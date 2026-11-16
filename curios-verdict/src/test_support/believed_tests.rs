@@ -1208,3 +1208,317 @@ struct /u/R: #{level = u + 1} Type { field: #{level = u} Type }
     let stepped = history.step("u", Written::CoreText, &carrying("Irrelevant"));
     assert!(denied(&stepped), "{stepped:?}");
 }
+
+/// The carrier the summary histories below build on: `N`, whose successor is a constructor, so a call that unfolds to its own successor converts with `N/s` of itself in one step, and `no_fix`, which takes an `n` equal to its own successor to `False`.
+const SUCCESSOR: &str = "\
+use /std/{Nat, Eq, proved};
+use /std/Bool/{False, Holds};
+
+pub induct N: pub Type
+| z()
+| s(p: N)
+end
+
+pub let depth(n: N) -> Nat =
+    match n
+    | z() => 0
+    | s(p) => depth(p) + 1
+    end;
+
+pub let no_fix_nat(n: Nat, e: Eq()(n, n + 1)) -> False =
+    let h: Holds(n + 1 < n + 1) = Eq/subst((m: Nat) => Holds(m < n + 1), e, proved());
+    proved(@False);
+
+pub let no_fix(n: N, e: Eq()(n, N/s(n))) -> False =
+    no_fix_nat(depth(n), Eq/cong(depth, e));
+";
+
+/// `/lib/apply` at one type either way: applying `k` below `x` where `below`, and otherwise at `x` itself where `x` is `0`, so its record files `k` applied below `x` or at it.
+fn applying(below: bool) -> &'static str {
+    match below {
+        true => {
+            "\
+use /std/{Nat};
+use /base/{N};
+
+pub let apply(x: Nat, k: (Nat) -> N) -> N =
+    match x
+    | 0 => N/z()
+    | n + 1 => match apply(n, k) | z() => k(n) | s(_) => k(n) end
+    end;
+"
+        }
+        false => {
+            "\
+use /std/{Nat};
+use /base/{N};
+
+pub let apply(x: Nat, k: (Nat) -> N) -> N =
+    match x
+    | 0 => k(0)
+    | n + 1 => apply(n, k)
+    end;
+"
+        }
+    }
+}
+
+/// `/app/loop`, which recurses through the callback `/lib/apply` is handed: total while `apply` applies `k` below `x`, and `loop(0)` is `N/s(loop(0))` once it applies `k` at `0`.
+const LOOPING_THROUGH_APPLY: &str = "\
+use /std/{Nat};
+use /base/{N};
+use /lib/{apply};
+
+pub let loop(x: Nat) -> N =
+    apply(x, (y) => N/s(loop(y)));
+";
+
+/// A proof that `/<unit>/loop` at `at` is no fixed point of `N/s`: refused for its equation where `loop` terminates, and admitted at `False` were `loop` read total where `loop(at)` unfolds to `N/s(loop(at))`.
+fn no_fix_of_loop(unit: &str, at: &str) -> String {
+    fill!(
+        r"
+/base/no_fix(
+    /${unit}/loop(${at}),
+    (#{universes = {levels = [0], qualities = [Type]}} /std/Eq/Eq/refl)(
+        @#{node = InductType} /base/N(),
+        @/${unit}/loop(${at})))
+",
+        unit,
+        at,
+    )
+}
+
+/// Whether `verdicts` refuse the closing term for its type alone: a mismatch there, and nothing it reaches read as not known to terminate.
+fn refused_for_its_equation_alone(verdicts: &[Verdict]) -> bool {
+    verdicts
+        .iter()
+        .any(|verdict| verdict.name.is_none() && matches!(verdict.error, Error::Mismatch { .. }))
+        && !refused_as_partial(verdicts)
+}
+
+/// `loop` is graded through what `/lib`'s record files of how `apply` applies `k`: below `x`, so `loop` is total and `loop(0)` is `N/z()`. Edited at the same type to apply `k` at `0` itself, `apply` moves its summary and nothing else `loop` reads of it, so `/app`, compiled over its baseline, keeps `loop` total only where a read of `apply`'s signature digests no summary. Stepped back and forth, `/app` finds `loop`'s verdict among the records the store filed of its item, one under each summary, and takes the one filed under the summary `/lib` files now. Mutation-check: leave `self.applications` out of the signature part `Readable::digest` archives (`curios-cert/src/baseline.rs`), and the proof over a library last stepped to apply `k` at `0` is admitted at `False`.
+#[test]
+fn a_recursion_through_a_callees_summary_is_judged_again_where_the_callee_moves_in_another_unit() {
+    for steps in [
+        &[true][..],
+        &[true, false],
+        &[true, false, true],
+        &[true, false, true, false],
+    ] {
+        let (first, later) = steps.split_first().expect("a step of the library");
+        let mut history = History::new();
+        history
+            .step("base", Written::Program, SUCCESSOR)
+            .expect("the carrier builds");
+        history
+            .step("lib", Written::Program, applying(*first))
+            .expect("the library builds");
+        history
+            .step("app", Written::Program, LOOPING_THROUGH_APPLY)
+            .expect("the recursion builds");
+        for below in later {
+            history
+                .step("lib", Written::Program, applying(*below))
+                .expect("the edited library builds");
+        }
+
+        let verdicts = put(&history, &no_fix_of_loop("app", "0"));
+
+        match steps.last() == Some(&true) {
+            true => assert!(
+                refused_for_its_equation_alone(&verdicts),
+                "{steps:?}: {verdicts:?}"
+            ),
+            false => assert!(refused_as_partial(&verdicts), "{steps:?}: {verdicts:?}"),
+        }
+    }
+}
+
+/// `fwd`, `apply` and `loop` in one unit: `apply` applies `k` to `fwd(p)` in the arm that takes `x` to `s(p)`, `fwd` the identity or the successor.
+fn forwarding(identity: bool) -> String {
+    let body = match identity {
+        true => "n",
+        false => "N/s(n)",
+    };
+
+    fill!(
+        "\
+use /base/{N};
+
+pub let fwd(n: N) -> N =
+    ${body};
+
+pub let apply(x: N, k: (N) -> N) -> N =
+    match x
+    | z() => N/z()
+    | s(p) => match apply(p, k) | z() => k(fwd(p)) | s(_) => k(fwd(p)) end
+    end;
+
+pub let loop(x: N) -> N =
+    apply(x, (y) => N/s(loop(y)));
+",
+        body,
+    )
+}
+
+/// What `apply`'s record files of `k` is what its grader unfolds `fwd(p)` to: `p`, below `x`, while `fwd` is the identity, and `x` itself once `fwd` rebuilds the successor, where `loop(N/s(N/z()))` is `N/s` of itself. The edit moves `fwd`'s body alone, so `apply`, whose terms are the baseline's, is judged again for the body its grader read, and `loop`, whose terms are the baseline's too, for the summary it read of `apply`. Mutation-check: as for the history across units above, and the proof over the edited unit is admitted.
+#[test]
+fn a_recursion_through_a_summary_is_judged_again_where_what_the_callees_grader_unfolded_moves() {
+    for edited in [false, true] {
+        let mut history = History::new();
+        history
+            .step("base", Written::Program, SUCCESSOR)
+            .expect("the carrier builds");
+        history
+            .step("one", Written::Program, &forwarding(true))
+            .expect("the unit builds");
+        if edited {
+            history
+                .step("one", Written::Program, &forwarding(false))
+                .expect("the edited unit builds");
+        }
+
+        let verdicts = put(&history, &no_fix_of_loop("one", "/base/N/s(/base/N/z())"));
+
+        match edited {
+            false => assert!(refused_for_its_equation_alone(&verdicts), "{verdicts:?}"),
+            true => assert!(refused_as_partial(&verdicts), "{verdicts:?}"),
+        }
+    }
+}
+
+/// `/base` with a witness of `Down(N)` whose method answers `n` as first written, and `N/s(n)` once edited.
+fn descending(edited: bool) -> String {
+    let body = match edited {
+        false => "n",
+        true => "N/s(n)",
+    };
+
+    fill!(
+        "${carrier}
+pub concept Down(T: Type): pub Type {
+    down(T) -> T,
+}
+
+satisfy Down(N) {
+    down(n) = ${body},
+}
+",
+        carrier = SUCCESSOR,
+        body,
+    )
+}
+
+/// `/base` with `each`, which applies `k` below `x` as first written, and at `x` itself once edited.
+fn iterating(edited: bool) -> String {
+    let at = match edited {
+        false => "p",
+        true => "x",
+    };
+
+    fill!(
+        "${carrier}
+pub let each(x: N, k: (N) -> N) -> N =
+    match x
+    | z() => N/z()
+    | s(p) => match each(p, k) | z() => k(${at}) | s(_) => k(${at}) end
+    end;
+",
+        carrier = SUCCESSOR,
+        at,
+    )
+}
+
+/// `apply` applies `k` to `Down/down(p)` in the arm that takes `x` to `s(p)`, which its grader reads through the witness the call resolved.
+const APPLYING_THROUGH_A_WITNESS: &str = "\
+use /base/{N, Down};
+
+pub let apply(x: N, k: (N) -> N) -> N =
+    match x
+    | z() => N/z()
+    | s(p) => match apply(p, k) | z() => k(Down/down(p)) | s(_) => k(Down/down(p)) end
+    end;
+";
+
+/// `apply` applies `k` in a lambda it hands `each`, whose binder stands to `x` as `each`'s summary says each application of its callback does.
+const APPLYING_THROUGH_EACH: &str = "\
+use /base/{N, each};
+
+pub let apply(x: N, k: (N) -> N) -> N =
+    match x
+    | z() => N/z()
+    | s(p) => match apply(p, k) | z() => each(x, (y) => k(y)) | s(_) => each(x, (y) => k(y)) end
+    end;
+";
+
+/// `loop` recursing through `/lib/apply` at `N`.
+const LOOPING_THROUGH_APPLY_AT_N: &str = "\
+use /base/{N};
+use /lib/{apply};
+
+pub let loop(x: N) -> N =
+    apply(x, (y) => N/s(loop(y)));
+";
+
+/// What `/lib`'s record files of `apply`'s `k` is read off `/base`: through the witness `Down/down(p)` resolves to, or through `each`'s summary. Either reads `k` applied below `x` as `/base` is first written, and at `x` itself once it is edited, where `loop(N/s(N/z()))` is `N/s` of itself. Neither `/lib` nor `/app` is edited, so `apply` is judged again for what it read of `/base`, and `loop` for the summary it read of `apply`. Mutation-check: as for the history across units above, and the proof over each edited carrier is admitted.
+#[test]
+fn a_recursion_through_a_summary_is_judged_again_where_a_unit_the_callee_read_moves() {
+    let carriers: [(fn(bool) -> String, &str); 2] = [
+        (descending, APPLYING_THROUGH_A_WITNESS),
+        (iterating, APPLYING_THROUGH_EACH),
+    ];
+    for (carrier, library) in carriers {
+        for edited in [false, true] {
+            let mut history = History::new();
+            history
+                .step("base", Written::Program, &carrier(false))
+                .expect("the carrier builds");
+            history
+                .step("lib", Written::Program, library)
+                .expect("the library builds");
+            history
+                .step("app", Written::Program, LOOPING_THROUGH_APPLY_AT_N)
+                .expect("the recursion builds");
+            if edited {
+                history
+                    .step("base", Written::Program, &carrier(true))
+                    .expect("the edited carrier builds");
+            }
+
+            let verdicts = put(&history, &no_fix_of_loop("app", "/base/N/s(/base/N/z())"));
+
+            match edited {
+                false => assert!(refused_for_its_equation_alone(&verdicts), "{verdicts:?}"),
+                true => assert!(refused_as_partial(&verdicts), "{verdicts:?}"),
+            }
+        }
+    }
+}
+
+/// `/lib` edited so `apply` applies `k` at `x`, then its record withheld, whole or `apply`'s verdict alone: no summary is read of a unit no record covers, its stale one included, so `loop` is graded as one through a callback was before any record said how one is applied.
+#[test]
+fn a_recursion_through_a_summary_withheld_with_its_callees_record_is_judged_again() {
+    let apply = [named("lib/apply")];
+    for withheld in [None, Some(&apply[..])] {
+        let mut history = History::new();
+        history
+            .step("base", Written::Program, SUCCESSOR)
+            .expect("the carrier builds");
+        history
+            .step("lib", Written::Program, applying(true))
+            .expect("the library builds");
+        history
+            .step("app", Written::Program, LOOPING_THROUGH_APPLY)
+            .expect("the recursion builds");
+        history
+            .step("lib", Written::Program, applying(false))
+            .expect("the edited library builds");
+        history
+            .withhold("lib", withheld)
+            .expect("the record is withheld");
+
+        let verdicts = put(&history, &no_fix_of_loop("app", "0"));
+
+        assert!(refused_as_partial(&verdicts), "{withheld:?}: {verdicts:?}");
+    }
+}

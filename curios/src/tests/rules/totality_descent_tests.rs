@@ -745,3 +745,59 @@ fn a_callback_handed_past_a_members_parameters_is_graded_as_unrelated() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// Each checker grades a recursion through a `/std` function's callback by its own record of how the function applies it, filed by its own walk over `/std`: `List/find` applies `pred` below `l` in a plain arm, `List/take_while` in a guard of a guarded match, and `List/traverse` under a monad's bind, and a type reaches a recursion through each. The refusal hands each callback the tree rebuilt around the same children, which both checkers refuse at every `Prop` that reaches one; a summary one checker's record files and the other's does not shows here as a refusal by one checker alone, or as the control refused.
+#[test]
+fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
+    let refusals = control(
+        r#"
+        use /std/{Nat, List, Bool, Option};
+        use /std/Bool/{Holds};
+
+        induct Rose : Type
+        | node(label : Nat, children : List(Rose))
+        end
+
+        let via_find(t : Rose) -> Bool =
+            match t
+            | node(label, children) =>
+                label == 0 || match List/find(children, (c) => via_find(c)) | some(_) => true | none() => false end
+            end;
+        let Found(t : Rose) -> Prop = Holds(via_find(t));
+
+        let via_take_while(t : Rose) -> Nat =
+            match t
+            | node(label, children) => label + List/len(List/take_while(children, (c) => via_take_while(c) == 0))
+            end;
+        let Taken(t : Rose) -> Prop = Holds(via_take_while(t) == 0);
+
+        let via_traverse(t : Rose) -> Option(Nat) =
+            match t
+            | node(label, children) =>
+                match List/traverse(children, (c) => via_traverse(c))
+                | some(ns) => Option/some(label + List/len(ns))
+                | none() => Option/none()
+                end
+            end;
+        let Traversed(t : Rose) -> Prop = Holds(Option/is_some(via_traverse(t)));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("(c) => via_find(c)", "(c) => via_find(Rose/node(label, children))"),
+        ("(c) => via_take_while(c)", "(c) => via_take_while(Rose/node(label, children))"),
+        ("(c) => via_traverse(c)", "(c) => via_traverse(Rose/node(label, children))"),
+    ]);
+
+    for at in ["/Found", "/Taken", "/Traversed"] {
+        refusals
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
