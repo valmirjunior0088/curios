@@ -73,11 +73,8 @@ impl<'a> Candidating<'a> {
         }
     }
 
-    /// Complete the record of each declaration that no filing has, `credited` saying which written binders the proofs of the declaration declaring its names read: what the declaration made and read, or nothing for one no record can be completed of — a witness, or one that read a part that will not digest, or of another unit that the unit records nothing of.
-    pub fn complete(
-        &self,
-        credited: impl Fn(&[Global]) -> Vec<(Global, u32)>,
-    ) -> Result<(), String> {
+    /// Complete the record of each declaration that no filing has: what the declaration made and read, or nothing for one no record can be completed of — a witness, or one that read a part that will not digest, or of another unit that the unit records nothing of.
+    pub fn complete(&self) -> Result<(), String> {
         curios_profile::profile!("elaborations::complete");
         for declaration in self.declarations.each() {
             // Asked of what each place declares, which a stored module knows without its item: a filing over a store completes what its edit made and restores nothing else.
@@ -90,19 +87,14 @@ impl<'a> Candidating<'a> {
             if held.completed() {
                 continue;
             }
-            held.complete(self.made(declaration, held, &credited)?);
+            held.complete(self.made(declaration, held)?);
         }
 
         Ok(())
     }
 
     /// What `declaration`, whose trace is `held`, made and read: `None` where no record of it can be completed.
-    fn made(
-        &self,
-        declaration: usize,
-        held: &TraceRecord,
-        credited: &impl Fn(&[Global]) -> Vec<(Global, u32)>,
-    ) -> Result<Option<Made>, String> {
+    fn made(&self, declaration: usize, held: &TraceRecord) -> Result<Option<Made>, String> {
         let positions = self.declarations.items(declaration);
         let names = positions
             .iter()
@@ -158,7 +150,6 @@ impl<'a> Candidating<'a> {
             input: declaration_input(inputs),
             reads,
             outputs,
-            credited: credited(&names),
         }))
     }
 

@@ -80,9 +80,9 @@ pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
 pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = proved();
 ";
 
-/// A unit's credited binders are stored alike whichever pass credited them.
+/// A unit's credited binders are held alike in its declarations' records whichever pass credited them.
 ///
-/// A recompile credits the binders of what it elaborates again and then the ones the baseline's proofs read in what it reused, where a whole compile credits in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text. Mutation-checked: kept as a list, the two units' text parts differ.
+/// A recompile files what the proofs of each declaration it elaborates again read in that declaration's record, and keeps the baseline's record of each it reused, where a whole compile files every record as it elaborates in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text.
 #[test]
 fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
     let baseline = unit_of(CREDITED_TWICE);
@@ -94,16 +94,24 @@ fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
     assert!(reuses_body(&baseline, &incremental, "below"));
     assert!(!reuses_body(&baseline, &incremental, "above"));
     assert!(unused_binders(&incremental).is_empty());
-    assert!(
-        curios_archive::to_bytes(
-            incremental
-                .text()
-                .expect("a program's unit holds its lowering")
-        )
-        .unwrap()[..]
-            == curios_archive::to_bytes(whole.text().expect("a program's unit holds its lowering"))
-                .unwrap()[..],
-        "the text stage's part is stored differently over a baseline"
+    let credited = |unit: &Unit| {
+        unit.traces()
+            .declarations()
+            .map(|(name, record)| (*name, record.concluded().credited.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        credited(&incremental),
+        credited(&whole),
+        "a record holds another credit over a baseline"
+    );
+    assert_eq!(
+        credited(&whole)
+            .iter()
+            .filter(|(_, credited)| !credited.is_empty())
+            .count(),
+        2,
+        "the records of `below` and `above` each hold what their proof read"
     );
 }
 

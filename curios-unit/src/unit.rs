@@ -16,7 +16,7 @@ use {
     curios_erase::ErasedUnit,
     curios_lint::Lint,
     curios_module::PreparedText,
-    std::{borrow::Cow, cell::OnceCell, rc::Rc},
+    std::{borrow::Cow, cell::OnceCell, collections::BTreeSet, rc::Rc},
 };
 
 /// What a unit was written in: a program's sources, whose lowering it holds, or Core text, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
@@ -262,7 +262,7 @@ impl Produced {
             self.traces.get()?,
         );
 
-        candidating.complete(|names| text.credited_in(names))
+        candidating.complete()
     }
 
     /// The digest of the elaborated item at each place: the one it was stored under where the module holds it as it was read, and what it is named by alone otherwise ([`ItemRun::identity`]), which a whole compile and a recompile name it by alike.
@@ -361,10 +361,19 @@ impl Unit {
         traces: Traces,
         certification: Certification,
     ) -> Self {
-        // Decided once, here, where every unit written as a program is made: what its lowering found, less every binder a proof its elaboration wrote read.
+        // Decided once, here, where every unit written as a program is made: what its lowering found, less every binder a proof its elaboration wrote read — a declaration's as its record holds them, whether elaborated now, kept from a baseline or taken from a store, and the program's final term's as the elaboration that ran credited them.
+        let recorded = traces
+            .declarations()
+            .flat_map(|(_, record)| record.concluded().credited.iter().copied())
+            .collect::<BTreeSet<_>>();
         let lints = curios_lint::lints(
             text.zeros(),
-            |binder| text.credited().contains(binder),
+            |binder| {
+                text.credited().contains(binder)
+                    || binder
+                        .declaration
+                        .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
+            },
             text.anchors(),
         );
         Self {

@@ -46,6 +46,20 @@ impl Credits {
         );
     }
 
+    /// The written binders proofs have read in a definition `names` holds, each by its definition and its place, in order and each once: what the record of the declaration declaring them holds.
+    pub fn credited_in(&self, names: &[Global]) -> Vec<(Global, u32)> {
+        self.credited
+            .iter()
+            .filter_map(|(declaration, place)| {
+                declaration
+                    .filter(|declaration| names.contains(declaration))
+                    .map(|declaration| (declaration, *place))
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     /// The written binders proofs have read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
     pub fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
         self.credited.iter().copied().collect()

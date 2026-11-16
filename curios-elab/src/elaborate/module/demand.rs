@@ -1100,7 +1100,7 @@ impl<'a> Demand<'a> {
                 self.compare(context, &item);
                 self.survivors.keep(ItemStamp(*position), item, Vec::new());
             }
-            context.credit_adopted(made.credited.iter().copied());
+            context.credit_adopted(record.concluded().credited.iter().copied());
             self.file(&names, Rc::clone(&record));
             return true;
         }
@@ -1288,10 +1288,11 @@ impl<'a> Demand<'a> {
                     .flatten()
                     .map(|name| (name, context.classified(&name)))
                     .collect();
-                self.file(
-                    &names,
-                    Rc::new(TraceRecord::new(trace, Concluded { classified })),
-                );
+                let concluded = Concluded {
+                    classified,
+                    credited: context.credited_in(&names),
+                };
+                self.file(&names, Rc::new(TraceRecord::new(trace, concluded)));
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {

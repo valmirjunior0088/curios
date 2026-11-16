@@ -89,7 +89,13 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
     let classified = vec![(name("caller"), context.classified(&name("caller")))];
     traces.share(
         name("caller"),
-        Rc::new(TraceRecord::new(Trace::default(), Concluded { classified })),
+        Rc::new(TraceRecord::new(
+            Trace::default(),
+            Concluded {
+                classified,
+                credited: Vec::new(),
+            },
+        )),
     );
     assert_eq!(read(&traces), Totality::Total);
 }

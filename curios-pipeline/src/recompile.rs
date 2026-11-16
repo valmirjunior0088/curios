@@ -168,10 +168,6 @@ pub fn compile_lowered_over(
         },
         entry,
     ) = walked.map_err(|error| refuse(&lowered, error))?;
-    // And what the baseline's read in the declarations kept from it.
-    if let Some(written) = baseline.text() {
-        lowered.credit_reused(written, |name| !made.contains(name));
-    }
     if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
         elaborated(&core, entry);
     }

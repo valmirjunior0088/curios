@@ -43,8 +43,6 @@ pub struct Made {
     pub reads: Vec<Read>,
     /// What it made, each by its identity: its elaborated items in the order of its lowered ones.
     pub outputs: Vec<Digest>,
-    /// The written binders its proofs read, each by the name of its definition and its place among that definition's written binders.
-    pub credited: Vec<(Global, u32)>,
 }
 
 /// What elaboration concluded of a declaration as it made it, beside its items: what a compile that keeps the declaration — over a baseline, or from a record a store held — reads of it with nothing elaborated. Made where the declaration elaborates and held by its record, so a record shared, stored or taken from a store carries it.
@@ -52,6 +50,8 @@ pub struct Made {
 pub struct Concluded {
     /// What elaboration concluded of each definition the declaration made, by the definition's name ([`Classified`]), its items holding none: what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
     pub classified: Vec<(Global, Classified)>,
+    /// The written binders the proofs it wrote read, each by the name of its definition and its place among that definition's written binders: each used, though no written name reaches it, which the lint owner reads where it decides `unused-binder`.
+    pub credited: Vec<(Global, u32)>,
 }
 
 /// A declaration's trace as a unit holds it: what it asked and what elaboration concluded of it (`Concluded`), and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
@@ -675,6 +675,7 @@ struct TabledTrace {
     name: u32,
     asked: Trace<Question<u32, u32>, Answered<u32>>,
     classified: Vec<(u32, Classified)>,
+    credited: Vec<(u32, u32)>,
     made: Option<TabledMade>,
 }
 
@@ -684,7 +685,6 @@ struct TabledMade {
     input: [u8; 32],
     reads: Vec<Read>,
     outputs: Vec<[u8; 32]>,
-    credited: Vec<(u32, u32)>,
 }
 
 impl TabledTrace {
@@ -705,11 +705,6 @@ impl TabledTrace {
                     input: Digest::from_bytes(made.input),
                     reads: made.reads,
                     outputs: made.outputs.into_iter().map(Digest::from_bytes).collect(),
-                    credited: made
-                        .credited
-                        .into_iter()
-                        .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
-                        .collect::<Result<_, String>>()?,
                 })
             })
             .transpose()?;
@@ -718,6 +713,11 @@ impl TabledTrace {
                 .classified
                 .into_iter()
                 .map(|(place, classified)| Ok((name(place)?, classified)))
+                .collect::<Result<_, String>>()?,
+            credited: self
+                .credited
+                .into_iter()
+                .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
                 .collect::<Result<_, String>>()?,
         };
 
@@ -847,11 +847,6 @@ impl TraceTable {
                         .iter()
                         .map(|output| *output.as_bytes())
                         .collect(),
-                    credited: made
-                        .credited
-                        .iter()
-                        .map(|(name, place)| (names.place(*name), *place))
-                        .collect(),
                 });
 
                 TabledTrace {
@@ -861,6 +856,11 @@ impl TraceTable {
                         .classified
                         .iter()
                         .map(|(name, classified)| (names.place(*name), classified.clone()))
+                        .collect(),
+                    credited: concluded
+                        .credited
+                        .iter()
+                        .map(|(name, place)| (names.place(*name), *place))
                         .collect(),
                     made,
                 }

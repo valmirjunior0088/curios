@@ -599,6 +599,11 @@ impl<'s> Context<'s> {
         self.underway.credits.credit(proof);
     }
 
+    /// [`Credits::credited_in`].
+    pub(crate) fn credited_in(&self, names: &[Global]) -> Vec<(Global, u32)> {
+        self.underway.credits.credited_in(names)
+    }
+
     /// The written binders proofs the elaborator wrote read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
     pub fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
         self.underway.credits.credited()

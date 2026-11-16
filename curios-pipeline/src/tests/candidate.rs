@@ -123,6 +123,39 @@ fn an_edit_undone_takes_what_it_made_from_the_store() {
     );
 }
 
+/// A declaration whose hypothesis `p` only the proof `proved` stands for reads.
+const PROVED: &str = "use /std/{Nat, proved};
+use /std/Bool/{Holds};
+
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
+";
+
+/// A declaration a recompile takes from a store keeps what its proofs read: the record the store held carries the binders its proof read, so `p` is credited as a whole compile credits it, with nothing elaborated.
+#[test]
+fn a_declaration_taken_from_the_store_keeps_what_its_proofs_read() {
+    let first = unit_of(PROVED);
+    assert!(
+        unused_binders(&first).is_empty(),
+        "`p` is read by the proof `proved` stands for"
+    );
+    let mut store = Store::default();
+    store.file(&first);
+    let respelled = PROVED.replace(
+        "n: Nat, p: Holds(i < n)) -> Holds(i <= n)",
+        "m: Nat, p: Holds(i < m)) -> Holds(i <= m)",
+    );
+    let edited = recompile_over(&respelled, &first).expect("the edit compiles");
+    store.file(&edited);
+
+    let undone = recompile_from(PROVED, &edited, &store);
+
+    assert!(
+        store.read().contains(&identity(&first, "below")),
+        "`below` is taken from the store"
+    );
+    assert!(unused_binders(&undone).is_empty());
+}
+
 const ALIASED: &str =
     "use /std/{Int, Nat};\n\npub let Number: Type = Nat;\n\npub let one: Number = 1;\n";
 

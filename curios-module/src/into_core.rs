@@ -640,7 +640,8 @@ pub struct PreparedText {
     /// Every zero the lowering found — see [`Zero`]: what `curios-lint` decides the unit's lints from where the unit is made. Held by a unit lowered in this process alone: a unit stores the lints decided of it, and a lowering over it reads its baseline half's.
     #[archived_with(curios_archive::Skip)]
     zeros: Vec<Zero>,
-    /// Every written binder a zero names that a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again. A set, since membership is all that is asked of it: its order is then the binders' own, by declaration and place, whichever pass credited which, and a unit compiled over a baseline stores the one a whole compile stores.
+    /// Every written binder a zero names that a proof the elaborator wrote read where this unit was elaborated in this process — see [`LintedBinder`]: what the lint owner reads of a binder no declaration's record holds, the program's final term's, and of a unit refused, which files no record. A declaration's own are its trace record's, which a unit compiled over this one keeps. Never stored.
+    #[archived_with(curios_archive::Skip)]
     credited: BTreeSet<LintedBinder>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
@@ -704,48 +705,19 @@ impl PreparedText {
 
     /// Record which binders the unit's zeros name a proof the elaborator wrote read, as `credited` holds them: used, though no written name reaches them. Called once the unit has elaborated, since only elaboration writes such a proof.
     pub fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
-        self.credit_where(|binder| credited.contains(&(binder.declaration, binder.ordinal)));
-    }
-
-    /// Credit, in every declaration `reused` keeps as `baseline` elaborated it, the binders `baseline`'s elaboration credited: a declaration a recompile does not elaborate again has its lowering unchanged, so its binders sit where they sat.
-    pub fn credit_reused(
-        &mut self,
-        baseline: &PreparedText,
-        reused: impl Fn(&curios_core::Global) -> bool,
-    ) {
-        let credited = &baseline.credited;
-        self.credit_where(|binder| {
-            binder.declaration.as_ref().is_some_and(&reused) && credited.contains(binder)
-        });
-    }
-
-    /// The binders elaboration credited among those written in the definitions named `names`, each by its definition's name and its place: what a declaration declaring them has a later compile credit where it takes the declaration's elaboration whole.
-    pub fn credited_in(&self, names: &[curios_core::Global]) -> Vec<(curios_core::Global, u32)> {
-        names
-            .iter()
-            .flat_map(|name| {
-                let at = |ordinal| LintedBinder {
-                    declaration: Some(*name),
-                    ordinal,
-                };
-                self.credited
-                    .range(at(0)..=at(u32::MAX))
-                    .map(|binder| (*name, binder.ordinal))
-            })
-            .collect()
-    }
-
-    /// Record as read every binder a binder zero names that `read` holds of.
-    fn credit_where(&mut self, read: impl Fn(&LintedBinder) -> bool) {
-        let credited = self
+        let read = self
             .zeros
             .iter()
             .filter_map(|zero| match zero {
-                Zero::Binder { binder, .. } if read(binder) => Some(*binder),
+                Zero::Binder { binder, .. }
+                    if credited.contains(&(binder.declaration, binder.ordinal)) =>
+                {
+                    Some(*binder)
+                }
                 _ => None,
             })
             .collect::<Vec<_>>();
-        self.credited.extend(credited);
+        self.credited.extend(read);
     }
 
     /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.

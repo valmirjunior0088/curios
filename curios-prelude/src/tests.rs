@@ -54,31 +54,28 @@ pub fn authored() -> Vec<PathBuf> {
 #[test]
 fn every_authored_source_is_lint_clean() {
     // Both roots, in the order the build script folds them: `/std`'s imports resolve only against a lowered `/sys`, and an unresolved import is not a lint but a lowering failure.
-    let mut sys = prepare_prelude(&sys_source(), &[], &SYNTAX)
+    let sys = prepare_prelude(&sys_source(), &[], &SYNTAX)
         .unwrap_or_else(|error| panic!("/sys failed to lower: {}", error.format()));
-    let mut std = prepare_prelude(&std_source().tested(), &[&sys], &SYNTAX)
+    let std = prepare_prelude(&std_source().tested(), &[&sys], &SYNTAX)
         .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
-    // Credited as a recompile credits a declaration it reuses: with what the build's elaboration of the same sources recorded as read by a proof it wrote.
-    with_prelude(|units| {
-        sys.credit_reused(
-            units[0]
-                .text()
-                .expect("a program's unit holds its lowering"),
-            |_| true,
-        );
-        std.credit_reused(
-            units[1]
-                .text()
-                .expect("a program's unit holds its lowering"),
-            |_| true,
-        );
+    // Credited as a recompile credits a declaration it keeps: with what the build's elaboration of the same sources recorded, in each declaration's record, as read by a proof it wrote.
+    let recorded = with_prelude(|units| {
+        units
+            .iter()
+            .flat_map(|unit| unit.traces().declarations())
+            .flat_map(|(_, record)| record.concluded().credited.iter().copied())
+            .collect::<BTreeSet<_>>()
     });
     let lints = [&sys, &std]
         .iter()
         .flat_map(|prepared| {
             curios_lint::lints(
                 prepared.zeros(),
-                |binder| prepared.credited().contains(binder),
+                |binder| {
+                    binder
+                        .declaration
+                        .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
+                },
                 prepared.anchors(),
             )
             .iter()
