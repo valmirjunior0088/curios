@@ -677,9 +677,9 @@ fn a_call_in_a_callback_descends_where_its_callee_applies_it_below() {
     });
 }
 
-// A parameter a list function uses otherwise than by applying it or handing it on to itself at its own place is summarized as nothing, since what is done with it there is not seen: `any_kept` hands its `pred` to `List/any`, so a recursion through a callback handed to `any_kept` is graded as one through a callback was before any record said how one is applied, and a type reaching it is refused. The control recurses through `List/any` itself.
+// A parameter handed to a definition that applies it as its summary states is applied where that definition applies it, through the call: `any_kept` hands its `pred` to `List/any` over the tail of its list, so its own summary applies `pred` below `l`, and a recursion through a callback handed to `any_kept` descends. The refusal has `any_kept` hand `List/any` a list holding a tree built around `l`, where `pred` is applied at something not below.
 #[test]
-fn a_callback_its_callee_hands_on_is_graded_as_unrelated() {
+fn a_callback_its_callee_hands_on_is_graded_where_the_callee_applies_it() {
     control(
         r#"
         use /std/{Nat, List, Bool};
@@ -689,21 +689,18 @@ fn a_callback_its_callee_hands_on_is_graded_as_unrelated() {
         let any_kept(l : List(Rose), pred : (Rose) -> Bool) -> Bool =
             match l
             | [] => false
-            | [h, ..t] => List/any([h], pred) || any_kept(t, pred)
+            | [h, ..t] => pred(h) || List/any(t, pred)
             end;
         let has_zero(t : Rose) -> Bool =
             match t
-            | node(label, children) => label == 0 || List/any(children, (c) => has_zero(c))
+            | node(label, children) => label == 0 || any_kept(children, (c) => has_zero(c))
             end;
         let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[(
-        "List/any(children, (c) => has_zero(c))",
-        "any_kept(children, (c) => has_zero(c))",
-    )])
+    .refused(&[("List/any(t, pred)", "List/any([Rose/node(0, l)], pred)")])
     .by_elaborator_in("/Zeroed", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })

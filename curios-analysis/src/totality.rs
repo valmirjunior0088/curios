@@ -462,6 +462,21 @@ impl<E: Env> Walk<'_, E> {
             return self.walk_term(argument);
         };
         match &**argument {
+            // A parameter handed whole is applied where the callee applies what it is handed, as its summary states, through this call: those applications are this member's own, already graded against its parameters ([`handed`]).
+            Subterm::Var(var) if let Some(position) = self.tracked_position(var.as_free()) => {
+                if !self.summarizes {
+                    return self.recorded(position, None, None);
+                }
+                for matrix in &applied.itself {
+                    self.recorded(position, None, Some(matrix.clone()))?;
+                }
+                for (path, matrices) in &applied.fields {
+                    for matrix in matrices {
+                        self.recorded(position, Some(path.clone()), Some(matrix.clone()))?;
+                    }
+                }
+                return Ok(());
+            }
             Subterm::Func(Func { telescope, .. }) => {
                 return self.walk_handed(telescope.clone(), &applied.itself);
             }
