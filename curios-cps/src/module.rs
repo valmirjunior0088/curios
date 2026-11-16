@@ -681,6 +681,22 @@ impl Module {
         }
     }
 
+    /// [`Module::replace_atom`] for every value `replacements` names, in one walk of the live nodes.
+    pub fn replace_values(&mut self, replacements: &BTreeMap<ValueId, Atom>) {
+        if replacements.is_empty() {
+            return;
+        }
+        for (_, node) in self.nodes.iter_live_mut() {
+            visit_atoms_mut(node, &mut |atom| {
+                if let Atom::Value(value) = atom
+                    && let Some(replacement) = replacements.get(value)
+                {
+                    *atom = replacement.clone();
+                }
+            });
+        }
+    }
+
     pub fn tombstones(&self) -> (usize, usize, usize, usize) {
         let return_continuations = self
             .functions

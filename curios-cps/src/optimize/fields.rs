@@ -744,24 +744,49 @@ fn insert_above(module: &mut Module, carrier: NodeId, nodes: Vec<Node>) {
     }
 }
 
-/// Virtualize every window region the module admits, the widest first, each as [`split_widest_window`] virtualizes one.
+/// Virtualize every window region the module admits, the widest first, each as [`split_window`] virtualizes one.
 ///
-/// One region a call would leave the rest to the optimizer's own fixpoint, at a round of every pass for each region and another for the fold its split exposes, which is what [`split_parameters`] sweeps to avoid. A split records its groups and rewrites its slices, so the uses and the regions are read again from the module as each split leaves it: the widest region is then the widest of what remains, and a region a split has reached into is declined as it is from one round to the next. Termination is each split's own: it records a group over a parameter that had none, under the growth ceiling.
+/// One region a call would leave the rest to the optimizer's own fixpoint, at a round of every pass for each region and another for the fold its split exposes, which is what [`split_parameters`] sweeps to avoid. The regions are planned off one read of the module, widest first ([`admitted_regions`]), and split in that order while each stands apart from those split before it, as [a pass applies the independent plans its snapshot admits](../../README.md#a-pass-applies-the-independent-plans-its-snapshot-admits). A region sharing a member with one split is passed over: grown again after the split, it would reach a parameter the split grouped and be declined. A region sharing only a continuation with one split ends the plan, its positions and that continuation's ceiling having moved, and the module is read again, as it is where the plan runs out: so each split is the one a read after every split would make, and the module is read once a run of regions that stand apart rather than once a region. Termination is each split's own: it records a group over a parameter that had none, under the growth ceiling.
 pub fn split_windows(module: &mut Module) -> bool {
     let mut split = false;
-    while split_widest_window(module) {
-        split = true;
+    loop {
+        let uses = window_uses(module);
+        let resumes = resume_targets(module);
+        let regions = admitted_regions(module, &uses, &resumes);
+        if regions.is_empty() {
+            return split;
+        }
+        let carriers = carriers_of(module);
+        let mut members = BTreeSet::new();
+        let mut continuations = BTreeSet::new();
+        for region in regions {
+            if !region.members.is_disjoint(&members) {
+                continue;
+            }
+            if region
+                .params
+                .iter()
+                .any(|(continuation, ..)| continuations.contains(continuation))
+            {
+                break;
+            }
+            members.extend(region.members.iter().copied());
+            continuations.extend(region.params.iter().map(|(continuation, ..)| *continuation));
+            split_window(module, &uses, &carriers, region);
+            split = true;
+        }
     }
-    split
 }
 
-/// Virtualize one whole window region: every parameter becomes `(base, end, length)` under a recorded group, every slice becomes a guarded extent and the end it leaves, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
-fn split_widest_window(module: &mut Module) -> bool {
-    let uses = window_uses(module);
-    let resumes = resume_targets(module);
-
-    // The widest admissible region, not the first. A region grows forward along transfers from its seed, so a seed downstream of another's grows a *strict sub-region* of it — and splitting that one records a group over positions the larger region also spans, which `grow_window_region` then declines outright, stranding the larger region's slices for the rest of the compilation. `programs/walk_mirror_held_scan.crs` is that shape: its walk's region and the one-continuation sub-region below it are both candidates, and taking the sub-region first would slice a fresh rope per character where `walk_mirror_baseline.crs` virtualizes the same walk. Slices consumed is the key because consuming them is what the rewrite is for; seed order breaks ties, so the choice stays deterministic.
-    let mut admitted: Option<WindowRegion> = None;
+/// Every region the module admits, the widest first.
+///
+/// The widest, not the first. A region grows forward along transfers from its seed, so a seed downstream of another's grows a *strict sub-region* of it — and splitting that one records a group over positions the larger region also spans, which `grow_window_region` then declines outright, stranding the larger region's slices for the rest of the compilation. `programs/walk_mirror_held_scan.crs` is that shape: its walk's region and the one-continuation sub-region below it are both candidates, and taking the sub-region first would slice a fresh rope per character where `walk_mirror_baseline.crs` virtualizes the same walk. Slices consumed is the key because consuming them is what the rewrite is for; seed order breaks ties, so the order stays deterministic, and a region grown again from a later seed of it stands after the one its first seed grew.
+fn admitted_regions(
+    module: &Module,
+    uses: &BTreeMap<ValueId, Vec<WindowUse>>,
+    resumes: &BTreeSet<ContinuationId>,
+) -> Vec<WindowRegion> {
+    let mut regions = Vec::new();
     for (continuation, definition) in module.live_continuations() {
         if resumes.contains(&continuation) {
             continue;
@@ -772,24 +797,41 @@ fn split_widest_window(module: &mut Module) -> bool {
             {
                 continue;
             }
-            let Some(region) =
-                grow_window_region(module, &uses, &resumes, (continuation, position, param))
-            else {
-                continue;
-            };
-            let wider = admitted.as_ref().is_none_or(|best| {
-                (region.slices.len(), region.members.len())
-                    > (best.slices.len(), best.members.len())
-            });
-            if wider {
-                admitted = Some(region);
+            if let Some(region) =
+                grow_window_region(module, uses, resumes, (continuation, position, param))
+            {
+                regions.push(region);
             }
         }
     }
-    let Some(region) = admitted else {
-        return false;
-    };
+    // Stable, so seed order breaks ties.
+    regions.sort_by(|left, right| {
+        (right.slices.len(), right.members.len()).cmp(&(left.slices.len(), left.members.len()))
+    });
+    regions
+}
 
+/// The nodes whose edges enter each continuation, in node order: read once a plan, since a split rewrites the edges into its own continuations and makes no node that carries one.
+fn carriers_of(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
+    let mut carriers = BTreeMap::<ContinuationId, Vec<NodeId>>::new();
+    for (id, node) in module.live_nodes() {
+        for edge in edges_of(node) {
+            let into = carriers.entry(edge.target).or_default();
+            if into.last() != Some(&id) {
+                into.push(id);
+            }
+        }
+    }
+    carriers
+}
+
+/// Virtualize one whole window region: every parameter becomes `(base, end, length)` under a recorded group, every slice becomes a guarded extent and the end it leaves, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
+fn split_window(
+    module: &mut Module,
+    uses: &BTreeMap<ValueId, Vec<WindowUse>>,
+    carriers: &BTreeMap<ContinuationId, Vec<NodeId>>,
+    region: WindowRegion,
+) {
     // 1. Split the parameters, highest position first within each continuation so earlier positions stay stable, and record each group.
     let mut fields = BTreeMap::<ValueId, [Atom; 3]>::new();
     let mut splits = region.params.clone();
@@ -914,7 +956,8 @@ fn split_widest_window(module: &mut Module) -> bool {
         );
     }
 
-    // 3. Rewrite the reads. A length is an alias of the length field; a read reaches the base at `end ∸ (length ∸ index)`, which is `end - length + index` for every index the read's evidence admits.
+    // 3. Rewrite the reads. A length is an alias of the length field, replaced in one walk once every read is rewritten; a read reaches the base at `end ∸ (length ∸ index)`, which is `end - length + index` for every index the read's evidence admits.
+    let mut aliased = BTreeMap::<ValueId, Atom>::new();
     for &member in &region.members {
         for this in uses.get(&member).map_or(&[][..], Vec::as_slice) {
             match this {
@@ -926,7 +969,7 @@ fn split_widest_window(module: &mut Module) -> bool {
                     };
                     rewire_node(module, *node, next);
                     module.remove_node(*node);
-                    module.replace_atom(UseTarget::Value(result), fields[&member][2].clone());
+                    aliased.insert(result, fields[&member][2].clone());
                     module.remove_value(result);
                 }
                 WindowUse::Get(node) => {
@@ -972,18 +1015,13 @@ fn split_widest_window(module: &mut Module) -> bool {
         }
     }
 
+    module.replace_values(&aliased);
+
     // 4. Rewrite every edge into a split continuation, highest position first: a member argument travels as its fields, and any other rope opens as its own whole window with one length read above the jump.
-    let carriers: Vec<NodeId> = module
-        .live_nodes()
-        .filter(|(_, node)| {
-            edges_of(node).iter().any(|edge| {
-                splits
-                    .iter()
-                    .any(|(continuation, ..)| edge.target == *continuation)
-            })
-        })
-        .map(|(id, _)| id)
-        .collect();
+    let carriers = splits
+        .iter()
+        .flat_map(|(continuation, ..)| carriers.get(continuation).into_iter().flatten().copied())
+        .collect::<BTreeSet<_>>();
     for carrier in carriers {
         let mut node = module.node(carrier).expect("carrier is live").clone();
         let mut openings = Vec::new();
@@ -1018,8 +1056,6 @@ fn split_widest_window(module: &mut Module) -> bool {
     for member in &region.members {
         module.remove_value(*member);
     }
-
-    true
 }
 
 /// The continuations that receive call results — the interface the return protocol owns.
