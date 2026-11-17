@@ -1,6 +1,6 @@
 //! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts. The archive, `xboard/archive/`, holds a directory for a part the board has, and in it a directory per ticket filed there, whose record states the `reason` it is archived where a live one states its `status`, and whose witnesses state no refusal.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds or unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
@@ -75,7 +75,7 @@ impl From<ArchivedWitnessRecord> for WitnessRecord {
     }
 }
 
-/// One step of a witness's history: a unit, by the path it is mounted at and its file; a record withheld, by the unit's path and the names withheld, all of them where none is listed; or the proof, its file alone.
+/// One step of a witness's history: a unit, by the path it is mounted at and its file; a record withheld, by the unit's path and the names withheld, all of them where none is listed; a unit unmounted, by its path; or the proof, its file alone.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StepRecord {
@@ -83,6 +83,7 @@ struct StepRecord {
     source: Option<String>,
     withhold: Option<String>,
     verdicts: Option<Vec<String>>,
+    unmount: Option<String>,
 }
 
 /// One refusal a witness expects.
@@ -338,7 +339,7 @@ fn history<'f>(
     records: Vec<StepRecord>,
     text: &mut impl FnMut(&str) -> Result<(Written, &'f str), String>,
 ) -> Result<(Vec<Step>, Proof), String> {
-    let shape = "a step is a unit, `mount` and `source`; a record withheld, `withhold` and its `verdicts` where it withholds some; or the proof, `source` alone";
+    let shape = "a step is a unit, `mount` and `source`; a record withheld, `withhold` and its `verdicts` where it withholds some; a unit unmounted, `unmount`; or the proof, `source` alone";
     let mut records = records;
     let last = records.pop().expect("a history states a step");
     let proof = match last {
@@ -347,6 +348,7 @@ fn history<'f>(
             source: Some(source),
             withhold: None,
             verdicts: None,
+            unmount: None,
         } => proof_of(text(&source)?),
         _ => {
             return Err(
@@ -368,6 +370,7 @@ fn history<'f>(
                 source: Some(source),
                 withhold: None,
                 verdicts: None,
+                unmount: None,
             } => {
                 let mount = mount_of(&mount)?;
                 let (written, text) = text(&source)?;
@@ -384,6 +387,7 @@ fn history<'f>(
                 source: None,
                 withhold: Some(withheld),
                 verdicts,
+                unmount: None,
             } => {
                 let mount = mount_of(&withheld)?;
                 if !mounted.contains(&mount) {
@@ -400,7 +404,22 @@ fn history<'f>(
                 source: Some(_),
                 withhold: None,
                 verdicts: None,
+                unmount: None,
             } => Err("only a history's last step is its proof".to_string()),
+            StepRecord {
+                mount: None,
+                source: None,
+                withhold: None,
+                verdicts: None,
+                unmount: Some(unmounted),
+            } => {
+                let mount = mount_of(&unmounted)?;
+                if !mounted.remove(&mount) {
+                    return Err(format!("`{unmounted}` is unmounted where no step mounts it"));
+                }
+
+                Ok(Step::Unmount { mount })
+            }
             _ => Err(shape.to_string()),
         })
         .collect::<Result<Vec<_>, _>>()?;

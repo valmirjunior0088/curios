@@ -75,10 +75,12 @@ pub enum Step {
         mount: String,
         names: Option<Vec<Global>>,
     },
+    /// The unit claiming `mount` mounted by no later build, as a dependency taken out of a manifest is: a unit standing in for an archived root unmounted gives the root its place back.
+    Unmount { mount: String },
 }
 
 impl Step {
-    /// What the step is put to: the checkers of the text it compiles, and the certifier for a record withheld, which is whose judgment a later build makes of it.
+    /// What the step is put to: the checkers of the text it compiles, the certifier for a record withheld, which is whose judgment a later build makes of it, and nothing for a unit unmounted, whose later builds compile what earlier steps wrote.
     fn asked(&self) -> &'static [Checker] {
         match self {
             Step::Unit {
@@ -90,6 +92,7 @@ impl Step {
                 ..
             } => &[Checker::Reader, Checker::Certifier],
             Step::Withhold { .. } => &[Checker::Certifier],
+            Step::Unmount { .. } => &[],
         }
     }
 }

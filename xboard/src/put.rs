@@ -276,6 +276,7 @@ pub fn put(steps: &[Step], proof: &Proof) -> Answer {
                 text,
             } => history.step(mount, *written, text),
             Step::Withhold { mount, names } => history.withhold(mount, names.as_deref()),
+            Step::Unmount { mount } => history.unmounted(mount),
         };
         if let Err(stopped) = walked {
             return halted(stopped);

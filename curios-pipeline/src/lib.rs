@@ -27,7 +27,9 @@ pub use recompile::complete_records;
 use recompile::*;
 
 mod standard;
-pub use standard::{Fold, compile_with_prelude, prelude_documentation};
+pub use standard::{
+    Fold, compile_with_prelude, granted_in_place, prelude_documentation, stood_in_for,
+};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_pipeline::test_support::recheck_with_prelude` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

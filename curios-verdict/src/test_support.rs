@@ -14,11 +14,14 @@ use {
     curios_core::{Certification, Definitions, Global},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
-    curios_pipeline::{Cache, CompileError, Listeners, compile_units, test_support::*},
+    curios_pipeline::{
+        Cache, CompileError, Listeners, compile_units, granted_in_place, stood_in_for,
+        test_support::*,
+    },
     curios_prelude::with_prelude,
     curios_surface::{CoreFile, FormScope, ReadError, to_core},
     curios_unit::{Predecessors, Unit},
-    std::{fs, path::PathBuf},
+    std::{fs, path::PathBuf, slice},
 };
 
 /// What a unit's step is written in.
@@ -154,26 +157,34 @@ impl History {
         }
     }
 
+    /// Mount the unit claiming `mount` in no later build, as a dependency taken out of a manifest is, then build: what each unit after it filed stays in the store, and a unit standing in for an archived root unmounted gives the root its place back.
+    pub fn unmounted(&mut self, mount: &str) -> Result<(), Stopped> {
+        self.units.retain(|(at, ..)| at != mount);
+
+        self.built(|_| ())
+    }
+
     /// Build every unit, and hand `then` the prelude and each unit as the build made it or the store held it: what the term a history closes with is put over.
     pub fn built<R>(&self, then: impl FnOnce(Predecessors<'_>) -> R) -> Result<R, Stopped> {
         let verdicts = self.verdicts();
-        let units = self.walked(&verdicts, None, |_, _, _| ())?;
+        let (units, stood_in) = self.walked(&verdicts, None, |_, _, _| ())?;
 
         Ok(with_prelude(|prelude| {
-            let scope = prelude.iter().copied().chain(&units).collect::<Vec<_>>();
+            let scope = roots(prelude, stood_in).chain(&units).collect::<Vec<_>>();
             then(Predecessors::over(&scope))
         }))
     }
 
-    /// Every unit in the order its first step came, up to the one claiming `until` where it is given, each compiled through `verdicts` over the prelude and the units before it, and handed to `each` with the source it was compiled from as it is made.
+    /// Every unit in the order its first step came, up to the one claiming `until` where it is given, each compiled through `verdicts` over the prelude and the units before it, and handed to `each` with the source it was compiled from as it is made; with the index of the archived root the first unit stands in for, where it claims a prefix the last root mounts, as a package named `std` first in a fold does.
     fn walked(
         &self,
         verdicts: &Verdicts,
         until: Option<&str>,
         mut each: impl FnMut(&str, &UnitSource<'_>, &Unit),
-    ) -> Result<Vec<Unit>, Stopped> {
+    ) -> Result<(Vec<Unit>, Option<usize>), Stopped> {
         let mut units = Vec::new();
-        for (mount, written, file) in &self.units {
+        let mut stood_in = None;
+        for (position, (mount, written, file)) in self.units.iter().enumerate() {
             if until == Some(mount.as_str()) {
                 break;
             }
@@ -186,21 +197,34 @@ impl History {
             let root = RootSource::one_file(mount, file, &text);
             let source = UnitSource::mounted(&root);
             let unit = with_prelude(|prelude| {
-                let scope = prelude.iter().copied().chain(&units).collect::<Vec<_>>();
+                // The root a first unit stands in for is withheld, and the unit is compiled over the roots before it, seeing what the root could see and offered its archived unit as a baseline, as the standard fold compiles a package named `std`.
+                let standing = (position == 0)
+                    .then(|| stood_in_for(prelude, slice::from_ref(&root)))
+                    .flatten();
+                if let Some((index, _)) = standing {
+                    stood_in = Some(index);
+                }
+                let scope = roots(prelude, stood_in).chain(&units).collect::<Vec<_>>();
                 let predecessors = Predecessors::over(&scope);
+                let seeing = match standing {
+                    Some((index, _)) => UnitSource::mounted(&root)
+                        .seeing(granted_in_place(prelude, index, &root)),
+                    None => UnitSource::mounted(&root),
+                };
+                let offered = standing.map(|(_, archived)| archived.clone().read_for(root.packages()));
                 match written {
                     Written::Program => compile_units(
                         DEFAULT_BUDGET,
                         predecessors,
                         &SYNTAX,
-                        &[(UnitSource::mounted(&root), None)],
+                        &[(seeing, offered.as_ref())],
                         Some(verdicts),
                         |_| {},
                         Listeners::default(),
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),
-                    Written::CoreText => read(verdicts, predecessors, &source, &text),
+                    Written::CoreText => read(verdicts, predecessors, &seeing, &text),
                 }
             })
             .map_err(stopped)?;
@@ -208,8 +232,19 @@ impl History {
             units.push(unit);
         }
 
-        Ok(units)
+        Ok((units, stood_in))
     }
+}
+
+/// The prelude's roots a history's units are compiled over: every one but the root at `stood_in`, where a unit stands in for it.
+fn roots<'u>(prelude: &[&'u Unit], stood_in: Option<usize>) -> impl Iterator<Item = &'u Unit> {
+    prelude
+        .iter()
+        .enumerate()
+        .filter(move |(index, _)| Some(*index) != stood_in)
+        .map(|(_, root)| *root)
+        .collect::<Vec<_>>()
+        .into_iter()
 }
 
 /// The unit `source` is, `text` being the Core text it is written in: the one the store holds for it where its record agrees, and otherwise read over `predecessors`, compiled over the unit the store offers for its earlier text, and filed.

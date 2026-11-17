@@ -399,7 +399,7 @@ impl<'a> Fold<'a> {
 
         with_prelude(|prelude| {
             // The prelude's roots are in scope unconditionally, with one exception: a package named `std` is the standard library, by the meaning of the name. It takes the archived root's place — the root is withheld, the package is compiled over the archived unit as its baseline and sees what the root could see — and every unit after it is compiled against it, addressed in the store after it. Any other unit claiming a prefix a root mounts collides with it and is refused, exactly as two source units claiming one prefix are. What this is not is a way to swap standard libraries under a dependency: a dependency means what it means against the `/std` it was compiled after, which is why the name is reserved rather than the scope made a parameter.
-            let withheld = withheld(prelude, units);
+            let withheld = stood_in_for(prelude, units);
             let roots = prelude
                 .iter()
                 .enumerate()
@@ -414,7 +414,7 @@ impl<'a> Fold<'a> {
                 .enumerate()
                 .map(|(index, unit)| match withheld {
                     Some((index_of_root, _)) if index == 0 => (
-                        UnitSource::mounted(unit).seeing(granted(prelude, index_of_root, unit)),
+                        UnitSource::mounted(unit).seeing(granted_in_place(prelude, index_of_root, unit)),
                         offered.as_ref(),
                     ),
                     _ => (UnitSource::mounted(unit), None),
@@ -438,7 +438,7 @@ impl<'a> Fold<'a> {
 /// The last archived root, when the first of `units` claims a prefix it mounts: the root that unit takes the place of.
 ///
 /// The first unit alone, because its predecessors are then exactly the roots before the withheld one — the ones the archived unit was compiled against — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
-fn withheld<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'a Unit)> {
+pub fn stood_in_for<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'a Unit)> {
     let claims = units.first()?.mounts();
     let (index, root) = prelude.iter().copied().enumerate().next_back()?;
 
@@ -451,7 +451,7 @@ fn withheld<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'
 /// What the unit standing in for the archived root at `withheld` may name: every root before it, which the archived unit could see, beside whatever the unit declared itself.
 ///
 /// The roots before it are granted whether or not the unit declared them, because the one that matters is closed: `/sys` is in no unit's default set and the standard library reaches it by declaring it, and a package's manifest cannot declare it.
-fn granted(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
+pub fn granted_in_place(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
     let source = UnitSource::mounted(unit);
     let mut prefixes = prelude[..withheld]
         .iter()
