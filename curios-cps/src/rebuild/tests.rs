@@ -763,3 +763,270 @@ fn built_over_a_number_handed_twice() -> Module {
 fn a_number_handed_at_two_parameters_shares_nothing_built_over_it() {
     assert_eq!(rebuilds(&built_over_a_number_handed_twice()).len(), 1);
 }
+
+/// `main` builds `p`, a `Pair` over a `Pair` `inner`, reads `p`'s second slot into `held`, and enters `k` with `held` at `a` and `p` at `b`, or, where `apart`, with the same read of another such `Pair`, `q`, at `a`. `k` reads `b`'s second slot, reads that one's slot, builds a `Pair` of it beside what it read dying, then reads `a`'s slot and halts on it.
+fn child_beside_its_holder(apart: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [
+        x,
+        inner_p,
+        inner_q,
+        p,
+        q,
+        held,
+        a,
+        b,
+        b_inner,
+        v,
+        built,
+        a_slot,
+    ] = [
+        "x", "inner_p", "inner_q", "p", "q", "held", "a", "b", "b_inner", "v", "built", "a_slot",
+    ]
+    .map(|name| module.add_value(Some(name.into())));
+
+    let exit = module.add_node(halt(vec![Atom::Value(a_slot)]));
+    let read_a = module.add_node(Node::LetIntrinsic {
+        result: a_slot,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(a)],
+        next: exit,
+    });
+    let build = module.add_node(Node::LetValue {
+        result: built,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: read_a,
+    });
+    let read_v = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(b_inner)],
+        next: build,
+    });
+    let read_b = module.add_node(Node::LetIntrinsic {
+        result: b_inner,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(b)],
+        next: read_v,
+    });
+    let k = module.reserve_continuation();
+    module.define_continuation(
+        k,
+        Continuation {
+            debug_name: Some("k".into()),
+            params: vec![a, b],
+            body: read_b,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: k,
+        args: vec![Atom::Value(held), Atom::Value(p)],
+    }));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![k],
+        body: enter,
+    });
+    let read_held = module.add_node(Node::LetIntrinsic {
+        result: held,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(if apart { q } else { p })],
+        next: scope,
+    });
+    let build_q = module.add_node(Node::LetValue {
+        result: q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_q)]),
+        next: read_held,
+    });
+    let build_p = module.add_node(Node::LetValue {
+        result: p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_p)]),
+        next: build_q,
+    });
+    let build_inner_q = module.add_node(Node::LetValue {
+        result: inner_q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_p,
+    });
+    let build_inner_p = module.add_node(Node::LetValue {
+        result: inner_p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_inner_q,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: build_inner_p,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A child read out of a value and handed beside it names what the value holds in that slot, so a rebuild of what another name reads out of that slot would write what the first still reads. Mutation-checked: with a value consumed while a field read out of it still names what it read left unique, `b`'s child is rebuilt under `a`.
+#[test]
+fn a_child_handed_beside_its_holder_is_written_into_by_nothing_the_other_reads() {
+    for (apart, rebuilt) in [(false, 0), (true, 1)] {
+        let module = child_beside_its_holder(apart);
+        let found = rebuilds(&module);
+        assert_eq!(found.len(), rebuilt, "apart: {apart}: {found:?}\n{module}");
+    }
+}
+
+/// `main` builds `p`, a `Pair` over a `Pair` `inner`, reads `p`'s second slot into `held`, hands `p` to `deep`, and reads `held`'s slot once `deep` returns, or, where `apart`, reads `held` out of another such `Pair`, `q`. `deep(t)` reads its parameter's second slot, reads that one's slot, and builds a `Pair` of it beside what it read dying.
+fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let deep = module.reserve_function();
+    let deep_return = module.reserve_continuation();
+    let [t, t_inner, t_slot, t_built] =
+        ["t", "t_inner", "t_slot", "t_built"].map(|name| module.add_value(Some(name.into())));
+    let deep_hands = module.add_node(Node::ApplyCont(Edge {
+        target: deep_return,
+        args: vec![Atom::Value(t_built)],
+    }));
+    let deep_build = module.add_node(Node::LetValue {
+        result: t_built,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(t_slot)]),
+        next: deep_hands,
+    });
+    let read_slot = module.add_node(Node::LetIntrinsic {
+        result: t_slot,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(t_inner)],
+        next: deep_build,
+    });
+    let deep_body = module.add_node(Node::LetIntrinsic {
+        result: t_inner,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(t)],
+        next: read_slot,
+    });
+    module.define_function(
+        deep,
+        Function {
+            debug_name: Some("deep".into()),
+            params: vec![t],
+            return_cont: deep_return,
+            body: deep_body,
+            droppable: Droppable::Never,
+        },
+    );
+
+    let [x, inner_p, inner_q, p, q, held, deeper, held_slot] = [
+        "x",
+        "inner_p",
+        "inner_q",
+        "p",
+        "q",
+        "held",
+        "deeper",
+        "held_slot",
+    ]
+    .map(|name| module.add_value(Some(name.into())));
+    let exit = module.add_node(halt(vec![Atom::Value(held_slot)]));
+    let read_held = module.add_node(Node::LetIntrinsic {
+        result: held_slot,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(held)],
+        next: exit,
+    });
+    let after = module.reserve_continuation();
+    module.define_continuation(
+        after,
+        Continuation {
+            debug_name: None,
+            params: vec![deeper],
+            body: read_held,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(deep),
+        args: vec![Atom::Value(p)],
+        return_to: after,
+    });
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![after],
+        body: call,
+    });
+    let take_held = module.add_node(Node::LetIntrinsic {
+        result: held,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(if apart { q } else { p })],
+        next: scope,
+    });
+    let build_q = module.add_node(Node::LetValue {
+        result: q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_q)]),
+        next: take_held,
+    });
+    let build_p = module.add_node(Node::LetValue {
+        result: p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_p)]),
+        next: build_q,
+    });
+    let build_inner_q = module.add_node(Node::LetValue {
+        result: inner_q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_p,
+    });
+    let build_inner_p = module.add_node(Node::LetValue {
+        result: inner_p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_inner_q,
+    });
+    let compute = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: build_inner_p,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![deep],
+        body: compute,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A child read out of a value before the value is handed on, and read again after, names what the callee takes apart: the callee may not rebuild that child in place. Mutation-checked: with a value consumed while a field read out of it is live left unique, `deep` rebuilds the child `held` reads.
+#[test]
+fn a_child_read_before_its_holder_is_handed_on_is_written_into_by_nothing_the_callee_reads() {
+    for (apart, rebuilt) in [(false, 0), (true, 1)] {
+        let module = child_read_before_its_holder_is_handed_on(apart);
+        let found = rebuilds(&module);
+        assert_eq!(found.len(), rebuilt, "apart: {apart}: {found:?}\n{module}");
+    }
+}

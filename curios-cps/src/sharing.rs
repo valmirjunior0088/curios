@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
 //! **Payloads by slot.** A construction holding what something else holds is shared with it, since a read of the construction hands that out; only a row or a tuple counts, a number or a list holding nothing a rebuild writes. A slot whose reads nothing takes apart, wherever what they hand out flows, is a payload's and carries the fact itself: a shared value stored in it shares the slot and leaves the construction one nothing else holds, and a read of a slot so shared is shared. So a leaf built over a payload read back out of another map is a leaf nothing else holds, and every fork over it is rebuilt; a child's slot stays shared with the construction that holds it, so one tree something else holds says nothing of another. Which slots are payloads decides what the facts prove and never whether they hold, a slot's fact covering every store into it.
 //!
@@ -1462,6 +1462,42 @@ impl Shape {
         }
     }
 
+    /// `value` and every field read off it, and off those: each name a read hands out of what `value` holds.
+    fn with_fields(&self, value: ValueId) -> BTreeSet<ValueId> {
+        let mut found = BTreeSet::from([value]);
+        let mut pending = vec![value];
+        while let Some(holder) = pending.pop() {
+            for field in self.fields.get(&holder).into_iter().flatten() {
+                if found.insert(*field) {
+                    pending.push(*field);
+                }
+            }
+        }
+        found
+    }
+
+    /// Whether a field read out of `value`, or out of one of its fields, still names what it read at a point in `consumed`: live past it, or handed on there beside `value`, on the same edge. Whoever `value` is handed to there may take that field apart and rebuild it in place while the read still names it, so `value` is one that read names too. A read there, a switch's scrutinee among them, hands nothing on.
+    fn outlived_by_a_field(&self, module: &Module, value: ValueId, consumed: &[Point]) -> bool {
+        let mut fields = self.with_fields(value);
+        fields.remove(&value);
+        if fields.is_empty() {
+            return false;
+        }
+        consumed.iter().any(|point| {
+            fields.iter().any(|field| {
+                self.live_after(module, *point, *field)
+                    || self
+                        .uses
+                        .get(field)
+                        .into_iter()
+                        .flatten()
+                        .any(|(node, site, into)| {
+                            *node == point.node && *into == point.into && *site != Site::Read
+                        })
+            })
+        })
+    }
+
     /// Whether `value` is defined where `node` can name it: before it along a block enclosing it.
     fn in_scope(&self, value: ValueId, node: NodeId) -> bool {
         let anchor = match self.defs.get(&value) {
@@ -1922,7 +1958,7 @@ impl<'s> Facts<'s> {
     }
 }
 
-/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it. What a call or a jump hands a parameter shares it only where it may be a row or a tuple, one of `aggregates`: a number handed at two parameters holds nothing a rebuild writes.
+/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, one consumed while a field read out of it still names what it read ([`Shape::outlived_by_a_field`]), a captured one, a field another read on its path reads or its own read reads again on a later round —and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it. What a call or a jump hands a parameter shares it only where it may be a row or a tuple, one of `aggregates`: a number handed at two parameters holds nothing a rebuild writes.
 fn sources(
     module: &Module,
     shape: &Shape,
@@ -1948,6 +1984,7 @@ fn sources(
         let not_last = consumed
             .iter()
             .any(|point| shape.live_after(module, *point, *value));
+        let outlived = shape.outlived_by_a_field(module, *value, &consumed);
         let source = match def {
             Def::Other => true,
             Def::Construction => false,
@@ -2016,7 +2053,7 @@ fn sources(
                     })
             }
         };
-        if source || twice || not_last || shape.captured.contains(value) {
+        if source || twice || not_last || outlived || shape.captured.contains(value) {
             sources.insert(Key::Value(*value));
         }
     }
