@@ -1,11 +1,11 @@
-//! The certifier over the restored prelude: where it disagrees with the elaborator, its memos changing no verdict, a declared type typed at each value of a parameter, and the inventories of the prelude's universe parameters and their variances.
+//! The certifier over the restored prelude: where it disagrees with the elaborator, its memos changing no verdict, a declared type typed at each value of a parameter, and the inventories of the prelude's universe parameters, their variances and its families' polarities.
 
 use {
     super::{test_support::*, *},
     curios_cert::{Error, certify_definitions, infer, test_support::*},
     curios_core::{
-        Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Quality, Reducer, Subterm,
-        Telescope, Term, Variance, instantiate_qualities,
+        Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality, Reducer,
+        Subterm, Telescope, Term, Variance, instantiate_qualities,
     },
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
@@ -318,6 +318,46 @@ fn family_variance_inventory() {
         );
         println!("  {irrelevant:>4}  irrelevant");
         println!("  {:>4}  invariant", parameters - irrelevant);
+    });
+}
+
+/// How each of the prelude's families uses its parameters, printed rather than asserted: one line per family that takes one, its vector as the archive carries the one `curios-analysis`'s `positivity_vectors` computed, and a tally of the polarities over every parameter. A change to how the walk reads a type moves a vector without refusing anything, so the lines of two commits are compared by name. Counted.
+#[test]
+#[ignore = "inventory: measures how the prelude's families use their parameters rather than asserting it"]
+fn polarity_census() {
+    with_prelude(|prelude| {
+        let families = prelude
+            .iter()
+            .flat_map(|root| {
+                let core = root.core();
+                let inducts = core
+                    .induct_decls()
+                    .into_iter()
+                    .map(|(name, declaration)| (name, declaration.polarities().to_vec()));
+                let structs = core
+                    .struct_decls()
+                    .into_iter()
+                    .map(|(name, declaration)| (name, declaration.polarities.clone()));
+                inducts.chain(structs).collect::<Vec<_>>()
+            })
+            .collect::<BTreeMap<Global, Vec<Polarity>>>();
+
+        let mut tally = BTreeMap::<String, usize>::new();
+        for (name, vector) in families.iter().filter(|(_, vector)| !vector.is_empty()) {
+            println!("{}\t{vector:?}", name.faithful());
+            for polarity in vector {
+                *tally.entry(format!("{polarity:?}")).or_default() += 1;
+            }
+        }
+
+        println!(
+            "\n=== {} families, {} with no parameter ===",
+            families.len(),
+            families.values().filter(|vector| vector.is_empty()).count(),
+        );
+        for (polarity, count) in tally {
+            println!("  {count:>4}  {polarity}");
+        }
     });
 }
 
