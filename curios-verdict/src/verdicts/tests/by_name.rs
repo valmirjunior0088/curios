@@ -118,8 +118,7 @@ fn a_proof_another_project_filed_over_a_package_of_one_name_is_judged_again_over
 /// A verdict a store filed is found by the item it judged, its reads digested again where it is taken. `d` proves `NonZero(0)` while `/std` is the package `std`, where `NonZero` holds of every number, and its first filing completes its record with what it read of that package; `p` is then filed without `d`, so its slot holds no `d` to adopt; once `/std` is the archived root, where `NonZero(0)` is `Bool/Holds(0 != 0)`, `d` written again is judged and not taken from that record, and is refused as a build with nothing stored refuses it.
 #[test]
 fn a_verdict_filed_over_the_package_std_is_not_taken_over_the_archived_std() {
-    const PROVED: &str =
-        "use /std/Nat/{NonZero};\nuse /std/Bool/{True};\n\npub let d: NonZero(0) =\n    True/qed();\n";
+    const PROVED: &str = "use /std/Nat/{NonZero};\nuse /std/Bool/{True};\n\npub let d: NonZero(0) =\n    True/qed();\n";
     let project = |name: &str, under: Option<&str>| {
         let root = temporary(name);
         write(&root, "std/curios.toml", &beside("std", None));

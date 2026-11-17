@@ -592,7 +592,10 @@ fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leadin
         b"ok",
     )
     .refused(&[
-        ("(y) => match y | 0 => 1", "let q = 1; (y) => match y | 0 => q"),
+        (
+            "(y) => match y | 0 => 1",
+            "let q = 1; (y) => match y | 0 => q",
+        ),
         ("apply1(W, k)", "apply1(W, y)"),
     ])
     .by_elaborator_in("/Low", |error| {

@@ -808,9 +808,14 @@ fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
             false => Certifier::new(BUDGET, SYNTAX),
             true => Certifier::uncached(BUDGET, SYNTAX),
         };
-        let verdicts =
-            super::verdicts_from(&mut certifier, &definitions, None, &Globals::default(), None)
-                .verdicts;
+        let verdicts = super::verdicts_from(
+            &mut certifier,
+            &definitions,
+            None,
+            &Globals::default(),
+            None,
+        )
+        .verdicts;
         assert!(
             verdicts.iter().any(|verdict| {
                 verdict.name == Some(global("d"))

@@ -588,7 +588,8 @@ fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
 // What an arm learns of a projection of a `let`-bound scrutinee it learns of the definition's projection too, and only within the arm: under `let p = g(n)`, the arm matching `(3, _)` refines `p.0` and `g(n).0`, and the default arm, where `g(n).0` is anything but `3`, learns neither. The control states the fact in the arm that matched, and in the default only what holds of every `g(n).0`.
 #[test]
 fn a_projection_refined_through_a_lets_definition_answers_nothing_in_a_sibling_arm() {
-    control(r#"
+    control(
+        r#"
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
@@ -604,7 +605,9 @@ fn a_projection_refined_through_a_lets_definition_answers_nothing_in_a_sibling_a
             end;
 
         /std/print(Nat/to_str(pair(0, (m) => (3, m))))
-        "#, b"0")
-        .refused(&[("Holds(g(n).0 == 3 || true)", "Holds(g(n).0 == 3)")])
-        .by_elaborator_in("/pair", |error| matches!(error, Error::TypeMismatch { .. }));
+        "#,
+        b"0",
+    )
+    .refused(&[("Holds(g(n).0 == 3 || true)", "Holds(g(n).0 == 3)")])
+    .by_elaborator_in("/pair", |error| matches!(error, Error::TypeMismatch { .. }));
 }

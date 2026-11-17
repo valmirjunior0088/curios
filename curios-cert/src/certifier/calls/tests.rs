@@ -279,11 +279,18 @@ fn a_call_below_its_caller_only_to_a_question_descends_on_nothing() {
     let group = |left: &str, right: &str| term(&fill!(ASKED_ARGUMENT, left, right));
 
     assert!(
-        infer(&mut certifier(), &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(a2, b2))")).is_ok(),
+        infer(
+            &mut certifier(),
+            &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(a2, b2))")
+        )
+        .is_ok(),
         "the calls spelled alike descend, or the refusal below proves nothing"
     );
     assert!(matches!(
-        infer(&mut certifier(), &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(b2, a2))")),
+        infer(
+            &mut certifier(),
+            &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(b2, a2))")
+        ),
         Err(Error::NotDescending { .. }),
     ));
 }
