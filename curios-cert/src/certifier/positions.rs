@@ -4,12 +4,13 @@
 //!
 //! **Classified when recorded, never afterwards.** A position's type routinely mentions the binders the item opened, and those are retracted the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and a quiet failure would leave positions silently unconstrained.
 //!
-//! Three things make that workable. Which half a type's positions belong to is remembered beside the certifier's sorts and under their lives ([`Memos`](super::Memos)), so classifying at every record site costs one question per type for as long as what its sort was read off stands — and a type an arm's equation makes a proposition is classified under each arm's own, where a memo kept here for the whole item would hand one arm's answer to the next. A classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn. The last two are this component's rather than a caller's.
+//! Two things make that workable. Which half a type's positions belong to is remembered beside the certifier's sorts and under their lives ([`Memos`](super::Memos)), so classifying at every record site costs one question per type for as long as what its sort was read off stands — and a type an arm's equation makes a proposition is classified under each arm's own, where a memo kept here for the whole item would hand one arm's answer to the next. And a classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it — this component's job rather than a caller's. Deciding a position's erased half records nothing of its own: it classifies in a reading, which offers no recording ([`ByValue`](super::ByValue)).
 
 use {
     super::Error,
     curios_analysis::Erased,
     curios_core::{Free, Term},
+    std::mem,
 };
 
 /// One erased position an item's check recorded.
@@ -25,34 +26,23 @@ pub struct Positions {
     recorded: Vec<Position>,
     /// The first classification that could not be decided.
     failure: Option<Error>,
-    /// Re-entrancy guard: set while an erased half is being decided.
-    classifying: bool,
     /// Set while a reader reads ([`Certifier::read`](super::Certifier::read)), whose judgments are no item's check.
     reading: bool,
 }
 
 impl Positions {
-    /// Whether a classification is already in flight, in which case this record is one of its own, or a reader reads: either way the record is dropped.
+    /// Whether a reader reads, whose judgments are no item's check: the record is dropped.
     pub fn suppressed(&self) -> bool {
-        self.classifying || self.reading
+        self.reading
     }
 
     /// Drop every record while `reading`, handing back whether records were already being dropped for a reader.
     pub fn hold_for_reading(&mut self, reading: bool) -> bool {
-        std::mem::replace(&mut self.reading, reading)
+        mem::replace(&mut self.reading, reading)
     }
 
-    /// Raise the guard for a classification about to run.
-    ///
-    /// A bracket rather than a closure, and paired with [`Positions::settle`] — two calls that must agree, which is normally a thing to get wrong. It is unavoidable here and safe for one reason: the middle of the bracket is `erased_half`, which needs the whole [`Certifier`](super::Certifier), and handing this component the certifier that owns it is not a thing Rust will do. So the orchestration lives on `Certifier::record_checked`, which is the sole caller of either half and the only one that can exist.
-    pub fn begin(&mut self) {
-        self.classifying = true;
-    }
-
-    /// Lower the guard and hand back what the type classified as, keeping the first failure to surface with the drain.
+    /// Hand back what a type classified as, keeping the first failure to surface with the drain.
     pub fn settle(&mut self, outcome: Result<Option<Erased>, Error>) -> Option<Erased> {
-        self.classifying = false;
-
         match outcome {
             Ok(erased) => erased,
             Err(error) => {
@@ -107,6 +97,6 @@ impl Positions {
 
     /// Take this item's positions and any classification that could not be decided, leaving both empty for the next item.
     pub fn drain(&mut self) -> (Vec<Position>, Option<Error>) {
-        (std::mem::take(&mut self.recorded), self.failure.take())
+        (mem::take(&mut self.recorded), self.failure.take())
     }
 }

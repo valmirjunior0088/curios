@@ -132,9 +132,24 @@ pub fn carries_information(certifier: &mut Certifier, type_: &Term) -> Result<bo
     Ok(!Sort::of(certifier, type_)?.is_prop())
 }
 
-/// The erased half a term judged at `type_` belongs to, `type_` read by value ([`ByValue::erased_half`]).
+/// The erased half a term judged at `type_` belongs to, `type_` read by value ([`ByValue::erased_half`]), remembered beside the certifier's sorts: the one door a recorded position (`Certifier::record_checked`) and erasure's [`Reader::erased`](super::Reader::erased) ask.
+///
+/// **Filed under the type by value, as its sort is**, and under the lives a sort has (`Memos`). A classification that failed is asked again where the type is met next: remembered, its `None` would read as a type no erased half holds, and the failure would go with whichever walk met it first — a refused one takes it back.
 pub fn erased_half(certifier: &mut Certifier, type_: &Term) -> Result<Option<Erased>, Error> {
-    certifier.read_by_value([type_], |certifier, [type_]| certifier.erased_half(&type_))
+    certifier.read_by_value([type_], |certifier, [type_]| {
+        let in_arm = certifier.has_refinements();
+        if let Some(erased) = certifier.standing(certifier.memos.half(&type_, in_arm)) {
+            return Ok(erased);
+        }
+        let erased = certifier.erased_half(&type_)?;
+        let prefix = certifier.scope.prefix();
+        certifier
+            .certifier
+            .memos
+            .store_half(type_, in_arm, prefix, erased);
+
+        Ok(erased)
+    })
 }
 
 /// Whether a value of `type_` is a proof, `type_` read by value ([`ByValue::bears_proof`]).

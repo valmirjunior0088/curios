@@ -1220,36 +1220,14 @@ impl<'s> Certifier<'s> {
 
     /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.
     ///
-    /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The orchestration lives here rather than on [`Positions`] because the middle of it — `erased_half` — needs the whole certifier; see `Positions::begin` on why that bracket cannot be a closure.
+    /// Called from both `check` and `infer`, because a term's type is its type however the judgment reached it. The half is asked of the one door that remembers it ([`erased_half`]), which classifies in a reading and so records no position of its own; a classification that could not be decided is kept to surface with the drain ([`Positions::settle`]).
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) -> Option<usize> {
         if self.positions.suppressed() {
             return None;
         }
 
-        // The half is filed under the type by value, as its sort is.
-        let type_ = &self.by_value(type_);
-        let erased = match self.standing(self.memos.half(type_, self.has_refinements())) {
-            Some(erased) => erased,
-            None => {
-                self.positions.begin();
-                let outcome = erased_half(self, type_);
-                let classified = outcome.is_ok();
-                let erased = self.positions.settle(outcome);
-                // A classification that failed is asked again where the type is met next: remembered, its `None` would read as a type no erased half holds, and the failure would go with whichever walk met it first — a refused one takes it back.
-                if classified {
-                    self.memos.store_half(
-                        type_.clone(),
-                        self.has_refinements(),
-                        self.scope.prefix(),
-                        erased,
-                    );
-                }
-
-                erased
-            }
-        };
-
-        let erased = erased?;
+        let classified = erased_half(self, type_);
+        let erased = self.positions.settle(classified)?;
         // A position is read for what its term reaches, and a `let`-bound local's name says nothing of what it stands for: the term is recorded by value, with whether a value it names enclosed a group that does not descend — the group was typed where the `let` binds it, not inside this term.
         let filed = self.by_value(term);
         let position = self.positions.push(&filed, erased);

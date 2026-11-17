@@ -101,20 +101,9 @@ impl<'s> Reader<'_, 's> {
         infer(self.certifier, term)
     }
 
-    /// Which half a value of `type_` is in — a proof, a type, or neither, `None` — as the erasure obligations classify a position, remembered beside the certifier's sorts.
+    /// Which half a value of `type_` is in — a proof, a type, or neither, `None` — as the erasure obligations classify a position, remembered beside the certifier's sorts (`erased_half`).
     pub fn erased(&mut self, type_: &Term) -> Result<Option<Erased>, Error> {
-        let certifier = &mut *self.certifier;
-        let type_ = certifier.by_value(type_);
-        let in_arm = certifier.has_refinements();
-        if let Some(erased) = certifier.standing(certifier.memos.half(&type_, in_arm)) {
-            return Ok(erased);
-        }
-
-        let erased = erased_half(certifier, &type_)?;
-        let prefix = certifier.scope.prefix();
-        certifier.memos.store_half(type_, in_arm, prefix, erased);
-
-        Ok(erased)
+        erased_half(self.certifier, type_)
     }
 
     /// Put the case `value` of `scrutinee` in force, as an arm of a `Bool` or `Switch` elimination is checked under it: the scrutinee read by value, as typing reads a match's ([`infer`]), so a case equation names no `let`-bound local.
