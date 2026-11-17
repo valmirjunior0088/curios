@@ -224,3 +224,37 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
         assert_eq!(run(&source), b"inside", "{guard}");
     }
 }
+
+// An arm over a projection of a projection of a `let`-bound scrutinee refines the same chain over the definition, as the certifier, reading the scrutinee by value, matches on it: a nested tuple pattern matches `p.0.1`, and a character inside a tuple matches `p.0.code`, so each arm's fact holds of `g(n)`'s projection as of `p`'s.
+#[test]
+fn a_nested_projection_of_a_let_bound_scrutinee_is_refined_through_its_definition() {
+    assert_eq!(
+        run(r#"
+            use /std/{Nat, Char};
+            use /std/Bool/{True, Holds};
+
+            let nested(n: Nat, g: (Nat) -> {{Nat, Nat}, Nat}) -> Nat =
+                let p = g(n);
+                match p
+                | ((_, 3), _) =>
+                    let _: Holds(p.0.1 == 3) = True/qed();
+                    let _: Holds(g(n).0.1 == 3) = True/qed();
+                    0
+                | _ => 1
+                end;
+
+            let chars(n: Nat, g: (Nat) -> {Char, Nat}) -> Nat =
+                let p = g(n);
+                match p
+                | ('a', _) =>
+                    let _: Holds(p.0 == 'a') = True/qed();
+                    let _: Holds(g(n).0 == 'a') = True/qed();
+                    0
+                | _ => 1
+                end;
+
+            /std/print(Nat/to_str(nested(0, (m) => ((m, 3), m)) + chars(0, (m) => ('a', m))))
+            "#),
+        b"0"
+    );
+}
