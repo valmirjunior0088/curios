@@ -773,3 +773,54 @@ fn a_signature_naming_a_member_that_does_not_descend_is_a_type_that_does_not_ter
         "{control:?}"
     );
 }
+
+/// `T(b)`, `Type` at `true` and `Nat` at `false`, and `/d` splitting on `g(n)`: its `false` arm holds `5` at `T(g(n))`, a relevant position, and its `true` arm a type at `T(g(n))` that matches on `/loop(0)`, which does not descend. The `false` arm classifies `T(g(n))` first, under its own equation.
+const AN_ERASED_HALF_UNDER_EACH_ARM: &str = r#"
+#{node = Rec}
+let /loop: (m: #NatType) -> #NatType = (m2: #NatType) => /loop(m2);
+
+let /T: (b: #BoolType) -> #{level = 1} Type =
+    (b2: #BoolType) => #{goal = #{level = 1} Type} match b2 | false => #NatType | true => Type end;
+
+let /d: (g: (x: #NatType) -> #BoolType, n: #NatType) -> #NatType =
+    (g2: (x: #NatType) -> #BoolType, n2: #NatType) =>
+        #{goal = #NatType}
+        match g2(n2)
+        | false =>
+            let a: /T(g2(n2)) = 5;
+            0
+        | true =>
+            let t: /T(g2(n2)) =
+                #{goal = Type} match /loop(0) | 0 => #NatType | k + 1 => #NatType end;
+            1
+        end;
+"#;
+
+// A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type reaching `/loop`, is refused by obligation (T), with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
+//
+// Mutation-checked at `Memos::begin_equations`: with the erased halves read off the scope left standing, `/d` is admitted with the memos on.
+#[test]
+fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
+    let definitions = core_text_module(AN_ERASED_HALF_UNDER_EACH_ARM);
+
+    for uncached in [false, true] {
+        let mut certifier = match uncached {
+            false => Certifier::new(BUDGET, SYNTAX),
+            true => Certifier::uncached(BUDGET, SYNTAX),
+        };
+        let verdicts =
+            super::verdicts_from(&mut certifier, &definitions, None, &Globals::default(), None)
+                .verdicts;
+        assert!(
+            verdicts.iter().any(|verdict| {
+                verdict.name == Some(global("d"))
+                    && verdict.error
+                        == Error::NotTotal {
+                            erased: Erased::Type,
+                            reached: Some(global("loop")),
+                        }
+            }),
+            "with the memos off: {uncached}: {verdicts:?}"
+        );
+    }
+}

@@ -267,3 +267,23 @@ fn a_self_call_graded_short_in_a_leading_binders_type_does_not_descend() {
         Err(Error::NotDescending { .. }),
     ));
 }
+
+/// `rec f(h, a, b, n) -> Type`, its successor arm calling `f` at `match ${left} == ${right} | false => n | true => pred end`.
+const ASKED_ARGUMENT: &str = "#{node = Rec} (let f: (h: (x: #NatType) -> #NatType, a: #NatType, b: #NatType, n: #NatType) -> Type = (h2: (x: #NatType) -> #NatType, a2: #NatType, b2: #NatType, n2: #NatType) => #{goal = Type} match n2 | 0 => #NatType | pred + 1 => f(h2, a2, b2, #{goal = #NatType} match #NatEql(${left}, ${right}) | false => n2 | true => pred end) end; f)";
+
+/// The size reader reads a call's argument by plain reduction (`Env::force`), which asks the certifier's conversion nothing: an argument below the caller's only to a question — `h(a + b)` and `h(b + a)` one call to conversion and two atoms to the fold — descends on nothing, and the gate refuses the group. The control spells the two calls alike, which the fold pairs with no question, and descends. Totality reads terms this way because conversion's proof irrelevance is sound only while acceptance waits on a totality that rests on no verdict of conversion's.
+///
+/// Mutation-checked: with `Env::force` on `Certifier` reducing as a judgment does, the question takes the argument to `pred` and the first group is accepted.
+#[test]
+fn a_call_below_its_caller_only_to_a_question_descends_on_nothing() {
+    let group = |left: &str, right: &str| term(&fill!(ASKED_ARGUMENT, left, right));
+
+    assert!(
+        infer(&mut certifier(), &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(a2, b2))")).is_ok(),
+        "the calls spelled alike descend, or the refusal below proves nothing"
+    );
+    assert!(matches!(
+        infer(&mut certifier(), &group("h2(#NatAdd(a2, b2))", "h2(#NatAdd(b2, a2))")),
+        Err(Error::NotDescending { .. }),
+    ));
+}

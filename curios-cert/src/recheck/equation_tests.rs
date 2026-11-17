@@ -552,3 +552,167 @@ fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
         "{verdicts:?}"
     );
 }
+
+/// The guard is the match on `G(u, v, 0) == G(u, v, 1)`, `k(1)` at `false` and `k(0)` at `true`, where `G` applies `u` at `0` and `v` past it, and the guard hands it `(e) => h(p)` and `(e) => h(q)`; the goal states its `false` arm at `True` and its `true` arm at `Holds(k(0))`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, where `h(p)` and `h(q)` are one atom, so the guard settles to `k(0)` there and `u` reads it. After the split the guard's `true` arm asks the same.
+const A_GUARD_THROUGH_A_DEFINITION_UNDER_A_SPLIT: &str = r#"
+let /G: (u: (e: #NatType) -> #NatType, v: (e: #NatType) -> #NatType, i: #NatType) -> #NatType =
+    (u2: (e: #NatType) -> #NatType, v2: (e: #NatType) -> #NatType, i2: #NatType) =>
+        #{goal = #NatType} match i2 | 0 => u2(0) | j + 1 => v2(0) end;
+
+((
+    c: #BoolType,
+    h: (x: #{goal = Type} match c | false => #NatType | true => {} end) -> #NatType,
+    k: (n: #NatType) -> #BoolType,
+    p: #{goal = Type} match c | false => #NatType | true => {} end,
+    q: #{goal = Type} match c | false => #NatType | true => {} end) =>
+    #{
+        goal = /std/Bool/Holds(
+            #{goal = #BoolType}
+            match
+                #{goal = #BoolType}
+                match
+                    #NatEql(
+                        /G((e1: #NatType) => h(p), (e2: #NatType) => h(q), 0),
+                        /G((e3: #NatType) => h(p), (e4: #NatType) => h(q), 1))
+                | false => k(1)
+                | true => k(0)
+                end
+            | false => true
+            | true => k(0)
+            end)}
+    match
+        #{goal = #BoolType}
+        match
+            #NatEql(
+                /G((e1: #NatType) => h(p), (e2: #NatType) => h(q), 0),
+                /G((e3: #NatType) => h(p), (e4: #NatType) => h(q), 1))
+        | false => k(1)
+        | true => k(0)
+        end
+    | false => #{node = Variant} /std/Bool/True/qed()
+    | true =>
+        let w: #{node = InductType} /std/Bool/True() =
+            #{goal = #{node = InductType} /std/Bool/True()}
+            match c
+            | false => #{node = Variant} /std/Bool/True/qed()
+            | true =>
+                let u: /std/Bool/Holds(k(0)) = #{node = Variant} /std/Bool/True/qed();
+                #{node = Variant} /std/Bool/True/qed()
+            end;
+        #{node = Variant} /std/Bool/True/qed()
+    end)(false, (n2: #NatType) => n2, (n3: #NatType) => #NatEql(n3, 1), 0, 1)
+"#;
+
+// A definition's body is closed, so what it reads of the split's locals is what the guard hands it: the guard names `h`, `p` and `q`, whose types name `c`, the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, where the guard is `k(1)`, `true`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`. A member of a group standing in a term reads what it captures with no guard naming it, which the board's ticket filed at af2b2d825 holds.
+//
+// Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted, the guard settling inside the split.
+#[test]
+fn a_guard_through_a_definition_answers_nothing_after_the_split() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GUARD_THROUGH_A_DEFINITION_UNDER_A_SPLIT}",
+        PROPOSITIONS,
+        A_GUARD_THROUGH_A_DEFINITION_UNDER_A_SPLIT
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// The guard is the match on `n1 == n2`, `k(1)` at `false` and `k(0)` at `true`, where `n1` and `n2` are the payloads of two `Same` proofs whose arms' index inversions solve them to `h(p)` and `h(q)`; the goal states its `false` arm at `True` and its `true` arm at `Holds(k(0))`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, so the guard settles to `k(0)` there and `u` reads it. After the split the guard's `true` arm asks the same.
+const A_GUARD_OVER_INVERSIONS_UNDER_A_SPLIT: &str = r#"
+induct /Same: (a: #NatType, b: #NatType) -> pub Prop
+| refl(n: #NatType): (n, n)
+end
+
+((
+    c: #BoolType,
+    h: (x0: #{goal = Type} match c | false => #NatType | true => {} end) -> #NatType,
+    k: (n0: #NatType) -> #BoolType,
+    p: #{goal = Type} match c | false => #NatType | true => {} end,
+    q: #{goal = Type} match c | false => #NatType | true => {} end,
+    x: #NatType,
+    y: #NatType,
+    ex: #{node = InductType} /Same()(x, h(p)),
+    ey: #{node = InductType} /Same()(y, h(q))) =>
+    #{
+        goal = /std/Bool/Holds(
+            #{goal = #BoolType}
+            match #{goal = #BoolType} match #NatEql(x, y) | false => k(1) | true => k(0) end
+            | false => true
+            | true => k(0)
+            end)}
+    match ex
+    | refl(n1) =>
+        #{
+            goal = /std/Bool/Holds(
+                #{goal = #BoolType}
+                match #{goal = #BoolType} match #NatEql(n1, y) | false => k(1) | true => k(0) end
+                | false => true
+                | true => k(0)
+                end)}
+        match ey
+        | refl(n2) =>
+            #{
+                goal = /std/Bool/Holds(
+                    #{goal = #BoolType}
+                    match
+                        #{goal = #BoolType} match #NatEql(n1, n2) | false => k(1) | true => k(0) end
+                    | false => true
+                    | true => k(0)
+                    end)}
+            match #{goal = #BoolType} match #NatEql(n1, n2) | false => k(1) | true => k(0) end
+            | false => #{node = Variant} /std/Bool/True/qed()
+            | true =>
+                let w: #{node = InductType} /std/Bool/True() =
+                    #{goal = #{node = InductType} /std/Bool/True()}
+                    match c
+                    | false => #{node = Variant} /std/Bool/True/qed()
+                    | true =>
+                        let u: /std/Bool/Holds(k(0)) = #{node = Variant} /std/Bool/True/qed();
+                        #{node = Variant} /std/Bool/True/qed()
+                    end;
+                #{node = Variant} /std/Bool/True/qed()
+            end
+        end
+    end)(
+    false,
+    (n3: #NatType) => n3,
+    (n4: #NatType) => #NatEql(n4, 1),
+    0,
+    1,
+    0,
+    1,
+    #{node = Variant} /Same/refl(0),
+    #{node = Variant} /Same/refl(1))
+"#;
+
+// A variable an index inversion solved is bound to its solution and the guard is recorded by value, so it names `h`, `p` and `q`, whose types name `c`: the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`.
+//
+// Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted.
+#[test]
+fn a_guard_over_an_inversions_solutions_answers_nothing_after_the_split() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GUARD_OVER_INVERSIONS_UNDER_A_SPLIT}",
+        PROPOSITIONS,
+        A_GUARD_OVER_INVERSIONS_UNDER_A_SPLIT
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
+    );
+}
