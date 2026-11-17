@@ -303,3 +303,41 @@ fn a_projections_steps_reach_no_application_typed_inside_its_head() {
         "the control stopped certifying, a callback `/g`'s field lambda applies below `n`",
     );
 }
+
+/// `/spin`, a recursion handing back both its arguments, whose type takes them at once and whose body binds them by `${lambdas}`.
+const A_MEMBER_WHOSE_LAMBDAS_ARE_NOT_ITS_TYPES: &str = r#"
+#{node = Rec}
+let /spin: (n: #NatType, m: #NatType) -> #{node = InductType} /std/Bool/False() =
+    ${lambdas} => /spin(n, m);
+"#;
+
+// A member's leading lambdas are its parameters to the call recorder only where the λ rule reads them against its type's telescope, and a body whose lambdas are not that telescope is refused before any call of it is graded: written with a mark the type does not state, or curried where the type takes both at once, the λ rule would be passed by, no parameter bound, and `/spin(n, m)` graded on no row against two columns, which composes with nothing and is no idempotent, so a recursion handing back everything it was handed would descend. The control binds both as the type states, and its call does not descend.
+#[test]
+fn a_member_whose_lambdas_are_not_its_types_telescope_is_refused_before_its_calls_are_graded() {
+    let verdicts = |lambdas: &str| {
+        let module = fill!(A_MEMBER_WHOSE_LAMBDAS_ARE_NOT_ITS_TYPES, lambdas);
+        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+    };
+
+    let control = verdicts("(n: #NatType, m: #NatType)");
+    assert!(
+        refuses(&control, Some("spin"), |error| matches!(
+            error,
+            Error::NotDescending { .. }
+        )),
+        "a recursion handing back both its arguments descended: {control:?}",
+    );
+    for lambdas in [
+        "(@n: #NatType, m: #NatType)",
+        "(n: #NatType) => (m: #NatType)",
+    ] {
+        let refused = verdicts(lambdas);
+        assert!(
+            refuses(&refused, Some("spin"), |error| matches!(
+                error,
+                Error::Mismatch { .. }
+            )),
+            "`{lambdas}`: a member whose lambdas are not its type's telescope was not refused as a mismatch: {refused:?}",
+        );
+    }
+}
