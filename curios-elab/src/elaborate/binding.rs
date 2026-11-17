@@ -6,14 +6,14 @@ use {
         BinderSite, Binding, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode,
         Occurrence, ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns, check,
         check_is_sort, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
-        premise_label, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
+        read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
         stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
-    curios_common::{InfixOp, Plicity, recurse},
+    curios_common::{InfixOp, Plicity, Symbol, recurse},
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
         Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
-        Telescope, Term, Transient, WitnessKey, WitnessOrigin,
+        Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole,
     },
     curios_num::{Floating, Integer, Rounding},
     std::collections::BTreeMap,
@@ -578,7 +578,7 @@ fn infix_method(
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
-        role: Some(format!("its `{field_name}` implementation")),
+        role: Some(WitnessRole::Implementation(Symbol::new(field_name))),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
@@ -683,7 +683,7 @@ fn sequencing_witness(
             concept: concept_name,
             field: bind.field.to_string(),
         },
-        role: Some(premise_label(1)),
+        role: Some(WitnessRole::Premise(1)),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());

@@ -17,12 +17,12 @@ use {
         ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
         declared, pending, reduce_with, resolved_for_display,
     },
-    crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
-    curios_common::{Mount, Plicity, Qualifier, SyntaxName},
+    crate::{SlotPositions, is_prop, stuck_on_metavar},
+    curios_common::{Mount, Plicity, Qualifier, Symbol, SyntaxName},
     curios_core::{
-        Advance, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
-        ImplicitOrigin, Instance, Mention, Metavar, MetavarId, StructType, Subterm, Term,
-        Transient, UniverseContext, Universes, WitnessKey, WitnessOrigin,
+        Advance, ArgumentSite, CalleeId, ConceptDecl, Enter, Extent, Field, Free, Global, HeadKey,
+        Instance, Mention, Metavar, MetavarId, StructType, Subterm, Term, Transient,
+        UniverseContext, Universes, WitnessKey, WitnessOrigin, WitnessRole,
     },
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
@@ -738,20 +738,21 @@ fn instantiate(
         Subterm::FuncType(ft) => {
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities().len());
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
-            let mut bounds: Vec<(MetavarId, Term, ImplicitOrigin)> = Vec::new();
+            let mut bounds: Vec<(MetavarId, Term, ArgumentSite)> = Vec::new();
             let mut positions = SlotPositions::default();
             let mut cursor = ft.telescope.cursor();
             while let Some(plicity) = cursor.mark() {
                 let (hint, ty) = cursor.entry().expect("a mark stands at an entry");
                 let position = positions.next(plicity);
-                let binder = hint.map(str::to_string);
                 let arg = match plicity {
                     Plicity::Implicit => {
                         let proposition =
                             curios_core::Probe::probed(is_prop(context, &ty))?.unwrap_or(false);
-                        let provenance = ImplicitOrigin {
-                            func: CalleeId::Witness(witness.name),
-                            binder,
+                        let provenance = ArgumentSite {
+                            callee: CalleeId::Witness(witness.name),
+                            parameter: hint.map(Symbol::new),
+                            plicity,
+                            position,
                         };
                         let (slot, hole) = context.fresh_metavar(
                             ty.clone(),
@@ -768,7 +769,7 @@ fn instantiate(
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
                             func: CalleeId::Witness(witness.name),
-                            role: Some(premise_label(position)),
+                            role: Some(WitnessRole::Premise(position)),
                         };
                         let (id, metavar) =
                             context.fresh_witness_metavar(ty.clone(), extent, provenance.clone());

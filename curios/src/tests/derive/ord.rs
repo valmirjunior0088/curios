@@ -72,7 +72,7 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
 
 #[test]
 fn an_order_derivation_needs_the_equality_its_concept_requires() {
-    // `Ord`'s superclass slot is left unfilled by the derived record, so resolution asks for it exactly as it would for a written literal that omitted it — and reports at the declaration when it is missing.
+    // `Ord`'s superclass slot is left unfilled by the derived record, so resolution asks for it exactly as it would for a written literal that omitted it — and reports at the declaration when it is missing, the superclass spelled as its reader reaches it: `Eql` is in scope here by its path alone.
     let source = r#"
         use /std/{Nat, Ord, print};
         induct Colour: pub Type | red() | green(Nat) end
@@ -82,8 +82,9 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
 
     let report = error(source);
     assert!(
-        report
-            .contains("wanted: /std/ops/Eql(Colour)\n│  needed by `Ord` for its `Eql` superclass"),
+        report.contains(
+            "wanted: /std/ops/Eql(Colour)\n│  needed by `Ord` for its `/std/ops/Eql` superclass"
+        ),
         "{report}"
     );
     assert!(report.contains("satisfy Ord(Colour) { .. }"), "{report}");

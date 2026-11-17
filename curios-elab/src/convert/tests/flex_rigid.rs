@@ -6,7 +6,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         CalleeId, DefinitionKind, Global, Intrinsic, Level, Mention, MetavarId, MetavarOrigin,
-        Subterm, Term, Universes, WitnessOrigin,
+        Subterm, Term, Universes, WitnessOrigin, WitnessRole,
     },
 };
 
@@ -333,7 +333,7 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
     };
     let premise = MetavarOrigin::Witness(WitnessOrigin {
         func: CalleeId::Function(Mention::Declaration(nominal("holds"))),
-        role: Some("key".into()),
+        role: Some(WitnessRole::Premise(0)),
     });
 
     assert_eq!(

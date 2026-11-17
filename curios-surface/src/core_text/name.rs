@@ -10,11 +10,12 @@ use {
         value_list, value_number, value_term, value_variant, verbatim, word, word_value,
     },
     crate::{Apply, CoreText, CoreValue, Frame, Minting, Rendered, sub},
-    curios_common::{InfixOp, Span},
+    curios_common::{InfixOp, Plicity, Sign, Span, Symbol},
     curios_core::{
-        Binding, CalleeId, Free, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
-        MetavarOrigin, Subterm, Term, Universes, Var, WitnessOrigin,
+        ArgumentSite, Binding, CalleeId, Free, Global, Instance, Mention, Metavar, MetavarId,
+        MetavarOrigin, Subterm, Term, Universes, Var, WantedPremise, WitnessOrigin, WitnessRole,
     },
+    std::rc::Rc,
 };
 
 /// A global at an instance: its name, under a decorator stating the instance where it states one.
@@ -148,21 +149,84 @@ fn origin_written<D: Rendered>(origin: &MetavarOrigin, frame: Frame<'_, D>) -> c
         MetavarOrigin::Hole => word("Hole"),
         MetavarOrigin::Goal => word("Goal"),
         MetavarOrigin::Domain(binder) => called(word("Domain"), vec![optional(binder)]),
-        MetavarOrigin::Implicit(implicit) => literal_of(
+        MetavarOrigin::Implicit(site) => literal_of(
             "Implicit",
             vec![
-                ("func", callee_written(&implicit.func, frame)),
-                ("binder", optional(&implicit.binder)),
+                ("callee", callee_written(&site.callee, frame)),
+                ("parameter", optional_symbol(site.parameter)),
+                ("plicity", word(plicity_word(site.plicity))),
+                ("position", super::numeral(site.position, Sign::Unmarked)),
             ],
         ),
         MetavarOrigin::Witness(witness) => literal_of(
             "Witness",
             vec![
                 ("func", callee_written(&witness.func, frame)),
-                ("role", optional(&witness.role)),
+                (
+                    "role",
+                    match &witness.role {
+                        Some(role) => called(word("Some"), vec![role_written(role, frame)]),
+                        None => word("None"),
+                    },
+                ),
             ],
         ),
     }
+}
+
+/// A slot's mark, as Core names it.
+fn plicity_word(plicity: Plicity) -> &'static str {
+    match plicity {
+        Plicity::Explicit => "Explicit",
+        Plicity::Implicit => "Implicit",
+        Plicity::Witness => "Witness",
+    }
+}
+
+/// What a witness slot is to its callee, as Core names it.
+fn role_written<D: Rendered>(role: &WitnessRole, frame: Frame<'_, D>) -> crate::Term<D> {
+    match role {
+        WitnessRole::Premise(position) => called(
+            word("Premise"),
+            vec![super::numeral(*position, Sign::Unmarked)],
+        ),
+        WitnessRole::Superclass(concept) => called(word("Superclass"), vec![frame.global(concept)]),
+        WitnessRole::Implementation(field) => {
+            called(word("Implementation"), vec![string(field.as_str())])
+        }
+        WitnessRole::Payload {
+            label,
+            ordinal,
+            premise,
+        } => literal_of(
+            "Payload",
+            vec![
+                ("label", optional_symbol(*label)),
+                ("ordinal", super::numeral(*ordinal, Sign::Unmarked)),
+                (
+                    "premise",
+                    match premise {
+                        Some(premise) => called(
+                            word("Some"),
+                            vec![literal_of(
+                                "WantedPremise",
+                                vec![
+                                    ("concept", frame.global(&premise.concept)),
+                                    ("variable", sub(premise.variable.clone(), frame)),
+                                ],
+                            )],
+                        ),
+                        None => word("None"),
+                    },
+                ),
+            ],
+        ),
+    }
+}
+
+/// An optional name as Core holds it, as [`optional`] holds a text.
+fn optional_symbol<D: Rendered>(name: Option<Symbol>) -> crate::Term<D> {
+    optional(&name.map(|name| name.as_str().to_string()))
 }
 
 /// The callee an implicit or a witness slot belongs to, as Core names it.
@@ -303,13 +367,15 @@ fn origin_read(value: &CoreValue, reader: &mut Reader<'_>) -> Result<MetavarOrig
     if let crate::Subterm::StructLit(literal) = term.as_subterm() {
         let mut fields = literal_fields(literal)?;
         let origin = match literal_variant(literal).unwrap_or_default() {
-            "Implicit" => MetavarOrigin::Implicit(ImplicitOrigin {
-                func: callee_read(fields.term("func")?, reader)?,
-                binder: optional_read(fields.term("binder")?)?,
+            "Implicit" => MetavarOrigin::Implicit(ArgumentSite {
+                callee: callee_read(fields.term("callee")?, reader)?,
+                parameter: optional_read(fields.term("parameter")?)?.map(|name| Symbol::new(&name)),
+                plicity: plicity_read(fields.term("plicity")?)?,
+                position: number_read(fields.term("position")?, "a slot's position")?,
             }),
             "Witness" => MetavarOrigin::Witness(WitnessOrigin {
                 func: callee_read(fields.term("func")?, reader)?,
-                role: optional_read(fields.term("role")?)?,
+                role: some_read(fields.term("role")?, |role| role_read(role, reader))?,
             }),
             _ => return Err(malformed("a metavariable's origin", value)),
         };
@@ -324,6 +390,100 @@ fn origin_read(value: &CoreValue, reader: &mut Reader<'_>) -> Result<MetavarOrig
             _ => Err(malformed("`Domain(…)`", value)),
         },
         _ => Err(malformed("a metavariable's origin", value)),
+    }
+}
+
+/// A slot's mark, as Core names it ([`plicity_word`]).
+fn plicity_read(term: &crate::Term<CoreText>) -> Result<Plicity, ReadError> {
+    match term_word(term) {
+        Some("Explicit") => Ok(Plicity::Explicit),
+        Some("Implicit") => Ok(Plicity::Implicit),
+        Some("Witness") => Ok(Plicity::Witness),
+        _ => Err(ReadError::at(
+            Refusal::Malformed("`Explicit`, `Implicit` or `Witness`"),
+            term.span(),
+        )),
+    }
+}
+
+/// A count Core writes as a numeral, `what` naming it in a refusal.
+fn number_read(term: &crate::Term<CoreText>, what: &'static str) -> Result<usize, ReadError> {
+    term_number(term)
+        .and_then(|number| usize::try_from(number).ok())
+        .ok_or_else(|| ReadError::at(Refusal::Malformed(what), term.span()))
+}
+
+/// `None`, or what `read` reads under `Some`.
+fn some_read<T>(
+    term: &crate::Term<CoreText>,
+    read: impl FnOnce(&crate::Term<CoreText>) -> Result<T, ReadError>,
+) -> Result<Option<T>, ReadError> {
+    if term_word(term) == Some("None") {
+        return Ok(None);
+    }
+    match term.as_subterm() {
+        crate::Subterm::Apply(Apply { head, arguments }) if term_word(head) == Some("Some") => {
+            match arguments.as_slice() {
+                [held] => read(&held.term).map(Some),
+                _ => Err(ReadError::at(Refusal::Malformed("`Some(…)`"), term.span())),
+            }
+        }
+        _ => Err(ReadError::at(
+            Refusal::Malformed("`None` or `Some(…)`"),
+            term.span(),
+        )),
+    }
+}
+
+/// What a witness slot is to its callee, as Core names it ([`role_written`]).
+fn role_read(
+    term: &crate::Term<CoreText>,
+    reader: &mut Reader<'_>,
+) -> Result<WitnessRole, ReadError> {
+    let refused = || ReadError::at(Refusal::Malformed("a witness slot's role"), term.span());
+    if let crate::Subterm::StructLit(literal) = term.as_subterm() {
+        if literal_variant(literal) != Some("Payload") {
+            return Err(refused());
+        }
+        let mut fields = literal_fields(literal)?;
+        let role = WitnessRole::Payload {
+            label: optional_read(fields.term("label")?)?.map(|label| Symbol::new(&label)),
+            ordinal: number_read(fields.term("ordinal")?, "a payload's ordinal")?,
+            premise: some_read(fields.term("premise")?, |premise| {
+                let crate::Subterm::StructLit(literal) = premise.as_subterm() else {
+                    return Err(refused());
+                };
+                let mut fields = literal_fields(literal)?;
+                let premise = WantedPremise {
+                    concept: term_global(fields.term("concept")?).ok_or_else(refused)?,
+                    variable: core_read(fields.term("variable")?, reader)?,
+                };
+                fields.finish()?;
+                Ok(Rc::new(premise))
+            })?,
+        };
+        fields.finish()?;
+        return Ok(role);
+    }
+    let crate::Subterm::Apply(Apply { head, arguments }) = term.as_subterm() else {
+        return Err(refused());
+    };
+    let [argument] = arguments.as_slice() else {
+        return Err(refused());
+    };
+    let held = &argument.term;
+    match term_word(head) {
+        Some("Premise") => Ok(WitnessRole::Premise(number_read(
+            held,
+            "a premise's position",
+        )?)),
+        Some("Superclass") => Ok(WitnessRole::Superclass(
+            term_global(held).ok_or_else(refused)?,
+        )),
+        Some("Implementation") => Ok(WitnessRole::Implementation(Symbol::new(
+            &term_string(held).ok_or_else(refused)?,
+        ))),
+        _ => Err(refused()),
     }
 }
 

@@ -17,7 +17,7 @@ use {
         solve_indices,
     },
     curios_core::{
-        Advance, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
+        Advance, ArgumentSite, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global,
         Metavar, MetavarId, MetavarOrigin, MetavarSpine, Names, Produced, Proj, Quality,
         ReduceError, Sort, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
     },
@@ -717,9 +717,9 @@ impl Context<'_> {
                 }
 
                 Ok::<_, Error>(Some(match &metavar.origin {
-                    MetavarOrigin::Implicit(ImplicitOrigin { func, binder }) => {
-                        let callee = callee(context, func);
-                        let binder = binder.clone();
+                    MetavarOrigin::Implicit(site) => {
+                        let callee = callee(context, &site.callee);
+                        let binder = site.parameter.map(|name| name.as_str().to_string());
                         pending(context, [&product], move |reporting, [product]| {
                             Error::implicit_at_other_sort(
                                 callee,
@@ -1007,9 +1007,9 @@ fn watched_blockers(
 /// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
 pub fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
     match origin {
-        Some(MetavarOrigin::Implicit(origin)) => Watched::Implicit {
-            callee: callee(context, &origin.func),
-            binder: origin.binder.clone(),
+        Some(MetavarOrigin::Implicit(site)) => Watched::Implicit {
+            callee: callee(context, &site.callee),
+            binder: site.parameter.map(|name| name.as_str().to_string()),
         },
         Some(MetavarOrigin::Witness(origin)) => Watched::Witness {
             callee: callee(context, &origin.func),
@@ -1560,7 +1560,7 @@ fn root_blocker_error(
 ) -> Option<Error> {
     let mut seen: BTreeSet<MetavarId> = BTreeSet::new();
     let mut frontier: Vec<MetavarId> = watching.iter().copied().collect();
-    let mut root: Option<(MetavarId, ImplicitOrigin, Option<Extent>)> = None;
+    let mut root: Option<(MetavarId, ArgumentSite, Option<Extent>)> = None;
 
     while let Some(id) = frontier.pop() {
         if !seen.insert(id) {
@@ -1600,12 +1600,13 @@ fn root_blocker_error(
         return None;
     }
 
-    let callee = callee(context, &origin.func);
+    let callee = callee(context, &origin.callee);
+    let binder = origin.parameter.map(|name| name.as_str().to_string());
     Some(
         pending(context, [&bound], move |reporting, [bound]| {
             Error::uninferred_implicit(
                 callee,
-                origin.binder,
+                binder,
                 resolved_for_display(reporting, &bound),
                 true,
                 reduct,

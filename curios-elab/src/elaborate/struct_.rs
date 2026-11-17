@@ -1,16 +1,16 @@
 use {
     super::{
-        Misaligned, align, check_args_against, insert_auto_argument, is_placeholder, premise_label,
+        Misaligned, SlotPositions, align, check_args_against, insert_auto_argument, is_placeholder,
     },
     crate::{
         Context, Error, Mode, Occurrence, attempt_witness_goal, check, elaborate, expect, is_prop,
         reduce_with, resolve_witness_goal,
     },
-    curios_common::Plicity,
+    curios_common::{Plicity, Symbol},
     curios_core::{
-        CalleeId, Global, ImplicitOrigin, Mention, Probe, Struct, StructDecl, StructEntry,
+        ArgumentSite, CalleeId, Global, Mention, Probe, Struct, StructDecl, StructEntry,
         StructType, Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
-        instantiate_universes,
+        WitnessRole, instantiate_universes,
     },
 };
 
@@ -98,15 +98,19 @@ pub fn elaborate_struct_type(
 
     if params.is_empty() && param_count != 0 {
         let mut cursor = parameters.cursor();
+        let mut positions = SlotPositions::default();
         while let Some((hint, ty)) = cursor.entry() {
-            let binder = hint.map(str::to_string);
+            let plicity = cursor.mark().expect("a mark stands at an entry");
+            let position = positions.next(plicity);
             let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
                 ty,
                 term.extent(),
-                ImplicitOrigin {
-                    func: CalleeId::Function(Mention::Declaration(*name)),
-                    binder,
+                ArgumentSite {
+                    callee: CalleeId::Function(Mention::Declaration(*name)),
+                    parameter: hint.map(Symbol::new),
+                    plicity,
+                    position,
                 },
                 proposition,
                 None,
@@ -142,11 +146,12 @@ pub enum FieldSource<'a> {
     Infer {
         func: CalleeId,
         label: String,
+        position: usize,
     },
     /// An unfilled `use` position: a superclass edge the literal left to resolution. `edge` names the concept edged to rather than a field label, because the field is anonymous — there is no label to carry, and the edge is what a reader needs.
     Resolve {
         func: CalleeId,
-        edge: String,
+        edge: Option<Global>,
     },
 }
 
@@ -162,19 +167,23 @@ pub fn check_dependent_fields(
     // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
         FieldSource::Written(field) => check(context, field, ty),
-        FieldSource::Infer { func, label } => insert_auto_argument(
+        FieldSource::Infer {
+            func,
+            label,
+            position,
+        } => insert_auto_argument(
             context,
             Plicity::Implicit,
             &ty,
             (!label.is_empty()).then_some(label.as_str()),
             func,
             origin,
-            0,
+            *position,
         ),
         FieldSource::Resolve { func, edge } => {
             let provenance = WitnessOrigin {
                 func: func.clone(),
-                role: Some(format!("its `{edge}` superclass")),
+                role: edge.map(WitnessRole::Superclass),
             };
             let (id, metavar) =
                 context.fresh_witness_metavar(ty.clone(), origin.extent(), provenance.clone());
@@ -417,16 +426,18 @@ pub fn elaborate_struct(
                 None if *slot == Plicity::Implicit => FieldSource::Infer {
                     func: CalleeId::Structure(*name),
                     label: labels[position].to_string(),
+                    position: slots[..position]
+                        .iter()
+                        .filter(|earlier| **earlier == Plicity::Implicit)
+                        .count(),
                 },
-                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label, which it does not have. The short name, since the goal's own line already carries the application it is wanted at.
+                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label, which it does not have; the report spells it where its reader stands.
                 None => FieldSource::Resolve {
                     func: CalleeId::Function(Mention::Declaration(*name)),
                     edge: use_positions
                         .iter()
                         .find(|(index, _)| *index == position)
-                        .and_then(|(_, edge)| edge.qualifier())
-                        .map(|path| path.last().to_string())
-                        .unwrap_or_default(),
+                        .map(|(_, edge)| *edge),
                 },
             }
         })
@@ -466,16 +477,17 @@ pub fn resolve_struct_params(
     term: &Term,
 ) -> Result<Vec<Term>, Error> {
     let mut written = params.iter();
-    let mut premises = 0;
+    let mut positions = SlotPositions::default();
     let mut cursor = struct_decl.arity.cursor();
     while let Some((hint, ty)) = cursor.entry() {
-        let premise = cursor.mark() == Some(Plicity::Witness);
+        let plicity = cursor.mark().expect("a mark stands at an entry");
+        let position = positions.next(plicity);
         let arg = match written.next() {
             Some(arg) => check(context, arg, ty.clone())?,
-            None if premise => {
+            None if plicity == Plicity::Witness => {
                 let provenance = WitnessOrigin {
                     func: CalleeId::Function(Mention::Declaration(*name)),
-                    role: Some(premise_label(premises)),
+                    role: Some(WitnessRole::Premise(position)),
                 };
                 let (id, metavar) =
                     context.fresh_witness_metavar(ty.clone(), term.extent(), provenance.clone());
@@ -483,15 +495,16 @@ pub fn resolve_struct_params(
                 metavar
             }
             None => {
-                let binder = hint.map(str::to_string);
                 let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
                 context
                     .fresh_metavar(
                         ty.clone(),
                         term.extent(),
-                        ImplicitOrigin {
-                            func: CalleeId::Function(Mention::Declaration(*name)),
-                            binder,
+                        ArgumentSite {
+                            callee: CalleeId::Function(Mention::Declaration(*name)),
+                            parameter: hint.map(Symbol::new),
+                            plicity,
+                            position,
                         },
                         proposition,
                         None,
@@ -499,7 +512,6 @@ pub fn resolve_struct_params(
                     .1
             }
         };
-        premises += usize::from(premise);
         cursor.advance(arg);
     }
     Ok(cursor.into_args())
@@ -688,6 +700,10 @@ pub fn elaborate_struct_spread(
                 None if slots[position] == Plicity::Implicit => FieldSource::Infer {
                     func: CalleeId::Structure(*name),
                     label: labels[position].to_string(),
+                    position: slots[..position]
+                        .iter()
+                        .filter(|earlier| **earlier == Plicity::Implicit)
+                        .count(),
                 },
                 None => FieldSource::Written(&copies[position]),
             })

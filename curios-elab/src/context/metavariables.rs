@@ -11,7 +11,7 @@ use {
         read_by_value, zonk_solved_term_metas,
     },
     curios_core::{
-        Bound, Extent, Free, Global, ImplicitOrigin, Mention, Metavar, MetavarId, MetavarOrigin,
+        ArgumentSite, Bound, Extent, Free, Global, Mention, Metavar, MetavarId, MetavarOrigin,
         MetavarSpine, Names, Subterm, Term, WitnessOrigin,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -219,7 +219,7 @@ impl<'s> Context<'s> {
         &mut self,
         result: Term,
         extent: Option<Extent>,
-        origin: ImplicitOrigin,
+        origin: ArgumentSite,
         proposition: bool,
         reduct: Option<Term>,
     ) -> (MetavarId, Term) {

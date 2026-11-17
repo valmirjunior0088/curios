@@ -199,8 +199,8 @@ impl<'a> Zonk<'a> {
                             let bound = self.zonk_term(&bound).unwrap_or(bound);
                             // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
                             let unsolved = Error::uninferred_implicit(
-                                callee(self, &origin.func),
-                                origin.binder.clone(),
+                                callee(self, &origin.callee),
+                                origin.parameter.map(|name| name.as_str().to_string()),
                                 bound,
                                 entry.is_some_and(|entry| entry.proposition()),
                                 entry.and_then(|entry| entry.reduct().cloned()),

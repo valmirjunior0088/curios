@@ -9,9 +9,9 @@ use {
     curios_analysis::{DeclaredPart, Erased},
     curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
     curios_core::{
-        Anchors, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion, Extent, Free,
-        Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings, Term,
-        UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
+        Anchors, ArgumentSite, Atom, Definition, DefinitionKind, Definitions, Exhaustion, Extent,
+        Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings,
+        Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, WitnessRole,
     },
     curios_surface::{
         DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
@@ -305,10 +305,10 @@ pub enum Watched {
         callee: Callee,
         binder: Option<String>,
     },
-    /// A witness argument of a callee, by what its slot is to the callee where something states it: `its 2nd 'use' premise`.
+    /// A witness argument of a callee, by what its slot is to the callee where something states it, worded where the report is made: `its 2nd 'use' premise`.
     Witness {
         callee: Callee,
-        role: Option<String>,
+        role: Option<WitnessRole>,
     },
     /// The type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position or names a declaration.
     Described(String),
@@ -330,37 +330,13 @@ pub enum Underivable {
     },
 }
 
-/// Where an argument was checked, for a report that names the slot it filled.
+/// Where a lambda handed where no function is wanted was written as an argument, for a report that names the slot it filled.
 #[derive(Debug)]
-pub struct ArgumentSite {
-    /// The applied callee, carried as its identity so the report spells it under the names in scope.
-    function: CalleeId,
-    /// The parameter the argument filled, when the telescope names it and the slot is not a `use` one.
-    parameter: Option<String>,
-    /// The mark the argument was written with, which is its slot's plicity.
-    plicity: Plicity,
-    /// The argument's 0-based position among the arguments written with that mark.
-    position: usize,
+pub struct MisplacedLambda {
+    /// The slot the lambda filled.
+    pub site: ArgumentSite,
     /// For a plain argument, a later explicit parameter whose type is a function type, with its name and 0-based position among the explicit parameters — the slot a misplaced lambda was meant for.
-    function_typed: Option<(Option<String>, usize)>,
-}
-
-impl ArgumentSite {
-    pub fn new(
-        function: CalleeId,
-        parameter: Option<String>,
-        plicity: Plicity,
-        position: usize,
-        function_typed: Option<(Option<String>, usize)>,
-    ) -> Self {
-        Self {
-            function,
-            parameter,
-            plicity,
-            position,
-            function_typed,
-        }
-    }
+    pub function_typed: Option<(Option<String>, usize)>,
 }
 
 /// Who an inserted argument was inserted for, as a report names it.
@@ -482,8 +458,15 @@ macro_rules! shown_terms {
                 $visit(candidate);
                 error.$recurse($visit);
             }
-            Self::NoWitness { goal, need, .. } => {
+            Self::NoWitness {
+                goal, role, need, ..
+            } => {
                 $visit(goal);
+                if let Some(role) = role {
+                    for term in role.$terms() {
+                        $visit(term);
+                    }
+                }
                 match need {
                     Some(Need::Embedding(EmbeddingDiagnosis { source, target, .. })) => {
                         $visit(source);
@@ -632,7 +615,7 @@ pub enum Error {
     /// A lambda checked against a type that is no function type. `argument` says where, when the lambda was an argument: the parameter it filled and, when the callee takes a function somewhere later, which parameter that is — the report a reader who swapped two arguments needs.
     NotAFunctionType {
         expected: Box<Term>,
-        argument: Option<Box<ArgumentSite>>,
+        argument: Option<Box<MisplacedLambda>>,
     },
     NotATuple {
         head_type: Box<Term>,
@@ -995,7 +978,8 @@ pub enum Error {
         goal: Box<Term>,
         /// Boxed for the reason `shape` is: a witness callee's concept and key inline would push this variant, already the roster's largest, past what `result_large_err` admits.
         callee: Box<Callee>,
-        role: Option<String>,
+        /// Boxed for the reason `callee` is.
+        role: Option<Box<WitnessRole>>,
         /// Present when the goal's concept is one the compiler resolves for a form of its own: what that form needed the witness for.
         need: Option<Need>,
         /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
@@ -1276,7 +1260,7 @@ impl Error {
     }
 
     /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through an extent wrapper if one is already on.
-    pub fn at_argument(self, site: ArgumentSite) -> Self {
+    pub fn at_argument(self, site: MisplacedLambda) -> Self {
         match self {
             Self::NotAFunctionType {
                 expected,
@@ -1642,14 +1626,14 @@ impl Error {
     pub fn no_witness<T: Into<Term>>(
         goal: T,
         callee: Callee,
-        role: Option<String>,
+        role: Option<WitnessRole>,
         need: Option<Need>,
         shape: Option<Box<ShapeDiagnosis>>,
     ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
             callee: Box::new(callee),
-            role,
+            role: role.map(Box::new),
             need,
             shape,
         }

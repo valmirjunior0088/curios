@@ -1,15 +1,15 @@
 use {
     super::{Misaligned, align, method_call, park_checking, trivially_inhabited},
     crate::{
-        ArgumentSite, Context, Entailed, ErasedSite, Error, HeldFrames, Mode, ParkedWork,
+        Context, Entailed, ErasedSite, Error, HeldFrames, MisplacedLambda, Mode, ParkedWork,
         attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
         elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
         stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
-    curios_common::Plicity,
+    curios_common::{Plicity, Symbol},
     curios_core::{
-        Advance, Apply, CalleeId, Cursor, Free, FuncType, ImplicitOrigin, Level, MetavarId, Method,
-        One, Probe, Scope, Sort, Subterm, Telescope, Term, Transient, WitnessOrigin,
+        Advance, Apply, ArgumentSite, CalleeId, Cursor, Free, FuncType, Level, MetavarId, Method,
+        One, Probe, Scope, Sort, Subterm, Telescope, Term, Transient, WitnessOrigin, WitnessRole,
     },
     std::collections::BTreeSet,
 };
@@ -154,14 +154,14 @@ pub fn insert_auto_argument(
     origin: &Term,
     position: usize,
 ) -> Result<Term, Error> {
-    let binder = label.map(str::to_string);
-
     match plicity {
         // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. One that follows from the facts in scope is proved here for the same reason ([`crate::entail`]). A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]); one waiting only on a recursive member's slot is asked of that procedure first ([`waits_past_its_group`]).
         Plicity::Implicit => {
-            let provenance = ImplicitOrigin {
-                func: func.clone(),
-                binder,
+            let provenance = ArgumentSite {
+                callee: func.clone(),
+                parameter: label.map(Symbol::new),
+                plicity: Plicity::Implicit,
+                position,
             };
             let (reduced, inhabitant) = trivially_inhabited(context, type_)
                 .map_err(|error| bound_exhausted(context, error, type_, &provenance))?;
@@ -225,7 +225,7 @@ pub fn insert_witness_argument(
 ) -> Result<Term, Error> {
     let provenance = WitnessOrigin {
         func: func.clone(),
-        role: Some(premise_label(position)),
+        role: Some(WitnessRole::Premise(position)),
     };
     let (id, metavar) =
         context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
@@ -244,7 +244,7 @@ pub fn attempt_discharge(
     context: &mut Context,
     slot: MetavarId,
     bound: &Term,
-    provenance: &ImplicitOrigin,
+    provenance: &ArgumentSite,
 ) -> Result<bool, Error> {
     if context.metavar_solution(slot).is_some() {
         return Ok(false);
@@ -307,7 +307,7 @@ pub fn retry_discharge(
     context: &mut Context,
     slot: MetavarId,
     bound: Term,
-    provenance: ImplicitOrigin,
+    provenance: ArgumentSite,
     origin: Term,
     frames: HeldFrames,
 ) -> Result<(), Error> {
@@ -351,11 +351,11 @@ fn bound_exhausted(
     context: &Context,
     error: Error,
     bound: &Term,
-    provenance: &ImplicitOrigin,
+    provenance: &ArgumentSite,
 ) -> Error {
     let site = ErasedSite::Bound {
-        callee: callee(context, &provenance.func),
-        binder: provenance.binder.clone(),
+        callee: callee(context, &provenance.callee),
+        binder: provenance.parameter.map(|name| name.as_str().to_string()),
     };
     exhausted_bound(context, error, bound, site)
 }
@@ -537,7 +537,7 @@ fn argument_site(
     position: usize,
     rest: &Scope<One, Telescope<Term>>,
     later_plicities: &[Plicity],
-) -> ArgumentSite {
+) -> MisplacedLambda {
     let mut function_typed = None;
     if plicity == Plicity::Explicit {
         let mut cursor = rest.body();
@@ -557,16 +557,18 @@ fn argument_site(
         }
     }
     let parameter = match plicity {
-        Plicity::Explicit | Plicity::Implicit => rest.first_hint().map(str::to_string),
+        Plicity::Explicit | Plicity::Implicit => rest.first_hint().map(Symbol::new),
         Plicity::Witness => None,
     };
-    ArgumentSite::new(
-        function.clone(),
-        parameter,
-        plicity,
-        position,
+    MisplacedLambda {
+        site: ArgumentSite {
+            callee: function.clone(),
+            parameter,
+            plicity,
+            position,
+        },
         function_typed,
-    )
+    }
 }
 
 /// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.

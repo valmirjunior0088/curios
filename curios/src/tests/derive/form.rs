@@ -148,6 +148,30 @@ fn a_private_representation_refuses_the_derivation_outside_its_module() {
     );
 }
 
+// The premise to add is spelled as its reader writes the concept where the witness stands: `Spell` is in scope here by its path alone, and the advice pasted into the telescope derives the witness.
+#[test]
+fn a_missing_premise_is_advised_as_its_reader_spells_the_concept() {
+    let advised = r#"
+        induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+        satisfy (@A: Type) => /std/Spell(Tree(A)) { .. }
+        /std/print("")
+        "#;
+    let report = error(advised);
+    assert!(
+        report.contains(
+            "needed by `Tree/leaf` for payload #1 — add `use /std/Spell(A)` to the telescope"
+        ),
+        "{report}"
+    );
+
+    let pasted = r#"
+        induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+        satisfy (@A: Type, use /std/Spell(A)) => /std/Spell(Tree(A)) { .. }
+        /std/print("ok")
+        "#;
+    assert_eq!(run(pasted), b"ok");
+}
+
 #[test]
 fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     let premise = r#"

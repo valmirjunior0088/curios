@@ -10,12 +10,12 @@ use {
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, GoalReport, Need,
         RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
     },
-    crate::{Conclusion, Origin, Refusal, ordinal},
+    crate::{Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
-        Anchors, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort, Subterm, Term,
-        UniverseMetaId, WitnessKey,
+        Anchors, ArgumentSite, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort,
+        Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
     },
     curios_surface::{ReaderPosition, Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
@@ -330,6 +330,58 @@ impl ErasedSite {
     }
 }
 
+/// What a witness slot is to `callee`, as a report says it where its reader stands: `its 2nd 'use' premise`, the superclass a record literal left out by its concept, a derived payload with the premise its witness's telescope lacks.
+fn role_said(role: &WitnessRole, callee: &Callee, spelling: &Rc<Spelling>) -> String {
+    match role {
+        WitnessRole::Premise(position) => premise_label(*position),
+        WitnessRole::Superclass(concept) => {
+            format!("its `{}` superclass", spelling.symbol(concept))
+        }
+        WitnessRole::Implementation(field) => format!("its `{}` implementation", field.as_str()),
+        WitnessRole::Payload {
+            label,
+            ordinal,
+            premise,
+        } => {
+            let noun = match callee {
+                Callee::Constructor { .. } => "payload",
+                _ => "field",
+            };
+            let described = match label {
+                Some(label) => format!("{noun} `{}`", label.as_str()),
+                None => format!("{noun} #{ordinal}"),
+            };
+            match premise {
+                Some(premise) => format!(
+                    "{described} — add `use {}({})` to the telescope",
+                    spelling.symbol(&premise.concept),
+                    premise.variable.spelled(spelling)
+                ),
+                None => described,
+            }
+        }
+    }
+}
+
+/// The slot a term was checked as, as every report raised against it says it: ``checked as `n`, the 1st argument of `apply` ``, ``checked as the 1st `use` argument of `f` ``.
+pub fn site_said(site: &ArgumentSite, spelling: &Spelling) -> String {
+    let parameter = match site.parameter {
+        Some(name) => format!("`{}`, ", name.as_str()),
+        None => String::new(),
+    };
+    let mark = match site.plicity {
+        Plicity::Explicit => "",
+        Plicity::Implicit => "`@` ",
+        Plicity::Witness => "`use` ",
+    };
+
+    format!(
+        "checked as {parameter}the {} {mark}argument of `{}`",
+        ordinal(site.position),
+        spelled_callee(&site.callee, spelling)
+    )
+}
+
 /// A callee identity spelled the same way, for the reports that carry one whole rather than destructured.
 fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
     match callee {
@@ -446,8 +498,9 @@ impl Displayed<'_> {
             }
             Watched::Witness { callee, role } => match role {
                 Some(role) => format!(
-                    "the witness argument of {} for {role}",
-                    callee.phrase(spelling)
+                    "the witness argument of {} for {}",
+                    callee.phrase(spelling),
+                    role_said(role, callee, spelling)
                 ),
                 None => format!("the witness argument of {}", callee.phrase(spelling)),
             },
@@ -635,29 +688,16 @@ impl Displayed<'_> {
             Error::NotAFunctionType { expected, argument } => {
                 f.text("unexpected function");
                 f.stating(format_args!("expected: {}", expected.spelled(spelling)));
-                if let Some(site) = argument {
-                    let parameter = match &site.parameter {
-                        Some(name) => format!("`{name}`, "),
-                        None => String::new(),
-                    };
-                    let mark = match site.plicity {
-                        Plicity::Explicit => "",
-                        Plicity::Implicit => "`@` ",
-                        Plicity::Witness => "`use` ",
-                    };
-                    f.stating(format_args!(
-                        "checked as {parameter}the {} {mark}argument of `{}`",
-                        ordinal(site.position),
-                        spelled_callee(&site.function, spelling)
-                    ));
-                    if let Some((name, position)) = &site.function_typed {
+                if let Some(misplaced) = argument {
+                    f.stating(site_said(&misplaced.site, spelling));
+                    if let Some((name, position)) = &misplaced.function_typed {
                         let name = match name {
                             Some(name) => format!("`{name}`, "),
                             None => String::new(),
                         };
                         f.stating(format_args!(
                             "`{}` takes a function as {name}its {} argument",
-                            spelled_callee(&site.function, spelling),
+                            spelled_callee(&misplaced.site.callee, spelling),
                             ordinal(*position)
                         ));
                     }
@@ -1701,7 +1741,11 @@ impl Displayed<'_> {
                 shape,
             } => {
                 let needed = match role {
-                    Some(role) => format!("needed by {} for {role}", callee.phrase(spelling)),
+                    Some(role) => format!(
+                        "needed by {} for {}",
+                        callee.phrase(spelling),
+                        role_said(role, callee, spelling)
+                    ),
                     None => format!("needed by {}", callee.phrase(spelling)),
                 };
                 let written = match need {

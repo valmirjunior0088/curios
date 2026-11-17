@@ -19,15 +19,15 @@ use {
     crate::{is_prop_to, sort_of_in},
     curios_common::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, Sign, SpellDerivation, StringSyntax, SyntaxRegistry,
+        Qualifier, Sign, SpellDerivation, StringSyntax, Symbol, SyntaxRegistry,
     },
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Mention,
-        MetavarOrigin, Method, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
-        str_literal, syn_call,
+        MetavarOrigin, Method, StructDecl, StructEntry, StructType, Subterm, Term, WantedPremise,
+        WitnessOrigin, WitnessRole, str_literal, syn_call,
     },
     curios_num::Natural,
-    curios_surface::Spellable,
+    std::rc::Rc,
 };
 
 /// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-module`'s scheduler read one value rather than two lists obliged to agree.
@@ -232,7 +232,9 @@ struct Payload {
     callee: CalleeId,
     /// The written label, empty where there was none.
     label: String,
-    /// ``payload `x` ``, `field #2`: how a report names it.
+    /// Its position among the plain payloads or fields, from one: what a report counts it by where it has no label.
+    ordinal: usize,
+    /// ``payload `x` ``, `field #2`: how a refusal of the derivation names it.
     described: String,
 }
 
@@ -258,6 +260,7 @@ impl Payload {
             constructor: path(owner, tag),
             callee,
             label: label.to_string(),
+            ordinal,
             described,
         }
     }
@@ -268,7 +271,7 @@ enum Part {
     /// Evidence: it erases, spells as the goal, and compares as nothing.
     Proof,
     /// A value, taking part through the concept's own witness — with the type to name in the premise to add when that type is a variable of the witness's telescope.
-    Value { premise: Option<String> },
+    Value { premise: Option<Term> },
 }
 
 /// One payload that takes part, classified: its position among the payloads (or fields), where it sits, what it is, and whether it is hidden, which `Spell` writes under its mark.
@@ -319,7 +322,7 @@ fn classify(
         position,
         payload,
         part: Part::Value {
-            premise: telescope_variable.then(|| reduced.faithful().to_string()),
+            premise: telescope_variable.then(|| reduced.clone()),
         },
         hidden: false,
     })
@@ -479,19 +482,22 @@ fn witness_call(
     site: &Site<'_>,
     field: ConceptField,
     classified: &Classified,
-    premise: Option<&str>,
+    premise: Option<&Term>,
     args: Vec<Term>,
 ) -> Term {
-    let role = match premise {
-        Some(type_) => format!(
-            "{} — add `use {}({type_})` to the telescope",
-            classified.payload.described,
-            field.concept.last()
-        ),
-        None => classified.payload.described.clone(),
+    let payload = &classified.payload;
+    let role = WitnessRole::Payload {
+        label: (!payload.label.is_empty()).then(|| Symbol::new(&payload.label)),
+        ordinal: payload.ordinal,
+        premise: premise.map(|variable| {
+            Rc::new(WantedPremise {
+                concept: Global::Authored(field.concept.qualifier()),
+                variable: variable.clone(),
+            })
+        }),
     };
     let provenance = WitnessOrigin {
-        func: classified.payload.callee.clone(),
+        func: payload.callee.clone(),
         role: Some(role),
     };
     // Placed like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.
@@ -536,7 +542,7 @@ fn spell_body(
             site,
             row.spell,
             classified,
-            premise.as_deref(),
+            premise.as_ref(),
             vec![read],
         ),
     };
@@ -636,7 +642,7 @@ fn hash_body(
             site,
             row.hash,
             classified,
-            premise.as_deref(),
+            premise.as_ref(),
             vec![read],
         )),
     };
@@ -759,7 +765,7 @@ fn compare(
                             site,
                             field,
                             classified,
-                            premise.as_deref(),
+                            premise.as_ref(),
                             vec![this, that],
                         ))
                     }
@@ -877,7 +883,7 @@ fn order(
                             site,
                             row.ord,
                             classified,
-                            premise.as_deref(),
+                            premise.as_ref(),
                             vec![this, that],
                         ))
                     }

@@ -16,7 +16,7 @@ use {
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
     curios_core::{
-        Apply, Bound, Global, ImplicitOrigin, Intrinsic, Metavar, MetavarOrigin, Method, Quality,
+        Apply, ArgumentSite, Bound, Global, Intrinsic, Metavar, MetavarOrigin, Method, Quality,
         Sort, Subterm, Term, Transient, Visit,
     },
     std::{
@@ -358,7 +358,12 @@ fn sort_decided_twice(context: &mut Context, this: &Term, that: &Term) -> Option
 fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
     let Subterm::Metavar(Metavar {
         id,
-        origin: MetavarOrigin::Implicit(ImplicitOrigin { func, binder }),
+        origin:
+            MetavarOrigin::Implicit(ArgumentSite {
+                callee: func,
+                parameter,
+                ..
+            }),
         ..
     }) = &**that
     else {
@@ -394,7 +399,7 @@ fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Op
 
     Some(Error::implicit_at_other_sort(
         callee(context, func),
-        binder.clone(),
+        parameter.map(|name| name.as_str().to_string()),
         this.clone(),
         proposition,
     ))

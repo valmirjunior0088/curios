@@ -4,12 +4,12 @@
 
 use {
     crate::{
-        Atom, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix, MetavarSpine, One,
-        Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
+        ArgumentSite, Atom, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix,
+        MetavarSpine, One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
-    curios_common::{ConceptField, InfixOp, Mint, Plicity, Sign},
+    curios_common::{ConceptField, InfixOp, Mint, Plicity, Sign, Symbol},
     curios_num::Natural,
     std::{
         fmt,
@@ -838,22 +838,66 @@ impl Rec {
     }
 }
 
-/// Provenance of an inserted implicit argument: the applied callee (`func`) had no `@`-argument for an implicit binder at some call site, so the elaborator filled the slot with a fresh metavariable. `binder` is the binder's name, `None` where it was written `_` or declared as its type alone.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub struct ImplicitOrigin {
-    pub func: CalleeId,
-    pub binder: Option<String>,
-}
-
 /// Provenance of an inserted witness argument: the applied function (`func`) had no `use`-argument for a witness slot at some call site, so the elaborator filled the slot with a fresh metavariable and registered a resolution goal for it. An occurrence still unsolved at zonk reports as a missing witness (naming the goal type from the birth record) rather than an uninferred implicit.
 ///
-/// A `use` slot has no name, so `role` is what the slot is to its callee as a report says it — `its 2nd 'use' premise`, `its 'Eql' superclass` — and `None` where nothing states one.
+/// A `use` slot has no name, so `role` is what the slot is to its callee, and `None` where nothing states one: an identity a report words where its reader stands, as it spells `func`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WitnessOrigin {
     pub func: CalleeId,
-    pub role: Option<String>,
+    pub role: Option<WitnessRole>,
+}
+
+/// What a witness slot is to its callee ([`WitnessOrigin::role`]), as a report names it: `its 2nd 'use' premise`, `its '/std/ops/Eql' superclass`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum WitnessRole {
+    /// The callee's `use` premise at this position among them, from zero.
+    Premise(usize),
+    /// A record literal's anonymous superclass slot, by the concept it edges to.
+    Superclass(Global),
+    /// The method an operator's witness implements, by the concept's field.
+    Implementation(Symbol),
+    /// A derived body's call for a payload of a constructor, or a field of a structure: its label where it has one and its position among the plain ones from one, with the premise the witness's telescope lacks where the payload's type is one of its variables.
+    Payload {
+        label: Option<Symbol>,
+        ordinal: usize,
+        premise: Option<Rc<WantedPremise>>,
+    },
+}
+
+impl WitnessRole {
+    /// The terms this role states: the variable a wanted premise is at.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+        match self {
+            Self::Payload {
+                premise: Some(premise),
+                ..
+            } => Some(&premise.variable),
+            _ => None,
+        }
+        .into_iter()
+    }
+
+    /// [`Self::terms`], each to be written over.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        match self {
+            Self::Payload {
+                premise: Some(premise),
+                ..
+            } => Some(&mut Rc::make_mut(premise).variable),
+            _ => None,
+        }
+        .into_iter()
+    }
+}
+
+/// A `use` premise a derived witness's telescope lacks: the concept, at the variable of the telescope a payload's type is.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct WantedPremise {
+    pub concept: Global,
+    pub variable: Term,
 }
 
 /// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the slot it filled — by its binder, or by its role to the callee — an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
@@ -866,7 +910,8 @@ pub enum MetavarOrigin {
     Hole,
     /// A settle-synthesized lambda's unannotated domain, named by its binder where it has a name: minted when a lambda whose expectation never gained structure is synthesized at a settle tier, replacing the silent hole (which is solved with it). Solved — by the body, or by whatever the settled type later unifies with — it splices silently like a hole; unsolved, zonk reports the parameter whose type was never determined, by name where it has one.
     Domain(Option<String>),
-    Implicit(ImplicitOrigin),
+    /// An inserted implicit argument: the applied callee had no `@`-argument for an implicit slot at some call site, so the elaborator filled it with a fresh metavariable, named by the slot it fills.
+    Implicit(ArgumentSite),
     Witness(WitnessOrigin),
     /// A written goal `?` (`into_core` mints it via `Term::goal`): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
     Goal,

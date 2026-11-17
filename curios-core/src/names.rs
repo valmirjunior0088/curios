@@ -12,7 +12,8 @@ mod tests;
 use {
     crate::{UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenSort},
     curios_common::{
-        Digest, Filed, InKeyOrder, InfixOp, Object, Qualifier, Records, Sorted, Symbol, name,
+        Digest, Filed, InKeyOrder, InfixOp, Object, Plicity, Qualifier, Records, Sorted, Symbol,
+        name,
     },
     std::{
         borrow::Borrow,
@@ -154,6 +155,16 @@ pub enum CalleeId {
     Anonymous,
     /// A structure, where a literal of it left a hidden field to be filled: the slot is a field and is written in braces, which a report must say where a function's would say an argument.
     Structure(Global),
+}
+
+/// A slot of a callee a term fills, written or inserted: the callee as its identity, the parameter's name where the slot has one — a `use` slot has none — the mark the slot takes, and its position among the slots of that mark, from zero. What a report names a slot by, spelled where its reader stands: `checked as \`s\`, the 2nd argument of \`pair\``, `the implicit argument \`F\` of \`ap\``.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct ArgumentSite {
+    pub callee: CalleeId,
+    pub parameter: Option<Symbol>,
+    pub plicity: Plicity,
+    pub position: usize,
 }
 
 /// What the lowering of one source declaration minted in each space elaboration goes on minting in: counts within the declaration, which the elaborator's counters start above so nothing it mints is an identity a lowered term already holds, and a seed per universe level, which the solver starts from.

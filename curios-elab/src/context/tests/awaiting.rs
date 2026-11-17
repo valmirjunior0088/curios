@@ -3,7 +3,9 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_core::{CalleeId, Free, Intrinsic, Mention, MetavarId, Nat, Term, WitnessOrigin},
+    curios_core::{
+        CalleeId, Free, Intrinsic, Mention, MetavarId, Nat, Term, WitnessOrigin, WitnessRole,
+    },
     std::collections::BTreeSet,
 };
 
@@ -27,7 +29,7 @@ fn awaited(context: &Context, id: usize) -> bool {
 fn premise() -> WitnessOrigin {
     WitnessOrigin {
         func: CalleeId::Function(Mention::Local(Free::local(0, None))),
-        role: Some("key".into()),
+        role: Some(WitnessRole::Premise(0)),
     }
 }
 

@@ -9,7 +9,7 @@ use {
     crate::{DeadArm, Problem, Refusal},
     curios_common::Entropy,
     curios_core::{
-        Bound, Extent, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
+        ArgumentSite, Bound, Extent, Free, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
         Term, Transient, WitnessOrigin,
     },
     std::{
@@ -168,7 +168,7 @@ pub enum ParkedWork {
     Discharge {
         slot: MetavarId,
         bound: Term,
-        provenance: ImplicitOrigin,
+        provenance: ArgumentSite,
     },
 }
 

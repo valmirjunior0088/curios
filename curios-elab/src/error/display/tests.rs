@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_common::Qualifier,
-    curios_core::{Cost, Free, Global, Intrinsic, Level, Term},
+    curios_core::{Cost, Free, Global, Intrinsic, Level, Term, WitnessRole},
 };
 
 fn family(name: &str, universes: Vec<Level>) -> Term {
@@ -171,7 +171,7 @@ fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
     });
     let witness = shown(Watched::Witness {
         callee: callee(),
-        role: Some("its 2nd `use` premise".to_string()),
+        role: Some(WitnessRole::Premise(1)),
     });
 
     assert!(
