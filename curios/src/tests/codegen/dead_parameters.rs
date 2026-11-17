@@ -1,9 +1,56 @@
-//! Unused arguments preserve ordering, effects and captures across suspension through both Wasm paths.
+//! Unused arguments preserve ordering, effects and captures across suspension through both Wasm paths, and a parameter read only to build its own next value is no use.
 use {
     super::structural::test_support::*,
+    crate::test_support::*,
+    curios_elab::DEFAULT_BUDGET,
+    curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, test_support::*},
+    curios_pipeline::{Stage, compile_with_prelude},
+    curios_surface::Entrypoint,
     curios_wasm::to_bytes,
 };
+
+/// A loop parameter whose one reader builds its own next value is dead, and so is that work: `seen`, a hidden argument carrying what the walk has read, is read only by the append that hands it back as the next `seen`, so the loop takes neither the parameter nor the append. With the append gone no byte is read, so the loop carries the bytes' length and its count alone. Mutation-checked: with droppable work asking of its operands whether or not its result is read, the loop keeps `seen` and appends a byte at every step.
+#[test]
+fn a_parameter_read_only_to_build_its_own_next_value_is_dead() {
+    let source = r#"
+        use /std/{Nat, Bytes, List, Option, Proc};
+        let count(b: Bytes, k: Nat, @seen: Bytes) -> Nat =
+            match b
+            | x[] => k
+            | x[h, ..t] => count(t, k + 1, @x[..seen, h])
+            end;
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let bytes = Option/unwrap_or(List/try_get(arguments, 0), x[]);
+            /std/print(Nat/to_str(count(bytes, 0, @x[])));
+        entry()
+        "#;
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let mut captured = None;
+    let (wasm, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+            if let Stage::CpsOptm(module) = stage {
+                captured = Some(module.clone());
+            }
+        })
+        .expect("the count compiles");
+    let module = captured.expect("the pipeline observes cps-optm");
+    let count = module
+        .continuation_ids()
+        .find(|&id| module.continuation(id).unwrap().debug_name.as_deref() == Some("/count"))
+        .expect("the recursive count is contified");
+    assert_eq!(
+        module.continuation(count).unwrap().params.len(),
+        2,
+        "the loop carries the bytes' length and the count: {module}"
+    );
+
+    let compiled = to_compiled(&wasm, foreigns).expect("the count compiles to a program");
+    let (system, io) = MockHost::builder().args(["abcd"]).build();
+    assert_eq!(compiled.run(system, ForeignBindings::empty()), Ok(0));
+    assert_eq!(io.output(), b"4");
+}
 
 fn answers(source: &str, expected: [&str; 4]) {
     let (module, foreigns) = compile_raw_program(source);

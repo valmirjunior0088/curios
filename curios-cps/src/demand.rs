@@ -3,6 +3,8 @@
 //! Dead-parameter elimination asks only whether a value is used at all, which a use count answers. A return protocol needs more: whether *every* use projects a field, so a constructor could be delivered as its fields rather than as a heap tuple. Those are two points of one order, so they are computed once here rather than by two walks that could drift apart.
 //!
 //! **The fact is interprocedural.** A value passed to a known call or jumped along an edge asks exactly what the receiving parameter's own uses ask, so an argument's demand defers to that parameter and the rules reach a genuine fixpoint under the shared solver. Two transfers deliberately keep the syntactic reading: an argument to a closure call crosses an indirection this walk does not resolve, and a value on an edge into a bodyless return sentinel is consumed by the caller's resume, whose linkage belongs to the return protocol rather than to this lattice.
+//!
+//! **Droppable work is read through what it builds.** A construction, or an operation that goes where nothing reads it, asks of its operands only once its own result is asked of: such a binding nothing reads is dropped, and what it read with it. So a loop parameter read only by the work that builds its next value — a hidden argument carrying an invariant, `@x[..seen, h]` — settles at `Unused` with that work, and dead-parameter elimination takes both. A projection nothing reads is no use either, so `Projected` and `Indexed` are what the reads *something reads through* ask.
 
 use {
     super::{Atom, Callee, Edge, Intrinsic, Lattice, Module, Node, Solver, ValueId, atoms},
@@ -81,118 +83,142 @@ pub fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
 
     Solver::solve(seeds, |rules| {
         for (_, node) in module.live_nodes() {
-            rules.add(move |solver| match node {
-                // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
-                Node::LetIntrinsic {
-                    op: Intrinsic::TupleGet(index) | Intrinsic::RowGet(_, index),
-                    args,
-                    ..
-                } if matches!(args.as_slice(), [Atom::Value(_)]) => {
-                    if let [Atom::Value(value)] = args.as_slice() {
-                        solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
-                    }
+            rules.add(move |solver| {
+                // Droppable work asks of its operands only where what it builds is asked of: a binding nothing reads goes, so a value read by nothing but such work — its result handed on only to where the value came from, as a loop parameter's next value is — is as unread as the work, and goes with it.
+                if let Some(result) = droppable_result(node)
+                    && solver
+                        .fact(&result)
+                        .is_none_or(|demand| *demand == Demand::Unused)
+                {
+                    return;
                 }
-
-                // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
-                Node::LetIntrinsic {
-                    op:
-                        Intrinsic::BytesLen
-                        | Intrinsic::BytesEql
-                        | Intrinsic::BytesGet
-                        | Intrinsic::BytesSlice
-                        | Intrinsic::BytesRest
-                        | Intrinsic::ListLen
-                        | Intrinsic::ListGet
-                        | Intrinsic::ListSlice
-                        | Intrinsic::ListRest
-                        | Intrinsic::ListSettle,
-                    args,
-                    ..
-                } => {
-                    let carriers = match args.len() {
-                        // Equality reads both sides.
-                        2 if matches!(
-                            node,
-                            Node::LetIntrinsic {
-                                op: Intrinsic::BytesEql,
-                                ..
-                            }
-                        ) =>
-                        {
-                            2
-                        }
-                        _ => 1,
-                    };
-                    for (position, atom) in args.iter().enumerate() {
-                        if let Atom::Value(value) = atom {
-                            let demand = match position < carriers {
-                                true => Demand::Indexed,
-                                false => Demand::Opaque,
-                            };
-                            solver.join(*value, demand);
-                        }
-                    }
-                }
-
-                // The deferral: a known call's argument asks what the receiving parameter's uses ask. A parameter is a seeded live value, so an absent fact can only mean a malformed call, and opaque is the reading that only ever excludes.
-                Node::ApplyFun {
-                    callee: Callee::Known(callee),
-                    args,
-                    ..
-                } => {
-                    let params = module
-                        .function(*callee)
-                        .map(|function| function.params.as_slice());
-                    for (position, atom) in args.iter().enumerate() {
-                        if let Atom::Value(value) = atom {
-                            let deferred = params
-                                .and_then(|params| params.get(position))
-                                .and_then(|param| solver.fact(param).cloned())
-                                .unwrap_or(Demand::Opaque);
-                            solver.join(*value, deferred);
-                        }
-                    }
-                }
-
-                // A closure callee is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it. Its arguments stay opaque — the callee is not resolved here, so no parameter exists to defer to.
-                Node::ApplyFun {
-                    callee: Callee::Closure(closure),
-                    args,
-                    ..
-                } => {
-                    for atom in args {
-                        if let Atom::Value(value) = atom {
-                            solver.join(*value, Demand::Opaque);
-                        }
-                    }
-                    solver.join(*closure, Demand::Applied(args.len()));
-                }
-
-                Node::ApplyCont(edge) => defer_edge(module, solver, edge),
-
-                Node::Switch {
-                    scrutinee,
-                    cases,
-                    default,
-                } => {
-                    if let Atom::Value(value) = scrutinee {
-                        solver.join(*value, Demand::Opaque);
-                    }
-                    for edge in cases.values().chain(default.as_ref()) {
-                        defer_edge(module, solver, edge);
-                    }
-                }
-
-                _ => {
-                    for atom in atoms(node) {
-                        if let Atom::Value(value) = atom {
-                            solver.join(*value, Demand::Opaque);
-                        }
-                    }
-                }
+                rule(module, solver, node);
             });
         }
     })
+}
+
+/// The value a binding that goes where nothing reads it binds: a construction, or an operation that [`Intrinsic::drops_unread`]. What `shrink` drops, read here so that what it reads is read only through what it builds.
+fn droppable_result(node: &Node) -> Option<ValueId> {
+    match node {
+        Node::LetValue { result, .. } => Some(*result),
+        Node::LetIntrinsic { op, result, .. } if op.drops_unread() => Some(*result),
+        _ => None,
+    }
+}
+
+/// What `node` asks of each value it reads, once its result, where it binds droppable work, is asked of.
+fn rule(module: &Module, solver: &mut Solver<Demand>, node: &Node) {
+    match node {
+        // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
+        Node::LetIntrinsic {
+            op: Intrinsic::TupleGet(index) | Intrinsic::RowGet(_, index),
+            args,
+            ..
+        } if matches!(args.as_slice(), [Atom::Value(_)]) => {
+            if let [Atom::Value(value)] = args.as_slice() {
+                solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
+            }
+        }
+
+        // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
+        Node::LetIntrinsic {
+            op:
+                Intrinsic::BytesLen
+                | Intrinsic::BytesEql
+                | Intrinsic::BytesGet
+                | Intrinsic::BytesSlice
+                | Intrinsic::BytesRest
+                | Intrinsic::ListLen
+                | Intrinsic::ListGet
+                | Intrinsic::ListSlice
+                | Intrinsic::ListRest
+                | Intrinsic::ListSettle,
+            args,
+            ..
+        } => {
+            let carriers = match args.len() {
+                // Equality reads both sides.
+                2 if matches!(
+                    node,
+                    Node::LetIntrinsic {
+                        op: Intrinsic::BytesEql,
+                        ..
+                    }
+                ) =>
+                {
+                    2
+                }
+                _ => 1,
+            };
+            for (position, atom) in args.iter().enumerate() {
+                if let Atom::Value(value) = atom {
+                    let demand = match position < carriers {
+                        true => Demand::Indexed,
+                        false => Demand::Opaque,
+                    };
+                    solver.join(*value, demand);
+                }
+            }
+        }
+
+        // The deferral: a known call's argument asks what the receiving parameter's uses ask. A parameter is a seeded live value, so an absent fact can only mean a malformed call, and opaque is the reading that only ever excludes.
+        Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args,
+            ..
+        } => {
+            let params = module
+                .function(*callee)
+                .map(|function| function.params.as_slice());
+            for (position, atom) in args.iter().enumerate() {
+                if let Atom::Value(value) = atom {
+                    let deferred = params
+                        .and_then(|params| params.get(position))
+                        .and_then(|param| solver.fact(param).cloned())
+                        .unwrap_or(Demand::Opaque);
+                    solver.join(*value, deferred);
+                }
+            }
+        }
+
+        // A closure callee is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it. Its arguments stay opaque — the callee is not resolved here, so no parameter exists to defer to.
+        Node::ApplyFun {
+            callee: Callee::Closure(closure),
+            args,
+            ..
+        } => {
+            for atom in args {
+                if let Atom::Value(value) = atom {
+                    solver.join(*value, Demand::Opaque);
+                }
+            }
+            solver.join(*closure, Demand::Applied(args.len()));
+        }
+
+        Node::ApplyCont(edge) => defer_edge(module, solver, edge),
+
+        Node::Switch {
+            scrutinee,
+            cases,
+            default,
+        } => {
+            if let Atom::Value(value) = scrutinee {
+                solver.join(*value, Demand::Opaque);
+            }
+            for edge in cases.values().chain(default.as_ref()) {
+                defer_edge(module, solver, edge);
+            }
+        }
+
+        _ => {
+            for atom in atoms(node) {
+                if let Atom::Value(value) = atom {
+                    solver.join(*value, Demand::Opaque);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -637,7 +637,7 @@ fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
     );
 }
 
-/// A loop a total definition defines in its body is part of that definition's evaluation, so a call of the definition nothing reads is dropped with its loop; the same loop in a definition the certifier found partial keeps its call, since it may never return. What licenses the drop is the definition's record reaching the function nested in it ([`curios_anf::Function::total`]). Mutation-checked: marking only the functions a name is bound to keeps the total definition's loop.
+/// A loop a total definition defines in its body is part of that definition's evaluation, so a call of the definition nothing reads is dropped with its loop; the same loop in a definition the certifier found partial keeps its call, since it may never return. What licenses the drop is the definition's record reaching the function nested in it ([`curios_anf::Function::total`]). The partial loop dispatches on its parameter, so the literal that marks it stays read: one whose parameter only builds its own next value keeps its call with no parameter left to mark it. Mutation-checked: marking only the functions a name is bound to keeps the total definition's loop.
 #[test]
 fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
     const LOCAL_LOOPS: &str = r#"
@@ -646,7 +646,7 @@ fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
             let count(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => count(j, acc + 30011) end;
             count(n, 0);
         let whirl(n: Nat) -> Nat =
-            let spin(k: Nat) -> Nat = spin(k + 30013);
+            let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30013) end;
             spin(n);
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
@@ -667,12 +667,12 @@ fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
     );
 }
 
-/// An unread fold handed a pure stepper is dropped, though the fold applies a function it was handed: the summary names what it applies, and the call hands a function droppable at every call ([`curios_cps::Droppable`]). A fold handed a stepper that may never return is kept. Mutation-checked: a function applying its parameter judged an unknown keeps the pure ones.
+/// An unread fold handed a pure stepper is dropped, though the fold applies a function it was handed: the summary names what it applies, and the call hands a function droppable at every call ([`curios_cps::Droppable`]). A fold handed a stepper that may never return is kept, the stepper dispatching on its parameter so the literal that marks it stays read. Mutation-checked: a function applying its parameter judged an unknown keeps the pure ones.
 #[test]
 fn an_unread_fold_handed_a_pure_stepper_is_dropped() {
     const FOLDS: &str = r#"
         use /std/{Nat, List, Bytes, Proc};
-        let spin(k: Nat) -> Nat = spin(k + 30023);
+        let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30023) end;
         let tally(bytes: Bytes, arguments: List(Bytes)) -> Nat =
             let unread_bytes = Bytes/fold(bytes, 0, (b, acc) => acc + 30017);
             let unread_list = List/fold(arguments, 0, (s, acc) => acc + 30019);

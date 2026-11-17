@@ -4,7 +4,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// Three parameters, one read only through a projection, one consumed whole, one never mentioned.
+/// Three parameters, one read only through a projection, one consumed whole, one never mentioned; the field read and the tuple built are handed out where the function halts.
 fn module() -> (Module, ValueId, ValueId, ValueId) {
     let mut module = Module::default();
     let projected = module.add_value(Some("projected".into()));
@@ -13,7 +13,7 @@ fn module() -> (Module, ValueId, ValueId, ValueId) {
     let field = module.add_value(Some("field".into()));
     let built = module.add_value(Some("built".into()));
 
-    let exit = module.add_node(halt_zero());
+    let exit = module.add_node(halt(vec![Atom::Value(field), Atom::Value(built)]));
     let construct = module.add_node(Node::LetValue {
         result: built,
         value: ValueExpr::Tuple(vec![Atom::Value(whole)]),
@@ -79,7 +79,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
 
     let callee = module.reserve_function();
     let callee_ret = module.reserve_continuation();
-    let callee_exit = module.add_node(halt_zero());
+    let callee_exit = module.add_node(halt(vec![Atom::Value(field)]));
     let callee_body = module.add_node(Node::LetIntrinsic {
         result: field,
         op: Intrinsic::TupleGet(1),
@@ -259,4 +259,62 @@ fn a_closure_call_consumes_its_arguments_whole() {
     let demands = demands(&module);
     assert_eq!(demand_of(&demands, closure), Demand::Applied(1));
     assert_eq!(demand_of(&demands, argument), Demand::Opaque);
+}
+
+/// A loop parameter read only by work that builds its own next value asks nothing: the append is read only as the argument the loop hands itself, so the parameter, the append and its result are all unused. The same append handed out where the function halts asks its operands whole. Mutation-checked: with droppable work asking of its operands whether or not its result is read, the looping parameter is opaque.
+#[test]
+fn a_parameter_read_only_to_build_its_own_next_value_is_unused() {
+    let demand_on_seen = |looped: bool| {
+        let mut module = Module::default();
+        let seen = module.add_value(Some("seen".into()));
+        let next = module.add_value(Some("next".into()));
+        let looping = module.reserve_continuation();
+        let end = match looped {
+            true => module.add_node(Node::ApplyCont(Edge {
+                target: looping,
+                args: vec![Atom::Value(next)],
+            })),
+            false => module.add_node(halt(vec![Atom::Value(next)])),
+        };
+        let append = module.add_node(Node::LetIntrinsic {
+            result: next,
+            op: Intrinsic::BytesAppend,
+            args: vec![Atom::Value(seen), Atom::Literal(Literal::Nat(7u32.into()))],
+            next: end,
+        });
+        module.define_continuation(
+            looping,
+            Continuation {
+                debug_name: Some("loop".into()),
+                params: vec![seen],
+                body: append,
+            },
+        );
+        let start = module.add_node(Node::ApplyCont(Edge {
+            target: looping,
+            args: vec![Atom::Literal(Literal::Nat(0u32.into()))],
+        }));
+        let body = module.add_node(Node::LetCont {
+            continuations: vec![looping],
+            body: start,
+        });
+        let function = module.reserve_function();
+        let return_cont = module.reserve_continuation();
+        module.define_function(
+            function,
+            Function {
+                debug_name: Some("main".into()),
+                params: Vec::new(),
+                return_cont,
+                body,
+                droppable: Droppable::Never,
+            },
+        );
+        module.set_entry(function);
+
+        demand_of(&demands(&module), seen)
+    };
+
+    assert_eq!(demand_on_seen(true), Demand::Unused);
+    assert_eq!(demand_on_seen(false), Demand::Opaque);
 }

@@ -33,14 +33,14 @@ fn returning_callee(module: &mut Module, name: &str) -> FunctionId {
     function
 }
 
-/// A resume continuation that reads its one parameter only through `TupleGet(0)` and `TupleGet(1)`, then exits.
+/// A resume continuation that reads its one parameter only through `TupleGet(0)` and `TupleGet(1)`, then exits with the second, which is what makes the result read through its fields: a projection nothing reads is no use.
 fn projecting_resume(module: &mut Module, name: &str) -> ContinuationId {
     let result = module.add_value(Some(format!("{name}/result")));
     let tag = module.add_value(Some(format!("{name}/tag")));
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(halt_zero());
+    let exit = module.add_node(halt(vec![Atom::Value(payload)]));
     let second = module.add_node(Node::LetIntrinsic {
         result: payload,
         op: Intrinsic::TupleGet(1),
@@ -70,7 +70,7 @@ fn opaque_resume(module: &mut Module, name: &str) -> ContinuationId {
     let held = module.add_value(Some(format!("{name}/held")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(halt_zero());
+    let exit = module.add_node(halt(vec![Atom::Value(held)]));
     let hold = module.add_node(Node::LetValue {
         result: held,
         value: ValueExpr::Tuple(vec![Atom::Value(result)]),
@@ -373,7 +373,7 @@ fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> Continu
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(halt_zero());
+    let exit = module.add_node(halt(vec![Atom::Value(payload)]));
     let second = module.add_node(Node::LetIntrinsic {
         result: payload,
         op: Intrinsic::RowGet(row, 1),

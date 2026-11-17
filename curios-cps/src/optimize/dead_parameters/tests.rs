@@ -501,16 +501,35 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
     let params = p.params(2);
     let nested = p.module.reserve_function();
     let returned = p.module.reserve_continuation();
+    let capture = p.params(1)[0];
+    // The capture is handed back once the call returns, so what it holds is read.
+    let after = p.module.reserve_continuation();
+    let result = p.params(1);
+    let hand_back = p.module.add_node(Node::ApplyCont(Edge {
+        target: returned,
+        args: vec![Atom::Value(capture)],
+    }));
+    p.module.define_continuation(
+        after,
+        Continuation {
+            debug_name: None,
+            params: result,
+            body: hand_back,
+        },
+    );
     let inside = p.module.add_node(Node::ApplyFun {
         callee: Callee::Known(receiver),
         args: vec![Atom::Value(params[1])],
-        return_to: returned,
+        return_to: after,
     });
-    let capture = p.params(1)[0];
+    let call = p.module.add_node(Node::LetCont {
+        continuations: vec![after],
+        body: inside,
+    });
     let nested_body = p.module.add_node(Node::LetValue {
         result: capture,
         value: ValueExpr::Tuple(vec![Atom::Value(params[0])]),
-        next: inside,
+        next: call,
     });
     p.module.define_function(
         nested,
