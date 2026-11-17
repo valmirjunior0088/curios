@@ -415,6 +415,7 @@ impl Verdicts {
                 executable,
                 source.declared(),
                 source.compiled(),
+                source.stand_in(),
             ));
         }
 
@@ -423,6 +424,7 @@ impl Verdicts {
             &source.claims(),
             source.declared(),
             source.compiled(),
+            source.stand_in(),
         ))
     }
 

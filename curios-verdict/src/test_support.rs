@@ -10,7 +10,7 @@ mod tests;
 use {
     crate::Verdicts,
     curios_abi::ForeignStore,
-    curios_common::test_support::Temporary,
+    curios_common::{Qualifier, test_support::Temporary},
     curios_core::{Certification, Definitions, Global},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
@@ -119,7 +119,7 @@ impl History {
             why: Unbuilt::Stored(why),
         };
         let mut held = None;
-        self.walked(&self.verdicts(), None, |at, _, unit| {
+        let (_, stand_in) = self.walked(&self.verdicts(), None, |at, _, unit| {
             if at == mount {
                 held = Some(unit.clone());
             }
@@ -146,10 +146,18 @@ impl History {
             .expect("the unit was walked");
         let text = fs::read_to_string(file).map_err(|error| stored(error.to_string()))?;
         let root = RootSource::one_file(mount, file, &text);
-        filing.put(
-            &UnitSource::mounted(&root),
-            &held.with_certification(certification),
-        );
+        let position = self
+            .units
+            .iter()
+            .position(|(at, ..)| at == mount)
+            .expect("the unit was walked");
+        // At the slot the walk filed it at: a stand-in's, and a unit's over one, are addressed apart from the archived root's.
+        with_prelude(|prelude| {
+            filing.put(
+                &source_of(prelude, &root, position, stand_in.as_ref()),
+                &held.with_certification(certification),
+            );
+        });
 
         match filing.refused() {
             Some(refused) => Err(stored(refused)),
@@ -167,10 +175,12 @@ impl History {
     /// Build every unit, and hand `then` the prelude and each unit as the build made it or the store held it: what the term a history closes with is put over.
     pub fn built<R>(&self, then: impl FnOnce(Predecessors<'_>) -> R) -> Result<R, Stopped> {
         let verdicts = self.verdicts();
-        let (units, stood_in) = self.walked(&verdicts, None, |_, _, _| ())?;
+        let (units, stand_in) = self.walked(&verdicts, None, |_, _, _| ())?;
 
         Ok(with_prelude(|prelude| {
-            let scope = roots(prelude, stood_in).chain(&units).collect::<Vec<_>>();
+            let scope = roots(prelude, stand_in.as_ref().map(|(index, _)| *index))
+                .chain(&units)
+                .collect::<Vec<_>>();
             then(Predecessors::over(&scope))
         }))
     }
@@ -181,9 +191,9 @@ impl History {
         verdicts: &Verdicts,
         until: Option<&str>,
         mut each: impl FnMut(&str, &UnitSource<'_>, &Unit),
-    ) -> Result<(Vec<Unit>, Option<usize>), Stopped> {
+    ) -> Result<(Vec<Unit>, Option<StandIn>), Stopped> {
         let mut units = Vec::new();
-        let mut stood_in = None;
+        let mut stand_in: Option<StandIn> = None;
         for (position, (mount, written, file)) in self.units.iter().enumerate() {
             if until == Some(mount.as_str()) {
                 break;
@@ -201,17 +211,17 @@ impl History {
                 let standing = (position == 0)
                     .then(|| stood_in_for(prelude, slice::from_ref(&root)))
                     .flatten();
-                if let Some((index, _)) = standing {
-                    stood_in = Some(index);
+                if let Some((index, archived)) = standing {
+                    let prefixes = archived.mounts().iter().map(|mount| mount.prefix);
+                    stand_in = Some((index, prefixes.collect()));
                 }
-                let scope = roots(prelude, stood_in).chain(&units).collect::<Vec<_>>();
+                let scope = roots(prelude, stand_in.as_ref().map(|(index, _)| *index))
+                    .chain(&units)
+                    .collect::<Vec<_>>();
                 let predecessors = Predecessors::over(&scope);
-                let seeing = match standing {
-                    Some((index, _)) => UnitSource::mounted(&root)
-                        .seeing(granted_in_place(prelude, index, &root)),
-                    None => UnitSource::mounted(&root),
-                };
-                let offered = standing.map(|(_, archived)| archived.clone().read_for(root.packages()));
+                let seeing = source_of(prelude, &root, position, stand_in.as_ref());
+                let offered =
+                    standing.map(|(_, archived)| archived.clone().read_for(root.packages()));
                 match written {
                     Written::Program => compile_units(
                         DEFAULT_BUDGET,
@@ -232,7 +242,30 @@ impl History {
             units.push(unit);
         }
 
-        Ok((units, stood_in))
+        Ok((units, stand_in))
+    }
+}
+
+/// The archived root a history's first unit stands in for: its index among the prelude's roots, and the prefixes it claims.
+type StandIn = (usize, Vec<Qualifier>);
+
+/// The source of the unit `root` at `position` of a history whose first unit stands in for an archived root, where one does: compiled over the stand-in, and the stand-in itself seeing what the root could see, as the standard fold builds each.
+fn source_of<'r>(
+    prelude: &[&Unit],
+    root: &'r RootSource,
+    position: usize,
+    stand_in: Option<&StandIn>,
+) -> UnitSource<'r> {
+    let source = UnitSource::mounted(root);
+    match stand_in {
+        None => source,
+        Some((index, prefixes)) => {
+            let source = source.over_stand_in(prefixes.clone());
+            match position {
+                0 => source.seeing(granted_in_place(prelude, *index, root)),
+                _ => source,
+            }
+        }
     }
 }
 

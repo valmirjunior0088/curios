@@ -2321,6 +2321,8 @@ pub struct UnitSource<'a> {
     visible: Option<Vec<Qualifier>>,
     /// What the unit is compiled for: what `source` was marked for ([`RootSource::tested`]), or the other kind, for a store looking up the same source's other compile ([`UnitSource::other`]).
     compiled: Compiled,
+    /// The prefixes of the archived root a unit of this unit's fold stands in for, where one does ([`UnitSource::over_stand_in`]).
+    stand_in: Option<Vec<Qualifier>>,
 }
 
 impl<'a> UnitSource<'a> {
@@ -2331,6 +2333,7 @@ impl<'a> UnitSource<'a> {
             source,
             visible: source.declared().map(<[Qualifier]>::to_vec),
             compiled: source.compiled(),
+            stand_in: None,
         }
     }
 
@@ -2341,6 +2344,7 @@ impl<'a> UnitSource<'a> {
             source,
             visible: source.declared().map(<[Qualifier]>::to_vec),
             compiled: source.compiled(),
+            stand_in: None,
         }
     }
 
@@ -2354,6 +2358,7 @@ impl<'a> UnitSource<'a> {
                 Compiled::Built => Compiled::Tested,
                 Compiled::Tested => Compiled::Built,
             },
+            stand_in: self.stand_in.clone(),
         }
     }
 
@@ -2365,6 +2370,19 @@ impl<'a> UnitSource<'a> {
             visible: Some(prefixes),
             ..self
         }
+    }
+
+    /// The same unit, compiled in a fold whose first unit stands in for the archived root claiming `root`, as a package named `std` does: what it reads under `root` is not the compiler's own, so a store keeps it apart from the same unit compiled over the archived root.
+    pub fn over_stand_in(self, root: Vec<Qualifier>) -> Self {
+        Self {
+            stand_in: Some(root),
+            ..self
+        }
+    }
+
+    /// The prefixes of the archived root a unit of this unit's fold stands in for, where one does: the other half of what it read, beside the units a record names.
+    pub fn stand_in(&self) -> Option<&[Qualifier]> {
+        self.stand_in.as_deref()
     }
 
     /// The mounts of `predecessors` this source may name, plus `own`.

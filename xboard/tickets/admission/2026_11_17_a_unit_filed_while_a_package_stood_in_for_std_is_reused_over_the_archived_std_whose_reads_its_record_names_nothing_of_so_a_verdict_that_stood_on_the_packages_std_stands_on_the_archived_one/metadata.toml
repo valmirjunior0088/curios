@@ -1,5 +1,5 @@
 title = "A unit filed while a package stood in for `/std` is reused over the archived `/std`, whose reads its record names nothing of, so a verdict that stood on the package's `/std` stands on the archived one"
-status = "open"
+status = "fixed"
 
 [[witness]]
 what = "`d` proved of the package standing in for `/std`, which a later build unmounts, and put over the archived `/std`, where it states `False`"

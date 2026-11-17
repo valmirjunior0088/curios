@@ -12,6 +12,8 @@ use {
     std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
 
+mod by_name;
+
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
 const ENTRY: &str = "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n";
 

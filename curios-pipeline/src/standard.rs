@@ -94,12 +94,12 @@ impl<'a> Fold<'a> {
     {
         let mut observe = observe;
 
-        self.under_entry(progress, |predecessors, progress| {
+        self.under_entry(progress, |predecessors, stand_in, progress| {
             compile_entrypoint(
                 self.budget,
                 predecessors,
                 &SYNTAX,
-                &UnitSource::entry(entrypoint, loader),
+                &entry_source(entrypoint, loader, stand_in),
                 self.cache,
                 EntryTail::Program,
                 Told {
@@ -127,12 +127,12 @@ impl<'a> Fold<'a> {
     {
         let mut observe = observe;
 
-        self.under_entry(progress, |predecessors, progress| {
+        self.under_entry(progress, |predecessors, stand_in, progress| {
             compile_entrypoint(
                 self.budget,
                 predecessors,
                 &SYNTAX,
-                &UnitSource::entry(entrypoint, loader),
+                &entry_source(entrypoint, loader, stand_in),
                 self.cache,
                 EntryTail::Test { under },
                 Told {
@@ -155,12 +155,12 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.under_entry(progress, |predecessors, progress| {
+        self.under_entry(progress, |predecessors, stand_in, progress| {
             check_entrypoint(
                 self.budget,
                 predecessors,
                 &SYNTAX,
-                &UnitSource::entry(entrypoint, loader),
+                &entry_source(entrypoint, loader, stand_in),
                 self.cache,
                 tail,
                 // A check hands no rung on.
@@ -218,7 +218,7 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped(progress, |prelude, _, produced, _| {
+        self.scoped(progress, |prelude, sources, produced, _| {
             let scope = prelude
                 .iter()
                 .copied()
@@ -228,7 +228,7 @@ impl<'a> Fold<'a> {
             lower_subject(
                 Predecessors::over(&scope),
                 &SYNTAX,
-                &UnitSource::entry(entrypoint, loader),
+                &entry_source(entrypoint, loader, stand_in_of(sources)),
                 None,
                 self.cache,
                 |text, entry| {
@@ -325,14 +325,18 @@ impl<'a> Fold<'a> {
     fn under_entry<P, E, T>(self, progress: P, entry: E) -> Result<T, CompileError>
     where
         P: FnMut(Progress<'_>),
-        E: FnOnce(Predecessors<'_>, &mut dyn FnMut(Progress<'_>)) -> Result<T, CompileError>,
+        E: FnOnce(
+            Predecessors<'_>,
+            Option<&[Qualifier]>,
+            &mut dyn FnMut(Progress<'_>),
+        ) -> Result<T, CompileError>,
     {
         // The subject is the program on top, whose step tells the reader itself: no unit beneath it is read.
         self.scoped_before(
             0,
             Listeners::default(),
             progress,
-            |prelude, _, produced, progress| {
+            |prelude, sources, produced, progress| {
                 let predecessors = prelude
                     .iter()
                     .copied()
@@ -340,7 +344,11 @@ impl<'a> Fold<'a> {
                     .collect::<Vec<_>>();
 
                 // The entry step announces itself, since what its announcement says, whether its declarations are held, is known first there; that it finished is said here, where the fold's last step ends.
-                let compiled = entry(Predecessors::over(&predecessors), progress)?;
+                let compiled = entry(
+                    Predecessors::over(&predecessors),
+                    stand_in_of(sources),
+                    progress,
+                )?;
                 progress(Progress::Compiled);
 
                 Ok(compiled)
@@ -409,15 +417,20 @@ impl<'a> Fold<'a> {
 
             // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines — read for that unit's packages, so the texts a lowering over it keeps lie in the package's own files.
             let offered = withheld.map(|(_, root)| root.clone().read_for(units[0].packages()));
+            // Every unit of a fold whose first unit stands in for a root is compiled over the stand-in, which a store keeps apart from the archived root.
+            let mounted = |unit| match withheld {
+                Some((_, root)) => UnitSource::mounted(unit).over_stand_in(prefixes_of(root)),
+                None => UnitSource::mounted(unit),
+            };
             let sources = units
                 .iter()
                 .enumerate()
                 .map(|(index, unit)| match withheld {
                     Some((index_of_root, _)) if index == 0 => (
-                        UnitSource::mounted(unit).seeing(granted_in_place(prelude, index_of_root, unit)),
+                        mounted(unit).seeing(granted_in_place(prelude, index_of_root, unit)),
                         offered.as_ref(),
                     ),
-                    _ => (UnitSource::mounted(unit), None),
+                    _ => (mounted(unit), None),
                 })
                 .collect::<Vec<_>>();
             let produced = compile_units(
@@ -432,6 +445,29 @@ impl<'a> Fold<'a> {
 
             then(&roots, &sources, produced, &mut progress)
         })
+    }
+}
+
+/// The prefixes `root` claims: what a unit standing in for it claims in its place.
+fn prefixes_of(root: &Unit) -> Vec<Qualifier> {
+    root.mounts().iter().map(|mount| mount.prefix).collect()
+}
+
+/// The prefixes of the archived root the first of a fold's `sources` stands in for, where it does: what every unit of the fold, its entry among them, is compiled over.
+fn stand_in_of<'s>(sources: &'s [(UnitSource<'_>, Option<&Unit>)]) -> Option<&'s [Qualifier]> {
+    sources.first().and_then(|(source, _)| source.stand_in())
+}
+
+/// The entry's source, over the stand-in the fold's first unit is where there is one.
+fn entry_source<'a>(
+    entrypoint: &'a curios_surface::Entrypoint,
+    loader: &'a RootSource,
+    stand_in: Option<&[Qualifier]>,
+) -> UnitSource<'a> {
+    let source = UnitSource::entry(entrypoint, loader);
+    match stand_in {
+        Some(root) => source.over_stand_in(root.to_vec()),
+        None => source,
     }
 }
 
