@@ -151,3 +151,41 @@ fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A guard reads its comparison as a graded call reads it, as an arm's case does: under `q`'s arm, whose inversion solved `t` to `k`, `match t == 0` rules zero out of `t`, so `guarded(t - 1, …)` on its `false` arm descends. The refusal hands `t` back.
+#[test]
+fn a_guard_after_an_inversion_rules_zero_out_of_the_variable_a_call_names() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        induct Q: (Nat) -> Type
+        | c(k: Nat): (k)
+        end
+
+        let guarded(t: Nat, q: Q(t)) -> Bool =
+            match q
+            | c(k) =>
+                match t == 0
+                | true => false
+                | false => guarded(t - 1, Q/c(t - 1))
+                end
+            end;
+
+        let Guarded(t: Nat, q: Q(t)) -> Prop = Bool/Holds(guarded(t, q));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| false => guarded(t - 1, Q/c(t - 1))",
+        "| false => guarded(t, Q/c(t))",
+    )])
+    .by_elaborator_in("/Guarded", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Guarded", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

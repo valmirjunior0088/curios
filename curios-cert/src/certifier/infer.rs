@@ -614,7 +614,7 @@ fn check_cases(
 
         let mut assumed = Vec::new();
         let checked = certifier.tried(|certifier| {
-            certifier.assume_guard(scrutinee, &value)?;
+            certifier.assume_guard(sized, &value)?;
             let mut solutions = Vec::new();
             assumed = eliminate::assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
             certifier.assume_arm(sized, &value)?;

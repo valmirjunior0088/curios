@@ -1,6 +1,6 @@
 //! The certifier as its readers hold it: reduction, conversion and classification each read their terms by value, every `let`-bound local unfolded, behind doors that unfold what they are handed.
 //!
-//! **A reading is made only here, at a door.** [`ByValue`] holds the certifier mutably borrowed, so nothing binds while it lives, and it offers no typing, no binding and no recording: the certifier's lookups by shared reference, and by name each capability a reading mutates — the budget, the memo tables, a case equation's settlement, a fresh binder opened, a bracket, plain reduction, the closed machine's runs. Its fields are this module's, and every door enters by one function, which unfolds the terms the door is handed before it makes one ([`Certifier::read_by_value`]); a bracket hands its walk the same reading. So a walk behind a door is handed only what its door unfolded, its own parts and reducts, binders it minted, and what the scope and the definitions hold, all by value, and no binding can leave any of it naming a `let`-bound local while it reads.
+//! **A reading is made only here, at a door.** [`ByValue`] holds the certifier mutably borrowed, so nothing binds while it lives, and it offers no typing, no binding and no recording: the certifier's lookups by shared reference, and by name each capability a reading mutates — the budget, the memo tables, a case equation's settlement, a fresh binder opened, a bracket, plain reduction, the closed machine's runs. Its fields are this module's, and every door enters by one function, which unfolds the terms the door is handed before it makes one ([`Certifier::read_by_value`]), but the size order's, which unfolds them as a graded call reads them, a variable an arm's index inversion solved standing as written ([`Certifier::read_graded`]); a bracket hands its walk the same reading. So a walk behind a door is handed only what its door unfolded, its own parts and reducts, binders it minted, and what the scope and the definitions hold, all by value but for such a variable, which reduction holds as it holds any other, and no binding can leave any of it naming a `let`-bound local while it reads.
 //!
 //! **A door keeps the name and the signature it had**, so typing, erasure's [`Reader`](super::Reader), the suites and the crates that call the certifier read the same functions. Where a door and its walk share a name, the walk's entry is the reading's method of that name.
 //!
@@ -37,7 +37,7 @@ impl<'s> Deref for ByValue<'_, 's> {
 }
 
 impl<'s> Certifier<'s> {
-    /// Read `terms` in a reading of this certifier, each unfolded first: the one place a reading is made, which every door enters by.
+    /// Read `terms` in a reading of this certifier, each unfolded first: the door every reading enters by but the size order's.
     fn read_by_value<const N: usize, T>(
         &mut self,
         terms: [&Term; N],
@@ -45,6 +45,26 @@ impl<'s> Certifier<'s> {
     ) -> T {
         let terms = terms.map(|term| self.scope.by_value(term));
 
+        self.read_unfolded(terms, read)
+    }
+
+    /// Read `terms` as a graded call reads them ([`Certifier::graded`]): unfolded as [`Certifier::read_by_value`] unfolds them, but for a variable an arm's index inversion solved, which stands as written, so the size order reads nothing an inversion concluded. The size order's door ([`Env::force_graded`]).
+    fn read_graded<const N: usize, T>(
+        &mut self,
+        terms: [&Term; N],
+        read: impl FnOnce(&mut ByValue<'_, 's>, [Term; N]) -> T,
+    ) -> T {
+        let terms = terms.map(|term| self.scope.graded(term));
+
+        self.read_unfolded(terms, read)
+    }
+
+    /// Read `terms`, which a door has unfolded, in a reading of this certifier: the one place a reading is made, which [`Certifier::read_by_value`] and [`Certifier::read_graded`] alone enter.
+    fn read_unfolded<const N: usize, T>(
+        &mut self,
+        terms: [Term; N],
+        read: impl FnOnce(&mut ByValue<'_, 's>, [Term; N]) -> T,
+    ) -> T {
         read(
             &mut ByValue {
                 certifier: self,
@@ -482,6 +502,13 @@ impl Env for Certifier<'_> {
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads. A door, so the term is read by value, in a reading whose reduction is plain.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
         Ok(self.read_by_value([term], |certifier, [term]| {
+            certifier.plainly(|certifier| certifier.reduce_forced(term))
+        })?)
+    }
+
+    /// Plain reduction of the term as a graded call reads it: a door, the term read by value but for a variable an arm's index inversion solved, so a guard's operand and a call's argument read through a witness are read as the call names them.
+    fn force_graded(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        Ok(self.read_graded([term], |certifier, [term]| {
             certifier.plainly(|certifier| certifier.reduce_forced(term))
         })?)
     }

@@ -57,6 +57,11 @@ pub trait Env {
     /// **Plain reduction: it asks its checker's conversion nothing.** Where a judgment reduces, a stuck fold's atoms and a missed case equation are put to the checker's own conversion; here they are not. Nothing this trait answers is a judgment, and that has to stay true of a reduct: totality reads terms through this method, and conversion's proof irrelevance is sound because a program is accepted only once totality has passed, an argument that holds only while totality's own reading rests on no verdict of conversion's.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error>;
 
+    /// [`Env::force`] for the size order, which reads a term as a graded call reads it: a variable an arm's index inversion solved stands as written, since the order reads nothing an inversion concluded ([`refined_by_arm`](crate::refined_by_arm)). A checker whose `force` reads no solution answers it as `force` does.
+    fn force_graded(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        self.force(term)
+    }
+
     /// The type `name` was assumed at, or `None` for a name not in scope.
     fn assumption(&self, name: &Free) -> Option<&Term>;
 

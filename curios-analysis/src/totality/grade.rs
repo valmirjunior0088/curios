@@ -664,7 +664,7 @@ impl<'a, E: Env> Grader<'a, E> {
         if !readable(term) {
             return Ok(Shape::Opaque);
         }
-        let Some(reduced) = self.env.force(term).probed()? else {
+        let Some(reduced) = self.env.force_graded(term).probed()? else {
             return Ok(Shape::Opaque);
         };
         if reduced == *term {
@@ -683,7 +683,7 @@ impl<'a, E: Env> Grader<'a, E> {
         if !readable(head) {
             return Ok(None);
         }
-        let Some(reduced) = self.env.force(head).probed()? else {
+        let Some(reduced) = self.env.force_graded(head).probed()? else {
             return Ok(None);
         };
         if reduced == *head {

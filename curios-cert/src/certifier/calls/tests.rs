@@ -427,3 +427,18 @@ fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
 
     assert!(infer(&mut certifier, &group).is_ok());
 }
+
+/// A guard rules zero out of its comparison's operand as a graded call reads it, a variable an index inversion solved standing as written: under `q`'s arm, whose inversion solves `t` to `k`, the `false` arm of `t == 0` rules zero out of `t`, so the call on `t - 1` descends. Mutation-checked: with the guard read off the scrutinee by value, zero is ruled out of `k`, which no call names, and the group is refused.
+#[test]
+fn a_guard_after_an_inversion_rules_zero_out_of_the_variable_a_call_names() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        "induct /Q: (i: #NatType) -> pub Type\n| c(k: #NatType): (k)\nend",
+    );
+    let group = term(
+        "#{node = Rec} (let d: (t: #NatType, q: #{node = InductType} /Q()(t)) -> Type = (t: #NatType, q: #{node = InductType} /Q()(t)) => #{goal = Type} match q | c(k) => #{goal = Type} match #NatEql(t, 0) | false => d(#NatSub(t, 1), #{node = Variant} /Q/c(#NatSub(t, 1))) | true => #NatType end end; d)",
+    );
+
+    assert!(infer(&mut certifier, &group).is_ok());
+}

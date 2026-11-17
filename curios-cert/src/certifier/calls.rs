@@ -630,7 +630,7 @@ impl Certifier<'_> {
         Ok(())
     }
 
-    /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for.
+    /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for. The comparison is handed as a graded call reads it, as [`Certifier::assume_arm`]'s scrutinee is: a binder an index inversion solved stands as written, so zero is ruled out of the binder a call names, and nothing an inversion concluded enters the size order.
     ///
     /// Read before the arm assumes its case equation, and it must be: that equation makes `scrutinee` reduce to `value` itself, and a comparison read through it is a literal with nothing left to compare.
     pub(super) fn assume_guard(&mut self, scrutinee: &Term, value: &Term) -> Result<(), Error> {
