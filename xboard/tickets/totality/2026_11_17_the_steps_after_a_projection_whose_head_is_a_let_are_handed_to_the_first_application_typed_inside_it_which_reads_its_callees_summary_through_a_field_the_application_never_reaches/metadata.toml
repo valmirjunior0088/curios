@@ -1,0 +1,7 @@
+title = "The steps after a projection whose head is a `let` are handed to the first application typed inside it, which reads its callee's summary through a field the application never reaches"
+status = "open"
+
+[[witness]]
+what = "a recursion through a callback handed to `/g` inside a `let` that a projection reads, graded by the summary of `/g`'s field lambda, which the call never reaches"
+source = "a_let_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]

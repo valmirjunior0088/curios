@@ -1,0 +1,20 @@
+-- `/g`'s field lambda applies `w` below `n`, and its leading lambdas apply `w` at `n` itself, in the field they answer beside it. `/spin` projects a field out of a `let` whose value is `/g((c) => /spin(c), n)` and whose tail is another record: the steps after the projection are handed to the first application typed inside the `let`, so `/g`'s call is graded as a call of its field lambda, whose summary bounds `c` below `n`. The tail reads `/g`'s other field, which applies the callback at `n`, so `/spin(0)` is `/spin(0)` again.
+let /g: (w: (#NatType) -> #{node = InductType} /sys/Bool/False(), n: #NatType) -> {
+    (#NatType) -> #NatType,
+    #{node = InductType} /sys/Bool/False()} =
+    (w: (#NatType) -> #{node = InductType} /sys/Bool/False(), n: #NatType) =>
+        (
+            (m: #NatType) =>
+                #{goal = #NatType}
+                match n | 0 => 0 | k + 1 => #{goal = #NatType} match w(k) end end,
+            w(n));
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) =>
+        (
+            let r: {(#NatType) -> #NatType, #{node = InductType} /sys/Bool/False()} =
+                /g((c: #NatType) => /spin(c), n);
+            ((m: #NatType) => r.1,)).0(0);
+
+/spin(0)
