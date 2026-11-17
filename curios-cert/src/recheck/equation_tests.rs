@@ -604,8 +604,6 @@ let /G: (u: (e: #NatType) -> #NatType, v: (e: #NatType) -> #NatType, i: #NatType
 "#;
 
 // A definition's body is closed, so what it reads of the split's locals is what the guard hands it: the guard names `h`, `p` and `q`, whose types name `c`, the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, where the guard is `k(1)`, `true`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`. A member of a group standing in a term reads what it captures with no guard naming it, which the board's ticket filed at af2b2d825 holds.
-//
-// Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted, the guard settling inside the split.
 #[test]
 fn a_guard_through_a_definition_answers_nothing_after_the_split() {
     let verdicts = core_text_verdicts(&fill!(
@@ -695,8 +693,6 @@ end
 "#;
 
 // A variable an index inversion solved is bound to its solution and the guard is recorded by value, so it names `h`, `p` and `q`, whose types name `c`: the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`.
-//
-// Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted.
 #[test]
 fn a_guard_over_an_inversions_solutions_answers_nothing_after_the_split() {
     let verdicts = core_text_verdicts(&fill!(

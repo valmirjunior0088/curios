@@ -797,8 +797,6 @@ let /d: (g: (x: #NatType) -> #BoolType, n: #NatType) -> #NatType =
 "#;
 
 // A position's erased half is remembered by its one door (`erased_half`) under the equations in force where it was classified, and goes where they do: the `true` arm classifies `T(g(n))` again, as a sort, and its term, a type reaching `/loop`, is refused by obligation (T), with the memos on as off. Answered from the `false` arm, the term would be classified relevant and pass unconstrained.
-//
-// Mutation-checked at `Memos::begin_equations`: with the erased halves read off the scope left standing, `/d` is admitted with the memos on.
 #[test]
 fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
     let definitions = core_text_module(AN_ERASED_HALF_UNDER_EACH_ARM);

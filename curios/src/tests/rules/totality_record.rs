@@ -507,8 +507,6 @@ fn a_field_of_what_a_field_lambda_answers_is_no_part_of_the_member() {
 }
 
 // A path that follows a field calls the member's leading lambdas too, since strict evaluation answers the record, its other fields with it, before the field is read: with `W(n).0(1)` at slot `1`, every `W(n)` evaluates it, so each call of the field lambda through `W(n)` calls it again at `n`, and evaluating `W(n)` does so without end. Were a field read alone, only the field lambda, which descends on `m`, would be seen. The control's slot `1` calls nothing.
-//
-// Mutation-checked: with the block of `part_calls` that pushes the leading lambdas' call `(base, answered)` removed, the refusal certifies and this test fails.
 #[test]
 fn a_call_through_a_field_calls_the_fields_answered_beside_it() {
     control(
@@ -536,8 +534,6 @@ fn a_call_through_a_field_calls_the_fields_answered_beside_it() {
 }
 
 // A path that reaches no field lambda lets the record escape, so it is a call of every part under where it stands, graded on the arguments it handed and claiming nothing past them: `W(n)` bound by a `let`, `W(n)` handed to `pass`, which states nothing of what it is handed, and `V.0`, a record literal held at a field, bound by a `let`, are each a call of the field lambda the record holds, which each refusal reaches through one of them at its own argument again. The control reaches each field by its path, below its argument.
-//
-// Mutation-checked: with `escapes` in `part_calls` held `false`, each refusal certifies and this test fails.
 #[test]
 fn a_record_that_escapes_is_a_call_of_every_part_under_where_it_stands() {
     let program = control(
@@ -573,8 +569,6 @@ fn a_record_that_escapes_is_a_call_of_every_part_under_where_it_stands() {
 }
 
 // A member of no parameter handed bare to a definition that applies a field of it is a call of its leading lambdas, whose record holds that field, where no part lies at the field applied: `W`'s slot `1` is a lambda under a `let`, which is no part of `W`, so `apply1(W, y)` in it is a call of `W` its leading lambdas make again, and handing `y` back it recurs for ever. The control's slot `1` is a field lambda, which `apply1` applies below `y`.
-//
-// Mutation-checked: with the `match &answered` block of `handed_member` that pushes the leading lambdas' call removed, the refusal certifies and this test fails.
 #[test]
 fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leading_lambdas() {
     control(

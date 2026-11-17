@@ -272,8 +272,6 @@ fn a_self_call_graded_short_in_a_leading_binders_type_does_not_descend() {
 const ASKED_ARGUMENT: &str = "#{node = Rec} (let f: (h: (x: #NatType) -> #NatType, a: #NatType, b: #NatType, n: #NatType) -> Type = (h2: (x: #NatType) -> #NatType, a2: #NatType, b2: #NatType, n2: #NatType) => #{goal = Type} match n2 | 0 => #NatType | pred + 1 => f(h2, a2, b2, #{goal = #NatType} match #NatEql(${left}, ${right}) | false => n2 | true => pred end) end; f)";
 
 /// The size reader reads a call's argument by plain reduction (`Env::force`), which asks the certifier's conversion nothing: an argument below the caller's only to a question — `h(a + b)` and `h(b + a)` one call to conversion and two atoms to the fold — descends on nothing, and the gate refuses the group. The control spells the two calls alike, which the fold pairs with no question, and descends. Totality reads terms this way because conversion's proof irrelevance is sound only while acceptance waits on a totality that rests on no verdict of conversion's.
-///
-/// Mutation-checked: with `Env::force` on `Certifier` reducing as a judgment does, the question takes the argument to `pred` and the first group is accepted.
 #[test]
 fn a_call_below_its_caller_only_to_a_question_descends_on_nothing() {
     let group = |left: &str, right: &str| term(&fill!(ASKED_ARGUMENT, left, right));
@@ -295,7 +293,7 @@ fn a_call_below_its_caller_only_to_a_question_descends_on_nothing() {
     ));
 }
 
-/// Zero ruled out of a lambda's binder is ruled out of what it stands for only where it stands for it bare: in `((x) => match x | 0 => … | _ => f(n - 1) end)(n + 1)` the default rules zero out of a successor, which says nothing of `n`, so `n - 1` is at most `n`, and at `0` the call hands back what it was handed. Mutation-checked: with the nonzero chain of `SizeContext::open` following a successor run to its tail, the call reads below `n`, and this is accepted.
+/// Zero ruled out of a lambda's binder is ruled out of what it stands for only where it stands for it bare: in `((x) => match x | 0 => … | _ => f(n - 1) end)(n + 1)` the default rules zero out of a successor, which says nothing of `n`, so `n - 1` is at most `n`, and at `0` the call hands back what it was handed.
 #[test]
 fn zero_ruled_out_of_a_binder_standing_for_a_successor_is_ruled_out_of_no_parameter() {
     let body = "((x: #NatType) => #{goal = Type} match x | 0 => #NatType | _ => f(#NatSub(n, 1)) end)(#NatAdd(n, 1))";
@@ -306,7 +304,7 @@ fn zero_ruled_out_of_a_binder_standing_for_a_successor_is_ruled_out_of_no_parame
     ));
 }
 
-/// What an arm establishes of a lambda's binder, and so of what the binder stands for, leaves with the arm: past a `let` whose value split `x`, standing for `n`, at a default or at `pred + 1`, `n` is neither nonzero nor a successor, so `n - 1` is at most `n`. Mutation-checked: with `SizeContext::exit` putting back only the binder an arm named, and not what it stands for, `n` stays nonzero or split past the `let`, and both are accepted.
+/// What an arm establishes of a lambda's binder, and so of what the binder stands for, leaves with the arm: past a `let` whose value split `x`, standing for `n`, at a default or at `pred + 1`, `n` is neither nonzero nor a successor, so `n - 1` is at most `n`.
 #[test]
 fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
     for arm in ["_", "pred + 1"] {
@@ -328,7 +326,7 @@ fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
 /// A proposition with one proof, which the fixtures below that state a proof declare.
 const TRUE: &str = "induct /True: pub Prop\n| qed()\nend";
 
-/// The instance a match states is typed where it is held to the scrutinee's type, so a call standing only there is recorded: `f(n)` sits in the stated instance of a split over `qed()`, which reduction reads the arm's payload off and no arm names. Mutation-checked: converting the stated instance with the scrutinee's type without typing it leaves the group with no call, and it is accepted.
+/// The instance a match states is typed where it is held to the scrutinee's type, so a call standing only there is recorded: `f(n)` sits in the stated instance of a split over `qed()`, which reduction reads the arm's payload off and no arm names.
 #[test]
 fn a_call_in_a_matchs_stated_instance_is_recorded() {
     let mut certifier = certifier();
@@ -362,7 +360,7 @@ fn a_call_in_a_proof_argument_is_recorded() {
     ));
 }
 
-/// An intrinsic's type operand is typed, so a call standing only in a list literal's element type is recorded: `f(n)` sits in the element type of the empty list a split takes apart, and no arm or goal names it. Mutation-checked: classifying a type operand by its sort without typing it (`check_is_type`) leaves the group with no call, and it is accepted.
+/// An intrinsic's type operand is typed, so a call standing only in a list literal's element type is recorded: `f(n)` sits in the element type of the empty list a split takes apart, and no arm or goal names it.
 #[test]
 fn a_call_in_a_list_literals_element_type_is_recorded() {
     let body = "#{goal = Type, cases = {carrier = {elem = #NatType}}} match #List(((y: Type) => #NatType)(f(n)), []) | [] => #NatType | [h, ..t] => #NatType end";
@@ -373,7 +371,7 @@ fn a_call_in_a_list_literals_element_type_is_recorded() {
     ));
 }
 
-/// A curried spine whose head is a lambda applied on the spot binds its later list to the lambda the head's body is, as what that binder stands for: in `((x) => (y) => f(y))(0)(n)` the call is at the caller's own argument and the gate refuses it, and through a split of `y` the call is below `n` and the group is accepted. Mutation-checked: reading the spine one list at a time, the arguments past the head lambda's binders left unbound, refuses the split.
+/// A curried spine whose head is a lambda applied on the spot binds its later list to the lambda the head's body is, as what that binder stands for: in `((x) => (y) => f(y))(0)(n)` the call is at the caller's own argument and the gate refuses it, and through a split of `y` the call is below `n` and the group is accepted.
 #[test]
 fn a_curried_spine_binds_its_later_list_to_the_lambda_its_head_answers() {
     assert!(matches!(
@@ -391,7 +389,7 @@ fn a_curried_spine_binds_its_later_list_to_the_lambda_its_head_answers() {
     assert!(infer(&mut certifier(), &group(&body)).is_ok());
 }
 
-/// A member handed in a curried spine's later list is named bare, a call graded unknown, whatever the lambda the head answers does with it: `((x) => (h) => h(x))(n)(f)` applies `f` at the caller's own argument, and the gate refuses it. Mutation-checked: with `record_call` removed from `infer_within`'s `Var` rule, the group has no call and is accepted.
+/// A member handed in a curried spine's later list is named bare, a call graded unknown, whatever the lambda the head answers does with it: `((x) => (h) => h(x))(n)(f)` applies `f` at the caller's own argument, and the gate refuses it.
 #[test]
 fn a_member_handed_in_a_later_list_is_a_call_of_unknown_grade() {
     let body = "((x: #NatType) => (h: (k: #NatType) -> Type) => h(x))(n)(f)";
@@ -402,7 +400,7 @@ fn a_member_handed_in_a_later_list_is_a_call_of_unknown_grade() {
     ));
 }
 
-/// A member called across two argument lists makes one call of its two leading lambdas: `t(n)(m)` hands `t` both its parameters back, and the gate refuses it. Mutation-checked: recording a call only at an application whose own head is a member local leaves the group with no call, and it is accepted.
+/// A member called across two argument lists makes one call of its two leading lambdas: `t(n)(m)` hands `t` both its parameters back, and the gate refuses it.
 #[test]
 fn a_member_called_across_two_lists_is_one_call_of_both_its_parameters() {
     let group = term(

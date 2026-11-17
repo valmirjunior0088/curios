@@ -189,7 +189,7 @@ fn an_arm_of_the_wrong_payload_arity_is_refused() {
     ));
 }
 
-/// A proposition's constructors are one value to conversion, so an arm over a proof an index inversion solved to one of them is no arm reduction never takes: under `c(v)`, whose target `w(v)` solves `t`, a match on `t` reads, by value, the constructed `w(v)`, and its `base()` arm is typed still, refused for answering `7` where `Wit` is wanted. Mutation-checked: with the unifier deciding tag disjointness at a proposition, `another_case` reads `base()` as another case than `w(v)`, the `base()` arm is never typed, and the elimination is accepted.
+/// A proposition's constructors are one value to conversion, so an arm over a proof an index inversion solved to one of them is no arm reduction never takes: under `c(v)`, whose target `w(v)` solves `t`, a match on `t` reads, by value, the constructed `w(v)`, and its `base()` arm is typed still, refused for answering `7` where `Wit` is wanted.
 #[test]
 fn an_arm_over_a_proof_an_inversion_solved_to_another_constructor_is_typed() {
     let mut certifier = certifier();

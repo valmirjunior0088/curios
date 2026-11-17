@@ -47,8 +47,6 @@ fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_
 }
 
 // A member whose leading lambdas answer another member's record states, of a parameter it hands that member at its own place, what that record's fields apply too: `outer` answers `inner(t, f)`, a call that lets `inner`'s record escape, so the summary of `outer`'s leading lambdas closes over a call of each of `inner`'s parts, its field lambda among them, which `call` applies. The control's field applies nothing, so `outer` applies `f` below `t` alone and `size`'s recursion through the lambda it hands `outer` descends. The refusal has `inner`'s field apply `f` at `t`: stated as `inner`'s leading lambdas' rows alone, `outer`'s summary would hold `f(l)` and `f(r)`, and `size(c)` would be graded below `t` while `call` reaches `f(t)`, `size(t)` again.
-//
-// Mutation-checked claim, for the gatherer to make: with `part_calls` in `curios-analysis/src/totality/part.rs` calling the reached part alone where the record escapes (`escapes` forced false), the refusal is admitted and this test fails.
 #[test]
 fn a_member_answering_another_members_record_states_what_its_fields_apply() {
     control(
@@ -84,8 +82,6 @@ fn a_member_answering_another_members_record_states_what_its_fields_apply() {
 }
 
 // A field lambda that applies a field of a definition's parameter withholds the leading lambdas' summary of the parameter, its field rows with it: `sizes` applies `e.0` below `t` in the record's first field, and its field lambda is called wherever `call` applies it, at arguments no row of the leading lambdas states. The control's field lambda applies nothing, so the record literal `size` hands `sizes` binds its field below `t`. The refusal has the field lambda apply `e.0` at `t`: stated by the leading lambdas' rows, `size(c)` would be graded below `t` while `call` reaches `e.0(t)`, `size(t)` again.
-//
-// Mutation-checked claim, for the gatherer to make: with `applied_in_a_field` in `curios-analysis/src/totality.rs` answering false, the refusal is admitted and this test fails.
 #[test]
 fn a_field_lambda_applying_a_parameters_field_withholds_the_leading_lambdas_summary_of_it() {
     control(
@@ -120,8 +116,6 @@ fn a_field_lambda_applying_a_parameters_field_withholds_the_leading_lambdas_summ
 }
 
 // What counts as a field lambda for a summary is what counts as a part for the call graph, a record literal held at a field followed: `sizes`'s lambda at `.1.0` is a part of its own, called wherever `call` applies it, so a parameter it applies is one the leading lambdas' summary states nothing of. The control's lambda applies nothing, so `sizes` applies `f` below `t` alone and `size` descends. The refusal has the lambda apply `f` at `t`: read as no part, it would leave `f(l)` and `f(r)` the leading lambdas' rows, and `size(c)` graded below `t` while `call` reaches `f(t)`, `size(t)` again.
-//
-// Mutation-checked claim, for the gatherer to make: with `applied_in_a_field` counting only the parts at a path of one slot, the refusal is admitted and this test fails.
 #[test]
 fn a_field_lambda_in_a_nested_record_withholds_the_leading_lambdas_summary_of_what_it_applies() {
     control(
