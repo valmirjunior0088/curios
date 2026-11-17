@@ -310,13 +310,18 @@ fn a_unit_is_unmounted_once_a_step_mounts_it_and_no_record_of_it_is_withheld_aft
             &format!("    [[witness.step]]\n    unmount = \"{path}\""),
         )
     };
-    let ticket = read(&unmounted("/lib"), &[("a_program.crs", "0"), ("a_module.crsc", "0")])
-        .expect("a unit a step mounted is unmounted");
+    let ticket = read(
+        &unmounted("/lib"),
+        &[("a_program.crs", "0"), ("a_module.crsc", "0")],
+    )
+    .expect("a unit a step mounted is unmounted");
     assert!(matches!(
         &ticket.witnesses[0].steps[..],
         [Step::Unit { .. }, Step::Unmount { mount }] if mount == "lib"
     ));
-    assert!(refusal(&unmounted("/other")).contains("`/other` is unmounted where no step mounts it"));
+    assert!(
+        refusal(&unmounted("/other")).contains("`/other` is unmounted where no step mounts it")
+    );
 
     let withheld_after = HISTORY.replace(
         "    [[witness.step]]\n    withhold",

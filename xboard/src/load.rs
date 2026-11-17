@@ -415,7 +415,9 @@ fn history<'f>(
             } => {
                 let mount = mount_of(&unmounted)?;
                 if !mounted.remove(&mount) {
-                    return Err(format!("`{unmounted}` is unmounted where no step mounts it"));
+                    return Err(format!(
+                        "`{unmounted}` is unmounted where no step mounts it"
+                    ));
                 }
 
                 Ok(Step::Unmount { mount })

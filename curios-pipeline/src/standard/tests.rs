@@ -1123,7 +1123,7 @@ fn supplied(prefix: &str) -> RootSource {
 fn a_package_named_std_takes_the_archived_roots_place() {
     with_prelude(|prelude| {
         for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
-            let (index, root) = withheld(prelude, &[claim]).expect("a package named std");
+            let (index, root) = stood_in_for(prelude, &[claim]).expect("a package named std");
 
             assert_eq!(index + 1, prelude.len(), "the last root, /std");
             assert_eq!(root.mounts()[0].prefix, Qualifier::from(["std"]));
@@ -1134,8 +1134,8 @@ fn a_package_named_std_takes_the_archived_roots_place() {
 #[test]
 fn a_package_named_otherwise_takes_no_roots_place() {
     with_prelude(|prelude| {
-        assert!(withheld(prelude, &[supplied("other")]).is_none());
-        assert!(withheld(prelude, &[]).is_none());
+        assert!(stood_in_for(prelude, &[supplied("other")]).is_none());
+        assert!(stood_in_for(prelude, &[]).is_none());
     });
 }
 
@@ -1143,7 +1143,7 @@ fn a_package_named_otherwise_takes_no_roots_place() {
 #[test]
 fn a_package_named_sys_collides_with_the_compilers_own_root() {
     with_prelude(|prelude| {
-        assert!(withheld(prelude, &[supplied("sys")]).is_none());
+        assert!(stood_in_for(prelude, &[supplied("sys")]).is_none());
     });
 
     let error = compile_with_units(&[("sys", "pub let a : /std/Nat = 1;")], "0")
@@ -1156,7 +1156,7 @@ fn a_package_named_sys_collides_with_the_compilers_own_root() {
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
     with_prelude(|prelude| {
-        assert!(withheld(prelude, &[supplied("other"), std_from_its_tree()]).is_none());
+        assert!(stood_in_for(prelude, &[supplied("other"), std_from_its_tree()]).is_none());
     });
 
     let error = compile_with_units(
@@ -1174,7 +1174,7 @@ fn only_the_first_unit_can_take_a_roots_place() {
 #[test]
 fn a_withheld_root_is_granted_the_roots_before_it() {
     with_prelude(|prelude| {
-        let prefixes = granted(prelude, prelude.len() - 1, &std_from_its_tree());
+        let prefixes = granted_in_place(prelude, prelude.len() - 1, &std_from_its_tree());
 
         assert!(prefixes.contains(&Qualifier::from(["sys"])));
     });
