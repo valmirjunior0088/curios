@@ -1094,13 +1094,20 @@ fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
     );
 }
 
-/// A program whose claim is that `parser` reads `input`, stated over whether it succeeded and over a declaration bound to the read, so the claim holds nothing of what was read and no member left to inference.
-fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
+/// A program whose claim is how many bytes of `input` are `left` once `parser` has read it, read back by the carrier's `rest` and stated over a declaration bound to the read, so no member is left to inference. A claim over the success alone counts no walk where a primitive answers its success before its walk is run, as one that builds its position where its walk stops does.
+fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> String {
+    let (rest, length) = match carrier {
+        "Str" => ("Parse/str/rest", "Bytes/len(Str/to_bytes(tail))"),
+        _ => ("Parse/bytes/rest", "Bytes/len(tail)"),
+    };
     fill!(
-        "use /std/{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool};\nuse /std/Bool/{Holds, True};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse(${carrier}, {}) =\n    let _ = ${parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {}) = Parse/run(reader(), ${input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n",
+        "use /std/{Str, Bytes, Byte, Char, Nat, Parse, Result, Option, Eq};\n\nlet left(r: Result(Parse/Error, Nat)) -> Option(Nat) =\n    match r\n    | success(n) => Option/some(n)\n    | failure(_) => Option/none()\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse(${carrier}, Nat) =\n    let _ = ${parser}!;\n    let tail = ${rest}!;\n    Parse/pure(${length});\n\nlet read: Result(Parse/Error, Nat) = Parse/run(reader(), ${input});\n\nlet _claim: Eq()(left(read), Option/some(${left})) = Eq/refl();\n\n/std/print(\"ok\")\n",
         carrier,
         parser,
-        input
+        rest,
+        length,
+        input,
+        left
     )
 }
 
@@ -1114,20 +1121,20 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// At `9c543476a`:
+/// On top of `7bbf27ea6`:
 ///
 /// ```text
-///   primitive            text elab      certifier  bytes elab      certifier
-///   literal                  70365       70286       17516       17437
-///   take_while               47188       47109       10035        9956
-///   char, byte               57134       57055       31182       31103
-///   char_if, byte_if         63148       63069       37203       37124
-///   expect                   58931       58852       33712       33633
-///   rest                      8283        5908        9385        5914
-///   until                    46834       46755
+///   primitive            text elab   certifier  bytes elab   certifier
+///   literal                   7970        7804       17650       19688
+///   take_while               14254       16292       10702       12740
+///   char, byte               52801       54839       28650       30688
+///   char_if, byte_if         58937       60975       34793       36831
+///   expect                   54598       56636       31169       33207
+///   rest                      7186        7563        8319        7566
+///   until                    13654       15695
 /// ```
 ///
-/// **A text primitive costs about four times its twin, or near five, where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
+/// **A text primitive that is a walk costs about what its twin does**: `take_while` reads the bytes it walks, a character whole at its lead byte, and costs 1.3 times its twin, and `literal` compares the piece's bytes at once where its twin compares them a byte at a time, and costs under half. **A parser run a character at a time costs under twice its twin**, `char`, `char_if` and `expect` through `times`, each step building the position it hands on. `rest` cuts once and reads nothing.
 #[test]
 #[ignore = "measurement, counted: reports what each parser primitive costs over text and over bytes rather than asserting"]
 fn parse_primitive_measurements() {
@@ -1173,13 +1180,14 @@ fn parse_primitive_measurements() {
         "primitive", "text elab", "certifier", "bytes elab", "certifier"
     );
     for (label, over_text, over_bytes) in rows {
-        let input = match label {
-            "until" => format!("\"{letters}b\""),
-            _ => text.clone(),
+        let (input, left) = match label {
+            "until" => (format!("\"{letters}b\""), 1),
+            _ => (text.clone(), 0),
         };
-        let (elaborator, certifier) = declaration_cost(&primitive_claim("Str", &over_text, &input));
+        let (elaborator, certifier) =
+            declaration_cost(&primitive_claim("Str", &over_text, &input, left));
         let twin = over_bytes
-            .map(|parser| declaration_cost(&primitive_claim("Bytes", &parser, &bytes)))
+            .map(|parser| declaration_cost(&primitive_claim("Bytes", &parser, &bytes, 0)))
             .map_or_else(
                 || format!("{:>10}  {:>10}", "", ""),
                 |(elaborator, certifier)| {
@@ -1205,23 +1213,23 @@ fn parse_primitive_measurements() {
 ///
 /// # What it last printed
 ///
-/// At `9c543476a`:
+/// On top of `7bbf27ea6`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  certifier/elab
-///   Str/split                    30109       3      27037       28387       1      27363     0.9x
-///   Str/split_once               19238       3      16166       18213       2      16165     0.9x
-///   Str/lines                    27178       3      24106       25487       1      24463     0.9x
-///   Str/replace                  24644       3      21572       22901       1      21877     0.9x
-///   Str/trim                     20360       3      17288       18295       1      17271     0.9x
-///   Str/strip_suffix             17601       3      14529       16525       2      14477     0.9x
-///   Flt/of_str                   35209       3      32137       34155       2      32107     1.0x
-///   Str/index_of                 26790       3      23718       20916       2      18868     0.8x
+///   Str/split                    16602       1      15578       18633       3      15561     1.1x
+///   Str/split_once               11089       1      10065       13139       3      10067     1.2x
+///   Str/lines                    13054       1      12030       15086       3      12014     1.2x
+///   Str/replace                  14186       1      13162       16194       3      13122     1.1x
+///   Str/trim                     14035       1      13011       16074       3      13002     1.1x
+///   Str/strip_suffix              6613       1       5589        8642       3       5570     1.3x
+///   Flt/of_str                   23265       1      22241       25305       3      22233     1.1x
+///   Str/index_of                 11147       1      10123       14182       4      10086     1.3x
 /// ```
 ///
-/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 3 on their rows as on every other, the certifier's 1.
+/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 1 on their rows as on every other, the certifier's 3, and 4 on `Str/index_of`.
 ///
-/// **The certifier spends about nine tenths of the elaborator's units on seven rows**, between 0.89 and 0.97, and 0.78 on `Str/index_of`.
+/// **The certifier spends between 1.1 and 1.3 times the elaborator's units on every row**, the units past depth within a hundred of the elaborator's on each.
 ///
 /// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]

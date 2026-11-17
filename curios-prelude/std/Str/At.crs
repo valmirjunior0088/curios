@@ -274,6 +274,8 @@ pub let try_prev_grapheme(
         start(s));
 
 --- Recursion forward through the positions of `s`: `step` answers `P(at)` and may recur at any position past `at` — with the proof that it lies past, which is what [`next`] and [`skip`] answer — so a walk forward is total without recursing on its own, and computes wherever a value is demanded, in a type as at runtime.
+---
+--- It is for a walk that must stand at its positions, as a grapheme cluster's breaks do; a walk that stops where a predicate does reads the bytes it walks instead, as [`Str/span`] does, and builds its position once where it stops.
 pub let forward(
     @s: Str,
     P: (At(s)) -> Type,
