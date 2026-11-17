@@ -1,0 +1,7 @@
+-- A package standing in for the archived `/std`: its `Nat/NonZero` holds of every number, where the archived one is `Bool/Holds(n != 0)`.
+pub mod Nat
+    pub use /sys/{let Nat};
+
+    pub let NonZero(n: Nat) -> Prop =
+        /sys/Bool/True;
+end

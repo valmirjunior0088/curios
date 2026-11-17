@@ -1,0 +1,12 @@
+title = "A unit filed while a package stood in for `/std` is reused over the archived `/std`, whose reads its record names nothing of, so a verdict that stood on the package's `/std` stands on the archived one"
+status = "open"
+
+[[witness]]
+what = "`d` proved of the package standing in for `/std`, which a later build unmounts, and put over the archived `/std`, where it states `False`"
+step = [
+    { mount = "/std", source = "std.crs" },
+    { mount = "/p", source = "p.crsc" },
+    { unmount = "/std" },
+    { source = "proof.crsc" },
+]
+refused = [{ by = "certifier", error = "Mismatch", within = "/p/d" }]

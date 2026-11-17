@@ -1,0 +1,3 @@
+-- `d` judged while `/std` is the package standing in for it, where `/std/Nat/NonZero(0)` holds; over the archived `/std` it is `Bool/Holds(0 != 0)`.
+let /p/d: /std/Nat/NonZero(0) =
+    #{node = Variant} /sys/Bool/True/qed();
