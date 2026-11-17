@@ -30,7 +30,7 @@ use test_runner::*;
 
 use {
     curios::{bindings_of, fault, optimize, unlinked},
-    curios_common::{Kind, Report, Source, SourceName, Style},
+    curios_common::{Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost, Stop},
@@ -519,7 +519,7 @@ fn dispatch() -> Result<(), Failure> {
             tree.stands(
                 write_documentation(&record, &directory).map_err(|error| {
                     Refused::of("unwritable directory")
-                        .stating(error)
+                        .stating(OsError(&error))
                         .about_path(&directory)
                 }),
                 from_here(&directory.join("index.html")),
@@ -751,7 +751,7 @@ fn dispatch() -> Result<(), Failure> {
                                         true => Ok(()),
                                         false => fs::write(&path, text).map_err(|error| {
                                             Refused::of("unwritable file")
-                                                .stating(error)
+                                                .stating(OsError(&error))
                                                 .about_path(&path)
                                         }),
                                     };
@@ -858,7 +858,7 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Profile { stream } => {
             let report = fold_at(&stream).map_err(|error| {
                 Refused::of("unreadable file")
-                    .stating(error)
+                    .stating(OsError(&error))
                     .about_path(&stream)
             })?;
 

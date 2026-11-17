@@ -5,7 +5,7 @@ mod tests;
 
 use {
     crate::Refused,
-    curios_common::{Fingerprint, Report, Said, digest},
+    curios_common::{Fingerprint, OsError, Report, Said, digest},
     std::{ffi::OsStr, fmt, fs, io, path::Path},
 };
 
@@ -131,8 +131,9 @@ fn collect(
     at: &mut Vec<String>,
     files: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<(), Box<Report>> {
-    let unreadable =
-        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
+    let unreadable = |tag: &str, path: &Path, error: io::Error| {
+        Refused::of(tag).stating(OsError(&error)).about_path(path)
+    };
     let entries = fs::read_dir(directory)
         .map_err(|error| unreadable("unreadable directory", directory, error))?;
 

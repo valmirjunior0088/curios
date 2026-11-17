@@ -12,7 +12,7 @@ use {
         FileHash, MANIFEST, Manifest, Refused, Row, Step, Store, Target, TreeHash, deliver,
         deliver_module, nearest_manifest, umbrella_over, unwritable,
     },
-    curios_common::{Report, Source},
+    curios_common::{OsError, Report, Source},
     curios_module::identity,
     std::{
         fs,
@@ -41,7 +41,7 @@ impl Pinning {
             None => {
                 let directory = directory.canonicalize().map_err(|error| {
                     Refused::of("unreadable directory")
-                        .stating(error)
+                        .stating(OsError(&error))
                         .about_path(directory)
                 })?;
 
@@ -287,7 +287,7 @@ pub fn pin(
     let written = subject.written(&pinning.manifest, name);
     let text = fs::read_to_string(&pinning.manifest).map_err(|error| {
         Refused::of("unreadable file")
-            .stating(error)
+            .stating(OsError(&error))
             .about_path(&pinning.manifest)
     })?;
     let before = text.parse::<DocumentMut>().map_err(|error| {
@@ -375,7 +375,7 @@ pub fn pin(
 
     fs::write(&pinning.manifest, left).map_err(|error| {
         Refused::of("unwritable file")
-            .stating(error)
+            .stating(OsError(&error))
             .about_path(&pinning.manifest)
     })?;
 
@@ -537,7 +537,7 @@ fn fetched_module(
                 .stating(format_args!(
                     "what was fetched from `{url}` could not be read"
                 ))
-                .stating(error),
+                .stating(OsError(&error)),
         )
     })?;
     let hash = FileHash::of_bytes(&bytes);
@@ -655,7 +655,7 @@ fn settled_foreign(
                         "the foreign module `{name}` is read from {}",
                         at.display()
                     ))
-                    .stating(error),
+                    .stating(OsError(&error)),
             )
         })?;
 

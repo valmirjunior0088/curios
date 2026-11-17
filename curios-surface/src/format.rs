@@ -15,7 +15,7 @@ use {
         CoreFormatInput, FormatInput, TopItem, between_items, parse_core_for_format,
         parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
     },
-    curios_common::{About, LINE_WIDTH, Report, Said, Source, Span},
+    curios_common::{About, LINE_WIDTH, OsError, Report, Said, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
@@ -89,7 +89,7 @@ impl Formatted {
     pub fn from_path(path: &Path, width: Width) -> Result<Self, Box<Report>> {
         let source = Source::read(path).map_err(|error| {
             let mut said = Said::line("unreadable file");
-            said.stating(error);
+            said.stating(OsError(&error));
 
             Report::about(About::Path(path.to_path_buf()), said)
         })?;

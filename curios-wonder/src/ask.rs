@@ -11,8 +11,8 @@ use {
         diagnostics, placed, stage, unit_stage, written,
     },
     curios_common::{
-        About, Code, Kind, LINE_WIDTH, Qualifier, Report, STDIN_NAME, Said, Source, SourceName,
-        Style,
+        About, Code, Kind, LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
+        SourceName, Style,
     },
     curios_core::{Declared, Totality},
     curios_cps::{Fate, Outcome},
@@ -50,7 +50,7 @@ pub fn answer(text: impl Display) {
                 "{}",
                 Refused::of("unwritable output")
                     .stating("standard output could not be written")
-                    .stating(error)
+                    .stating(OsError(&error))
                     .about_named("<stdout>")
                     .render()
             );
@@ -1036,7 +1036,7 @@ fn read_stdin() -> Result<String, Box<Report>> {
     io::read_to_string(io::stdin()).map_err(|error| {
         Refused::of("unreadable input")
             .stating("standard input could not be read")
-            .stating(error)
+            .stating(OsError(&error))
             .about_named(STDIN_NAME)
     })
 }

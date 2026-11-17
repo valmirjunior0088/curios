@@ -13,7 +13,7 @@ use {
     curios_browser::{
         ARGUMENT, INDEX_HTML, Posted, Reply, Sent, Step, Stream, content_type, runner,
     },
-    curios_common::Report,
+    curios_common::{OsError, Report},
     curios_package::Refused,
     httparse::{EMPTY_HEADER, Error, Status},
     std::{
@@ -241,7 +241,7 @@ pub fn bound(port: u16) -> Result<TcpListener, Box<Report>> {
     TcpListener::bind((Ipv4Addr::LOCALHOST, port)).map_err(|error| {
         Refused::of("address unavailable")
             .stating(format_args!("`127.0.0.1:{port}` could not be served on"))
-            .stating(error)
+            .stating(OsError(&error))
             .stating("write `--port` to serve on another")
             .about_named(format!("127.0.0.1:{port}"))
     })
@@ -255,7 +255,7 @@ pub fn port_of(listener: &TcpListener) -> Result<u16, Box<Report>> {
         .map_err(|error| {
             Refused::of("address unavailable")
                 .stating("the address served on could not be read")
-                .stating(error)
+                .stating(OsError(&error))
                 .about_named("--port")
         })
 }

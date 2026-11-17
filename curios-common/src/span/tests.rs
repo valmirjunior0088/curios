@@ -368,3 +368,23 @@ fn what_is_said_is_a_line_and_the_facts_begun_after_it() {
         "type mismatch\n│  inferred: `Nat`\n│  expected: List(\n│    Str)\n└─ [error]"
     );
 }
+
+/// What the system says of a refusal is worded in lower case: the kinds a reader acts on the same on every system, and any other in the system's words without its number.
+#[test]
+fn an_os_error_is_worded_without_its_number() {
+    assert_eq!(
+        OsError(&io::Error::from_raw_os_error(2)).to_string(),
+        "no such file or directory"
+    );
+    assert_eq!(
+        OsError(&io::Error::from(io::ErrorKind::PermissionDenied)).to_string(),
+        "permission denied"
+    );
+    assert_eq!(
+        OsError(&io::Error::other(
+            "Stream did not contain valid UTF-8 (os error 92)"
+        ))
+        .to_string(),
+        "stream did not contain valid UTF-8"
+    );
+}

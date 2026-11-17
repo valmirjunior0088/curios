@@ -10,7 +10,7 @@ mod tests;
 use {
     curios_abi::{ForeignStore, host_answers},
     curios_browser::{Linked, Placed},
-    curios_common::{Report, Said},
+    curios_common::{OsError, Report, Said},
     curios_native::{DeclaredModule, ForeignBindings, Unlinked, plugin_bindings},
     curios_package::{
         Foreign, Governing, MANIFEST, Refused, Row, Step, Store, Target, declared_modules,
@@ -271,7 +271,7 @@ pub fn linked_of(
                             foreign.name,
                             served.file.display()
                         ))
-                        .stating(error),
+                        .stating(OsError(&error)),
                 )
             })?;
 

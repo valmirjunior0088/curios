@@ -1,5 +1,5 @@
 use {
-    curios_common::{About, Code, Report, Said, Span},
+    curios_common::{About, Code, OsError, Report, Said, Span},
     curios_parse::ParserError,
     std::{fmt, io, path::PathBuf},
 };
@@ -387,7 +387,7 @@ impl LoadError {
         match self {
             LoadError::Read { path, error } => {
                 let mut said = Said::line("unreadable file");
-                said.stating(error);
+                said.stating(OsError(error));
 
                 Report::about(About::Path(path.clone()), said)
             }

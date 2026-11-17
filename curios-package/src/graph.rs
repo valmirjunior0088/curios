@@ -11,7 +11,7 @@ use {
     crate::{
         Dependency, Governing, MANIFEST, Manifest, Package, Refused, Row, Snapshot, package_source,
     },
-    curios_common::Report,
+    curios_common::{OsError, Report},
     curios_module::RootSource,
     std::{
         collections::BTreeMap,
@@ -278,7 +278,7 @@ impl Walk<'_> {
             written.refuse(
                 Refused::of("unreadable directory")
                     .stating(format_args!("`{name}` resolves to {}", directory.display()))
-                    .stating(error),
+                    .stating(OsError(&error)),
             )
         })
     }

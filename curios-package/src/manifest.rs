@@ -19,7 +19,7 @@ use {
         CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
         TreeHash,
     },
-    curios_common::{About, Code, Report, Said, Source, is_identifier, is_reserved},
+    curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -57,7 +57,7 @@ impl Manifest {
     pub fn from_path(path: &Path) -> Result<Self, Box<Report>> {
         let source = Source::read(path).map_err(|error| {
             let mut said = Said::line("unreadable file");
-            said.stating(error);
+            said.stating(OsError(&error));
 
             Report::about(About::Path(path.to_path_buf()), said)
         })?;
@@ -622,7 +622,7 @@ impl Delivery {
                         "the foreign module `{name}` is read from {}",
                         path.display()
                     ))
-                    .stating(error),
+                    .stating(OsError(&error)),
             )
         })?;
 

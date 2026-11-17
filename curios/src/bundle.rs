@@ -2,7 +2,7 @@
 
 use {
     curios::fault,
-    curios_common::Report,
+    curios_common::{OsError, Report},
     curios_native::{Bundle, append_bundle},
     curios_package::Refused,
     std::{fs, io, os::unix::fs::PermissionsExt, path::Path},
@@ -14,8 +14,9 @@ const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 /// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_native::append_bundle`]).
 pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), Box<Report>> {
     let mut bytes = LAUNCHER.to_vec();
-    let unwritable =
-        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
+    let unwritable = |tag: &str, path: &Path, error: io::Error| {
+        Refused::of(tag).stating(OsError(&error)).about_path(path)
+    };
 
     append_bundle(&mut bytes, bundle)
         .map_err(|error| fault("the executable's bundle could not be archived", error))?;

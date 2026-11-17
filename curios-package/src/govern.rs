@@ -14,7 +14,7 @@ use {
         FormatSettings, MANIFEST, Manifest, Package, Refused, Step, Store, Umbrella,
         compiler_requirement, format_owner, require_compiler,
     },
-    curios_common::Report,
+    curios_common::{OsError, Report},
     curios_module::identity,
     std::{
         collections::BTreeMap,
@@ -91,7 +91,7 @@ impl Governing {
         let directory = std::env::current_dir().map_err(|error| {
             Refused::of("unreadable directory")
                 .stating("the working directory could not be read")
-                .stating(error)
+                .stating(OsError(&error))
                 .about_named("the working directory")
         })?;
 
@@ -330,7 +330,7 @@ pub fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, Bo
 /// The refusal of a directory the system would not resolve, in the system's words.
 fn unreadable(directory: &Path, error: &std::io::Error) -> Box<Report> {
     Refused::of("unreadable directory")
-        .stating(error)
+        .stating(OsError(error))
         .about_path(directory)
 }
 

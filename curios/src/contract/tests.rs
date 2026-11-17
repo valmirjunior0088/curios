@@ -406,7 +406,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -426,7 +426,7 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: stray.crs → refused: missing output: `compile` files what it builds under the package that declares it · this file has none · try; curios compile <root>/work/app/stray.crs --output stray → <root>/work/app/stray.crs
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → refused: missing output: `compile` files what it builds under the package that declares it · this file has none · try; curios compile <root>/scratch.crs --output scratch → <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -446,7 +446,7 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -466,7 +466,7 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: stray.crs → refused: not a library: `document` takes a library · a program is not one → <root>/work/app/stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → refused: not a library: `document` takes a library · a program is not one → <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → library app
@@ -488,7 +488,7 @@ test SUBJECT — Any, store Write, leaves Nothing, options --target --port --fil
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → entire app
@@ -530,7 +530,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → entire app
@@ -550,7 +550,7 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --width 
   work/app: stray.crs → files stray.crs within 100
   work/app: nested/lib.crs → files nested/lib.crs within 100
   work/app: <root>/scratch.crs → files <root>/scratch.crs within 100
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs within 100
@@ -570,7 +570,7 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → entire app
@@ -590,7 +590,7 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → entire app
@@ -610,7 +610,7 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: not a program: `wonder --cost` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -630,7 +630,7 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -650,7 +650,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: not a program: `wonder --stage` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -670,7 +670,7 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -690,7 +690,7 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -710,7 +710,7 @@ wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves No
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
@@ -730,7 +730,7 @@ wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves N
   work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: unreadable file: No such file or directory (os error 2) → <root>/work/app/missing.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve

@@ -14,7 +14,7 @@ use {
         Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused, Row,
         Snapshot, Step, Store, Subject, Target, TreeHash,
     },
-    curios_common::{Code, Report},
+    curios_common::{Code, OsError, Report},
     std::{
         collections::BTreeSet,
         fmt, fs, io,
@@ -331,7 +331,7 @@ fn attempted(
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => Some(Err(Refused::of("fetcher not run")
             .stating(format_args!("`{program}` could not be run"))
-            .stating(error))),
+            .stating(OsError(&error)))),
         Ok(output) if output.status.success() => Some(Ok(())),
         Ok(output) => Some(Err(Refused::of("fetch failed")
             .stating(format_args!(
@@ -388,7 +388,7 @@ fn accept_module(
 ) -> Result<(), Box<Report>> {
     let bytes = fs::read(scratch).map_err(|error| {
         Refused::of("unreadable file")
-            .stating(error)
+            .stating(OsError(&error))
             .about_path(scratch)
     })?;
     let delivered = FileHash::of_bytes(&bytes);
@@ -486,7 +486,7 @@ pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), Refused> {
     fs::remove_dir_all(scratch.join(".git")).map_err(|error| {
         Refused::of("unwritable directory")
             .stating("the fetched repository's metadata could not be dropped")
-            .stating(error)
+            .stating(OsError(&error))
     })
 }
 
@@ -546,7 +546,7 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<(), Refused> {
                     "`git {}` could not be run",
                     arguments.join(" ")
                 ))
-                .stating(error)
+                .stating(OsError(&error))
                 .stating("`curate` is the only thing in this toolchain that fetches, and it fetches by asking the `git` on this machine")
         })?;
 
@@ -561,6 +561,6 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<(), Refused> {
 /// The refusal of a place in the store the system would not let be written, in the system's words.
 pub fn unwritable(path: &Path, error: &io::Error) -> Box<Report> {
     Refused::of("unwritable store")
-        .stating(error)
+        .stating(OsError(error))
         .about_path(path)
 }

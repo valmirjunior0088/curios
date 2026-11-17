@@ -4,7 +4,7 @@ use {
     crate::{Built, Failure, Then, Tree, payload_of},
     curios::{linked_of, page_name},
     curios_browser::page,
-    curios_common::Report,
+    curios_common::{OsError, Report},
     curios_package::{Program, Refused, Target},
     curios_verdict::Verdicts,
     std::{collections::BTreeMap, fs, io, path::Path},
@@ -48,8 +48,9 @@ pub fn emit_page(
     files: &BTreeMap<String, Vec<u8>>,
     owned: bool,
 ) -> Result<(), Box<Report>> {
-    let unwritable =
-        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
+    let unwritable = |tag: &str, path: &Path, error: io::Error| {
+        Refused::of(tag).stating(OsError(&error)).about_path(path)
+    };
     if owned && directory.exists() {
         fs::remove_dir_all(directory)
             .map_err(|error| unwritable("unwritable directory", directory, error))?;

@@ -285,6 +285,42 @@ impl<T: fmt::Display> fmt::Display for Code<T> {
     }
 }
 
+/// What the system said of an operation it refused, worded as a report words a fact: in lower case, by what went wrong — `no such file or directory`, `permission denied` — the same on every system for the kinds a reader acts on, and otherwise in the system's own words without the `(os error 2)` its number adds, which no reader has a use for.
+#[derive(Debug, Clone, Copy)]
+pub struct OsError<'a>(pub &'a io::Error);
+
+impl fmt::Display for OsError<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let worded = match self.0.kind() {
+            io::ErrorKind::NotFound => "no such file or directory",
+            io::ErrorKind::PermissionDenied => "permission denied",
+            io::ErrorKind::AlreadyExists => "it already exists",
+            io::ErrorKind::IsADirectory => "it is a directory",
+            io::ErrorKind::NotADirectory => "a part of its path is not a directory",
+            io::ErrorKind::DirectoryNotEmpty => "the directory is not empty",
+            io::ErrorKind::ReadOnlyFilesystem => "the file system is read-only",
+            io::ErrorKind::StorageFull => "no space is left on the device",
+            _ => {
+                let said = self.0.to_string();
+                let said = match (said.rfind(" (os error "), said.ends_with(')')) {
+                    (Some(number), true) => &said[..number],
+                    _ => &said,
+                };
+                let mut letters = said.chars();
+
+                return match letters.next() {
+                    Some(first) => {
+                        write!(formatter, "{}{}", first.to_lowercase(), letters.as_str())
+                    }
+                    None => Ok(()),
+                };
+            }
+        };
+
+        formatter.write_str(worded)
+    }
+}
+
 /// What a report says before it stands anywhere, as whoever says it builds it: a tag, and each fact beneath it. The first line begun is the tag, and every one begun after it a fact, so which is which is how it was built and nothing reads it back out of text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]

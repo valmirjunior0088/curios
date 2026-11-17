@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{Gateway, MANIFEST, Refused, Row, Step},
-    curios_common::Report,
+    curios_common::{OsError, Report},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -68,7 +68,7 @@ impl Gateway {
                     return Err(stand(
                         Refused::of("unreadable file")
                             .stating(format_args!("{subject} reads {}", read.display()))
-                            .stating(error),
+                            .stating(OsError(&error)),
                     ));
                 }
             }
@@ -111,7 +111,7 @@ fn walked(
     let unreadable = |error: std::io::Error| {
         Refused::of("unreadable directory")
             .stating(format_args!("{subject} reads {}", directory.display()))
-            .stating(error)
+            .stating(OsError(&error))
     };
 
     let mut children = fs::read_dir(directory)
@@ -134,7 +134,7 @@ fn walked(
         let metadata = fs::symlink_metadata(&child).map_err(|error| {
             Refused::of("unreadable file")
                 .stating(format_args!("{subject} reads {}", child.display()))
-                .stating(error)
+                .stating(OsError(&error))
         })?;
         let page = format!("{page}/{name}");
 

@@ -21,7 +21,7 @@ pub use entropy::{Entropy, Mint};
 mod span;
 pub use span::{
     About, ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, Code, LINE_WIDTH, Note,
-    Pane, Report, Said, Source, Span,
+    OsError, Pane, Report, Said, Source, Span,
 };
 
 mod source_name;

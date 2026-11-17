@@ -6,7 +6,7 @@ use {
     crate::{Subject, Tree, apart, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
-    curios_common::{Report, STDIN_NAME, Source, Style},
+    curios_common::{OsError, Report, STDIN_NAME, Source, Style},
     curios_document::Documentation,
     curios_module::{PackageRoot, RootSource, UnitSource},
     curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
@@ -169,7 +169,7 @@ pub fn drained() -> Result<String, Box<Report>> {
     io::read_to_string(io::stdin()).map_err(|error| {
         Refused::of("unreadable input")
             .stating("standard input could not be read")
-            .stating(error)
+            .stating(OsError(&error))
             .about_named(STDIN_NAME)
     })
 }

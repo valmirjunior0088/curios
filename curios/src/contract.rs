@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
-    curios_common::{Report, STDIN_NAME},
+    curios_common::{OsError, Report, STDIN_NAME},
     curios_module::Overlay,
     curios_package::{
         Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
@@ -668,7 +668,7 @@ pub fn here() -> Result<PathBuf, Box<Report>> {
     env::current_dir().map_err(|error| {
         Refused::of("unreadable directory")
             .stating("the working directory could not be read")
-            .stating(error)
+            .stating(OsError(&error))
             .about_named("the working directory")
     })
 }

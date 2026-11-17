@@ -11,7 +11,7 @@ use {
     crate::{
         CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, Refused, STORE, canonical, umbrella_over,
     },
-    curios_common::Report,
+    curios_common::{OsError, Report},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -63,7 +63,7 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, Box<Report>> {
 
     fs::create_dir_all(directory).map_err(|error| {
         Refused::of("unwritable directory")
-            .stating(error)
+            .stating(OsError(&error))
             .about_path(directory)
     })?;
 
@@ -100,7 +100,7 @@ const IGNORE: &str = ".gitignore";
 fn write(path: &Path, contents: &str) -> Result<(), Box<Report>> {
     fs::write(path, contents).map_err(|error| {
         Refused::of("unwritable file")
-            .stating(error)
+            .stating(OsError(&error))
             .about_path(path)
     })
 }
