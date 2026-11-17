@@ -611,3 +611,178 @@ fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A parameter handed whole to a definition at several places is applied wherever the definition applies any of them: `both` applies `g1` below `m` and `g2` at `m`, and `twice` hands its `f` at the first place and a callback of its own at the second, so `twice` applies `f` below `n` and `deep` descends. The refusal hands `f` at both places: read through the first place alone, `deep(1)`, which is `both(1, …)` applying the lambda at `1`, would be a total `deep(1)` again.
+#[test]
+fn a_callback_handed_at_two_places_is_applied_wherever_either_is() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let both(m: Nat, g1: (Nat) -> Bool, g2: (Nat) -> Bool) -> Bool =
+            match m | 0 => false | k + 1 => g1(k) || g2(m) end;
+
+        let twice(n: Nat, f: (Nat) -> Bool) -> Bool = both(n, f, (z) => false);
+
+        let deep(n: Nat) -> Bool = twice(n, (c) => deep(c));
+
+        let Deep(n: Nat) -> Prop = Bool/Holds(deep(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("both(n, f, (z) => false)", "both(n, f, f)")])
+    .by_elaborator_in("/Deep", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Deep", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A definition of no group is walked where a parameter's type, reduced, is one a body applies, so a callback typed by an alias publishes how it is applied as one written as a function type does: `at` applies `g` below `m`, and `aliased` descends. The refusal applies `g` at `m`, which `aliased(1)` reaches as `aliased(1)` again; summarized below `m`, it would descend.
+#[test]
+fn a_callback_typed_by_an_alias_is_summarized_as_a_function_typed_one() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let Fn: Type = (Nat) -> Bool;
+
+        let at(m: Nat, g: Fn) -> Bool = match m | 0 => false | k + 1 => g(k) end;
+
+        let aliased(n: Nat) -> Bool = at(n, (c) => aliased(c));
+
+        let Aliased(n: Nat) -> Prop = Bool/Holds(aliased(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| k + 1 => g(k)", "| k + 1 => g(m)")])
+    .by_elaborator_in("/Aliased", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Aliased", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// `/sys/List/fold` hands its function an element below the list and an accumulator below nothing, whatever value starts it: `total` folds its children from `t`, and the lambda's call on the element descends. The refusal calls `total` on the accumulator, which the first step hands `t` itself: graded as the element is, below the list, `total(t)` would be a total `total(t)` again wherever `t` has a child.
+#[test]
+fn a_lambda_handed_to_a_list_fold_binds_its_accumulator_below_nothing() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let total(t: Rose) -> Rose =
+            match t | rose(n, cs) => List/fold(cs, t, (c, acc) => total(c)) end;
+
+        let Rooted(t: Rose) -> Prop = Bool/Holds(match total(t) | rose(n, _) => n == 0 end);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(c, acc) => total(c)", "(c, acc) => total(acc)")])
+    .by_elaborator_in("/Rooted", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Rooted", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A callback handed inside a local member's body stands to the parameters of every member whose body holds it, each graded against its own: `go`, local to `has_zero`, hands `List/any` a lambda, or itself bare, over the children of its own argument, and descends. Each refusal has it hand `List/any` `has_zero`'s children instead, below `t` and below nothing `go` is handed, so `go` visits the same children for ever: graded against `has_zero`'s parameters, or with the standing the callback takes to them, `go`'s call would descend.
+#[test]
+fn a_local_member_recurring_through_a_callback_is_graded_against_its_own_parameters() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | node(label: Nat, children: List(Rose))
+        end
+
+        let has_zero(t: Rose) -> Bool =
+            match t
+            | node(label, children) =>
+                let go(u: Rose) -> Bool =
+                    match u | node(l, cs) => l == 0 || List/any(cs, (c) => go(c)) end;
+                label == 0 || go(t)
+            end;
+
+        let Zeroed(t: Rose) -> Prop = Bool/Holds(has_zero(t));
+
+        let bare(t: Rose) -> Bool =
+            match t
+            | node(label, children) =>
+                let go(u: Rose) -> Bool =
+                    match u | node(l, cs) => l == 0 || List/any(cs, go) end;
+                label == 0 || go(t)
+            end;
+
+        let Bare(t: Rose) -> Prop = Bool/Holds(bare(t));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for (edit, at) in [
+        (
+            (
+                "List/any(cs, (c) => go(c))",
+                "List/any(children, (c) => go(c))",
+            ),
+            "/Zeroed",
+        ),
+        (("List/any(cs, go)", "List/any(children, go)"), "/Bare"),
+    ] {
+        program
+            .refused(&[edit])
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
+
+// A parameter a definition hands to a lambda applied on the spot, or names as what a match answers, is used otherwise than applied, so the definition publishes nothing for it: `h` applies `f` below `n`, so `spin` descends, and each refusal has `h`'s `0` arm apply `f` at `n + 1` through one of the two, which `spin(1)` reaches as `spin(1)` again. Read as unseen, either would leave the summary holding `f(k)` alone.
+#[test]
+fn a_callback_applied_through_an_applied_lambda_or_a_match_publishes_nothing() {
+    let control = control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let h(n: Nat, f: (Nat) -> Bool) -> Bool =
+            match n | 0 => false | k + 1 => f(k) end;
+
+        let spin(n: Nat) -> Bool = h(n, (c) => spin(c));
+
+        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for route in [
+        "| 0 => ((g: (Nat) -> Bool) => g(n + 1))(f)",
+        "| 0 => (match n | _ => f end)(n + 1)",
+    ] {
+        control
+            .refused(&[("| 0 => false", route)])
+            .by_elaborator_in("/Spun", |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in("/Spun", |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}

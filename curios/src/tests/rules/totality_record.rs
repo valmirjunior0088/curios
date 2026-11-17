@@ -602,3 +602,88 @@ fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leadin
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A call through a definition's field is graded by that field's summary and by no other part's: `w` answers two field lambdas over its `f`, the first applying it below `n` and the second at `n`, so `spin`'s recursion through the lambda it hands `w`, projected to the first field, descends. The refusal projects the second field: graded by the first field's summary, or by the leading lambdas', `spin(1)`, which is `w(1, …).1(0)` applying the lambda at `1`, would be a total `spin(1)` again.
+#[test]
+fn a_definitions_field_call_is_graded_by_the_field_it_projects() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let w(n: Nat, f: (Nat) -> Bool) -> {(Nat) -> Bool, (Nat) -> Bool} =
+            ((x) => match n | 0 => false | k + 1 => f(k) end, (y) => f(n));
+
+        let spin(n: Nat) -> Bool = w(n, (c) => spin(c)).0(0);
+
+        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("w(n, (c) => spin(c)).0(0)", "w(n, (c) => spin(c)).1(0)")])
+    .by_elaborator_in("/Spun", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Spun", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A call through nested records is graded by the field lambda its whole path reaches: `w` answers a record holding a pair of field lambdas, the first applying `f` below `n` and the second at `n`, so `.0.0` reaches the first and `spin` descends. The refusal projects `.0.1`: graded by the pair's first field, or by the path's first slot alone, `spin(1)` would be a total `spin(1)` again.
+#[test]
+fn a_definitions_nested_field_call_is_graded_by_the_path_it_projects() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let w(n: Nat, f: (Nat) -> Bool) -> {{(Nat) -> Bool, (Nat) -> Bool}} =
+            (((x) => match n | 0 => false | k + 1 => f(k) end, (y) => f(n)),);
+
+        let spin(n: Nat) -> Bool = w(n, (c) => spin(c)).0.0(0);
+
+        let Spun(n: Nat) -> Prop = Bool/Holds(spin(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("w(n, (c) => spin(c)).0.0(0)", "w(n, (c) => spin(c)).0.1(0)")])
+    .by_elaborator_in("/Spun", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Spun", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A record literal handed to a definition hands each field what that field's path is applied with, and nothing another field's is: `walk` applies `h.0` to an element below `t` and `h.1` to `t` itself, so a lambda at the first field may recur on its argument and one at the second may not. The control recurs at the first field and descends; the refusal recurs at the second, which is `sizes(t)` again: bounded by the first field's applications, it would descend.
+#[test]
+fn a_record_literal_hands_each_field_its_own_applications_alone() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let walk(h: {(Rose) -> Nat, (Rose) -> Nat}, t: Rose) -> Nat =
+            match t | rose(n, cs) => List/fold(cs, 0, (c, acc) => acc + h.0(c)) + h.1(t) end;
+
+        let sizes(t: Rose) -> Nat = walk(((u) => sizes(u), (v) => 0), t);
+
+        let Small(t: Rose) -> Prop = Bool/Holds(sizes(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("((u) => sizes(u), (v) => 0)", "((u) => 0, (v) => sizes(v))")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

@@ -934,3 +934,21 @@ let /f: (c: #BoolType) -> #NatType =
         "a member's selection read under an arm's solution"
     );
 }
+
+/// A member named inside its own group's body under an instance decorator is the member, and its call an edge of the group: `/spin` calls itself at `n` through `#{universes = …} /spin`, which does not descend. Resolved to the global its export is, the call would be no application of a member, the group would hold no edge, and a proof of `/std/Bool/False` that recurs for ever would certify.
+#[test]
+fn a_member_named_under_an_instance_decorator_in_its_own_body_is_a_call_of_the_member() {
+    let module = r#"
+#{node = Rec}
+let /spin: (n: #NatType) -> #{node = InductType} /std/Bool/False() =
+    (n: #NatType) => (#{universes = {levels = [], qualities = []}} /spin)(n);
+"#;
+    let verdicts = text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+    assert!(
+        refuses(&verdicts, Some("spin"), |error| matches!(
+            error,
+            Error::NotDescending { .. }
+        )),
+        "a member named under an instance decorator in its own body contributed no edge: {verdicts:?}",
+    );
+}
