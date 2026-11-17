@@ -1,22 +1,27 @@
-use /std/{Str, Char, Bool, Bytes, Nat, Option, proved};
+use /std/{Str, Char, Bool, Bytes, Nat, Option, Eq, proved};
 use /std/Str/{At};
 
---- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk forward, which stops there.
+--- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk over the bytes from `from`, which stops before it.
 pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
-    At/forward(
-        (_) => Option({at: At(s), char: Char}),
-        (at, again) =>
-            match At/try_next(s, at)
-            | some(n) =>
-                match pred(n.char)
-                | true => Option/some((at = at, char = n.char))
-                | false => again(n.past, n.progress)
-                end
-            | none() => Option/none()
-            end,
-        from);
+    let rest = Str/after(s, from);
+    let walked =
+        Str/leading(
+            rest.bytes,
+            rest.valid,
+            (c) => Bool/not(pred(c)),
+            0,
+            @rest.bytes,
+            @proved(),
+            @Eq/refl());
+    match walked.stop
+    | some(c) =>
+        Option/some((
+            at = At { offset = from.offset + walked.taken, @_, @boundary = walked.boundary },
+            char = c))
+    | none() => Option/none()
+    end;
 
--- That the walk has not gone back goes down with the position, here, in `span` and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
+-- That the walk has not gone back goes down with the position, here and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
 --- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
 pub let meets(
     s: Str,
@@ -136,8 +141,13 @@ pub let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =
     At/backward(
         (_) => At(s),
         (at, again) =>
-            match At/try_prev(s, at)
-            | some(p), pred(p.char) => again(p.past, p.progress)
-            | _ => at
+            match 0 < at.offset
+            | true =>
+                let p = At/prev(s, at);
+                match pred(p.char)
+                | true => again(p.past, p.progress)
+                | false => at
+                end
+            | false => at
             end,
         from);

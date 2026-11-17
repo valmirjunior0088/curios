@@ -294,6 +294,230 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
         end;
     go(s.bytes, s.valid, init);
 
+--- What a walk over the bytes of `whole` answers: how many it took, which lie within `whole`, that a character may begin past them, and the character it stopped before, or `none` at the end.
+let Leading(whole: Bytes) -> Type =
+    {
+        taken: Nat,
+        within: Bool/Holds(taken <= Bytes/len(whole)),
+        boundary: Bool/Holds(At/starts(Bytes/drop(whole, taken, @within))),
+        stop: Option(Char)};
+
+--- A walk over `whole` that stands `taken` bytes in, before `passed` and then `t`, stands before `t` once it passes `passed`.
+let passing(
+    @whole: Bytes,
+    @passed: Bytes,
+    @t: Bytes,
+    taken: Nat,
+    w: Bool/Holds(taken <= Bytes/len(whole)),
+    e: Eq()(Bytes/drop(whole, taken, @w), x[..passed, ..t]),
+) -> {
+    within: Bool/Holds(taken + Bytes/len(passed) <= Bytes/len(whole)),
+    cut: Eq()(Bytes/drop(whole, taken + Bytes/len(passed), @within), t)} =
+    let room: Bool/Holds(Bytes/len(passed) <= Bytes/len(Bytes/drop(whole, taken, @w))) =
+        Eq/subst((b: Bytes) => Bool/Holds(Bytes/len(passed) <= Bytes/len(b)), Eq/sym(e), proved());
+    (
+        within = proved(),
+        cut =
+            Eq/subst(
+                (b: Bytes) =>
+                    (q: Bool/Holds(Bytes/len(passed) <= Bytes/len(b))) -> Eq()(
+                        Bytes/drop(b, Bytes/len(passed), @q),
+                        t),
+                Eq/sym(e),
+                (_) => Eq/refl())(
+                room));
+
+--- Where a walk over the bytes of `whole` stops, `taken` bytes in, before `b` and the character `stop` begins it with: valid bytes begin where a character may.
+let stopped(
+    @whole: Bytes,
+    @b: Bytes,
+    v: Valid(b),
+    taken: Nat,
+    stop: Option(Char),
+    @w: Bool/Holds(taken <= Bytes/len(whole)),
+    @e: Eq()(Bytes/drop(whole, taken, @w), b),
+) -> Leading(whole) =
+    (
+        taken = taken,
+        within = w,
+        boundary = Eq/subst((x: Bytes) => Bool/Holds(At/starts(x)), Eq/sym(e), Valid/begins(v)),
+        stop = stop);
+
+--- How many bytes the characters `pred` accepts take at the front of `b`, counted on from `taken`, and the character it refused: a walk over the bytes it reads, which decodes each character at its lead byte as [`fold`] does and stops at the first one refused. Where it stands in `whole` rides beside it as proofs alone, so where it stops is a position of `whole` with no cut made.
+-- A stop passes the walk's own `b`: filled from the refined type, a hidden argument is `x[h, ..t]` rebuilt where the walk stands.
+let leading(
+    b: Bytes,
+    v: Valid(b),
+    pred: (Char) -> Bool,
+    taken: Nat,
+    @whole: Bytes,
+    @w: Bool/Holds(taken <= Bytes/len(whole)),
+    @e: Eq()(Bytes/drop(whole, taken, @w), b),
+) -> Leading(whole) =
+    match b
+    | x[] => stopped(@whole, @b, v, taken, Option/none(), @w, @e)
+    | x[h, ..t] =>
+        match classify(h)
+        | ascii() =>
+            let c = Char { code = Byte/to_nat(h) };
+            match pred(c)
+            | true =>
+                let step = passing(@whole, @x[h], @t, taken, w, e);
+                leading(t, v, pred, taken + 1, @whole, @step.within, @step.cut)
+            | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
+            end
+        | lead(rem, lo, hi, partial) =>
+            let p = begins_scalars_of(h);
+            match t
+            | x[] => match v end
+            | x[c1, ..t1] =>
+                match Nat/in_range(Byte/to_nat(c1), lo, hi)
+                | false => match Valid/from_bad(@t1, v) end
+                | true =>
+                    let one = partial * 0x40 + (Byte/to_nat(c1) - 0x80);
+                    match rem
+                    | 0 => match p end
+                    | r1 + 1 =>
+                        match r1
+                        | 0 =>
+                            let c =
+                                Char {
+                                    code = one,
+                                    @valid =
+                                        concluded(
+                                            lo,
+                                            hi,
+                                            partial,
+                                            Byte/to_nat(c1),
+                                            p,
+                                            Bool/True/qed()) };
+                            match pred(c)
+                            | true =>
+                                let step = passing(@whole, @x[h, c1], @t1, taken, w, e);
+                                leading(t1, v, pred, taken + 2, @whole, @step.within, @step.cut)
+                            | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
+                            end
+                        | r2 + 1 =>
+                            let p1 =
+                                advanced(
+                                    rem,
+                                    lo,
+                                    hi,
+                                    partial,
+                                    Byte/to_nat(c1),
+                                    p,
+                                    Bool/True/qed(),
+                                    proved());
+                            match t1
+                            | x[] => match v end
+                            | x[c2, ..t2] =>
+                                match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
+                                | false => match Valid/from_bad(@t2, v) end
+                                | true =>
+                                    let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
+                                    match r2
+                                    | 0 =>
+                                        let c =
+                                            Char {
+                                                code = two,
+                                                @valid =
+                                                    concluded(
+                                                        0x80,
+                                                        0xBF,
+                                                        one,
+                                                        Byte/to_nat(c2),
+                                                        p1,
+                                                        Bool/True/qed()) };
+                                        match pred(c)
+                                        | true =>
+                                            let step =
+                                                passing(@whole, @x[h, c1, c2], @t2, taken, w, e);
+                                            leading(
+                                                t2,
+                                                v,
+                                                pred,
+                                                taken + 3,
+                                                @whole,
+                                                @step.within,
+                                                @step.cut)
+                                        | false =>
+                                            stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
+                                        end
+                                    | r3 + 1 =>
+                                        let p2 =
+                                            advanced(
+                                                rem - 1,
+                                                0x80,
+                                                0xBF,
+                                                one,
+                                                Byte/to_nat(c2),
+                                                p1,
+                                                Bool/True/qed(),
+                                                proved());
+                                        match t2
+                                        | x[] => match v end
+                                        | x[c3, ..t3] =>
+                                            match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
+                                            | false => match Valid/from_bad(@t3, v) end
+                                            | true =>
+                                                match r3
+                                                | 0 =>
+                                                    let c =
+                                                        Char {
+                                                            code =
+                                                                two * 0x40
+                                                                    + (Byte/to_nat(c3) - 0x80),
+                                                            @valid =
+                                                                concluded(
+                                                                    0x80,
+                                                                    0xBF,
+                                                                    two,
+                                                                    Byte/to_nat(c3),
+                                                                    p2,
+                                                                    Bool/True/qed()) };
+                                                    match pred(c)
+                                                    | true =>
+                                                        let step =
+                                                            passing(
+                                                                @whole,
+                                                                @x[h, c1, c2, c3],
+                                                                @t3,
+                                                                taken,
+                                                                w,
+                                                                e);
+                                                        leading(
+                                                            t3,
+                                                            v,
+                                                            pred,
+                                                            taken + 4,
+                                                            @whole,
+                                                            @step.within,
+                                                            @step.cut)
+                                                    | false =>
+                                                        stopped(
+                                                            @whole,
+                                                            @b,
+                                                            v,
+                                                            taken,
+                                                            Option/some(c),
+                                                            @w,
+                                                            @e)
+                                                    end
+                                                | _ + 1 => match p end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        | bad() => match Valid/from_bad(@t, v) end
+        end
+    end;
+
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
@@ -355,25 +579,17 @@ pub let follows(
 ) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
     meets(s, from, piece, At/start(piece));
 
---- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk forward, which stops at the first character refused or at the end.
+--- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk over the bytes from `from`, which stops at the first character refused or at the end, its position built where it stops.
 pub let span(
     s: Str,
     from: At(s),
     pred: (Char) -> Bool,
 ) -> {past: At(s), reach: Bool/Holds(from.offset <= past.offset)} =
-    At/forward(
-        (at) =>
-            (reached: Bool/Holds(from.offset <= at.offset)) -> {
-                past: At(s),
-                reach: Bool/Holds(from.offset <= past.offset)},
-        (at, again) =>
-            (reached) =>
-                match At/try_next(s, at)
-                | some(n), pred(n.char) => again(n.past, n.progress)(proved())
-                | _ => (past = at, reach = reached)
-                end,
-        from)(
-        Nat/le/refl(from.offset));
+    let rest = after(s, from);
+    let walked = leading(rest.bytes, rest.valid, pred, 0, @rest.bytes, @proved(), @Eq/refl());
+    (
+        past = At { offset = from.offset + walked.taken, @_, @boundary = walked.boundary },
+        reach = proved());
 
 --- Where `needle` first occurs in `s`, or `none`; an empty needle occurs at the start.
 pub let index_of_substr(s: Str, needle: Str) -> Option(At(s)) =

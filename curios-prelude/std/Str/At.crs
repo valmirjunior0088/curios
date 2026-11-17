@@ -197,7 +197,7 @@ pub let prev(
     | 0 => match here end
     | j + 1 =>
         let back = floor(s, j, proved());
-        (char = next(s, back.at).char, past = back.at, progress = back.below)
+        (char = lead(Str/after(s, back.at).valid, proved()), past = back.at, progress = back.below)
     end;
 
 --- The character before `at`, the position before it and the proof that it lies before, or `none` at the start of `s`.

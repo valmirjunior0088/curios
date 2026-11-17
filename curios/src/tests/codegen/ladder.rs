@@ -236,9 +236,9 @@ fn walk_mirror_family_isolates_each_obligation() {
 
 /// The walk reads a character whole at its lead byte, so no scan state is carried from one turn to the next: the obligations the mirror family attributes to a per-byte walk — the returned scan state, the scan argument rebuilt — have nothing to stand on here.
 ///
-/// The fold does not call `step`. `classify` names how many bytes continue a character and the range of the first, and the fold reads each in a line, its validity stepped through every byte as `step` would step it, so no call and no returned scan remain in the loop. Nothing else on this program's path calls `step` either: `Str/trim` moves by position through `Str/At/next`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
+/// The fold does not call `step`. `classify` names how many bytes continue a character and the range of the first, and the fold reads each in a line, its validity stepped through every byte as `step` would step it, so no call and no returned scan remain in the loop. Nothing else on this program's path calls `step` either: `Str/trim` reads forward through the walk under `Str/span`, which reads a character whole at its lead byte as the fold does, and back by position through `Str/At/prev`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.
 ///
-/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `Str/At/next` constructs nothing, and no loop that reads a byte carries a `struct.new` of its own: neither the accumulator nor the suffix view. That assertion is deliberately about *every* allocation but what a step answers rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one; the fold is copied into each call that hands it a known step, so a step's body runs in the walk's loop, and what it builds, as `Nat/of_str`'s `Option`, is the step's.
+/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** A step of `Str/At` constructs nothing wherever it stands as a function of its own, and no loop that reads a byte carries a `struct.new` of its own: neither the accumulator nor the suffix view. That assertion is deliberately about *every* allocation but what a step answers rather than the tuple shapes named above, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one; the fold is copied into each call that hands it a known step, so a step's body runs in the walk's loop, and what it builds, as `Nat/of_str`'s `Option`, is the step's.
 #[test]
 fn the_per_character_walk_reads_each_character_whole_without_allocating() {
     let wat = wat(PARSE_MULTIBYTE);
@@ -256,15 +256,19 @@ fn the_per_character_walk_reads_each_character_whole_without_allocating() {
             .all(|function| !function.name.contains("/std/Str/utf8/step")),
         "nothing on this program's path calls `step`, so the module holds no copy of it",
     );
-    let next = split
-        .iter()
-        .find(|function| function.name.contains("/std/Str/At/next"))
-        .expect("`trim` steps its positions through `Str/At/next`");
-    assert_eq!(
-        count_in(next.body, "struct.new"),
-        0,
-        "and a step from one position to the next constructs nothing",
-    );
+    // A step stands as a function where it is not copied into its caller, and wherever it stands it constructs nothing.
+    for step in split.iter().filter(|function| {
+        ["/std/Str/At/next", "/std/Str/At/prev", "/std/Str/At/skip"]
+            .iter()
+            .any(|name| function.name.contains(name))
+    }) {
+        assert_eq!(
+            count_in(step.body, "struct.new"),
+            0,
+            "a step from one position to the next constructs nothing: {}",
+            step.name,
+        );
+    }
 
     // The fold's per-character shape, in every loop that reads a byte: `Str/fold` is copied into each call that hands it a known step, the program's own and `Nat/of_str`'s, so its walk stands in no function of its own and the claims are stated of each such loop. The accumulator travels as fields, and the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum.
     let walks = reading_loops(&wat);
@@ -284,9 +288,9 @@ fn the_per_character_walk_reads_each_character_whole_without_allocating() {
             0,
             "the suffix view is a virtual window: no helper call, no view allocation",
         );
-        // One site a byte, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits each read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. A loop over bytes reads at one site, and the fold's walk at four, a character's lead and the three bytes that may continue it; only the arms a byte takes run, so this is a static site count, and the cost is one read a byte either way.
+        // One site a byte, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits each read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. A loop over bytes reads at one site, and a walk that reads a character whole at four, its lead and the three bytes that may continue it; only the arms a byte takes run, so this is a static site count, and the cost is one read a byte either way. The walk back `Str/trim` takes reads the character before at eight, two whole copies of the four: the optimizer emits the step back's decode once for each way its search for the boundary, `Str/At/floor`, ends, and one copy runs a step.
         assert!(
-            matches!(in_walk("call $bytes/read"), 1 | 4),
+            matches!(in_walk("call $bytes/read"), 1 | 4 | 8),
             "each byte is read once and shared by the arms, not re-read per arm:\n{}",
             walk.join("\n"),
         );
@@ -305,8 +309,8 @@ fn the_per_character_walk_reads_each_character_whole_without_allocating() {
                 .count()
                 == 4)
             .count(),
-        2,
-        "the fold's two walks, the program's and `Nat/of_str`'s, each read a character whole",
+        3,
+        "the fold's two walks, the program's and `Nat/of_str`'s, and the walk under the span `Str/trim` reads forward by each read a character whole",
     );
     // Matched on the name, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
