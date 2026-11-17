@@ -1,0 +1,32 @@
+-- `/def`'s field lambda hands `f` on at its own place to `/app`, which applies it at `n`, so the field's walk records no use of `f`, and the summary of `/def`'s leading lambdas states `f(k)` alone, below `n`, as if no field applied `f`. `/h` calls the field of the record `/def` answers, which `/def`'s leading lambdas' summary is read for where `/spin` hands `/def` its lambda: `/spin(c)` is graded below `n`, and `/spin(0)` is `/h(/def(0, …), 0)`, which is `/app(0, …)`, which is `/spin(0)` again.
+let /def: (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) -> {
+    #NatType,
+    (#NatType) -> #{node = InductType} /sys/Bool/False()} =
+    (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+        (
+            #{goal = #NatType} match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end,
+            (m: #NatType) => /app(n, f))
+#{proof = true}
+and /app: (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+    #{node = InductType}
+    /sys/Bool/False() =
+    (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+        #{goal = #{node = InductType} /sys/Bool/False()}
+        match n
+        | 0 => f(n)
+        | k + 1 =>
+            let x2: {#NatType, (#NatType) -> #{node = InductType} /sys/Bool/False()} = /def(k, f);
+            f(n)
+        end;
+
+#{proof = true}
+let /h: (r: {#NatType, (#NatType) -> #{node = InductType} /sys/Bool/False()}, y: #NatType) ->
+    #{node = InductType}
+    /sys/Bool/False() =
+    (r: {#NatType, (#NatType) -> #{node = InductType} /sys/Bool/False()}, y: #NatType) => r.1(y);
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) => /h(/def(n, (c: #NatType) => /spin(c)), n);
+
+/spin(0)

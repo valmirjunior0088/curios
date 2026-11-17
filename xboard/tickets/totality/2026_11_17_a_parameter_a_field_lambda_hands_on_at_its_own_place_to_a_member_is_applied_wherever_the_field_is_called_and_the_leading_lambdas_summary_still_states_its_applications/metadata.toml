@@ -1,0 +1,12 @@
+title = "A parameter a field lambda hands on at its own place to a member is applied wherever the field is called, and the leading lambdas' summary still states its applications"
+status = "open"
+
+[[witness]]
+what = "a recursion through a callback `def`'s field hands on to `app`, graded below its argument by the summary of `def`'s leading lambdas where `h` calls the field"
+source = "a_callback_a_field_hands_on_to_a_member.crs"
+refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
+
+[[witness]]
+what = "the same recursion, as a term"
+source = "a_callback_a_field_hands_on_to_a_member.crsc"
+refused = [{ by = "certifier", error = "NotTotal" }]
