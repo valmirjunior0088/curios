@@ -1,0 +1,26 @@
+-- `spin` hands itself to `def` bare rather than a lambda, so the row the summary of `def`'s leading lambdas states of `f`, `f(k)` alone and below `n`, grades the call of `spin` that `handed_member` reads off it; `spin(0)` is `h(def(0, spin), 0)`, which is `app(0, spin)`, which is `spin(0)` again.
+use /std/{Nat};
+use /std/Bool/{False};
+
+let def(n: Nat, f: (Nat) -> False) -> {Nat, (Nat) -> False} =
+    (
+        match n
+        | 0 => 0
+        | k + 1 => match f(k) end
+        end,
+        (m) => app(n, f))
+and app(n: Nat, f: (Nat) -> False) -> False =
+    match n
+    | 0 => f(n)
+    | k + 1 =>
+        let _ = def(k, f);
+        f(n)
+    end;
+
+let h(r: {Nat, (Nat) -> False}, y: Nat) -> False =
+    r.1(y);
+
+let spin(n: Nat) -> False =
+    h(def(n, spin), n);
+
+spin(0)

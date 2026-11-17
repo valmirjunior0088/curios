@@ -7,6 +7,11 @@ source = "a_callback_a_field_hands_on_to_a_member.crs"
 refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
 
 [[witness]]
+what = "the same recursion through `spin` handed to `def` bare, graded by `handed_member` off the leading lambdas' summary"
+source = "a_member_a_field_hands_on_to_a_member.crs"
+refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
+
+[[witness]]
 what = "the same recursion, as a term"
 source = "a_callback_a_field_hands_on_to_a_member.crsc"
 refused = [{ by = "certifier", error = "NotTotal" }]
