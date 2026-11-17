@@ -1,4 +1,4 @@
-//! Where the workspace and its build products live: the root every other path is derived from, cargo's target directory, and the triple this tool was built for — the two values the runner fills in a command without a declaration, and the root a relative path is read from.
+//! Where the workspace and its build products live: the root every other path is derived from, cargo's target directory, Cargo's home, and the triple this tool was built for — values the runner fills in a command without a declaration — and the root a relative path is read from.
 //!
 //! Nothing here runs anything or touches a file. A path is a fact about the tree; acting on one is a step's business.
 
@@ -19,6 +19,14 @@ pub fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {
         Some(directory) => root().join(directory),
         None => root().join("target"),
+    }
+}
+
+/// Cargo's home, where it fetches what a build depends on and builds it from, honoring the same override cargo itself honors: the task files' `{cargo_home}`.
+pub fn cargo_home() -> PathBuf {
+    match env::var_os("CARGO_HOME") {
+        Some(home) => PathBuf::from(home),
+        None => env::home_dir().unwrap_or_default().join(".cargo"),
     }
 }
 

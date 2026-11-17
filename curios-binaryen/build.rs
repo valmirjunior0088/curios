@@ -194,8 +194,12 @@ fn build(entry: &Path, out: &Path) {
         .unpack(out)
         .expect("extract Binaryen source archive");
 
+    // An assertion names the file it is written in, so the build's own directory would be in every compiler that links the library: mapped to a word, as the release's Rust is (`xtask/tasks/compiler.toml`).
+    let mapped = format!("-ffile-prefix-map={}=binaryen", out.display());
     let prefix = cmake::Config::new(out.join(format!("binaryen-{BINARYEN_VERSION}")))
         .profile("Release")
+        .cflag(&mapped)
+        .cxxflag(&mapped)
         .define("BUILD_SHARED_LIBS", "OFF")
         .define("BUILD_TOOLS", "OFF")
         .define("BUILD_TESTS", "OFF")

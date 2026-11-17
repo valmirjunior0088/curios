@@ -36,7 +36,7 @@ const DIRECTORY: &str = "xtask/tasks";
 pub const COMMANDS: [&str; 2] = ["release", "installer"];
 
 /// The values the runner fills without a declaration.
-const BUILT_INS: [&str; 2] = ["host", "target"];
+const BUILT_INS: [&str; 4] = ["host", "target", "cargo_home", "sysroot"];
 
 /// The keys a step may hold.
 const STEP_KEYS: [&str; 6] = [
@@ -200,6 +200,10 @@ pub enum Fill {
     Host,
     /// Cargo's target directory.
     Target,
+    /// Cargo's home.
+    CargoHome,
+    /// The toolchain's root, as the pinned `rustc` prints it.
+    Sysroot,
     Variable(Name),
     /// A produced file's path.
     Produced(Name),
@@ -1132,6 +1136,8 @@ fn word_of(
         let fill = match written {
             "host" => Fill::Host,
             "target" => Fill::Target,
+            "cargo_home" => Fill::CargoHome,
+            "sysroot" => Fill::Sysroot,
             _ => {
                 let name = resolved(&file.scope, written);
                 match kinds.get(&name) {

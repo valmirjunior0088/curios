@@ -1,17 +1,18 @@
 description = "The compiler as it is released"
 
 [build]
-description = "Build the compiler as it is released"
+description = "Build the compiler as it is released, handing rustc the target directory, Cargo's home and the toolchain's root remapped, so no directory of the machine it is built on is in it"
 consumes = ["launcher.binary"]
 produces.binary = "{target}/release/curios"
 run = [
-    ["cargo", "build", "--release", "--package", "curios", "--keep-going"],
+    ["CARGO_ENCODED_RUSTFLAGS=--remap-path-prefix={target}=target\u001F--remap-path-prefix={cargo_home}=cargo\u001F--remap-path-prefix={sysroot}=rust", "cargo", "build", "--release", "--package", "curios", "--keep-going"],
 ]
 
 [test]
-description = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end"
+description = "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine, beside the test runner's own pieces: alone runs a page the compiler wrote, its gateways answering their rows, and a test serve end to end; and hold the compiler, and an executable it writes, to holding no directory of the machine that built them"
 # The compiler under test is the one this file's build filed, named to the suite rather than found on PATH, where an installed one would answer instead.
 consumes = ["binary"]
 run = [
     ["CURIOS={binary}", "node", "--test", "curios-browser/src/page.test.mjs", "curios-browser/src/runner.test.mjs"],
+    ["CURIOS={binary}", "TARGET={target}", "CARGO_HOME={cargo_home}", "SYSROOT={sysroot}", "node", "--test", "curios-browser/src/released.test.mjs"],
 ]
