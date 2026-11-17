@@ -348,7 +348,7 @@ fn a_fact_of_an_updates_base_is_spelled_through_the_base() {
     )
     .expect_err("zero is not above zero");
 
-    assert_eq!(error.matches("p.ok: 0 < p.n").count(), 1, "{error}");
+    assert_eq!(error.matches("`p.ok`: `0 < p.n`").count(), 1, "{error}");
     assert!(!error.contains("x.ok"), "{error}");
 }
 
