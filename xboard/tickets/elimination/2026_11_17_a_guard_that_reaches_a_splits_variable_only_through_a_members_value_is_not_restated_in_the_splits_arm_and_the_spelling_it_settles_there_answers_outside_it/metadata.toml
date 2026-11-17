@@ -2,6 +2,11 @@ title = "A guard that reaches a split's variable only through a member's value i
 status = "open"
 
 [[witness]]
+what = "a guard over two calls of a local member whose body captures the locals a split re-types, settled in the split's true arm and answered after the split"
+source = "a_guard_reaching_the_split_through_a_members_value.crs"
+refused = [{ by = "elaborator", error = "TypeMismatch", within = "/f" }]
+
+[[witness]]
 what = "a guard over two calls of a member whose body captures the locals a split re-types, settled in the split's true arm and answered after the split, as a term"
 source = "a_guard_reaching_the_split_through_a_members_value.crsc"
 refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]

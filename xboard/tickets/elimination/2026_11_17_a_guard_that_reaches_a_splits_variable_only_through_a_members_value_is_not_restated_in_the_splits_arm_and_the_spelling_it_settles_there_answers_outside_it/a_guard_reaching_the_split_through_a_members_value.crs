@@ -1,0 +1,44 @@
+-- `g` is a member of a local group whose body captures `h`, `p` and `q`, and `m` splits on a guard comparing `g(0)` with `g(1)`, naming none of them, so the split on `c` restates nothing of it; a settlement of the guard inside the split's `true` arm unfolds `g` and reads `p` and `q` as units, where `h(p)` and `h(q)` are one, and settles the guard's spelling as `k(0)`, which answers `true` after the split with `c` open. At `false`, the guard is `k(1)`, `true`, and what `m` proves is `Holds(k(0))`, `Holds(0 == 1)`.
+use /std/{Nat, Bool};
+use /std/Bool/{True, False, Holds};
+
+let F(c: Bool) -> Type =
+    match c | true => {} | false => Nat end;
+
+let f(
+    c: Bool,
+    h: (F(c)) -> Nat,
+    k: (Nat) -> Bool,
+    p: F(c),
+    q: F(c),
+) -> Holds(
+    match match h(p) == h(q) | true => k(0) | false => k(1) end
+    | false => true
+    | true => k(0)
+    end) =
+    let g(i: Nat) -> Nat = match i | 0 => h(p) | _ + 1 => h(q) end
+    and m(
+        _: {},
+    ) -> Holds(
+        match match g(0) == g(1) | true => k(0) | false => k(1) end
+        | false => true
+        | true => k(0)
+        end) =
+        match match g(0) == g(1) | true => k(0) | false => k(1) end
+        | false => True/qed()
+        | true =>
+            let _: {} =
+                match c
+                | false => ()
+                | true =>
+                    let _: Holds(k(0)) = True/qed();
+                    ()
+                end;
+            True/qed()
+        end;
+    m(());
+
+let proof: False =
+    f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1);
+
+proof
