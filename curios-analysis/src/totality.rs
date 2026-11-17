@@ -1103,47 +1103,57 @@ pub fn known_to_terminate<E: Env>(
     Ok(group_totality(env, &RecGroup::closing(known))?.is_total())
 }
 
-/// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
+/// What a value of `type_` answers once applied to everything it takes: `type_` reduced, and past every function type it reduces to, each binder opened over a fresh identity, the codomain reduced again. `None` where a reduction has no value.
 ///
-/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
+/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — answers a sort only once forced, and so does `(n : Nat) -> U`: an alias is not a different claim.
 ///
-/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
+/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
+pub fn codomain<E: Env>(env: &mut E, type_: &Term) -> Result<Option<Term>, E::Error> {
+    // Peeling to a codomain answers the same question about a smaller type, so it iterates rather than re-entering: an arrow's spine is as long as its type is written.
+    let mut type_ = type_.clone();
+
+    loop {
+        let Some(reduced) = env.force(&type_).probed()? else {
+            return Ok(None);
+        };
+        let Subterm::FuncType(FuncType { telescope, .. }) = &*reduced else {
+            return Ok(Some(reduced));
+        };
+        let mut cursor = telescope.cursor();
+        while !cursor.is_done() {
+            cursor.advance_fresh(|hint| env.fresh(hint));
+        }
+        type_ = cursor.body().expect("a cursor past every entry");
+    }
+}
+
+/// Whether a sort is extractable from this type: its `codomain` is one, or a tuple a component of which yields one. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
 ///
-/// `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort, arrow or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
+/// Read through `codomain`, reduced at every step, so declaring a member through an alias is no escape from the descent gate, which is what stops a member erasure deletes from being assumed at its own type before its body is checked against it.
+///
+/// `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`).
 pub fn yields_a_sort_where<E: Env>(
     env: &mut E,
     type_: &Term,
     undetermined: &dyn Fn(Option<&Term>) -> bool,
 ) -> Result<bool, E::Error> {
-    // Peeling to a codomain answers the same question about a smaller type, so it iterates here rather than re-entering: an arrow's spine is as long as its type is written, and the answer is the codomain's own.
-    let mut type_ = type_.clone();
+    let Some(codomain) = codomain(env, type_)? else {
+        return Ok(undetermined(None));
+    };
 
-    loop {
-        let Some(reduced) = env.force(&type_).probed()? else {
-            return Ok(undetermined(None));
-        };
-
-        match &*reduced {
-            Subterm::Sort(_) => return Ok(true),
-            Subterm::FuncType(FuncType { telescope, .. }) => {
-                let mut cursor = telescope.cursor();
-                while !cursor.is_done() {
-                    cursor.advance_fresh(|hint| env.fresh(hint));
+    match &*codomain {
+        Subterm::Sort(_) => Ok(true),
+        Subterm::TupleType(tuple) => {
+            let mut cursor = tuple.telescope.cursor();
+            while let Some((_, entry)) = cursor.entry() {
+                if yields_a_sort_where(env, &entry, undetermined)? {
+                    return Ok(true);
                 }
-                type_ = cursor.body().expect("a cursor past every entry");
+                cursor.advance_fresh(|hint| env.fresh(hint));
             }
-            Subterm::TupleType(tuple) => {
-                let mut cursor = tuple.telescope.cursor();
-                while let Some((_, entry)) = cursor.entry() {
-                    if yields_a_sort_where(env, &entry, undetermined)? {
-                        return Ok(true);
-                    }
-                    cursor.advance_fresh(|hint| env.fresh(hint));
-                }
-                return Ok(false);
-            }
-            _ => return Ok(undetermined(Some(&reduced))),
+            Ok(false)
         }
+        _ => Ok(undetermined(Some(&codomain))),
     }
 }
 

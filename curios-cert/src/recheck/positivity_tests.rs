@@ -397,3 +397,41 @@ fn a_head_carrying_a_type_into_an_arm_is_read_at_mixed() {
         "{verdicts:?}"
     );
 }
+
+/// `/size` takes a `/T` apart and is placed before it, and `/T`'s `node` holds a `/Zero` indexed by `/size(u)`: a datum computed by taking apart a value of the family that holds it.
+const A_DATUM_TAKING_ITS_FAMILY_APART: &str = r#"
+#{node = Rec}
+let /size : (t: #{node = InductType} /T()) -> #NatType =
+    (t: #{node = InductType} /T()) =>
+        #{goal = #NatType}
+        match t
+        | leaf() => 0
+        | node(u, ok) => /size(u)
+        end;
+induct /Zero: (n: #NatType) -> pub Type
+| here(): (0)
+end
+induct /T: pub Type
+| leaf()
+| node(u: #{node = InductType} /T(), ok: #{node = InductType} /Zero()(/size(u)))
+end
+/std/Bool/True/qed()
+"#;
+
+// An index at `Nat` is a datum, which no type parameter of the family reaches, but a declaration it names is read where it stands: a datum may take a value of one apart. Read past, as a type parameter is, `/T` would be admitted holding a datum about itself that a definition placed before it computes.
+#[test]
+fn a_datum_taking_its_family_apart_reaches_the_family() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_DATUM_TAKING_ITS_FAMILY_APART}",
+        PROPOSITIONS,
+        A_DATUM_TAKING_ITS_FAMILY_APART
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("T"))
+                && matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}"
+    );
+}

@@ -14,6 +14,8 @@
 //!
 //! A type-level definition is forced to the form it reduces to, and a `match` that form is stuck on is read as the arms it reduces to at every instance ([`crate::opened`]): each at the polarity the `match` stands at, and what supplies an arm's binders, the head or the instance definitional K fires on, at `Mixed` where an arm reads one. Its annotations — the goal, a list's element type, and a supplier no arm reads — stand in no reduct, so no parameter is read in them; a declaration they name is read at `Mixed`, since a `match` does not say which family it takes apart and an annotation naming one is the only witness that a type computes by taking apart a value of it. Every other form the walk cannot see through is read whole at `Mixed` ([`Walk::opaque`]).
 //!
+//! A value standing where data is expected is a datum ([`crate::Data`]): an index of a family occurrence at its index telescope's type, a value parameter of a family or record occurrence at its parameter telescope's, the head of a `match` whose cases state a data carrier, and a `match` whose goal is data. A datum is the same value at every instance of the declaration's type parameters — no part of it is a type, and no term computes on one — so no type parameter is read inside it ([`answers_a_type`]); a value parameter and a declaration are read there as anywhere, a datum being free to compute on the one and to take apart a value of the other.
+//!
 //! # Asked before the pass has run
 //!
 //! Conversion asks whether a struct reaches itself while a unit's items are still being checked, to end its reading of a type's inhabitants, and the relation above does not exist yet: the pass runs over finished declarations, after the items whose conversions ask. [`struct_reaches_itself`] answers from the declarations as they are written. It reads the same diagonal coarsely — any mention counts, at whatever polarity and whatever it would reduce to — so it answers yes wherever the pass would and in more places besides. Its answer ends a walk early and admits nothing: whatever it says, a type judged to have one inhabitant is one whose every field was judged.
@@ -28,16 +30,16 @@
 mod tests;
 
 use {
-    crate::{Env, forceable, opened},
+    crate::{Data, Env, codomain, forceable, opened},
     curios_common::recurse,
     curios_core::{
-        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Match,
-        Mention, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Advance, Atom, Bound, Carrier, Cases, Free, FuncType, Global, InductDecl, InductType,
+        Intrinsic, Match, Mention, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope,
+        Term, TupleType,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         hash::{Hash, Hasher},
-        mem,
     },
 };
 
@@ -150,10 +152,17 @@ pub fn positivity_vectors<E: Env>(
     let names = declarations.names();
     let mut split = BTreeMap::new();
     for name in &names {
-        split.insert(*name, Split::of(env, declarations, name));
+        // Which parameters are type parameters is read by reduction, so a refused one is reported as every other is.
+        match Split::of(env, declarations, name) {
+            Ok(opened) => split.insert(*name, opened),
+            Err(error) => {
+                return Err(PositivityRefusal::Exhausted { name: *name, error });
+            }
+        };
     }
 
-    let (vectors, closed, exhausted) = fixpoint(env, &split);
+    let mut data = Data::new(declarations);
+    let (vectors, closed, exhausted) = fixpoint(env, &mut data, &split);
 
     // Nothing computed past a refused reduction is handed back: an acceptance would file a vector that may hold the budget's `Mixed`, and a refusal may be that reading's alone.
     if let Some((walked, error)) = exhausted {
@@ -174,7 +183,7 @@ pub fn positivity_vectors<E: Env>(
         }
 
         return Err(PositivityRefusal::NotPositive(refusal(
-            env, &split, &vectors, &closed, name, diagonal,
+            env, &mut data, &split, &vectors, &closed, name, diagonal,
         )));
     }
 
@@ -362,6 +371,8 @@ fn globals_named(type_: &Term, named: &mut BTreeSet<Global>) {
 #[derive(Debug)]
 struct Split {
     params: Vec<Free>,
+    /// Which of `params` is a type parameter ([`answers_a_type`]), which a datum carries none of.
+    type_params: Vec<bool>,
     parts: Vec<Piece>,
 }
 
@@ -373,9 +384,14 @@ struct Piece {
 }
 
 impl Split {
-    fn of<E: Env>(env: &mut E, declarations: Declarations<'_>, name: &Global) -> Self {
+    fn of<E: Env>(
+        env: &mut E,
+        declarations: Declarations<'_>,
+        name: &Global,
+    ) -> Result<Self, E::Error> {
         if let Some(declaration) = declarations.induct(name) {
             let params = binders(env, declaration.arity());
+            let type_params = type_parameters(env, declaration.arity())?;
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
@@ -398,13 +414,18 @@ impl Split {
                 }
             }
 
-            return Self { params, parts };
+            return Ok(Self {
+                params,
+                type_params,
+                parts,
+            });
         }
 
         let declaration = declarations
             .struct_(name)
             .expect("every analyzed name is an inductive or a struct");
         let params = binders(env, &declaration.arity);
+        let type_params = type_parameters(env, &declaration.arity)?;
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
         let parts = labelled(env, &declaration.fields_at(&arguments))
             .into_iter()
@@ -414,7 +435,11 @@ impl Split {
             })
             .collect();
 
-        Self { params, parts }
+        Ok(Self {
+            params,
+            type_params,
+            parts,
+        })
     }
 }
 
@@ -451,23 +476,14 @@ pub fn labelled<E: Env, B: Bound>(
 /// One declaration's occurrences under the current parameter estimates, and the first reduction the driver refused while finding them.
 fn sweep<E: Env>(
     env: &mut E,
+    data: &mut Data<'_>,
     vectors: &Vectors,
     split: &Split,
 ) -> (BTreeMap<Target, Polarity>, Option<E::Error>) {
     let mut found = BTreeMap::new();
     let mut refused = None;
     for part in &split.parts {
-        let mut walk = Walk {
-            env,
-            params: split.params.clone(),
-            vectors,
-            unfolded: BTreeSet::new(),
-            forcing: Vec::new(),
-            entered: HashSet::new(),
-            reading: Reading::Content,
-            found: BTreeMap::new(),
-            refused: None,
-        };
+        let mut walk = Walk::over(env, data, vectors, split);
         walk.walk(&part.type_, Polarity::Strict);
         for (target, polarity) in walk.found {
             found
@@ -485,6 +501,7 @@ fn sweep<E: Env>(
 /// Whole-set rather than declaration-by-declaration because a single ordered pass gets the wrong answer twice over. `Node(V)` mentions itself, so its own vector is an input to computing it; and in the mutual pair `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is negative in `X` on the round after `B` does. Seeding at `Unused` and joining upward computes the least fixpoint, which is the right one: an inductive declaration *is* the least fixpoint of its own unfolding.
 fn fixpoint<E: Env>(
     env: &mut E,
+    data: &mut Data<'_>,
     split: &BTreeMap<Global, Split>,
 ) -> (Vectors, Occurrences, Option<(Global, E::Error)>) {
     let mut vectors = Vectors {
@@ -499,7 +516,7 @@ fn fixpoint<E: Env>(
     loop {
         let mut changed = false;
         for (name, entry) in split {
-            let (found, refused) = sweep(env, &vectors, entry);
+            let (found, refused) = sweep(env, data, &vectors, entry);
             if exhausted.is_none()
                 && let Some(error) = refused
             {
@@ -584,6 +601,7 @@ fn close(direct: &Occurrences) -> Occurrences {
 /// Reached only when the fixpoint refused no reduction, so the verdict is the rule's. A reduction this re-walk has refused can only cost the message its part, which the fallback below covers.
 fn refusal<E: Env>(
     env: &mut E,
+    data: &mut Data<'_>,
     split: &BTreeMap<Global, Split>,
     vectors: &Vectors,
     closed: &Occurrences,
@@ -592,17 +610,7 @@ fn refusal<E: Env>(
 ) -> NotPositive {
     let entry = &split[name];
     for part in &entry.parts {
-        let mut walk = Walk {
-            env,
-            params: entry.params.clone(),
-            vectors,
-            unfolded: BTreeSet::new(),
-            forcing: Vec::new(),
-            entered: HashSet::new(),
-            reading: Reading::Content,
-            found: BTreeMap::new(),
-            refused: None,
-        };
+        let mut walk = Walk::over(env, data, vectors, entry);
         walk.walk(&part.type_, Polarity::Strict);
 
         for (target, polarity) in walk.found {
@@ -672,11 +680,15 @@ impl Vectors {
 }
 
 /// One declaration's traversal: where it mentions its own parameters, and where it mentions other declarations.
-struct Walk<'a, E: Env> {
+struct Walk<'a, 'd, E: Env> {
     env: &'a mut E,
     /// The declaration's parameter binders as this traversal opened them, in declaration order. `Target::Param(i)` is a free occurrence of `params[i]`.
     params: Vec<Free>,
     vectors: &'a Vectors,
+    /// Which of `params` is a type parameter, which a datum carries none of.
+    type_params: Vec<bool>,
+    /// The classification of data, kept for the analysis this traversal is part of.
+    data: &'a mut Data<'d>,
     /// Definitions already unfolded on this traversal. A type-level `let` can be mentioned from many positions, and a recursive group can mention itself; without this the sweep in `blocked` would not terminate.
     unfolded: BTreeSet<Mention>,
     /// The `rec` members this walk is already inside, innermost last — the path, not the traversal.
@@ -692,11 +704,43 @@ struct Walk<'a, E: Env> {
     refused: Option<E::Error>,
 }
 
-/// How a walk reads what it is walking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// The type each of `arguments` stands at in `telescope`, each entry instantiated at the arguments before it; `None` past the telescope's last entry.
+fn along<B: Bound>(telescope: &Telescope<B>, arguments: &[Term]) -> Vec<Option<Term>> {
+    let mut types = Vec::with_capacity(arguments.len());
+    let mut cursor = telescope.cursor();
+    for argument in arguments {
+        types.push(cursor.entry().map(|(_, type_)| type_));
+        cursor.advance(argument.clone());
+    }
+    types
+}
+
+/// Whether a binder at `type_` is a type parameter: every value of it a type, or a function answering one once applied to everything it takes ([`codomain`]). A datum can apply such a value but never take apart what it answers. A tuple holding a type is none: a datum can project its other components and compute on them, as it can on a value parameter.
+fn answers_a_type<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
+    Ok(matches!(
+        codomain(env, type_)?.as_deref(),
+        Some(Subterm::Sort(_))
+    ))
+}
+
+/// Which of a telescope's entries is a type parameter ([`answers_a_type`]): what a datum carries none of.
+fn type_parameters<E: Env, B: Bound>(
+    env: &mut E,
+    params: &Telescope<B>,
+) -> Result<Vec<bool>, E::Error> {
+    labelled(env, params)
+        .into_iter()
+        .map(|(_, type_)| answers_a_type(env, &type_))
+        .collect()
+}
+
+/// How a walk reads what it is walking, each reading reading less than the one after it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Reading {
     /// What a type holds: every target where it stands.
     Content,
+    /// A value standing where data is expected ([`Data`]): one value at every instance of the declaration's type parameters, so none of them is recorded; a value parameter and a declaration are, where they stand.
+    Datum,
     /// What annotates a term and stands in none of its reducts — a stuck `match`'s goal and a list's element type, and a head no arm reads a binder of. No parameter reaches a type through it, so none is recorded; a declaration is, at `Mixed`, since an annotation naming a family is the only witness that a type takes apart a value of it.
     Annotation,
 }
@@ -737,10 +781,34 @@ impl Hash for Entered {
     }
 }
 
-impl<E: Env> Walk<'_, E> {
+impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
+    /// A traversal of one of `split`'s parts, with nothing found yet.
+    fn over(env: &'a mut E, data: &'a mut Data<'d>, vectors: &'a Vectors, split: &Split) -> Self {
+        Self {
+            env,
+            params: split.params.clone(),
+            vectors,
+            type_params: split.type_params.clone(),
+            data,
+            unfolded: BTreeSet::new(),
+            forcing: Vec::new(),
+            entered: HashSet::new(),
+            reading: Reading::Content,
+            found: BTreeMap::new(),
+            refused: None,
+        }
+    }
+
     fn record(&mut self, target: Target, polarity: Polarity) {
-        if self.reading == Reading::Annotation && matches!(target, Target::Param(_)) {
-            return;
+        if let Target::Param(index) = target {
+            let skipped = match self.reading {
+                Reading::Content => false,
+                Reading::Datum => self.type_params.get(index).copied().unwrap_or(false),
+                Reading::Annotation => true,
+            };
+            if skipped {
+                return;
+            }
         }
         self.found
             .entry(target)
@@ -792,36 +860,111 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
-    /// A nominal type former's arguments, composed against how that former uses each one. `Toml/table(Map(Toml))` is admitted here and nowhere else: `Map` is `Strict` in its parameter, so the `Toml` inside stays strict.
-    fn arguments(&mut self, name: &Global, arguments: &[Term], polarity: Polarity) {
+    /// A nominal type former's arguments, composed against how that former uses each one, each a datum where the parameter it fills is typed at data. `Toml/table(Map(Toml))` is admitted here and nowhere else: `Map` is `Strict` in its parameter, so the `Toml` inside stays strict.
+    fn arguments(
+        &mut self,
+        name: &Global,
+        arguments: &[Term],
+        types: &[Option<Term>],
+        polarity: Polarity,
+    ) {
         for (index, argument) in arguments.iter().enumerate() {
             let used = self.vectors.at(self.env, name, index);
-            self.walk(argument, polarity.compose(used));
+            let type_ = types.get(index).and_then(Option::as_ref);
+            self.value_at(argument, type_, polarity.compose(used));
         }
     }
 
     /// A stuck `match`, read as what it reduces to: every instance reduces it to one arm, its binders supplied by the head or by the instance the `match` states, so each arm is read at the polarity the `match` stands at, opened against fresh binders, and the suppliers at `Mixed` where an arm reads one of its binders. Where none does they only select an arm, whose reading the arms' join bounds, and are read as annotations, as the goal and a list's element type are.
+    ///
+    /// A `match` whose goal is data is a datum whole, and a head whose cases state a data carrier — a `Bool`, a `Nat`, `Bytes`, a list of data — is one.
     fn stuck(&mut self, matched: &Match, polarity: Polarity) {
-        let opened = opened(self.env, matched);
-        for arm in &opened.arms {
-            self.walk(arm, polarity);
-        }
-        for supplier in &opened.suppliers {
-            match opened.reads_a_binder {
-                true => self.walk(supplier, Polarity::Mixed),
-                false => self.annotation(supplier),
+        let reading = match self.is_data(&matched.goal) {
+            true => Reading::Datum,
+            false => Reading::Content,
+        };
+        let head_type = match &matched.cases {
+            Cases::Bool { .. } => Some(Term::intrinsic(Intrinsic::BoolType)),
+            Cases::Switch { .. } => Some(Term::intrinsic(Intrinsic::NatType)),
+            Cases::FreeMonoid { carrier } => Some(match carrier {
+                Carrier::Nat { .. } => Term::intrinsic(Intrinsic::NatType),
+                Carrier::Bytes { .. } => Term::intrinsic(Intrinsic::BytesType),
+                Carrier::List { elem, .. } => Term::intrinsic(Intrinsic::ListType(elem.clone())),
+            }),
+            Cases::Induct { .. } => None,
+        };
+
+        self.within(reading, |walk| {
+            let opened = opened(walk.env, matched);
+            for arm in &opened.arms {
+                walk.walk(arm, polarity);
             }
-        }
-        for annotation in &opened.annotations {
-            self.annotation(annotation);
-        }
+            for (position, supplier) in opened.suppliers.iter().enumerate() {
+                match opened.reads_a_binder {
+                    // The head is the first supplier, and the one its cases type.
+                    true => {
+                        let type_ = head_type.as_ref().filter(|_| position == 0);
+                        walk.value_at(supplier, type_, Polarity::Mixed);
+                    }
+                    false => walk.annotation(supplier),
+                }
+            }
+            for annotation in &opened.annotations {
+                walk.annotation(annotation);
+            }
+        });
     }
 
     /// Walk `term` as an annotation ([`Reading::Annotation`]), at `Mixed`.
     fn annotation(&mut self, term: &Term) {
-        let outer = mem::replace(&mut self.reading, Reading::Annotation);
-        self.walk(term, Polarity::Mixed);
+        self.within(Reading::Annotation, |walk| walk.walk(term, Polarity::Mixed));
+    }
+
+    /// Walk `term` at `polarity`, as a datum ([`Reading::Datum`]) where `type_` is data, the type its position states.
+    fn value_at(&mut self, term: &Term, type_: Option<&Term>, polarity: Polarity) {
+        match type_.is_some_and(|type_| self.is_data(type_)) {
+            true => self.within(Reading::Datum, |walk| walk.walk(term, polarity)),
+            false => self.walk(term, polarity),
+        }
+    }
+
+    /// Run `read` reading no more than `reading` reads: a reading entered inside another that reads less keeps the outer one.
+    fn within(&mut self, reading: Reading, read: impl FnOnce(&mut Self)) {
+        let outer = self.reading;
+        self.reading = outer.max(reading);
+        read(self);
         self.reading = outer;
+    }
+
+    /// Whether `type_` is data, a reduction the classification refuses kept as the walk keeps its own.
+    fn is_data(&mut self, type_: &Term) -> bool {
+        self.data.is_data(self.env, type_, &mut self.refused)
+    }
+
+    /// The type each of a family's or record's parameters and indices stands at in this occurrence, by position, each instantiated at the arguments before it; `None` past what the entry states, or for a name with no entry. Read off the entry where it is held, the declarations analysed first.
+    fn argument_types(
+        &self,
+        name: &Global,
+        params: &[Term],
+        indices: &[Term],
+    ) -> (Vec<Option<Term>>, Vec<Option<Term>>) {
+        let declarations = self.data.declarations();
+        let induct = declarations
+            .induct(name)
+            .or_else(|| self.env.induct_decl(name));
+        if let Some(declaration) = induct {
+            return (
+                along(declaration.arity(), params),
+                along(&declaration.indices_at(params), indices),
+            );
+        }
+        let record = declarations
+            .struct_(name)
+            .or_else(|| self.env.struct_decl(name));
+        match record {
+            Some(declaration) => (along(&declaration.arity, params), Vec::new()),
+            None => (vec![None; params.len()], vec![None; indices.len()]),
+        }
     }
 
     /// A form the walk cannot see through: descend into every direct child at `Mixed`.
@@ -932,16 +1075,18 @@ impl<E: Env> Walk<'_, E> {
                 ..
             }) => {
                 self.record(Target::Decl(*name), polarity);
-                self.arguments(name, params, polarity);
-                // Indices are not parameters: an inductive is not uniform in them, so nothing can be composed and they stay opaque. The corpus never recurses through one.
-                for index in indices {
-                    self.walk(index, Polarity::Mixed);
+                let (param_types, index_types) = self.argument_types(name, params, indices);
+                self.arguments(name, params, &param_types, polarity);
+                // Indices are not parameters: an inductive is not uniform in them, so nothing can be composed and they stay opaque. The corpus never recurses through one. An index at a data type is a datum.
+                for (index, type_) in indices.iter().zip(&index_types) {
+                    self.value_at(index, type_.as_ref(), Polarity::Mixed);
                 }
             }
 
             Subterm::StructType(StructType { name, params, .. }) => {
                 self.record(Target::Decl(*name), polarity);
-                self.arguments(name, params, polarity);
+                let (param_types, _) = self.argument_types(name, params, &[]);
+                self.arguments(name, params, &param_types, polarity);
             }
 
             Subterm::Intrinsic(intrinsic) => self.intrinsic(intrinsic, polarity, &term),

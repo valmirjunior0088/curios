@@ -418,6 +418,20 @@ impl Intrinsic {
         }
     }
 
+    /// The carrier a type former's values are of, where the algebra has one: `Nat`'s the naturals, `Bytes`'s packed bytes, `List`'s sequences whatever its element. `None` for a former no operation of the algebra is over — a handle, a cell, a channel, a description of an effect — and for a value or an operation, which no value is of. Which carriers' values may hold a type is [`Carrier::holds_types`]'s.
+    pub fn values_carrier(&self) -> Option<Carrier> {
+        Some(match self {
+            Intrinsic::NatType => Carrier::Natural,
+            Intrinsic::IntType => Carrier::Integer,
+            Intrinsic::BoolType => Carrier::Boolean,
+            Intrinsic::ByteType => Carrier::Byte,
+            Intrinsic::FltType => Carrier::Float,
+            Intrinsic::BytesType => Carrier::Bytes,
+            Intrinsic::ListType(_) => Carrier::List,
+            _ => return None,
+        })
+    }
+
     /// Where `operand` — this conversion's operand, reduced — is the result of a conversion this one undoes, that conversion's own operand: `Nat/to_byte(Byte/to_nat(b))` is `b`, and `Flt/of_le_bytes(Flt/to_le_bytes(x))` is `x`. Which conversions undo which is `curios-algebra`'s `Operation::undoes`; this reads the two declarations. `None` for anything else.
     ///
     /// **A round trip is the inversion of a constructor, not an equation about arithmetic.** A narrowing states the bound that makes its operand a value of the narrower carrier, so the value it builds *is* that operand, and reading it back is the operand again. That is what keeps a bound established on one side of a round trip standing after it.

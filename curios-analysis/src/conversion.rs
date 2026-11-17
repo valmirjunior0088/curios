@@ -523,12 +523,10 @@ fn same_value(produced: &Produced, this: &Intrinsic, that: &Intrinsic) -> bool {
         return false;
     };
     let carrier = match &**type_ {
-        Subterm::Intrinsic(Intrinsic::NatType) => Carrier::Natural,
-        Subterm::Intrinsic(Intrinsic::IntType) => Carrier::Integer,
-        Subterm::Intrinsic(Intrinsic::BoolType) => Carrier::Boolean,
-        Subterm::Intrinsic(Intrinsic::ByteType) => Carrier::Byte,
-        Subterm::Intrinsic(Intrinsic::FltType) => Carrier::Float,
-        Subterm::Intrinsic(Intrinsic::BytesType) => Carrier::Bytes,
+        Subterm::Intrinsic(former) => match former.values_carrier() {
+            Some(carrier) if !carrier.holds_types() => carrier,
+            _ => return false,
+        },
         _ => return false,
     };
     let (this, that) = (Term::intrinsic(this.clone()), Term::intrinsic(that.clone()));

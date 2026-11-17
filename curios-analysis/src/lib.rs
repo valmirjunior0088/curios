@@ -40,6 +40,9 @@ pub use specialize::{reads_solved, retyped, scrutinee_solution};
 mod unfolding;
 use unfolding::*;
 
+mod data;
+use data::*;
+
 mod reading;
 use reading::*;
 
@@ -54,6 +57,7 @@ mod variance;
 pub use variance::{HeldLevels, VarianceVectors, held_by, held_levels, variance_vectors};
 
 mod totality;
+use totality::*;
 pub use totality::{
     Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds, blocker,
     call_path, decide, definition_applications, grade, group_applications, group_parts,

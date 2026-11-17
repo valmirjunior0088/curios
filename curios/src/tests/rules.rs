@@ -25,6 +25,7 @@ mod one_inhabitant;
 mod plicity;
 mod positivity_composition;
 mod positivity_computed_type;
+mod positivity_datum;
 mod positivity_index;
 mod positivity_occurrence;
 mod proposition;
