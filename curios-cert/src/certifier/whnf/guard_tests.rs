@@ -2,10 +2,11 @@
 
 use {
     super::test_support::*,
+    crate::certifier::by_value::test_support::*,
     crate::{test_support::*, *},
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
     curios_common::fill,
-    curios_core::{Cost, Exhaustion, Term},
+    curios_core::{Cost, Exhaustion, Reducer, Term},
 };
 
 /// `witness`, a structure of one method comparing two numbers by `${compared}`: the stand-in for a dispatch, projected and applied as elaboration spells a concept call.
@@ -25,7 +26,9 @@ fn a_comparison_refined_answers_its_dual_negated() {
         certifier
             .refine(guard.clone(), term("false"))
             .expect("the equation records");
-        let reduced = whnf(certifier, dual.clone()).expect("a dual probe reduces");
+        let reduced = certifier
+            .reduce(dual.clone())
+            .expect("a dual probe reduces");
         assert_eq!(reduced.as_bool(), Some(true));
         assert_eq!(
             certifier.refinement_of(&dual),
@@ -48,7 +51,9 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
 
     let mut control = certifier();
     let [written_length, _, _] = under(&mut control, hypotheses, terms);
-    let folded = whnf(&mut control, written_length.clone()).expect("the operand reduces");
+    let folded = control
+        .reduce(written_length.clone())
+        .expect("the operand reduces");
     assert_ne!(
         folded, written_length,
         "the operand has to fold, or the probe never leaves the written spelling",
@@ -62,7 +67,7 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
             .refine(below.clone(), term("true"))
             .expect("the equation records");
 
-        let reduced = whnf(certifier, within.clone()).expect("the bound reduces");
+        let reduced = certifier.reduce(within.clone()).expect("the bound reduces");
         assert_eq!(
             reduced,
             term("true"),
@@ -71,7 +76,7 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
     });
 
     // Outside the arm it is stuck again: the seam is a second spelling to look under, never a fact of its own.
-    let reduced = whnf(&mut certifier, within).expect("the bound reduces");
+    let reduced = certifier.reduce(within).expect("the bound reduces");
     assert!(
         reduced.as_bool().is_none(),
         "the successor spelling answered outside the arm that recorded the guard: {reduced:?}",
@@ -96,7 +101,7 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
     );
 
     assert_eq!(
-        whnf(&mut certifier, dual.clone()),
+        certifier.reduce(dual.clone()),
         Ok(term("false")),
         "the procedure has to decide the probe, or the arm is not dead"
     );
@@ -106,7 +111,7 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
             .refine(guard, term("false"))
             .expect("the equation records");
 
-        whnf(certifier, dual)
+        certifier.reduce(dual)
     });
 
     assert_eq!(answered, Ok(term("true")));
@@ -132,9 +137,9 @@ fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
             .refine(guard, term("false"))
             .expect("the equation records");
 
-        whnf(certifier, closed.clone())
+        certifier.reduce(closed.clone())
     });
-    let outside = whnf(&mut certifier, closed);
+    let outside = certifier.reduce(closed);
 
     assert_eq!(inside, Ok(term("true")), "the equation is not this term's");
     assert_eq!(
@@ -176,7 +181,12 @@ fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
         let mut certifier = certifier();
         let [guard, comparison] = dispatched_through(&mut certifier, layers);
 
-        (resolved_spelling(&mut certifier, &guard), comparison)
+        (
+            reading(&mut certifier, |certifier| {
+                resolved_spelling(certifier, &guard)
+            }),
+            comparison,
+        )
     };
 
     // A function is one layer, and seeing that what the last one opened to is no application is one more.
@@ -218,7 +228,9 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
 
     let (mut control, _, dual) = certifier_over(budget);
     assert!(
-        whnf(&mut control, dual).is_err_and(|spent| spent.is_exhausted()),
+        control
+            .reduce(dual)
+            .is_err_and(|spent| spent.is_exhausted()),
         "the operand has to be unaffordable, or the subject's answer proves nothing"
     );
 
@@ -228,7 +240,7 @@ fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
             .refine(guard, term("false"))
             .expect("resolving reduces no operand");
 
-        whnf(certifier, dual)
+        certifier.reduce(dual)
     });
 
     assert_eq!(answered, Ok(term("true")));
@@ -252,9 +264,16 @@ fn an_operand_with_no_value_is_compared_as_written() {
         ),
     );
     assert!(
-        whnf(&mut certifier, undefined).is_err_and(|error| !error.is_exhausted()),
+        certifier
+            .reduce(undefined)
+            .is_err_and(|error| !error.is_exhausted()),
         "the operand has a value, so the probe is not put to the question"
     );
 
-    assert_eq!(super::canonical_operands(&mut certifier, &probe), Ok(probe));
+    assert_eq!(
+        reading(&mut certifier, |certifier| {
+            super::canonical_operands(certifier, &probe)
+        }),
+        Ok(probe)
+    );
 }

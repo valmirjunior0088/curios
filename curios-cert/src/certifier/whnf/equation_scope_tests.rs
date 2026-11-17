@@ -181,7 +181,9 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
     let mut control = Certifier::new(budget, SYNTAX);
     let [unaffordable] = under(&mut control, "n: #NatType", &key);
     assert!(
-        whnf(&mut control, unaffordable).is_err_and(|spent| spent.is_exhausted()),
+        control
+            .reduce(unaffordable)
+            .is_err_and(|spent| spent.is_exhausted()),
         "the fold has to be unaffordable, or the subject's answer proves nothing"
     );
 
@@ -191,7 +193,7 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
         certifier
             .refine(key.clone(), term("0"))
             .expect("the equation records");
-        whnf(certifier, key.clone())
+        certifier.reduce(key.clone())
     });
 
     assert_eq!(answered, Ok(term("0")));
@@ -209,13 +211,13 @@ const FOLDING: &str = "#NatAdd(n, #NatAdd(30, 34)),";
 fn the_two_consultation_points_answer_one_equation_alike() {
     let mut control = certifier();
     let [written] = under(&mut control, "n: #NatType", FOLDING);
-    let key = whnf(&mut control, written.clone()).expect("reduces");
+    let key = control.reduce(written.clone()).expect("reduces");
     assert_ne!(
         key, written,
         "the inner operand has to fold, or the two probes below are one probe"
     );
     assert_eq!(
-        whnf(&mut control, key.clone()),
+        control.reduce(key.clone()),
         Ok(key.clone()),
         "a stored key is a normal form, so re-reducing it is identity"
     );
@@ -227,7 +229,7 @@ fn the_two_consultation_points_answer_one_equation_alike() {
             .refine(key.clone(), term("0"))
             .expect("the equation records");
 
-        (whnf(certifier, key.clone()), whnf(certifier, written))
+        (certifier.reduce(key.clone()), certifier.reduce(written))
     });
 
     assert_eq!(at_key, Ok(term("0")), "the term is the key: the early ask");
@@ -249,7 +251,7 @@ fn the_two_consultation_points_answer_one_equation_alike() {
 fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
     let mut control = certifier();
     let [written] = under(&mut control, "n: #NatType", FOLDING);
-    let reduct = whnf(&mut control, written.clone()).expect("reduces");
+    let reduct = control.reduce(written.clone()).expect("reduces");
     assert_ne!(
         reduct, written,
         "the inner operand has to fold, or the probe below is the written spelling's"
@@ -262,7 +264,7 @@ fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
             .refine(written, term("0"))
             .expect("the equation records");
 
-        whnf(certifier, reduct.clone())
+        certifier.reduce(reduct.clone())
     });
 
     assert_eq!(answered, Ok(term("0")));
@@ -281,7 +283,7 @@ fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
 
     let mut control = certifier();
     let [_, outer] = under(&mut control, "n: #NatType", nested);
-    let reduct = whnf(&mut control, outer.clone()).expect("reduces");
+    let reduct = control.reduce(outer.clone()).expect("reduces");
     assert_ne!(
         reduct, outer,
         "the written spelling has to fold, or the probe below is the written spelling's"
@@ -299,7 +301,7 @@ fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
                 .refine(inner, term("5"))
                 .expect("the equation records");
 
-            whnf(certifier, reduct.clone())
+            certifier.reduce(reduct.clone())
         })
     });
 
@@ -327,9 +329,9 @@ fn a_local_free_term_is_never_refined() {
             .refine(open, term("0"))
             .expect("the equation records");
 
-        whnf(certifier, closed.clone())
+        certifier.reduce(closed.clone())
     });
-    let outside = whnf(&mut certifier, closed);
+    let outside = certifier.reduce(closed);
 
     assert_eq!(inside, Ok(term("7")), "the equation is not this term's");
     assert_eq!(
@@ -351,12 +353,12 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does(
         declared(certifier, KONST);
         let closed = term("/konst(1)");
 
-        let before = whnf(certifier, closed.clone());
+        let before = certifier.reduce(closed.clone());
         let inside = certifier.scoped(|certifier| {
             certifier
                 .refine(closed.clone(), term("0"))
                 .expect("asking to record a local-free equation is not an error");
-            whnf(certifier, closed.clone())
+            certifier.reduce(closed.clone())
         });
 
         [before, inside]
@@ -398,7 +400,7 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
             .refine(written, term("0"))
             .expect("the equation records");
 
-        whnf(certifier, m)
+        certifier.reduce(m)
     });
 
     assert_eq!(answered, Ok(term("0")));
@@ -445,7 +447,10 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
             .refine(written.clone(), term("true"))
             .expect("the equation records");
         assert_eq!(
-            whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
+            certifier
+                .reduce(at_zero.clone())
+                .expect("reduces")
+                .as_bool(),
             None,
             "the instance is no term the guard was written as, or the arm below proves nothing"
         );
@@ -454,7 +459,10 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
             certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
-                whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
+                certifier
+                    .reduce(at_zero.clone())
+                    .expect("reduces")
+                    .as_bool(),
                 Some(true),
                 "the equation answers at the arm's solution"
             );
@@ -466,7 +474,10 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
         });
 
         assert_eq!(
-            whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
+            certifier
+                .reduce(at_zero.clone())
+                .expect("reduces")
+                .as_bool(),
             None,
             "the restatement does not outlive the arm"
         );
@@ -513,7 +524,10 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
             certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
-                whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
+                certifier
+                    .reduce(at_zero.clone())
+                    .expect("reduces")
+                    .as_bool(),
                 None
             );
         });

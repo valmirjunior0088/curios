@@ -6,7 +6,7 @@
 
 use {
     super::{Pairs, compare, ground},
-    crate::{Certifier, Error},
+    crate::{ByValue, Certifier, Error},
     curios_analysis::{
         Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
         connectives_agree_classed, convert_classed, convert_intrinsics, foreign_congruence,
@@ -19,7 +19,7 @@ use {
 ///
 /// The chain that decides the pair or leaves what is left to compare is `curios-analysis`'s `convert_intrinsics`, the elaborator's too. What is the certifier's is the discharge: the atoms the chain hands back are classed by the certifier's own comparison, a residual is compared at `Type`, the levels by entailment, and each operand in order at its declared type, all inside the pairs the goal stands in, stopping at the first that fails.
 pub fn convert_intrinsic(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Intrinsic,
     that: &Intrinsic,
@@ -54,7 +54,7 @@ pub fn convert_intrinsic(
 
 /// Whether `this` and `that`, two host calls, are one call: `curios-analysis`'s `foreign_congruence` says which operands to compare, and at what, as it says it to the elaborator.
 pub fn convert_foreign(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -67,7 +67,7 @@ pub fn convert_foreign(
 
 /// Each operand pair of a congruence in order at its declared type, a type operand at `Type`, stopping at the first that fails.
 fn obligations_convert(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     operands: Vec<Obligation>,
 ) -> Result<bool, Error> {
@@ -85,7 +85,7 @@ fn obligations_convert(
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
 pub fn connectives_convert(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -106,12 +106,27 @@ pub fn connectives_convert(
 }
 
 /// Which of `atoms` are one: each compared at `Type` with the representative of every class opened before it, inside the pairs of the goal the pair belongs to, as an operand of the congruence is. A comparison that fails leaves nothing behind, a pair being released where the comparison of its unfoldings returns.
-fn classes(certifier: &mut Certifier, pairs: &mut Pairs, atoms: &[Term]) -> Result<Classes, Error> {
+fn classes(certifier: &mut ByValue, pairs: &mut Pairs, atoms: &[Term]) -> Result<Classes, Error> {
     curios_profile::profile!("convert::classes");
     Classes::of(atoms, |this, that| ground(certifier, pairs, this, that))
 }
 
-/// The certifier is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction.
+/// The certifier is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction. A reading's reduction trusts what it is handed ([`ByValue`]).
+impl Driver for ByValue<'_, '_> {
+    fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
+        intrinsic
+    }
+
+    fn solving_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
+        None
+    }
+
+    fn syntax(&self) -> SyntaxRegistry {
+        Certifier::syntax(self)
+    }
+}
+
+/// [`ByValue`]'s driver, for an analysis driven over the certifier itself: its reduction is a door, which reads each term it is handed by value first.
 impl Driver for Certifier<'_> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         intrinsic

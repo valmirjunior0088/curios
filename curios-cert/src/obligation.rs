@@ -13,7 +13,7 @@
 //! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. No [`Definition`](curios_core::Definition) carries elaboration's totality, judged or carried, so every verdict here is this crate's own.
 
 use {
-    super::{Certifier, Error, Globals, Position, Sort, declared_into_prop},
+    super::{ByValue, Certifier, Error, Globals, Position, declared_into_prop},
     curios_analysis::Erased,
     curios_core::{
         Enter, Foreign, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
@@ -197,43 +197,43 @@ pub fn check_positions(
     Ok(())
 }
 
-/// Whether a value of `type_` is a proof: `type_` is a proposition, or a function that ultimately answers one. It is what this certifier states a binder binds where it marks one ([`curios_core::Scope::binds_proof`]), read of the binder's type by its own rules, and never what a module arriving says of it (`certifier::stating`). A sort is neither, so a binder at a type bears no mark: conversion reads a type's reduct, and a type is evaluated before it is bound.
-pub fn bears_proof(certifier: &mut Certifier, type_: &Term) -> Result<bool, Error> {
-    if matches!(erased_half(certifier, type_)?, Some(Erased::Proof)) {
-        return Ok(true);
-    }
-    let reduced = certifier.reduce_forced(type_.clone())?;
-    let Subterm::FuncType(FuncType { telescope }) = &*reduced else {
-        return Ok(false);
-    };
-
-    certifier.scoped(|certifier| {
-        let mut cursor = telescope.cursor();
-        while let Some((_, domain)) = cursor.entry() {
-            certifier.advance_assumed(&mut cursor, &domain);
+impl ByValue<'_, '_> {
+    /// Whether a value of `type_` is a proof: `type_` is a proposition, or a function that ultimately answers one. It is what this certifier states a binder binds where it marks one ([`curios_core::Scope::binds_proof`]), read of the binder's type by its own rules, and never what a module arriving says of it (`certifier::stating`). A sort is neither, so a binder at a type bears no mark: conversion reads a type's reduct, and a type is evaluated before it is bound.
+    pub fn bears_proof(&mut self, type_: &Term) -> Result<bool, Error> {
+        if matches!(self.erased_half(type_)?, Some(Erased::Proof)) {
+            return Ok(true);
         }
-        let codomain = cursor.body().expect("a cursor past every entry");
+        let reduced = self.reduce_forced(type_.clone())?;
+        let Subterm::FuncType(FuncType { telescope }) = &*reduced else {
+            return Ok(false);
+        };
 
-        bears_proof(certifier, &codomain)
-    })
-}
+        self.scoped(|certifier| {
+            let mut cursor = telescope.cursor();
+            while let Some((_, domain)) = cursor.entry() {
+                certifier.advance_assumed(&mut cursor, &domain);
+            }
+            let codomain = cursor.body().expect("a cursor past every entry");
 
-/// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.
-///
-/// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
-pub fn erased_half(certifier: &mut Certifier, type_: &Term) -> Result<Option<Erased>, Error> {
-    // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
-    if declared_into_prop(certifier, type_)?.is_some() {
-        return Ok(Some(Erased::Proof));
+            certifier.bears_proof(&codomain)
+        })
     }
 
-    let reduced = certifier.reduce_forced(type_.clone())?;
-    // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::Sort) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
-    if matches!(&*reduced, Subterm::Sort(_)) {
-        return Ok(Some(Erased::Type));
-    }
+    /// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.
+    ///
+    /// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
+    pub fn erased_half(&mut self, type_: &Term) -> Result<Option<Erased>, Error> {
+        // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
+        if declared_into_prop(self, type_)?.is_some() {
+            return Ok(Some(Erased::Proof));
+        }
 
-    Ok(Sort::of(certifier, type_)?
-        .is_prop()
-        .then_some(Erased::Proof))
+        let reduced = self.reduce_forced(type_.clone())?;
+        // A term at a sort is a type, and erasure deletes it wholesale. This is the one question the structural test answers — what the *runtime* observes — and it is not the question [`carries_information`](crate::carries_information) asks, which is what *conversion* observes and where a type counts in full. Reading the two as one predicate would certify a closed inhabitant of `False`.
+        if matches!(&*reduced, Subterm::Sort(_)) {
+            return Ok(Some(Erased::Type));
+        }
+
+        Ok(self.sort_of(type_)?.is_prop().then_some(Erased::Proof))
+    }
 }

@@ -29,9 +29,10 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Certifier, Converted, Error, InductAt, Sort, synth_neutral, unfold_spelling},
+    super::{ByValue, Certifier, Converted, Error, InductAt, unfold_spelling},
     curios_analysis::{
-        Classes, Within, case_target_indices, pinned_instance, struct_reaches_itself,
+        Classes, Within, case_target_indices, holds_no_type, one_up_to_instances, pinned_instance,
+        struct_reaches_itself,
     },
     curios_common::recurse,
     curios_core::{
@@ -42,23 +43,13 @@ use {
     },
 };
 
-/// Whether `this` and `that` are definitionally equal at `type_`.
-pub fn convert(
-    certifier: &mut Certifier,
-    type_: &Term,
-    this: &Term,
-    that: &Term,
-) -> Result<bool, Error> {
-    curios_profile::profile!("convert");
-    let mut pairs = Pairs::default();
-
-    // Conversion reads by value, as reduction does and for its reason: it compares spellings, keys its verdicts on them, and opens no `let`.
-    let (type_, this, that) = (
-        certifier.by_value(type_),
-        certifier.by_value(this),
-        certifier.by_value(that),
-    );
-    certifier.reading(|certifier| compare(certifier, &mut pairs, &type_, &this, &that))
+impl ByValue<'_, '_> {
+    /// Whether `this` and `that` are definitionally equal at `type_`.
+    ///
+    /// **By value, as reduction reads and for its reason:** conversion compares spellings, keys its verdicts on them, and opens no `let` ([`ByValue`]).
+    pub fn convert(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Error> {
+        compare(self, &mut Pairs::default(), type_, this, that)
+    }
 }
 
 /// The pairs of heads conversion is unfolding against each other on the way to the goal in hand.
@@ -139,15 +130,12 @@ impl Pairs {
 ///
 /// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]), the budget spent on entry standing behind it — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted. A family's former is the member that reproduces nothing, and a refusal of one is left to the nodes it builds ([`projects_a_former`]).
 fn compare(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     type_: &Term,
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
-    for term in [type_, this, that] {
-        certifier.debug_assert_by_value(term, "conversion");
-    }
     recurse(|| {
         certifier.spend(Cost::STEP)?;
 
@@ -157,7 +145,7 @@ fn compare(
         }
 
         // Proof irrelevance. Deliberately before reduction: the point is that neither side is examined, and reducing a proof in order to discover it equals another proof is work whose answer was already known.
-        if Sort::of(certifier, type_)?.is_prop() {
+        if certifier.sort_of(type_)?.is_prop() {
             return Ok(true);
         }
 
@@ -195,7 +183,7 @@ enum Decided {
 
 /// The rules [`compare`] decides a goal it could not discharge at once by, in their order, inside the comparison of its own [`Pairs::rested`] runs it as.
 fn decide(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     type_: &Term,
     this: &Term,
@@ -236,7 +224,7 @@ fn decide(
 
 /// A goal the spines of one definition did not decide: eta where its type directs one, and the two sides' heads otherwise.
 fn by_the_type(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     type_: &Term,
     this: &Term,
@@ -268,7 +256,7 @@ fn by_the_type(
 
 /// A goal no eta directs, at `at`, its type in weak-head normal form: both sides forced, and their heads compared.
 fn forced(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     at: &Term,
     this: &Term,
@@ -306,7 +294,7 @@ fn forced(
 ///
 /// A lookup that fails for any reason but a spent budget is no answer, and the pair goes on untyped; so does a pair one side of which is a lambda or a tuple literal, which is decided by its parts.
 fn by_their_own_type(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -327,8 +315,8 @@ fn by_their_own_type(
         )?)
 }
 
-/// The type a lookup reads for one side of a pair its position handed no type: a neutral's, off its head's binder or declaration ([`synth_neutral`]), and a constructor's value's off its declaration — the family at the value's parameters and at the index targets its constructor states for its payload. Each is a lookup and a substitution, and neither reaches conversion. `None` where the side is neither, or its declaration refuses the occurrence.
-fn looked_up(certifier: &mut Certifier, term: &Term) -> Result<Option<Term>, Error> {
+/// The type a lookup reads for one side of a pair its position handed no type: a neutral's, off its head's binder or declaration ([`ByValue::synth_neutral`]), and a constructor's value's off its declaration — the family at the value's parameters and at the index targets its constructor states for its payload. Each is a lookup and a substitution, and neither reaches conversion. `None` where the side is neither, or its declaration refuses the occurrence.
+fn looked_up(certifier: &mut ByValue, term: &Term) -> Result<Option<Term>, Error> {
     match &**term {
         Subterm::Variant(Variant {
             name,
@@ -355,7 +343,7 @@ fn looked_up(certifier: &mut Certifier, term: &Term) -> Result<Option<Term>, Err
                 targets,
             )))
         }
-        _ if names_a_type(term) => Ok(synth_neutral(certifier, term).probed()?.flatten()),
+        _ if names_a_type(term) => Ok(certifier.synth_neutral(term).probed()?.flatten()),
         _ => Ok(None),
     }
 }
@@ -367,7 +355,7 @@ fn looked_up(certifier: &mut Certifier, term: &Term) -> Result<Option<Term>, Err
 /// **It ends at a struct that reaches itself.** A struct met again while it is being judged answers no where its declaration reaches itself ([`struct_reaches_itself`]): a declaration is opened by this walk and by no reduction, so nothing else would end it, and the answer is the refusing one. One met again through a parameter it was instantiated at is judged again: its declaration abbreviates a record of its fields, and the parameter is a part of the type the walk began at, or what a definition that ends made of one. Every other type is forced as eta by the goal's type forces it, a recursive definition's call unfolding as far as it computes, and is bounded as that walk is, by the budget.
 ///
 /// A field's type is judged under the fields before it, opened at binders, so one that computes from an earlier field counts only where it reduces whatever that field is. A type no sort judgment classifies, and an occurrence its declaration refuses, answer no.
-fn one_inhabitant(certifier: &mut Certifier, type_: &Term) -> Result<bool, Error> {
+fn one_inhabitant(certifier: &mut ByValue, type_: &Term) -> Result<bool, Error> {
     curios_profile::profile!("convert::one_inhabitant");
     inhabited_once(certifier, type_, &mut Vec::new())
 }
@@ -376,7 +364,7 @@ fn one_inhabitant(certifier: &mut Certifier, type_: &Term) -> Result<bool, Error
 ///
 /// A function type is a proposition where its codomain is one and a record where every field is, so each is read through to what it ends in, and a sort is asked only of what is neither: no part of the type is walked twice.
 fn inhabited_once(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     type_: &Term,
     entered: &mut Vec<Global>,
 ) -> Result<bool, Error> {
@@ -386,8 +374,9 @@ fn inhabited_once(
         let Some(at) = certifier.reduce_forced(type_.clone()).probed()? else {
             return Ok(false);
         };
-        let proposition = |certifier: &mut Certifier| -> Result<bool, Error> {
-            Ok(Sort::of(certifier, &at)
+        let proposition = |certifier: &mut ByValue| -> Result<bool, Error> {
+            Ok(certifier
+                .sort_of(&at)
                 .probed()?
                 .is_some_and(|sort| sort.is_prop()))
         };
@@ -436,7 +425,7 @@ fn inhabited_once(
 
 /// Whether every field of `telescope` has one inhabitant, each judged under the fields before it.
 fn fields_inhabited_once(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     telescope: Telescope<()>,
     entered: &mut Vec<Global>,
 ) -> Result<bool, Error> {
@@ -461,7 +450,7 @@ fn fields_inhabited_once(
 ///
 /// Only heads that would unfold qualify, because a head with nothing to unfold reaches the same spine comparison in [`structural`] anyway, and asking twice would double the cost of every mismatch.
 fn one_definition_by_its_spines(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -506,7 +495,7 @@ fn one_definition_by_its_spines(
 ///
 /// Groups are matched by position, which is what makes one index of two a pair. A group binds no universe, so both sides' members spell the levels of the declaration this comparison is judged in and the congruence reads them as it reads any other pair of terms — which is why no width is consulted here, where one once refused the pair outright.
 fn two_groups(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -562,7 +551,7 @@ fn two_groups(
 ///
 /// This is why `f` converts with `(x) => f(x)` without either being reduced into the other's shape — the rule is stated once, here, instead of as a special case in every structural arm.
 fn eta_function(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     telescope: Telescope<Term>,
     this: &Term,
@@ -592,7 +581,7 @@ fn eta_function(
 ///
 /// **At the empty Σ this is unit eta.** No component is left to compare, so any two terms convert at `{}` without either being read: the type has one inhabitant, and conversion is asked about two terms of the goal's type, the invariant irrelevance discharges a proposition on. It composes with the rules above it — two terms at a record of units, or two functions into one, convert by the eta that reaches the unit — and where a child is compared at `Type` the same verdict is read off the type a lookup gives ([`one_inhabitant`]).
 fn eta_tuple(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     telescope: Telescope<()>,
     this: &Term,
@@ -621,7 +610,7 @@ fn eta_tuple(
 ///
 /// The goal's type is read by one rule, a literal's eta, and only to refuse it ([`another_former`]).
 fn structural(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     at: &Term,
     this: &Term,
@@ -938,7 +927,7 @@ fn structural(
 ///
 /// `None` for the telescope keeps the grounded comparison: a declaration the registry seeding refused has no types to compare at, and inventing some would be worse than the concession. Shared by the three nominal shapes that carry parameters — a struct type, a struct literal and a constructor value — which reach it from `StructDecl::arity`'s outer half and `InductDecl::arity`'s, the same halves `induct_type_args` walks for a family.
 fn params_at<B: Bound>(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     telescope: Option<Telescope<B>>,
     this: &[Term],
@@ -988,7 +977,7 @@ fn induct_params(
 
 /// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Same(@P)(p, q)`, a family indexed by two proofs of a `P : Prop`, converts with `Same(@P)(p, p)`, because no proof of a proposition is distinguishable from another. The struct and constructor analogs are [`params_at`]'s, which reads the same outer telescope this does.
 fn induct_type_args(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     name: &Global,
     universes: &Universes,
@@ -1070,7 +1059,7 @@ fn another_struct(certifier: &Certifier, at: &Term, literal: &Struct) -> bool {
 ///
 /// **The invariant and the restriction are [`struct_eta`]'s.** Conversion is asked about two terms of one type, so `other` is a function of the lambda's type and applying it is typed; and the walk is taken against a neutral alone, the proxy for that invariant where nothing checks it.
 fn function_eta(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     function: &Func,
     other: &Term,
@@ -1094,7 +1083,7 @@ fn function_eta(
 ///
 /// A literal with no field compares nothing and answers `true`, as an empty struct's does at [`struct_eta`]: `{}` has one inhabitant, and a neutral of the literal's type is it.
 fn tuple_eta(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     literal: &Tuple,
     other: &Term,
@@ -1114,7 +1103,7 @@ fn tuple_eta(
 ///
 /// That invariant is checked where the goal states a type and nowhere else. At a goal whose type is a former other than the literal's own struct, [`structural`] refuses the rule before it reaches here ([`another_struct`]). Under [`ground`] the goal's type is `Type`, which says nothing, and there the walk is restricted to neutrals as a proxy, not a second guarantee: a `Var` is as arbitrary a term as any other, so what the restriction buys is that a pair arriving from a caller that broke the invariant is unlikely to be *shaped* like an inhabitant — thin, and worth knowing it is thin, because an all-`Prop` or empty struct's field walk compares nothing and answers `true`.
 fn struct_eta(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     literal: &Struct,
     other: &Term,
@@ -1132,7 +1121,7 @@ fn struct_eta(
         };
         cursor.advance(field.clone());
 
-        if Sort::of(certifier, &type_)?.is_prop() {
+        if certifier.sort_of(&type_)?.is_prop() {
             continue;
         }
 
@@ -1151,7 +1140,7 @@ fn struct_eta(
 ///
 /// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
 fn unfolded_retry(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -1246,7 +1235,7 @@ fn applied_head(term: &Term) -> &Term {
 }
 
 /// The type of two eliminations' scrutinee, in weak-head normal form, read by a lookup once the two are one term. `None` where no lookup types it, which leaves the arms' binders at the stand-in.
-fn scrutinee_type(certifier: &mut Certifier, head: &Term) -> Result<Option<Term>, Error> {
+fn scrutinee_type(certifier: &mut ByValue, head: &Term) -> Result<Option<Term>, Error> {
     let Some(type_) = looked_up(certifier, head)? else {
         return Ok(None);
     };
@@ -1255,7 +1244,7 @@ fn scrutinee_type(certifier: &mut Certifier, head: &Term) -> Result<Option<Term>
 }
 
 /// A binder opened at `type_`.
-fn assumed(certifier: &mut Certifier, type_: &Term) -> Term {
+fn assumed(certifier: &mut ByValue, type_: &Term) -> Term {
     let binder = certifier.fresh(None);
     certifier.assume(&binder, type_);
 
@@ -1263,7 +1252,7 @@ fn assumed(certifier: &mut Certifier, type_: &Term) -> Term {
 }
 
 /// A cons arm's binders: the carrier's own domains.
-fn cons_binders(certifier: &mut Certifier, carrier: &Carrier) -> Vec<Term> {
+fn cons_binders(certifier: &mut ByValue, carrier: &Carrier) -> Vec<Term> {
     carrier
         .cons_domains()
         .iter()
@@ -1273,12 +1262,12 @@ fn cons_binders(certifier: &mut Certifier, carrier: &Carrier) -> Vec<Term> {
 
 /// What `compare` reads of an arm of `tag`'s case opened at its payload: the payload at the constructor's telescope over the scrutinee's parameters, where a lookup typed the scrutinee as `family` and the family states a constructor of the arm's `arity`, and opaque binders otherwise. Those are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `tests::irrelevance`'s `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
 fn ground_arm(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     family: Option<&InductAt>,
     tag: &Atom,
     arity: usize,
-    compare: impl FnOnce(&mut Certifier, &mut Pairs, &[&Term]) -> Result<bool, Error>,
+    compare: impl FnOnce(&mut ByValue, &mut Pairs, &[&Term]) -> Result<bool, Error>,
 ) -> Result<bool, Error> {
     let signature = family
         .and_then(|at| at.signature(certifier, tag).ok().flatten())
@@ -1301,7 +1290,7 @@ fn ground_arm(
     })
 }
 
-fn opaque_binders(certifier: &mut Certifier, arity: usize) -> Vec<Term> {
+fn opaque_binders(certifier: &mut ByValue, arity: usize) -> Vec<Term> {
     (0..arity)
         .map(|_| assumed(certifier, &Term::type_ground()))
         .collect()
@@ -1311,7 +1300,7 @@ fn opaque_binders(certifier: &mut Certifier, arity: usize) -> Vec<Term> {
 ///
 /// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_arm`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
 fn ground_cases(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     left: &Match,
     scrutinee: Option<&Term>,
@@ -1505,11 +1494,11 @@ fn ground_cases(
 ///
 /// Π and Σ differ *only* there — a function type's terminal is its codomain and must be compared, a record type's carries nothing — so the terminal clause is the only thing either caller states, and the shared-binder discipline every dependent comparison rests on is written once.
 fn compare_binders<B: Bound>(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: Telescope<B>,
     that: Telescope<B>,
-    terminal: impl FnOnce(&mut Certifier, &mut Pairs, B, B) -> Result<bool, Error>,
+    terminal: impl FnOnce(&mut ByValue, &mut Pairs, B, B) -> Result<bool, Error>,
 ) -> Result<bool, Error> {
     certifier.scoped(|certifier| {
         let mut walk = Lockstep::new(&this, &that);
@@ -1532,7 +1521,7 @@ fn compare_binders<B: Bound>(
 
 /// [`compare_binders`] for a Π or a λ, whose terminal is a codomain to be compared.
 fn compare_telescope(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: Telescope<Term>,
     that: Telescope<Term>,
@@ -1548,7 +1537,7 @@ fn compare_telescope(
 
 /// [`compare_binders`] for a Σ, whose terminal carries nothing.
 fn compare_field_telescope(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: Telescope<()>,
     that: Telescope<()>,
@@ -1564,7 +1553,7 @@ fn compare_field_telescope(
 ///
 /// The justification is the callers': every pair compared here is the corresponding children of two parents already shown convertible, so the two heads have one type and one telescope to assign.
 fn compare_arguments(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     left: &Apply,
     right: &Apply,
@@ -1581,16 +1570,16 @@ fn compare_arguments(
 
 /// The function type a head was bound or declared at, opened for `arity` arguments — or `None` where the head names no type, or names one that is not a function of that arity.
 ///
-/// The heads that name one are a variable, a universe instance of one, a projection of a `rec` group, whose member type the group carries, and a stuck elimination, whose result states it, and an application or a record projection of such a head ([`names_a_type`]) — each read by [`synth_neutral`], which is a lookup, a substitution and a reduction, and never reaches conversion. They are the heads the elaborator types a spine under, so `f(n)(p)` against `f(n)(q)` for two proofs meets irrelevance in both checkers or in neither.
+/// The heads that name one are a variable, a universe instance of one, a projection of a `rec` group, whose member type the group carries, and a stuck elimination, whose result states it, and an application or a record projection of such a head ([`names_a_type`]) — each read by [`ByValue::synth_neutral`], which is a lookup, a substitution and a reduction, and never reaches conversion. They are the heads the elaborator types a spine under, so `f(n)(p)` against `f(n)(q)` for two proofs meets irrelevance in both checkers or in neither.
 fn spine_telescope(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     head: &Term,
     arity: usize,
 ) -> Result<Option<Telescope<Term>>, Error> {
     if !names_a_type(head) {
         return Ok(None);
     }
-    let Some(type_) = synth_neutral(certifier, head)? else {
+    let Some(type_) = certifier.synth_neutral(head)? else {
         return Ok(None);
     };
 
@@ -1606,7 +1595,7 @@ fn spine_telescope(
     }
 }
 
-/// Whether `head` is a spine [`synth_neutral`] reads a type for: a variable, a universe instance of one, a projection of a `rec` group or a stuck elimination, under any run of applications and projections.
+/// Whether `head` is a spine [`ByValue::synth_neutral`] reads a type for: a variable, a universe instance of one, a projection of a `rec` group or a stuck elimination, under any run of applications and projections.
 fn names_a_type(head: &Term) -> bool {
     match &**head {
         Subterm::Var(var) => var.as_free().is_some(),
@@ -1619,7 +1608,7 @@ fn names_a_type(head: &Term) -> bool {
 
 /// Compare two term sequences pairwise at `Type`. Length is part of the shape.
 fn compare_each<'a>(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: impl ExactSizeIterator<Item = &'a Term>,
     that: impl ExactSizeIterator<Item = &'a Term>,
@@ -1639,7 +1628,7 @@ fn compare_each<'a>(
 
 /// Compare two field sequences at the types `telescope` assigns them, each `rest` opened at the left field's value — so a field at a proposition is discharged by irrelevance without being read, and a dependent field is compared at the type its predecessors determine. A telescope shorter than the fields, or none at all, leaves the remainder at `Type`, the untyped comparison, which can only refuse more. Length is part of the shape.
 fn compare_fields_at<B: Bound>(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     telescope: Option<Telescope<B>>,
     this: &[Term],
@@ -1669,7 +1658,7 @@ fn compare_fields_at<B: Bound>(
 
 /// [`compare`] at `Type`, for a child position whose type its head does not hand us: see the module documentation on a child with no type of its own.
 fn ground(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     pairs: &mut Pairs,
     this: &Term,
     that: &Term,
@@ -1678,20 +1667,45 @@ fn ground(
 }
 
 /// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck: a comparison of its own, inside no unfolding of the goal reduction was serving. A refusal that is no exhaustion of the budget — a term the certifier cannot compare — is that they are not known to: a question only widens what reduction sees.
-pub fn grounded(certifier: &mut Certifier, this: &Term, that: &Term) -> Result<bool, ReduceError> {
+pub fn grounded(certifier: &mut ByValue, this: &Term, that: &Term) -> Result<bool, ReduceError> {
     Ok(ground(certifier, &mut Pairs::default(), this, that)
         .probed_refusal()?
         .unwrap_or(false))
 }
 
-/// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`Certifier::plainly`]).
-pub fn asked_classes(certifier: &mut Certifier, atoms: &[Term]) -> Result<Classes, ReduceError> {
+impl ByValue<'_, '_> {
+    /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra: the second of the four questions a judgment's reduction asks (`documentation/design/soundness/a-question-reduction-asks-is-answered-by-plain-reduction.md`), beside [`asked_classes`], [`asked_within`] and [`unread_payload`].
+    ///
+    /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`ByValue::withholding`]): under its own equation the key reduces to the case value, and nothing would convert with it.
+    ///
+    /// **Two calls apart in their head's instance alone are asked about by their arguments** where the case value holds no type, as the elaborator asks them (`curios_analysis::one_up_to_instances`): an instance is no part of such a value. Where the value may hold a type, the elaborator committed the two instances one, and they are compared whole at the levels they closed at.
+    pub fn asked_scrutinee(
+        &mut self,
+        index: usize,
+        term: &Term,
+        key: &Term,
+        value: &Term,
+    ) -> Result<bool, ReduceError> {
+        curios_profile::profile!("certifier::asked_scrutinee");
+        self.plainly(|certifier| {
+            certifier.withholding(index, |certifier| match holds_no_type(value) {
+                true => one_up_to_instances(term, key, &mut |this, that| {
+                    grounded(certifier, this, that)
+                }),
+                false => grounded(certifier, term, key),
+            })
+        })
+    }
+}
+
+/// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each compared with the representative of every class opened before it, by plain reduction ([`ByValue::plainly`]).
+pub fn asked_classes(certifier: &mut ByValue, atoms: &[Term]) -> Result<Classes, ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     certifier.plainly(|certifier| Classes::of(atoms, |this, that| grounded(certifier, this, that)))
 }
 
 /// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, as [`asked_classes`] classes a stuck fold's atoms.
-pub fn asked_within(certifier: &mut Certifier, within: &mut Within) -> Result<(), ReduceError> {
+pub fn asked_within(certifier: &mut ByValue, within: &mut Within) -> Result<(), ReduceError> {
     curios_profile::profile!("convert::asked_classes");
     certifier.plainly(|certifier| within.class(|this, that| grounded(certifier, this, that)))
 }
@@ -1707,7 +1721,7 @@ struct Stated {
 ///
 /// **Nothing is read but the match.** The instance is the term's own, so what it says moves with a substitution into the term and with nothing else: no binder is looked up, and a scrutinee an arm re-types under its own name is a match that states another instance. Typing holds the instance to the scrutinee's own type where it types the match (`infer`), and a match no judgment typed is, by this reading, a spelling of its arm at the payload it states, as any term standing unchecked in a type position is what it reduces to.
 fn stated(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     stated: &Term,
     tag: &Atom,
 ) -> Result<Option<Stated>, ReduceError> {
@@ -1757,7 +1771,7 @@ fn stated(
 ///
 /// The instance the match states says the payload ([`stated`]), and the instance the constructor builds at it is put beside the stated one: where the two are one the proof can be no other value, and the match is its arm at that payload. The certifier's conversion decides it, as reduction asks of a missed equation; plain reduction asks nothing and holds the two to one spelling.
 pub fn unread_payload(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     instance: &Term,
     tag: &Atom,
 ) -> Result<Option<Option<Vec<Term>>>, ReduceError> {
@@ -1780,7 +1794,7 @@ pub fn unread_payload(
 
 /// [`unread_payload`] for a closed match, which is asked nothing: a closed proof of a family with one constructor is that constructor, so the stated instance's indices are the constructor's. What the closed machine binds an arm's payload to ([`ClosedHost::stated_payload`](curios_core::ClosedHost::stated_payload)).
 pub fn stated_payload(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     instance: &Term,
     tag: &Atom,
 ) -> Result<Option<Vec<Term>>, ReduceError> {

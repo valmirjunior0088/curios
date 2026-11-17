@@ -423,9 +423,6 @@ impl Certifier<'_> {
                 .iter()
                 .map(|argument| self.graded(argument))
                 .collect::<Vec<_>>();
-            for argument in &arguments {
-                self.debug_assert_graded(argument);
-            }
 
             // Taken out for the grading and put back: the grader reads the context while reducing through this certifier, and nothing it reduces opens an arm.
             let context = mem::take(&mut self.calls.context);
@@ -474,9 +471,6 @@ impl Certifier<'_> {
                 Segment::Field(slot) => Segment::Field(*slot),
             })
             .collect::<Vec<_>>();
-        for argument in steps.iter().flat_map(Segment::arguments) {
-            self.debug_assert_graded(argument);
-        }
         let context = mem::take(&mut self.calls.context);
         let mut by_position = vec![None; count];
         let mut graded = Ok(());
@@ -573,9 +567,6 @@ impl Certifier<'_> {
                     .iter()
                     .map(|argument| self.graded(argument))
                     .collect::<Vec<_>>();
-                for argument in &arguments {
-                    self.debug_assert_graded(argument);
-                }
                 let context = mem::take(&mut self.calls.context);
                 let call = grade(self, &context, caller, &params, base, arity, &arguments);
                 self.calls.context = context;

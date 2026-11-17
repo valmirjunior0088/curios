@@ -922,31 +922,29 @@ fn under_bindings<T>(
     tail: &Scope<Many>,
     judge: impl FnOnce(&mut Certifier, &Term) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    certifier.naming(|certifier| {
-        certifier.scoped(|certifier| {
-            let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());
+    certifier.scoped(|certifier| {
+        let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());
 
-            for (index, binding) in bindings.iter().enumerate() {
-                let refs = binders.iter().collect::<Vec<_>>();
-                let type_ = binding.type_().release(&refs);
-                let value = binding.value().release(&refs);
-
-                infer_type(certifier, &type_)?;
-                let partial = certifier.partial_groups();
-                check(certifier, &value, &type_)?;
-                let binder = certifier.fresh(tail.hint(index));
-                certifier.bind(
-                    &binder,
-                    &type_,
-                    &value,
-                    certifier.partial_groups() > partial,
-                );
-                binders.push(Term::free_var(&binder));
-            }
-
+        for (index, binding) in bindings.iter().enumerate() {
             let refs = binders.iter().collect::<Vec<_>>();
-            judge(certifier, &tail.open(&refs))
-        })
+            let type_ = binding.type_().release(&refs);
+            let value = binding.value().release(&refs);
+
+            infer_type(certifier, &type_)?;
+            let partial = certifier.partial_groups();
+            check(certifier, &value, &type_)?;
+            let binder = certifier.fresh(tail.hint(index));
+            certifier.bind(
+                &binder,
+                &type_,
+                &value,
+                certifier.partial_groups() > partial,
+            );
+            binders.push(Term::free_var(&binder));
+        }
+
+        let refs = binders.iter().collect::<Vec<_>>();
+        judge(certifier, &tail.open(&refs))
     })
 }
 

@@ -2,6 +2,7 @@
 
 use {
     super::{test_support::*, *},
+    crate::certifier::by_value::test_support::*,
     crate::test_support::*,
     curios_common::fill,
     curios_core::{Apply, Reducer, Subterm, Term},
@@ -15,7 +16,7 @@ fn beta_opens_a_function_over_its_arguments() {
     let mut certifier = certifier();
 
     assert_eq!(
-        whnf(&mut certifier, term("((x: #NatType) => x)(7)")),
+        certifier.reduce(term("((x: #NatType) => x)(7)")),
         Ok(term("7"))
     );
 }
@@ -25,7 +26,7 @@ fn delta_unfolds_a_monomorphic_definition() {
     let mut certifier = certifier();
     declared(&mut certifier, "let /f: #NatType = 3;");
 
-    assert_eq!(whnf(&mut certifier, term("/f")), Ok(term("3")));
+    assert_eq!(certifier.reduce(term("/f")), Ok(term("3")));
 }
 
 /// A definition generalized over universe parameters denotes no particular instance, so a reference to it stating none is a normal form. Unfolding it here would silently pick an instance nobody stated.
@@ -35,7 +36,7 @@ fn delta_withholds_a_universe_polymorphic_definition() {
     declared(&mut certifier, POLYMORPHIC);
 
     let occurrence = term("/f");
-    assert_eq!(whnf(&mut certifier, occurrence.clone()), Ok(occurrence));
+    assert_eq!(certifier.reduce(occurrence.clone()), Ok(occurrence));
 }
 
 /// The same definition *does* unfold through a stated instance, which is the one position that names which one it is.
@@ -45,7 +46,7 @@ fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     declared(&mut certifier, POLYMORPHIC);
 
     assert_eq!(
-        whnf(&mut certifier, term("#{universes = {levels = [0]}} /f")),
+        certifier.reduce(term("#{universes = {levels = [0]}} /f")),
         Ok(term("3"))
     );
 }
@@ -55,7 +56,7 @@ fn an_undefined_variable_is_its_own_normal_form() {
     let mut certifier = certifier();
 
     let occurrence = term("x");
-    assert_eq!(whnf(&mut certifier, occurrence.clone()), Ok(occurrence));
+    assert_eq!(certifier.reduce(occurrence.clone()), Ok(occurrence));
 }
 
 /// Zeta. The second binding refers to the first, so this also pins the left-to-right order: `y` must see `x`'s value, not `x` itself.
@@ -65,7 +66,7 @@ fn zeta_substitutes_let_bindings_left_to_right() {
 
     let block = term("(let x: #NatType = 2; let y: #NatType = #NatAdd(x, 3); y)");
 
-    assert_eq!(whnf(&mut certifier, block), Ok(term("5")));
+    assert_eq!(certifier.reduce(block), Ok(term("5")));
 }
 
 /// The intrinsic folds are shared with the elaborator through `Reducer`; this is the certifier reaching them with its own strategy underneath.
@@ -74,7 +75,7 @@ fn intrinsics_fold_through_the_reducer_seam() {
     let mut certifier = certifier();
     declared(&mut certifier, "let /x: #NatType = 2;");
 
-    assert_eq!(whnf(&mut certifier, term("#NatAdd(/x, 2)")), Ok(term("4")));
+    assert_eq!(certifier.reduce(term("#NatAdd(/x, 2)")), Ok(term("4")));
 }
 
 #[test]
@@ -85,7 +86,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
         "#{goal = #NatType} match #{node = Variant} /E/some(42) | none() => 0 | some(a) => a end",
     );
 
-    assert_eq!(whnf(&mut certifier, matched), Ok(term("42")));
+    assert_eq!(certifier.reduce(matched), Ok(term("42")));
 }
 
 #[test]
@@ -95,7 +96,7 @@ fn iota_peels_one_successor_off_a_nat() {
     // `match 3 { 0 => 0 | succ(pred, _) => pred }` peels exactly one layer.
     let matched = term("#{goal = #NatType} match 3 | 0 => 0 | pred + 1 => pred end");
 
-    assert_eq!(whnf(&mut certifier, matched), Ok(term("2")));
+    assert_eq!(certifier.reduce(matched), Ok(term("2")));
 }
 
 /// The switch of `scrutinee` over the literals `1` and `2`, falling through to `99`.
@@ -110,14 +111,14 @@ fn switch(scrutinee: &str) -> Term {
 fn a_switch_takes_the_case_a_literal_names() {
     let mut certifier = certifier();
 
-    assert_eq!(whnf(&mut certifier, switch("2")), Ok(term("20")));
+    assert_eq!(certifier.reduce(switch("2")), Ok(term("20")));
 }
 
 #[test]
 fn a_switch_falls_through_to_its_default() {
     let mut certifier = certifier();
 
-    assert_eq!(whnf(&mut certifier, switch("7")), Ok(term("99")));
+    assert_eq!(certifier.reduce(switch("7")), Ok(term("99")));
 }
 
 /// A symbolic scrutinee decides nothing, so the switch rebuilds as the neutral term it is rather than guessing an arm.
@@ -125,7 +126,9 @@ fn a_switch_falls_through_to_its_default() {
 fn a_switch_on_a_symbolic_scrutinee_stays_stuck() {
     let mut certifier = certifier();
 
-    let reduced = whnf(&mut certifier, switch("n")).expect("a stuck term still reduces");
+    let reduced = certifier
+        .reduce(switch("n"))
+        .expect("a stuck term still reduces");
     assert!(matches!(&*reduced, Subterm::Match(_)));
 }
 
@@ -135,14 +138,14 @@ fn a_bool_match_dispatches_on_a_literal() {
 
     let matched = term("#{goal = #NatType} match true | false => 0 | true => 1 end");
 
-    assert_eq!(whnf(&mut certifier, matched), Ok(term("1")));
+    assert_eq!(certifier.reduce(matched), Ok(term("1")));
 }
 
 #[test]
 fn projection_selects_a_tuple_field() {
     let mut certifier = certifier();
 
-    assert_eq!(whnf(&mut certifier, term("(10, 20, 30).1")), Ok(term("20")));
+    assert_eq!(certifier.reduce(term("(10, 20, 30).1")), Ok(term("20")));
 }
 
 /// A constructor is projected through the flat runtime view `(tag, payload...)`, so field 1 is payload component 0 — unlike a struct, which has no tag to skip.
@@ -151,10 +154,10 @@ fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut certifier = certifier();
 
     let variant = term("(#{node = Variant} /E/some(42)).1");
-    assert_eq!(whnf(&mut certifier, variant), Ok(term("42")));
+    assert_eq!(certifier.reduce(variant), Ok(term("42")));
 
     let struct_ = term("#{field = Struct(/E, 0)} /E { 42 }.0");
-    assert_eq!(whnf(&mut certifier, struct_), Ok(term("42")));
+    assert_eq!(certifier.reduce(struct_), Ok(term("42")));
 }
 
 /// Under the binder's own mark a forwarding contracts, and across one it stays as written: `(@x) => f(x)` is a function at `(@x: Nat) -> …`, and `f` one at another type. `f` is assumed, so no binder a probe mints is `f` again.
@@ -167,9 +170,9 @@ fn eta_contracts_a_function_that_only_forwards() {
         "f, (x: #NatType) => f(x), (@x: #NatType) => f(@x), (@x: #NatType) => f(x)",
     );
 
-    assert_eq!(whnf(&mut certifier, forwarding), Ok(f.clone()));
-    assert_eq!(whnf(&mut certifier, hidden), Ok(f));
-    assert_eq!(whnf(&mut certifier, across.clone()), Ok(across));
+    assert_eq!(certifier.reduce(forwarding), Ok(f.clone()));
+    assert_eq!(certifier.reduce(hidden), Ok(f));
+    assert_eq!(certifier.reduce(across.clone()), Ok(across));
 }
 
 /// The side condition is load-bearing: contracting `(x) => x(x)` would move an occurrence of `x` out from under the binder that gives it meaning.
@@ -179,7 +182,7 @@ fn eta_declines_when_the_head_mentions_the_binder() {
 
     let function = term("(x: #NatType) => x(x)");
 
-    assert_eq!(whnf(&mut certifier, function.clone()), Ok(function));
+    assert_eq!(certifier.reduce(function.clone()), Ok(function));
 }
 
 /// A forwarding's argument may be an index no binder of the term binds — one the boundary refuses, which reduction takes all the same: the lambda's own binder is no identity it can be compared with, so the lambda is its own normal form rather than an abort.
@@ -189,7 +192,7 @@ fn an_eta_probes_argument_may_be_a_bound_index() {
 
     let function = term("(x: #NatType) => (#{binding = Bound(3)} _)(#{binding = Bound(2)} _)");
 
-    assert_eq!(whnf(&mut certifier, function.clone()), Ok(function));
+    assert_eq!(certifier.reduce(function.clone()), Ok(function));
 }
 
 /// Eta hands back the head as the occurrence spells it, and a reference to a declaration is its instance: `(x) => f@{3}(x)` contracts to `f@{3}`, which unfolds at level 3, where the bare `f` the contraction must not invent stays stuck.
@@ -224,22 +227,22 @@ fn eta_contracts_to_the_instance_the_occurrence_states() {
         );
 
         assert_eq!(
-            whnf(&mut certifier, three),
+            certifier.reduce(three),
             Ok(term("#{level = 3} Type")),
             "{label}: the contraction did not keep the instance's levels",
         );
         assert_eq!(
-            whnf(&mut certifier, one),
+            certifier.reduce(one),
             Ok(term("#{level = 1} Type")),
             "{label}: the contraction read another occurrence's levels",
         );
         assert_eq!(
-            whnf(&mut certifier, bare),
+            certifier.reduce(bare),
             Ok(term("/f")),
             "{label}: the contraction invented an instance the occurrence does not state",
         );
         assert_eq!(
-            whnf(&mut certifier, across.clone()),
+            certifier.reduce(across.clone()),
             Ok(across),
             "{label}: a forwarding across a mark contracted",
         );
@@ -261,7 +264,9 @@ fn a_recursive_application_stays_folded_until_forced() {
     let Subterm::Rec(rec) = Term::unwrap_or_clone(countdown("x")) else {
         unreachable!("written as a rec")
     };
-    let reduced = whnf(&mut certifier, unfold_rec(rec)).expect("ordinary reduction terminates");
+    let reduced = certifier
+        .reduce(unfold_rec(rec))
+        .expect("ordinary reduction terminates");
     assert!(matches!(
         &*reduced,
         Subterm::Apply(Apply { head, .. }) if head.as_rec_proj().is_some()
@@ -295,12 +300,12 @@ fn a_stuck_left_operand_leaves_the_right_as_written() {
     );
 
     assert_eq!(
-        whnf(&mut certifier, stuck.clone()),
+        certifier.reduce(stuck.clone()),
         Ok(stuck),
         "a stuck left settles the fold, and the right is not reduced for an answer it cannot change"
     );
     assert_eq!(
-        whnf(&mut certifier, open),
+        certifier.reduce(open),
         Ok(term("true")),
         "a literal left reads the right and folds"
     );
@@ -317,7 +322,7 @@ fn an_equality_reads_its_right_operand() {
     );
 
     assert_eq!(
-        whnf(&mut certifier, equality),
+        certifier.reduce(equality),
         Ok(x),
         "the right folds to `true`, and `x == true` is `x`"
     );
@@ -336,5 +341,10 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
         unreachable!("written as an application")
     };
 
-    assert_eq!(unfold_rec_apply(&mut certifier, apply), Ok(Some(value)));
+    assert_eq!(
+        reading(&mut certifier, |certifier| unfold_rec_apply(
+            certifier, apply
+        )),
+        Ok(Some(value))
+    );
 }

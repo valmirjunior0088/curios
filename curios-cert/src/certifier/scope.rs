@@ -2,7 +2,7 @@
 //!
 //! The two belong to one component because they retract as one. A [`Mark`] is a checkpoint into both stacks and [`Scope::retract`] truncates both, so an arm that opened binders and assumed its scrutinee's case value gives up exactly both on the way out. Splitting them would be two checkpoints that must agree, which is a thing to get wrong rather than a thing to state.
 //!
-//! `mark` and `retract` are `pub(super)` and `Certifier::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
+//! `mark` and `retract` are `pub(super)` and the certifier's bracket is their only caller anywhere, opened by `Certifier::scoped` and by a reading's `ByValue::scoped` — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
     curios_analysis::{could_reduce_to, reads_solved, records_case_equation},
@@ -88,7 +88,7 @@ struct Local {
     shadowed: Option<usize>,
     /// Which opening this is, counted over the whole walk — what a [`Prefix`] names.
     opening: u64,
-    /// Whether the binder is itself a proof — opened at a proposition — once asked: `None` until a stuck form naming it is put to the equations in force ([`Certifier::proofs_named`](super::Certifier::proofs_named)).
+    /// Whether the binder is itself a proof — opened at a proposition — once asked: `None` until a stuck form naming it is put to the equations in force ([`ByValue::proofs_named`](super::ByValue::proofs_named)).
     proof: Option<bool>,
 }
 
@@ -195,29 +195,6 @@ impl Scope {
         self.local(name).is_some_and(|local| local.value.is_none())
     }
 
-    /// Whether `name` is a local a `let` bound.
-    pub fn binds(&self, name: &Free) -> bool {
-        self.local(name).is_some_and(|local| local.value.is_some())
-    }
-
-    /// Whether `term` names a `let`-bound local, read off its memoized mentions: a term [`Scope::by_value`] left names none.
-    pub fn names_bound(&self, term: &Term) -> bool {
-        self.bound != 0
-            && term.has_local_free()
-            && term.mentions().locals().any(|name| self.binds(name))
-    }
-
-    /// Whether `term` names a `let`-bound local a graded call reads by value: a term [`Scope::graded`] left names none but a local an arm's index inversion solved.
-    pub fn names_ungraded(&self, term: &Term) -> bool {
-        self.bound != 0
-            && term.has_local_free()
-            && term.mentions().locals().any(|name| {
-                self.local(name)
-                    .and_then(|local| local.value.as_ref())
-                    .is_some_and(|value| !value.solved)
-            })
-    }
-
     /// Whether `term` names a `let`-bound local whose value enclosed a group that does not descend.
     pub fn names_partial(&self, term: &Term) -> bool {
         self.bound != 0
@@ -290,7 +267,7 @@ impl Scope {
         self.in_force() != 0
     }
 
-    /// Assume an arm's case equation: within the arm, `scrutinee` is `value`, definitionally. Answers whether one was recorded — a scrutinee naming no local records none, and then nothing in force has changed.
+    /// Assume an arm's case equation: within the arm, `scrutinee` is `value`, definitionally. Answers whether one was recorded — a scrutinee naming no local records none, and then nothing in force has changed. Both are by value: the door that records one unfolds them (`Certifier::refine`), and a restatement substitutes a solution into a recorded one ([`Scope::restate`]).
     ///
     /// **Keyed on the scrutinee as written.** Keying on its weak-head normal form would reduce it once per arm, and a scrutinee mentioning a local can be memoized by nothing, so a web of combinator definitions each naming the one before it twice would unfold exponentially to produce a key a literal arm body never probes. The written spelling costs nothing to record; the reduced one is computed only when a probe misses, at most once per equation, by [`Scope::unasked_refinement`] and its caller.
     ///
@@ -300,10 +277,6 @@ impl Scope {
     ///
     /// Keying through `project_erased_universes` would rest on the premise that a universe argument cannot affect what a term computes to, and the premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it is written for the Core-to-ANF hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identifies `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
     pub fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) -> bool {
-        debug_assert!(
-            !self.names_bound(&scrutinee),
-            "a `let`-bound local reached a case equation by name"
-        );
         let recorded = records_case_equation(&scrutinee);
         if recorded {
             self.refinements.push(Refinement {

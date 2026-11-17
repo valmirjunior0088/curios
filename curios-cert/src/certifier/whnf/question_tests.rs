@@ -38,19 +38,20 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
 
     guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(
-            whnf(certifier, commuted.clone())
+            certifier
+                .reduce(commuted.clone())
                 .expect("reduces")
                 .as_bool(),
             Some(true)
         );
         assert_eq!(
-            whnf(certifier, dual).expect("reduces").as_bool(),
+            certifier.reduce(dual).expect("reduces").as_bool(),
             Some(false)
         );
     });
 
     assert_eq!(
-        whnf(&mut certifier, commuted).expect("reduces").as_bool(),
+        certifier.reduce(commuted).expect("reduces").as_bool(),
         None,
         "outside the arm the respelling is the stuck comparison it is"
     );
@@ -92,14 +93,14 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
 
     guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(
-            whnf(certifier, respelled).expect("reduces").as_bool(),
+            certifier.reduce(respelled).expect("reduces").as_bool(),
             Some(true)
         );
         assert_eq!(
-            whnf(certifier, dual).expect("reduces").as_bool(),
+            certifier.reduce(dual).expect("reduces").as_bool(),
             Some(false)
         );
-        assert_eq!(whnf(certifier, other).expect("reduces").as_bool(), None);
+        assert_eq!(certifier.reduce(other).expect("reduces").as_bool(), None);
     });
 
     certifier.scoped(|certifier| {
@@ -107,8 +108,8 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
             .refine(key, term("0"))
             .expect("the equation records");
 
-        assert_eq!(whnf(certifier, call), Ok(term("0")));
-        assert_eq!(whnf(certifier, other_call.clone()), Ok(other_call));
+        assert_eq!(certifier.reduce(call), Ok(term("0")));
+        assert_eq!(certifier.reduce(other_call.clone()), Ok(other_call));
     });
 }
 
@@ -124,7 +125,7 @@ fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
         let read = Env::force(certifier, &respelled).expect("reduces");
         assert_eq!(read.as_bool(), None);
         assert_eq!(
-            whnf(certifier, respelled).expect("reduces").as_bool(),
+            certifier.reduce(respelled).expect("reduces").as_bool(),
             Some(true),
             "the judgment's own reduction answers it, or the reading above proves nothing"
         );
@@ -190,11 +191,11 @@ fn a_question_is_answered_by_reduction_that_asks_nothing() {
             .expect("the equation records");
 
         assert_eq!(
-            whnf(certifier, respelled).expect("reduces").as_bool(),
+            certifier.reduce(respelled).expect("reduces").as_bool(),
             Some(true),
             "one question deep the argument is decided, or the refusal below proves nothing"
         );
-        assert_eq!(whnf(certifier, nested).expect("reduces").as_bool(), None);
+        assert_eq!(certifier.reduce(nested).expect("reduces").as_bool(), None);
     });
 }
 
@@ -216,7 +217,8 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
 
     guarded(&mut certifier, &below_first, |certifier| {
         assert_eq!(
-            whnf(certifier, below_second.clone())
+            certifier
+                .reduce(below_second.clone())
                 .expect("reduces")
                 .as_bool(),
             Some(true)
@@ -226,13 +228,11 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
         certifier
             .refine(call_first, term("0"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, call_second), Ok(term("0")));
+        assert_eq!(certifier.reduce(call_second), Ok(term("0")));
     });
 
     assert_eq!(
-        whnf(&mut certifier, below_second)
-            .expect("reduces")
-            .as_bool(),
+        certifier.reduce(below_second).expect("reduces").as_bool(),
         None,
         "with no guard the form is the stuck comparison it is"
     );
@@ -256,7 +256,10 @@ fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
         "the two convert, or the miss below is no limit of the filter"
     );
     guarded(&mut certifier, &guard, |certifier| {
-        assert_eq!(whnf(certifier, respelled).expect("reduces").as_bool(), None);
+        assert_eq!(
+            certifier.reduce(respelled).expect("reduces").as_bool(),
+            None
+        );
     });
 }
 
@@ -358,21 +361,16 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     );
 
     assert_eq!(
-        whnf(&mut certifier, equal.clone())
-            .expect("reduces")
-            .as_bool(),
+        certifier.reduce(equal.clone()).expect("reduces").as_bool(),
         Some(true)
     );
     assert_eq!(
-        whnf(&mut certifier, at_most).expect("reduces").as_bool(),
+        certifier.reduce(at_most).expect("reduces").as_bool(),
         Some(true)
     );
-    assert_eq!(whnf(&mut certifier, difference), Ok(term("0")));
+    assert_eq!(certifier.reduce(difference), Ok(term("0")));
 
-    assert_eq!(
-        whnf(&mut certifier, other).expect("reduces").as_bool(),
-        None
-    );
+    assert_eq!(certifier.reduce(other).expect("reduces").as_bool(), None);
 
     assert_eq!(
         Env::force(&mut certifier, &equal)
@@ -383,7 +381,7 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     );
 
     let plain = Env::force(&mut certifier, &undecided).expect("reduces");
-    assert_eq!(whnf(&mut certifier, undecided), Ok(plain));
+    assert_eq!(certifier.reduce(undecided), Ok(plain));
 }
 
 /// A fold inside a question is not taken again, a question being answered by plain reduction (`a_question_is_answered_by_reduction_that_asks_nothing` holds the same of a guard's lookup): `h(f(a + b) == f(b + a)) == h(true)` stays stuck, its two calls being one only to a conversion that takes the fold in the first one's argument again.
@@ -402,14 +400,11 @@ fn a_fold_inside_a_question_is_not_taken_again() {
     );
 
     assert_eq!(
-        whnf(&mut certifier, equal).expect("reduces").as_bool(),
+        certifier.reduce(equal).expect("reduces").as_bool(),
         Some(true),
         "one question deep the fold is decided, or the refusal below proves nothing"
     );
-    assert_eq!(
-        whnf(&mut certifier, nested).expect("reduces").as_bool(),
-        None
-    );
+    assert_eq!(certifier.reduce(nested).expect("reduces").as_bool(), None);
 }
 
 /// A `Bool` match on `${scrutinee}` at `Nat`: `2` where it is false, `1` where it is true.
@@ -439,7 +434,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     );
 
     for decided in [&contradiction, &successor] {
-        let arm = whnf(&mut certifier, decided.clone()).expect("reduces");
+        let arm = certifier.reduce(decided.clone()).expect("reduces");
         assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
         assert_eq!(
             Env::force(&mut certifier, decided),
@@ -447,11 +442,11 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
             "plain reduction takes the arm too"
         );
     }
-    assert_eq!(whnf(&mut certifier, contradiction), Ok(term("2")));
-    assert_eq!(whnf(&mut certifier, successor), Ok(term("20")));
+    assert_eq!(certifier.reduce(contradiction), Ok(term("2")));
+    assert_eq!(certifier.reduce(successor), Ok(term("20")));
 
     for open in [open_connective, open_product] {
-        let stuck = whnf(&mut certifier, open.clone()).expect("reduces");
+        let stuck = certifier.reduce(open.clone()).expect("reduces");
         assert!(stuck.as_nat().is_none(), "{open:?} takes an arm: {stuck:?}");
     }
 }
@@ -479,14 +474,14 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
         ),
     );
 
-    assert_eq!(whnf(&mut certifier, classed.clone()), Ok(term("2")));
+    assert_eq!(certifier.reduce(classed.clone()), Ok(term("2")));
     let plain = Env::force(&mut certifier, &classed).expect("reduces");
     assert!(
         plain.as_nat().is_none(),
         "plain reduction classed {classed:?}"
     );
 
-    let other = whnf(&mut certifier, other).expect("reduces");
+    let other = certifier.reduce(other).expect("reduces");
     assert!(
         other.as_nat().is_none(),
         "a call on another argument classed: {other:?}"

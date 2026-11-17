@@ -205,13 +205,13 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
         certifier
             .refine(wrapped_at_0, term("1"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, wrapped_at_1), Ok(term("1")));
+        assert_eq!(certifier.reduce(wrapped_at_1), Ok(term("1")));
     });
     certifier.scoped(|certifier| {
         certifier
             .refine(boxing_at_0, term("1"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, boxing_at_1.clone()), Ok(boxing_at_1));
+        assert_eq!(certifier.reduce(boxing_at_1.clone()), Ok(boxing_at_1));
     });
 }
 

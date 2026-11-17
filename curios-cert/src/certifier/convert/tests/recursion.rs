@@ -1,6 +1,7 @@
 //! Recursive heads: alpha-variant groups, two groups compared as binders, a folded call compared against its unfolding, and the pair unfolded against itself once.
 
 use {
+    crate::certifier::by_value::test_support::*,
     crate::certifier::convert::{Pairs, convert_intrinsic, test_support::*},
     crate::{test_support::*, *},
     curios_analysis::test_support::*,
@@ -432,12 +433,16 @@ fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
     let mut pairs = Pairs::default();
     assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
     assert_eq!(
-        convert_intrinsic(&mut certifier, &mut pairs, &left, &right),
+        reading(&mut certifier, |certifier| {
+            convert_intrinsic(certifier, &mut pairs, &left, &right)
+        }),
         Ok(false),
         "the two calls were unfolded inside their own unfolding",
     );
     assert_eq!(
-        convert_intrinsic(&mut certifier, &mut Pairs::default(), &left, &right),
+        reading(&mut certifier, |certifier| {
+            convert_intrinsic(certifier, &mut Pairs::default(), &left, &right)
+        }),
         Ok(true),
         "the control: from no pair, the two calls are one after one unfolding",
     );
@@ -454,12 +459,16 @@ fn a_verdict_reached_across_a_pair_left_apart_is_no_answer_from_no_pair() {
         let mut pairs = Pairs::default();
         assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
         assert_eq!(
-            convert_intrinsic(&mut certifier, &mut pairs, &left, &right),
+            reading(&mut certifier, |certifier| {
+                convert_intrinsic(certifier, &mut pairs, &left, &right)
+            }),
             Ok(false),
             "inside the pair's own unfolding the two calls are apart",
         );
         assert_eq!(
-            convert_intrinsic(&mut certifier, &mut Pairs::default(), &left, &right),
+            reading(&mut certifier, |certifier| {
+                convert_intrinsic(certifier, &mut Pairs::default(), &left, &right)
+            }),
             Ok(true),
             "from no pair, one unfolding reconciles them, whatever was asked before",
         );

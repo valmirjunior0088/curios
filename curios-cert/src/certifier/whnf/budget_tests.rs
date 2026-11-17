@@ -35,11 +35,11 @@ fn restoring_the_budget_refills_it() {
     let mut certifier = Certifier::new(Cost::FRAME.get() + Cost::STEP.get(), SYNTAX);
     let [x, y, z] = <[Term; 3]>::try_from(components(&term("(x, y, z)"))).expect("three locals");
 
-    assert_eq!(whnf(&mut certifier, x.clone()), Ok(x));
-    assert!(whnf(&mut certifier, y).is_err_and(|spent| spent.is_exhausted()));
+    assert_eq!(certifier.reduce(x.clone()), Ok(x));
+    assert!(certifier.reduce(y).is_err_and(|spent| spent.is_exhausted()));
 
     certifier.restore_budget();
-    assert_eq!(whnf(&mut certifier, z.clone()), Ok(z));
+    assert_eq!(certifier.reduce(z.clone()), Ok(z));
 }
 
 /// Depth is refused by the counter, and the refusal says so. Without the frame row, a reduction driven deep would take real stack the budget observes none of — `recurse` grows rather than aborting, so what bounded depth would be the host's memory rather than anything the program could be told about.

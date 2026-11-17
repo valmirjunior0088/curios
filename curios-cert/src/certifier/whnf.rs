@@ -24,7 +24,7 @@ mod rules_tests;
 mod test_support;
 
 use {
-    super::{Certifier, asked_classes, asked_within, stated_payload, unread_payload},
+    super::{ByValue, Certifier, asked_classes, asked_within, stated_payload, unread_payload},
     curios_analysis::{
         Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead, answers, answers_classed, atoms_within,
         read_operands, read_scrutinee, read_scrutinee_classed, refold,
@@ -40,8 +40,8 @@ use {
 };
 
 /// The certifier's side of the closed-machine seam: the same delta `step_instance` performs, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
-impl ClosedHost for Certifier<'_> {
-    /// None: the certifier holds no local by name, a `let` being substituted by value before reduction meets its binder (`step_var`).
+impl ClosedHost for ByValue<'_, '_> {
+    /// None: a reading's terms name no `let`-bound local, a door having unfolded each before the reading began ([`ByValue`]).
     fn closed_body(&self, _: &Free) -> Option<&Term> {
         None
     }
@@ -59,7 +59,7 @@ impl ClosedHost for Certifier<'_> {
     }
 
     fn payload_proofs(&self, family: &Global, tag: &Atom) -> Vec<bool> {
-        self.payload_proofs(family, tag)
+        Certifier::payload_proofs(self, family, tag)
     }
 
     fn closed_memo(&mut self) -> &mut ClosedMemo {
@@ -68,7 +68,7 @@ impl ClosedHost for Certifier<'_> {
 }
 
 /// A run of the closed machine over `term`, on the memo the certifier keeps for its runs.
-fn closed_run(certifier: &mut Certifier, term: Term, demand: Demand) -> Result<Term, ReduceError> {
+fn closed_run(certifier: &mut ByValue, term: Term, demand: Demand) -> Result<Term, ReduceError> {
     let outer = certifier.begin_closed_run();
     let value = reduce_closed(certifier, term, demand);
     certifier.end_closed_run(outer);
@@ -82,19 +82,15 @@ fn machine_admissible(certifier: &Certifier, term: &Term) -> bool {
 }
 
 /// The certifier's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit is free.
-impl Reducer for Certifier<'_> {
+///
+/// **A reading's terms are by value already**, so the strategy reads what it is handed: a shared fold or analysis the reading called hands back terms built from the reading's own ([`ByValue`]).
+impl Reducer for ByValue<'_, '_> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         curios_profile::profile!("reduce");
-        whnf(self, term)
+        self.whnf(term)
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
-        // By value before the table is asked, as [`whnf`] is: its keys are the spellings reduction sees.
-        if !self.reads_by_value() {
-            let term = self.by_value(&term);
-            return self.reading(|certifier| certifier.reduce_forced(term));
-        }
-        self.debug_assert_by_value(&term, "reduction");
         // A weak-head value is its own forced form, asked of no table ([`weak_head_value`]).
         if weak_head_value(&term) {
             return Ok(term);
@@ -105,7 +101,7 @@ impl Reducer for Certifier<'_> {
         // Past the memo, so the span times reductions the table did not answer: a hit costs a lookup, and a span per hit would cost the profile more rows than any other site and bill each its own row-writing.
         curios_profile::profile!("reduce_forced");
 
-        let reduced = whnf(self, term.clone())?;
+        let reduced = self.whnf(term.clone())?;
         let reduct = force(self, reduced)?;
         self.whnf_store(term, true, reduct.clone());
 
@@ -113,11 +109,11 @@ impl Reducer for Certifier<'_> {
     }
 
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
-        Certifier::spend(self, cost)
+        ByValue::spend(self, cost)
     }
 
     fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
-        self.fresh(hint)
+        Certifier::fresh(self, hint)
     }
 }
 
@@ -127,27 +123,23 @@ enum Step {
     Stop(Term),
 }
 
-/// Reduce `term` until its head constructor is stable.
-///
-/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the certifier has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
-///
-/// **Reduction reads by value.** Typing walks a `let`'s tail over its binder, so the term it hands over may name one. Where reduction is entered from outside, the name gives way to what it stands for, once, and everything beneath — the tables' keys, the case equations' probes, the closed machine's gate — meets the spelling a substituted `let` leaves, which is the spelling each was argued over. A remembered reduct therefore never rests on a `let`'s binding, which an arm may replace and no key of these tables carries.
-pub fn whnf(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
-    if !certifier.reads_by_value() {
-        let term = certifier.by_value(&term);
-        return certifier.reading(|certifier| whnf(certifier, term));
+impl ByValue<'_, '_> {
+    /// Reduce `term` until its head constructor is stable.
+    ///
+    /// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the certifier has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
+    ///
+    /// **Reduction reads by value.** Typing walks a `let`'s tail over its binder, so the term it hands over may name one; the door it enters by gives the name way to what it stands for, once, and everything beneath — the tables' keys, the case equations' probes, the closed machine's gate — meets the spelling a substituted `let` leaves, which is the spelling each was argued over ([`ByValue`]). A remembered reduct therefore never rests on a `let`'s binding, which an arm may replace and no key of these tables carries.
+    pub fn whnf(&mut self, term: Term) -> Result<Term, ReduceError> {
+        // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
+        self.enter_level()?;
+        let reduct = recurse(|| whnf_within(self, term));
+        self.leave_level();
+
+        reduct
     }
-    certifier.debug_assert_by_value(&term, "reduction");
-
-    // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
-    certifier.enter_level()?;
-    let reduct = recurse(|| whnf_within(certifier, term));
-    certifier.leave_level();
-
-    reduct
 }
 
-fn whnf_within(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
+fn whnf_within(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError> {
     // A weak-head value is its own reduct, asked of no table ([`weak_head_value`]): read by value already, it names no binder a `let` could give way for.
     if weak_head_value(&term) {
         return Ok(term);
@@ -231,7 +223,7 @@ fn whnf_within(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceErro
                         Step::Stop(Term::from(Subterm::Match(Match { head, goal, cases })))
                     }
                     None => {
-                        let value = whnf(certifier, head)?;
+                        let value = certifier.whnf(head)?;
                         let forced = force(certifier, value)?;
 
                         step_match(scrutinee_read(certifier, &cases, forced)?, goal, cases)
@@ -286,7 +278,7 @@ fn refined_spelling(certifier: &Certifier, term: &Term) -> Option<Term> {
 /// **A settled spelling answers what the readers hold equal to it.** Where no settled spelling is the probe's, each is put to `curios_analysis::answers` with it: the rule the elaborator's reducer asks at the same point, so a guard respelled inside the theory — a sum commuted, a dual with its sides moved — is answered by both or by neither. A reduct's dual and its spelling across the successor seam are the rule's to answer as well, so no spelling but the probe's own is compared with a reduct here; [`refined_spelling`] asks them of the written key, before anything is reduced.
 ///
 /// **The reduced spellings meet in operand-canonical form.** A settled reduct is the key's weak-head form with each operand weak-head reduced, and the value probed against it is brought to the same form here, so that `x && true` under a `match x && g(7)` meets the key whose `g(7)` the settlement folded, and `x && h(7)` meets it too. A weak-head form alone would not do: a `&&` behind a stuck left leaves its right as written, and the two spellings would then differ by exactly the fold the escalation exists to see through. It is computed only on a miss under a live equation and only for a tagged intrinsic — a `head_key` — which is the same path the elaborator's `refined_after_fold` canonicalizes on, and what keeps the two checkers reaching the same occurrences.
-fn refined_reduct(certifier: &mut Certifier, value: &Term) -> Result<Option<Term>, ReduceError> {
+fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>, ReduceError> {
     if let Some(refined) = certifier.refinement_of(value) {
         return Ok(Some(refined));
     }
@@ -337,7 +329,7 @@ fn refined_reduct(certifier: &mut Certifier, value: &Term) -> Result<Option<Term
 ///
 /// The elaborator's reducer takes the same steps in the same order, each checker asking its own conversion.
 fn answered(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     index: usize,
     term: &Term,
     key: &Term,
@@ -364,7 +356,7 @@ fn answered(
 /// **Only of a term that names a local, and never by plain reduction.** A local-free term's reduct is remembered for the declaration and must be one function of the definition store whichever reduction takes it, so nothing is asked of it; and plain reduction asks nothing at all ([`Certifier::plainly`]), which is what answers a question and what a shared analysis reads by.
 ///
 /// **What a stuck fold's walk found is kept for the fold above it.** A reduction folds a spine from its leaves, so each operand of a stuck operation was a stuck operation a moment before: its classification is looked up ([`Certifier::classification`]) and extended, and the operation's own is filed where its fold stands, so a long spine is classified once and not once for each level.
-fn refolded(certifier: &mut Certifier, value: &Term) -> Result<Option<Term>, ReduceError> {
+fn refolded(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>, ReduceError> {
     if certifier.plain() || !value.has_local_free() {
         return Ok(None);
     }
@@ -398,7 +390,7 @@ fn refolded(certifier: &mut Certifier, value: &Term) -> Result<Option<Term>, Red
 /// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.
 ///
 /// Each operand is a [`Probe`], as the elaborator's twin reads it: an operand with no value at the type level is kept as written, so a probe that meets one misses rather than refusing the judgment it serves.
-pub fn canonical_operands(certifier: &mut Certifier, term: &Term) -> Result<Term, ReduceError> {
+pub fn canonical_operands(certifier: &mut ByValue, term: &Term) -> Result<Term, ReduceError> {
     if term.head_key().is_none() {
         return Ok(term.clone());
     }
@@ -411,11 +403,7 @@ pub fn canonical_operands(certifier: &mut Certifier, term: &Term) -> Result<Term
 
     let mut operands = Vec::new();
     for operand in masking.take_masked_children() {
-        operands.push(
-            whnf(certifier, operand.clone())
-                .probed()?
-                .unwrap_or(operand),
-        );
+        operands.push(certifier.whnf(operand.clone()).probed()?.unwrap_or(operand));
     }
 
     let mut index = 0;
@@ -432,14 +420,10 @@ pub fn canonical_operands(certifier: &mut Certifier, term: &Term) -> Result<Term
     Ok(Subterm::Intrinsic(rebuilt).into())
 }
 
-/// A free variable is the normal form it is: the certifier holds no local by name, a `let` being read by value before reduction meets its binder ([`Certifier::bind`]). The one local that unfolds is a member known to terminate, in its group's bodies ([`Calls::member_value`](super::Calls::member_value)).
-fn step_var(certifier: &mut Certifier, var: Var) -> Result<Step, ReduceError> {
-    // A bound index stops here as a local with no binding does, and the assert is a free local's alone: an index with no binder is no name a scope could have bound, so there is nothing to have read by value, and reduction asserts on no shape a caller hands it. One reaching here is refused where the module entered (`curios_core::open_positions_of`).
+/// A free variable is the normal form it is: a reading names no `let`-bound local, its door having unfolded each ([`ByValue`]). The one local that unfolds is a member known to terminate, in its group's bodies ([`Calls::member_value`](super::Calls::member_value)).
+fn step_var(certifier: &mut ByValue, var: Var) -> Result<Step, ReduceError> {
+    // A bound index stops here as a local with no binding does: one reaching here is refused where the module entered (`curios_core::open_positions_of`).
     if let Some(free) = var.as_free() {
-        assert!(
-            !certifier.binds(free),
-            "a `let`-bound local reached reduction by name"
-        );
         // A member known to terminate unfolds in its group's bodies to its selection out of the known members (`check_group`); every other local is a neutral.
         if let Some(member) = certifier.calls.member_value(free) {
             return Ok(Step::Continue(member));
@@ -452,10 +436,10 @@ fn step_var(certifier: &mut Certifier, var: Var) -> Result<Step, ReduceError> {
 /// Beta: open a function's telescope over the arguments applied to it.
 ///
 /// A `rec` head is exposed but not unfolded — the folded spelling stays the normal form of a recursive call, and [`force`] is what demands otherwise.
-fn step_apply(certifier: &mut Certifier, apply: Apply) -> Result<Step, ReduceError> {
+fn step_apply(certifier: &mut ByValue, apply: Apply) -> Result<Step, ReduceError> {
     let Apply { head, arguments } = apply;
 
-    let head = whnf(certifier, head)?;
+    let head = certifier.whnf(head)?;
     let head = expose_rec_tail(certifier, head)?;
 
     Ok(match Term::unwrap_or_clone(head) {
@@ -484,7 +468,7 @@ fn step_apply(certifier: &mut Certifier, apply: Apply) -> Result<Step, ReduceErr
 ///
 /// **Bounded rather than reduced, which is what lets an arm record it on entry.** Only heads are reduced and no argument is forced, so a guard over an expensive subject costs no evaluation of that subject; a β step fires only at the arity it saturates, as [`step_apply`]'s does. That is the line the elaborator's `spine_whnf` draws, and this is the spelling it registers beside the written one. Both checkers holding it is what keeps them answering the same occurrences at the same point: met only through its lazily settled reduct — after the decision procedure has already folded the probe, and as that fold's result — a dispatched guard's intrinsic shape would be answered from the procedure in an arm whose guard the procedure decides against, where the elaborator answers the dual spelling from the arm's equation.
 pub fn resolved_spelling(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     scrutinee: &Term,
 ) -> Result<Option<Term>, ReduceError> {
     let mut current = scrutinee.clone();
@@ -494,7 +478,7 @@ pub fn resolved_spelling(
         let Subterm::Apply(Apply { head, arguments }) = &*current else {
             return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
         };
-        let head = whnf(certifier, head.clone())?;
+        let head = certifier.whnf(head.clone())?;
         let Subterm::Func(Func { telescope, .. }) = &*head else {
             return Ok((current != *scrutinee && current.head_key().is_some()).then_some(current));
         };
@@ -522,14 +506,14 @@ pub fn resolved_spelling(
 /// A slot reads the literal of what it is a slot of: a tuple's slot a tuple literal's field or, through the flat runtime view `(tag, payload...)`, a constructor's payload, where slot `i + 1` is payload component `i`; and a structure's slot a field of that structure's literal, which has no tag to skip. A label that survived to here has no positional meaning yet and stays stuck, as a slot over anything else does: a slot past the literal, or a slot of one thing over a literal of another.
 ///
 /// The rule is stated here for the certifier and in `curios_core::project_literal` for the closed machine and the elaborator, so the two checkers read a slot by two statements of it, held together where both reduce one term (`curios-elab`'s `certifier_agreement_tests`).
-fn step_proj(certifier: &mut Certifier, proj: Proj) -> Result<Step, ReduceError> {
+fn step_proj(certifier: &mut ByValue, proj: Proj) -> Result<Step, ReduceError> {
     let Proj { head, field } = proj;
 
     if field.slot().is_none() {
         return Ok(Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))));
     }
 
-    let head = whnf(certifier, head)?;
+    let head = certifier.whnf(head)?;
     let head = force(certifier, head)?;
 
     let component = match (&*head, &field) {
@@ -554,7 +538,7 @@ fn step_proj(certifier: &mut Certifier, proj: Proj) -> Result<Step, ReduceError>
 /// Eta for functions: `(x) => f(x)` is `f`, provided each argument stands under its binder's mark and `f` does not itself mention `x`. Across a mark the two are functions at two types plicity holds apart, so `(@x) => f(x)` stays as written. The closed machine and the elaborator contract through `curios_core::eta_head`, and this is the certifier's own statement of the rule, so a mistake in either shows where the two checkers reduce one term.
 ///
 /// Contracting here rather than only at conversion means the two spellings have one normal form, so every consumer of a weak-head normal form sees them as the same term without having to know the rule.
-fn step_func(certifier: &mut Certifier, func: Func) -> Result<Step, ReduceError> {
+fn step_func(certifier: &mut ByValue, func: Func) -> Result<Step, ReduceError> {
     let arity = func.telescope.len();
 
     // Three arity-sized vectors — the probe binders, their occurrences, and the refs handed to `open` — plus the opening itself. Charged even though the probe usually fails, because the probe is what allocates.
@@ -592,7 +576,7 @@ fn step_func(certifier: &mut Certifier, func: Func) -> Result<Step, ReduceError>
 /// Zeta: substitute a `let`'s bindings into its tail.
 ///
 /// The elaborator's reducer substitutes by the same rule. Binding each value as a fresh definition and opening the tail over *those* would avoid copying a value into every use, but spell reducts with names the other checker's reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
-fn step_let(certifier: &mut Certifier, let_: Let) -> Result<Term, ReduceError> {
+fn step_let(certifier: &mut ByValue, let_: Let) -> Result<Term, ReduceError> {
     // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
     let bindings = let_.bindings().len() as u64;
     certifier.spend(
@@ -616,7 +600,7 @@ fn step_let(certifier: &mut Certifier, let_: Let) -> Result<Term, ReduceError> {
 }
 
 /// Delta: unfold a definition at the instance its reference states, which is the one position a definition unfolds from, and only where the instance states its scheme whole ([`curios_core::UniverseContext::stated_by`]); otherwise the reference is the normal form it is.
-fn step_instance(certifier: &mut Certifier, instance: Instance) -> Result<Step, ReduceError> {
+fn step_instance(certifier: &mut ByValue, instance: Instance) -> Result<Step, ReduceError> {
     let Instance { name, universes } = instance;
 
     let reduct = match certifier.value_at(&name, &universes).cloned() {
@@ -636,7 +620,7 @@ fn step_instance(certifier: &mut Certifier, instance: Instance) -> Result<Step, 
 ///
 /// **Where the diagram hands back atoms that may be one, the certifier's conversion classes them** and the connective is read again over the classes, once for both literals: the third point reduction asks the certifier's conversion, under a stuck fold's two conditions ([`refolded`]) — only of a scrutinee that names a local, and never by plain reduction.
 fn scrutinee_read(
-    certifier: &mut Certifier,
+    certifier: &mut ByValue,
     cases: &Cases,
     forced: Term,
 ) -> Result<Term, ReduceError> {
@@ -762,7 +746,7 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
 }
 
 /// Strip `rec` binding syntax without unfolding a member's fixed point, leaving the projection that `rec f = ...; f` denotes.
-fn expose_rec_tail(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
+fn expose_rec_tail(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
 
     loop {
@@ -772,7 +756,7 @@ fn expose_rec_tail(certifier: &mut Certifier, term: Term) -> Result<Term, Reduce
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => term = whnf(certifier, unfold_rec(rec))?,
+            Subterm::Rec(rec) => term = certifier.whnf(unfold_rec(rec))?,
             other => return Ok(other.into()),
         }
     }
@@ -795,7 +779,7 @@ pub fn unfold_rec(rec: Rec) -> Term {
 /// Reading the head alone cannot separate *stuck* from *finished*, since both are neutral; reading the occurrence alone cannot separate *restuck* from *productive*, since both name the group. The clause needs both, and the group it asks about is the one `folded` is a call on, because the cycle being ruled out is this term growing under repeated demand.
 ///
 /// A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does — every outcome here is idempotent, so this decides which reducts survive, never whether the walk stops.
-fn force(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
+fn force(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     if machine_admissible(certifier, &term) {
         return closed_run(certifier, term, Demand::Forced);
@@ -810,15 +794,15 @@ fn force(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
         // Unfolding a projection means stepping to the member's body; unfolding any other `rec` means opening its tail. Both are the same rule read at the two tail shapes.
         if let Some((group, index)) = term.as_rec_proj() {
             let body = group.member_body(index);
-            term = whnf(certifier, body)?;
+            term = certifier.whnf(body)?;
             continue;
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) => term = whnf(certifier, unfold_rec(rec))?,
+            Subterm::Rec(rec) => term = certifier.whnf(unfold_rec(rec))?,
             // An application no unfolding opens is stuck as a `match` on a variable is: kept where the recursion is finished, its group gone from it, and the folded call otherwise.
             Subterm::Apply(apply) => match unfold_rec_apply(certifier, apply.clone())? {
-                Some(unfolded) => term = whnf(certifier, unfolded)?,
+                Some(unfolded) => term = certifier.whnf(unfolded)?,
                 None => return finished(certifier, folded, Subterm::Apply(apply).into()),
             },
             other => {
@@ -839,7 +823,7 @@ fn force(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
 }
 
 /// What [`force`] keeps of a neutral `value` the unfolding of `folded` reached: `value` where the recursion is finished, no member of the group `folded` is a call on standing in it, and `folded` otherwise.
-fn finished(certifier: &mut Certifier, folded: Term, value: Term) -> Result<Term, ReduceError> {
+fn finished(certifier: &mut ByValue, folded: Term, value: Term) -> Result<Term, ReduceError> {
     Ok(match forced_group(certifier, &folded)? {
         Some(group) if value.mentions_rec_member(&group) => folded,
         _ => value,
@@ -849,7 +833,7 @@ fn finished(certifier: &mut Certifier, folded: Term, value: Term) -> Result<Term
 /// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
 ///
 /// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application carries it at the head of its spine — the same place [`unfold_rec_apply`] reads it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
-fn forced_group(certifier: &mut Certifier, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
+fn forced_group(certifier: &mut ByValue, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
     if let Some((group, _)) = folded.as_rec_proj() {
         return Ok(Some(group.clone()));
     }
@@ -857,7 +841,7 @@ fn forced_group(certifier: &mut Certifier, folded: &Term) -> Result<Option<RecGr
     match &**folded {
         Subterm::Rec(rec) => Ok(Some(rec.group().clone())),
         Subterm::Apply(Apply { head, .. }) => {
-            let head = whnf(certifier, head.clone())?;
+            let head = certifier.whnf(head.clone())?;
             let head = expose_rec_tail(certifier, head)?;
 
             Ok(head.spine_rec_proj().map(|(group, _)| group.clone()))
@@ -869,20 +853,17 @@ fn forced_group(certifier: &mut Certifier, folded: &Term) -> Result<Option<RecGr
 /// The one definitional unfolding [`force`] withholds: a folded recursive spelling — a `rec` value, a member selection, or a member application — stepped to the weak-head form of its body. `None` for every other shape.
 ///
 /// `force` keeps the folded spelling as a recursive call's normal form, while the same call reached by unfolding is the member's body at the argument, a match stuck where the argument is a variable; conversion consults this to see the two spellings as one.
-pub fn unfold_spelling(
-    certifier: &mut Certifier,
-    term: &Term,
-) -> Result<Option<Term>, ReduceError> {
+pub fn unfold_spelling(certifier: &mut ByValue, term: &Term) -> Result<Option<Term>, ReduceError> {
     if let Some((group, index)) = term.as_rec_proj() {
         let body = group.member_body(index);
 
-        return Ok(Some(whnf(certifier, body)?));
+        return Ok(Some(certifier.whnf(body)?));
     }
 
     match &**term {
-        Subterm::Rec(rec) => Ok(Some(whnf(certifier, unfold_rec(rec.clone()))?)),
+        Subterm::Rec(rec) => Ok(Some(certifier.whnf(unfold_rec(rec.clone()))?)),
         Subterm::Apply(apply) => match unfold_rec_apply(certifier, apply.clone())? {
-            Some(unfolded) => Ok(Some(whnf(certifier, unfolded)?)),
+            Some(unfolded) => Ok(Some(certifier.whnf(unfolded)?)),
             None => Ok(None),
         },
         _ => Ok(None),
@@ -890,16 +871,16 @@ pub fn unfold_spelling(
 }
 
 /// Unfold one folded recursive application, when its result shape is demanded.
-fn unfold_rec_apply(certifier: &mut Certifier, apply: Apply) -> Result<Option<Term>, ReduceError> {
+fn unfold_rec_apply(certifier: &mut ByValue, apply: Apply) -> Result<Option<Term>, ReduceError> {
     let Apply { head, arguments } = apply;
 
-    let head = whnf(certifier, head)?;
+    let head = certifier.whnf(head)?;
     let head = expose_rec_tail(certifier, head)?;
 
     // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and the elaborator's twin takes them the same way — an `induct`'s type constructor lowers into a `rec` whatever its arity, since otherwise a caller reaching the unfolded spelling would see a nominal type where one reaching the folded spelling sees a stuck application.
     let body = match head.as_rec_proj() {
         Some((group, index)) => {
-            let body = whnf(certifier, group.member_body(index))?;
+            let body = certifier.whnf(group.member_body(index))?;
 
             force(certifier, body)?
         }

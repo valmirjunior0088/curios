@@ -26,7 +26,7 @@ fn named(local: &Free, word: &str) -> Term {
 
 /// A `let`'s tail is typed over its binder — a variable there has the binder's type — and the `let`'s own type is stated by value, since the binder closes with it.
 ///
-/// Mutation-checked: with conversion comparing its terms as they are handed, the second binding's annotation is a name reduction has no value for.
+/// Mutation-checked: with the doors handing their terms on as written (`Certifier::read_by_value`), conversion compares the second binding's annotation, a name reduction has no value for.
 #[test]
 fn a_lets_tail_is_typed_over_its_binder_and_its_type_stated_by_value() {
     let mut certifier = certifier();
@@ -42,7 +42,7 @@ fn a_lets_tail_is_typed_over_its_binder_and_its_type_stated_by_value() {
 
 /// Reduction reads by value where typing enters it: a lambda checks against a `let`-bound function type, which the rule reduces to find its telescope.
 ///
-/// Mutation-checked: with a forced reduction taking its term as it is handed, the annotation's name reaches the reducer.
+/// Mutation-checked: with the doors handing their terms on as written (`Certifier::read_by_value`), the annotation's name reaches the reducer.
 #[test]
 fn a_lambda_checks_against_a_let_bound_function_type() {
     let mut certifier = certifier();
@@ -279,7 +279,7 @@ fn a_member_stands_for_its_group_in_the_groups_tail() {
     ));
 
     let inferred = infer(&mut certifier, &group).expect("the member computes in the tail");
-    assert_eq!(whnf(&mut certifier, inferred).ok(), Some(term("#NatType")));
+    assert_eq!(certifier.reduce(inferred).ok(), Some(term("#NatType")));
 }
 
 /// And a member not known to terminate stands for nothing in its group's own bodies: `countdown` calls itself at `3`, nothing below its argument, so its turn withholds it, and there `countdown(3) == 0` is a `Bool` that never arrives, and a type stated over it in the body is stuck where the same type in the tail is the one it reduces to. A value a body reads of a member that need not terminate is no fact the certifier holds, whoever wrote the term that reads it.
@@ -323,7 +323,7 @@ fn a_position_over_a_member_of_a_partial_group_says_so() {
 
 /// Reduction reads by value where it is entered: a `let`-bound name gives way to what it stands for.
 ///
-/// Mutation-checked: with a reduction taking its term as it is handed, the name reaches the reducer, which has no value for it.
+/// Mutation-checked: with the doors handing their terms on as written (`Certifier::read_by_value`), the name reaches the reducer, which has no value for it.
 #[test]
 fn reduction_reads_a_let_bound_name_by_value() {
     let mut certifier = certifier();
@@ -331,7 +331,7 @@ fn reduction_reads_a_let_bound_name_by_value() {
 
     let reduct = certifier.scoped(|certifier| {
         certifier.bind(&x, &term("#NatType"), &term("2"), false);
-        whnf(certifier, named(&x, "x"))
+        certifier.reduce(named(&x, "x"))
     });
 
     assert_eq!(reduct.ok(), Some(term("2")));
@@ -359,13 +359,13 @@ fn binding_over_a_local_that_stood_for_nothing_reads_it_again_where_the_scope_na
             certifier.local_type(&locals[1]),
             Some(&term(&family("true")))
         );
-        assert_eq!(whnf(certifier, named(&c, "c")).ok(), Some(term("true")));
+        assert_eq!(certifier.reduce(named(&c, "c")).ok(), Some(term("true")));
     });
 }
 
 /// A remembered reduct is keyed on its term by value, so it never rests on what a `let`-bound name stood for when it was taken. An arm binds `x` again at another value; the reduct tables carry no binder and are not cleared when the arm is left, so an entry filed under a spelling that names `x` would answer for the outer `x` with what the inner one stood for.
 ///
-/// Mutation-checked: with a forced reduction asking its table about the term as it is handed, the reduct taken under the arm's binding answers after the arm.
+/// Mutation-checked: with the doors handing their terms on as written (`Certifier::read_by_value`), a forced reduction asks its table about the term by name, and the reduct taken under the arm's binding answers after the arm.
 #[test]
 fn a_remembered_reduct_does_not_rest_on_a_lets_binding() {
     let mut certifier = certifier();

@@ -13,8 +13,14 @@
 mod at;
 pub use at::*;
 
+mod by_value;
+pub use by_value::{
+    ByValue, as_sort, bears_proof, carries_information, convert, erased_half, sort_of_intrinsic,
+    synth_neutral,
+};
+
 mod convert;
-pub use convert::{asked_classes, asked_within, convert, stated_payload, unread_payload};
+pub use convert::{asked_classes, asked_within, stated_payload, unread_payload};
 
 mod globals;
 use globals::*;
@@ -48,9 +54,7 @@ use scope::*;
 
 mod sort;
 use sort::*;
-pub use sort::{
-    Sort, as_sort, carries_information, declared_into_prop, sort_of_intrinsic, synth_neutral,
-};
+pub use sort::{Sort, declared_into_prop};
 
 mod spend;
 use spend::*;
@@ -65,17 +69,14 @@ pub use whnf::*;
 mod test_support;
 
 use {
-    crate::{Baseline, entails, erased_half},
-    curios_analysis::{
-        Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, holds_no_type,
-        one_up_to_instances, retyped,
-    },
+    crate::{Baseline, entails},
+    curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, retyped},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
-        Advance, Applications, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global,
-        InductDecl, Level, LevelHead, Names, Notation, Polarity, Probe, Quality, Reads,
-        ReduceError, Reducer, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
-        Universes, Variance, instantiate_qualities,
+        Advance, Applications, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl,
+        Level, LevelHead, Names, Notation, Polarity, Quality, Reads, ReduceError, Reducer,
+        StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
+        instantiate_qualities,
     },
     std::{
         collections::{BTreeMap, HashMap},
@@ -511,11 +512,11 @@ impl fmt::Display for Displayed<'_> {
     }
 }
 
-/// The certifier's side of the shared-analysis seam.
+/// The certifier's side of the shared-analysis seam, for an analysis typing started: its reduction a door ([`ByValue`]).
 impl Env for Certifier<'_> {
     type Error = Error;
 
-    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads.
+    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads. A door, so the term is read by value.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
         Ok(self.plainly(|certifier| certifier.reduce_forced(term.clone()))?)
     }
@@ -532,7 +533,7 @@ impl Env for Certifier<'_> {
         Certifier::fresh(self, hint)
     }
 
-    /// None: the certifier holds no local by name, a `let` being substituted by value before a judgment meets its binder.
+    /// None: what the certifier hands a shared analysis it reads by value already — a door unfolded it, or the scope holds it so — but for a graded call's arguments, whose variables an arm's index inversion solved the size order reads as written (`Certifier::graded`).
     fn unfold(&self, _: &Free) -> Option<&Term> {
         None
     }
@@ -566,7 +567,7 @@ impl Env for Certifier<'_> {
         Certifier::applications(self, name)
     }
 
-    /// The case equations of the arms in force; a solved variable is a `let`, substituted by value before a judgment meets it.
+    /// The case equations of the arms in force, each keyed by value where it was recorded (`Certifier::refine`) and restated under an arm's solution (`Scope::restate`), so none names a `let`-bound local.
     fn refined(&self) -> Vec<(Term, Term)> {
         self.scope.refined()
     }
@@ -585,7 +586,7 @@ impl Judge for Certifier<'_> {
             Err(error) if unread(&error) => return Ok(false),
             Err(error) => return Err(error),
         };
-        let above = match sort::as_sort(self, universe) {
+        let above = match as_sort(self, universe) {
             Ok(sort) => sort,
             Err(error) if unread(&error) => return Ok(false),
             Err(error) => return Err(error),
@@ -632,10 +633,14 @@ pub struct Certifier<'s> {
     assumed: Vec<UniverseConstraint>,
     /// Whether the closed machine may run — false only in the differential fixture's strategy arm, which is what makes the machine's reducts checkable against the strategy's at all.
     machine: bool,
-    /// Whether the terms in hand are already by value: set where reduction or conversion is entered from typing, so the entries beneath read what they are handed, and put back where typing binds a `let`. See [`Certifier::by_value`].
-    reading: bool,
     /// The terms [`infer()`] is typing, each from where its typing begins to where it ends, with how many binders the walk had opened where each of its typings in progress began, innermost last: one asked for again in between, under the binders it named then, is refused ([`Error::NeedsItsOwnTyping`]).
     typing: HashMap<Term, Vec<u64>>,
+}
+
+/// Where [`Certifier::open_bracket`] found the scope and the call recorder standing, for [`Certifier::close_bracket`] to retract them to.
+struct Bracket {
+    scope: Mark,
+    calls: CallsMark,
 }
 
 impl<'s> Certifier<'s> {
@@ -652,7 +657,6 @@ impl<'s> Certifier<'s> {
             syntax,
             assumed: Vec::new(),
             machine: true,
-            reading: false,
             typing: HashMap::new(),
         }
     }
@@ -763,23 +767,6 @@ impl<'s> Certifier<'s> {
         ))
     }
 
-    /// Remember the verdict of comparing `this` with `that` at `type_`, with the pairs of heads its derivation unfolded.
-    pub(crate) fn convert_store(
-        &mut self,
-        type_: &Term,
-        this: &Term,
-        that: &Term,
-        converted: Converted,
-    ) {
-        self.memos.store_converted(
-            (type_.clone(), this.clone(), that.clone()),
-            self.has_refinements(),
-            self.scope.plain(),
-            self.scope.prefix(),
-            converted,
-        );
-    }
-
     /// The remembered sort of `type_`, with nothing spent and nothing minted, as every hit is. A local-free type's, read with no case equation in force, is the declaration's; one read off the scope, for a type naming a local or under an equation, is taken only while the binders it was read under stand.
     pub(crate) fn sort_hit(&self, type_: &Term) -> Option<Sort> {
         self.standing(
@@ -797,33 +784,9 @@ impl<'s> Certifier<'s> {
             .then_some(answer)
     }
 
-    /// Remember `type_`'s sort, beside the binders in scope now.
-    pub(crate) fn sort_store(&mut self, type_: Term, sort: Sort) {
-        self.memos.store_sort(
-            type_,
-            self.has_refinements(),
-            self.scope.plain(),
-            self.scope.prefix(),
-            sort,
-        );
-    }
-
-    /// Remember a `term`'s weak-head reduct.
-    ///
-    /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
-    pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, reduct: Term) {
-        self.memos
-            .store_whnf(term, forced, self.scope.plain(), reduct);
-    }
-
     /// What classifying the stuck operation `term` found, where it is remembered ([`Memos::classification`]).
     pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
         self.memos.classification(term)
-    }
-
-    /// Remember what classifying the stuck operation `term` found, stored for nothing as a reduct is ([`Certifier::whnf_store`]).
-    pub(crate) fn keep_classification(&mut self, term: Term, classification: Classification) {
-        self.memos.store_classification(term, classification);
     }
 
     /// The heaviest declaration this certifier has walked — what it spent, and how deep it went.
@@ -831,21 +794,6 @@ impl<'s> Certifier<'s> {
     /// An observation for a measurement: nothing in the certifier reads it, and it exists so a figure can be stated with a probe beside it instead of bisected against a budget from outside the compiler. See [`Consumption`] for why depth is the row it separates out.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.spend.heaviest()
-    }
-
-    /// The closed machine's memo, which lives the declaration as the local-free reducts do.
-    pub(crate) fn closed_memo_mut(&mut self) -> &mut ClosedMemo {
-        self.memos.closed()
-    }
-
-    /// See [`Memos::begin_closed_run`].
-    pub(crate) fn begin_closed_run(&mut self) -> Option<ClosedMemo> {
-        self.memos.begin_closed_run()
-    }
-
-    /// See [`Memos::end_closed_run`].
-    pub(crate) fn end_closed_run(&mut self, outer: Option<ClosedMemo>) {
-        self.memos.end_closed_run(outer);
     }
 
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Certifier::restore_budget`], this is a declaration-boundary reset.
@@ -1169,64 +1117,14 @@ impl<'s> Certifier<'s> {
         }
     }
 
-    /// `term` by value — see the scope's `by_value`. A term already by value is handed back as it is.
+    /// `term` by value, where typing reads it for more than its type — see the scope's `by_value`: made where the term is read, so no binding between could leave it naming a `let`-bound local. A reading's door unfolds what it is handed the same way ([`ByValue`]).
     pub(crate) fn by_value(&self, term: &Term) -> Term {
-        match self.reading {
-            true => term.clone(),
-            false => self.scope.by_value(term),
-        }
+        self.scope.by_value(term)
     }
 
-    /// `term` as a graded call reads it — see the scope's `graded`. A term already by value is handed back as it is.
+    /// `term` as a graded call reads it — see the scope's `graded`.
     pub(crate) fn graded(&self, term: &Term) -> Term {
-        match self.reading {
-            true => term.clone(),
-            false => self.scope.graded(term),
-        }
-    }
-
-    /// Run `read` over terms that are by value: reduction and conversion entered inside it read what they are handed. Entered where either is reached from typing, so a term is unfolded once at the outermost entry and never beneath it, where every term is a subterm or a reduct of one that was.
-    pub(crate) fn reading<T>(&mut self, read: impl FnOnce(&mut Self) -> T) -> T {
-        let outer = std::mem::replace(&mut self.reading, true);
-        let outcome = read(self);
-        self.reading = outer;
-
-        outcome
-    }
-
-    /// Whether the terms in hand are already by value.
-    pub(crate) fn reads_by_value(&self) -> bool {
-        self.reading
-    }
-
-    /// Run `walk` over terms that may name a `let`-bound local: the bracket typing a `let`'s tail runs in, wherever it is reached from.
-    pub(crate) fn naming<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
-        let outer = std::mem::replace(&mut self.reading, false);
-        let outcome = walk(self);
-        self.reading = outer;
-
-        outcome
-    }
-
-    /// Whether `name` is a local a `let` bound.
-    pub(crate) fn binds(&self, name: &Free) -> bool {
-        self.scope.binds(name)
-    }
-
-    /// Assert that `term`, which `reader` is about to read for more than its type, names no `let`-bound local: the check `step_var` makes of the one name it steps, made of the whole term where it arrives, so a caller that skipped its unfolding is caught there and not by what the reader answers.
-    pub(crate) fn debug_assert_by_value(&self, term: &Term, reader: &str) {
-        debug_assert!(
-            !self.scope.names_bound(term),
-            "a `let`-bound local reached {reader} by name"
-        );
-    }
-
-    /// [`Certifier::debug_assert_by_value`] for a graded call's argument, which keeps a local an arm's index inversion solved.
-    pub(crate) fn debug_assert_graded(&self, term: &Term) {
-        debug_assert!(
-            !self.scope.names_ungraded(term),
-            "a `let`-bound local reached a graded call by name"
-        );
+        self.scope.graded(term)
     }
 
     /// The `let`-bound locals in scope — see the scope's `bound_locals`.
@@ -1243,21 +1141,33 @@ impl<'s> Certifier<'s> {
 
     /// Run `walk` with every binder it opened — and every case equation it assumed — closed again afterwards, on the failing path as well as the succeeding one.
     ///
-    /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and this is their only caller anywhere, which is what makes that true. A judgment that opened a binder and returned early would leave it in scope for every judgment after it, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Certifier` throughout, and a guard holding the borrow would leave them nothing to be called with.
+    /// **The only way to open a binder scope.** [`Scope`]'s `mark` and `retract` are `pub(super)` and the bracket's two steps are their only caller anywhere ([`Certifier::open_bracket`], [`Certifier::close_bracket`]), taken by this and by a reading's own ([`ByValue::scoped`]), which is what makes that true. A judgment that opened a binder and returned early would leave it in scope for every judgment after it, and no amount of care spread over a dozen call sites makes that structural. Written as a bracket rather than a guard object because the walks it wraps take `&mut Certifier` throughout, and a guard holding the borrow would leave them nothing to be called with.
     pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
-        let mark = self.scope.mark();
-        // What the call recorder learned inside the bracket — an arm's refinements, a group opened for its bodies — is about the binders the bracket opened, so it retracts with them.
-        let calls = self.calls.mark();
+        let bracket = self.open_bracket();
         let outcome = walk(self);
-        let established = self.calls.retract(calls);
+        self.close_bracket(bracket);
+
+        outcome
+    }
+
+    /// Open the bracket [`Certifier::scoped`] runs a walk in, marking where the scope and the call recorder stand.
+    fn open_bracket(&mut self) -> Bracket {
+        Bracket {
+            scope: self.scope.mark(),
+            // What the call recorder learned inside the bracket — an arm's refinements, a group opened for its bodies — is about the binders the bracket opened, so it retracts with them.
+            calls: self.calls.mark(),
+        }
+    }
+
+    /// Close a bracket [`Certifier::open_bracket`] opened: every binder and case equation opened since retracted, and what the tables read under them with them.
+    fn close_bracket(&mut self, bracket: Bracket) {
+        let established = self.calls.retract(bracket.calls);
         // Retracting an equation, or an arm's re-typing of a local, changes what a local-bearing term reduces to, so what was read off the scope under it goes with it; retracting what an arm established for the call recorder changes how a group typed under it closes, so the typings do. A bracket that assumed none of them leaves the tables alone — most do, and what they remembered is still true; an answer read under a binder closed here is refused by its `Prefix` instead.
-        if self.scope.retract(mark) {
+        if self.scope.retract(bracket.scope) {
             self.memos.begin_equations();
         } else if established {
             self.memos.begin_sizes();
         }
-
-        outcome
     }
 
     /// Type `term` by `typing`, refusing where its typing is already in progress and every local it names stands at the binder it stood at where that typing began: such a typing reads the definition store and those binders alone, so one that needs itself needs itself again at every turn, and a derivation resting on its own conclusion is none. An arm that re-typed a local `term` names opened a newer binder for it, and the typing under it is another judgment.
@@ -1310,24 +1220,6 @@ impl<'s> Certifier<'s> {
         outcome
     }
 
-    /// Assume an arm's case equation: within the arm, `scrutinee` — as written, and as its dispatch resolves — is `value`, definitionally. Assumed inside the arm's [`Certifier::scoped`] bracket, which is what scopes it.
-    ///
-    /// The resolved spelling is computed before the equation is pushed, so it rests only on the equations outside it, which retract no earlier than it does — the view [`Certifier::settle_refinement`] has to reconstruct by withholding, had for free here. Only a local-bearing scrutinee is resolved, since [`Scope::refine`](scope::Scope) records nothing else, and only one with no head a probe presents already. The resolution is a [`Probe`], as a settlement is: a scrutinee with no value at the type level records the written spelling alone.
-    pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) -> Result<(), ReduceError> {
-        let resolved = match scrutinee.has_local_free() && scrutinee.head_key().is_none() {
-            true => whnf::resolved_spelling(self, &scrutinee)
-                .probed()?
-                .flatten(),
-            false => None,
-        };
-        // What was read off the scope goes where the equations in force change, and an arm that records none — its scrutinee names no local, a literal an outer arm substituted there among them — leaves them as they were.
-        if self.scope.refine(scrutinee, resolved, value) {
-            self.memos.begin_equations();
-        }
-
-        Ok(())
-    }
-
     /// Restate the equations in force under an arm's solution, answering the restated ones ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
     pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
         let restated = self.scope.restate(solutions);
@@ -1357,32 +1249,6 @@ impl<'s> Certifier<'s> {
         self.scope.settled_refinements(candidate, proofs)
     }
 
-    /// The binders `term` names that are themselves proofs: opened at a proposition, so conversion reads them nowhere, and a stuck form naming one the key of an equation does not may still be that key's term (`curios_analysis::could_reduce_to`).
-    ///
-    /// **Each binder is asked once**, where a stuck form naming it first reaches the equations in force, and remembered with the binder. It is asked by plain reduction, which no question interrupts, and counted not a proof while it is being asked, so a type whose classification comes back to its own binder ends there, toward refusal. A failure that is no exhaustion of the budget is that the binder is not known to be a proof.
-    pub(crate) fn proofs_named(&mut self, term: &Term) -> Result<Vec<Free>, ReduceError> {
-        let mut proofs = Vec::new();
-        for name in term.mentions().locals() {
-            let proof = match self.scope.classified(name) {
-                Some(proof) => proof,
-                None => {
-                    let Some(type_) = self.scope.local_type(name).cloned() else {
-                        continue;
-                    };
-                    self.scope.classify(name, false);
-                    let sort = self.plainly(|certifier| Sort::of(certifier, &type_));
-                    let proof = sort.probed_refusal()?.is_some_and(|sort| sort.is_prop());
-                    self.scope.classify(name, proof);
-                    proof
-                }
-            };
-            if proof {
-                proofs.push(*name);
-            }
-        }
-        Ok(proofs)
-    }
-
     /// The innermost equation in force whose reduced spelling has not been asked for and could be `candidate`, as its position and the term to reduce.
     pub(crate) fn unasked_refinement(
         &self,
@@ -1396,32 +1262,6 @@ impl<'s> Certifier<'s> {
     #[cfg(feature = "profile")]
     pub(crate) fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
         self.scope.reachable_refinements(candidate, proofs)
-    }
-
-    /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld.
-    ///
-    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing; this is where the reduction happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
-    ///
-    /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
-    pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
-        // Withholding equations is a change to the set in force, and so is restoring them: what was read off the scope under the equations in force is set aside while the settlement runs and handed back where it restores them, and what the settlement reads under the narrowed ones goes ([`Memos::set_aside`]).
-        let outer = self.scope.hide_refinements_from(index);
-        let aside = self.memos.set_aside(self.scope.plain());
-        // The reduced spelling is held operand-canonical, the form `refined_reduct` brings a probed value to before comparing — see `canonical_operands`.
-        let reduct = whnf(self, key).and_then(|reduct| whnf::canonical_operands(self, &reduct));
-        self.scope.show_refinements(outer);
-        self.memos.hand_back(aside);
-
-        match reduct.probed() {
-            Ok(settled) => {
-                self.scope.settle_refinement(index, settled);
-                Ok(())
-            }
-            Err(spent) => {
-                self.scope.settle_refinement(index, None);
-                Err(spent)
-            }
-        }
     }
 
     /// Whether reduction is plain: it asks the certifier's conversion nothing ([`Certifier::plainly`]).
@@ -1442,35 +1282,6 @@ impl<'s> Certifier<'s> {
         self.scope.end_plain(previous);
 
         answer
-    }
-
-    /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra.
-    ///
-    /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`Certifier::settle_refinement`]): under its own equation the key reduces to the case value, and nothing would convert with it.
-    ///
-    /// **Two calls apart in their head's instance alone are asked about by their arguments** where the case value holds no type, as the elaborator asks them (`curios_analysis::one_up_to_instances`): an instance is no part of such a value. Where the value may hold a type, the elaborator committed the two instances one, and they are compared whole at the levels they closed at.
-    pub(crate) fn asked_scrutinee(
-        &mut self,
-        index: usize,
-        term: &Term,
-        key: &Term,
-        value: &Term,
-    ) -> Result<bool, ReduceError> {
-        curios_profile::profile!("certifier::asked_scrutinee");
-        self.plainly(|certifier| {
-            let outer = certifier.scope.hide_refinements_from(index);
-            let aside = certifier.memos.set_aside(certifier.scope.plain());
-            let same = match holds_no_type(value) {
-                true => one_up_to_instances(term, key, &mut |this, that| {
-                    convert::grounded(certifier, this, that)
-                }),
-                false => convert::grounded(certifier, term, key),
-            };
-            certifier.scope.show_refinements(outer);
-            certifier.memos.hand_back(aside);
-
-            same
-        })
     }
 
     /// Whether any arm's case equation is currently assumed ([`Scope::has_refinements`]).
@@ -1576,7 +1387,6 @@ impl<'s> Certifier<'s> {
         let erased = erased?;
         // A position is read for what its term reaches, and a `let`-bound local's name says nothing of what it stands for: the term is recorded by value, with whether a value it names enclosed a group that does not descend — the group was typed where the `let` binds it, not inside this term.
         let filed = self.by_value(term);
-        self.debug_assert_by_value(&filed, "a recorded position");
         let position = self.positions.push(&filed, erased);
         if self.scope.names_partial(term) {
             self.positions.enclose_partial(position);
