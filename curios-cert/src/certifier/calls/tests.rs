@@ -412,3 +412,18 @@ fn a_member_called_across_two_lists_is_one_call_of_both_its_parameters() {
         Err(Error::NotDescending { .. }),
     ));
 }
+
+/// An arm's case stands for the scrutinee as a graded call reads it, a variable an index inversion solved standing as written: under `q`'s arm, whose inversion solves `t` to `k`, `match t` takes `t` apart, so the call on `pred` descends. Mutation-checked: with the arm assuming its case of the scrutinee read by value, `k` stands where `t` was matched, no call names it, and the group is refused.
+#[test]
+fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        "induct /Q: (i: #NatType) -> pub Type\n| c(k: #NatType): (k)\nend",
+    );
+    let group = term(
+        "#{node = Rec} (let d: (t: #NatType, q: #{node = InductType} /Q()(t)) -> Type = (t: #NatType, q: #{node = InductType} /Q()(t)) => #{goal = Type} match q | c(k) => #{goal = Type} match t | 0 => #NatType | pred + 1 => d(pred, #{node = Variant} /Q/c(pred)) end end; d)",
+    );
+
+    assert!(infer(&mut certifier, &group).is_ok());
+}

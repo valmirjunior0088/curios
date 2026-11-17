@@ -494,6 +494,8 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             let scrutinee_type = infer(certifier, &m.head)?;
             let scrutinee_type = certifier.reduce_forced(scrutinee_type)?;
             let head = certifier.by_value(&m.head);
+            // What an arm establishes of the scrutinee's size is established of it as a graded call reads it, a local an index inversion solved standing as written, since the size order reads nothing an inversion concluded.
+            let sized = certifier.graded(&m.head);
             let goal = certifier.by_value(&m.goal);
             let family = match &*scrutinee_type {
                 Subterm::InductType(family) => Some(family.clone()),
@@ -506,6 +508,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 &goal,
                 &m.cases,
                 &head,
+                &sized,
                 &scrutinee_type,
             )?;
 
@@ -597,6 +600,7 @@ fn check_cases(
     goal: &Term,
     cases: &Cases,
     scrutinee: &Term,
+    sized: &Term,
     scrutinee_type: &Term,
 ) -> Result<(), Error> {
     let goal_sort = goal_sort(certifier, goal)?;
@@ -613,7 +617,7 @@ fn check_cases(
             certifier.assume_guard(scrutinee, &value)?;
             let mut solutions = Vec::new();
             assumed = eliminate::assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
-            certifier.assume_arm(scrutinee, &value)?;
+            certifier.assume_arm(sized, &value)?;
             eliminate::bind_solutions(certifier, &solutions)?;
 
             check(certifier, body, &expected)
@@ -655,7 +659,10 @@ fn check_cases(
                 goal,
                 cases,
                 default.as_ref(),
-                scrutinee,
+                eliminate::Scrutinee {
+                    typed: scrutinee,
+                    sized,
+                },
             )
         }
 
@@ -689,7 +696,7 @@ fn check_cases(
             // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing. Enumerating zero is what rules zero out of it, which a call inside may descend on.
             let expected = goal.clone();
             certifier.scoped(|certifier| {
-                if let Subterm::Var(var) = &**scrutinee
+                if let Subterm::Var(var) = &**sized
                     && let Some(binder) = var.as_free()
                     && cases.iter().any(|(key, _)| key.is_zero())
                 {
@@ -700,9 +707,15 @@ fn check_cases(
             })
         }
 
-        Cases::FreeMonoid { carrier } => {
-            check_free_monoid(certifier, goal, scrutinee, scrutinee_type, carrier, &at)
-        }
+        Cases::FreeMonoid { carrier } => check_free_monoid(
+            certifier,
+            goal,
+            scrutinee,
+            sized,
+            scrutinee_type,
+            carrier,
+            &at,
+        ),
     }
 }
 
@@ -713,6 +726,7 @@ fn check_free_monoid(
     certifier: &mut Certifier,
     goal: &Term,
     scrutinee: &Term,
+    sized: &Term,
     scrutinee_type: &Term,
     carrier: &Carrier,
     at: &impl Fn(&mut Certifier, Term, &Term) -> Result<(), Error>,
@@ -750,7 +764,7 @@ fn check_free_monoid(
                     &cons_value,
                     &mut solutions,
                 )?;
-                certifier.assume_arm(scrutinee, &size_value)?;
+                certifier.assume_arm(sized, &size_value)?;
                 eliminate::bind_solutions(certifier, &solutions)?;
 
                 check(certifier, body, &expected)

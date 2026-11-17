@@ -44,7 +44,14 @@ use {
     },
 };
 
-/// Check every arm of an elimination of `scrutinee_type` at `goal`.
+/// The term an elimination takes apart, read two ways: by value, as typing reads it, and as a graded call reads it, a local an index inversion solved standing as written (`Certifier::graded`), so what an arm establishes of the scrutinee's size reaches the variable a call names.
+#[derive(Clone, Copy)]
+pub struct Scrutinee<'t> {
+    pub typed: &'t Term,
+    pub sized: &'t Term,
+}
+
+/// Check every arm of an elimination of `scrutinee` at `goal`.
 pub fn check_induct_arms(
     certifier: &mut Certifier,
     at: &InductAt,
@@ -52,7 +59,7 @@ pub fn check_induct_arms(
     goal: &Term,
     cases: &[(Atom, InductArm)],
     default: Option<&Term>,
-    scrutinee: &Term,
+    scrutinee: Scrutinee<'_>,
 ) -> Result<(), Error> {
     for (tag, arm) in cases {
         check_arm(certifier, at, family, goal, scrutinee, tag, arm)?;
@@ -105,7 +112,10 @@ fn check_arm(
     at: &InductAt,
     family: &InductType,
     goal: &Term,
-    scrutinee: &Term,
+    Scrutinee {
+        typed: scrutinee,
+        sized,
+    }: Scrutinee<'_>,
     tag: &Atom,
     arm: &InductArm,
 ) -> Result<(), Error> {
@@ -156,7 +166,7 @@ fn check_arm(
                 let checked = certifier.tried(|certifier| {
                     assumed = assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
                     // What the call recorder grades under within the arm: the case the arm names, and the payload binders — an application of one reads as the payload it came from.
-                    certifier.assume_arm(scrutinee, &value)?;
+                    certifier.assume_arm(sized, &value)?;
                     certifier.assume_payloads(binders)?;
 
                     let refs = payload.iter().collect::<Vec<_>>();

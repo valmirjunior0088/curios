@@ -113,3 +113,41 @@ fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// An arm's case stands for the scrutinee as a graded call reads it, a variable an index inversion solved standing as written: under `q`'s arm, whose inversion solved `t` to `k`, `match t` takes `t` apart, so `direct(j, …)` descends, as matching `t` before `q` does. The refusal hands `t` back.
+#[test]
+fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        induct Q: (Nat) -> Type
+        | c(k: Nat): (k)
+        end
+
+        let direct(t: Nat, q: Q(t)) -> Bool =
+            match q
+            | c(k) =>
+                match t
+                | 0 => false
+                | j + 1 => direct(j, Q/c(j))
+                end
+            end;
+
+        let Direct(t: Nat, q: Q(t)) -> Prop = Bool/Holds(direct(t, q));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| j + 1 => direct(j, Q/c(j))",
+        "| j + 1 => direct(t, Q/c(t))",
+    )])
+    .by_elaborator_in("/Direct", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Direct", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
