@@ -15,9 +15,9 @@ pub use Valid/{let Valid};
 pub mod At;
 pub use At/{let At};
 
--- The walks a search makes: a character a predicate accepts, a piece held at a position forward or back, and a needle's first occurrence.
+-- The walks a search makes: a character a predicate accepts, and a needle's first occurrence, found as bytes.
 mod search;
-use search/{seek, meets, meets_back, occurrence, first_occurrence, back_over};
+use search/{seek, occurrence, first_occurrence, back_over};
 
 --- How many characters, not bytes, with how a concatenation's count is its halves'.
 pub mod len;
@@ -571,13 +571,46 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
         (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
 
+--- Bytes are what lies before `k` followed by what lies from `k` on.
+let split_at(
+    b: Bytes,
+    k: Nat,
+    within: Bool/Holds(k <= Bytes/len(b)),
+) -> Eq()(b, x[..Bytes/slice(b, 0, k, @within), ..Bytes/drop(b, k, @within)]) =
+    match k
+    | 0 => Eq/refl()
+    | j + 1 =>
+        match b
+        | x[] => match within end
+        | x[h, ..t] => Eq/cong((r: Bytes) => x[h, ..r], split_at(t, j, within))
+        end
+    end;
+
 --- Where `piece` follows `from` in `s`: the position past it, which is not before `from`, or `none` when `s` does not hold it there.
+---
+--- Compared as bytes, UTF-8 encoding each character one way: valid text that holds a valid piece's bytes at a boundary holds its characters, and goes on past them as valid text, so the position past it is a boundary with no character decoded.
 pub let follows(
     s: Str,
     from: At(s),
     piece: Str,
 ) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
-    meets(s, from, piece, At/start(piece));
+    let rest = after(s, from);
+    let n = Bytes/len(piece.bytes);
+    match Bool/holds(n <= Bytes/len(rest.bytes))
+    | some(fits), Bytes/slice(rest.bytes, 0, n, @fits) == piece.bytes =>
+        let held = Bytes/eq_of_eql(Bytes/slice(rest.bytes, 0, n, @fits), piece.bytes, proved());
+        let onward: Valid(Bytes/drop(rest.bytes, n, @fits)) =
+            Valid/after_prefix(
+                piece.valid,
+                Eq/subst(
+                    (p: Bytes) => Valid(x[..p, ..Bytes/drop(rest.bytes, n, @fits)]),
+                    held,
+                    Eq/subst((w: Bytes) => Valid(w), split_at(rest.bytes, n, fits), rest.valid)));
+        Option/some((
+            past = At { offset = from.offset + n, @_, @boundary = Valid/begins(onward) },
+            reach = proved()))
+    | _ => Option/none()
+    end;
 
 --- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk over the bytes from `from`, which stops at the first character refused or at the end, its position built where it stops.
 pub let span(
@@ -612,11 +645,28 @@ pub let trim_end(s: Str) -> Str =
 
 --- `s` without `prefix` at its front, or `none` when it does not begin with it.
 pub let strip_prefix(s: Str, prefix: Str) -> Option(Str) =
-    Option/map(meets(s, At/start(s), prefix, At/start(prefix)), (met) => after(s, met.past));
+    Option/map(follows(s, At/start(s), prefix), (met) => after(s, met.past));
 
---- `s` without `suffix` at its end, or `none` when it does not end with it.
+--- `s` without `suffix` at its end, or `none` when it does not end with it: the bytes where it would begin compared with its own, a valid suffix beginning where a character may.
 pub let strip_suffix(s: Str, suffix: Str) -> Option(Str) =
-    Option/map(meets_back(s, At/finish(s), suffix, At/finish(suffix)), (start) => before(s, start));
+    let n = Bytes/len(suffix.bytes);
+    match Bool/holds(n <= Bytes/len(s.bytes))
+    | some(_), Bytes/drop(s.bytes, Bytes/len(s.bytes) - n) == suffix.bytes =>
+        let held =
+            Bytes/eq_of_eql(Bytes/drop(s.bytes, Bytes/len(s.bytes) - n), suffix.bytes, proved());
+        Option/some(
+            before(
+                s,
+                At {
+                    offset = Bytes/len(s.bytes) - n,
+                    @_,
+                    @boundary =
+                        Eq/subst(
+                            (w: Bytes) => Bool/Holds(At/starts(w)),
+                            Eq/sym(held),
+                            Valid/begins(suffix.valid)) }))
+    | _ => Option/none()
+    end;
 
 --- Whether `s` begins with `prefix`.
 pub let starts_with(s: Str, prefix: Str) -> Bool =

@@ -21,51 +21,6 @@ pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), ch
     | none() => Option/none()
     end;
 
--- That the walk has not gone back goes down with the position, here and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
---- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
-pub let meets(
-    s: Str,
-    from: At(s),
-    piece: Str,
-    p: At(piece),
-) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
-    At/forward(
-        (at) =>
-            (p: At(piece), reached: Bool/Holds(from.offset <= at.offset)) -> Option(
-                {past: At(s), reach: Bool/Holds(from.offset <= past.offset)}),
-        (at, again) =>
-            (p, reached) =>
-                match At/try_next(piece, p)
-                | none() => Option/some((past = at, reach = reached))
-                | some(want) =>
-                    match At/try_next(s, at)
-                    | some(have), have.char == want.char =>
-                        again(have.past, have.progress)(want.past, proved())
-                    | _ => Option/none()
-                    end
-                end,
-        from)(
-        p,
-        Nat/le/refl(from.offset));
-
---- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
-pub let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
-    At/backward(
-        (_) => (p: At(piece)) -> Option(At(s)),
-        (at, again) =>
-            (p) =>
-                match At/try_prev(piece, p)
-                | none() => Option/some(at)
-                | some(want) =>
-                    match At/try_prev(s, at)
-                    | some(have), have.char == want.char =>
-                        again(have.past, have.progress)(want.past)
-                    | _ => Option/none()
-                    end
-                end,
-        from)(
-        p);
-
 --- An occurrence of a needle at or after `from`: where it starts, which is not before `from`, and the position past it, which is past the start — the needle holds a character.
 pub let Found(s: Str, from: At(s)) -> Type =
     {
@@ -74,56 +29,112 @@ pub let Found(s: Str, from: At(s)) -> Type =
         ordered: Bool/Holds(from.offset <= start.offset),
         progress: Bool/Holds(start.offset < past.offset)};
 
+--- A character may begin at the front of bytes that begin with bytes, not empty, at whose front one may.
+let starts_concat(
+    a: Bytes,
+    r: Bytes,
+    some: Bool/Holds(0 < Bytes/len(a)),
+    at: Bool/Holds(At/starts(a)),
+) -> Bool/Holds(At/starts(x[..a, ..r])) =
+    match a
+    | x[] => match some end
+    | x[_, .._] => at
+    end;
+
 --- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
 ---
---- A candidate is a position whose byte is the needle's first — cheap to test, and a position because the walk steps only from one character to the next — confirmed by stepping both from there. Every other character is skipped without being decoded.
+--- Searched as bytes, one walk over what follows `from`: a valid needle begins with a byte no character continues, so where its bytes stand they stand where a character begins, and valid text that holds them goes on past them as valid text. No character is decoded.
 pub let occurrence(
     s: Str,
     from: At(s),
     needle: Str,
     first: {char: Char, past: At(needle), progress: Bool/Holds(0 < past.offset)},
 ) -> Option(Found(s, from)) =
-    let lead_byte =
-        Bytes/get(
-            needle.bytes,
-            0,
-            @Nat/lt/of_lt_le(
-                0,
-                first.past.offset,
-                Bytes/len(needle.bytes),
-                first.progress,
-                first.past.within));
-    At/forward(
-        (at) => (reached: Bool/Holds(from.offset <= at.offset)) -> Option(Found(s, from)),
-        (at, again) =>
-            (reached) =>
-                match at.offset < Bytes/len(s.bytes)
-                | false => Option/none()
-                | true =>
-                    let onward = At/skip(s, at);
-                    let later() -> Option(Found(s, from)) =
-                        again(onward.past, onward.progress)(proved());
-                    match Bytes/get(s.bytes, at.offset) == lead_byte
-                    | false => later()
+    let n = Bytes/len(needle.bytes);
+    let some: Bool/Holds(0 < n) =
+        Nat/lt/of_lt_le(0, first.past.offset, n, first.progress, first.past.within);
+    let lead_byte = Bytes/get(needle.bytes, 0, @some);
+    let rest = Str/after(s, from);
+    let go(
+        b: Bytes,
+        k: Nat,
+        @w: Bool/Holds(k <= Bytes/len(rest.bytes)),
+        @e: Eq()(Bytes/drop(rest.bytes, k, @w), b),
+    ) -> Option(Found(s, from)) =
+        match b
+        | x[] => Option/none()
+        | x[h, ..t] =>
+            let onward = Str/passing(@rest.bytes, @x[h], @t, k, w, e);
+            match h == lead_byte
+            | false => go(t, k + 1, @onward.within, @onward.cut)
+            | true =>
+                match Bool/holds(k + n <= Bytes/len(rest.bytes))
+                | none() => go(t, k + 1, @onward.within, @onward.cut)
+                | some(inside) =>
+                    match Bytes/slice(rest.bytes, k, n, @inside) == needle.bytes
+                    | false => go(t, k + 1, @onward.within, @onward.cut)
                     | true =>
-                        let have = At/next(s, at);
-                        match have.char == first.char
-                        | false => later()
-                        | true =>
-                            match meets(s, have.past, needle, first.past)
-                            | some(met) =>
-                                Option/some((
-                                    start = at,
-                                    past = met.past,
-                                    ordered = reached,
-                                    progress = proved()))
-                            | none() => later()
-                            end
-                        end
+                        let fits: Bool/Holds(n <= Bytes/len(b)) =
+                            Eq/subst((x: Bytes) => Bool/Holds(n <= Bytes/len(x)), e, proved());
+                        let held: Eq()(Bytes/slice(b, 0, n, @fits), needle.bytes) =
+                            Eq/subst(
+                                (x: Bytes) =>
+                                    (q: Bool/Holds(n <= Bytes/len(x))) -> Eq()(
+                                        Bytes/slice(x, 0, n, @q),
+                                        needle.bytes),
+                                e,
+                                (_) =>
+                                    Bytes/eq_of_eql(
+                                        Bytes/slice(rest.bytes, k, n, @inside),
+                                        needle.bytes,
+                                        proved()))(
+                                fits);
+                        let split: Eq()(b, x[..needle.bytes, ..Bytes/drop(b, n, @fits)]) =
+                            Eq/trans(
+                                Str/split_at(b, n, fits),
+                                Eq/cong((p: Bytes) => x[..p, ..Bytes/drop(b, n, @fits)], held));
+                        let begins: Bool/Holds(At/starts(Bytes/drop(rest.bytes, k, @w))) =
+                            Eq/subst(
+                                (w: Bytes) => Bool/Holds(At/starts(w)),
+                                Eq/sym(e),
+                                Eq/subst(
+                                    (w: Bytes) => Bool/Holds(At/starts(w)),
+                                    Eq/sym(split),
+                                    starts_concat(
+                                        needle.bytes,
+                                        Bytes/drop(b, n, @fits),
+                                        some,
+                                        Str/Valid/begins(needle.valid))));
+                        let valid_b: Str/Valid(b) =
+                            Eq/subst(
+                                (w: Bytes) => Str/Valid(w),
+                                e,
+                                Str/Valid/after(rest.valid, k, w, begins));
+                        let past_valid: Str/Valid(Bytes/drop(b, n, @fits)) =
+                            Str/Valid/after_prefix(
+                                needle.valid,
+                                Eq/subst((w: Bytes) => Str/Valid(w), split, valid_b));
+                        let room: Bool/Holds(n <= Bytes/len(Bytes/drop(rest.bytes, k, @w))) =
+                            Eq/subst((w: Bytes) => Bool/Holds(n <= Bytes/len(w)), Eq/sym(e), fits);
+                        let ends: Bool/Holds(
+                            At/starts(Bytes/drop(Bytes/drop(rest.bytes, k, @w), n, @room))) =
+                            Eq/subst(
+                                (w: Bytes) =>
+                                    (q: Bool/Holds(n <= Bytes/len(w))) -> Bool/Holds(
+                                        At/starts(Bytes/drop(w, n, @q))),
+                                Eq/sym(e),
+                                (_) => Str/Valid/begins(past_valid))(
+                                room);
+                        Option/some((
+                            start = At { offset = from.offset + k, @_, @boundary = begins },
+                            past = At { offset = from.offset + k + n, @_, @boundary = ends },
+                            ordered = proved(),
+                            progress = proved()))
                     end
-                end,
-        from)(
-        Nat/le/refl(from.offset));
+                end
+            end
+        end;
+    go(rest.bytes, 0, @proved(), @Eq/refl());
 
 --- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
 pub let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =

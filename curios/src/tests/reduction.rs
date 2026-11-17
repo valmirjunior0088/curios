@@ -926,9 +926,11 @@ fn over_read(prove: &str) -> impl FnOnce(&str) -> String {
 }
 
 /// A closed claim costs the elaborator what it costs with nothing left to inference. Reduced as its solutions spell it, the claim holding a solved metavariable is one run of the closed machine, as the claim over `read` is; declined at the gate for the metavariable, it is taken apart by the recursive strategy, each closed piece a run of its own, at several times the cost and growing faster than the text.
+///
+/// So the claim holding the metavariable grows with the text as the claim over `read` does, and costs under twice it at every length. What it pays beyond the run is the metavariable's and the same at every length, which a parse that compares its piece's bytes at once leaves as a large share of a short claim.
 #[test]
 fn a_claim_over_a_solved_metavariable_costs_what_the_claim_written_out_costs() {
-    for letters in [16, 32] {
+    let cost = |letters: usize| {
         let (inline, ..) = declaration_cost(&parse_claim(letters, |parse| {
             format!("let _claim: Holds(ok({parse})) = True/qed();")
         }));
@@ -937,13 +939,23 @@ fn a_claim_over_a_solved_metavariable_costs_what_the_claim_written_out_costs() {
             over_read("let _claim: Holds(ok(read)) = True/qed();"),
         ));
 
+        (letters, inline.units(), named.units())
+    };
+    let [short, long] = [16, 32].map(cost);
+
+    for (letters, inline, named) in [short, long] {
         assert!(
-            inline.units() * 4 <= named.units() * 5,
-            "at {letters} letters the claim costs {} units with the parse inline and {} with it named",
-            inline.units(),
-            named.units()
+            inline < named * 2,
+            "at {letters} letters the claim costs {inline} units with the parse inline and {named} with it named",
         );
     }
+    let ((_, inline_short, named_short), (_, inline_long, named_long)) = (short, long);
+    let inline = inline_long.saturating_sub(inline_short);
+    let named = named_long.saturating_sub(named_short);
+    assert!(
+        inline * 4 <= named * 5,
+        "from 16 to 32 letters the claim grows by {inline} units with the parse inline and by {named} with it named",
+    );
 }
 
 /// An equation costs each checker what the decision of the same fact costs. A claim `Eq()(lhs, rhs)` is typed by a run that evaluates both sides, a family's operands being evaluated as any substituend is, and conversion then asks for each side by itself: what the first run answered is kept by the closed term (`curios_core::ClosedMemo`), so the second asking is a probe. Asked twice, the equation cost twice the decision.

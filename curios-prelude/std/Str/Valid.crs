@@ -87,6 +87,15 @@ pub let concat(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a,
                 Eq/cong((sc: Scan) => scan_from(sc, b), lead_of(scan_from(Scan/lead(), a), va)))),
         vb);
 
+--- Valid bytes that begin with valid bytes go on as valid bytes: a scan that has read the first comes to rest between characters, where the second begins.
+pub let after_prefix(@a: Bytes, @b: Bytes, va: Valid(a), vab: Valid(x[..a, ..b])) -> Valid(b) =
+    Eq/subst(
+        (sc: Scan) => Bool/Holds(at_lead(sc)),
+        Eq/trans(
+            append(Scan/lead(), a, b),
+            Eq/cong((sc: Scan) => scan_from(sc, b), lead_of(scan_from(Scan/lead(), a), va))),
+        vab);
+
 --- Nothing is valid from the bad state.
 pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =
     match x
