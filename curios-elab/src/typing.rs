@@ -274,21 +274,21 @@ pub fn expect_as(
 ///
 /// The four shapes are one fact: reduction cannot proceed until some metavariable is solved, so nothing about the term is decided yet. Conversion already treats each of them as [`Outcome::Blocked`](crate::Outcome) rather than as a mismatch; this is the same reading for the checked-only introduction forms, which otherwise refuse a program one step before the turnaround that would have solved the blocker. `Count(?L)` is the case that motivates the `Match` arm: the payload type of a description-indexed constructor, stuck until the index is known.
 pub fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
+    // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument* — any of the call's ([`Subterm::call_arguments`]), a member's own, one applied past them, or one a field of it is applied to. `Count(?L)` is that term — a description-indexed payload type before its index is known. The argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell, so one mentioning an unsolved metavariable blocks the call; one that mentions none blocks on nothing a solution could change, and rightly refuses.
+    if reduced.called_member().is_some() {
+        return reduced.call_arguments().into_iter().any(|argument| {
+            argument
+                .metavars()
+                .iter()
+                .any(|id| context.metavar_solution(*id).is_none())
+        });
+    }
+
     match &**reduced {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::Match(matched) => stuck_on_metavar(context, &matched.head),
         Subterm::Proj(proj) => stuck_on_metavar(context, &proj.head),
-        Subterm::Apply(apply) => {
-            // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument*. `Count(?L)` is that term — a description-indexed payload type before its index is known. The argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell, so one mentioning an unsolved metavariable blocks the call; one that mentions none blocks on nothing a solution could change, and rightly refuses.
-            stuck_on_metavar(context, &apply.head)
-                || (apply.head.as_rec_proj().is_some()
-                    && apply.params().any(|param| {
-                        param
-                            .metavars()
-                            .iter()
-                            .any(|id| context.metavar_solution(*id).is_none())
-                    }))
-        }
+        Subterm::Apply(apply) => stuck_on_metavar(context, &apply.head),
         _ => false,
     }
 }

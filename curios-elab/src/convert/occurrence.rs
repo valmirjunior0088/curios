@@ -75,14 +75,15 @@ pub fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
             .any(|id| context.metavar_solution(*id).is_none())
     };
 
+    // A folded recursive call does not wear its blocker on its head: unfolding hands the call itself back where it cannot choose an arm, so what reduction waits for sits in an argument — any of the call's ([`Subterm::call_arguments`]) — as [`stuck_on_metavar`](crate::stuck_on_metavar) reads it where a form is checked. An argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell — `measure(?c % 3)` is an application of a lambda — so one that mentions an unsolved metavariable blocks the call.
+    if term.called_member().is_some() {
+        return term.call_arguments().into_iter().any(has_unsolved);
+    }
+
     match &**term {
         Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
         Subterm::Intrinsic(_) | Subterm::Match(_) => has_unsolved(term),
-        // A folded recursive call does not wear its blocker on its head: unfolding hands the call itself back where it cannot choose an arm, so what reduction waits for sits in an argument, as [`stuck_on_metavar`](crate::stuck_on_metavar) reads it where a form is checked. An argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell — `measure(?c % 3)` is an application of a lambda — so one that mentions an unsolved metavariable blocks the call.
-        Subterm::Apply(apply) => {
-            blocked_on_unsolved_metavar(context, &apply.head)
-                || (apply.head.as_rec_proj().is_some() && apply.params().any(has_unsolved))
-        }
+        Subterm::Apply(apply) => blocked_on_unsolved_metavar(context, &apply.head),
         Subterm::Proj(proj) => blocked_on_unsolved_metavar(context, &proj.head),
         _ => false,
     }

@@ -13,7 +13,8 @@ use {
     curios_cert::Certifier,
     curios_common::Qualifier,
     curios_core::{
-        DefinitionKind, Free, Global, Intrinsic, Reducer, Term, UniverseContext, Universes,
+        DefinitionKind, Free, Global, Intrinsic, Nat, Reducer, Subterm, Term, UniverseContext,
+        Universes,
     },
 };
 
@@ -199,6 +200,57 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
         group,
         Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
     ));
+}
+
+// A member answering a record is called through its field, as a recursive witness's method is. The call computes to its literal, and on a variable stays the folded call in both reducers, forced or reached as an operand: the record the member answers is no progress past which the field's call may restick.
+#[test]
+fn recursion_through_a_field_agrees_to_a_literal_and_stays_folded_otherwise() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let pred = context.fresh(Some("pred"));
+    let counter = context.fresh(Some("counter"));
+    let x = context.fresh(Some("x"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let count = nominal("Count");
+    let call = |argument: Term| {
+        Term::apply(
+            Term::proj_struct(Term::free_var(&counter), count, 0),
+            [argument],
+        )
+    };
+
+    let method = Term::func(
+        [(n, nat_type.clone())],
+        Term::nat_match(
+            Term::free_var(&n),
+            nat_type.clone(),
+            nat(0),
+            &pred,
+            call(Term::free_var(&pred)),
+        ),
+    );
+    let group = [(
+        counter,
+        Term::struct_type(count, Vec::<Term>::new()),
+        Term::struct_(count, Vec::<Term>::new(), [method]),
+    )];
+
+    agree(Term::rec(group.clone(), call(nat(4))));
+
+    let restuck = Term::rec(group.clone(), call(Term::free_var(&x)));
+    agree(restuck.clone());
+    assert_eq!(certifier().reduce_forced(restuck.clone()), Ok(restuck));
+
+    let operand = Term::rec(
+        group,
+        Term::intrinsic(Intrinsic::nat_add(call(Term::free_var(&x)), nat(1))),
+    );
+    agree(operand.clone());
+    let forced = certifier().reduce_forced(operand).expect("a sum reduces");
+    let Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(_, left))) = &*forced else {
+        panic!("the sum stays a successor of the call: {forced:?}");
+    };
+    assert!(left.is_folded(), "the operand unfolded restuck: {left:?}");
 }
 
 /// A guard answers its own definition one unfolding down, in both checkers.

@@ -304,6 +304,16 @@ pub fn unfold_rec_apply(context: &mut Context, apply: Apply) -> Result<Option<Te
                 .into()
             }));
         }
+        // The head is a folded call projected by a field: a member whose result is a record, its field applied, as a recursive witness's method is called. Unfolding the projected call one step and applying what the field becomes is this application's one step.
+        Subterm::Proj(inner) => {
+            return Ok(unfold_rec_proj(context, inner)?.map(|unfolded| {
+                Subterm::Apply(Apply {
+                    head: unfolded,
+                    arguments,
+                })
+                .into()
+            }));
+        }
         _ => return Ok(None),
     };
     context.spend(
@@ -318,9 +328,31 @@ pub fn unfold_rec_apply(context: &mut Context, apply: Apply) -> Result<Option<Te
     Ok(Some(telescope.open(&param_refs)))
 }
 
-/// A folded recursive spelling: a `rec` projection, a `rec` block, or an application spine headed by a projection — the one weak-head value a forced demand must not be served.
-fn is_folded(term: &Term) -> bool {
-    term.spine_rec_proj().is_some() || matches!(&**term, Subterm::Rec(_))
+/// Delta-unfold one folded call projected by a field: the call unfolded one step, and the field of the record it becomes. `None` where the projection is of no folded call, or the step exposes no record that holds the field.
+fn unfold_rec_proj(context: &mut Context, proj: Proj) -> Result<Option<Term>, ReduceError> {
+    let Proj { head, field } = proj;
+    if field.slot().is_none() {
+        return Ok(None);
+    }
+    let head = reduce(context, head)?;
+    let head = expose_rec_tail(context, head)?;
+
+    let unfolded = match head.as_rec_proj() {
+        Some((group, index)) => reduce(context, group.member_body(index))?,
+        None => {
+            let step = match Term::unwrap_or_clone(head) {
+                Subterm::Apply(inner) => unfold_rec_apply(context, inner)?,
+                Subterm::Proj(inner) => unfold_rec_proj(context, inner)?,
+                _ => None,
+            };
+            match step {
+                Some(step) => reduce(context, step)?,
+                None => return Ok(None),
+            }
+        }
+    };
+
+    Ok(project_literal(&field, force_rec(context, unfolded)?).ok())
 }
 
 /// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a normal form, so an eliminator that demands its value unfolds it here and re-reduces, repeating if the opened tail is itself a `rec`. A non-productive group spins until the step budget runs out — exactly as a top-level `rec` does.
@@ -344,13 +376,13 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
         if let Some(cached) = context.cached_forced(&term).or_else(|| {
             context
                 .cached_reduced(&term)
-                .filter(|cached| !is_folded(cached))
+                .filter(|cached| !cached.is_folded())
         }) {
             return Ok(cached);
         }
         let entry = term.clone();
         let result = reduce_closed(context, term, Demand::Forced)?;
-        if !is_folded(&result) {
+        if !result.is_folded() {
             context.remember_forced(entry, &result);
         }
 
@@ -384,6 +416,11 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 Some(unfolded) => term = reduce(context, unfolded)?,
                 None => return finished(context, folded, Subterm::Apply(apply).into()),
             },
+            // A projection of a folded call is that call's path, unfolded and kept by the same test; any other projection no unfolding opens is neutral.
+            Subterm::Proj(proj) => match unfold_rec_proj(context, proj.clone())? {
+                Some(unfolded) => term = reduce(context, unfolded)?,
+                None => return finished(context, folded, Subterm::Proj(proj).into()),
+            },
             other => {
                 let neutral = matches!(
                     other,
@@ -416,9 +453,10 @@ fn finished(context: &mut Context, folded: Term, reduct: Term) -> Result<Term, R
 
 /// The group whose call `folded` is, for [`force_rec`]'s occurrence test.
 ///
-/// A projection and a bare `rec` value carry it directly; an application carries it at the head of its spine, which is where `unfold_rec_apply` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.
+/// A member selection and a bare `rec` value carry it directly; an application or a field's projection carries it at the root of its call's path, which is where `unfold_rec_apply` and `unfold_rec_proj` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.
 fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
-    if let Some((group, _)) = folded.as_rec_proj() {
+    // A path whose root is reduced already names its group: a projection's head reduced further would be forced to the record the call answers, and name none.
+    if let Some((group, _)) = folded.called_member() {
         return Ok(Some(group.clone()));
     }
 
@@ -428,7 +466,13 @@ fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGrou
             let head = reduce(context, head.clone())?;
             let head = expose_rec_tail(context, head)?;
 
-            Ok(head.spine_rec_proj().map(|(group, _)| group.clone()))
+            Ok(head.called_member().map(|(group, _)| group.clone()))
+        }
+        Subterm::Proj(Proj { head, field }) if field.slot().is_some() => {
+            let head = reduce(context, head.clone())?;
+            let head = expose_rec_tail(context, head)?;
+
+            Ok(head.called_member().map(|(group, _)| group.clone()))
         }
         _ => Ok(None),
     }
@@ -500,6 +544,14 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
 
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
+
+    // A function a folded call's field holds, applied, is the rest of the projection's demand ([`reduce_proj`]): the path is forced whole, and stays folded where the field's call comes back restuck.
+    if matches!(&*head, Subterm::Proj(_)) && head.is_folded() {
+        let folded = Term::from(Subterm::Apply(Apply { head, arguments }));
+
+        return Ok(Reduce::Break(force_rec(context, folded)?));
+    }
+
     match Term::unwrap_or_clone(head) {
         Subterm::Func(Func { telescope, .. }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
@@ -523,8 +575,23 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
         return Ok(Reduce::Continue(value));
     }
 
+    // A projection demands the call it projects, and the demand is judged over the call's path ([`Subterm::called_member`]), not at the record the member answers: forced whole ([`force_rec`]), `lookup(leaf(k, v), h).0` is `k` and `lookup(t, h).0` stays folded. A function the field holds is no progress until it is applied, as a call answering a function is none, so the projection stays folded and its application takes the path on ([`reduce_apply`]) — taken for progress, `w(a).0(l)` would come back a `match` on `l` that names `w` again.
+    let head = reduce(context, head)?;
+    if head.is_folded() {
+        if let Some(value) = context.proj_reduct(&head, index) {
+            return Ok(Reduce::Continue(value));
+        }
+        let folded = Term::from(Subterm::Proj(Proj { head, field }));
+        let forced = force_rec(context, folded.clone())?;
+
+        return Ok(Reduce::Break(match &*forced {
+            Subterm::Func(_) => folded,
+            _ => forced,
+        }));
+    }
+
     // Which literal a slot reads is `project_literal`'s to say, as it is for the closed machine. Its flat view of a constructor value, slot `i + 1` being payload component `i`, is one nothing in this module builds (see [`reduce_match`]'s rejected alternative): it stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
-    match project_literal(&field, reduce_forced(context, head)?) {
+    match project_literal(&field, force_rec(context, head)?) {
         Ok(component) => Ok(Reduce::Continue(component)),
         Err(head) => match context.proj_reduct(&head, index) {
             Some(value) => Ok(Reduce::Continue(value)),
@@ -1586,14 +1653,18 @@ fn normalize_level(
     let inner = match Term::unwrap_or_clone(reduced) {
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             // A folded recursive call reduction left standing keeps its head, as a name whose unfolding stalls keeps its name: normalized alone, the head is forced to its member's body, a lambda applied where it stands, and the refold after this walk names a group and no body.
-            head: match is_folded(&head) {
+            head: match head.is_folded() {
                 true => normalize_arguments(context, known, head)?,
                 false => normalize_known(context, known, head)?,
             },
             arguments: normalize_argument_vec(context, known, arguments)?,
         }),
+        // A folded call projected by a field keeps its head, as an applied one does.
         Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
-            head: normalize_known(context, known, head)?,
+            head: match head.is_folded() {
+                true => normalize_arguments(context, known, head)?,
+                false => normalize_known(context, known, head)?,
+            },
             field,
         }),
         Subterm::InductType(InductType {

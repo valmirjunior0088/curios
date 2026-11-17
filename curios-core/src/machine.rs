@@ -203,7 +203,7 @@ impl ClosedMemo {
 ///
 /// **One rule, read everywhere a plain answer could reach a forced reader.** The [`ClosedMemo`] files no value this declines, because `remembered` reads the plain table for a forced probe too; a caller reads it to size that write's charge, so nothing is charged for a write that will not happen; and the [`Tap`] reads it to decide whether an operand produced plainly may answer a fold that forces. Stated once because the three are the same fact: a forced reader may be handed a plain answer exactly where forcing would have changed nothing.
 fn its_own_forced_form(value: &Term) -> bool {
-    value.spine_rec_proj().is_none() && !matches!(&**value, Subterm::Rec(_))
+    !value.is_folded()
 }
 
 /// Whether an answer about `term` can be the definition store's alone: it names no local, no metavariable and no universe metavariable. A host may rewrite a level or unwind a solution in place, and reads a local through its scope, so an answer naming none of them is one no change of scope reaches.
@@ -328,7 +328,7 @@ enum Frame {
         folded: Term,
         group: RecGroup,
     },
-    /// A forced application whose head is itself a folded call — a member whose result is a function, applied past its own parameters — waiting for that call's forced value to apply its own arguments to.
+    /// An application whose head is itself a folded call — a member whose result is a function, applied past its own parameters, or a field of the record it answers — waiting for that call's forced value to apply its own arguments to, under a [`Frame::RecGuard`] for the whole call.
     Spine {
         arguments: Vec<Argument>,
         demand: Demand,
@@ -344,10 +344,18 @@ enum Frame {
         cases: Cases,
         demand: Demand,
     },
-    /// A projection waiting for its head: the slot it reads.
+    /// A projection waiting for its head, evaluated plainly: the slot it reads.
     ProjK {
         field: Field,
         demand: Demand,
+    },
+    /// A projection of a folded call, waiting for the call's forced value: the slot it reads, the component read at the forced demand the path is under ([`Subterm::inward`]).
+    ProjPath {
+        field: Field,
+    },
+    /// A projection of a folded call at the plain demand, waiting for what its path forced to: a function stays the folded projection, as a call answering a function stays folded until it is applied.
+    PathFunc {
+        folded: Term,
     },
     /// Record the value about to be produced under `key` in the memo, in the table of the `demand` it is produced at — pushed under an application, a member selection or a match, so the second occurrence of the same closed call is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
     Memo {
@@ -600,9 +608,10 @@ impl Machine {
             }
 
             Subterm::Proj(Proj { head, field }) => match field.slot() {
+                // The head is read plainly first, so a folded call is seen as one before it is forced: a projection of one is a demand on the call's whole path, judged as the strategies judge it ([`Frame::ProjK`]). Every other head is its own forced form at either demand.
                 Some(_) => {
                     self.push(host, Frame::ProjK { field, demand })?;
-                    Ok(Step::Eval(head, Demand::Forced))
+                    Ok(Step::Eval(head, Demand::Whnf))
                 }
                 // A label or a written position that survived to reduction names no slot yet and stays stuck, exactly as it does in both hosts.
                 None => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
@@ -792,10 +801,21 @@ impl Machine {
                     Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
                         self.beta(host, telescope, arguments, demand)
                     }
-                    // A head evaluated at the plain demand comes back a folded call when the application is a member's call applied past its own parameters. A forced demand reaches through it, as the strategies' `unfold_rec_apply` does: force the call, and apply what it becomes to these arguments. A plain demand stops at the folded spine, its normal form.
-                    head if matches!(demand, Demand::Forced) && head.spine_rec_proj().is_some() => {
+                    // A head evaluated at the plain demand comes back a folded call when the application is a member's call applied past its own parameters, or a field of the record it answers ([`Subterm::inward`]). A forced demand reaches through it, as the strategies' `unfold_rec_apply` does: force the call, and apply what it becomes to these arguments, the whole call kept where it restuck. A plain demand stops at a folded spine, its normal form; a folded field applied is the rest of its projection's demand ([`Frame::ProjK`]), and is forced at either.
+                    head if (matches!(demand, Demand::Forced)
+                        || matches!(head, Subterm::Proj(_)))
+                        && head.called_member().is_some() =>
+                    {
+                        let head = Term::from(head);
+                        let (group, _) = head.called_member().expect("checked above");
+                        let group = group.clone();
+                        let folded = Term::from(Subterm::Apply(Apply {
+                            head: head.clone(),
+                            arguments: arguments.clone(),
+                        }));
+                        self.push(host, Frame::RecGuard { folded, group })?;
                         self.push(host, Frame::Spine { arguments, demand })?;
-                        Ok(Step::Eval(head.into(), Demand::Forced))
+                        Ok(Step::Eval(head, Demand::Forced))
                     }
                     head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
                         head: head.into(),
@@ -852,9 +872,48 @@ impl Machine {
                 demand,
             } => self.dispatch(host, goal, cases, value, demand),
 
-            Frame::ProjK { field, demand } => match project_literal(&field, value) {
-                Ok(component) => Ok(Step::Eval(component, demand)),
+            Frame::ProjK { field, demand } => {
+                // A folded call projected is a demand on the call's whole path, as the strategies' `force` reads one: forced, read at the slot, and kept where the path got anywhere ([`Frame::RecGuard`]). At the plain demand a function the field holds stays the folded projection, the call it is a part of not yet applied.
+                if value.is_folded() {
+                    let group = match value.called_member() {
+                        Some((group, _)) => group.clone(),
+                        None => match &*value {
+                            Subterm::Rec(rec) => rec.group().clone(),
+                            _ => unreachable!("a folded spelling is a call or a `rec`"),
+                        },
+                    };
+                    let folded = Term::from(Subterm::Proj(Proj {
+                        head: value.clone(),
+                        field: field.clone(),
+                    }));
+                    if matches!(demand, Demand::Whnf) {
+                        self.push(
+                            host,
+                            Frame::PathFunc {
+                                folded: folded.clone(),
+                            },
+                        )?;
+                    }
+                    self.push(host, Frame::RecGuard { folded, group })?;
+                    self.push(host, Frame::ProjPath { field })?;
+
+                    return Ok(Step::Eval(value, Demand::Forced));
+                }
+
+                match project_literal(&field, value) {
+                    Ok(component) => Ok(Step::Eval(component, demand)),
+                    Err(head) => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
+                }
+            }
+
+            Frame::ProjPath { field } => match project_literal(&field, value) {
+                Ok(component) => Ok(Step::Eval(component, Demand::Forced)),
                 Err(head) => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
+            },
+
+            Frame::PathFunc { folded } => match &*value {
+                Subterm::Func(_) => Ok(Step::Value(folded)),
+                _ => Ok(Step::Value(value)),
             },
 
             Frame::LetK {

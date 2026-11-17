@@ -1151,7 +1151,7 @@ fn unfolded_retry(
     that: &Term,
 ) -> Result<bool, Error> {
     curios_profile::profile!("convert::unfolded_retry");
-    if rec_instances(certifier, applied_head(this), applied_head(that)) == Some(false) {
+    if rec_instances(certifier, this.call_root(), that.call_root()) == Some(false) {
         return Ok(false);
     }
 
@@ -1167,14 +1167,14 @@ fn unfolded_retry(
             let right = right.unwrap_or_else(|| that.clone());
 
             // A `rec` block whose tail applies one of its members reaches `Apply(rec_proj)` only once that tail is opened, which is the unfolding just taken, so the guard is asked again of what it produced.
-            if rec_instances(certifier, applied_head(&left), applied_head(&right)) == Some(false) {
+            if rec_instances(certifier, left.call_root(), right.call_root()) == Some(false) {
                 return Ok(false);
             }
 
             if !pair {
                 return ground(certifier, pairs, &left, &right);
             }
-            if !pairs.unfold(applied_head(this), applied_head(that)) {
+            if !pairs.unfold(this.call_root(), that.call_root()) {
                 return Ok(false);
             }
             let outcome = ground(certifier, pairs, &left, &right);
@@ -1227,16 +1227,6 @@ fn projects_a_former(term: &Term) -> bool {
     }
 
     matches!(&**body, Subterm::InductType(_) | Subterm::StructType(_))
-}
-
-/// The head of an application spine, or the term itself: what `rec_instances` is asked about when a folded recursive call arrives applied — past its own parameters too, where the call is the head of an application of its own.
-fn applied_head(term: &Term) -> &Term {
-    let mut term = term;
-    while let Subterm::Apply(apply) = &**term {
-        term = &apply.head;
-    }
-
-    term
 }
 
 /// The type of two eliminations' scrutinee, in weak-head normal form, read by a lookup once the two are one term. `None` where no lookup types it, which leaves the arms' binders at the stand-in.

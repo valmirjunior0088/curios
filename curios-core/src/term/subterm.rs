@@ -42,6 +42,14 @@ pub enum Subterm {
     Transient(Transient),
 }
 
+/// One step a call's path takes toward its root ([`Subterm::inward`]).
+pub enum Inward<'a> {
+    /// An application, whose arguments the step applies.
+    Applied(&'a Apply),
+    /// An elaborated projection's slot.
+    Field(usize),
+}
+
 impl Subterm {
     /// The group and index this term projects, when it is a member selection rather than a `rec` block with a tail of its own.
     ///
@@ -54,16 +62,46 @@ impl Subterm {
         rec.as_proj().map(|index| (rec.group(), index))
     }
 
-    /// The group and index at the head of this application spine: [`as_rec_proj`](Self::as_rec_proj) read through every enclosing application, or of the term itself when it is none.
+    /// The step a call's path takes from this term toward its root, and the head it reaches: an application, whose arguments the step applies, or an elaborated projection's slot. `None` at the root; a written projection names no slot yet, and is a root.
     ///
-    /// This, and not `as_rec_proj` on an application's immediate head, is what recognizes a folded recursive call. A member whose result is a function, applied past its own parameters, is `f(a)(b)` — the call `f(a)` applied to what is left — and its immediate head is that call rather than the member. Read one level deep, it would be a neutral no demand ever unfolds.
-    pub fn spine_rec_proj(&self) -> Option<(&RecGroup, usize)> {
+    /// **The one statement of what a call is.** A member whose result is a function, applied past its own parameters, is `f(a)(b)` — the call `f(a)` applied to what is left — and a member whose result is a record is called through a field, `w(a).0(l)`, the way a recursive witness's method is. Read one level deep, at an application's immediate head, either is a neutral no demand unfolds and no blocker is read off, and a projection read as no part of the call demands its head and unfolds the call restuck. So every reader of a call follows these steps: the member it is of ([`called_member`](Self::called_member)), its arguments ([`call_arguments`](Self::call_arguments)), its root ([`Term::call_root`]), and totality's `call_path`, which collects them.
+    pub fn inward(&self) -> Option<(Inward<'_>, &Term)> {
+        match self {
+            Subterm::Apply(apply) => Some((Inward::Applied(apply), &apply.head)),
+            Subterm::Proj(Proj { head, field }) => {
+                field.slot().map(|slot| (Inward::Field(slot), head))
+            }
+            _ => None,
+        }
+    }
+
+    /// The group and index of the member this term is a folded call of: [`as_rec_proj`](Self::as_rec_proj) at the root of its path ([`inward`](Self::inward)), or of the term itself where it takes no step.
+    pub fn called_member(&self) -> Option<(&RecGroup, usize)> {
         let mut term = self;
-        while let Subterm::Apply(apply) = term {
-            term = &apply.head;
+        while let Some((_, inner)) = term.inward() {
+            term = inner;
         }
 
         term.as_rec_proj()
+    }
+
+    /// Every argument applied along this term's path ([`inward`](Self::inward)), the outermost first: what a folded call waits on where unfolding cannot choose an arm, since it does not wear its blocker on its head.
+    pub fn call_arguments(&self) -> Vec<&Term> {
+        let mut arguments = Vec::new();
+        let mut term = self;
+        while let Some((step, inner)) = term.inward() {
+            if let Inward::Applied(apply) = step {
+                arguments.extend(apply.params());
+            }
+            term = inner;
+        }
+
+        arguments
+    }
+
+    /// Whether this is a folded recursive spelling: a `rec` block, or a folded call ([`called_member`](Self::called_member)). It is the one weak-head value plain reduction leaves that a forced demand unfolds, so the one a forced reader must not be served.
+    pub fn is_folded(&self) -> bool {
+        self.called_member().is_some() || matches!(self, Subterm::Rec(_))
     }
 
     /// The family a nominal node is an instance or a value of.

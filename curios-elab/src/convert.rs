@@ -3173,8 +3173,8 @@ impl Convert {
                     }
                 }
                 // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the certifier's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
-                (Subterm::Apply(apply), other) if apply.head.spine_rec_proj().is_some() => {
-                    let head = applied_head(&apply.head).clone();
+                (Subterm::Apply(apply), other) if apply.head.called_member().is_some() => {
+                    let head = apply.head.call_root().clone();
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
                             self.unfolded(Some(&head), None);
@@ -3184,8 +3184,8 @@ impl Convert {
                         None => false,
                     }
                 }
-                (other, Subterm::Apply(apply)) if apply.head.spine_rec_proj().is_some() => {
-                    let head = applied_head(&apply.head).clone();
+                (other, Subterm::Apply(apply)) if apply.head.called_member().is_some() => {
+                    let head = apply.head.call_root().clone();
                     match Self::force_folded_call(context, apply)? {
                         Some(forced) => {
                             self.unfolded(None, Some(&head));

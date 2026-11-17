@@ -178,12 +178,12 @@ pub use term::{
     ArchivedTupleType, ArchivedVariant, ArchivedWantedPremise, ArchivedWitnessOrigin,
     ArchivedWitnessRole, ArchivedWrittenPlace, Argument, Arm, Ascribed, Bang, Carrier, Cases,
     Elements, Ending, Field, Foreign, FormerEta, Func, FuncType, Guard, HeadTag, InductArm,
-    InductType, Infix, Instance, Let, LetBinding, LevelDifferences, Match, Matrix, MentionCache,
-    Mentions, MentionsIter, MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method,
-    Names, NumLit, Paired, Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache,
-    Scalars, Slot, Sort, SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient,
-    Tuple, TupleType, Variant, WantedPremise, WitnessOrigin, WitnessRole, WrittenPlace, former_eta,
-    goal_at, paired,
+    InductType, Infix, Instance, Inward, Let, LetBinding, LevelDifferences, Match, Matrix,
+    MentionCache, Mentions, MentionsIter, MetaRenaming, Metavar, MetavarId, MetavarOrigin,
+    MetavarSpine, Method, Names, NumLit, Paired, Pattern, Proj, Ranked, Rec, RecGroup,
+    RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort, SpineEntries, Struct, StructEntry,
+    StructType, Subterm, Term, Transient, Tuple, TupleType, Variant, WantedPremise, WitnessOrigin,
+    WitnessRole, WrittenPlace, former_eta, goal_at, paired,
 };
 
 mod walk;

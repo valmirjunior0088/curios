@@ -1284,6 +1284,16 @@ impl Term {
 
         Self::from(Subterm::Rec(Rec::new(group, tail)))
     }
+
+    /// The root of this term's path ([`Subterm::inward`]), its steps left unread: the head a call is a call of, under every application and elaborated projection.
+    pub fn call_root(&self) -> &Term {
+        let mut term = self;
+        while let Some((_, inner)) = term.inward() {
+            term = inner;
+        }
+
+        term
+    }
 }
 
 /// Hold each of `subterm`'s children somewhere else, then stand `subterm` down to a childless node.

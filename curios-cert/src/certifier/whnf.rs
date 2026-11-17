@@ -442,6 +442,13 @@ fn step_apply(certifier: &mut ByValue, apply: Apply) -> Result<Step, ReduceError
     let head = certifier.whnf(head)?;
     let head = expose_rec_tail(certifier, head)?;
 
+    // A function a folded call's field holds, applied, is the rest of the projection's demand ([`step_proj`]): the path is forced whole, and stays folded where the field's call comes back restuck.
+    if matches!(&*head, Subterm::Proj(_)) && head.is_folded() {
+        let folded = Term::from(Subterm::Apply(Apply { head, arguments }));
+
+        return Ok(Step::Stop(force(certifier, folded)?));
+    }
+
     Ok(match Term::unwrap_or_clone(head) {
         // Saturation is the precondition of the β step, not an assumption about it: `Telescope::open` asserts on a count mismatch, so an under- or over-applied lambda would abort the walk rather than be refused. An application that does not saturate its lambda is stuck instead, which is the conservative direction — it leaves the term for the typing rules to reject with a diagnostic, and reduction that declines to fire can never admit anything.
         Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
@@ -513,10 +520,28 @@ fn step_proj(certifier: &mut ByValue, proj: Proj) -> Result<Step, ReduceError> {
         return Ok(Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))));
     }
 
+    // A projection demands the call it projects, and the demand is judged over the call's path ([`Subterm::called_member`]), not at the record the member answers: forced whole ([`force`]), it is kept where the path got anywhere and stays folded where it restuck. A function the field holds is no progress until it is applied, as a call answering a function is none, so the projection stays folded and its application takes the path on ([`step_apply`]) — taken for progress, `w(a).0(l)` would come back a `match` on `l` that names `w` again, as the elaborator's twin says.
     let head = certifier.whnf(head)?;
+    if head.is_folded() {
+        let folded = Term::from(Subterm::Proj(Proj { head, field }));
+        let forced = force(certifier, folded.clone())?;
+
+        return Ok(Step::Stop(match &*forced {
+            Subterm::Func(_) => folded,
+            _ => forced,
+        }));
+    }
     let head = force(certifier, head)?;
 
-    let component = match (&*head, &field) {
+    Ok(match slot_of(&head, &field) {
+        Some(component) => Step::Continue(component),
+        None => Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))),
+    })
+}
+
+/// The component `field` reads of the literal `head` is, where `head` is one that holds it ([`step_proj`]'s rule).
+fn slot_of(head: &Term, field: &Field) -> Option<Term> {
+    let component = match (&**head, field) {
         (Subterm::Tuple(Tuple { fields, .. }), Field::Tuple(index)) => fields.get(*index),
         (Subterm::Variant(Variant { payload, .. }), Field::Tuple(index)) => index
             .checked_sub(1)
@@ -529,10 +554,7 @@ fn step_proj(certifier: &mut ByValue, proj: Proj) -> Result<Step, ReduceError> {
         _ => None,
     };
 
-    Ok(match component.cloned() {
-        Some(component) => Step::Continue(component),
-        None => Step::Stop(Term::from(Subterm::Proj(Proj { head, field }))),
-    })
+    component.cloned()
 }
 
 /// Eta for functions: `(x) => f(x)` is `f`, provided each argument stands under its binder's mark and `f` does not itself mention `x`. Across a mark the two are functions at two types plicity holds apart, so `(@x) => f(x)` stays as written. The closed machine and the elaborator contract through `curios_core::eta_head`, and this is the certifier's own statement of the rule, so a mistake in either shows where the two checkers reduce one term.
@@ -805,6 +827,11 @@ fn force(certifier: &mut ByValue, term: Term) -> Result<Term, ReduceError> {
                 Some(unfolded) => term = certifier.whnf(unfolded)?,
                 None => return finished(certifier, folded, Subterm::Apply(apply).into()),
             },
+            // A projection of a folded call is that call's path, unfolded and kept by the same test; any other projection no unfolding opens is stuck.
+            Subterm::Proj(proj) => match unfold_rec_proj(certifier, proj.clone())? {
+                Some(unfolded) => term = certifier.whnf(unfolded)?,
+                None => return finished(certifier, folded, Subterm::Proj(proj).into()),
+            },
             other => {
                 let stuck = matches!(
                     other,
@@ -832,22 +859,23 @@ fn finished(certifier: &mut ByValue, folded: Term, value: Term) -> Result<Term, 
 
 /// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
 ///
-/// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application carries it at the head of its spine — the same place [`unfold_rec_apply`] reads it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
+/// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application or a field's projection carries it at the root of its call's path — the same place [`unfold_rec_apply`] and [`unfold_rec_proj`] read it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
 fn forced_group(certifier: &mut ByValue, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
-    if let Some((group, _)) = folded.as_rec_proj() {
+    // A path whose root is reduced already names its group: a projection's head reduced further would be forced to the record the call answers, and name none.
+    if let Some((group, _)) = folded.called_member() {
         return Ok(Some(group.clone()));
     }
 
-    match &**folded {
-        Subterm::Rec(rec) => Ok(Some(rec.group().clone())),
-        Subterm::Apply(Apply { head, .. }) => {
-            let head = certifier.whnf(head.clone())?;
-            let head = expose_rec_tail(certifier, head)?;
+    let head = match &**folded {
+        Subterm::Rec(rec) => return Ok(Some(rec.group().clone())),
+        Subterm::Apply(Apply { head, .. }) => head,
+        Subterm::Proj(Proj { head, field }) if field.slot().is_some() => head,
+        _ => return Ok(None),
+    };
+    let head = certifier.whnf(head.clone())?;
+    let head = expose_rec_tail(certifier, head)?;
 
-            Ok(head.spine_rec_proj().map(|(group, _)| group.clone()))
-        }
-        _ => Ok(None),
-    }
+    Ok(head.called_member().map(|(group, _)| group.clone()))
 }
 
 /// The one definitional unfolding [`force`] withholds: a folded recursive spelling — a `rec` value, a member selection, or a member application — stepped to the weak-head form of its body. `None` for every other shape.
@@ -860,13 +888,16 @@ pub fn unfold_spelling(certifier: &mut ByValue, term: &Term) -> Result<Option<Te
         return Ok(Some(certifier.whnf(body)?));
     }
 
-    match &**term {
-        Subterm::Rec(rec) => Ok(Some(certifier.whnf(unfold_rec(rec.clone()))?)),
-        Subterm::Apply(apply) => match unfold_rec_apply(certifier, apply.clone())? {
-            Some(unfolded) => Ok(Some(certifier.whnf(unfolded)?)),
-            None => Ok(None),
-        },
-        _ => Ok(None),
+    let unfolded = match &**term {
+        Subterm::Rec(rec) => return Ok(Some(certifier.whnf(unfold_rec(rec.clone()))?)),
+        Subterm::Apply(apply) => unfold_rec_apply(certifier, apply.clone())?,
+        Subterm::Proj(proj) => unfold_rec_proj(certifier, proj.clone())?,
+        _ => None,
+    };
+
+    match unfolded {
+        Some(unfolded) => Ok(Some(certifier.whnf(unfolded)?)),
+        None => Ok(None),
     }
 }
 
@@ -899,6 +930,16 @@ fn unfold_rec_apply(certifier: &mut ByValue, apply: Apply) -> Result<Option<Term
                 .into()
             }));
         }
+        // The head is a folded call projected by a field: a member whose result is a record, its field applied, as a recursive witness's method is called. Unfolding the projected call one step and applying what the field becomes is this application's one step, as the elaborator's twin takes it.
+        Subterm::Proj(inner) => {
+            return Ok(unfold_rec_proj(certifier, inner)?.map(|unfolded| {
+                Subterm::Apply(Apply {
+                    head: unfolded,
+                    arguments,
+                })
+                .into()
+            }));
+        }
         _ => return Ok(None),
     };
     // Saturation, for the reason `step_apply` needs it: this is the recursive twin of the β step, and `Telescope::open` asserts. An application that does not saturate its member declines to unfold rather than aborting the walk.
@@ -911,4 +952,31 @@ fn unfold_rec_apply(certifier: &mut ByValue, apply: Apply) -> Result<Option<Term
         .map(|argument| &argument.term)
         .collect::<Vec<_>>();
     Ok(Some(telescope.open(&refs)))
+}
+
+/// Unfold one folded call projected by a field: the call unfolded one step, and the field of the record it becomes. `None` where the projection is of no folded call, or the step exposes no record that holds the field.
+fn unfold_rec_proj(certifier: &mut ByValue, proj: Proj) -> Result<Option<Term>, ReduceError> {
+    let Proj { head, field } = proj;
+    if field.slot().is_none() {
+        return Ok(None);
+    }
+    let head = certifier.whnf(head)?;
+    let head = expose_rec_tail(certifier, head)?;
+
+    let unfolded = match head.as_rec_proj() {
+        Some((group, index)) => certifier.whnf(group.member_body(index))?,
+        None => {
+            let step = match Term::unwrap_or_clone(head) {
+                Subterm::Apply(inner) => unfold_rec_apply(certifier, inner)?,
+                Subterm::Proj(inner) => unfold_rec_proj(certifier, inner)?,
+                _ => None,
+            };
+            match step {
+                Some(step) => certifier.whnf(step)?,
+                None => return Ok(None),
+            }
+        }
+    };
+
+    Ok(slot_of(&force(certifier, unfolded)?, &field))
 }

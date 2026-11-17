@@ -8,7 +8,9 @@ mod tests;
 use {
     super::Applied,
     crate::Env,
-    curios_core::{Advance, CallMatrix, Free, Func, Proj, RecGroup, Struct, Subterm, Term, Tuple},
+    curios_core::{
+        Advance, CallMatrix, Free, Func, Inward, RecGroup, Struct, Subterm, Term, Tuple,
+    },
 };
 
 /// One callable part of a recursive group: member `member`'s leading lambdas where `path` is empty, and otherwise the field of the record literal under them that `path` projects to, nested literals followed; `arity` counts the member's parameters and the field lambda's after them.
@@ -38,26 +40,19 @@ impl Segment {
     }
 }
 
-/// `term` as a path: its root under every application and every elaborated projection, and the steps from the root in order. A written projection names no slot yet, and ends the path where it stands.
+/// `term` as a path: its root under every application and every elaborated projection, and the steps from the root in order, as [`Subterm::inward`] states a step.
 pub fn call_path(term: &Term) -> (Term, Vec<Segment>) {
     let mut steps = Vec::new();
-    let mut head = term.clone();
-    loop {
-        match &*head.clone() {
-            Subterm::Apply(apply) => {
-                steps.push(Segment::Arguments(apply.params().cloned().collect()));
-                head = apply.head.clone();
-            }
-            Subterm::Proj(Proj { head: inner, field }) if field.slot().is_some() => {
-                steps.push(Segment::Field(field.slot().expect("a slot")));
-                head = inner.clone();
-            }
-            _ => {
-                steps.reverse();
-                return (head, steps);
-            }
-        }
+    let mut head = term;
+    while let Some((step, inner)) = head.inward() {
+        steps.push(match step {
+            Inward::Applied(apply) => Segment::Arguments(apply.params().cloned().collect()),
+            Inward::Field(slot) => Segment::Field(slot),
+        });
+        head = inner;
     }
+    steps.reverse();
+    (head.clone(), steps)
 }
 
 /// The calls of member `member`'s parts a path rooted at it makes, each with the arguments it hands that part.
