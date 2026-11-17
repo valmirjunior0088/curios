@@ -746,12 +746,11 @@ impl Intrinsic {
         self.effect() == IntrinsicEffect::MayTrap
     }
 
-    /// Whether a binding of this operation that nothing reads may go. A total one may, and so may one that may trap: what is partial in the language takes, beside its operands, the proof that rules its trap out — a division its nonzero divisor, a read its index below the length, a narrowing of an `Flt` its evidence (`curios-core`'s `Intrinsic::signature`) — so its trap is a compiler's fault and no event a program keeps, the licence an unread call of a droppable function goes under. The window guard stays: its trap is all it contributes, the bounds check of a slice the window split virtualized away, kept where the slice stood. An allocation stays too, for the passes that splice what they build ([`Intrinsic::allocates`]).
+    /// Whether a binding of this operation that nothing reads may go. A total one may, and so may one that may trap: what is partial in the language takes, beside its operands, the proof that rules its trap out — a division its nonzero divisor, a read its index below the length, a narrowing of an `Flt` its evidence (`curios-core`'s `Intrinsic::signature`) — so its trap is a compiler's fault and no event a program keeps, the licence an unread call of a droppable function goes under. The window guard stays: its trap is all it contributes, the bounds check of a slice the window split virtualized away, kept where the slice stood. An allocation goes as a total operation does: what it builds is reached only through its result, and the pass that fuses a chain of appends splices its interior out itself, within the one pass, so no pass reads an allocation nothing reads.
     pub fn drops_unread(self) -> bool {
         match self.effect() {
-            IntrinsicEffect::Total => true,
+            IntrinsicEffect::Total | IntrinsicEffect::Allocates => true,
             IntrinsicEffect::MayTrap => !matches!(self, Self::WindowExtent),
-            IntrinsicEffect::Allocates => false,
         }
     }
 

@@ -368,7 +368,7 @@ pub fn fuse_append_chains(module: &mut Module) -> bool {
             );
         }
 
-        // The interior appends are dead once the tip stops reading them, and dead-binding elimination declines `Allocates` ops, so the chain splices its own nodes out.
+        // The interior appends are dead once the tip stops reading them, and the chain splices its own nodes out here, in the pass that rewired them, rather than leave a dead binding for dead-binding elimination.
         let redirect = chain
             .iter()
             .map(|&(node, value)| {

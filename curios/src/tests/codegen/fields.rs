@@ -107,3 +107,51 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         assert_eq!(io.output(), expected);
     }
 }
+
+/// An exit arm that builds a value nothing reads leaves the loop its window: the unread `x[h, ..t]` goes as a total operation does, so no arm reads the suffix as a value and the loop carries `(base, end, length)` instead of cutting a view at every byte. Mutation-checked: with an unread allocation kept, the arm reads `t` whole and the loop takes the bytes as one parameter.
+#[test]
+fn an_unread_construction_in_an_exit_arm_leaves_the_loop_its_window() {
+    let source = r#"
+        use /std/{Nat, Bytes, List, Option, Proc};
+        let walk(b: Bytes, k: Nat) -> Nat =
+            match b
+            | x[] => k
+            | x[h, ..t] =>
+                match h == 46
+                | true => (let _ = x[h, ..t]; k)
+                | false => walk(t, k + 1)
+                end
+            end;
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let bytes = Option/unwrap_or(List/try_get(arguments, 0), x[]);
+            /std/print(Nat/to_str(walk(bytes, 0)));
+        entry()
+        "#;
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let mut captured = None;
+    let (wasm, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+            if let Stage::CpsOptm(module) = stage {
+                captured = Some(module.clone());
+            }
+        })
+        .expect("the walk compiles");
+    let module = captured.expect("the pipeline observes cps-optm");
+    let walk = module
+        .continuation_ids()
+        .find(|&id| module.continuation(id).unwrap().debug_name.as_deref() == Some("/walk"))
+        .expect("the recursive walk is contified");
+    assert_eq!(
+        module.field_groups().get(&walk),
+        Some(&vec![FieldGroup { start: 0, width: 3 }]),
+        "the bytes travel as their window: {module}"
+    );
+
+    let compiled = to_compiled(&wasm, foreigns).expect("the walk compiles to a program");
+    for (argument, expected) in [("abc", b"3".as_slice()), ("ab.c", b"2".as_slice())] {
+        let (system, io) = MockHost::builder().args([argument]).build();
+        assert_eq!(compiled.run(system, ForeignBindings::empty()), Ok(0));
+        assert_eq!(io.output(), expected);
+    }
+}
