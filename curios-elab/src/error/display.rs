@@ -194,11 +194,13 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
         return;
     }
     let origin = |origin: &Origin| match origin {
-        Origin::Hypothesis(name) => name.spelled(spelling).to_string(),
-        Origin::Field(name, label) => format!("{}.{label}", name.spelled(spelling)),
-        Origin::Guard(written, true) => format!("a guard, {}", written.spelled(spelling)),
+        Origin::Hypothesis(name) => format!("a hypothesis, `{}`", name.spelled(spelling)),
+        Origin::Field(name, label) => {
+            format!("a proof field, `{}.{label}`", name.spelled(spelling))
+        }
+        Origin::Guard(written, true) => format!("a guard, `{}`", written.spelled(spelling)),
         Origin::Guard(written, false) => {
-            format!("a guard's false arm, {}", written.spelled(spelling))
+            format!("a guard's false arm, `{}`", written.spelled(spelling))
         }
         Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => {
             String::new()
@@ -211,7 +213,7 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             Origin::Guard(written, _) if written.spelled(spelling).to_string() == stated => {
                 origin(from)
             }
-            _ => format!("{}: {stated}", origin(from)),
+            _ => format!("{}: `{stated}`", origin(from)),
         }
     };
     if !refusal.considered().is_empty() {
@@ -245,7 +247,7 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
         Conclusion::Counterexample(assignment) if !assignment.is_empty() => {
             let values = assignment
                 .iter()
-                .map(|(atom, value)| format!("{} = {value}", atom.spelled(spelling)))
+                .map(|(atom, value)| format!("`{} = {value}`", atom.spelled(spelling)))
                 .collect::<Vec<_>>()
                 .join(", ");
             said.stating(match (refusal.absurd(), refusal.refuted()) {

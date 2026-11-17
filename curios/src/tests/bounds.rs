@@ -972,7 +972,9 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A fact too weak for the goal: named, and a counterexample at the one value it leaves.
     let weak = refusal("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i < n)");
     assert!(
-        weak.contains("it does not follow from the facts in scope:\n│    p: i <= n"),
+        weak.contains(
+            "it does not follow from the facts in scope:\n│    a hypothesis, `p`: `i <= n`"
+        ),
         "{weak}"
     );
     assert!(weak.contains("it fails at"), "{weak}");
@@ -985,7 +987,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     assert!(
         rational.contains("the search finds no proof from the facts in scope:")
             && rational.contains(
-                "the search finds it failing at x = 3/2\n│  each atom is read as a number of its own"
+                "the search finds it failing at `x = 3/2`\n│  each atom is read as a number of its own"
             ),
         "{rational}"
     );
@@ -1000,7 +1002,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     assert!(
         absurd.contains("the search finds no contradiction among the facts in scope:")
             && absurd.contains(
-                "the search finds them all holding at x = 3/2\n│  each atom is read as a number of its own"
+                "the search finds them all holding at `x = 3/2`\n│  each atom is read as a number of its own"
             ),
         "{absurd}"
     );
@@ -1014,7 +1016,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     };
     assert!(
         power.contains(
-            "the search finds them all holding at Nat/pow(2, n) = 1, n = 1\n│  each atom is read as a number of its own"
+            "the search finds them all holding at `Nat/pow(2, n) = 1`, `n = 1`\n│  each atom is read as a number of its own"
         ),
         "{power}"
     );
@@ -1043,7 +1045,7 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
         let refused = typecheck(&format!("{HEADER}\n{body}\nIo/pure(())"))
             .expect_err("the control is refused");
         assert!(
-            refused.contains("it fails at Nat/log2(n) = 0"),
+            refused.contains("it fails at `Nat/log2(n) = 0`"),
             "{body:?} reported {refused}"
         );
     }
@@ -1056,7 +1058,10 @@ fn a_fact_a_local_definition_states_is_named_with_its_operators() {
         "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) = let stated: Eq()(b * c + c, a) = Eq/sym(h); proved();\nIo/pure(())"
     ))
     .expect_err("the control is refused");
-    assert!(refused.contains("stated: b * c + c <= a"), "{refused}");
+    assert!(
+        refused.contains("a hypothesis, `stated`: `b * c + c <= a`"),
+        "{refused}"
+    );
 }
 
 /// An atom inside an operation is named as the operand it was written as, through an operator written by its concept and through a local definition standing for one: `width(s)`, where the view read the fold its body unfolds to.
@@ -1099,7 +1104,9 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
         "let _: Holds(q * Nat/to_int(d) + Nat/to_int(r) == Int/DivMod/of(n, d).quotient * Nat/to_int(d) + Nat/to_int(Int/DivMod/of(n, d).remainder)) = proved(); 0",
     );
     assert!(
-        original.contains("it fails at d = 1, r = 0, Int/DivMod/of(n, d).remainder = 1, n = 0\n"),
+        original.contains(
+            "it fails at `d = 1`, `r = 0`, `Int/DivMod/of(n, d).remainder = 1`, `n = 0`\n"
+        ),
         "{original}"
     );
 
@@ -1145,7 +1152,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let short = index("i <= List/len(xs)", "true", "false");
     assert!(
         short.contains(
-            "    a guard, i <= List/len(@Nat, xs)\n│  it fails at i = 0, List/len(@Nat, xs) = 0\n"
+            "    a guard, `i <= List/len(@Nat, xs)`\n│  it fails at `i = 0`, `List/len(@Nat, xs) = 0`\n"
         ) && short.contains(by_guard),
         "{short}"
     );
@@ -1153,7 +1160,9 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     // A false arm is the other comparison, so both are named.
     let dual = index("List/len(xs) < i", "false", "true");
     assert!(
-        dual.contains("    a guard's false arm, List/len(@Nat, xs) < i: i <= List/len(@Nat, xs)\n"),
+        dual.contains(
+            "    a guard's false arm, `List/len(@Nat, xs) < i`: `i <= List/len(@Nat, xs)`\n"
+        ),
         "{dual}"
     );
 
@@ -1161,13 +1170,13 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let apart = index("i == List/len(xs)", "false", "true");
     assert!(
         apart.contains(
-            "    a guard's false arm, i == List/len(@Nat, xs): i != List/len(@Nat, xs)\n│  it fails at i = 1, List/len(@Nat, xs) = 0\n"
+            "    a guard's false arm, `i == List/len(@Nat, xs)`: `i != List/len(@Nat, xs)`\n│  it fails at `i = 1`, `List/len(@Nat, xs) = 0`\n"
         ),
         "{apart}"
     );
     let unequal = index("i != List/len(xs)", "true", "false");
     assert!(
-        unequal.contains("    a guard, i != List/len(@Nat, xs)\n│  it fails at i = 1"),
+        unequal.contains("    a guard, `i != List/len(@Nat, xs)`\n│  it fails at `i = 1`"),
         "{unequal}"
     );
 
@@ -1178,7 +1187,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
         "Positive { n = n }.n",
     );
     assert!(
-        field.contains("it fails at n = 0\n│  decide the bound with a guard before the literal\n│  or write it explicitly, `Positive { @... }`"),
+        field.contains("it fails at `n = 0`\n│  decide the bound with a guard before the literal\n│  or write it explicitly, `Positive { @... }`"),
         "{field}"
     );
 
