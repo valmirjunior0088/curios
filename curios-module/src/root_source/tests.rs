@@ -20,7 +20,7 @@ fn an_entry_declares_what_its_mod_chain_reaches() {
         ],
     );
     let (entrypoint, loader, _) =
-        open_entrypoint(&root.join("serve.crs")).expect("the entry parses");
+        open_entrypoint(&root.join("serve.crs"), None).expect("the entry parses");
     let declares = |qualifier: Qualifier| {
         loader
             .entry_declares(&entrypoint.module.items, &qualifier)
@@ -63,7 +63,7 @@ fn the_declared_files_are_what_the_mod_chains_reach() {
     );
 
     let (entrypoint, loader, _) =
-        open_entrypoint(&root.join("serve.crs")).expect("the entry parses");
+        open_entrypoint(&root.join("serve.crs"), None).expect("the entry parses");
     assert_eq!(
         loader
             .entry_declared_files(&entrypoint.module.items)
@@ -290,6 +290,79 @@ fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
     assert!(
         Arc::ptr_eq(&header_read(&good), &header_read(&restored)),
         "the failure evicted nothing"
+    );
+}
+
+/// A source read for a package names each file it reads by the package and the file's path below the package's directory, its header among them.
+#[test]
+fn a_package_names_each_file_it_reads_by_its_path_below_its_root() {
+    let root = tree(
+        "names-library",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let source = json(&root).reading_for(PackageRoot::new("json", root.to_path_buf()));
+    source.load(&Qualifier::from(["json"])).unwrap();
+    source.load(&Qualifier::from(["json", "parse"])).unwrap();
+
+    let mut names = source
+        .reads()
+        .into_iter()
+        .map(|(_, read)| read.name().map(|name| name.to_string()))
+        .collect::<Vec<_>>();
+    names.sort();
+    assert_eq!(
+        names,
+        [Some("/json/lib.crs".into()), Some("/json/parse.crs".into())]
+    );
+}
+
+/// An entry opened for the package that declares it is named below the package's directory, and so is every file its loader reads, a directory below the manifest included.
+#[test]
+fn an_entry_opened_for_its_package_is_named_with_what_it_reads() {
+    let root = tree(
+        "names-entry",
+        &[
+            ("src/main.crs", "mod util;\n/std/print(\"\")\n"),
+            ("src/util.crs", ""),
+        ],
+    );
+    let package = PackageRoot::new("app", root.to_path_buf());
+    let (_, loader, source) =
+        open_entrypoint(&root.join("src/main.crs"), Some(&package)).expect("the entry parses");
+    loader.load(&Qualifier::from(["util"])).unwrap();
+
+    assert_eq!(
+        source.name().map(|name| name.as_str()),
+        Some("/app/src/main.crs")
+    );
+    let util = loader
+        .reads()
+        .into_iter()
+        .find(|(file, _)| file.ends_with("util.crs"))
+        .expect("the module was read")
+        .1;
+    assert_eq!(
+        util.name().map(|name| name.as_str()),
+        Some("/app/src/util.crs")
+    );
+}
+
+/// A file read for no package and then for one is two sources, so a unit read for a package never holds a source its package did not name.
+#[test]
+fn a_file_read_loose_and_then_for_a_package_is_a_source_of_its_own() {
+    let root = tree("names-memo", &[("lib.crs", "")]);
+    let qualifier = Qualifier::from(["json"]);
+
+    let loose = json(&root);
+    loose.load(&qualifier).unwrap();
+    let named = json(&root).reading_for(PackageRoot::new("json", root.to_path_buf()));
+    named.load(&qualifier).unwrap();
+
+    assert!(!Arc::ptr_eq(&header_read(&loose), &header_read(&named)));
+    assert_eq!(header_read(&loose).name(), None);
+    assert_eq!(
+        header_read(&named).name().map(|name| name.as_str()),
+        Some("/json/lib.crs")
     );
 }
 

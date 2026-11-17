@@ -4,8 +4,8 @@ use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
     curios_common::{Qualifier, Report, Said, Source, Span, is_identifier},
     curios_module::{
-        Overlay, PreparedText, RootSource, UnitSource, open_entrypoint, overlay_entrypoint,
-        supply_entrypoint,
+        Overlay, PackageRoot, PreparedText, RootSource, UnitSource, open_entrypoint,
+        overlay_entrypoint, supply_entrypoint,
     },
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold, Progress},
     curios_surface::{Entrypoint, Form},
@@ -39,6 +39,8 @@ pub enum Subject {
         ///
         /// An `Option` rather than a possibly-empty list, because the two differ: a program that declared *none* sees nothing but its own names, and one that declared *nothing* sees everything a program may name. A loose program is the second.
         declares: Option<Vec<Qualifier>>,
+        /// The package that declares the entry, which names its files — `None` for a loose program, which no package declares.
+        package: Option<PackageRoot>,
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
     Unit { units: Vec<RootSource> },
@@ -94,6 +96,7 @@ impl Subject {
                 units,
                 origin,
                 declares: None,
+                package: None,
             } if units.is_empty() => {
                 let module = match &origin {
                     Origin::File(path) => RootSource::loose_module(path, overlay),
@@ -108,6 +111,7 @@ impl Subject {
                         units,
                         origin,
                         declares: None,
+                        package: None,
                     },
                 }
             }
@@ -214,8 +218,8 @@ fn diagnosed_reading(
             units,
             origin,
             declares,
-            ..
-        } => match open(origin, declares, overlay) {
+            package,
+        } => match open(origin, declares, package.as_ref(), overlay) {
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
                 let checked =
@@ -268,16 +272,17 @@ impl Diagnosed {
     }
 }
 
-/// `program` parsed, with the loader its modules resolve through — both reading through `overlay` — or the one diagnostic a program that does not parse gets.
+/// `program` parsed, with the loader its modules resolve through — both reading through `overlay`, and for `package` where a package declares it — or the one diagnostic a program that does not parse gets.
 pub fn open(
     origin: Origin,
     declares: Option<Vec<Qualifier>>,
+    package: Option<&PackageRoot>,
     overlay: &Overlay,
 ) -> Result<(Entrypoint, RootSource), Vec<Diagnosis>> {
     let opened = match origin {
         Origin::File(path) => match overlay.get(&path) {
-            Some(text) => overlay_entrypoint(&path, text).map_err(|error| error.report()),
-            None => open_entrypoint(&path).map_err(|error| error.report()),
+            Some(text) => overlay_entrypoint(&path, text, package).map_err(|error| error.report()),
+            None => open_entrypoint(&path, package).map_err(|error| error.report()),
         },
         Origin::Text { label, text } => {
             supply_entrypoint(&label, &text).map_err(|error| error.report())

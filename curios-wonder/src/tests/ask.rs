@@ -16,6 +16,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         subject: Subject::Entry {
             units: Vec::new(),
             declares: None,
+            package: None,
             origin: Origin::Text {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),

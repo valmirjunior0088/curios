@@ -7,8 +7,8 @@
 //! Every file a source reads passes through one of two doors, [`RootSource::read`] for its text and [`RootSource::load`] for its tree, which hold one source for each distinct text of a file per thread and parse it at most once: see [`parsed`].
 
 use {
-    super::{Error, LoadError},
-    curios_common::{Mount, Qualifier, RootKind, Source, is_identifier},
+    super::{Error, LoadError, PackageRoot},
+    curios_common::{Mount, Qualifier, RootKind, Source, SourceName, is_identifier},
     curios_surface::{Form, Module, TopItem},
     std::{
         cell::RefCell,
@@ -60,10 +60,11 @@ enum Unreadable {
 
 /// Where one mount's modules are.
 enum Base {
-    /// Read from disk. `header` is the file the mount's own namespace is declared in — `None` for the entry program, whose header is its [`Entrypoint`](curios_surface::Entrypoint) and so is never read twice — and everything below the prefix reads from `directory`: `<prefix>/a/b` is `<directory>/a/b.crs`.
+    /// Read from disk. `header` is the file the mount's own namespace is declared in — `None` for the entry program, whose header is its [`Entrypoint`](curios_surface::Entrypoint) and so is never read twice — and everything below the prefix reads from `directory`: `<prefix>/a/b` is `<directory>/a/b.crs`. `package` is the package the files are read for, which names each of them ([`RootSource::reading_for`]); none for a loose file.
     Disk {
         header: Option<PathBuf>,
         directory: PathBuf,
+        package: Option<PackageRoot>,
     },
     /// Supplied already parsed, by canonical qualifier, the mount's own header filed under the prefix itself.
     Supplied(BTreeMap<Qualifier, Module>),
@@ -84,6 +85,7 @@ impl RootSource {
             Base::Disk {
                 header: None,
                 directory: Self::namespace_of(header),
+                package: None,
             },
         )])
     }
@@ -118,8 +120,20 @@ impl RootSource {
             Base::Disk {
                 header: Some(header.into()),
                 directory: directory.into(),
+                package: None,
             },
         )])
+    }
+
+    /// This source with its files read for `package`, which names each file it reads ([`PackageRoot::name_of`]): what a package's library and executables are read as, and a loose file is not.
+    pub fn reading_for(mut self, package: PackageRoot) -> Self {
+        for (_, base) in &mut self.bases {
+            if let Base::Disk { package: read, .. } = base {
+                *read = Some(package.clone());
+            }
+        }
+
+        self
     }
 
     /// `path` mounted as a unit of its own at its stem, when its text — `overlay`'s where it holds one — is written as a module and its stem is a name a mount can take: how a file no unit declares is checked item by item, rather than refused at its end for lacking the term a program would end in.
@@ -321,19 +335,26 @@ impl RootSource {
         let Some((mount, base)) = self.owning(qualifier) else {
             return Err(missing());
         };
-        let Base::Disk { header, directory } = base else {
+        let Base::Disk {
+            header,
+            directory,
+            package,
+        } = base
+        else {
             return Ok(None);
         };
         let path = match qualifier == &mount.prefix {
             true => header.clone().ok_or_else(missing)?,
             false => file(directory, qualifier, mount.prefix.segments().len()),
         };
+        let name = package.as_ref().and_then(|package| package.name_of(&path));
 
-        let source =
-            sourced(&path, self.overlay.get(&path)).map_err(|cause| Error::ModuleLoadFailed {
+        let source = sourced(&path, self.overlay.get(&path), name).map_err(|cause| {
+            Error::ModuleLoadFailed {
                 label: qualifier.join(),
                 cause: Box::new(cause),
-            })?;
+            }
+        })?;
         self.reads
             .borrow_mut()
             .insert(path.canonicalize().unwrap_or(path), Arc::clone(&source));
@@ -353,18 +374,24 @@ impl RootSource {
 
         match base {
             Base::Supplied(modules) => modules.get(qualifier).cloned().ok_or_else(missing),
-            Base::Disk { header, directory } => {
+            Base::Disk {
+                header,
+                directory,
+                package,
+            } => {
                 let path = match qualifier == &mount.prefix {
                     true => header.clone().ok_or_else(missing)?,
                     false => file(directory, qualifier, mount.prefix.segments().len()),
                 };
+                let name = package.as_ref().and_then(|package| package.name_of(&path));
 
-                let (module, source) = parsed(&path, self.overlay.get(&path)).map_err(|cause| {
-                    Error::ModuleLoadFailed {
-                        label: qualifier.join(),
-                        cause: Box::new(cause),
-                    }
-                })?;
+                let (module, source) =
+                    parsed(&path, self.overlay.get(&path), name).map_err(|cause| {
+                        Error::ModuleLoadFailed {
+                            label: qualifier.join(),
+                            cause: Box::new(cause),
+                        }
+                    })?;
 
                 // Recorded after the read succeeded and canonicalized against the file that answered it, so the record names something that existed and names it the one way. A path that will not canonicalize was read anyway, so it is recorded as given rather than dropped: a record short one entry would let a cache confirm a unit against less than it was compiled from.
                 self.reads
@@ -583,10 +610,14 @@ thread_local! {
     static PARSED: RefCell<HashMap<PathBuf, Held>> = RefCell::new(HashMap::new());
 }
 
-/// The source of the file at `path` — its text from `held` when an overlay holds the file, from the disk otherwise — one for each text the thread holds of it: a text read again is the source it was.
+/// The source of the file at `path`, named `name` — its text from `held` when an overlay holds the file, from the disk otherwise — one for each text the thread holds of it under that name: a text read again is the source it was.
 ///
-/// A text the thread does not hold takes the place of the one last read and not parsed, and of no parse: reading a file evicts nothing a later read of its last good text wants.
-fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
+/// **The file keys it and the name is matched.** Two checkouts of one package are two files under one name, so a name never keys it; and a file read under another name — loose, then declared by a `mod` — is read as a source of its own, so a unit never holds a source its package did not name. A text the thread does not hold takes the place of the one last read and not parsed, and of no parse: reading a file evicts nothing a later read of its last good text wants.
+fn sourced(
+    path: &Path,
+    held: Option<&str>,
+    name: Option<SourceName>,
+) -> Result<Arc<Source>, LoadError> {
     let text = match held {
         Some(text) => text.to_owned(),
         None => fs::read_to_string(path).map_err(|error| LoadError::Read {
@@ -604,14 +635,14 @@ fn sourced(path: &Path, held: Option<&str>) -> Result<Arc<Source>, LoadError> {
             .iter()
             .map(|(source, _)| source)
             .chain(&held.read)
-            .find(|source| source.text() == text)
+            .find(|source| source.text() == text && source.name() == name.as_ref())
             .cloned()
     });
     if let Some(hit) = hit {
         return Ok(hit);
     }
 
-    let source = Source::held(path, text);
+    let source = Arc::new(Source::of(name, Some(path.to_path_buf()), text));
     PARSED.with(|parsed| {
         parsed.borrow_mut().entry(key).or_default().read = Some(Arc::clone(&source));
     });
@@ -653,13 +684,17 @@ pub fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
     Ok(tree)
 }
 
-/// The module at `path`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
+/// The module at `path`, named `name`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
 ///
 /// **A hit hands back the same `Arc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file ([`Held`]), its parse replaced when a later text of the file parses. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
 ///
 /// Thread-local because a surface module is an `Rc` tree, which cannot cross a thread; its spans could, since a source is shared by `Arc`. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
-pub fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Arc<Source>), LoadError> {
-    let source = sourced(path, held)?;
+pub fn parsed(
+    path: &Path,
+    held: Option<&str>,
+    name: Option<SourceName>,
+) -> Result<(Module, Arc<Source>), LoadError> {
+    let source = sourced(path, held, name)?;
 
     Ok((tree_of(&source)?, source))
 }

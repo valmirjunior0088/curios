@@ -17,7 +17,9 @@ use {
         module_of, order, reachable,
     },
     curios_common::{Qualifier, Report, RootKind},
-    curios_module::{Overlay, RootSource, identity, open_entrypoint, overlay_entrypoint},
+    curios_module::{
+        Overlay, PackageRoot, RootSource, identity, open_entrypoint, overlay_entrypoint,
+    },
     std::path::{Path, PathBuf},
 };
 
@@ -235,6 +237,8 @@ pub struct Home {
     pub manifest: PathBuf,
     /// The package that declares it. Carried beside `executable` because the two together are the one identity in a compilation that cannot collide, which is what the store addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
     pub package: String,
+    /// The directory the package's manifest sits in, which the program's files are named below.
+    pub directory: PathBuf,
     /// The executable's declared name.
     pub executable: String,
 }
@@ -243,6 +247,11 @@ impl Home {
     /// Where a build of the executable for `target` is written, under the governing root's store.
     pub fn built(&self, target: Target) -> PathBuf {
         Store::at(self.root.clone()).built(target, &self.package, &self.executable)
+    }
+
+    /// The package the program's files are read for.
+    pub fn package_root(&self) -> PackageRoot {
+        PackageRoot::new(&self.package, &self.directory)
     }
 }
 
@@ -313,7 +322,8 @@ impl Program {
             return Ok(Vec::new());
         };
         let (entrypoint, loader, _) =
-            open_entrypoint(entry).map_err(|error| Box::new(error.report()))?;
+            open_entrypoint(entry, self.home().map(Home::package_root).as_ref())
+                .map_err(|error| Box::new(error.report()))?;
 
         let mut files = vec![entry.clone()];
         files.extend(
@@ -335,6 +345,7 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, Bo
                 root: governing.root.clone(),
                 manifest: governing.manifest.clone(),
                 package: governing.package.name.clone(),
+                directory: governing.directory.clone(),
                 executable: executable.name.clone(),
             },
             declares: reachable(&governing.package),
@@ -357,6 +368,7 @@ fn placed(
         return Ok(loose(file));
     };
     let directory = identity(&governing.directory);
+    let package = PackageRoot::new(&governing.package.name, &directory);
 
     // A file is a unit's when its `mod` chain reaches it, and roots that sit in one directory share it: the package's directory holds the library's modules and those of every executable beside the manifest alike. Where a file sits says which roots may declare it, and only their chains say which does; the package's reading has already refused a file two of them reach.
     for executable in &governing.package.executables {
@@ -368,7 +380,7 @@ fn placed(
         let namespace = RootSource::namespace_of(&entry);
         let declared = spelled.starts_with(&namespace)
             && module_below(&namespace, &spelled)
-                .is_some_and(|module| entry_declares(&entry, &module, overlay));
+                .is_some_and(|module| entry_declares(&entry, &module, &package, overlay));
         if declared {
             return Ok(Selection::Program(
                 program(&governing, executable)?.selected_through(file),
@@ -388,6 +400,7 @@ fn placed(
             &header,
             RootSource::namespace_of(&header),
         )
+        .reading_for(package)
         .with_overlay(overlay.clone());
         // A header on the chain that cannot be read places the file in the library anyway: the compilation reports that fault on its own account.
         if library.declares_module(&module).unwrap_or(true) {
@@ -416,11 +429,16 @@ fn loose(file: PathBuf) -> Selection {
     Selection::Program(Program::loose(Entry::File(file)))
 }
 
-/// Whether a `mod` chain from `entry` reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.
-fn entry_declares(entry: &Path, module: &Qualifier, overlay: &Overlay) -> bool {
+/// Whether a `mod` chain from `entry`, an executable of `package`, reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.
+fn entry_declares(
+    entry: &Path,
+    module: &Qualifier,
+    package: &PackageRoot,
+    overlay: &Overlay,
+) -> bool {
     let opened = match overlay.get(entry) {
-        Some(text) => overlay_entrypoint(entry, text).ok(),
-        None => open_entrypoint(entry).ok(),
+        Some(text) => overlay_entrypoint(entry, text, Some(package)).ok(),
+        None => open_entrypoint(entry, Some(package)).ok(),
     };
     let Some((entrypoint, loader, _)) = opened else {
         return true;

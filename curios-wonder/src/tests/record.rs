@@ -11,6 +11,7 @@ fn of(text: &str) -> Vec<crate::Diagnosis> {
         Subject::Entry {
             units: Vec::new(),
             declares: None,
+            package: None,
             origin: Origin::Text {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),

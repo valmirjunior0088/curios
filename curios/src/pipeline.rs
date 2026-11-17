@@ -8,8 +8,8 @@ use {
     curios_abi::ForeignStore,
     curios_common::{Report, Source, Style},
     curios_document::Documentation,
-    curios_module::{RootSource, UnitSource},
-    curios_package::{Entry, Named, Program, Refused, Runs, Target},
+    curios_module::{PackageRoot, RootSource, UnitSource},
+    curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage},
     curios_surface::Entrypoint,
     curios_verdict::Verdicts,
@@ -54,10 +54,11 @@ pub fn payload_of(
         .map(|home| (home.package.clone(), home.executable.clone()));
     let declares = program.declares();
     let manifest = program.home().map(|home| home.manifest.clone());
+    let package = program.home().map(Home::package_root);
     let units = program.into_units();
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
-    let (entrypoint, loader, source) = open(entry.as_deref())?;
+    let (entrypoint, loader, source) = open(entry.as_deref(), package.as_ref())?;
     // What the manifest declared, onto the resolver the entry's own names go through. A loose program has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
     let loader = match declares {
         Some(declares) => loader.declaring(declares),
@@ -150,12 +151,15 @@ pub fn documentation_of(
     documented.map(|documentation| (documentation, steps.into_tree()))
 }
 
-/// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
+/// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, read for `package` where a package declares it, and otherwise standard input, drained to end.
 ///
 /// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so a read of it reports the end of the input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
-pub fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
+pub fn open(
+    entry: Option<&Path>,
+    package: Option<&PackageRoot>,
+) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     match entry {
-        Some(path) => opened(path),
+        Some(path) => opened(path, package),
         None => supplied(&drained()?),
     }
 }

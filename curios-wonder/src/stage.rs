@@ -52,7 +52,7 @@ pub fn stage(
         units,
         origin,
         declares,
-        ..
+        package,
     } = subject.formed(overlay)
     else {
         return Err(Refusal::Unit);
@@ -63,7 +63,8 @@ pub fn stage(
         });
     };
 
-    let (entrypoint, loader) = open(origin, declares, overlay).map_err(Refusal::Diagnostics)?;
+    let (entrypoint, loader) =
+        open(origin, declares, package.as_ref(), overlay).map_err(Refusal::Diagnostics)?;
     let units = overlaid(units, overlay);
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);

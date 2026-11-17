@@ -29,16 +29,17 @@ pub fn declared_tests(
             units,
             origin,
             declares,
-            ..
+            package,
         } => {
-            let (entrypoint, loader) = open(origin, declares, overlay).map_err(|refusal| {
-                CompileError::Failure(
-                    refusal
-                        .into_iter()
-                        .map(|diagnostic| diagnostic.report)
-                        .collect(),
-                )
-            })?;
+            let (entrypoint, loader) =
+                open(origin, declares, package.as_ref(), overlay).map_err(|refusal| {
+                    CompileError::Failure(
+                        refusal
+                            .into_iter()
+                            .map(|diagnostic| diagnostic.report)
+                            .collect(),
+                    )
+                })?;
             let units = overlaid(units, overlay);
             // Read off the program's lowering, as its test program schedules them: its elaborated module stores its items in dependency order.
             let lowered = RefCell::new(Vec::new());

@@ -790,8 +790,8 @@ fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
             cache: &reached,
             entry: RefCell::new(Vec::new()),
         };
-        let (entrypoint, loader) =
-            crate::open(Origin::File(file.clone()), None, overlay).expect("the program parses");
+        let (entrypoint, loader) = crate::open(Origin::File(file.clone()), None, None, overlay)
+            .expect("the program parses");
         Fold::new(DEFAULT_BUDGET, &[], Some(&noting))
             .check(&entrypoint, &loader, EntryTail::Program, |_| {})
             .expect("the program lowers")
@@ -838,8 +838,8 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
             cache: &reached,
             entry: RefCell::new(Vec::new()),
         };
-        let (entrypoint, loader) =
-            crate::open(Origin::File(root.join(file)), None, &overlay).expect("the program parses");
+        let (entrypoint, loader) = crate::open(Origin::File(root.join(file)), None, None, &overlay)
+            .expect("the program parses");
         let verdict = Fold::new(DEFAULT_BUDGET, &[], Some(&noting))
             .check(&entrypoint, &loader, EntryTail::Program, |_| {})
             .expect("the program lowers")

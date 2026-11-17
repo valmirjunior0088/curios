@@ -24,6 +24,9 @@ pub use span::{
     Report, Said, Source, Span,
 };
 
+mod source_name;
+pub use source_name::{ArchivedSourceName, SourceName};
+
 mod style;
 pub use style::{Kind, Role, Style, runs};
 

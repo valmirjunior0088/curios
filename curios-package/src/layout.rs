@@ -17,7 +17,7 @@ use {
         umbrella_over,
     },
     curios_common::{Qualifier, Report, RootKind, is_identifier},
-    curios_module::{RootSource, open_entrypoint},
+    curios_module::{PackageRoot, RootSource, open_entrypoint},
     std::{
         collections::BTreeMap,
         iter,
@@ -111,7 +111,7 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_module::read_module`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
+/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo under the package's names (`curios_module::RootSource::reading_for`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
 pub fn package_source(
     package: &Package,
     directory: &Path,
@@ -125,6 +125,7 @@ pub fn package_source(
             .map(|(umbrella, root)| (umbrella, root.as_path())),
     )?;
     let header = directory.join(LIBRARY);
+    let root = PackageRoot::new(&package.name, directory);
 
     // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still mounted, and its refusal is discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. The library is what a package documents, described as the manifest describes it, and what its modules answer: each claim travels with the unit, which is where it is held to a declaration.
     let source = header.is_file().then(|| {
@@ -134,6 +135,7 @@ pub fn package_source(
             &header,
             RootSource::namespace_of(&header),
         )
+        .reading_for(root.clone())
         .declaring(declared(package))
         .documented(&package.name, package.description.as_deref())
         .answering(package.foreign.iter().flat_map(|foreign| {
@@ -145,7 +147,7 @@ pub fn package_source(
     });
 
     // Asked whether or not there is a header, because the units sharing the package's directory are its programs as well as its library: two programs compiled from one file are the same refusal either way, and gating this on the header would turn the rule on and off for a manifest that did not change.
-    one_unit_each(package, directory, source.as_ref())?;
+    one_unit_each(package, &root, source.as_ref())?;
 
     // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
     if source.is_none()
@@ -186,12 +188,13 @@ const LIBRARY_CLAIMANT: &str = "the library";
 /// Roots share the directory they sit in, so the library and every executable beside the manifest read their modules from one directory, and a row may point below it, into a module's namespace directory. A file both reach would be compiled into two units as two unrelated modules, or be a program and a module at once, where the module loader would report a parse error at the program's first token naming neither claim. A file that does not read is still claimed, and ends its branch: the compilation reports it on its own account, and a program declared as a module is one such file. A package with no executable is one unit, and its chain is not walked here.
 fn one_unit_each(
     package: &Package,
-    directory: &Path,
+    root: &PackageRoot,
     library: Option<&RootSource>,
 ) -> Result<(), Box<Report>> {
     if package.executables.is_empty() {
         return Ok(());
     }
+    let directory = root.directory.as_path();
 
     let library_files = library
         .map(RootSource::reached_files)
@@ -211,7 +214,7 @@ fn one_unit_each(
         .enumerate()
         .flat_map(|(row, executable)| {
             let entry = directory.join(&executable.path);
-            let modules = open_entrypoint(&entry)
+            let modules = open_entrypoint(&entry, Some(root))
                 .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
                 .unwrap_or_default();
 

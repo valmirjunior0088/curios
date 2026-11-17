@@ -38,12 +38,13 @@ pub fn cost(
         units,
         origin,
         declares,
-        ..
+        package,
     } = subject.formed(overlay)
     else {
         return Err(Uncosted::Unit);
     };
-    let (entrypoint, loader) = open(origin, declares, overlay).map_err(Uncosted::Diagnostics)?;
+    let (entrypoint, loader) =
+        open(origin, declares, package.as_ref(), overlay).map_err(Uncosted::Diagnostics)?;
     let units = overlaid(units, overlay);
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);

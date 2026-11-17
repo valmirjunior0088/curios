@@ -96,6 +96,7 @@ fn check(program: &str) -> Diagnosed {
                 text: program.to_string(),
             },
             declares: None,
+            package: None,
         },
         &Overlay::default(),
         None,

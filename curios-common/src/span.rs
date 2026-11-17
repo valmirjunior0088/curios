@@ -1,5 +1,5 @@
 use {
-    crate::{Kind, Style},
+    crate::{Kind, SourceName, Style},
     curios_unicode::{
         EastAsianWidth, GraphemeBreak, east_asian_width, grapheme_break, graphemes,
         is_emoji_presentation,
@@ -38,6 +38,8 @@ fn columns(cluster: &str) -> usize {
 #[derive(Debug)]
 #[curios_archive::archived]
 pub struct Source {
+    /// What the source is named by its package, where a unit read it for one ([`SourceName`]).
+    name: Option<SourceName>,
     #[archived_with(curios_archive::Map<curios_archive::AsString>)]
     path: Option<PathBuf>,
     text: String,
@@ -47,9 +49,10 @@ pub struct Source {
 }
 
 impl Source {
-    /// The source `text` is, read from `path` where it was read from a file: what each constructor below hands out shared.
-    pub fn of(path: Option<PathBuf>, text: impl Into<String>) -> Self {
+    /// The source `text` is, named `name` where it was read for a package and read from `path` where it was read from a file: what each constructor below hands out shared.
+    pub fn of(name: Option<SourceName>, path: Option<PathBuf>, text: impl Into<String>) -> Self {
         Self {
+            name,
             path,
             text: text.into(),
             lines: OnceLock::new(),
@@ -57,12 +60,12 @@ impl Source {
     }
 
     fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self::of(Some(path.into()), text))
+        Arc::new(Self::of(None, Some(path.into()), text))
     }
 
     /// A source with no backing file — embedded or test input handed to a parser as a bare string. Its diagnostics close on the line and the column alone.
     pub fn inline(text: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self::of(None, text))
+        Arc::new(Self::of(None, None, text))
     }
 
     /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics name `label` in the place a report closes on, `label:line:column`, exactly as they name a path, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
@@ -83,6 +86,11 @@ impl Source {
         let text = fs::read_to_string(&path)?;
 
         Ok(Self::new(path, text))
+    }
+
+    /// What the source is named by the package a unit read it for; `None` for a source read for no package.
+    pub fn name(&self) -> Option<&SourceName> {
+        self.name.as_ref()
     }
 
     /// The file the text was read from or stands in for, or the label it arrived under; `None` for inline text.

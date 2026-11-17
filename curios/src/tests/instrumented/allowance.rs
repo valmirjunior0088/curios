@@ -37,6 +37,7 @@ fn classification_allowance_measurements() {
             units: Vec::new(),
             origin: Origin::File(path),
             declares: None,
+            package: None,
         })
         .collect::<Vec<_>>();
     subjects.extend(
@@ -49,6 +50,7 @@ fn classification_allowance_measurements() {
                     text,
                 },
                 declares: None,
+                package: None,
             }),
     );
     subjects.push(Subject::Unit {

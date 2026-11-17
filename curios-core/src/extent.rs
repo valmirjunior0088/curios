@@ -270,19 +270,19 @@ impl Records for Anchors {
 }
 
 impl Anchors {
-    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same path and text being one.
+    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same name, path and text being one.
     fn sources(&self) -> Vec<SourceTexts> {
         let mut sources = Vec::<SourceTexts>::new();
-        // Where each source a text was sited in went, by where it lies in memory, and by its path.
+        // Where each source a text was sited in went, by where it lies in memory, and by its name and path.
         let mut placed = HashMap::<*const Source, usize>::new();
-        let mut by_path = HashMap::<Option<&std::path::Path>, Vec<usize>>::new();
+        let mut by_path = HashMap::<_, Vec<usize>>::new();
         for ((anchor, stamp), sited) in self.texts.iter() {
             let held = Arc::as_ptr(&sited.source);
             let at = match placed.get(&held) {
                 Some(at) => *at,
                 None => {
-                    let path = sited.source.path();
-                    let alike = by_path.get(&path).and_then(|candidates| {
+                    let path = (sited.source.name(), sited.source.path());
+                    let alike = by_path.get(&path).and_then(|candidates: &Vec<usize>| {
                         candidates
                             .iter()
                             .find(|at| sources[**at].source.text() == sited.source.text())
@@ -290,7 +290,11 @@ impl Anchors {
                     });
                     let at = alike.unwrap_or_else(|| {
                         sources.push(SourceTexts {
-                            source: Source::of(path.map(ToOwned::to_owned), sited.source.text()),
+                            source: Source::of(
+                                path.0.cloned(),
+                                path.1.map(ToOwned::to_owned),
+                                sited.source.text(),
+                            ),
                             texts: Vec::new(),
                         });
                         by_path.entry(path).or_default().push(sources.len() - 1);

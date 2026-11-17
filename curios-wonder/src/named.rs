@@ -196,9 +196,9 @@ fn lowering<T>(
             units,
             origin,
             declares,
-            ..
+            package,
         } => {
-            let (entrypoint, loader) = open(origin, declares, overlay)?;
+            let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
             let units = overlaid(units, overlay);
 
             Fold::new(budget, &units, through).lowered(
@@ -507,9 +507,9 @@ pub fn described(
             units,
             origin,
             declares,
-            ..
+            package,
         } => {
-            let (entrypoint, loader) = open(origin, declares, overlay)?;
+            let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
             let loader = loader.tested();
             let units = overlaid(units, overlay);
             let (said, scope) = match Fold::new(budget, &units, through)

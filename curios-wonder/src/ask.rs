@@ -14,7 +14,7 @@ use {
     curios_core::{Declared, Totality},
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
-    curios_package::{Entry, Library, Program, Refused, Selection, Spelling},
+    curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress},
     curios_surface::{Formatted, Width},
     curios_verdict::{Session, Verdicts},
@@ -176,6 +176,7 @@ impl Asked {
             .home()
             .map(|home| Verdicts::at(home.root.clone()).executing(&home.package, &home.executable));
         let declares = program.declares();
+        let package = program.home().map(Home::package_root);
         let named = program.named();
         let manifest = program.home().map(|home| home.manifest.clone());
 
@@ -184,6 +185,7 @@ impl Asked {
                 units: program.into_units(),
                 origin,
                 declares,
+                package,
             },
             named,
             manifest,

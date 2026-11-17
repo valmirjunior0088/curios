@@ -18,6 +18,9 @@ mod archive;
 pub use archive::SortedEntries;
 use archive::*;
 
+mod package_root;
+pub use package_root::PackageRoot;
+
 mod root_source;
 use root_source::*;
 pub use root_source::{ArchivedCompiled, Compiled, Overlay, RootSource, identity};

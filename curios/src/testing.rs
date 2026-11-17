@@ -9,7 +9,9 @@ use {
     curios_abi::{ForeignStore, HostOps},
     curios_browser::page,
     curios_common::{Qualifier, Report, Source},
-    curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
+    curios_module::{
+        Overlay, PackageRoot, RootSource, UnitSource, open_entrypoint, supply_entrypoint,
+    },
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
@@ -99,7 +101,7 @@ pub fn test_subjects(
                                 TestSubject::loose_module(unit, path, Named::File(path.clone()))
                             }
                             None => TestSubject::loose_program(
-                                opened(path)?,
+                                opened(path, None)?,
                                 path,
                                 Named::File(path.clone()),
                             ),
@@ -163,7 +165,7 @@ impl TestSubject {
         let Entry::File(entry) = program.entry().clone() else {
             unreachable!("a declared program is written in a file");
         };
-        let (entrypoint, loader, source) = opened(&entry)?;
+        let (entrypoint, loader, source) = opened(&entry, Some(&home.package_root()))?;
         let loader = match declares {
             Some(declares) => loader.declaring(declares),
             None => loader,
@@ -442,8 +444,11 @@ impl TestRun {
 }
 
 /// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused as written as a module where its text is one, rather than as missing the term a program ends in.
-pub fn opened(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    open_entrypoint(path).map_err(|error| match fs::read_to_string(path) {
+pub fn opened(
+    path: &Path,
+    package: Option<&PackageRoot>,
+) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
+    open_entrypoint(path, package).map_err(|error| match fs::read_to_string(path) {
         // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
         Ok(text) if Form::of(path, &text) == Form::Module => {
             not_a_program(&Entry::File(path.to_path_buf())).into()
