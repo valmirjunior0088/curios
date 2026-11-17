@@ -1,5 +1,5 @@
 title = "A parameter a field lambda hands on at its own place to a member is applied wherever the field is called, and the leading lambdas' summary still states its applications"
-status = "open"
+status = "fixed"
 
 [[witness]]
 what = "a recursion through a callback `def`'s field hands on to `app`, graded below its argument by the summary of `def`'s leading lambdas where `h` calls the field"

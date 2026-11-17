@@ -163,7 +163,7 @@ fn summaries<E: Env>(
                 .all(|used| !used.escaped.get(position).copied().unwrap_or(false))
         })
         .collect::<Vec<_>>();
-    // A member's parameter a field lambda applies is applied wherever the field is called, at arguments no row of the leading lambdas states, so their summary states nothing of it: the field's own does.
+    // A member's parameter a field lambda applies, itself or through a member it hands the parameter on to, is applied wherever the field is called, at arguments no row of the leading lambdas states, so their summary states nothing of it: the field's own does.
     let applied_in_a_field = |member: usize, position: usize| {
         shapes.iter().zip(&uses).any(|(shape, used)| {
             shape.member == member && !shape.path.is_empty() && used.records(position)
@@ -229,6 +229,8 @@ struct Tracked {
     applied: Vec<Vec<CallMatrix>>,
     /// Each field path of a parameter applied, with the matrix grading that application.
     fields: Vec<Vec<(Vec<usize>, CallMatrix)>>,
+    /// Whether a parameter is handed on at its own place to a member taking one there, whose applications through the call are this part's own.
+    handed: Vec<bool>,
     escaped: Vec<bool>,
 }
 
@@ -237,6 +239,7 @@ impl Tracked {
         Self {
             applied: vec![Vec::new(); params],
             fields: vec![Vec::new(); params],
+            handed: vec![false; params],
             escaped: vec![false; params],
         }
     }
@@ -266,9 +269,10 @@ impl Tracked {
             .collect()
     }
 
-    /// Whether the parameter at `position` is applied, a field of it is, or it is used otherwise.
+    /// Whether the parameter at `position` is applied, a field of it is, it is handed on, or it is used otherwise.
     fn records(&self, position: usize) -> bool {
         self.escaped.get(position).copied().unwrap_or(false)
+            || self.handed.get(position).copied().unwrap_or(false)
             || self
                 .applied
                 .get(position)
@@ -841,10 +845,17 @@ impl<E: Env> Walk<'_, E> {
                             && *position < arity
                             && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
                     };
-                    let rest = arguments
-                        .iter()
-                        .enumerate()
-                        .filter(|entry| !handed_on(entry))
+                    let (handed, rest): (Vec<_>, Vec<_>) =
+                        arguments.iter().enumerate().partition(handed_on);
+                    if let Some(tracked) = &mut self.tracked {
+                        for (position, _) in &handed {
+                            if let Some(slot) = tracked.handed.get_mut(*position) {
+                                *slot = true;
+                            }
+                        }
+                    }
+                    let rest = rest
+                        .into_iter()
                         .map(|(_, argument)| argument.clone())
                         .collect::<Vec<_>>();
                     return self.walks(&rest);

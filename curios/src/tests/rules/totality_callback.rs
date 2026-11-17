@@ -567,3 +567,47 @@ fn a_lambda_handed_to_a_list_fold_binds_its_element_below_the_list() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A callback a field lambda hands on to a member at its own place is applied wherever the field is called, so the summary of the leading lambdas states nothing of it: `def` applies `f` below `n` in its leading lambdas, and in the control its field hands `app` a lambda of its own, so `spin`, which hands `def` its lambda and lets the record escape to `h`, descends. The refusal has the field hand `f` itself on to `app`, which applies it at `n`; read by the leading lambdas' `f(k)` alone, `spin(0)`, which is `h(def(0, …), 0)`, which is `app(0, …)`, would be a total `spin(0)` again.
+#[test]
+fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_called() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let def(n: Nat, f: (Nat) -> True) -> {Nat, (Nat) -> True} =
+            (
+                match n
+                | 0 => 0
+                | k + 1 =>
+                    let _ = f(k);
+                    0
+                end,
+                (m) => app(n, (_) => True/qed()))
+        and app(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => f(n)
+            | k + 1 =>
+                let _ = def(k, f);
+                f(n)
+            end;
+
+        let h(r: {Nat, (Nat) -> True}, y: Nat) -> True =
+            r.1(y);
+
+        let spin(n: Nat) -> True =
+            h(def(n, (c) => spin(c)), n);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(m) => app(n, (_) => True/qed())", "(m) => app(n, f)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
