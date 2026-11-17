@@ -14,7 +14,7 @@ use {
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
-    curios_module::PreparedText,
+    curios_module::{PackageRoot, PreparedText},
     std::{borrow::Cow, cell::OnceCell, rc::Rc},
 };
 
@@ -84,6 +84,19 @@ impl Produced {
             readers: Rc::default(),
             fixed: false,
         }
+    }
+
+    /// This unit with what its declarations are written in read for `packages` ([`PreparedText::read_for`]), and every other artifact the handle it was.
+    fn read_for(self, packages: Vec<PackageRoot>) -> Self {
+        let written = match &self.written {
+            Written::Program { text, lints } => Written::Program {
+                text: Rc::new((**text).clone().read_for(packages)),
+                lints: Rc::clone(lints),
+            },
+            Written::CoreText { .. } => return self,
+        };
+
+        Self { written, ..self }
     }
 
     /// See [`Unit::mounts`].
@@ -512,6 +525,14 @@ impl Unit {
         let (unit, apart) = halves(index).ok_or("not a unit's index")?;
 
         curios_archive::from_bytes::<Unit>(unit)?.with_apart(Bytes::from(apart.to_vec()), &find)
+    }
+
+    /// This unit, restored for a source whose files are read for `packages`: each source of what its declarations are written in holds the file its name resolves to on this machine, where the package it is named by stands ([`PreparedText::read_for`]). A unit restored for no source holds its sources' names alone.
+    pub fn read_for(self, packages: Vec<PackageRoot>) -> Self {
+        Self {
+            unit: self.unit.read_for(packages),
+            ..self
+        }
     }
 
     /// This unit, decoded from its archive alone, with `bytes` as what it and its record store apart from themselves ([`Unit::stored`], [`Unit::imaged`]), each part a run of the buffer and each object it names found by `find` now. A unit whose `bytes` are a constant of the executable is the compiler's own ([`Unit::fixed`]). `Err` is bytes that are no such thing, or name an object `find` holds none for.

@@ -5,7 +5,7 @@ mod tests;
 
 use {
     crate::{LoadError, PackageRoot, RootSource, parsed},
-    curios_common::Source,
+    curios_common::{Source, SourceName},
     curios_parse::ParserError,
     curios_surface::{Entrypoint, Module},
     std::{fs, path::Path, sync::Arc},
@@ -60,16 +60,13 @@ fn opened(path: &Path, source: &Arc<Source>, package: Option<&PackageRoot>) -> R
     }
 }
 
-/// Parses `text` as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`open_entrypoint`] for a program that arrived as text rather than as a file. `label` names it in diagnostics, where a file's path would go.
+/// Parses `text`, read from standard input, as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`open_entrypoint`] for a program that arrived as text rather than as a file. It is named [`SourceName::stdin`] in diagnostics, where a file would go.
 ///
 /// **Nothing resolves because there is nowhere to resolve from.** A root's file-backed modules live in the directory it sits in, and text sits in none, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
 ///
 /// The pairing lives here for the reason [`open_entrypoint`]'s does: which `RootSource` goes with an entrypoint is one answer, not a caller's choice. The source comes back for the same reason too, though nothing verifies a supplied program against it — text that was never on disk cannot go stale, so what a caller has here is the third element of one shape rather than a second one to handle.
-pub fn supply_entrypoint(
-    label: &str,
-    text: &str,
-) -> Result<(Entrypoint, RootSource, Arc<Source>), ParserError> {
-    let source = Source::labelled(label, text);
+pub fn supply_entrypoint(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), ParserError> {
+    let source = Source::named(SourceName::stdin(), text);
     let entrypoint = Entrypoint::parse(&source)?;
 
     Ok((entrypoint, RootSource::none(), source))

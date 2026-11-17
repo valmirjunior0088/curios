@@ -34,14 +34,17 @@ fn columns(cluster: &str) -> usize {
     }
 }
 
-/// One unit of input text — a file with its path, or pathless inline text — always handed out as `Arc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text, and so a span can cross a thread. Reference-counted rather than interned: a language server loads a new text on every edit, and a count is what frees the old one once nothing points into it.
+/// One unit of input text — its name and its file where it has them, or inline text with neither — always handed out as `Arc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text, and so a span can cross a thread. Reference-counted rather than interned: a language server loads a new text on every edit, and a count is what frees the old one once nothing points into it.
+///
+/// **A name is stored and a file is not.** What a source is named ([`SourceName`]) is what everything stored, recorded or keyed beyond one process holds, so a stored unit is the same bytes wherever its package stands. The file is where this process found the text, a path of this machine: it is resolved where a source is read, or restored for a unit whose package stands on the machine, and nothing archives it.
 #[derive(Debug)]
 #[curios_archive::archived]
 pub struct Source {
-    /// What the source is named by its package, where a unit read it for one ([`SourceName`]).
+    /// What the source is named by its package, where a unit read it for one, or [`SourceName::stdin`].
     name: Option<SourceName>,
-    #[archived_with(curios_archive::Map<curios_archive::AsString>)]
-    path: Option<PathBuf>,
+    /// The file the text was read from or stands in for, within this process.
+    #[archived_with(curios_archive::Skip)]
+    file: Option<PathBuf>,
     text: String,
     /// The byte offset each line begins at, found the first time a place in the text is named or a report quotes it, so that naming a place is a search rather than a count of every line before it. Never stored, being read off `text`.
     #[archived_with(curios_archive::Skip)]
@@ -49,18 +52,18 @@ pub struct Source {
 }
 
 impl Source {
-    /// The source `text` is, named `name` where it was read for a package and read from `path` where it was read from a file: what each constructor below hands out shared.
-    pub fn of(name: Option<SourceName>, path: Option<PathBuf>, text: impl Into<String>) -> Self {
+    /// The source `text` is, named `name` where it was read for a package and read from `file` where a file holds it: what each constructor below hands out shared.
+    pub fn of(name: Option<SourceName>, file: Option<PathBuf>, text: impl Into<String>) -> Self {
         Self {
             name,
-            path,
+            file,
             text: text.into(),
             lines: OnceLock::new(),
         }
     }
 
-    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self::of(None, Some(path.into()), text))
+    fn new(file: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self::of(None, Some(file.into()), text))
     }
 
     /// A source with no backing file — embedded or test input handed to a parser as a bare string. Its diagnostics close on the line and the column alone.
@@ -68,34 +71,37 @@ impl Source {
         Arc::new(Self::of(None, None, text))
     }
 
-    /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics name `label` in the place a report closes on, `label:line:column`, exactly as they name a path, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
-    ///
-    /// The label is a display name and is never opened. Nothing reads a source back, and the only paths any consumer *records* are those of module files, which arrive through [`read`](Self::read) — so a label that no filesystem would answer for cannot be mistaken later for one that would.
-    pub fn labelled(label: &str, text: impl Into<String>) -> Arc<Self> {
-        Self::new(label, text)
+    /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics name it in the place a report closes on, `<stdin>:line:column`, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
+    pub fn named(name: SourceName, text: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self::of(Some(name), None, text))
     }
 
-    /// Text standing in for the file at `path` — an editor's unsaved buffer, consulted where the file would have been read. Diagnostics name the path exactly as they would had it been read, because to everything downstream it was.
-    pub fn held(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
-        Self::new(path, text)
+    /// Text standing in for the file at `file` — an editor's unsaved buffer, consulted where the file would have been read. Diagnostics name the file exactly as they would had it been read, because to everything downstream it was.
+    pub fn held(file: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
+        Self::new(file, text)
     }
 
-    /// Loads the file at `path` as a source, keeping the path so a diagnostic can close on the place, `path:line:column`.
-    pub fn read(path: impl Into<PathBuf>) -> io::Result<Arc<Self>> {
-        let path = path.into();
-        let text = fs::read_to_string(&path)?;
+    /// Loads the file at `file` as a source, keeping the file so a diagnostic can close on the place, `file:line:column`.
+    pub fn read(file: impl Into<PathBuf>) -> io::Result<Arc<Self>> {
+        let file = file.into();
+        let text = fs::read_to_string(&file)?;
 
-        Ok(Self::new(path, text))
+        Ok(Self::new(file, text))
     }
 
-    /// What the source is named by the package a unit read it for; `None` for a source read for no package.
+    /// This source, held as the text of `file`: what a source restored for a unit is given, its name resolved where the unit's package stands.
+    pub fn with_file(self, file: Option<PathBuf>) -> Self {
+        Self { file, ..self }
+    }
+
+    /// What the source is named: by the package a unit read it for, or as the text read from standard input; `None` for a source read for no package.
     pub fn name(&self) -> Option<&SourceName> {
         self.name.as_ref()
     }
 
-    /// The file the text was read from or stands in for, or the label it arrived under; `None` for inline text.
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
+    /// The file the text was read from or stands in for, within this process; `None` for text no file holds, a source restored with no package standing on the machine among them.
+    pub fn file(&self) -> Option<&Path> {
+        self.file.as_deref()
     }
 
     /// The text, which every [`Span`] into this source indexes by byte offset.
@@ -203,13 +209,14 @@ impl Span {
         }
     }
 
-    /// Where the span begins, as a reader of `style` is told it: the file, spelled from where they stand, then the line and the column, the one token a terminal opens; the line and the column alone for text that has no file.
+    /// Where the span begins, as a reader of `style` is told it: the file, spelled from where they stand, then the line and the column, the one token a terminal opens; the source's name in the file's place where no file on the machine holds the text, written as it is held, since it is no path of the reader's; the line and the column alone for text that has neither.
     pub fn place(&self, style: &Style) -> String {
         let (line, column) = self.line_column();
 
-        match &self.source.path {
-            Some(path) => format!("{}:{line}:{column}", style.spelled(path)),
-            None => format!("{line}:{column}"),
+        match (&self.source.file, &self.source.name) {
+            (Some(file), _) => format!("{}:{line}:{column}", style.spelled(file)),
+            (None, Some(name)) => format!("{name}:{line}:{column}"),
+            (None, None) => format!("{line}:{column}"),
         }
     }
 }

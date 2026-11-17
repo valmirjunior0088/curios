@@ -15,6 +15,14 @@ fn a_path_holding_anything_but_plain_names_names_nothing() {
 }
 
 #[test]
+fn a_name_holds_its_package_and_its_path_apart() {
+    let name = SourceName::of("app", Path::new("src/main.crs")).expect("a plain path");
+
+    assert_eq!(name.in_package(), Some(("app", "src/main.crs")));
+    assert_eq!(SourceName::stdin().in_package(), None);
+}
+
+#[test]
 fn a_package_name_that_is_no_identifier_names_nothing() {
     assert_eq!(SourceName::of("std/Nat", Path::new("le.crs")), None);
     assert_eq!(SourceName::of("", Path::new("le.crs")), None);

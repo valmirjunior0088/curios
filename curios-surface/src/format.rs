@@ -101,9 +101,9 @@ impl Formatted {
 /// The canonical indent — the corpus's four spaces.
 const INDENT: usize = 4;
 
-/// Whether `source` was read from a file of Core text, `.crsc`, by the extension of the path it was read from.
+/// Whether `source` was read from a file of Core text, `.crsc`, by the extension of the file it was read from.
 fn written_as_core_text(source: &Source) -> bool {
-    source.path().is_some_and(|path| {
+    source.file().is_some_and(|path| {
         path.extension()
             .is_some_and(|extension| extension == "crsc")
     })
@@ -144,16 +144,17 @@ fn core_text_formatted(source: &Arc<Source>, width: Width) -> Result<String, Box
     Ok(output)
 }
 
-/// The refusal of an output that failed its verification, which is the formatter's own fault and no fault of `source`: about the file it was read from, where it was read from one.
+/// The refusal of an output that failed its verification, which is the formatter's own fault and no fault of `source`: about the file it was read from, where it was read from one, and the text it is named as otherwise.
 fn unverified(source: &Source, words: &str) -> Box<Report> {
     let mut said = Said::line("compiler fault");
     said.stating("the formatter's output does not read back as the text it formatted");
     said.stating(words);
     said.stating("nothing was written");
 
-    Box::new(match source.path() {
-        Some(path) => Report::about(About::Path(path.to_path_buf()), said),
-        None => Report::of(None, said),
+    Box::new(match (source.file(), source.name()) {
+        (Some(file), _) => Report::about(About::Path(file.to_path_buf()), said),
+        (None, Some(name)) => Report::about(About::Named(name.to_string()), said),
+        (None, None) => Report::of(None, said),
     })
 }
 

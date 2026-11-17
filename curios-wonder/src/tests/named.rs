@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_common::{Qualifier, Span},
+    curios_common::{Qualifier, Source, Span},
     curios_core::{Declared, Totality},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
@@ -16,7 +16,6 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: "<stdin>".to_string(),
                 text: program.to_string(),
             },
             declares: None,
@@ -145,48 +144,36 @@ fn a_files_declarations_are_listed_in_the_order_they_are_written() {
 
 const LIBRARY_USE: &str = "/std/print(\"\")";
 
-/// A declaration of the library a compiler was built with is placed where its file still holds the text it was read in, and left unplaced where it does not: an editor's text stands for the disk's, so a buffer that differs is a file that no longer holds it.
+/// A declaration of the library a compiler carries is read and left unplaced: its sources hold their names and no file of the machine, whichever checkout the compiler was built in, and its head and prose are read off the text its unit holds.
 #[test]
-fn a_declaration_of_the_compilers_own_library_is_placed_where_its_file_still_holds_it() {
-    let print = |overlay: &Overlay| {
-        let texts = asked(LIBRARY_USE, overlay);
+fn a_declaration_of_the_compilers_own_library_is_read_and_left_unplaced() {
+    let texts = asked(LIBRARY_USE, &Overlay::default());
+    let named = Named::at(texts.iter().flat_map(|text| &text.names), 6)
+        .cloned()
+        .expect("the program names the library's `print`");
+    let declaration = named.declaration.expect("the library's `print` is written");
 
-        Named::at(texts.iter().flat_map(|text| &text.names), 6)
-            .cloned()
-            .expect("the program names the library's `print`")
-    };
+    assert_eq!(declaration.place(), None);
+    let label = &declaration.label;
+    assert_eq!(&label.source.text()[label.start..label.end], "print");
+    assert!(
+        label
+            .source
+            .name()
+            .is_some_and(|name| name.as_str().starts_with("/std/")),
+        "{:?}",
+        label.source.name()
+    );
 
-    let placed = print(&Overlay::default());
-    let declaration = placed
-        .declaration
-        .expect("the library's `print` is written");
-    let place = declaration
-        .place()
-        .expect("the checkout this compiler was built in holds the library's sources");
-    let file = place
-        .source
-        .path()
-        .expect("a library file has a path")
-        .to_path_buf();
-    assert_eq!(&place.source.text()[place.start..place.end], "print");
-
-    let moved = Overlay::of([(file, "-- another text\n".to_string())]);
-    let unplaced = print(&moved);
-    assert_eq!(unplaced.name, placed.name);
-    let unheld = unplaced
-        .declaration
-        .expect("the declaration is read whatever a file holds");
-    assert_eq!(unheld.place(), None);
-
-    // Its head and prose are read off the text its unit holds, whatever a file holds.
-    let heading = unheld.heading().expect("the declaration's text states it");
+    let heading = declaration
+        .heading()
+        .expect("the declaration's text states it");
     assert!(
         heading.head.starts_with("pub let print("),
         "{}",
         heading.head
     );
     assert!(!heading.prose.is_empty());
-    assert_eq!(declaration.heading(), Some(heading));
 }
 
 /// A library is asked through one of its files, and answers as a program does.
@@ -196,7 +183,7 @@ fn a_library_is_asked_through_one_of_its_files() {
         "use /std/{Nat};\npub let answer: Nat = 42;\npub let again: Nat = answer;\n";
     let file = Path::new("answers.crs");
     let overlay = Overlay::of([(file.to_path_buf(), LIBRARY.to_string())]);
-    let library = RootSource::labelled_module("answers", "answers.crs", LIBRARY)
+    let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
         .expect("the text is written as a module");
 
     let texts = crate::written(
@@ -227,7 +214,6 @@ fn described(program: &str, path: &str) -> Option<Described> {
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: "<stdin>".to_string(),
                 text: program.to_string(),
             },
             declares: None,
@@ -388,7 +374,6 @@ fn a_place_answers_the_declaration_its_name_names() {
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: "<stdin>".to_string(),
                 text: PROGRAM.to_string(),
             },
             declares: None,

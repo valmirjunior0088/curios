@@ -20,10 +20,7 @@ fn every_crs_example_reports_nothing() {
     for (line, example) in examples {
         let subject = Subject::Entry {
             units: Vec::new(),
-            origin: Origin::Text {
-                label: format!("the example at language.md:{line}"),
-                text: example,
-            },
+            origin: Origin::Text { text: example },
             declares: None,
             package: None,
         };
@@ -34,12 +31,12 @@ fn every_crs_example_reports_nothing() {
             None,
             &mut |_| {},
         );
-        wrong.extend(
-            reports
-                .diagnostics
-                .iter()
-                .map(|report| report.rendered(&Style::plain())),
-        );
+        wrong.extend(reports.diagnostics.iter().map(|report| {
+            format!(
+                "the example at language.md:{line}\n{}",
+                report.rendered(&Style::plain())
+            )
+        }));
     }
 
     assert!(

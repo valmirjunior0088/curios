@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
-    curios_common::Report,
+    curios_common::{Report, STDIN_NAME},
     curios_module::Overlay,
     curios_package::{
         Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
@@ -17,7 +17,7 @@ use {
     curios_pipeline::Stage,
     curios_surface::Width,
     curios_verdict::Verdicts,
-    curios_wonder::{STDIN_LABEL, Staged, file_subject},
+    curios_wonder::{Staged, file_subject},
     std::{
         env,
         path::{Path, PathBuf},
@@ -535,7 +535,7 @@ impl Contract {
 
                 Err(match program.entry() {
                     Entry::File(path) => refused.about_path(path),
-                    Entry::Stdin => refused.about_named(STDIN_LABEL),
+                    Entry::Stdin => refused.about_named(STDIN_NAME),
                 })
             }
         }
@@ -647,7 +647,7 @@ fn homeless(command: &str, entry: &Entry) -> Box<Report> {
     match entry {
         Entry::Stdin => refused("standard input")
             .trying(format!("curios {command} - --output program"))
-            .about_named(STDIN_LABEL),
+            .about_named(STDIN_NAME),
         Entry::File(path) => {
             let named = path
                 .file_stem()

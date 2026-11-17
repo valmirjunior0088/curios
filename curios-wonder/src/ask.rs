@@ -7,10 +7,12 @@
 use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Reached,
-        Refusal, STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
-        described, diagnostics, placed, stage, unit_stage, written,
+        Refusal, Severity, Subject, Uncosted, Written, checked, cost, declared_tests, described,
+        diagnostics, placed, stage, unit_stage, written,
     },
-    curios_common::{About, Kind, LINE_WIDTH, Qualifier, Report, Said, Source, Style},
+    curios_common::{
+        About, Kind, LINE_WIDTH, Qualifier, Report, STDIN_NAME, Said, Source, SourceName, Style,
+    },
     curios_core::{Declared, Totality},
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
@@ -167,7 +169,6 @@ impl Asked {
     fn about_program(program: Program) -> Result<Self, Box<Report>> {
         let origin = match program.entry() {
             Entry::Stdin => Origin::Text {
-                label: STDIN_LABEL.to_string(),
                 text: read_stdin()?,
             },
             Entry::File(path) => Origin::File(path.clone()),
@@ -466,18 +467,24 @@ fn uncanonical(answers: &[Asked], files: &[PathBuf], width: Width, reader: &Styl
         .iter()
         .filter_map(|asked| match &asked.subject {
             Subject::Entry {
-                origin: Origin::Text { label, text },
+                origin: Origin::Text { text },
                 ..
-            } => Some((label, text)),
+            } => Some(text),
             _ => None,
         })
-        .filter(|(label, text)| {
+        .filter(|text| {
             moved(Formatted::from_source(
-                &Source::labelled(label, text.as_str()),
+                &Source::named(SourceName::stdin(), text.as_str()),
                 width,
             ))
         })
-        .map(|(label, _)| report(About::Named(label.clone()), "text", Spelling::STDIN));
+        .map(|_| {
+            report(
+                About::Named(STDIN_NAME.to_string()),
+                "text",
+                Spelling::STDIN,
+            )
+        });
 
     written.chain(read).collect()
 }
@@ -881,7 +888,7 @@ fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
             let file = match (program.through(), program.entry()) {
                 (Some(module), _) => module.to_path_buf(),
                 (None, Entry::File(entry)) => entry.clone(),
-                (None, Entry::Stdin) => PathBuf::from(STDIN_LABEL),
+                (None, Entry::Stdin) => PathBuf::from(STDIN_NAME),
             };
 
             Ok((Asked::about_program(program)?, file))
@@ -1014,7 +1021,7 @@ pub fn not_a_program(entry: &Entry) -> Box<Report> {
 
     match entry {
         Entry::File(path) => refused("file").about_path(path),
-        Entry::Stdin => refused("text").about_named(STDIN_LABEL),
+        Entry::Stdin => refused("text").about_named(STDIN_NAME),
     }
 }
 
@@ -1024,6 +1031,6 @@ fn read_stdin() -> Result<String, Box<Report>> {
         Refused::of("unreadable input")
             .stating("standard input could not be read")
             .stating(error)
-            .about_named(STDIN_LABEL)
+            .about_named(STDIN_NAME)
     })
 }

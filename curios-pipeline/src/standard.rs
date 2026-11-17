@@ -407,14 +407,15 @@ impl<'a> Fold<'a> {
                 .map(|(_, root)| *root)
                 .collect::<Vec<_>>();
 
-            // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines.
+            // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines — read for that unit's packages, so the texts a lowering over it keeps lie in the package's own files.
+            let offered = withheld.map(|(_, root)| root.clone().read_for(units[0].packages()));
             let sources = units
                 .iter()
                 .enumerate()
                 .map(|(index, unit)| match withheld {
-                    Some((index_of_root, root)) if index == 0 => (
+                    Some((index_of_root, _)) if index == 0 => (
                         UnitSource::mounted(unit).seeing(granted(prelude, index_of_root, unit)),
-                        Some(root),
+                        offered.as_ref(),
                     ),
                     _ => (UnitSource::mounted(unit), None),
                 })

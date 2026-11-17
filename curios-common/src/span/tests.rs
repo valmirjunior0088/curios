@@ -88,7 +88,7 @@ fn caret_padding_reproduces_the_tabs_the_printed_line_keeps() {
 /// A report is a block: what it says, what that rests on along a trunk, each further place closed by what stands there, and its own place closing it under the word of what it is, an empty line of the trunk above and below each pane of code.
 #[test]
 fn a_report_is_a_block_closed_by_its_own_place() {
-    let source = Source::labelled("lib.crs", "let a = 1;\nlet a = 2;\n");
+    let source = Source::held("lib.crs", "let a = 1;\nlet a = 2;\n");
     let first = Span::new(Arc::clone(&source), 4, 5);
     let second = Span::new(source, 15, 16);
 
@@ -118,7 +118,7 @@ fn a_report_is_a_block_closed_by_its_own_place() {
 /// A declaration's block closes on its place and shows none of its code, which follows the block whole; its ways out stand above the close as every report's do.
 #[test]
 fn a_declarations_block_closes_on_its_place_with_no_pane() {
-    let source = Source::labelled("lib.crs", "pub let a = 1;\n");
+    let source = Source::held("lib.crs", "pub let a = 1;\n");
     let label = Span::new(source, 8, 9);
 
     let report = Report::at(label, "/lib/a")
@@ -140,7 +140,7 @@ fn a_declarations_block_closes_on_its_place_with_no_pane() {
 #[test]
 fn the_panes_of_a_report_share_one_gutter() {
     let text = format!("{}let a = b;\nlet b = a;\n", "\n".repeat(8));
-    let source = Source::labelled("lib.crs", text.clone());
+    let source = Source::held("lib.crs", text.clone());
     let ninth = text.find("a =").unwrap();
     let tenth = text.find("b =").unwrap();
     let report = Report::at(
@@ -236,7 +236,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
         painted: true,
     };
     let report = Report::at(
-        Span::new(Source::labelled("lib.crs", "let a = 2;\n"), 4, 5),
+        Span::new(Source::held("lib.crs", "let a = 2;\n"), 4, 5),
         "`a` is already declared",
     )
     .stating("delete one");
@@ -318,6 +318,32 @@ fn a_place_is_named_on_every_line_of_a_text_without_a_final_break() {
     );
     assert_eq!(source.offset_of(3, 6), Some(source.text.len()));
     assert_eq!(source.offset_of(4, 1), None);
+}
+
+/// A place is spelled by its file where one holds the text, and by its source's name, as it is held, where none does: whoever reads it, wherever they stand, a name is no path of theirs.
+#[test]
+fn a_place_no_file_holds_is_spelled_by_its_name_wherever_its_reader_stands() {
+    let name = SourceName::of("std", Path::new("List.crs")).expect("a plain path");
+    let text = "let a = 1;\n";
+    let anywhere = Style {
+        here: Some(PathBuf::from("/std")),
+        painted: false,
+    };
+
+    let named = Span::new(Source::named(name.clone(), text), 4, 5);
+    assert_eq!(named.place(&Style::plain()), "/std/List.crs:1:5");
+    assert_eq!(named.place(&anywhere), "/std/List.crs:1:5");
+
+    let filed = Span::new(
+        Arc::new(Source::of(
+            Some(name),
+            Some(PathBuf::from("List.crs")),
+            text,
+        )),
+        4,
+        5,
+    );
+    assert_eq!(filed.place(&Style::plain()), "List.crs:1:5");
 }
 
 /// What is said is built a line at a time: the first line begun is what is said and every one begun after it a fact, and written out as one text each fact stands beneath, indented, a fact that runs over lines keeping its own.

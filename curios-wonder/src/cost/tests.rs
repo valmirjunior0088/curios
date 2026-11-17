@@ -23,7 +23,6 @@ fn loose(text: &str) -> Subject {
     Subject::Entry {
         units: Vec::new(),
         origin: Origin::Text {
-            label: "<stdin>".to_string(),
             text: text.to_string(),
         },
         declares: None,

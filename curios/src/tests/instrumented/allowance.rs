@@ -43,12 +43,9 @@ fn classification_allowance_measurements() {
     subjects.extend(
         fenced(&reference, "crs")
             .into_iter()
-            .map(|(line, text)| Subject::Entry {
+            .map(|(_, text)| Subject::Entry {
                 units: Vec::new(),
-                origin: Origin::Text {
-                    label: format!("the example at language.md:{line}"),
-                    text,
-                },
+                origin: Origin::Text { text },
                 declares: None,
                 package: None,
             }),

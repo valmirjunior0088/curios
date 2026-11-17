@@ -2,7 +2,7 @@
 
 use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
-    curios_common::{Qualifier, Report, Said, Source, Span, is_identifier},
+    curios_common::{Qualifier, Report, Said, Source, SourceName, Span, is_identifier},
     curios_module::{
         Overlay, PackageRoot, PreparedText, RootSource, UnitSource, open_entrypoint,
         overlay_entrypoint, supply_entrypoint,
@@ -100,9 +100,10 @@ impl Subject {
             } if units.is_empty() => {
                 let module = match &origin {
                     Origin::File(path) => RootSource::loose_module(path, overlay),
-                    Origin::Text { label, text } => {
-                        RootSource::labelled_module(STDIN_MOUNT, label, text)
-                    }
+                    Origin::Text { text } => RootSource::supplied_module(
+                        STDIN_MOUNT,
+                        &Source::named(SourceName::stdin(), text.as_str()),
+                    ),
                 };
 
                 match module {
@@ -120,12 +121,12 @@ impl Subject {
     }
 }
 
-/// Where the program a question is about comes from: a file, or text standing in for one.
+/// Where the program a question is about comes from: a file, or the text read from standard input, which is named [`SourceName::stdin`] where a diagnostic closes on its place.
 ///
-/// Text carries a label because a diagnostic names its source in the place it closes on, `label:line:column`, exactly as it names a path, and `<stdin>` is what a program piped in is called. A file an editor holds unsaved is not text — it is [`Origin::File`] with its path in the overlay, so its `mod` declarations still resolve where the saved file's would.
+/// A file an editor holds unsaved is not text — it is [`Origin::File`] with its path in the overlay, so its `mod` declarations still resolve where the saved file's would.
 pub enum Origin {
     File(PathBuf),
-    Text { label: String, text: String },
+    Text { text: String },
 }
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles — with what the subject reached beside the records. `overlay` is consulted before the disk for every file read, the entry included.
@@ -182,7 +183,7 @@ fn diagnosed_reading(
     }
 
     // The subject's lowering, as the fold makes or restores it, read for what `file` writes.
-    let reading = file.map(|file| Reading::of(file, overlay));
+    let reading = file.map(Reading::of);
     let written = RefCell::new(Vec::new());
     let read = |scope: &[&Unit], text: &PreparedText, entry: Option<&curios_core::Entrypoint>| {
         if let Some(reading) = &reading {
@@ -284,9 +285,7 @@ pub fn open(
             Some(text) => overlay_entrypoint(&path, text, package).map_err(|error| error.report()),
             None => open_entrypoint(&path, package).map_err(|error| error.report()),
         },
-        Origin::Text { label, text } => {
-            supply_entrypoint(&label, &text).map_err(|error| error.report())
-        }
+        Origin::Text { text } => supply_entrypoint(&text).map_err(|error| error.report()),
     };
 
     match opened {

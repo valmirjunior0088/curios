@@ -3,8 +3,8 @@
 use {
     super::{test_support::*, *},
     curios_cert::certify_definitions,
-    curios_common::{Qualifier, digest},
-    curios_core::{Item, Size},
+    curios_common::{Qualifier, Style, digest},
+    curios_core::{Anchors, Global, Item, Size},
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
@@ -25,6 +25,20 @@ fn a_truncated_archive_is_rejected() {
         assert!(validate_bytes(root, &bytes[..bytes.len() / 2], pack).is_err());
         assert!(validate_bytes(root, bytes, &pack[..pack.len() / 2]).is_err());
     }
+}
+
+/// A place in the image is spelled by its source's name: the image was read in a checkout no compiler carrying it names, so its sources hold their names and no file, and a report placed in the library reads `/std/…` wherever its reader stands.
+#[test]
+fn a_place_in_the_image_is_spelled_by_its_sources_name() {
+    with_prelude(|prelude| {
+        let std = prelude.last().expect("the prelude ends in /std");
+        let anchors = std.text().expect("/std is written as a program").anchors();
+        let reverse = Global::Authored(Qualifier::from(["std", "List", "reverse"]));
+        let label = Anchors::label(&[anchors], &reverse).expect("`reverse` is written");
+
+        assert_eq!(label.source.file(), None);
+        assert_eq!(label.place(&Style::plain()), "/std/List.crs:120:9");
+    });
 }
 
 /// `/sys` is supplied whole by the build script — no file is read and nothing precedes it — so its record says so, which is what keeps a source tree from ever claiming to be the one it came from.

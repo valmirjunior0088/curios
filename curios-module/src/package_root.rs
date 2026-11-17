@@ -21,8 +21,15 @@ impl PackageRoot {
         }
     }
 
-    /// What the file at `file` is named in this package: its path below the package's directory, spelled as it is given before any link is followed, so a file reached through a link keeps the name its package gives it. `None` for a file outside the directory.
+    /// What the file at `file` is named in this package: its path below the package's directory. `None` for a file outside the directory.
     pub fn name_of(&self, file: &Path) -> Option<SourceName> {
         SourceName::of(&self.name, file.strip_prefix(&self.directory).ok()?)
+    }
+
+    /// The file `name` names on this machine: its path below the package's directory, where `name` is one of this package's; `None` for a name of another package, or of no package.
+    pub fn file_of(&self, name: &SourceName) -> Option<PathBuf> {
+        let (package, path) = name.in_package()?;
+
+        (package == self.name).then(|| self.directory.join(path))
     }
 }

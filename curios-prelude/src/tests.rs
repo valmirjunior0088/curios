@@ -207,7 +207,10 @@ fn sys_spellings() -> Vec<Spelling> {
     for text in std.texts(None, |_| true) {
         for mention in text.mentions() {
             let span = &mention.span;
-            let path = span.source.path().expect("a source of `/std` is a file");
+            let path = span
+                .source
+                .file()
+                .expect("a source of `/std` read here is a file");
             if let Some(part) = part_spelled(&span.source.text()[span.start..span.end]) {
                 spellings.push(Spelling {
                     part: part.to_string(),

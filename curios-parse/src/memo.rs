@@ -4,6 +4,9 @@ use {
     std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc},
 };
 
+#[cfg(feature = "profile")]
+use std::path::Path;
+
 /// One cached parse at a given grammar key and start offset: either the produced value (type-erased, since the table is shared across the memoized parsers) paired with the end offset to resume at, or the verbatim error the parser failed with.
 type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;
 
@@ -57,7 +60,7 @@ pub fn run_parser<'a, A>(
     MEMO.with(|memo| memo.borrow_mut().clear());
 
     // One span per parse, named by what is being parsed: a test that parses several sources otherwise reads as one undifferentiated stream of choices.
-    curios_profile::profile!("run_parser", group = %source.path().unwrap_or(std::path::Path::new("<text>")).display());
+    curios_profile::profile!("run_parser", group = %source.name().map_or_else(|| source.file().unwrap_or(Path::new("<text>")).display().to_string(), ToString::to_string));
 
     // On a segment of its own, as every other stage enters: the grammar's nonterminals recurse per nesting, beneath `recurse`.
     let result = grown(|| parser.parse(ParserState::new(source)).map(|(item, _)| item));

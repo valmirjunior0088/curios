@@ -1,9 +1,9 @@
 use {crate::*, curios_common::Qualifier};
 
-/// Text has no file, but it has line numbers — so a diagnostic about it still says where, with the label standing exactly where a path would.
+/// Text has no file, but it has line numbers — so a diagnostic about it still says where, with its name standing exactly where a file would.
 #[test]
 fn supplied_text_names_itself_in_diagnostics() {
-    let Err(error) = supply_entrypoint("<stdin>", "/std/print(\n") else {
+    let Err(error) = supply_entrypoint("/std/print(\n") else {
         panic!("the call never closes");
     };
 
@@ -14,7 +14,7 @@ fn supplied_text_names_itself_in_diagnostics() {
 /// A file-backed `mod` has nowhere to resolve from, and answers as a missing module rather than by reading a directory invented from a stem nothing has.
 #[test]
 fn supplied_text_resolves_no_file_backed_modules() {
-    let (_, loader, _) = supply_entrypoint("<stdin>", "mod util;\n()").expect("it parses");
+    let (_, loader, _) = supply_entrypoint("mod util;\n()").expect("it parses");
 
     assert!(
         loader.directories().is_empty(),
@@ -29,11 +29,9 @@ fn supplied_text_resolves_no_file_backed_modules() {
 /// What a supplied program cannot do is spread itself over files — not declare modules. An inline one is untouched.
 #[test]
 fn supplied_text_keeps_inline_modules() {
-    let (entrypoint, _, _) = supply_entrypoint(
-        "<stdin>",
-        "mod util\n    pub let greeting: Str = \"hi\";\nend\n\nutil/greeting",
-    )
-    .expect("it parses");
+    let (entrypoint, _, _) =
+        supply_entrypoint("mod util\n    pub let greeting: Str = \"hi\";\nend\n\nutil/greeting")
+            .expect("it parses");
 
     assert_eq!(entrypoint.module.items.len(), 1);
 }

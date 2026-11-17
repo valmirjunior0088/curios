@@ -24,7 +24,7 @@
 
 use {
     crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Silent, Written},
-    curios_common::{Source, Span},
+    curios_common::{Source, Span, Style},
     curios_core::Declared,
     curios_module::Overlay,
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Selection, Spelling},
@@ -432,7 +432,7 @@ impl Server {
 
     /// `span` as a place an editor opens. In a document the editor holds it is where the span stands in the buffer, and nothing where the buffer was edited there since the span was taken; in any other file it is the span's own range.
     fn located(&self, span: &Span) -> Option<Location> {
-        let path = curios_module::identity(span.source.path()?);
+        let path = curios_module::identity(span.source.file()?);
         let range = match self.documents.get(&path) {
             Some(buffer) => {
                 let moved = Standing::of(span.source.text(), buffer).moved(span)?;
@@ -804,7 +804,7 @@ fn workspace_root(params: &InitializeParams) -> Option<PathBuf> {
     path_of(&folder.uri)
 }
 
-/// One record as the protocol's diagnostic, and the path it belongs to — the span's source when it has one, and the checked document itself, at its first position, when it has none. Each note of its report is a place related to it, which an editor shows beside the message and jumps to.
+/// One record as the protocol's diagnostic, and the file it belongs to — the one its span's text lies in, and the checked document itself, at its first position, where it has no place or a place no file on the machine holds. Each note of its report placed in a file is a place related to it, which an editor shows beside the message and jumps to; one placed where no file holds the text closes the message instead, spelled as a report spells it, so an editor is handed no place it cannot open.
 fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
     let severity = match record.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
@@ -812,16 +812,12 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
         Severity::Lint => DiagnosticSeverity::WARNING,
     };
 
-    let lies_in = |span: &Span| {
-        span.source
-            .path()
-            .map(curios_module::identity)
-            .unwrap_or_else(|| document.to_path_buf())
-    };
-    let (path, range) = match record.report.span() {
-        Some(span) => (lies_in(span), range_of(span)),
-        None => (document.to_path_buf(), Range::default()),
-    };
+    let filed = |span: &Span| span.source.file().map(curios_module::identity);
+    let placed = record
+        .report
+        .span()
+        .and_then(|span| Some((filed(span)?, range_of(span))));
+    let (path, range) = placed.unwrap_or_else(|| (document.to_path_buf(), Range::default()));
     let related = record
         .report
         .notes
@@ -829,13 +825,27 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
         .filter_map(|note| {
             Some(DiagnosticRelatedInformation {
                 location: Location {
-                    uri: uri_of(&lies_in(&note.span))?,
+                    uri: uri_of(&filed(&note.span)?)?,
                     range: range_of(&note.span),
                 },
                 message: note.message.clone(),
             })
         })
         .collect::<Vec<_>>();
+    // An editor lists a diagnostic by its first line, where a tag alone names nothing of the program. A goal's first line is its answer already.
+    let mut message = match record.severity {
+        Severity::Goal => record.report.message(),
+        Severity::Error | Severity::Lint => record.report.listed(),
+    };
+    for note in &record.report.notes {
+        if note.span.source.file().is_none() {
+            message.push_str(&format!(
+                "\n{}; {}",
+                note.message,
+                note.span.place(&Style::plain())
+            ));
+        }
+    }
 
     (
         path,
@@ -843,11 +853,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
             range,
             severity: Some(severity),
             // No `source`: an editor appends it to the message's last line (Zed writes `expected: Str (curios)`, which reads as one clause), it trims a trailing newline that would have moved it, and with one server for the language it identifies nothing.
-            // An editor lists a diagnostic by its first line, where a tag alone names nothing of the program. A goal's first line is its answer already.
-            message: match record.severity {
-                Severity::Goal => record.report.message(),
-                Severity::Error | Severity::Lint => record.report.listed(),
-            },
+            message,
             related_information: (!related.is_empty()).then_some(related),
             ..Diagnostic::default()
         },

@@ -127,11 +127,13 @@ impl PreparedText {
             })
             .collect::<Vec<_>>();
         texts.sort_by(|one, other| {
-            one.span
-                .source
-                .path()
-                .cmp(&other.span.source.path())
-                .then(one.span.start.cmp(&other.span.start))
+            let (one, other) = (&one.span, &other.span);
+
+            (one.source.name(), one.source.file(), one.start).cmp(&(
+                other.source.name(),
+                other.source.file(),
+                other.start,
+            ))
         });
 
         texts

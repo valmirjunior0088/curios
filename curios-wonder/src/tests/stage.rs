@@ -2,6 +2,7 @@
 
 use {
     crate::*,
+    curios_common::Source,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     std::path::Path,
@@ -15,7 +16,6 @@ fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Ref
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: "<stdin>".to_string(),
                 text: text.to_string(),
             },
             declares: None,
@@ -75,7 +75,7 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
     let file = Path::new("answers.crs");
     let overlay = Overlay::of([(file.to_path_buf(), LIBRARY.to_string())]);
     let rung = |name: &str| {
-        let library = RootSource::labelled_module("answers", "answers.crs", LIBRARY)
+        let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
             .expect("the text is written as a module");
 
         crate::unit_stage(

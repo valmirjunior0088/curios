@@ -1,12 +1,14 @@
 use {
     super::*,
     crate::*,
+    curios_common::{Report, SourceName},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     lsp_types::{DocumentSymbol, Position, SymbolKind},
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},
+        sync::Arc,
         time::Duration,
     },
 };
@@ -92,7 +94,6 @@ fn check(program: &str) -> Diagnosed {
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: "<stdin>".to_string(),
                 text: program.to_string(),
             },
             declares: None,
@@ -318,4 +319,31 @@ fn a_position_names_the_offset_it_was_derived_from() {
     let past = |line, character| offset_of(text, Position { line, character });
     assert_eq!(past(0, 40), 5);
     assert_eq!(past(9, 0), text.len());
+}
+
+/// A diagnostic placed where no file on the machine holds the text, as in the library a compiler carries, is filed under the checked document with no place, and a note placed there closes its message as a report spells it: an editor is handed no place it cannot open.
+#[test]
+fn a_place_no_file_holds_is_no_location_an_editor_is_handed() {
+    let name = SourceName::of("std", Path::new("List.crs")).expect("a plain path");
+    let library = Source::named(name, "let a = 1;\n");
+    let report = Report::at(Span::new(Arc::clone(&library), 4, 5), "`a` is declared")
+        .noting(Span::new(library, 4, 5), "first declared here");
+    let (path, diagnostic) = adapt(
+        &scratch(),
+        &Diagnosis {
+            severity: Severity::Error,
+            report,
+        },
+    );
+
+    assert_eq!(path, scratch());
+    assert_eq!(diagnostic.range, Range::default());
+    assert_eq!(diagnostic.related_information, None);
+    assert!(
+        diagnostic
+            .message
+            .ends_with("\nfirst declared here; /std/List.crs:1:5"),
+        "{}",
+        diagnostic.message
+    );
 }

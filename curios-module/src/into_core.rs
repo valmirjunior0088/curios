@@ -67,12 +67,12 @@ pub use reachability::Reachability;
 use reachability::*;
 
 use {
-    crate::{Compiled, Error, RootSource, tree_of},
+    crate::{Compiled, Error, PackageRoot, RootSource, tree_of},
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
     curios_common::{
         Digest, Filed, Mount, Object, Persistent, Plicity, Qualifier, Recorded, Report, RootKind,
-        Source, Span, SyntaxRegistry, grown,
+        Source, SourceName, Span, SyntaxRegistry, grown,
     },
     curios_document::Documentation,
     curios_surface::{
@@ -649,6 +649,9 @@ pub struct PreparedText {
     /// **Stored apart from the unit**, each source's texts an object ([`PreparedText::anchors_recorded`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
     #[archived_with(curios_archive::Skip)]
     anchors: Recorded<curios_core::Anchors>,
+    /// The packages the unit was restored for, each standing where this machine holds it: what each source of its stored texts is given its file by where they are restored ([`PreparedText::read_for`]). None for a unit lowered here, whose sources hold their files, and for one restored for no source, the prelude's image among them, whose sources hold their names alone.
+    #[archived_with(curios_archive::Skip)]
+    packages: Vec<PackageRoot>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
     /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that, each record and each file's scan an object ([`PreparedText::baseline_digests`]), handed back where the unit is restored ([`PreparedText::with_baseline`]), and read when a lowering first asks.
@@ -689,11 +692,33 @@ impl PreparedText {
         &self.lints
     }
 
-    /// Where each source declaration of this unit lies. See the field.
+    /// Where each source declaration of this unit lies, each source holding the file its name resolves to through the packages the unit was restored for. See the field.
     pub fn anchors(&self) -> &curios_core::Anchors {
+        let file_of = |name: &SourceName| {
+            self.packages
+                .iter()
+                .find_map(|package| package.file_of(name))
+        };
+
         self.anchors
-            .get()
+            .get_with(|table, entries| {
+                curios_core::Anchors::restored_filed(table, entries, &file_of)
+            })
             .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"))
+    }
+
+    /// This unit, restored for a source whose files are read for `packages`: where its declarations lie is read again from what it was restored from, each source holding the file its name resolves to on this machine. A unit lowered here holds its sources' files already, and is handed back as it is.
+    pub fn read_for(self, packages: Vec<PackageRoot>) -> Self {
+        let anchors = match self.anchors.as_stored() {
+            Some((table, entries)) => Recorded::stored(table.clone(), entries.to_vec()),
+            None => return self,
+        };
+
+        Self {
+            anchors,
+            packages,
+            ..self
+        }
     }
 
     /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.
@@ -2382,6 +2407,11 @@ impl<'a> UnitSource<'a> {
         self.source.reads()
     }
 
+    /// The packages this unit's files are read for. See [`RootSource::packages`].
+    pub fn packages(&self) -> Vec<PackageRoot> {
+        self.source.packages()
+    }
+
     /// The prefixes this unit claims, which decide how its names are spelled and so which unit it is.
     pub fn claims(&self) -> Vec<Mount> {
         self.mounts()
@@ -3431,6 +3461,7 @@ fn into_core_unit_within(
         lints,
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
+        packages: Vec::new(),
         baseline: Recorded::held(BaselineHalf {
             declarations: records,
             scans,
@@ -3517,7 +3548,8 @@ pub fn document_unit(
 
             Some((
                 (
-                    span.source.path().map(ToOwned::to_owned),
+                    span.source.name().cloned(),
+                    span.source.file().map(ToOwned::to_owned),
                     span.start,
                     span.end,
                 ),

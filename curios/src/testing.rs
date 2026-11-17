@@ -8,7 +8,7 @@ use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
     curios_abi::{ForeignStore, HostOps},
     curios_browser::page,
-    curios_common::{Qualifier, Report, Source},
+    curios_common::{Qualifier, Report, STDIN_NAME, Source, SourceName},
     curios_module::{
         Overlay, PackageRoot, RootSource, UnitSource, open_entrypoint, supply_entrypoint,
     },
@@ -17,7 +17,7 @@ use {
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
-    curios_wonder::{STDIN_LABEL, STDIN_MOUNT, not_a_program},
+    curios_wonder::{STDIN_MOUNT, not_a_program},
     std::{
         collections::BTreeMap,
         fs,
@@ -112,14 +112,13 @@ pub fn test_subjects(
                     let text = stdin()?;
                     // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
                     let invoked = Path::new(Spelling::STDIN);
-                    Ok(vec![
-                        match RootSource::labelled_module(STDIN_MOUNT, STDIN_LABEL, &text) {
-                            Some(unit) => TestSubject::loose_module(unit, invoked, Named::Stdin),
-                            None => {
-                                TestSubject::loose_program(supplied(&text)?, invoked, Named::Stdin)
-                            }
-                        },
-                    ])
+                    Ok(vec![match RootSource::supplied_module(
+                        STDIN_MOUNT,
+                        &Source::named(SourceName::stdin(), text.as_str()),
+                    ) {
+                        Some(unit) => TestSubject::loose_module(unit, invoked, Named::Stdin),
+                        None => TestSubject::loose_program(supplied(&text)?, invoked, Named::Stdin),
+                    }])
                 }
             },
         },
@@ -459,11 +458,9 @@ pub fn opened(
 
 /// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file when it is written as a module.
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    supply_entrypoint(STDIN_LABEL, text).map_err(|error| {
-        match Form::of(Path::new(STDIN_LABEL), text) {
-            Form::Module => not_a_program(&Entry::Stdin).into(),
-            Form::Program => CompileError::Failure(vec![error.report()]),
-        }
+    supply_entrypoint(text).map_err(|error| match Form::of(Path::new(STDIN_NAME), text) {
+        Form::Module => not_a_program(&Entry::Stdin).into(),
+        Form::Program => CompileError::Failure(vec![error.report()]),
     })
 }
 

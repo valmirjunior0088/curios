@@ -7,7 +7,10 @@ use {
     curios_module::Overlay,
     curios_surface::{Formatted, Width},
     curios_wonder::{Origin, Subject, diagnostics},
-    std::{fs, path::Path},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
 };
 
 /// The file the README has its reader save the error example in, which is the path `wonder` prints.
@@ -52,22 +55,16 @@ fn the_error_shown_is_what_wonder_prints() {
         .last()
         .expect("an example comes before the error it shows");
 
+    // Held as the file the reader saves it in, which no disk of the suite's holds, so the place a report closes on is that file's.
+    let file = PathBuf::from(ERROR_EXAMPLE);
+    let overlay = Overlay::of([(file.clone(), example)]);
     let subject = Subject::Entry {
         units: Vec::new(),
-        origin: Origin::Text {
-            label: ERROR_EXAMPLE.to_owned(),
-            text: example,
-        },
+        origin: Origin::File(file),
         declares: None,
         package: None,
     };
-    let reports = diagnostics(
-        DEFAULT_BUDGET,
-        subject,
-        &Overlay::default(),
-        None,
-        &mut |_| {},
-    );
+    let reports = diagnostics(DEFAULT_BUDGET, subject, &overlay, None, &mut |_| {});
     let printed: Vec<String> = reports
         .diagnostics
         .iter()

@@ -2,7 +2,7 @@
 //!
 //! **Asked of the lowering, and of no checker.** A written name is resolved where it is lowered, and a file being edited seldom checks. So the fold compiles what the subject is compiled against and lowers the subject itself, no further (`Fold::lowered`, `Fold::lowered_unit`): a subject that would be refused answers as one that compiles, and only one that does not lower has nothing to read.
 //!
-//! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a store's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. The units a compiler was built with are believed on no read, so a declaration of one is placed where its file still holds the text it was read in, and is left unplaced otherwise: under an installed release their sources are another machine's.
+//! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a store's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. A unit the compiler was built with was read in a checkout no question names, or on another machine, so its sources hold their names and no file, and a declaration of one is left unplaced: it is answered by the path it is declared at, its head and its prose read off its text all the same.
 //!
 //! **A declaration's head and prose are read off its own text**, which the unit that declares it read and its record still holds ([`Declaration::heading`]): a declaration is answered with them whether or not a file holds it, the library under an installed release included, and whether or not a documentation page shows it.
 //!
@@ -14,8 +14,8 @@ use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
     curios_common::{Plicity, Qualifier, Source, Span},
     curios_core::{
-        Anchors, Certification, Declared, Definitions, Global, HeadKey, Imports, Lexicon, Places,
-        Spellings, Subterm, Totality, UnitPaths, WitnessKey,
+        Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
+        Lexicon, Places, Spellings, Subterm, Totality, UnitPaths, WitnessKey,
     },
     curios_module::{Heading, Overlay, PreparedText, SYNTAX, heading, identity},
     curios_pipeline::{Cache, EntryTail, Fold, Progress, spelling_at},
@@ -24,12 +24,10 @@ use {
     curios_verdict::Verdicts,
     std::{
         cell::RefCell,
-        collections::{BTreeMap, HashMap},
-        fs,
+        collections::HashMap,
         path::{Path, PathBuf},
         ptr,
         rc::Rc,
-        sync::Arc,
     },
 };
 
@@ -57,7 +55,7 @@ pub struct Declaration {
     pub text: Span,
     /// Where its name stands in that text.
     pub label: Span,
-    /// Whether a file holds that text — see the module documentation. Where none does, the declaration is read and has no place to open.
+    /// Whether the declaration has a place to open: the subject's own always, and a unit in scope's where a file holds its text — see the module documentation. Where it has none, the declaration is read and answered by its path.
     pub held: bool,
 }
 
@@ -120,7 +118,7 @@ pub fn written(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<Written>, Vec<Diagnosis>> {
-    let reading = Reading::of(file, overlay);
+    let reading = Reading::of(file);
 
     lowering(
         budget,
@@ -144,7 +142,7 @@ pub fn placed(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Described>, Vec<Diagnosis>> {
-    let reading = Reading::of(file, overlay);
+    let reading = Reading::of(file);
 
     lowering(
         budget,
@@ -156,7 +154,7 @@ pub fn placed(
             let texts = reading.read(scope, own, entry);
             let offset = texts.first()?.text.source.offset_of(line, column)?;
             let named = Named::at(texts.iter().flat_map(|text| &text.names), offset)?;
-            let (said, _) = said_of(scope, own, named.named, overlay)?;
+            let (said, _) = said_of(scope, own, named.named)?;
 
             Some(Described {
                 asked: named.name.clone(),
@@ -180,7 +178,7 @@ fn lowering<T>(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
-    then: impl FnOnce(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>) -> T,
+    then: impl FnOnce(&[&Unit], &PreparedText, Option<&Entrypoint>) -> T,
 ) -> Result<T, Vec<Diagnosis>> {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
@@ -212,25 +210,23 @@ fn lowering<T>(
     .map_err(of_error)
 }
 
-/// One question's reads of the disk, each asked once: which source is the file asked about, and which file still holds the text a unit the compiler was built with read.
-pub struct Reading<'a> {
+/// One question's reads of what a file writes, each asked once: which source is the file asked about.
+pub struct Reading {
     /// The file asked about, under the one spelling two paths to it share.
     file: PathBuf,
-    overlay: &'a Overlay,
+    /// What was asked about, as it was written: the name a text no file holds is asked about by, `<stdin>`.
+    asked: PathBuf,
     /// Whether each source lies in the file asked about, by the source's own allocation: a unit's texts share their file's.
     lying: RefCell<HashMap<*const Source, bool>>,
-    /// Whether the file at each path holds the text a source of that path was read as.
-    standing: RefCell<BTreeMap<PathBuf, bool>>,
 }
 
-impl<'a> Reading<'a> {
-    /// What reads the file at `file`, through `overlay`, as a question about what it writes.
-    pub fn of(file: &Path, overlay: &'a Overlay) -> Self {
+impl Reading {
+    /// What reads the file at `file` as a question about what it writes.
+    pub fn of(file: &Path) -> Self {
         Self {
             file: identity(file),
-            overlay,
+            asked: file.to_path_buf(),
             lying: RefCell::new(HashMap::new()),
-            standing: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -239,7 +235,7 @@ impl<'a> Reading<'a> {
         &self,
         scope: &[&Unit],
         text: &PreparedText,
-        entry: Option<&curios_core::Entrypoint>,
+        entry: Option<&Entrypoint>,
     ) -> Vec<Written> {
         text.texts(entry, |source| self.lies(source))
             .iter()
@@ -258,7 +254,8 @@ impl<'a> Reading<'a> {
                                     held: true,
                                 }),
                             ),
-                            None => self.declaration(scope, text, &mention.name)?,
+                            None => found(scope, text, &mention.name)
+                                .map(|found| (found.declared, found.declaration))?,
                         };
 
                         Some(Named {
@@ -282,55 +279,18 @@ impl<'a> Reading<'a> {
             .collect()
     }
 
-    /// What `name` is declared as and where ([`found`]).
-    fn declaration(
-        &self,
-        scope: &[&Unit],
-        own: &PreparedText,
-        name: &Global,
-    ) -> Option<(Declared, Option<Declaration>)> {
-        let found = found(scope, own, name, &|label| self.stands(label))?;
-
-        Some((found.declared, found.declaration))
-    }
-
-    /// Whether `source` is the file asked about.
+    /// Whether `source` is what was asked about: the file, under its one spelling, and for a text no file holds, the name it was asked by.
     fn lies(&self, source: &Source) -> bool {
         *self
             .lying
             .borrow_mut()
             .entry(ptr::from_ref(source))
-            .or_insert_with(|| {
-                source
-                    .path()
-                    .is_some_and(|path| identity(path) == self.file)
+            .or_insert_with(|| match source.file() {
+                Some(file) => identity(file) == self.file,
+                None => source
+                    .name()
+                    .is_some_and(|name| Path::new(name.as_str()) == self.asked),
             })
-    }
-
-    /// Whether the file `span` names still holds the text the span was taken in, an editor's text standing for the disk's.
-    fn stands(&self, span: &Span) -> bool {
-        let source: &Arc<Source> = &span.source;
-        let Some(path) = source.path() else {
-            return false;
-        };
-
-        *self
-            .standing
-            .borrow_mut()
-            .entry(path.to_path_buf())
-            .or_insert_with(|| holds(self.overlay, source))
-    }
-}
-
-/// Whether the file `source` was read from still holds the text it was read as, an editor's text standing for the disk's.
-fn holds(overlay: &Overlay, source: &Source) -> bool {
-    let Some(path) = source.path() else {
-        return false;
-    };
-
-    match overlay.get(path) {
-        Some(held) => held == source.text(),
-        None => fs::read_to_string(path).is_ok_and(|held| held == source.text()),
     }
 }
 
@@ -342,16 +302,11 @@ struct Found<'s> {
     unit: Option<&'s Unit>,
 }
 
-/// What `name` is declared as and where, by the unit that declares it: the subject's own lowering `own`, then the units in scope, `stands` saying whether a file still holds the text a unit the compiler was built with read. `None` for a name no lowered item declares, which is one an item the parser could not read declared.
-fn found<'s>(
-    scope: &[&'s Unit],
-    own: &'s PreparedText,
-    name: &Global,
-    stands: &dyn Fn(&Span) -> bool,
-) -> Option<Found<'s>> {
-    let written = |anchors: &Anchors, held: &dyn Fn(&Span) -> bool| {
+/// What `name` is declared as and where, by the unit that declares it: the subject's own lowering `own`, placed always, then the units in scope, each placed where a file holds its text. `None` for a name no lowered item declares, which is one an item the parser could not read declared.
+fn found<'s>(scope: &[&'s Unit], own: &'s PreparedText, name: &Global) -> Option<Found<'s>> {
+    let written = |anchors: &Anchors, own: bool| {
         let (text, label) = anchors.written(name)?;
-        let held = held(&label);
+        let held = own || label.source.file().is_some();
 
         Some(Declaration { text, label, held })
     };
@@ -359,7 +314,7 @@ fn found<'s>(
     if let Some(declared) = own.declared_as(name) {
         return Some(Found {
             declared,
-            declaration: written(own.anchors(), &|_| true),
+            declaration: written(own.anchors(), true),
             lowered: own,
             unit: None,
         });
@@ -370,11 +325,10 @@ fn found<'s>(
         let lowered = unit.text()?;
         Some((*unit, lowered, lowered.declared_as(name)?))
     })?;
-    let fixed = unit.fixed();
 
     Some(Found {
         declared,
-        declaration: written(lowered.anchors(), &|label| !fixed || stands(label)),
+        declaration: written(lowered.anchors(), false),
         lowered,
         unit: Some(unit),
     })
@@ -441,7 +395,7 @@ pub fn described(
             .filter_map(|unit| unit.text())
             .collect::<Vec<_>>();
         let path = own.named_by(&texts, asked).unwrap_or(*asked);
-        let (said, unit) = said_of(scope, own, Global::Authored(path), overlay)?;
+        let (said, unit) = said_of(scope, own, Global::Authored(path))?;
 
         Some(match unit {
             Some(unit) => {
@@ -542,21 +496,19 @@ pub fn described(
     }
 }
 
-/// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering `own`, then the units in `scope` — beside the unit in scope that declares it, none for the subject's own. A file holds the text a unit the compiler was built with read as `overlay` says. `None` for a name no lowered item declares.
+/// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering `own`, then the units in `scope` — beside the unit in scope that declares it, none for the subject's own. `None` for a name no lowered item declares.
 fn said_of<'s>(
     scope: &[&'s Unit],
     own: &'s PreparedText,
     name: Global,
-    overlay: &Overlay,
 ) -> Option<(Lowered, Option<&'s Unit>)> {
     let texts = scope
         .iter()
         .filter_map(|unit| unit.text())
         .collect::<Vec<_>>();
-    let stands = |label: &Span| holds(overlay, &label.source);
-    let found = found(scope, own, &name, &stands)?;
+    let found = found(scope, own, &name)?;
     let spellings = own.spellings(&texts);
-    let witnesses = witnesses(scope, own, &stands, &spellings, &found, &name);
+    let witnesses = witnesses(scope, own, &spellings, &found, &name);
 
     Some((
         Lowered {
@@ -596,11 +548,10 @@ fn members(lexicon: &Lexicon, name: &Global, declared: Declared) -> Vec<String> 
     }
 }
 
-/// The witnesses the units in `scope`, then `own`, declare that `name`, `found` where it is declared, takes part in, each unit's by place, `stands` saying whether a file still holds the text a unit the compiler was built with read: a concept's own, and a type's — those keyed on the head it stands for, a nominal type's name, or what the value of a definition whose type is a sort is keyed by. None for anything else. Each name in them is written as a reader outside every module writes it, over `spellings` ([`absolute`]).
+/// The witnesses the units in `scope`, then `own`, declare that `name`, `found` where it is declared, takes part in, each unit's by place, placed where a file holds its text, the subject's own always: a concept's own, and a type's — those keyed on the head it stands for, a nominal type's name, or what the value of a definition whose type is a sort is keyed by. None for anything else. Each name in them is written as a reader outside every module writes it, over `spellings` ([`absolute`]).
 fn witnesses(
     scope: &[&Unit],
     own: &PreparedText,
-    stands: &dyn Fn(&Span) -> bool,
     spellings: &Spellings,
     found: &Found<'_>,
     name: &Global,
@@ -657,15 +608,16 @@ fn witnesses(
         (_, [_]) => Some(absolute(&outside, concept)),
         _ => Some(format!("{}{}", absolute(&outside, concept), heads(key))),
     };
-    // Each unit's places, the lowering its witnesses are written in where it holds one, and whether it is one the compiler was built with.
+    // Each unit's places, the lowering its witnesses are written in where it holds one, and whether it is the subject's own.
     let units = scope
         .iter()
-        .map(|unit| (unit.places(), unit.text(), unit.fixed()))
-        .chain([(own.places(), Some(own), false)]);
+        .map(|unit| (unit.places(), unit.text(), false))
+        .chain([(own.places(), Some(own), true)]);
 
     Some(
         units
-            .flat_map(|(places, lowered, fixed)| {
+            .flat_map(|(places, lowered, owned)| {
+                // In the order they are written, placed or not, then by module and by what each is keyed on.
                 let mut witnessed = places
                     .witnesses()
                     .filter_map(|witness| {
@@ -673,29 +625,30 @@ fn witnesses(
                         let Global::Witness(id) = witness else {
                             return None;
                         };
-                        let place = lowered
+                        let written = lowered
                             .and_then(|lowered| lowered.anchors().written(witness))
-                            .map(|(_, label)| label)
-                            .filter(|label| !fixed || stands(label));
-
-                        Some(Witnessed {
-                            place,
+                            .map(|(_, label)| label);
+                        let order = written.as_ref().map(|label| {
+                            (
+                                label.source.name().cloned(),
+                                label.source.file().map(Path::to_path_buf),
+                                label.start,
+                            )
+                        });
+                        let witnessed = Witnessed {
+                            place: written.filter(|label| owned || label.source.file().is_some()),
                             module: id.module().join(),
                             keyed: keyed(&concept, &key)?,
-                        })
+                        };
+
+                        Some((
+                            (order, witnessed.module.clone(), witnessed.keyed.clone()),
+                            witnessed,
+                        ))
                     })
                     .collect::<Vec<_>>();
-                witnessed.sort_by_key(|witnessed| {
-                    (
-                        witnessed
-                            .place
-                            .as_ref()
-                            .map(|place| (place.source.path().map(Path::to_path_buf), place.start)),
-                        witnessed.module.clone(),
-                        witnessed.keyed.clone(),
-                    )
-                });
-                witnessed
+                witnessed.sort_by(|(one, _), (other, _)| one.cmp(other));
+                witnessed.into_iter().map(|(_, witnessed)| witnessed)
             })
             .collect(),
     )

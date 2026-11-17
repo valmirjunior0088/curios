@@ -424,12 +424,14 @@ impl Verdicts {
             .map(|packs| -> Rc<dyn Candidates> { packs })
     }
 
-    /// The unit whose index `slot` holds as `index`, each object it names found among the packs of the slot's address: `None` where one of them is not found there, or the index holds no unit.
-    fn restored(&self, slot: &str, index: &[u8]) -> Option<Unit> {
+    /// The unit whose index `slot` holds as `index`, each object it names found among the packs of the slot's address, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the objects is not found there, or the index holds no unit.
+    fn restored(&self, slot: &str, index: &[u8], source: &UnitSource<'_>) -> Option<Unit> {
         curios_profile::profile!("verdicts::restored");
         let packs = self.packs(slot)?;
 
-        Unit::restored(index, |digest| packs.find(digest)).ok()
+        Unit::restored(index, |digest| packs.find(digest))
+            .ok()
+            .map(|unit| unit.read_for(source.packages()))
     }
 
     /// File the objects of `stored` the packs of `slot`'s address do not hold, in one pack: what a slot naming them is renamed into place after.
@@ -538,7 +540,7 @@ impl Verdicts {
                     return None;
                 }
 
-                self.restored(&slot, &index)?
+                self.restored(&slot, &index, source)?
             }
         };
         // Held as a compiled unit is, so the first edit to this unit is recompiled over the copy in hand rather than over the slot read back again.
@@ -572,7 +574,7 @@ impl Verdicts {
             return None;
         }
 
-        let unit = self.restored(&slot, &index)?;
+        let unit = self.restored(&slot, &index, source)?;
         let after = self
             .taken
             .borrow()

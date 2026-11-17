@@ -12,7 +12,9 @@ mod tests;
 use {
     super::{ModuleInfo, PreparedText, PublicInterface, Scoped, visible_path},
     curios_abi::{NEVER, WireType},
-    curios_common::{Class, Keyword, LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
+    curios_common::{
+        Class, Keyword, LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
+    },
     curios_document::{
         Declaration, Documentation, Kind, Mark, Marked, Member, ModuleDocumentation, Signature,
     },
@@ -31,8 +33,8 @@ use {
     },
 };
 
-/// Where a name is written: the path of the file it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
-pub type Written = (Option<PathBuf>, usize, usize);
+/// Where a name is written: the name and the file of the source it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
+pub type Written = (Option<SourceName>, Option<PathBuf>, usize, usize);
 
 /// The indent a broken signature continues at — the formatter's.
 const INDENT: usize = 4;
@@ -622,7 +624,8 @@ impl Reader<'_> {
             let referent = match written {
                 Some(written) => source.and_then(|source| {
                     let place = (
-                        source.path().map(ToOwned::to_owned),
+                        source.name().cloned(),
+                        source.file().map(ToOwned::to_owned),
                         written.start,
                         written.end,
                     );

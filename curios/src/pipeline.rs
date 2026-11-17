@@ -6,7 +6,7 @@ use {
     crate::{Subject, Tree, apart, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
-    curios_common::{Report, Source, Style},
+    curios_common::{Report, STDIN_NAME, Source, Style},
     curios_document::Documentation,
     curios_module::{PackageRoot, RootSource, UnitSource},
     curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
@@ -14,7 +14,7 @@ use {
     curios_surface::Entrypoint,
     curios_verdict::Verdicts,
     curios_wasm::Module,
-    curios_wonder::{Ended, STDIN_LABEL, Telling},
+    curios_wonder::{Ended, Telling},
     std::{
         cell::RefCell,
         io, mem,
@@ -170,7 +170,7 @@ pub fn drained() -> Result<String, Box<Report>> {
         Refused::of("unreadable input")
             .stating("standard input could not be read")
             .stating(error)
-            .about_named(STDIN_LABEL)
+            .about_named(STDIN_NAME)
     })
 }
 

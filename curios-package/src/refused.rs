@@ -126,7 +126,7 @@ impl Refused {
         let Self { said, at, tries } = self;
         let place = found(source.text(), &at)
             .map(|range| About::Place(Span::new(Arc::clone(source), range.start, range.end)));
-        let whole = || source.path().map(|path| About::Path(path.to_path_buf()));
+        let whole = || source.file().map(|file| About::Path(file.to_path_buf()));
         let report = match place.or_else(whole) {
             Some(about) => Report::about(about, said),
             None => Report::of(None, said),

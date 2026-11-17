@@ -113,6 +113,14 @@ impl<T> Recorded<T> {
     where
         T: Records,
     {
+        self.get_with(T::restored)
+    }
+
+    /// The table, restored now by `restore` where nothing has asked for it before: for a table whose entries are read with what the process holds beside their bytes. `Err` is what it was stored as holding no such table.
+    pub fn get_with(
+        &self,
+        restore: impl FnOnce(&[u8], &[Object]) -> Result<T, String>,
+    ) -> Result<&T, String> {
         if let Some(value) = self.value.get() {
             return Ok(value);
         }
@@ -120,7 +128,7 @@ impl<T> Recorded<T> {
             .stored
             .as_ref()
             .expect("a recorded table is in hand or stored");
-        let value = T::restored(table.as_slice(), entries)?;
+        let value = restore(table.as_slice(), entries)?;
 
         Ok(self.value.get_or_init(|| value))
     }

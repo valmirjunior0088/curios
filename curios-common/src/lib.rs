@@ -25,7 +25,7 @@ pub use span::{
 };
 
 mod source_name;
-pub use source_name::{ArchivedSourceName, SourceName};
+pub use source_name::{ArchivedSourceName, STDIN_NAME, SourceName};
 
 mod style;
 pub use style::{Kind, Role, Style, runs};

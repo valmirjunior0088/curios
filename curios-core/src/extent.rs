@@ -20,7 +20,8 @@ mod tests;
 use {
     crate::Global,
     curios_common::{
-        Digest, InKeyOrder, Object, Qualifier, Records, Sorted, Source, Span, Table, intern,
+        Digest, InKeyOrder, Object, Qualifier, Records, Sorted, Source, SourceName, Span, Table,
+        intern,
     },
     std::{
         cell::RefCell,
@@ -28,6 +29,7 @@ use {
         collections::HashMap,
         fmt,
         hash::{DefaultHasher, Hash, Hasher},
+        path::PathBuf,
         ptr,
         sync::{Arc, LazyLock, Mutex},
     },
@@ -238,14 +240,26 @@ impl SourceTexts {
     }
 }
 
-/// Where each declaration lies, restored out of what a unit stores of it: where each definition is named, archived with the unit, and each source's texts an object of its own, restored with the source shared by every text of it.
+/// Where each declaration lies, restored out of what a unit stores of it with no package standing on the machine: each source holds its name alone.
 impl Records for Anchors {
     fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        Self::restored_filed(table, entries, &|_| None)
+    }
+}
+
+impl Anchors {
+    /// Where each declaration lies, restored out of what a unit stores of it: where each definition is named, archived with the unit, and each source's texts an object of its own, restored with the source shared by every text of it and given the file `file_of` resolves its name to, where it resolves.
+    pub fn restored_filed(
+        table: &[u8],
+        entries: &[Object],
+        file_of: &dyn Fn(&SourceName) -> Option<PathBuf>,
+    ) -> Result<Self, String> {
         let mut anchors = curios_archive::from_bytes::<Anchors>(table)?;
         for object in entries {
             let SourceTexts { source, texts } =
                 curios_archive::from_bytes::<SourceTexts>(object.bytes.as_slice())?;
-            let source = Arc::new(source);
+            let file = source.name().and_then(file_of);
+            let source = Arc::new(source.with_file(file));
             for text in texts {
                 let (start, end) = (
                     usize::try_from(text.start).map_err(|error| error.to_string())?,
@@ -270,19 +284,19 @@ impl Records for Anchors {
 }
 
 impl Anchors {
-    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same name, path and text being one.
+    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same name and text being one, since a source is stored by its name and its file is no part of it.
     fn sources(&self) -> Vec<SourceTexts> {
         let mut sources = Vec::<SourceTexts>::new();
-        // Where each source a text was sited in went, by where it lies in memory, and by its name and path.
+        // Where each source a text was sited in went, by where it lies in memory, and by its name.
         let mut placed = HashMap::<*const Source, usize>::new();
-        let mut by_path = HashMap::<_, Vec<usize>>::new();
+        let mut by_name = HashMap::<Option<&SourceName>, Vec<usize>>::new();
         for ((anchor, stamp), sited) in self.texts.iter() {
             let held = Arc::as_ptr(&sited.source);
             let at = match placed.get(&held) {
                 Some(at) => *at,
                 None => {
-                    let path = (sited.source.name(), sited.source.path());
-                    let alike = by_path.get(&path).and_then(|candidates: &Vec<usize>| {
+                    let name = sited.source.name();
+                    let alike = by_name.get(&name).and_then(|candidates| {
                         candidates
                             .iter()
                             .find(|at| sources[**at].source.text() == sited.source.text())
@@ -290,14 +304,10 @@ impl Anchors {
                     });
                     let at = alike.unwrap_or_else(|| {
                         sources.push(SourceTexts {
-                            source: Source::of(
-                                path.0.cloned(),
-                                path.1.map(ToOwned::to_owned),
-                                sited.source.text(),
-                            ),
+                            source: Source::of(name.cloned(), None, sited.source.text()),
                             texts: Vec::new(),
                         });
-                        by_path.entry(path).or_default().push(sources.len() - 1);
+                        by_name.entry(name).or_default().push(sources.len() - 1);
                         sources.len() - 1
                     });
                     placed.insert(held, at);

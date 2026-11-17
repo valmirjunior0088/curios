@@ -5,8 +5,8 @@
 use {
     super::*,
     curios_common::{Qualifier, fill, test_support::*},
-    curios_core::{Certification, Global},
-    curios_module::{PackageRoot, open_entrypoint},
+    curios_core::{Anchors, Certification, Global},
+    curios_module::{PackageRoot, identity, open_entrypoint},
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
     std::{cell::RefCell, collections::BTreeMap, path::Path},
@@ -244,6 +244,56 @@ fn a_reused_unit_brings_its_certification_back() {
             .is_some_and(|reads| !reads.signatures.is_empty() || !reads.bodies.is_empty()),
         "the record came back without what judging `message` read"
     );
+}
+
+/// A unit taken back from a slot lies in its package's files: what was stored of each source is its name, and the store restores the unit for the source asking, whose package stands on this machine, so a place in it reads as a place in a unit compiled here does.
+#[test]
+fn a_reused_unit_lies_in_its_packages_files() {
+    let root = project("filed");
+    let shape = root.join("shape");
+    let store = Verdicts::at(root.to_path_buf());
+    let taking = Taking {
+        store: &store,
+        taken: RefCell::new(None),
+    };
+
+    assert!(!reused(&root), "nothing is stored for the first compile");
+    assert!(reused_through(&root, &shape, &taking));
+
+    let unit = taking.taken.into_inner().expect("the unit was taken back");
+    let anchors = unit.text().expect("a program's unit").anchors();
+    let message = Global::Authored(Qualifier::from(["shape", "message"]));
+    let label = Anchors::label(&[anchors], &message).expect("`message` is written");
+
+    assert_eq!(
+        label.source.name().map(|name| name.as_str()),
+        Some("/shape/lib.crs")
+    );
+    assert_eq!(
+        label.source.file().map(identity),
+        Some(identity(&shape.join("lib.crs")))
+    );
+}
+
+/// The store, keeping the last unit it handed back.
+struct Taking<'a> {
+    store: &'a Verdicts,
+    taken: RefCell<Option<Unit>>,
+}
+
+impl Cache for Taking<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        let hit = Cache::get(self.store, source);
+        if let Some(unit) = &hit {
+            *self.taken.borrow_mut() = Some(unit.clone());
+        }
+
+        hit
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        Cache::put(self.store, source, unit);
+    }
 }
 
 /// The point of the thing: source that has not changed is not compiled again.

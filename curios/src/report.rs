@@ -26,9 +26,8 @@
 mod tests;
 
 use {
-    curios_common::{Qualifier, Style},
+    curios_common::{Qualifier, STDIN_NAME, Style},
     curios_package::Named,
-    curios_wonder::STDIN_LABEL,
     std::{
         env, fmt,
         io::Write,
@@ -231,7 +230,7 @@ impl fmt::Display for Subject {
                 "{}/",
                 path.display().to_string().trim_end_matches('/')
             ),
-            Self::Stdin => formatter.write_str(STDIN_LABEL),
+            Self::Stdin => formatter.write_str(STDIN_NAME),
         }
     }
 }

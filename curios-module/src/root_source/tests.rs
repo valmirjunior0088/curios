@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::*,
-    curios_common::{Qualifier, RootKind, Source, test_support::*},
+    curios_common::{Qualifier, RootKind, Source, SourceName, test_support::*},
     std::{fs, path::Path, sync::Arc},
 };
 
@@ -90,8 +90,11 @@ fn a_bare_name_the_disk_does_not_hold_is_spelled_under_the_current_directory() {
 /// Text written as a module is supplied as a unit of its own at the prefix given, its header held rather than read; text written as a program is no module.
 #[test]
 fn text_written_as_a_module_is_supplied_at_the_prefix_given() {
-    let unit = RootSource::labelled_module("stdin", "<stdin>", "pub let one : /std/Nat = 1;\n")
-        .expect("items alone are a module");
+    let unit = RootSource::supplied_module(
+        "stdin",
+        &Source::named(SourceName::stdin(), "pub let one : /std/Nat = 1;\n"),
+    )
+    .expect("items alone are a module");
 
     assert_eq!(
         unit.mounts()
@@ -105,7 +108,8 @@ fn text_written_as_a_module_is_supplied_at_the_prefix_given() {
         Ok(module) if module.items.len() == 1
     ));
 
-    assert!(RootSource::labelled_module("stdin", "<stdin>", "/std/print(\"\")\n").is_none());
+    let program = Source::named(SourceName::stdin(), "/std/print(\"\")\n");
+    assert!(RootSource::supplied_module("stdin", &program).is_none());
 }
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.

@@ -136,6 +136,17 @@ impl RootSource {
         self
     }
 
+    /// The packages this source reads its files for, each standing where this machine holds it: what a unit restored for the source resolves the names of its stored texts by ([`PackageRoot::file_of`]).
+    pub fn packages(&self) -> Vec<PackageRoot> {
+        self.bases
+            .iter()
+            .filter_map(|(_, base)| match base {
+                Base::Disk { package, .. } => package.clone(),
+                Base::Supplied(_) => None,
+            })
+            .collect()
+    }
+
     /// `path` mounted as a unit of its own at its stem, when its text — `overlay`'s where it holds one — is written as a module and its stem is a name a mount can take: how a file no unit declares is checked item by item, rather than refused at its end for lacking the term a program would end in.
     pub fn loose_module(path: &Path, overlay: &Overlay) -> Option<Self> {
         let text = match overlay.get(path) {
@@ -152,13 +163,13 @@ impl RootSource {
             .then(|| Self::mounted(stem, RootKind::Ordinary, path, Self::namespace_of(path)))
     }
 
-    /// `text` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. `label` names it in diagnostics where a path would go. Text sits in no directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
-    pub fn labelled_module(prefix: &str, label: &str, text: &str) -> Option<Self> {
-        if Form::of(Path::new(label), text) != Form::Module {
+    /// The text of `source` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input, named [`SourceName::stdin`] — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. Text sits in no directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
+    pub fn supplied_module(prefix: &str, source: &Arc<Source>) -> Option<Self> {
+        if Form::of(source.file().unwrap_or(Path::new("")), source.text()) != Form::Module {
             return None;
         }
 
-        let module = Module::parse(&Source::labelled(label, text)).ok()?;
+        let module = Module::parse(source).ok()?;
         let mut unit = Self::supplied();
         unit.insert_root(prefix, RootKind::Ordinary, module);
 
@@ -654,7 +665,7 @@ fn sourced(
 ///
 /// A parse that succeeds is the file's last good one from then on. One that fails is not entered and evicts nothing, and a source the thread does not hold — an earlier text of its file, or a text with no file — is parsed and not remembered.
 pub fn tree_of(source: &Arc<Source>) -> Result<Module, LoadError> {
-    let key = source.path().map(identity);
+    let key = source.file().map(identity);
 
     let hit = PARSED.with(|parsed| {
         let parsed = parsed.borrow();

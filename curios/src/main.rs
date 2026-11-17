@@ -30,7 +30,7 @@ use test_runner::*;
 
 use {
     curios::{bindings_of, fault, optimize, unlinked},
-    curios_common::{Kind, Report, Source, Style},
+    curios_common::{Kind, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost, Stop},
@@ -41,9 +41,9 @@ use {
     curios_pipeline::CompileError,
     curios_surface::{Formatted, Width},
     curios_wonder::{
-        Linted, STDIN_LABEL, Staged, answer, lint, serve, std_documentation, wonder_at,
-        wonder_cost, wonder_declarations, wonder_diagnostics, wonder_name, wonder_stage,
-        wonder_tests, wonder_witnesses,
+        Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_cost,
+        wonder_declarations, wonder_diagnostics, wonder_name, wonder_stage, wonder_tests,
+        wonder_witnesses,
     },
     std::{
         collections::BTreeSet,
@@ -703,8 +703,10 @@ fn dispatch() -> Result<(), Failure> {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
                     Rewritten::Stdin(width) => {
                         let text = drained()?;
-                        let formatted =
-                            Formatted::from_source(&Source::labelled(STDIN_LABEL, &text), width)?;
+                        let formatted = Formatted::from_source(
+                            &Source::named(SourceName::stdin(), text.as_str()),
+                            width,
+                        )?;
 
                         match (check, formatted) {
                             (true, Formatted::Changed(_)) => {

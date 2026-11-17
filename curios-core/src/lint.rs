@@ -69,13 +69,14 @@ impl Lint {
         )
     }
 
-    /// `lints` in reading order, as `anchors` place them: by the file they are about, then by position in it, unlocated ones last. The stages decide in orders of their own — resolution walks a unit's items in dependency order and the modules in discovery order, elaboration files declarations as its walk settles them — none of which is the order a reader opens files in.
+    /// `lints` in reading order, as `anchors` place them: by the source they are about, its name and then its file, then by position in it, unlocated ones last. The stages decide in orders of their own — resolution walks a unit's items in dependency order and the modules in discovery order, elaboration files declarations as its walk settles them — none of which is the order a reader opens files in.
     pub fn ordered(mut lints: Vec<Lint>, anchors: &Anchors) -> Vec<Lint> {
         // An unlocated lint keys as `None`, which sorts first; `Reverse` on the presence alone puts it last without touching the order of the rest.
         lints.sort_by_cached_key(|lint| {
             let located = lint.at.and_then(|at| anchors.resolve(&at)).map(|span| {
                 (
-                    span.source.path().map(|path| path.display().to_string()),
+                    span.source.name().cloned(),
+                    span.source.file().map(ToOwned::to_owned),
                     span.start,
                 )
             });
