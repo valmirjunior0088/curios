@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{
-        Constructors, Free, InductDecl, Intrinsic, Level, Telescope, Term, UniverseConstraintKind,
+        Constructors, Free, InductDecl, Intrinsic, Level, Telescope, Term,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
@@ -725,7 +725,7 @@ impl AtTwoLevels {
             .add_eq(
                 self.this.clone(),
                 self.that.clone(),
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                UniverseConstraintOrigin::Converted,
             )
             .expect("two fresh levels may be one");
     }

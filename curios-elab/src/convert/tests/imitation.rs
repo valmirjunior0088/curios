@@ -321,7 +321,12 @@ fn an_imitated_family_takes_an_instance_of_its_own() {
         assert!(context.metavar_solution(MetavarId(0)).is_some());
         assert_eq!(
             context
-                .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+                .finalize_universe_metas(
+                    &BTreeSet::new(),
+                    BTreeSet::new(),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
                 .is_err(),
             refused,
             "{variance:?}"
@@ -357,7 +362,12 @@ fn a_family_read_off_a_rigid_side_takes_an_instance_of_its_own() {
         assert!(context.metavar_solution(MetavarId(0)).is_some());
         assert_eq!(
             context
-                .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+                .finalize_universe_metas(
+                    &BTreeSet::new(),
+                    BTreeSet::new(),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
                 .is_err(),
             refused,
             "{variance:?}"

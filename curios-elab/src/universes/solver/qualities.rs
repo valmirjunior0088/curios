@@ -47,7 +47,7 @@ impl UniverseSolver {
             .map(|sort| QualityMeta {
                 solution: None,
                 solved_at: None,
-                origin: sort.as_ref().map(WrittenSort::origin),
+                origin: sort.clone().map(UniverseConstraintOrigin::Written),
                 written: true,
             })
             .collect();
@@ -155,7 +155,7 @@ impl UniverseSolver {
                         written: self.qualities[index]
                             .origin
                             .as_ref()
-                            .and_then(|origin| origin.extent),
+                            .and_then(UniverseConstraintOrigin::extent),
                         decided: self.decided_at(QualityMetaId(index)),
                     });
                 }

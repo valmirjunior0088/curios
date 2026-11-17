@@ -1,11 +1,12 @@
 //! Consistency: positive cycles and contradictory bounds refused with the path and origins that show them, constraints discharged at insertion, and speculation rolled back or abandoned.
 
 use {
-    crate::universes::solver::test_support::*,
     crate::universes::solver::*,
     curios_cert::satisfiable,
-    curios_common::Qualifier,
-    curios_core::{Anchor, Anchored, Extent, Global},
+    curios_common::{Plicity, Qualifier, Symbol},
+    curios_core::{
+        Anchor, Anchored, ArgumentSite, CalleeId, Extent, Global, Mention, SortForm, WrittenSort,
+    },
 };
 
 /// A scheme stating one constraint.
@@ -47,9 +48,13 @@ fn a_constraint_an_occurrence_instantiates_takes_its_place_and_names_what_it_ins
     let [(_, origin)] = constraints.as_slice() else {
         panic!("one constraint, got {constraints:?}");
     };
-    assert_eq!(origin.extent, Some(written));
-    assert_eq!(origin.kind, UniverseConstraintKind::SchemeInstantiation);
-    assert_eq!(origin.instantiated, Some(used));
+    assert_eq!(
+        **origin,
+        UniverseConstraintOrigin::Restated {
+            declaration: used,
+            extent: Some(written),
+        }
+    );
 }
 
 #[test]
@@ -60,7 +65,7 @@ fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::meta(u),
-            origin("direct"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
@@ -74,13 +79,25 @@ fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
     let v = solver.fresh(UniverseRole::Generalizable, None);
     let w = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_leq(Level::meta(u).succ().unwrap(), Level::meta(v), origin("uv"))
+        .add_leq(
+            Level::meta(u).succ().unwrap(),
+            Level::meta(v),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(Level::meta(v), Level::meta(w), origin("vw"))
+        .add_leq(
+            Level::meta(v),
+            Level::meta(w),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(Level::meta(w), Level::meta(u), origin("wu"))
+        .add_leq(
+            Level::meta(w),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
     assert!(
@@ -92,12 +109,52 @@ fn solver_rejects_direct_and_long_positive_cycles_with_paths() {
     );
 }
 
+/// A constraint keeps where it was raised through an assignment that rewrites its inequality, and through the rollback of that rewrite: the store moves the inequality and never its origin, so a conflict found after the rewrite still names the slot the term was checked as.
+#[test]
+fn a_held_constraint_keeps_its_slot_through_a_rewrite_and_its_rollback() {
+    let held = UniverseConstraintOrigin::Held {
+        extent: None,
+        proposition: false,
+        site: Some(ArgumentSite {
+            callee: CalleeId::Function(Mention::Declaration(Global::Authored(Qualifier::from([
+                "app", "coerce",
+            ])))),
+            parameter: Some(Symbol::new("A")),
+            plicity: Plicity::Explicit,
+            position: 0,
+        }),
+    };
+    let mut solver = UniverseSolver::new(0);
+    let lower = solver.fresh(UniverseRole::Flexible, None);
+    let upper = solver.fresh(UniverseRole::Generalizable, None);
+    let chosen = solver.fresh(UniverseRole::Generalizable, None);
+    solver
+        .add_leq(Level::meta(lower), Level::meta(upper), held.clone())
+        .unwrap();
+    let raised = UniverseConstraint {
+        lower: Level::meta(lower),
+        upper: Level::meta(upper),
+    };
+
+    let mark = solver.mark();
+    solver.assign(lower, Level::meta(chosen)).unwrap();
+    let rewritten = UniverseConstraint {
+        lower: Level::meta(chosen),
+        upper: Level::meta(upper),
+    };
+    assert_eq!(solver.constraints(), vec![(&rewritten, &held)]);
+
+    solver.rollback(mark);
+    solver.release(mark);
+    assert_eq!(solver.constraints(), vec![(&raised, &held)]);
+}
+
 #[test]
 fn seeded_written_type_origin_survives_into_an_inconsistency_path() {
     let written = WrittenSort {
         extent: None,
-        kind: UniverseConstraintKind::WrittenType,
-        declaration: None,
+        form: SortForm::Type,
+        local: false,
     };
     let mut solver = UniverseSolver::new(0);
     solver.seed(&[UniverseSeed {
@@ -109,14 +166,15 @@ fn seeded_written_type_origin_survives_into_an_inconsistency_path() {
         .add_leq(
             Level::meta(UniverseMetaId(0)).succ().unwrap(),
             Level::meta(UniverseMetaId(0)),
-            origin("cycle"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
 
     assert!(matches!(
         error,
-        UniverseError::Inconsistency { path, .. } if path.contains(&written.origin())
+        UniverseError::Inconsistency { path, .. }
+            if path.contains(&UniverseConstraintOrigin::Written(written.clone()))
     ));
 }
 
@@ -129,11 +187,15 @@ fn solver_rejects_cycles_hidden_behind_right_hand_maxima() {
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::max([Level::meta(u), Level::meta(v)]),
-            origin("max"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver
-        .add_leq(Level::meta(v), Level::meta(u), origin("back"))
+        .add_leq(
+            Level::meta(v),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
     assert!(matches!(
@@ -150,14 +212,14 @@ fn solver_rejects_inconsistent_constant_bounds_through_atoms() {
         .add_leq(
             Level::constant(3),
             Level::meta(u).succ().unwrap(),
-            origin("lower"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::constant(2),
-            origin("upper"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     let error = solver.check_consistent().unwrap_err();
@@ -192,7 +254,6 @@ fn consistency_checks_match_the_exact_solver() {
             let lower = levels[draw() % levels.len()].clone();
             let upper = levels[draw() % levels.len()].clone();
             let constraint = UniverseConstraint { lower, upper };
-            let origin = origin(&format!("trial {trial}, step {step}"));
 
             // The exact side: the same normalization and insertion-time discharges `add_constraint` performs, then the ground-up exponential check over the pushed store.
             let mut exact = solver.clone();
@@ -210,11 +271,13 @@ fn consistency_checks_match_the_exact_solver() {
                     Err(UniverseError::Inconsistency {
                         lower: normalized.lower,
                         upper: normalized.upper,
-                        path: vec![origin.clone()],
+                        path: vec![UniverseConstraintOrigin::Converted],
                     })
                 }
             } else {
-                exact.constraints.push(normalized, origin.clone());
+                exact
+                    .constraints
+                    .push(normalized, UniverseConstraintOrigin::Converted);
                 exact.check_consistent_full().map(|_| ())
             };
 
@@ -229,7 +292,7 @@ fn consistency_checks_match_the_exact_solver() {
 
             // The incremental side decides in two moves — `add_constraint` refuses only the ground case and records otherwise; `check_consistent` is the verdict — so the comparison targets the pair, not the insertion alone.
             let incremental_result = solver
-                .add_constraint(constraint, origin)
+                .add_constraint(constraint, UniverseConstraintOrigin::Converted)
                 .and_then(|()| solver.check_consistent());
             assert_eq!(
                 incremental_result.is_ok(),
@@ -249,16 +312,24 @@ fn consistency_checks_match_the_exact_solver() {
 fn ground_and_reflexive_constraints_discharge_at_insertion() {
     let mut solver = UniverseSolver::new(0);
     solver
-        .add_leq(Level::zero(), Level::constant(1), origin("ground"))
+        .add_leq(
+            Level::zero(),
+            Level::constant(1),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     let u = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_eq(Level::meta(u), Level::meta(u), origin("reflexive"))
+        .add_eq(
+            Level::meta(u),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     assert!(solver.constraints().is_empty());
 
     assert!(matches!(
-        solver.add_leq(Level::constant(1), Level::zero(), origin("inconsistent")),
+        solver.add_leq(Level::constant(1), Level::zero(), UniverseConstraintOrigin::Converted),
         Err(UniverseError::Inconsistency { path, .. }) if path.len() == 1
     ));
 }
@@ -270,7 +341,11 @@ fn rollback_restores_constraints_and_solutions() {
     let output = solver.fresh(UniverseRole::Flexible, None);
     let mark = solver.mark();
     solver
-        .add_leq(Level::meta(input), Level::meta(output), origin("probe"))
+        .add_leq(
+            Level::meta(input),
+            Level::meta(output),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver.solve_flexible().unwrap();
     assert!(solver.solution(output).is_some());
@@ -602,7 +677,11 @@ fn abandoning_speculation_closes_every_scope_a_refusal_left_open() {
     let _outer = solver.mark();
     let _inner = solver.mark();
     solver
-        .add_leq(Level::zero(), Level::meta(u), origin("bound"))
+        .add_leq(
+            Level::zero(),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver.solve_flexible().unwrap();
     assert_eq!(solver.open_scopes(), 2);

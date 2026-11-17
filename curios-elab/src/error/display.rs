@@ -643,7 +643,12 @@ impl Displayed<'_> {
                 f.stating("write `lift(action)` to embed this one explicitly");
                 f.stating("that resolves the witness, or reports the edge to declare");
             }
-            Error::UniverseInconsistency { lower, upper, path } => {
+            Error::UniverseInconsistency {
+                lower,
+                upper,
+                path,
+                recursive,
+            } => {
                 let names = level_meta_names([lower, upper]);
                 f.text("universe inconsistency");
                 f.stating(format_args!(
@@ -661,6 +666,9 @@ impl Displayed<'_> {
                         spelling.symbol(&instantiated)
                     ));
                 }
+                for site in curios_core::held_at(path) {
+                    f.stating(site_said(site, spelling));
+                }
                 if curios_core::names_a_proposition(path) {
                     f.stating(
                         "a proposition sits at the level of what it quantifies over and of what it holds",
@@ -668,12 +676,17 @@ impl Displayed<'_> {
                     f.stating("so it is none of the propositions it ranges over");
                 }
                 f.stating("levels are inferred and have no syntax, so no annotation removes this");
-                f.stating("a definition is generalized only at the top level");
-                f.stating("hoist a local one that is used at two levels");
-                f.stating("a recursive group is monomorphic in its own levels");
-                f.stating(
-                    "a member's own calls constrain those levels, and never choose them afresh",
-                );
+                // Each remedy where its cycle holds what it speaks of: a level a local definition holds, a call of the group's own member.
+                if curios_core::through_a_local_definition(path) {
+                    f.stating("a definition is generalized only at the top level");
+                    f.stating("hoist a local one that is used at two levels");
+                }
+                if *recursive {
+                    f.stating("a recursive group is monomorphic in its own levels");
+                    f.stating(
+                        "a member's own calls constrain those levels, and never choose them afresh",
+                    );
+                }
             }
             Error::UniverseInvariant(message) => {
                 f.text("compiler fault");

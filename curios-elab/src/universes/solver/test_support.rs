@@ -1,4 +1,4 @@
-//! What the suites read of the universe solver and ask of it that no judgment does: its constraints and open scopes, minimization over the whole store, an origin to raise a constraint at and a use to mint an instance at.
+//! What the suites read of the universe solver and ask of it that no judgment does: its constraints and open scopes, minimization over the whole store, and a use to mint an instance at.
 
 use {super::*, curios_common::Qualifier, std::collections::BTreeSet};
 
@@ -37,8 +37,4 @@ pub fn unwritten_use() -> Occurrence {
         instantiated: Global::Authored(Qualifier::from(["app", "used"])),
         extent: None,
     }
-}
-
-pub fn origin(label: &str) -> UniverseConstraintOrigin {
-    UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
 }

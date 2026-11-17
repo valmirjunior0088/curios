@@ -30,8 +30,7 @@ use {
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
         Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Minted,
         Names, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
-        stamp_declaration_instance,
+        Term, Totality, UniverseConstraintOrigin, Universes, Visit, stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -41,12 +40,10 @@ use {
 /// **Typing's level, not the reduct's**, the level the certifier sizes a domain at, which types it as written: "a former sized as typing read its parts sits where the certifier types it" (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Read off a domain's reduct, an occurrence at a level its value drops — `/sys/List/List.{c}(Nat)`, which reduces to a node at `0`, or a type-valued definition's call — leaves the declaration's levels free to put the domain above its family, which the certifier refuses.
 fn size_domains(
     context: &mut Context,
-    declaration: &Global,
     domains: &[(Plicity, Free, Term)],
     levels: &[Level],
     uniform_count: usize,
     result_sort: &Term,
-    kind: UniverseConstraintKind,
 ) -> Result<(), Error> {
     let Subterm::Sort(Sort {
         quality: _,
@@ -57,7 +54,7 @@ fn size_domains(
     };
     let result_level = result_level.clone();
 
-    for (position, ((_, binder, domain), level)) in domains.iter().zip(levels).enumerate() {
+    for (position, ((_, _, domain), level)) in domains.iter().zip(levels).enumerate() {
         let upper = match position < uniform_count {
             true => result_level.checked_add(1).map_err(Error::from)?,
             false => result_level.clone(),
@@ -67,12 +64,8 @@ fn size_domains(
             .add_leq(
                 level.clone(),
                 upper,
-                UniverseConstraintOrigin {
+                UniverseConstraintOrigin::Sized {
                     extent: domain.extent(),
-                    kind: kind.clone(),
-                    declaration: Some(declaration.faithful().to_string()),
-                    binder: binder.hint().map(str::to_string),
-                    instantiated: None,
                 },
             )
             .map_err(Error::from)?;
@@ -275,12 +268,10 @@ fn elaborate_induct_constructors(
         })?;
         size_domains(
             context,
-            name,
             &entries,
             &levels,
             induct_decl.param_count(),
             induct_decl.result_sort(),
-            UniverseConstraintKind::ConstructorSizing,
         )?;
 
         // Each payload entry is rebuilt under the mark it had, elaboration never changing the calling convention, and the payload held under the parameters it was elaborated over.
@@ -410,12 +401,10 @@ fn elaborate_struct(
         .collect::<Vec<_>>();
     size_domains(
         context,
-        name,
         &domains,
         &levels,
         struct_decl.param_count(),
         &struct_decl.result_sort,
-        UniverseConstraintKind::FieldSizing,
     )?;
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
@@ -749,11 +738,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         interface.extend(unfolded.iter().copied());
         compared.extend(unfolded);
     }
-    let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
+    let owned = defs.iter().map(|def| def.name).collect::<BTreeSet<_>>();
+    let universe_context =
+        context.finalize_universe_metas(&owned, interface, internal, compared)?;
 
     // The group's members are monomorphic in their own universes, so every nominal occurrence of a member family — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
     let instance = universe_context.identity_instance();
-    let owned = defs.iter().map(|def| def.name).collect::<BTreeSet<_>>();
     let declared = defs
         .iter()
         .map(|def| Term::instance(def.name, instance.clone()))

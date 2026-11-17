@@ -1,6 +1,6 @@
 //! Minimizing flexible levels: the least solution, the floor a cycle closes at, and the equations that default a level and those that do not.
 
-use {crate::universes::solver::test_support::*, crate::universes::solver::*};
+use crate::universes::solver::*;
 
 #[test]
 fn flexible_levels_take_least_solution_and_default_to_zero() {
@@ -12,7 +12,7 @@ fn flexible_levels_take_least_solution_and_default_to_zero() {
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::meta(output),
-            origin("bound"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver.solve_flexible().unwrap();
@@ -32,7 +32,7 @@ fn flexible_solver_cancels_matching_successor_offsets() {
         .add_leq(
             Level::meta(input).succ().unwrap(),
             Level::meta(output).succ().unwrap(),
-            origin("cancel"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver.solve_flexible().unwrap();
@@ -48,7 +48,7 @@ fn non_principal_flexible_bound_is_not_arbitrarily_defaulted() {
         .add_leq(
             Level::constant(1),
             Level::max([Level::meta(left), Level::meta(right)]),
-            origin("choice"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver.solve_flexible().unwrap();
@@ -66,10 +66,18 @@ fn mutually_bounded_flexible_levels_close_at_their_floor() {
     let right = solver.fresh(UniverseRole::Flexible, None);
     let guarded = |meta| Level::max([Level::constant(1), Level::meta(meta)]);
     solver
-        .add_leq(guarded(left), guarded(right), origin("dispatch"))
+        .add_leq(
+            guarded(left),
+            guarded(right),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(guarded(right), guarded(left), origin("dispatch"))
+        .add_leq(
+            guarded(right),
+            guarded(left),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     solver.solve_flexible().unwrap();
@@ -86,13 +94,25 @@ fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
     let right = solver.fresh(UniverseRole::Flexible, None);
     let guarded = |meta| Level::max([Level::constant(1), Level::meta(meta)]);
     solver
-        .add_leq(Level::constant(2), Level::meta(left), origin("direct"))
+        .add_leq(
+            Level::constant(2),
+            Level::meta(left),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(guarded(left), guarded(right), origin("dispatch"))
+        .add_leq(
+            guarded(left),
+            guarded(right),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(guarded(right), guarded(left), origin("dispatch"))
+        .add_leq(
+            guarded(right),
+            guarded(left),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     solver.solve_flexible().unwrap();
@@ -111,14 +131,22 @@ fn a_cycle_through_a_maximum_closes_at_its_least_solution() {
         .add_leq(
             Level::max([Level::meta(base), Level::meta(payload)]),
             Level::meta(payload),
-            origin("region monad"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver
-        .add_leq(Level::meta(payload), Level::meta(base), origin("witness"))
+        .add_leq(
+            Level::meta(payload),
+            Level::meta(base),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(Level::constant(1), Level::meta(payload), origin("payload"))
+        .add_leq(
+            Level::constant(1),
+            Level::meta(payload),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     solver.solve_flexible().unwrap();
@@ -136,7 +164,7 @@ fn flexible_dependency_chain_propagates_after_defaulting_its_floor() {
         .add_leq(
             Level::meta(floor).succ().unwrap(),
             Level::meta(output),
-            origin("successor"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -153,7 +181,9 @@ fn a_shape_equal_equation_defaults_its_single_differing_metas() {
     let b = solver.fresh(UniverseRole::Flexible, None);
     let left = Level::max([Level::zero().succ().unwrap(), Level::meta(a)]);
     let right = Level::max([Level::zero().succ().unwrap(), Level::meta(b)]);
-    solver.add_eq(left, right, origin("shape-equal")).unwrap();
+    solver
+        .add_eq(left, right, UniverseConstraintOrigin::Converted)
+        .unwrap();
     assert_eq!(solver.solution(b), Some(&Level::meta(a)));
     assert!(solver.solution(a).is_none());
 }
@@ -167,7 +197,9 @@ fn a_multi_difference_equation_is_not_defaulted() {
     let d = solver.fresh(UniverseRole::Generalizable, None);
     let left = Level::max([Level::meta(a), Level::meta(c)]);
     let right = Level::max([Level::meta(b), Level::meta(d)]);
-    solver.add_eq(left, right, origin("multi")).unwrap();
+    solver
+        .add_eq(left, right, UniverseConstraintOrigin::Converted)
+        .unwrap();
     assert!(solver.solution(a).is_none());
     assert!(solver.solution(b).is_none());
     assert!(solver.solution(c).is_none());

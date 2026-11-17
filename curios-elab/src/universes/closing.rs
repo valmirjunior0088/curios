@@ -152,9 +152,10 @@ pub fn finalize_definition(
     interface.extend(unfolded.iter().copied());
     compared.extend(unfolded);
 
-    let universe_context = context.finalize_universe_metas(interface, internal, compared)?;
-    let instance = universe_context.identity_instance();
     let owned = BTreeSet::from([*name]);
+    let universe_context =
+        context.finalize_universe_metas(&owned, interface, internal, compared)?;
+    let instance = universe_context.identity_instance();
     // A definition's own nominal forms, in its signature, body and registry entry, denote its own instance; a witness whose body names itself names it by the local its group of one closes over — see [`elaborate_module_let`].
     let type_ =
         stamp_declaration_instance(&context.zonk_universe_levels(&type_)?, &owned, &instance);

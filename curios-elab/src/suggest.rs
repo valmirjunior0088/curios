@@ -272,7 +272,7 @@ fn retracted<T>(context: &mut Context, attempt: impl FnOnce(&mut Context) -> T) 
 /// Whether a term of type `type_` may stand where `goal_type` is wanted, with nothing committed: what `check` would say of it, so a candidate that fits by subsumption — a predicate where a family into `Type` is wanted — is offered.
 fn fits(context: &mut Context, type_: &Term, goal_type: &Term) -> bool {
     let outcome = retracted(context, |context| {
-        subsume_outcome(context, type_, goal_type, None)
+        subsume_outcome(context, type_, goal_type, None, None)
     });
 
     matches!(outcome, Ok(Outcome::Converts))
@@ -327,7 +327,7 @@ fn apply_fit(
                 .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
 
         // The goal first: what it pins, it pins.
-        let mut outcome = subsume_outcome(context, output, goal_type, None).ok()?;
+        let mut outcome = subsume_outcome(context, output, goal_type, None, None).ok()?;
         if matches!(outcome, Outcome::Mismatch(_)) {
             return None;
         }
@@ -350,7 +350,7 @@ fn apply_fit(
                 let domain = zonk_solved_term_metas(context, domain);
                 let binder = Term::free_var(name);
                 let fits = matches!(
-                    subsume_outcome(context, type_, &domain, None),
+                    subsume_outcome(context, type_, &domain, None, None),
                     Ok(Outcome::Converts)
                 ) && matches!(
                     convert_outcome(context, &domain, arg, &binder),
@@ -366,7 +366,7 @@ fn apply_fit(
             }
         }
         if filled || matches!(outcome, Outcome::Blocked(_)) {
-            outcome = subsume_outcome(context, output, goal_type, None).ok()?;
+            outcome = subsume_outcome(context, output, goal_type, None, None).ok()?;
         }
 
         let mut holes = 0usize;

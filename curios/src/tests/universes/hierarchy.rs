@@ -223,6 +223,11 @@ fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy()
         message.contains("hoist a local one that is used at two levels"),
         "the message says what to write instead:\n{message}"
     );
+    // The level on the cycle is the local definition's, and no call of a group's own member is on it: the group's remedy is no remedy here.
+    assert!(
+        !message.contains("monomorphic in its own levels"),
+        "the message states only the remedy its cycle holds:\n{message}"
+    );
 }
 
 // The control, and the reason the refusal above is about *locality* rather than about self-application: hoisted to the top level, `id` generalizes over the level its interface carries, the two occurrences instantiate it at their own, and the program runs.
@@ -260,6 +265,12 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
     assert!(
         message.contains("monomorphic in its own levels"),
         "the message names the group rule:\n{message}"
+    );
+    // The call on the cycle is the member's own, by the slot it fills; no local definition's level is on it.
+    assert!(
+        message.contains("checked as `A`, the 1st `@` argument of `depth`")
+            && !message.contains("hoist a local one"),
+        "the message names the slot and states only its own remedy:\n{message}"
     );
 }
 
@@ -368,6 +379,83 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
     assert!(
         note.contains(&second),
         "the note stands at the other:\n{message}"
+    );
+}
+
+/// The declarations the conflicts below are closed over: `coerce` holds its first argument's level to its second's domain's, and `tie` holds its argument's type at the level it answers.
+const TIED: &str = r#"
+        let coerce(A: Type, F: (Type) -> Type) -> Type = F(A);
+        let tie(@T: Type, x: T) -> Type = T;
+"#;
+
+// **A conflict an argument closes names the parameter the argument was checked as.** `coerce` states no bound in its scheme, the level `A` and `F`'s domain share being one by assignment, so what is on the cycle is `tie(G)` held under `A`'s sort: the report stands there and says whose parameter that is. No local definition's level and no call of a group's own member is on the cycle, so neither remedy is stated.
+#[test]
+fn a_conflict_an_argument_closes_names_the_parameter_it_was_checked_as() {
+    const BAD: &str = "        let bad(G: (Type) -> Type) -> Type = coerce(tie(G), G);";
+    let message = error(&format!("{TIED}{BAD}\n        /std/print(\"no\")\n"));
+
+    assert!(
+        message.contains("checked as `A`, the 1st argument of `coerce`"),
+        "the message names the parameter:\n{message}"
+    );
+    assert!(
+        message.contains(&caret_under(BAD, "tie(G)", 0)),
+        "the report stands at the argument:\n{message}"
+    );
+    assert!(
+        !message.contains("hoist a local one")
+            && !message.contains("monomorphic in its own levels"),
+        "the message states no remedy its cycle does not hold:\n{message}"
+    );
+}
+
+// The parameter travels with the type the argument is checked at: into an arm of a `match` the argument is, and into the tail of a block, each closing the conflict where it stands.
+#[test]
+fn a_conflict_closed_in_an_arm_or_a_tail_of_an_argument_names_the_parameter() {
+    for argument in [
+        "match b | true => tie(G) | false => /std/Nat end",
+        "let t = tie(G); t",
+    ] {
+        let message = error(&format!(
+            "{TIED}        let bad(b: /std/Bool, G: (Type) -> Type) -> Type = coerce({argument}, G);\n        /std/print(\"no\")\n"
+        ));
+        assert!(
+            message.contains("checked as `A`, the 1st argument of `coerce`"),
+            "the message for `{argument}` names the parameter:\n{message}"
+        );
+    }
+}
+
+// A call inside an argument checks its own argument as its own parameter, and both slots tie the levels on the cycle: each is named, the innermost where the report stands.
+#[test]
+fn a_conflict_through_a_call_inside_an_argument_names_each_parameter() {
+    let message = error(&format!(
+        "{TIED}        let id(@X: Type, x: X) -> X = x;\n        let bad(G: (Type) -> Type) -> Type = coerce(id(tie(G)), G);\n        /std/print(\"no\")\n"
+    ));
+
+    assert!(
+        message.contains("checked as `x`, the 1st argument of `id`")
+            && message.contains("checked as `A`, the 1st argument of `coerce`"),
+        "the message names both parameters:\n{message}"
+    );
+}
+
+// An argument whose check waits until a later argument decides its type raises its constraint when the parked check is retried, and the constraint keeps the parameter.
+#[test]
+fn a_conflict_an_argument_closes_after_it_waited_names_the_parameter() {
+    let message = error(
+        r#"
+        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) = a;
+        let tie(@T: Type, x: T) -> Type = T;
+        let take(A: Type, F: (Type) -> Type) -> Type = F(A);
+        let bad(G: (Type) -> Type) -> Type = take(pick(tie(G), (X) => X), G);
+        /std/print("no")
+        "#,
+    );
+
+    assert!(
+        message.contains("checked as `a`, the 1st argument of `pick`"),
+        "the message names the parameter the argument waited at:\n{message}"
     );
 }
 

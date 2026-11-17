@@ -20,8 +20,8 @@ use {
     curios_common::recurse,
     curios_core::{
         Extent, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes, WrittenSort,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
+        UniverseRole, UniverseSeed, Universes,
     },
     std::{
         cell::RefCell,
@@ -780,7 +780,7 @@ impl UniverseSolver {
             .iter()
             .map(|seed| UniverseMeta {
                 provenance: seed.role.into(),
-                origin: seed.written.as_ref().map(WrittenSort::origin),
+                origin: seed.written.clone().map(UniverseConstraintOrigin::Written),
                 solution: None,
             })
             .collect();
@@ -1038,11 +1038,14 @@ impl UniverseSolver {
         before: &[Option<u32>],
     ) {
         curios_profile::sample!("universe::weak_run", pairs.len());
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
         let mark = self.mark();
         let joined = pairs.iter().all(|(left, right)| {
-            self.add_eq(left.clone(), right.clone(), origin.clone())
-                .is_ok()
+            self.add_eq(
+                left.clone(),
+                right.clone(),
+                UniverseConstraintOrigin::Converted,
+            )
+            .is_ok()
         }) && self.check_consistent().is_ok()
             && self.relations_stand(held, before);
         if joined {
@@ -1168,10 +1171,11 @@ impl UniverseSolver {
         if let Some(refused) = self.refused_as_decided(&above, lower) {
             return refused;
         }
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion);
         let mark = self.mark();
-        let refused =
-            self.add_leq(above, lower.clone(), origin).is_err() || self.check_consistent().is_err();
+        let refused = self
+            .add_leq(above, lower.clone(), UniverseConstraintOrigin::Converted)
+            .is_err()
+            || self.check_consistent().is_err();
         self.rollback(mark);
         self.release(mark);
 
@@ -1718,12 +1722,13 @@ impl UniverseSolver {
                 }
             };
             // A scheme stores its inequalities alone, so where its declaration raised one is no part of it. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is raised again where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is.
-            let origin = UniverseConstraintOrigin {
-                extent: occurrence.extent,
-                instantiated: Some(occurrence.instantiated),
-                ..UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation)
-            };
-            if let Err(error) = self.add_constraint(instantiated, origin) {
+            if let Err(error) = self.add_constraint(
+                instantiated,
+                UniverseConstraintOrigin::Restated {
+                    declaration: occurrence.instantiated,
+                    extent: occurrence.extent,
+                },
+            ) {
                 self.rollback(mark);
                 self.release(mark);
                 return Err(error);
@@ -2343,10 +2348,7 @@ pub fn universe_context_validate(context: &UniverseContext) -> Result<(), Univer
     let mut solver = UniverseSolver::new(0);
     // A stored scheme holds no origin: each constraint is raised again as its scheme's, at no place.
     for constraint in &context.constraints {
-        solver.add_constraint(
-            constraint.clone(),
-            UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation),
-        )?;
+        solver.add_constraint(constraint.clone(), UniverseConstraintOrigin::Stated)?;
     }
     // Insertion records; it does not decide (see `add_constraint`). Satisfiability is this function's whole question, so the boundary it is decided at is here.
     solver.check_consistent()

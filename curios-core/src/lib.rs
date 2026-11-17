@@ -78,12 +78,12 @@ pub use lattice::Extremum;
 mod universe;
 pub use universe::{
     ArchivedLevel, ArchivedLevelHead, ArchivedQuality, ArchivedQualityMetaId, ArchivedQualityParam,
-    ArchivedUniverseConstraint, ArchivedUniverseConstraintKind, ArchivedUniverseContext,
-    ArchivedUniverseMetaId, ArchivedUniverseParam, ArchivedUniverseRole, ArchivedUniverseSeed,
-    ArchivedUniverses, ArchivedWrittenSort, Level, LevelHead, Quality, QualityMetaId, QualityParam,
-    UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-    UniverseError, UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
-    WrittenSort, inconsistent_sort, instantiated_on, names_a_proposition,
+    ArchivedSortForm, ArchivedUniverseConstraint, ArchivedUniverseContext, ArchivedUniverseMetaId,
+    ArchivedUniverseParam, ArchivedUniverseRole, ArchivedUniverseSeed, ArchivedUniverses,
+    ArchivedWrittenSort, Level, LevelHead, Quality, QualityMetaId, QualityParam, SortForm,
+    UniverseConstraint, UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId,
+    UniverseParam, UniverseRole, UniverseSeed, Universes, WrittenSort, held_at, inconsistent_sort,
+    instantiated_on, names_a_proposition, through_a_local_definition,
 };
 
 mod intrinsic;

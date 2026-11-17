@@ -18,16 +18,21 @@ fn a_metavariable_met_at_a_type_from_below_takes_a_level_of_its_own() {
     let small = Term::type_ground();
     let large = Term::type_at(Level::constant(1));
     assert!(matches!(
-        subsume_outcome(&mut context, &small, &Term::hole(0), None),
+        subsume_outcome(&mut context, &small, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        subsume_outcome(&mut context, &large, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(
         context
-            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .finalize_universe_metas(
+                &BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new()
+            )
             .is_ok()
     );
 }
@@ -41,8 +46,13 @@ fn a_metavariable_met_at_a_type_as_an_equation_is_that_type() {
     let small = Term::type_ground();
     let large = Term::type_at(Level::constant(1));
     assert_eq!(conv(&mut context, &small, &Term::hole(0)), Ok(true));
-    let second = subsume_outcome(&mut context, &large, &Term::hole(0), None);
-    let closed = context.finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let second = subsume_outcome(&mut context, &large, &Term::hole(0), None, None);
+    let closed = context.finalize_universe_metas(
+        &BTreeSet::new(),
+        BTreeSet::new(),
+        BTreeSet::new(),
+        BTreeSet::new(),
+    );
     assert!(
         !matches!(second, Ok(Outcome::Converts)) || closed.is_err(),
         "{second:?} {closed:?}"
@@ -58,16 +68,21 @@ fn a_metavariable_met_at_a_type_from_above_takes_a_level_of_its_own() {
     let small = Term::type_ground();
     let large = Term::type_at(Level::constant(1));
     assert!(matches!(
-        subsume_outcome(&mut context, &Term::hole(0), &large, None),
+        subsume_outcome(&mut context, &Term::hole(0), &large, None, None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &Term::hole(0), &small, None),
+        subsume_outcome(&mut context, &Term::hole(0), &small, None, None),
         Ok(Outcome::Converts)
     ));
     assert!(
         context
-            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .finalize_universe_metas(
+                &BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new()
+            )
             .is_ok()
     );
 }
@@ -87,16 +102,21 @@ fn a_function_type_met_from_below_takes_its_codomain_at_a_level_of_its_own() {
     let small = family(&mut context, 0);
     let large = family(&mut context, 1);
     assert!(matches!(
-        subsume_outcome(&mut context, &small, &Term::hole(0), None),
+        subsume_outcome(&mut context, &small, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        subsume_outcome(&mut context, &large, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(
         context
-            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .finalize_universe_metas(
+                &BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new()
+            )
             .is_ok()
     );
 }
@@ -110,7 +130,7 @@ fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of
     let small = Term::prop();
     let large = Term::prop_at(Level::constant(1));
     assert!(matches!(
-        subsume_outcome(&mut context, &small, &Term::hole(0), None),
+        subsume_outcome(&mut context, &small, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
@@ -123,12 +143,17 @@ fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of
         }))
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &large, &Term::hole(0), None),
+        subsume_outcome(&mut context, &large, &Term::hole(0), None, None),
         Ok(Outcome::Converts)
     ));
     assert!(
         context
-            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .finalize_universe_metas(
+                &BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new()
+            )
             .is_ok()
     );
 }
@@ -140,11 +165,11 @@ fn a_type_and_a_proposition_met_from_below_are_refused_in_either_order() {
         let mut context = context();
         context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
         assert!(matches!(
-            subsume_outcome(&mut context, &first, &Term::hole(0), None),
+            subsume_outcome(&mut context, &first, &Term::hole(0), None, None),
             Ok(Outcome::Converts)
         ));
 
-        subsume_outcome(&mut context, &second, &Term::hole(0), None)
+        subsume_outcome(&mut context, &second, &Term::hole(0), None, None)
     };
 
     assert!(matches!(

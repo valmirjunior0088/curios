@@ -36,10 +36,9 @@ use {
         ClosedMemo, Cost, Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
         Instance, Intrinsic, Layer, Let, Match, Metavar, Nat, Polarity, Probe, Proj, Quality, Rec,
         RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Var,
-        Variant, Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
-        project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
-        weak_head_value,
+        Term, Tuple, TupleType, UniverseConstraintOrigin, Universes, Var, Variant, Visit,
+        accelerable, eta_head, instantiate_universes, probe_spellings, project_erased_universes,
+        project_literal, reduce_closed, reduce_intrinsic, weak_head_value,
     },
     std::{
         cell::OnceCell,
@@ -231,9 +230,12 @@ impl Judge for Context<'_> {
             })
         })?;
 
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity);
-
-        Ok(below.quality == above && self.universes_mut().settle_leq(below.level, upper, origin))
+        Ok(below.quality == above
+            && self.universes_mut().settle_leq(
+                below.level,
+                upper,
+                UniverseConstraintOrigin::Converted,
+            ))
     }
 }
 

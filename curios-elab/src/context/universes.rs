@@ -6,8 +6,9 @@ use {
         stamp_if_moved, zonk_universe_levels,
     },
     curios_core::{
-        Bound, Extent, Global, InductInstance, Level, Quality, StructInstance, Term,
-        UniverseContext, UniverseError, UniverseMetaId, Universes, instantiate_universes,
+        Bound, CalleeId, Extent, Global, InductInstance, Level, Mention, Quality, StructInstance,
+        Term, UniverseContext, UniverseError, UniverseMetaId, Universes, held_at,
+        instantiate_universes,
     },
     std::collections::BTreeSet,
 };
@@ -280,9 +281,10 @@ impl<'s> Context<'s> {
         Ok(terms)
     }
 
-    /// Finalize a declaration's levels — see `UniverseSolver::finalize`.
+    /// Finalize the levels of the declarations `owned` — see `UniverseSolver::finalize`.
     pub(crate) fn finalize_universe_metas(
         &mut self,
+        owned: &BTreeSet<Global>,
         interface: BTreeSet<UniverseMetaId>,
         internal: BTreeSet<UniverseMetaId>,
         compared: BTreeSet<UniverseMetaId>,
@@ -290,7 +292,7 @@ impl<'s> Context<'s> {
         curios_profile::profile!("ctx::finalize_universe_metas");
         let mut universe_context = self
             .closing_universes(|solver| solver.finalize(interface, internal, compared))
-            .map_err(Error::from)?;
+            .map_err(|error| universe_conflict(error, owned))?;
         universe_context.quality_count = self.generalize_written_sorts()?;
         self.underway.attempt.universe_solver.close_scheme();
         self.typing.caches.invalidate_for_universe_rewrite();
@@ -333,5 +335,26 @@ impl<'s> Context<'s> {
 
     pub(crate) fn zonk_universe_levels<B: Bound>(&self, value: &B) -> Result<B, Error> {
         zonk_universe_levels(value, &self.underway.attempt.universe_solver).map_err(Error::from)
+    }
+}
+
+/// `error`, refused where the levels of the declarations `owned` settle, as its reader is told it: a conflict whose cycle holds a slot calling one of `owned` is one that declaration's own calls make, a group being monomorphic in its own levels.
+fn universe_conflict(error: UniverseError, owned: &BTreeSet<Global>) -> Error {
+    match error {
+        UniverseError::Inconsistency { lower, upper, path } => {
+            let recursive = held_at(&path).iter().any(|site| {
+                matches!(
+                    site.callee,
+                    CalleeId::Function(Mention::Declaration(name)) if owned.contains(&name)
+                )
+            });
+            Error::UniverseInconsistency {
+                lower,
+                upper,
+                path,
+                recursive,
+            }
+        }
+        error => Error::from(error),
     }
 }

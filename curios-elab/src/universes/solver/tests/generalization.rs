@@ -38,7 +38,11 @@ fn generalization_is_deterministic_and_closed() {
     let u = solver.fresh(UniverseRole::Generalizable, None);
     let v = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_leq(Level::meta(u).succ().unwrap(), Level::meta(v), origin("uv"))
+        .add_leq(
+            Level::meta(u).succ().unwrap(),
+            Level::meta(v),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     let (context, replacement) = solver.generalize([v, u]).unwrap();
     assert_eq!(replacement[&u], Level::param(UniverseParam(0)));
@@ -53,7 +57,11 @@ fn forced_equalities_share_one_generalized_parameter() {
     let u = solver.fresh(UniverseRole::Generalizable, None);
     let v = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_eq(Level::meta(u), Level::meta(v), origin("equal"))
+        .add_eq(
+            Level::meta(u),
+            Level::meta(v),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     let context = solver.finalize([u, v], [], []).unwrap();
@@ -68,13 +76,17 @@ fn a_level_bounded_by_zero_generalizes_to_the_constant() {
     let u = solver.fresh(UniverseRole::Generalizable, None);
     let v = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_leq(Level::meta(u), Level::zero(), origin("pinned"))
+        .add_leq(
+            Level::meta(u),
+            Level::zero(),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
         .add_leq(
             Level::meta(u).succ().unwrap(),
             Level::meta(v),
-            origin("above"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -101,10 +113,14 @@ fn a_maximum_bounded_by_zero_holds_every_part_at_zero() {
     let w = solver.fresh(UniverseRole::Generalizable, None);
     let both = Level::max([Level::meta(u), Level::meta(v)]);
     solver
-        .add_leq(both.clone(), Level::zero(), origin("pinned"))
+        .add_leq(
+            both.clone(),
+            Level::zero(),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
-        .add_leq(both, Level::meta(w), origin("below"))
+        .add_leq(both, Level::meta(w), UniverseConstraintOrigin::Converted)
         .unwrap();
 
     let context = solver.finalize([u, v, w], [], []).unwrap();
@@ -126,14 +142,14 @@ fn a_lone_level_equal_to_another_is_that_level() {
         .add_eq(
             Level::meta(u),
             Level::max([Level::meta(v), Level::meta(w)]),
-            origin("maximum"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
     solver
         .add_eq(
             Level::meta(x),
             Level::meta(v).succ().unwrap(),
-            origin("successor"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -159,13 +175,17 @@ fn a_level_determined_once_minimizing_settles_another_is_merged() {
     let b = solver.fresh(UniverseRole::Generalizable, None);
     let c = solver.fresh(UniverseRole::Generalizable, None);
     solver
-        .add_leq(Level::meta(a), Level::meta(b), origin("below"))
+        .add_leq(
+            Level::meta(a),
+            Level::meta(b),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver
         .add_leq(
             Level::meta(b),
             Level::max([Level::meta(a), Level::meta(c)]),
-            origin("above"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -183,7 +203,7 @@ fn an_equation_between_maxima_determines_neither_side() {
         .add_eq(
             Level::max([Level::meta(a), Level::meta(b)]),
             Level::max([Level::meta(c), Level::meta(d)]),
-            origin("maxima"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -202,7 +222,7 @@ fn non_principal_flexible_levels_are_promoted_to_residual_parameters() {
         .add_leq(
             Level::constant(1),
             Level::max([Level::meta(left), Level::meta(right)]),
-            origin("choice"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -221,7 +241,7 @@ fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
         .add_leq(
             Level::meta(outer),
             Level::param(UniverseParam(0)),
-            origin("scoped upper"),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 

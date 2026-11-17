@@ -9,8 +9,8 @@ use {
     crate::{Occurrence, UniverseSolver, UniverseStateToken},
     curios_common::Entropy,
     curios_core::{
-        Extent, Level, Quality, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseRole, Universes,
+        Extent, Level, Quality, Term, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseRole, Universes,
     },
 };
 
@@ -97,17 +97,15 @@ impl<'a> UniverseMutation<'a> {
     }
 
     /// The sort of a type left to inference: its quality and its level each a metavariable of its own ([`UniverseSolver::fresh_quality`]), so the first sort it is held to decides whether it is a proposition's or a type's.
-    pub fn fresh_sort(&mut self, kind: &str) -> Term {
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
-        let quality = self.solver.fresh_quality(Some(origin.clone()));
-        let level = self.solver.fresh(UniverseRole::Flexible, Some(origin));
+    pub fn fresh_sort(&mut self) -> Term {
+        let quality = self.solver.fresh_quality(None);
+        let level = self.solver.fresh(UniverseRole::Flexible, None);
         Term::sort_at(quality, Level::meta(level))
     }
 
     /// The sort of a proposition left to inference: [`UniverseMutation::fresh_sort`] with its quality stated, for a part of what is known a proposition — every field of a record of propositions is one.
-    pub fn fresh_prop_sort(&mut self, kind: &str) -> Term {
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
-        let level = self.solver.fresh(UniverseRole::Flexible, Some(origin));
+    pub fn fresh_prop_sort(&mut self) -> Term {
+        let level = self.solver.fresh(UniverseRole::Flexible, None);
         Term::sort_at(Quality::Prop, Level::meta(level))
     }
 }

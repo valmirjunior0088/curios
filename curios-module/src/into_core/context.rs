@@ -870,7 +870,7 @@ impl<'a> Context<'a> {
     pub fn fresh_universe(
         &self,
         span: Option<&Span>,
-        written: curios_core::UniverseConstraintKind,
+        form: curios_core::SortForm,
     ) -> curios_core::Level {
         if let Some(span) = span
             && let Some(id) = self
@@ -895,8 +895,8 @@ impl<'a> Context<'a> {
             role: self.universe_role(),
             written: span.map(|span| curios_core::WrittenSort {
                 extent: self.extent(span),
-                kind: written,
-                declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
+                form,
+                local: self.shared.declaring.sorts.site.get() == SortSite::Local,
             }),
         });
         let id = curios_core::UniverseMetaId(id);
@@ -926,10 +926,11 @@ impl<'a> Context<'a> {
 
         let mut seeds = self.shared.declaring.sorts.seeds.borrow_mut();
         let id = curios_core::QualityMetaId(seeds.len());
+        let local = self.shared.declaring.sorts.site.get() == SortSite::Local;
         seeds.push(span.map(|span| curios_core::WrittenSort {
             extent: self.extent(span),
-            kind: curios_core::UniverseConstraintKind::WrittenSort,
-            declaration: (!self.prefix.is_root()).then(|| self.prefix.join()),
+            form: curios_core::SortForm::Sort,
+            local,
         }));
         if let Some(span) = span {
             self.shared

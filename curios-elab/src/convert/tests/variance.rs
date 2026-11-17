@@ -7,8 +7,8 @@ use {
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Constructors, Definition, DefinitionKind, Free, InductDecl, Level, Telescope, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        UniverseParam, UniverseRole, Variance,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
+        Variance,
     },
     std::collections::BTreeSet,
 };
@@ -137,7 +137,7 @@ fn bounded(context: &mut Context) -> UniverseMetaId {
         .add_leq(
             Level::constant(1),
             Level::meta(bounded),
-            UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            UniverseConstraintOrigin::Converted,
         )
         .unwrap();
 
@@ -185,6 +185,7 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
             );
             let scheme = context
                 .finalize_universe_metas(
+                    &BTreeSet::new(),
                     BTreeSet::from([this, that]),
                     BTreeSet::new(),
                     BTreeSet::new(),
@@ -201,7 +202,7 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
                 .add_leq(
                     Level::constant(1),
                     Level::meta(bounded),
-                    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                    UniverseConstraintOrigin::Converted,
                 )
                 .unwrap();
             assert_eq!(
@@ -215,6 +216,7 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
             assert_eq!(
                 context
                     .finalize_universe_metas(
+                        &BTreeSet::new(),
                         BTreeSet::from([bounded]),
                         BTreeSet::new(),
                         BTreeSet::new()
@@ -264,6 +266,7 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
         );
         let scheme = context
             .finalize_universe_metas(
+                &BTreeSet::new(),
                 BTreeSet::from([this, that]),
                 BTreeSet::new(),
                 BTreeSet::new(),
@@ -285,6 +288,7 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
         assert_eq!(
             context
                 .finalize_universe_metas(
+                    &BTreeSet::new(),
                     BTreeSet::from([bounded]),
                     BTreeSet::new(),
                     BTreeSet::new()
@@ -318,6 +322,7 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
         assert!(
             context
                 .finalize_universe_metas(
+                    &BTreeSet::new(),
                     BTreeSet::from([bounded]),
                     BTreeSet::new(),
                     BTreeSet::new()
@@ -339,6 +344,7 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
         );
         let scheme = context
             .finalize_universe_metas(
+                &BTreeSet::new(),
                 BTreeSet::from([this, that]),
                 BTreeSet::new(),
                 BTreeSet::new(),
@@ -370,6 +376,7 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
         );
         let scheme = context
             .finalize_universe_metas(
+                &BTreeSet::new(),
                 BTreeSet::from([this, that]),
                 BTreeSet::new(),
                 BTreeSet::new(),
@@ -392,6 +399,7 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
         assert_eq!(
             context
                 .finalize_universe_metas(
+                    &BTreeSet::new(),
                     BTreeSet::from([bounded]),
                     BTreeSet::new(),
                     BTreeSet::new()
@@ -526,6 +534,7 @@ fn a_field_of_a_definition_is_joined_where_it_can_be_and_never_required() {
         assert_eq!(
             context
                 .finalize_universe_metas(
+                    &BTreeSet::new(),
                     BTreeSet::from([bounded]),
                     BTreeSet::new(),
                     BTreeSet::new()

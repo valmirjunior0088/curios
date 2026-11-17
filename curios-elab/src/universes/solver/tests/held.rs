@@ -2,10 +2,6 @@
 
 use crate::universes::solver::{test_support::*, *};
 
-fn conversion() -> UniverseConstraintOrigin {
-    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion)
-}
-
 /// The level of one occurrence: what a use of a declaration taking one universe parameter mints.
 fn occurrence(solver: &mut UniverseSolver) -> UniverseMetaId {
     let scheme = UniverseContext {
@@ -33,7 +29,11 @@ fn a_held_occurrence_keeps_its_bound_where_one_nothing_holds_settles_at_it() {
         let mut solver = UniverseSolver::new(0);
         let level = occurrence(&mut solver);
         solver
-            .add_leq(Level::constant(1), Level::meta(level), conversion())
+            .add_leq(
+                Level::constant(1),
+                Level::meta(level),
+                UniverseConstraintOrigin::Converted,
+            )
             .unwrap();
 
         let context = solver.finalize([level], [], held.then_some(level)).unwrap();
@@ -79,7 +79,11 @@ fn a_held_level_is_followed_to_the_level_that_carries_it() {
         let carrier = occurrence(&mut solver);
         solver.assign(written, Level::meta(carrier)).unwrap();
         solver
-            .add_leq(Level::constant(1), Level::meta(carrier), conversion())
+            .add_leq(
+                Level::constant(1),
+                Level::meta(carrier),
+                UniverseConstraintOrigin::Converted,
+            )
             .unwrap();
 
         let context = solver
@@ -97,7 +101,11 @@ fn an_occurrence_above_a_held_level_settles_at_it() {
     let held = occurrence(&mut solver);
     let above = occurrence(&mut solver);
     solver
-        .add_leq(Level::meta(held), Level::meta(above), conversion())
+        .add_leq(
+            Level::meta(held),
+            Level::meta(above),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     let context = solver.finalize([held, above], [], [held]).unwrap();
@@ -122,7 +130,11 @@ fn an_occurrence_nothing_bounds_or_holds_settles_at_zero() {
     let below = occurrence(&mut solver);
     let above = occurrence(&mut solver);
     solver
-        .add_leq(Level::meta(below), Level::meta(above), conversion())
+        .add_leq(
+            Level::meta(below),
+            Level::meta(above),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
 
     let context = solver.finalize([below, above], [], []).unwrap();

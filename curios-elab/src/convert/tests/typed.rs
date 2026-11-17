@@ -661,14 +661,14 @@ fn a_codomain_is_decided_at_below_past_a_domain_that_waits() {
     let upper = over(&mut context, Term::prop_at(Level::constant(1)));
     let into_a_type = over(&mut context, Term::type_ground());
 
-    let below = subsume_outcome(&mut context, &lower, &upper, None);
+    let below = subsume_outcome(&mut context, &lower, &upper, None, None);
     let Ok(Outcome::Blocked(goals)) = below else {
         panic!("{below:?}");
     };
     assert_eq!(goals.len(), 1);
     assert_eq!(goals[0].relation, Relation::Equal);
 
-    let below = subsume_outcome(&mut context, &lower, &into_a_type, None);
+    let below = subsume_outcome(&mut context, &lower, &into_a_type, None, None);
     assert!(matches!(below, Ok(Outcome::Mismatch(_))), "{below:?}");
     let equal = convert_outcome(&mut context, &Term::type_ground(), &lower, &into_a_type);
     assert!(matches!(equal, Ok(Outcome::Mismatch(_))), "{equal:?}");
@@ -682,7 +682,7 @@ fn two_sorts_at_below_are_a_level_bound() {
     let large = Term::type_at(Level::constant(1));
 
     assert!(matches!(
-        subsume_outcome(&mut context, &small, &large, None),
+        subsume_outcome(&mut context, &small, &large, None, None),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
@@ -690,16 +690,17 @@ fn two_sorts_at_below_are_a_level_bound() {
             &mut context,
             &Term::prop(),
             &Term::prop_at(Level::constant(1)),
+            None,
             None
         ),
         Ok(Outcome::Converts)
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &Term::prop(), &small, None),
+        subsume_outcome(&mut context, &Term::prop(), &small, None, None),
         Ok(Outcome::Mismatch(_))
     ));
     assert!(matches!(
-        subsume_outcome(&mut context, &small, &Term::prop(), None),
+        subsume_outcome(&mut context, &small, &Term::prop(), None, None),
         Ok(Outcome::Mismatch(_))
     ));
 }

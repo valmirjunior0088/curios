@@ -170,7 +170,7 @@ fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result
 pub fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = match &**term {
         Subterm::Metavar(_) => {
-            let sort = context.universes_mut().fresh_sort("type left to inference");
+            let sort = context.universes_mut().fresh_sort();
             elaborate(context, term, Mode::Check(Expectation::own(sort)))?
         }
         // `()` is checked against a type, so the tuple rule refuses it and says how the unit type is written.
@@ -238,11 +238,12 @@ pub fn expect_as(
     curios_profile::profile!("typing::expect");
     let expected = &expectation.type_;
     let site = expectation.site.as_ref();
-    let outcome = subsume_outcome(context, inferred, expected, term.extent()).map_err(|error| {
-        Error::from_reduce(error, |refusal| {
-            Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
-        })
-    })?;
+    let outcome =
+        subsume_outcome(context, inferred, expected, term.extent(), site).map_err(|error| {
+            Error::from_reduce(error, |refusal| {
+                Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
+            })
+        })?;
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
@@ -687,8 +688,8 @@ impl Context<'_> {
             let mut parts = Vec::with_capacity(tuple.fields.len());
             for position in 0..tuple.fields.len() {
                 let part = match declared {
-                    Some(Quality::Prop) => context.universes_mut().fresh_prop_sort("literal field"),
-                    _ => context.universes_mut().fresh_sort("literal field"),
+                    Some(Quality::Prop) => context.universes_mut().fresh_prop_sort(),
+                    _ => context.universes_mut().fresh_sort(),
                 };
                 let (part, hole) = context.fresh_hole(part, choice.written.extent());
                 parts.push(part);
@@ -1246,7 +1247,7 @@ fn retry_work(
 
     let outcome = context.standing_on(&frames, |context| {
         Ok(
-            match problem_outcome(context, goal.clone(), origin.extent())? {
+            match problem_outcome(context, goal.clone(), origin.extent(), site.as_ref())? {
                 Outcome::Converts => Retry::Converts,
                 // Held here, standing on the problem's frames: the sides are read through whatever solutions have landed, so the report names the actual disagreement rather than the metavariables it arrived wrapped in, and it is built standing on these frames where it is reported. A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.

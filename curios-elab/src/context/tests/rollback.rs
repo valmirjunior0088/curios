@@ -6,8 +6,7 @@ use {
     curios_common::Qualifier,
     curios_core::{
         CalleeId, DefinitionKind, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
-        Term, UniverseConstraintKind, UniverseConstraintOrigin, UniverseMetaId, UniverseRole,
-        Universes, WitnessOrigin,
+        Term, UniverseConstraintOrigin, UniverseMetaId, UniverseRole, Universes, WitnessOrigin,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -397,7 +396,7 @@ fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_o
             .add_eq(
                 this.clone(),
                 that.clone(),
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                UniverseConstraintOrigin::Converted,
             )
             .expect("two fresh levels may be one");
     };

@@ -9,8 +9,8 @@ use {
     crate::{Context, EveryPosition, Structural, reduce},
     curios_core::{
         Argument, Families, Field, Free, FuncType, Instance, Level, Match, Proj, Quality,
-        ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, instantiate_universes,
+        ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintOrigin,
+        instantiate_universes,
     },
     std::{collections::HashMap, rc::Rc},
 };
@@ -66,11 +66,7 @@ pub fn identify_universe_levels(
     for (this_level, that_level) in compared {
         context
             .universes_mut()
-            .add_eq(
-                this_level,
-                that_level,
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-            )
+            .add_eq(this_level, that_level, UniverseConstraintOrigin::Converted)
             .map_err(ReduceError::Universe)?;
     }
     for (this_level, that_level) in irrelevant {
@@ -110,11 +106,7 @@ pub fn hold_at_one_instance(
     let held = compared.into_iter().all(|(this_level, that_level)| {
         context
             .universes_mut()
-            .add_eq(
-                this_level,
-                that_level,
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-            )
+            .add_eq(this_level, that_level, UniverseConstraintOrigin::Converted)
             .is_ok()
     }) && sorts.into_iter().all(|(this_sort, that_sort)| {
         context

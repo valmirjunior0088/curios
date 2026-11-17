@@ -7,7 +7,7 @@
 //! A constraint is its inequality alone, so its equality, its hash and its archived bytes are the inequality's, and a context's are its counts' and its constraints': where a constraint was raised is the elaborator's solver's, which holds it beside the constraint ([`UniverseConstraintOrigin`]). Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before ANF.
 
 use {
-    super::{Bound, Extent, Global, instantiate_universes},
+    super::{ArgumentSite, Bound, Extent, Global, instantiate_universes},
     curios_common::Mint,
     std::{collections::BTreeMap, fmt, hash::Hash},
 };
@@ -382,54 +382,74 @@ pub struct UniverseSeed {
     pub written: Option<WrittenSort>,
 }
 
-/// Where a written `Type`, `Prop` or `Sort` stands and which of them it is: what the lowering keeps of the level or the sort it minted for one, archived with the lowered module, which keeps its positions. The solver makes of it the origin of what that level or sort raises ([`WrittenSort::origin`]), and nothing else stored holds one.
+/// Where a written `Type`, `Prop` or `Sort` stands and which of them it is: what the lowering keeps of the level or the sort it minted for one, archived with the lowered module, which keeps its positions. The solver makes of it the origin of what that level or sort raises ([`UniverseConstraintOrigin::Written`]), and nothing else stored holds one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WrittenSort {
     pub extent: Option<Extent>,
-    pub kind: UniverseConstraintKind,
-    /// The path the declaration it was written in stands under, where that is not the root.
-    pub declaration: Option<String>,
+    pub form: SortForm,
+    /// Whether it is written in a definition local to another, which no use instantiates afresh: a level a conflict holds of it is one the local definition holds wherever it is used.
+    pub local: bool,
 }
 
-impl WrittenSort {
-    /// Where a constraint raised on this sort's level or quality was raised, as the solver that raised it holds it.
-    pub fn origin(&self) -> UniverseConstraintOrigin {
-        UniverseConstraintOrigin {
-            extent: self.extent,
-            kind: self.kind.clone(),
-            declaration: self.declaration.clone(),
-            binder: None,
-            instantiated: None,
+/// Which of `Type`, `Prop` and `Sort` a program wrote.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum SortForm {
+    Type,
+    Prop,
+    Sort,
+}
+
+/// Why a universe constraint was raised, as the solver that raised it holds it beside the constraint and as a conflict's path reports it, each reason with the facts it has: a scheme stores its constraints as their inequalities alone ([`UniverseConstraint`]), so nothing stored holds one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UniverseConstraintOrigin {
+    /// The level or the sort a written `Type`, `Prop` or `Sort` was minted for.
+    Written(WrittenSort),
+    /// A term held under the sort a position expects, a sort put below another: where the term stands, whether what is put below is a proposition's, and the slot of the callee the position is, where it is one.
+    Held {
+        extent: Option<Extent>,
+        proposition: bool,
+        site: Option<ArgumentSite>,
+    },
+    /// A nominal declaration's parameter or member sized under the sort the declaration states: where its type is written.
+    Sized { extent: Option<Extent> },
+    /// Two levels conversion holds one, or one below the other, where comparing two instances or two sorts asked it.
+    Converted,
+    /// A bound a declaration's scheme states, restated at an occurrence's instance: the declaration instantiated — whose bound it is, to a reader who wrote the occurrence and never the bound — and where a term wrote the occurrence.
+    Restated {
+        declaration: Global,
+        extent: Option<Extent>,
+    },
+    /// A bound a stored scheme states, read where the scheme is validated alone, at no instance.
+    Stated,
+}
+
+impl UniverseConstraintOrigin {
+    /// Where a term of the program raised it, where one did.
+    pub fn extent(&self) -> Option<Extent> {
+        match self {
+            Self::Written(written) => written.extent,
+            Self::Held { extent, .. } | Self::Sized { extent } | Self::Restated { extent, .. } => {
+                *extent
+            }
+            Self::Converted | Self::Stated => None,
         }
     }
-}
-
-/// The semantic reason a universe inequality was introduced.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub enum UniverseConstraintKind {
-    WrittenType,
-    WrittenProp,
-    WrittenSort,
-    Cumulativity,
-    PropositionCumulativity,
-    TypeSuccessor,
-    FunctionFormation,
-    TupleFormation,
-    FieldSizing,
-    ConstructorSizing,
-    Conversion,
-    SchemeInstantiation,
-    Other(String),
 }
 
 /// Whether an inconsistency's path runs through a proposition: one written, or one put below a sort.
 pub fn names_a_proposition(path: &[UniverseConstraintOrigin]) -> bool {
     path.iter().any(|origin| {
         matches!(
-            origin.kind,
-            UniverseConstraintKind::WrittenProp | UniverseConstraintKind::PropositionCumulativity
+            origin,
+            UniverseConstraintOrigin::Written(WrittenSort {
+                form: SortForm::Prop,
+                ..
+            }) | UniverseConstraintOrigin::Held {
+                proposition: true,
+                ..
+            }
         )
     })
 }
@@ -438,51 +458,60 @@ pub fn names_a_proposition(path: &[UniverseConstraintOrigin]) -> bool {
 pub fn instantiated_on(path: &[UniverseConstraintOrigin]) -> Vec<Global> {
     let mut named = Vec::new();
     for origin in path {
-        if let Some(instantiated) = origin.instantiated
-            && !named.contains(&instantiated)
+        if let UniverseConstraintOrigin::Restated { declaration, .. } = origin
+            && !named.contains(declaration)
         {
-            named.push(instantiated);
+            named.push(*declaration);
         }
     }
 
     named
 }
 
+/// The slots of callees an inconsistency's path holds a term under, each once and in the order the path meets them: the parameters the program's arguments were checked as, which tie the levels it wrote.
+pub fn held_at(path: &[UniverseConstraintOrigin]) -> Vec<&ArgumentSite> {
+    let mut held = Vec::new();
+    for origin in path {
+        if let UniverseConstraintOrigin::Held {
+            site: Some(site), ..
+        } = origin
+            && !held.contains(&site)
+        {
+            held.push(site);
+        }
+    }
+
+    held
+}
+
+/// Whether an inconsistency's path holds a level written in a definition local to another: one only a top-level definition's generalization would let two uses hold apart.
+pub fn through_a_local_definition(path: &[UniverseConstraintOrigin]) -> bool {
+    path.iter().any(|origin| {
+        matches!(
+            origin,
+            UniverseConstraintOrigin::Written(WrittenSort { local: true, .. })
+        )
+    })
+}
+
 /// The sort an inconsistency is reported about, as its reader wrote it: `Prop` where its path runs through a proposition and through no type, `Type` otherwise.
 pub fn inconsistent_sort(path: &[UniverseConstraintOrigin]) -> &'static str {
     let through_a_type = path.iter().any(|origin| {
         matches!(
-            origin.kind,
-            UniverseConstraintKind::WrittenType | UniverseConstraintKind::Cumulativity
+            origin,
+            UniverseConstraintOrigin::Written(WrittenSort {
+                form: SortForm::Type,
+                ..
+            }) | UniverseConstraintOrigin::Held {
+                proposition: false,
+                ..
+            }
         )
     });
 
     match names_a_proposition(path) && !through_a_type {
         true => "Prop",
         false => "Type",
-    }
-}
-
-/// Where a universe constraint was raised, as the solver that raised it holds it beside the constraint, and as a conflict's path reports it: a scheme stores its constraints as their inequalities alone ([`UniverseConstraint`]), so nothing stored holds one.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UniverseConstraintOrigin {
-    pub extent: Option<Extent>,
-    pub kind: UniverseConstraintKind,
-    pub declaration: Option<String>,
-    pub binder: Option<String>,
-    /// The declaration an occurrence instantiated, where the constraint is one that declaration's scheme states, restated at the occurrence's instance: whose bound it is, to a reader who wrote the occurrence and never the bound. A scheme stores none: it is an instance's to say.
-    pub instantiated: Option<Global>,
-}
-
-impl UniverseConstraintOrigin {
-    pub fn new(kind: UniverseConstraintKind) -> Self {
-        Self {
-            extent: None,
-            kind,
-            declaration: None,
-            binder: None,
-            instantiated: None,
-        }
     }
 }
 

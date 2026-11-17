@@ -38,11 +38,11 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_common::{Keyed, Plicity, recurse},
     curios_core::{
-        Advance, Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families,
-        Free, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
-        Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin, Paired, Probe, Proj, Quality,
-        Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin, UniverseError, Universes,
+        Advance, Apply, ArgumentSite, Atom, Bound, Carrier, Cases, Cost, Cursor, Exhaustion,
+        Extent, Families, Free, Func, FuncType, Global, InductInstance, InductType, Instance,
+        Intrinsic, Level, Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin, Paired,
+        Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError, Universes,
         Variance, Variant, paired,
     },
     std::{
@@ -228,15 +228,16 @@ fn convert_under(
         relation: Relation::Equal,
     };
 
-    problem_outcome(context, problem, None)
+    problem_outcome(context, problem, None, None)
 }
 
-/// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `extent` is the term's, which a level bound raised on the way reports.
+/// Whether a term of type `lower` may stand where `upper` is wanted: the two types posed at [`Relation::Below`], under no binder. `extent` is the term's, and `site` the slot of the callee `upper` is the type of, where it is one: what a level bound raised on the way says of where it was raised.
 pub fn subsume_outcome(
     context: &mut Context,
     lower: &Term,
     upper: &Term,
     extent: Option<Extent>,
+    site: Option<&ArgumentSite>,
 ) -> Result<Outcome, ReduceError> {
     let problem = Problem {
         type_: Term::type_ground(),
@@ -247,17 +248,18 @@ pub fn subsume_outcome(
         relation: Relation::Below,
     };
 
-    problem_outcome(context, problem, extent)
+    problem_outcome(context, problem, extent, site)
 }
 
-/// Decide `problem` at the relation it carries: a question asked afresh, and the retry of a goal an earlier run surrendered, which resumes as what it was asked.
+/// Decide `problem` at the relation it carries: a question asked afresh, and the retry of a goal an earlier run surrendered, which resumes as what it was asked, for the slot it was asked for.
 pub fn problem_outcome(
     context: &mut Context,
     problem: Problem,
     extent: Option<Extent>,
+    site: Option<&ArgumentSite>,
 ) -> Result<Outcome, ReduceError> {
     curios_profile::profile!("convert::outcome");
-    Convert::new(problem, extent).outcome(context)
+    Convert::new(problem, extent, site.cloned()).outcome(context)
 }
 
 /// Whether what holding spines equal solves stands.
@@ -286,8 +288,8 @@ pub fn hold_spines(
 ) -> Result<Option<HeldConversion>, ReduceError> {
     let mark = context.solution_mark();
     let committed = context.solutions_committed();
-    let outcome =
-        context.holding_spines(|context| Convert::new(problem.clone(), None).outcome(context));
+    let outcome = context
+        .holding_spines(|context| Convert::new(problem.clone(), None, None).outcome(context));
     let solved = context
         .solutions_since(committed)
         .into_iter()
@@ -474,8 +476,9 @@ struct Convert {
     pairs: Pairs,
     // The level pairs the levels-only shortcut left to a curried head's type, in the order it met them. Nothing compares the two levels of one where the run goes on to hold its sides one, so each is a weak equation then and nothing where it does not.
     apart: Vec<(Level, Level)>,
-    // The extent of the term this run was asked for, where it was asked for one: what a level bound raised at below reports.
+    // The extent of the term this run was asked for, where it was asked for one, and the slot of the callee whose type it holds that term to, where it is one: what a level bound raised at below says of where it was raised.
     extent: Option<Extent>,
+    site: Option<ArgumentSite>,
 }
 
 impl Convert {
@@ -493,7 +496,7 @@ impl Convert {
             .add_eq(
                 left.clone(),
                 right.clone(),
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+                UniverseConstraintOrigin::Converted,
             )
             .map_err(ReduceError::Universe)?;
 
@@ -561,8 +564,8 @@ impl Convert {
         Ok(true)
     }
 
-    fn new(problem: Problem, extent: Option<Extent>) -> Self {
-        let mut run = Self::under(problem.binders.clone(), problem.pairs.clone(), extent);
+    fn new(problem: Problem, extent: Option<Extent>, site: Option<ArgumentSite>) -> Self {
+        let mut run = Self::under(problem.binders.clone(), problem.pairs.clone(), extent, site);
         run.posed.insert(Keyed::new(Posed {
             type_: problem.type_.clone(),
             this: problem.this.clone(),
@@ -576,7 +579,12 @@ impl Convert {
     }
 
     /// A run with nothing posed yet: what it is handed to compare is posed under `binders` and inside `pairs`.
-    fn under(binders: Binders, pairs: Pairs, extent: Option<Extent>) -> Self {
+    fn under(
+        binders: Binders,
+        pairs: Pairs,
+        extent: Option<Extent>,
+        site: Option<ArgumentSite>,
+    ) -> Self {
         Self {
             posed: HashSet::new(),
             binders,
@@ -588,6 +596,16 @@ impl Convert {
             rejected: None,
             apart: Vec::new(),
             extent,
+            site,
+        }
+    }
+
+    /// Why a sort this run puts below another is put there: the term it was asked for, held where its slot expects it, at a sort of `quality`.
+    fn held(&self, quality: Quality) -> UniverseConstraintOrigin {
+        UniverseConstraintOrigin::Held {
+            extent: self.extent,
+            proposition: quality == Quality::Prop,
+            site: self.site.clone(),
         }
     }
 
@@ -785,23 +803,10 @@ impl Convert {
                     return Ok(false);
                 }
                 // What is put below is named for the report: a proposition's level and a type's are told apart by nothing else on the path.
-                let kind = match context.universes().quality(*below) {
-                    Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
-                    _ => UniverseConstraintKind::Cumulativity,
-                };
+                let origin = self.held(context.universes().quality(*below));
                 context
                     .universes_mut()
-                    .add_leq(
-                        lower.clone(),
-                        upper.clone(),
-                        UniverseConstraintOrigin {
-                            extent: self.extent,
-                            kind,
-                            declaration: None,
-                            binder: None,
-                            instantiated: None,
-                        },
-                    )
+                    .add_leq(lower.clone(), upper.clone(), origin)
                     .map_err(ReduceError::Universe)?;
 
                 Ok(true)
@@ -881,7 +886,7 @@ impl Convert {
         that: &Rec,
     ) -> Result<Outcome, ReduceError> {
         let mark = context.solution_mark();
-        let mut run = Self::under(binders.clone(), pairs.clone(), None);
+        let mut run = Self::under(binders.clone(), pairs.clone(), None, None);
         let outcome = match run.compare_rec(context, this.clone(), that.clone())? {
             true => run.outcome(context)?,
             false => Outcome::Mismatch(None),
@@ -1113,7 +1118,7 @@ impl Convert {
             pairs,
             relation,
         };
-        let outcome = Convert::new(opened, self.extent).outcome(context);
+        let outcome = Convert::new(opened, self.extent, self.site.clone()).outcome(context);
         if matches!(outcome, Ok(Outcome::Mismatch(_))) {
             context.rollback_solutions(mark);
         }
@@ -2474,17 +2479,7 @@ impl Convert {
         match &*forced {
             Subterm::Sort(Sort { quality, level }) => {
                 // What is put below is named for the report, as the relation's own rule names it.
-                let kind = match context.universes().quality(*quality) {
-                    Quality::Prop => UniverseConstraintKind::PropositionCumulativity,
-                    _ => UniverseConstraintKind::Cumulativity,
-                };
-                let origin = UniverseConstraintOrigin {
-                    extent: self.extent,
-                    kind,
-                    declaration: None,
-                    binder: None,
-                    instantiated: None,
-                };
+                let origin = self.held(context.universes().quality(*quality));
                 let own = context
                     .universes_mut()
                     .fresh_beside(level, Some(origin.clone()))
@@ -2825,7 +2820,8 @@ impl Convert {
                     pairs: posed_pairs.clone(),
                     relation,
                 };
-                let outcome = Convert::new(reduced, self.extent).outcome(context);
+                let outcome =
+                    Convert::new(reduced, self.extent, self.site.clone()).outcome(context);
                 let waits = match &outcome {
                     Ok(Outcome::Blocked(_)) => true,
                     Ok(Outcome::Mismatch(_)) => solvable,

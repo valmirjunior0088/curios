@@ -569,6 +569,8 @@ pub enum Error {
         lower: Level,
         upper: Level,
         path: Vec<UniverseConstraintOrigin>,
+        /// Whether a slot on the cycle is a call of a member of the group whose levels it closes, which that member's own calls constrain and never choose afresh: what the elaborator, which holds the group, knows where the levels settle.
+        recursive: bool,
     },
     UniverseInvariant(String),
     ByteLiteralOutOfRange {
@@ -2119,7 +2121,7 @@ impl Error {
         vec![Report {
             notes,
             ..Report::of(
-                placed(self.innermost_extent(), self.owner()),
+                placed(self.innermost_extent().as_ref(), self.owner()),
                 held(said, spelling),
             )
         }]
@@ -2193,13 +2195,19 @@ impl Error {
             }
             // Each use whose scheme's bound is on the cycle, past the place the report itself stands at, which is the first the path knows.
             Self::UniverseInconsistency { path, .. } => {
-                let here = path.iter().find_map(|origin| origin.extent);
+                let here = path.iter().find_map(UniverseConstraintOrigin::extent);
                 let mut noted = Vec::new();
 
                 path.iter()
                     .filter_map(|origin| {
-                        let instantiated = origin.instantiated?;
-                        let extent = origin.extent.filter(|extent| Some(*extent) != here)?;
+                        let UniverseConstraintOrigin::Restated {
+                            declaration: instantiated,
+                            extent: Some(extent),
+                        } = origin
+                        else {
+                            return None;
+                        };
+                        let extent = Some(*extent).filter(|extent| Some(*extent) != here)?;
                         if noted.contains(&extent) {
                             return None;
                         }
@@ -2207,7 +2215,7 @@ impl Error {
 
                         note(
                             extent.resolved(anchors),
-                            format!("`{}` is used here", spelling.symbol(&instantiated)),
+                            format!("`{}` is used here", spelling.symbol(instantiated)),
                         )
                     })
                     .collect()
@@ -2251,16 +2259,16 @@ impl Error {
     /// The innermost extent stamped on this error, looking through both wrappers.
     ///
     /// A universe inconsistency carries its own, from the first constraint on the path that knows where it came from: nothing stamps one on the way out, because the solve that finds the cycle runs after the terms that forced it have been checked and left behind.
-    fn innermost_extent(&self) -> Option<&Extent> {
+    fn innermost_extent(&self) -> Option<Extent> {
         match self {
-            Self::Located { extent, error } => error.innermost_extent().or(Some(extent)),
+            Self::Located { extent, error } => error.innermost_extent().or(Some(*extent)),
             Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
             | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.innermost_extent(),
             Self::UniverseInconsistency { path, .. } => {
-                path.iter().find_map(|origin| origin.extent.as_ref())
+                path.iter().find_map(UniverseConstraintOrigin::extent)
             }
             _ => None,
         }
@@ -2358,9 +2366,12 @@ impl Exhaustion for Error {
 impl From<UniverseError> for Error {
     fn from(error: UniverseError) -> Self {
         match error {
-            UniverseError::Inconsistency { lower, upper, path } => {
-                Self::UniverseInconsistency { lower, upper, path }
-            }
+            UniverseError::Inconsistency { lower, upper, path } => Self::UniverseInconsistency {
+                lower,
+                upper,
+                path,
+                recursive: false,
+            },
             other => Self::UniverseInvariant(other.faithful().to_string()),
         }
     }

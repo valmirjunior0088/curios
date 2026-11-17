@@ -2,10 +2,6 @@
 
 use crate::universes::solver::*;
 
-fn conversion() -> UniverseConstraintOrigin {
-    UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion)
-}
-
 fn open(solver: &mut UniverseSolver) -> UniverseMetaId {
     solver.fresh(UniverseRole::Generalizable, None)
 }
@@ -33,7 +29,11 @@ fn a_weak_equation_the_store_refuses_is_dropped() {
     let bounded = |solver: &mut UniverseSolver| {
         let u = open(solver);
         solver
-            .add_leq(Level::constant(1), Level::meta(u), conversion())
+            .add_leq(
+                Level::constant(1),
+                Level::meta(u),
+                UniverseConstraintOrigin::Converted,
+            )
             .unwrap();
         u
     };
@@ -55,7 +55,11 @@ fn a_weak_equation_the_store_refuses_is_dropped() {
     let mut solver = UniverseSolver::new(0);
     let u = bounded(&mut solver);
     solver
-        .add_eq(Level::meta(u), Level::zero(), conversion())
+        .add_eq(
+            Level::meta(u),
+            Level::zero(),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     assert!(solver.finalize([u], [], []).is_err());
 }
@@ -68,7 +72,11 @@ fn a_refused_weak_equation_does_not_take_the_others_with_it() {
     let v = open(&mut solver);
     let w = open(&mut solver);
     solver
-        .add_leq(Level::constant(1), Level::meta(u), conversion())
+        .add_leq(
+            Level::constant(1),
+            Level::meta(u),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
     solver.add_weak_eq(Level::meta(u), Level::zero());
     solver.add_weak_eq(Level::meta(v), Level::meta(w));
@@ -90,7 +98,11 @@ fn of_two_weak_equations_that_cannot_both_hold_the_first_met_is_kept() {
         let a = open(&mut solver);
         let b = open(&mut solver);
         solver
-            .add_leq(Level::meta(a).succ().unwrap(), Level::meta(b), conversion())
+            .add_leq(
+                Level::meta(a).succ().unwrap(),
+                Level::meta(b),
+                UniverseConstraintOrigin::Converted,
+            )
             .unwrap();
         let (first, second) = match first_is_lower {
             true => (a, b),
@@ -190,7 +202,9 @@ fn a_weak_equation_puts_no_bound_on_a_level_a_declaration_holds() {
             true => Level::meta(b),
             false => Level::constant(1),
         };
-        solver.add_leq(below, Level::meta(u), conversion()).unwrap();
+        solver
+            .add_leq(below, Level::meta(u), UniverseConstraintOrigin::Converted)
+            .unwrap();
         solver.add_weak_eq(Level::meta(u), Level::meta(a));
 
         let context = solver.finalize([a, b], [u], [a, b]).unwrap();
@@ -208,9 +222,15 @@ fn a_weak_equation_joins_what_the_held_levels_already_bound() {
     let u = open(&mut solver);
     let above = Level::meta(b).succ().unwrap();
     solver
-        .add_leq(above.clone(), Level::meta(a), conversion())
+        .add_leq(
+            above.clone(),
+            Level::meta(a),
+            UniverseConstraintOrigin::Converted,
+        )
         .unwrap();
-    solver.add_leq(above, Level::meta(u), conversion()).unwrap();
+    solver
+        .add_leq(above, Level::meta(u), UniverseConstraintOrigin::Converted)
+        .unwrap();
     solver.add_weak_eq(Level::meta(u), Level::meta(a));
 
     let context = solver.finalize([a, b, u], [], [a, b]).unwrap();
@@ -227,29 +247,55 @@ fn an_order_asked_of_a_decided_store_is_answered_as_the_store_answers() {
     let stores: [(&str, Store); 3] = [
         ("forced", |solver, [u, v, w, _]| {
             let above = u.succ().unwrap();
-            solver.add_leq(above, v.clone(), conversion()).unwrap();
-            solver.add_leq(v, w.clone(), conversion()).unwrap();
-            solver.add_leq(w, Level::constant(3), conversion()).unwrap();
+            solver
+                .add_leq(above, v.clone(), UniverseConstraintOrigin::Converted)
+                .unwrap();
+            solver
+                .add_leq(v, w.clone(), UniverseConstraintOrigin::Converted)
+                .unwrap();
+            solver
+                .add_leq(w, Level::constant(3), UniverseConstraintOrigin::Converted)
+                .unwrap();
         }),
         ("a maximum of two levels", |solver, [u, v, w, t]| {
             let either = Level::max([v.clone(), w.clone()]);
-            solver.add_leq(u.clone(), either, conversion()).unwrap();
             solver
-                .add_leq(v.succ().unwrap(), t.clone(), conversion())
+                .add_leq(u.clone(), either, UniverseConstraintOrigin::Converted)
                 .unwrap();
             solver
-                .add_leq(w.checked_add(2).unwrap(), t, conversion())
+                .add_leq(
+                    v.succ().unwrap(),
+                    t.clone(),
+                    UniverseConstraintOrigin::Converted,
+                )
                 .unwrap();
-            solver.add_leq(Level::constant(1), u, conversion()).unwrap();
+            solver
+                .add_leq(
+                    w.checked_add(2).unwrap(),
+                    t,
+                    UniverseConstraintOrigin::Converted,
+                )
+                .unwrap();
+            solver
+                .add_leq(Level::constant(1), u, UniverseConstraintOrigin::Converted)
+                .unwrap();
         }),
         ("a maximum with a constant", |solver, [u, v, w, t]| {
             let either = Level::max([v.clone(), Level::constant(2)]);
             solver
-                .add_leq(u.succ().unwrap(), either, conversion())
+                .add_leq(
+                    u.succ().unwrap(),
+                    either,
+                    UniverseConstraintOrigin::Converted,
+                )
                 .unwrap();
-            solver.add_leq(v, Level::constant(1), conversion()).unwrap();
+            solver
+                .add_leq(v, Level::constant(1), UniverseConstraintOrigin::Converted)
+                .unwrap();
             let either = Level::max([u, t]);
-            solver.add_leq(w, either, conversion()).unwrap();
+            solver
+                .add_leq(w, either, UniverseConstraintOrigin::Converted)
+                .unwrap();
         }),
     ];
 
@@ -268,7 +314,9 @@ fn an_order_asked_of_a_decided_store_is_answered_as_the_store_answers() {
                     let asked = solver.refused_as_decided(&above, &raised);
 
                     let mark = solver.mark();
-                    let stored = solver.add_leq(above, raised.clone(), conversion()).is_err()
+                    let stored = solver
+                        .add_leq(above, raised.clone(), UniverseConstraintOrigin::Converted)
+                        .is_err()
                         || solver.check_consistent().is_err();
                     solver.rollback(mark);
                     solver.release(mark);

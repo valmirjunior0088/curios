@@ -453,7 +453,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let yielded = function.diverges().then(|| {
             let sort = curios_core::Term::type_at(
                 self.context
-                    .fresh_universe(None, curios_core::UniverseConstraintKind::WrittenType),
+                    .fresh_universe(None, curios_core::SortForm::Type),
             );
 
             (Plicity::Implicit, hintless(), sort)
@@ -631,16 +631,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(match term {
             Subterm::Type => curios_core::Term::type_at(
                 self.context
-                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenType),
+                    .fresh_universe(span, curios_core::SortForm::Type),
             ),
             Subterm::Prop => curios_core::Term::prop_at(
                 self.context
-                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenProp),
+                    .fresh_universe(span, curios_core::SortForm::Prop),
             ),
             Subterm::Sort => curios_core::Term::sort_at(
                 self.context.written_quality(span)?,
                 self.context
-                    .fresh_universe(span, curios_core::UniverseConstraintKind::WrittenSort),
+                    .fresh_universe(span, curios_core::SortForm::Sort),
             ),
             Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A held place: `@_` and `use _` say nothing, and elaboration fills the slot as one left out is.

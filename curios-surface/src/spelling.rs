@@ -1969,28 +1969,14 @@ impl fmt::Display for Spelled<'_, UniverseError> {
                 "universe consistency search exceeded its budget: \
                  {constraints} constraints, {branches} disjunctive clauses, widths {widths:?}"
             ),
-            UniverseError::Inconsistency { lower, upper, path } => {
-                write!(
-                    formatter,
-                    "this {} would need to be strictly below itself ({} ≤ {})",
-                    inconsistent_sort(path),
-                    level_spelled(lower, self.spelling()),
-                    level_spelled(upper, self.spelling()),
-                )?;
-                for origin in path {
-                    write!(formatter, "\n  required by {:?}", origin.kind)?;
-                    if let Some(instantiated) = &origin.instantiated {
-                        write!(formatter, " of {}", instantiated.faithful())?;
-                    }
-                    if let Some(declaration) = &origin.declaration {
-                        write!(formatter, " in {declaration}")?;
-                    }
-                    if let Some(binder) = &origin.binder {
-                        write!(formatter, " at binder {binder}")?;
-                    }
-                }
-                Ok(())
-            }
+            // The elaborator words a conflict for its reader itself (`curios-elab`'s `Error::UniverseInconsistency`), from the reasons on its path: this is the inequality alone.
+            UniverseError::Inconsistency { lower, upper, path } => write!(
+                formatter,
+                "this {} would need to be strictly below itself ({} ≤ {})",
+                inconsistent_sort(path),
+                level_spelled(lower, self.spelling()),
+                level_spelled(upper, self.spelling()),
+            ),
         }
     }
 }
