@@ -1,7 +1,6 @@
 //! Recursive heads: alpha-variant groups, two groups compared as binders, a folded call compared against its unfolding, and the pair unfolded against itself once.
 
 use {
-    crate::certifier::by_value::test_support::*,
     crate::certifier::convert::{Pairs, convert_intrinsic, test_support::*},
     crate::{test_support::*, *},
     curios_analysis::test_support::*,
@@ -216,9 +215,9 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
 
     assert_eq!(convert(&mut certifier, &nat, &left, &right), Ok(false));
     assert_eq!(
-        reading(&mut certifier, |certifier| certifier
-            .convert_hit(&nat, &left, &right))
-        .map(|remembered| remembered.verdict),
+        certifier
+            .reading(|certifier| certifier.convert_hit(&nat, &left, &right))
+            .map(|remembered| remembered.verdict),
         None
     );
 
@@ -226,17 +225,17 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     let redex = term("((x: Type) => x)(#NatType)");
     assert_eq!(convert(&mut certifier, &ground, &redex, &nat), Ok(true));
     assert_eq!(
-        reading(&mut certifier, |certifier| certifier
-            .convert_hit(&ground, &redex, &nat))
-        .map(|remembered| remembered.verdict),
+        certifier
+            .reading(|certifier| certifier.convert_hit(&ground, &redex, &nat))
+            .map(|remembered| remembered.verdict),
         Some(true)
     );
 
     certifier.restore_budget();
     assert_eq!(
-        reading(&mut certifier, |certifier| certifier
-            .convert_hit(&ground, &redex, &nat))
-        .map(|remembered| remembered.verdict),
+        certifier
+            .reading(|certifier| certifier.convert_hit(&ground, &redex, &nat))
+            .map(|remembered| remembered.verdict),
         None
     );
 }
@@ -433,14 +432,12 @@ fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
     let mut pairs = Pairs::default();
     assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
     assert_eq!(
-        reading(&mut certifier, |certifier| {
-            convert_intrinsic(certifier, &mut pairs, &left, &right)
-        }),
+        certifier.reading(|certifier| { convert_intrinsic(certifier, &mut pairs, &left, &right) }),
         Ok(false),
         "the two calls were unfolded inside their own unfolding",
     );
     assert_eq!(
-        reading(&mut certifier, |certifier| {
+        certifier.reading(|certifier| {
             convert_intrinsic(certifier, &mut Pairs::default(), &left, &right)
         }),
         Ok(true),
@@ -459,14 +456,13 @@ fn a_verdict_reached_across_a_pair_left_apart_is_no_answer_from_no_pair() {
         let mut pairs = Pairs::default();
         assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
         assert_eq!(
-            reading(&mut certifier, |certifier| {
-                convert_intrinsic(certifier, &mut pairs, &left, &right)
-            }),
+            certifier
+                .reading(|certifier| { convert_intrinsic(certifier, &mut pairs, &left, &right) }),
             Ok(false),
             "inside the pair's own unfolding the two calls are apart",
         );
         assert_eq!(
-            reading(&mut certifier, |certifier| {
+            certifier.reading(|certifier| {
                 convert_intrinsic(certifier, &mut Pairs::default(), &left, &right)
             }),
             Ok(true),

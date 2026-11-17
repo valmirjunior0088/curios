@@ -2,7 +2,6 @@
 
 use {
     super::test_support::*,
-    crate::certifier::by_value::test_support::*,
     crate::{test_support::*, *},
     curios_analysis::{Env, test_support::*},
     curios_common::fill,
@@ -276,7 +275,7 @@ fn a_verdict_is_remembered_by_the_reduction_that_reached_it() {
             convert(certifier, &bool_type, &respelled, &truth).expect("compares")
         };
         let read = |certifier: &mut Certifier| {
-            reading(certifier, |certifier| {
+            certifier.reading(|certifier| {
                 certifier
                     .plainly(|certifier| certifier.convert(&bool_type, &respelled, &truth))
                     .expect("compares")

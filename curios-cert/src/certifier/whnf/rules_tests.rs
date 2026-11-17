@@ -2,7 +2,6 @@
 
 use {
     super::{test_support::*, *},
-    crate::certifier::by_value::test_support::*,
     crate::test_support::*,
     curios_common::fill,
     curios_core::{Apply, Reducer, Subterm, Term},
@@ -342,9 +341,7 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     };
 
     assert_eq!(
-        reading(&mut certifier, |certifier| unfold_rec_apply(
-            certifier, apply
-        )),
+        certifier.reading(|certifier| unfold_rec_apply(certifier, apply)),
         Ok(Some(value))
     );
 }

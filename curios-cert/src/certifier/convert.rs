@@ -47,7 +47,12 @@ impl ByValue<'_, '_> {
     /// Whether `this` and `that` are definitionally equal at `type_`.
     ///
     /// **By value, as reduction reads and for its reason:** conversion compares spellings, keys its verdicts on them, and opens no `let` ([`ByValue`]).
-    pub fn convert(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Error> {
+    pub(crate) fn convert(
+        &mut self,
+        type_: &Term,
+        this: &Term,
+        that: &Term,
+    ) -> Result<bool, Error> {
         compare(self, &mut Pairs::default(), type_, this, that)
     }
 }
@@ -1679,7 +1684,7 @@ impl ByValue<'_, '_> {
     /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`ByValue::withholding`]): under its own equation the key reduces to the case value, and nothing would convert with it.
     ///
     /// **Two calls apart in their head's instance alone are asked about by their arguments** where the case value holds no type, as the elaborator asks them (`curios_analysis::one_up_to_instances`): an instance is no part of such a value. Where the value may hold a type, the elaborator committed the two instances one, and they are compared whole at the levels they closed at.
-    pub fn asked_scrutinee(
+    pub(crate) fn asked_scrutinee(
         &mut self,
         index: usize,
         term: &Term,

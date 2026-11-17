@@ -125,18 +125,3 @@ impl Driver for ByValue<'_, '_> {
         Certifier::syntax(self)
     }
 }
-
-/// [`ByValue`]'s driver, for an analysis driven over the certifier itself: its reduction is a door, which reads each term it is handed by value first.
-impl Driver for Certifier<'_> {
-    fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
-        intrinsic
-    }
-
-    fn solving_view(&mut self, _: &Intrinsic, _: &Intrinsic) -> Option<bool> {
-        None
-    }
-
-    fn syntax(&self) -> SyntaxRegistry {
-        Certifier::syntax(self)
-    }
-}

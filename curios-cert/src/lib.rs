@@ -33,8 +33,8 @@ pub use recheck::{
 mod certifier;
 use certifier::*;
 pub use certifier::{
-    Certifier, Counted, EnteredArm, Error, Globals, Reader, carries_information, check, convert,
-    infer,
+    ByValue, Certifier, Counted, EnteredArm, Error, Globals, Reader, carries_information, check,
+    convert, infer,
 };
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_cert::test_support` says at its use site that the caller reached for scaffolding rather than product API.

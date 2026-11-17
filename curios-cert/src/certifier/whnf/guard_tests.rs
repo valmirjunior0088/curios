@@ -2,7 +2,6 @@
 
 use {
     super::test_support::*,
-    crate::certifier::by_value::test_support::*,
     crate::{test_support::*, *},
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
     curios_common::fill,
@@ -182,9 +181,7 @@ fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
         let [guard, comparison] = dispatched_through(&mut certifier, layers);
 
         (
-            reading(&mut certifier, |certifier| {
-                resolved_spelling(certifier, &guard)
-            }),
+            certifier.reading(|certifier| resolved_spelling(certifier, &guard)),
             comparison,
         )
     };
@@ -271,9 +268,7 @@ fn an_operand_with_no_value_is_compared_as_written() {
     );
 
     assert_eq!(
-        reading(&mut certifier, |certifier| {
-            super::canonical_operands(certifier, &probe)
-        }),
+        certifier.reading(|certifier| { super::canonical_operands(certifier, &probe) }),
         Ok(probe)
     );
 }

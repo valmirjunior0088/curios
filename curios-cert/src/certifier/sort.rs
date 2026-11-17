@@ -71,7 +71,7 @@ impl ByValue<'_, '_> {
     /// Decode a term that is *already* a universe — a kind's codomain, a match's goal, a synthesized neutral's type — into the sort it names.
     ///
     /// Distinct from [`ByValue::sort_of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
-    pub fn as_sort(&mut self, universe: &Term) -> Result<Sort, Error> {
+    pub(crate) fn as_sort(&mut self, universe: &Term) -> Result<Sort, Error> {
         let reduced = self.whnf(universe.clone())?;
 
         match &*reduced {
@@ -96,7 +96,7 @@ impl ByValue<'_, '_> {
     /// **By value, as it is reduced:** an answer is filed under the spelling a substituted `let` leaves, so one type asked about under two `let`-bound names is one question, and everything asked beneath is a part or a reduct of a type that was ([`ByValue`]).
     ///
     /// Remembered per type, and probed here at every field and domain the rules below ask about: a type is a graph, and a record of two fields at one type asks one question where a walk per path asks two at every level. `Memos` states how long an answer stands.
-    pub fn sort_of(&mut self, type_: &Term) -> Result<Sort, Error> {
+    pub(crate) fn sort_of(&mut self, type_: &Term) -> Result<Sort, Error> {
         curios_profile::profile!("Sort::of");
         if let Some(sort) = self.sort_hit(type_) {
             return Ok(sort);
@@ -386,7 +386,7 @@ impl ByValue<'_, '_> {
     /// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
     ///
     /// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy reading the element's sort as the former's would type a list of proofs at `Prop`.
-    pub fn sort_of_intrinsic(&mut self, intrinsic: &Intrinsic) -> Result<Sort, Error> {
+    pub(crate) fn sort_of_intrinsic(&mut self, intrinsic: &Intrinsic) -> Result<Sort, Error> {
         match intrinsic {
             Intrinsic::BoolType
             | Intrinsic::NatType
@@ -430,7 +430,7 @@ impl ByValue<'_, '_> {
     /// A stuck elimination is a neutral too, and its type is the result it states. `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
     ///
     /// This must never reach [`convert`](super::convert()): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
-    pub fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, Error> {
+    pub(crate) fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, Error> {
         // A projection's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
         if let Some((group, index)) = term.as_rec_proj() {
             return Ok(Some(group.member_type(index)));

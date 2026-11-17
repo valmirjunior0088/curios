@@ -129,7 +129,7 @@ impl ByValue<'_, '_> {
     /// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the certifier has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
     ///
     /// **Reduction reads by value.** Typing walks a `let`'s tail over its binder, so the term it hands over may name one; the door it enters by gives the name way to what it stands for, once, and everything beneath — the tables' keys, the case equations' probes, the closed machine's gate — meets the spelling a substituted `let` leaves, which is the spelling each was argued over ([`ByValue`]). A remembered reduct therefore never rests on a `let`'s binding, which an arm may replace and no key of these tables carries.
-    pub fn whnf(&mut self, term: Term) -> Result<Term, ReduceError> {
+    pub(crate) fn whnf(&mut self, term: Term) -> Result<Term, ReduceError> {
         // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
         self.enter_level()?;
         let reduct = recurse(|| whnf_within(self, term));

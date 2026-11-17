@@ -248,26 +248,26 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
     let other = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &c), nat(10)));
 
     assert_eq!(
-        answers(&mut certifier, &key, &key, &truth(true)),
+        certifier.reading(|certifier| answers(certifier, &key, &key, &truth(true))),
         Ok(Answered::Value(truth(true)))
     );
     assert_eq!(
-        answers(&mut certifier, &commuted, &key, &truth(true)),
+        certifier.reading(|certifier| answers(certifier, &commuted, &key, &truth(true))),
         Ok(Answered::Value(truth(true))),
         "a sum commuted is the key's comparison"
     );
     assert_eq!(
-        answers(&mut certifier, &dual, &key, &truth(true)),
+        certifier.reading(|certifier| answers(certifier, &dual, &key, &truth(true))),
         Ok(Answered::Value(truth(false))),
         "the dual of a guard that holds does not"
     );
     assert_eq!(
-        answers(&mut certifier, &dual, &key, &truth(false)),
+        certifier.reading(|certifier| answers(certifier, &dual, &key, &truth(false))),
         Ok(Answered::Value(truth(true))),
         "and the dual of one that fails holds"
     );
     assert_eq!(
-        answers(&mut certifier, &other, &key, &truth(true)),
+        certifier.reading(|certifier| answers(certifier, &other, &key, &truth(true))),
         Ok(Answered::Silent),
         "a comparison over another atom is another comparison"
     );
@@ -275,11 +275,11 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
     // A key that is a number answers a number the readers hold equal to it, and nothing of another kind.
     let total = sum(&a, &b);
     assert_eq!(
-        answers(&mut certifier, &sum(&b, &a), &total, &nat(0)),
+        certifier.reading(|certifier| answers(certifier, &sum(&b, &a), &total, &nat(0))),
         Ok(Answered::Value(nat(0)))
     );
     assert_eq!(
-        answers(&mut certifier, &commuted, &total, &nat(0)),
+        certifier.reading(|certifier| answers(certifier, &commuted, &total, &nat(0))),
         Ok(Answered::Silent)
     );
 }
@@ -386,7 +386,7 @@ fn a_call_apart_from_the_key_in_its_instance_alone_is_asked_about_by_its_argumen
 
     for (term, one) in [(called(1, &a), true), (called(1, &b), false)] {
         assert_eq!(
-            answers(&mut certifier, &term, &key, &truth),
+            certifier.reading(|certifier| answers(certifier, &term, &key, &truth)),
             Ok(Answered::Whole)
         );
         let asked = one_up_to_instances(&term, &key, &mut |this, that| {
@@ -424,65 +424,76 @@ fn an_equation_hands_back_what_its_checker_is_to_ask() {
     let dual = Term::intrinsic(Intrinsic::nat_lte(nat(10), call(&f, &b, &a)));
     let other = Term::intrinsic(Intrinsic::nat_lt(call(&g, &b, &a), nat(10)));
 
-    let Ok(Answered::Atoms(atoms)) = answers(&mut certifier, &respelled, &key, &truth(true)) else {
+    let Ok(Answered::Atoms(atoms)) =
+        certifier.reading(|certifier| answers(certifier, &respelled, &key, &truth(true)))
+    else {
         panic!("two calls of one head may be one, and which is the checker's to say");
     };
     assert!(atoms.contains(&call(&f, &b, &a)) && atoms.contains(&call(&f, &a, &b)));
     assert_eq!(
-        answers(&mut certifier, &other, &key, &truth(true)),
+        certifier.reading(|certifier| answers(certifier, &other, &key, &truth(true))),
         Ok(Answered::Silent),
         "two heads are two atoms to every checker"
     );
 
     let Ok(mut one) = Classes::of(&atoms, |_, _| Ok::<_, std::convert::Infallible>(true));
     assert_eq!(
-        answers_classed(&mut certifier, &respelled, &key, &truth(true), &mut one),
+        certifier.reading(|certifier| answers_classed(
+            certifier,
+            &respelled,
+            &key,
+            &truth(true),
+            &mut one
+        )),
         Ok(Some(truth(true)))
     );
     assert_eq!(
-        answers_classed(&mut certifier, &dual, &key, &truth(true), &mut one),
+        certifier.reading(|certifier| answers_classed(
+            certifier,
+            &dual,
+            &key,
+            &truth(true),
+            &mut one
+        )),
         Ok(Some(truth(false))),
         "the dual over the classed atom is the key negated"
     );
     let Ok(mut apart) = Classes::of(&atoms, |_, _| Ok::<_, std::convert::Infallible>(false));
     assert_eq!(
-        answers_classed(&mut certifier, &respelled, &key, &truth(true), &mut apart),
+        certifier.reading(|certifier| answers_classed(
+            certifier,
+            &respelled,
+            &key,
+            &truth(true),
+            &mut apart
+        )),
         Ok(None),
         "atoms a checker holds apart leave the pair as it was"
     );
 
     // No operation of the algebra on either side: the whole pair is the question, or there is none.
     assert_eq!(
-        answers(
-            &mut certifier,
-            &call(&f, &b, &a),
-            &call(&f, &a, &b),
-            &nat(0)
-        ),
+        certifier.reading(|certifier| {
+            answers(certifier, &call(&f, &b, &a), &call(&f, &a, &b), &nat(0))
+        }),
         Ok(Answered::Whole)
     );
     assert_eq!(
-        answers(
-            &mut certifier,
-            &call(&g, &b, &a),
-            &call(&f, &a, &b),
-            &nat(0)
-        ),
+        certifier.reading(|certifier| {
+            answers(certifier, &call(&g, &b, &a), &call(&f, &a, &b), &nat(0))
+        }),
         Ok(Answered::Silent)
     );
     assert_eq!(
-        answers(
-            &mut certifier,
-            &Term::free_var(&a),
-            &call(&f, &a, &b),
-            &nat(0)
-        ),
+        certifier.reading(|certifier| {
+            answers(certifier, &Term::free_var(&a), &call(&f, &a, &b), &nat(0))
+        }),
         Ok(Answered::Silent)
     );
     // Nor two formers: a spelling still to be unfolded is put to nothing until it is reduced, or every stuck form beside it would be a question.
     let projected = Term::proj(Term::free_var(&a), 0);
     assert_eq!(
-        answers(&mut certifier, &projected, &call(&f, &a, &b), &nat(0)),
+        certifier.reading(|certifier| answers(certifier, &projected, &call(&f, &a, &b), &nat(0))),
         Ok(Answered::Silent)
     );
 }

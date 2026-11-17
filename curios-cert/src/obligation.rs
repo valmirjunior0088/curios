@@ -199,7 +199,7 @@ pub fn check_positions(
 
 impl ByValue<'_, '_> {
     /// Whether a value of `type_` is a proof: `type_` is a proposition, or a function that ultimately answers one. It is what this certifier states a binder binds where it marks one ([`curios_core::Scope::binds_proof`]), read of the binder's type by its own rules, and never what a module arriving says of it (`certifier::stating`). A sort is neither, so a binder at a type bears no mark: conversion reads a type's reduct, and a type is evaluated before it is bound.
-    pub fn bears_proof(&mut self, type_: &Term) -> Result<bool, Error> {
+    pub(crate) fn bears_proof(&mut self, type_: &Term) -> Result<bool, Error> {
         if matches!(self.erased_half(type_)?, Some(Erased::Proof)) {
             return Ok(true);
         }
@@ -222,7 +222,7 @@ impl ByValue<'_, '_> {
     /// The erased half a term judged at `type_` belongs to, or `None` when the type is relevant and the obligations have nothing to say about it.
     ///
     /// Decided where the position is recorded, while the binders its type mentions are still assumed. A failure propagates rather than reading as "unconstrained": everywhere else in this crate an exhausted budget refuses the item, and this is not the place to make a resource limit read as a pass.
-    pub fn erased_half(&mut self, type_: &Term) -> Result<Option<Erased>, Error> {
+    pub(crate) fn erased_half(&mut self, type_: &Term) -> Result<Option<Erased>, Error> {
         // A proposition known by its head is recorded with nothing run ([`declared_into_prop`]); no proposition is a sort, so the test below has nothing to say about it.
         if declared_into_prop(self, type_)?.is_some() {
             return Ok(Some(Erased::Proof));

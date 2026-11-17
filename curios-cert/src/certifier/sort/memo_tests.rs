@@ -2,7 +2,6 @@
 
 use {
     super::test_support::*,
-    crate::certifier::by_value::test_support::*,
     crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
     curios_common::fill,
@@ -267,7 +266,7 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
         term("#{node = InductType} /Judged()"),
     );
 
-    reading(&mut certifier, |certifier| {
+    certifier.reading(|certifier| {
         certifier
             .plainly(|certifier| certifier.sort_of(&read))
             .expect("classifies");
@@ -280,7 +279,7 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
     });
 
     Sort::of(&mut certifier, &judged).expect("classifies");
-    reading(&mut certifier, |certifier| {
+    certifier.reading(|certifier| {
         assert!(
             certifier
                 .plainly(|certifier| certifier.sort_hit(&judged))
