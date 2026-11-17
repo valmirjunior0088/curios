@@ -289,5 +289,5 @@ fn a_payload_slot_does_not_move_when_its_source_changes() {
 /// The two families version independently, so an entry written by one layout is never found by the other — which is the whole reason each carries its own schema tag.
 #[test]
 fn the_two_families_are_tagged_apart() {
-    assert_ne!(SCHEMA, PAYLOAD_SCHEMA);
+    assert_ne!(VERDICT_SCHEMA, PAYLOAD_SCHEMA);
 }

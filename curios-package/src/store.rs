@@ -147,7 +147,7 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u101";
+const VERDICT_SCHEMA: &str = "u101";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p13";
@@ -167,7 +167,7 @@ pub fn unit_slot(
 ) -> String {
     let mut fingerprint = Fingerprint::new();
 
-    fingerprint.feed(SCHEMA);
+    fingerprint.feed(VERDICT_SCHEMA);
     fingerprint.feed(compiler);
     fingerprint.feed(mounts.len().to_string());
     for mount in mounts {
@@ -193,7 +193,7 @@ pub fn entry_slot(
 ) -> String {
     let mut fingerprint = Fingerprint::new();
 
-    fingerprint.feed(SCHEMA);
+    fingerprint.feed(VERDICT_SCHEMA);
     fingerprint.feed(compiler);
     // Where a unit's slot states how many prefixes it claims, which no word spells.
     fingerprint.feed("executable");
