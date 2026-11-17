@@ -252,3 +252,54 @@ fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
         "{control:?}"
     );
 }
+
+/// `/g`'s leading lambdas answer a record whose field lambda applies its own `f` below `n`, and `/spin` is `${spin}`, which hands a callback to a field a projection reads.
+const A_PROJECTION_BESIDE_A_SUMMARIZED_CALL: &str = r#"
+let /g: (n: #NatType, u: (#NatType) -> #NatType) -> {
+    #NatType,
+    ((#NatType) -> #{node = InductType} /std/Bool/True()) -> #{node = InductType} /std/Bool/True()} =
+    (n: #NatType, u: (#NatType) -> #NatType) =>
+        (
+            u(0),
+            (f: (#NatType) -> #{node = InductType} /std/Bool/True()) =>
+                #{goal = #{node = InductType} /std/Bool/True()}
+                match n | 0 => #{node = Variant} /std/Bool/True/qed() | k + 1 => f(k) end);
+
+#{node = Rec}
+let /spin: (n: #NatType) -> #{node = InductType} /std/Bool/True() =
+    (n: #NatType) => ${spin};
+"#;
+
+// The steps after a projection belong to the application its head is and to nothing typed inside a head of another kind: a lambda applied on the spot takes them itself, binding no binder past the projected field, and a local a `let` binds types nothing, so `/g`'s call, which the tuple the projection reads holds or binds, is graded at its own path, where `/g`'s leading lambdas state nothing of the callback, and the callback the tuple applies at `n` is graded as unrelated. Handed to `/g`'s call, the steps would read `/g`'s field lambda's summary and bound `c` below `n`. The control projects `/g`'s own record, whose field applies the callback below `n`.
+#[test]
+fn a_projections_steps_reach_no_application_typed_inside_its_head() {
+    let verdicts = |spin: &str| {
+        let module = fill!(A_PROJECTION_BESIDE_A_SUMMARIZED_CALL, spin);
+        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+    };
+    for (head, spin) in [
+        (
+            "a lambda applied on the spot",
+            "((r: {#NatType, ((#NatType) -> #{node = InductType} /std/Bool/True()) -> #{node = InductType} /std/Bool/True()}) => (0, (f: (#NatType) -> #{node = InductType} /std/Bool/True()) => f(n)))(/g(n, (x: #NatType) => x)).1((c: #NatType) => /spin(c))",
+        ),
+        (
+            "a local a `let` binds",
+            "let t: {{#NatType, ((#NatType) -> #{node = InductType} /std/Bool/True()) -> #{node = InductType} /std/Bool/True()}, ((#NatType) -> #{node = InductType} /std/Bool/True()) -> #{node = InductType} /std/Bool/True()} = (/g(n, (x: #NatType) => x), (f: (#NatType) -> #{node = InductType} /std/Bool/True()) => f(n)); t.1((c: #NatType) => /spin(c))",
+        ),
+    ] {
+        let refused = verdicts(spin);
+        assert!(
+            refuses(&refused, Some("spin"), |error| matches!(
+                error,
+                Error::NotDescending { .. }
+            )),
+            "a projection out of {head}: a callback applied at `n` was graded below it: {refused:?}",
+        );
+    }
+    let control = verdicts("/g(n, (x: #NatType) => x).1((c: #NatType) => /spin(c))");
+    assert_eq!(
+        control,
+        Vec::new(),
+        "the control stopped certifying, a callback `/g`'s field lambda applies below `n`",
+    );
+}

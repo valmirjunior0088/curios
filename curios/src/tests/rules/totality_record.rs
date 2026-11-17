@@ -444,3 +444,161 @@ fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A field lambda is the part at its slot among every field of the literal, a field that is no lambda counted: `loop` is slot `1` of a structure whose slot `0` is a number, so its call of `H.loop` is a call of itself, as `down`'s of `H.down` is of itself. The refusal hands `H.loop` its own argument back; counted among the lambdas alone, `H.loop` would be the part `down` is, which descends, and the cycle through `loop` would go unseen.
+#[test]
+fn a_field_lambda_is_the_part_at_its_slot_among_every_field() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        struct Handlers: Type {
+            base: Nat,
+            loop: (Nat) -> Nat,
+            down: (Nat) -> Nat,
+        }
+
+        let H: Handlers = Handlers {
+            base = 0,
+            loop = (n) => match n | 0 => 0 | k + 1 => H.loop(k) end,
+            down = (n) => match n | 0 => 0 | k + 1 => H.down(k) end,
+        };
+
+        let Low(n: Nat) -> Prop = Bool/Holds(H.loop(n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| k + 1 => H.loop(k)", "| k + 1 => H.loop(n)")])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A path stops at the first field that is no part, and the call is of the part reached so far: `W.0(m).1(z)` projects slot `1` out of the record `W`'s field lambda at slot `0` answers, which is no part of `W`, so it is a call of that field lambda at `m` again, which the lambda in its record makes for ever. Read as `W`'s own slot `1`, it would be a call of the part that descends. The control calls that part itself.
+#[test]
+fn a_field_of_what_a_field_lambda_answers_is_no_part_of_the_member() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let W: {(Nat) -> {Nat, (Nat) -> Nat}, (Nat) -> Nat} = (
+            (m) => (0, (z) => W.1(z)),
+            (n) => match n | 0 => 0 | k + 1 => W.1(k) end
+        );
+
+        let Low(n: Nat) -> Prop = Bool/Holds(W.0(n).1(n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(z) => W.1(z)", "(z) => W.0(m).1(z)")])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A path that follows a field calls the member's leading lambdas too, since strict evaluation answers the record, its other fields with it, before the field is read: with `W(n).0(1)` at slot `1`, every `W(n)` evaluates it, so each call of the field lambda through `W(n)` calls it again at `n`, and evaluating `W(n)` does so without end. Were a field read alone, only the field lambda, which descends on `m`, would be seen. The control's slot `1` calls nothing.
+//
+// Mutation-checked: with the block of `part_calls` that pushes the leading lambdas' call `(base, answered)` removed, the refusal certifies and this test fails.
+#[test]
+fn a_call_through_a_field_calls_the_fields_answered_beside_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let W(n: Nat) -> {(Nat) -> Nat, Nat} = (
+            (m) => match m | 0 => 0 | k + 1 => W(n).0(k) end,
+            n * 2
+        );
+
+        let Low(n: Nat) -> Prop = Bool/Holds(W(n).0(n) == W(n).1);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("n * 2", "W(n).0(1)")])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A path that reaches no field lambda lets the record escape, so it is a call of every part under where it stands, graded on the arguments it handed and claiming nothing past them: `W(n)` bound by a `let`, `W(n)` handed to `pass`, which states nothing of what it is handed, and `V.0`, a record literal held at a field, bound by a `let`, are each a call of the field lambda the record holds, which each refusal reaches through one of them at its own argument again. The control reaches each field by its path, below its argument.
+//
+// Mutation-checked: with `escapes` in `part_calls` held `false`, each refusal certifies and this test fails.
+#[test]
+fn a_record_that_escapes_is_a_call_of_every_part_under_where_it_stands() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let pass(r: {(Nat) -> Nat}) -> {(Nat) -> Nat} = r;
+
+        let W(n: Nat) -> {(Nat) -> Nat} = ((m) => match m | 0 => n | k + 1 => W(n).0(k) end,);
+
+        let V: {{(Nat) -> Nat}} = (((m) => match m | 0 => 0 | k + 1 => V.0.0(k) end,),);
+
+        let Low(n: Nat) -> Prop = Bool/Holds(W(n).0(n) == V.0.0(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for (from, to) in [
+        ("W(n).0(k)", "let r = W(n); r.0(m)"),
+        ("W(n).0(k)", "pass(W(n)).0(m)"),
+        ("V.0.0(k)", "let r = V.0; r.0(m)"),
+    ] {
+        program
+            .refused(&[(from, to)])
+            .by_elaborator_in("/Low", |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in("/Low", |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
+
+// A member of no parameter handed bare to a definition that applies a field of it is a call of its leading lambdas, whose record holds that field, where no part lies at the field applied: `W`'s slot `1` is a lambda under a `let`, which is no part of `W`, so `apply1(W, y)` in it is a call of `W` its leading lambdas make again, and handing `y` back it recurs for ever. The control's slot `1` is a field lambda, which `apply1` applies below `y`.
+//
+// Mutation-checked: with the `match &answered` block of `handed_member` that pushes the leading lambdas' call removed, the refusal certifies and this test fails.
+#[test]
+fn a_member_handed_bare_where_no_part_lies_at_the_field_applied_calls_its_leading_lambdas() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let apply1(w: {Nat, (Nat) -> Nat}, n: Nat) -> Nat = w.1(n);
+
+        let W: {Nat, (Nat) -> Nat} = (0, (y) => match y | 0 => 1 | k + 1 => apply1(W, k) end);
+
+        let Low(n: Nat) -> Prop = Bool/Holds(W.1(n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("(y) => match y | 0 => 1", "let q = 1; (y) => match y | 0 => q"),
+        ("apply1(W, k)", "apply1(W, y)"),
+    ])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
