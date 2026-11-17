@@ -15,11 +15,11 @@ use {
     curios_common::{Plicity, Qualifier, Source, Span},
     curios_core::{
         Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
-        Lexicon, Places, Spellings, Subterm, Totality, UnitPaths, WitnessKey,
+        Intrinsic, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths, WitnessKey,
     },
     curios_module::{Heading, Overlay, PreparedText, SYNTAX, heading, identity},
     curios_pipeline::{Cache, EntryTail, Fold, Progress, spelling_at},
-    curios_surface::{Spellable, spell},
+    curios_surface::{IntrinsicForm, Spellable, intrinsic_form, intrinsic_global, spell},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -593,7 +593,8 @@ fn witnesses(
             .iter()
             .map(|head| match head {
                 HeadKey::Nominal(nominal) => absolute(&outside, nominal),
-                carrier => carrier.to_string(),
+                carrier => carrier_former(carrier)
+                    .map_or_else(|| carrier.to_string(), |former| absolute(&outside, &former)),
             })
             .collect::<Vec<_>>();
 
@@ -655,6 +656,30 @@ fn witnesses(
 }
 
 /// How a reader outside every module, with nothing imported, writes `global` over `spellings`: the shortest of its own path and the paths a module exports it at that every module may write (`curios_surface::spell`), and its own path where none is.
+/// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
+fn carrier_former(head: &HeadKey) -> Option<Global> {
+    let former = match head {
+        HeadKey::Nat => Intrinsic::NatType,
+        HeadKey::Byte => Intrinsic::ByteType,
+        HeadKey::Int => Intrinsic::IntType,
+        HeadKey::Flt => Intrinsic::FltType,
+        HeadKey::Bool => Intrinsic::BoolType,
+        HeadKey::Bytes => Intrinsic::BytesType,
+        HeadKey::Handle => Intrinsic::HandleType,
+        HeadKey::List => Intrinsic::ListType(Term::type_ground()),
+        HeadKey::Cell => Intrinsic::CellType(Term::type_ground()),
+        HeadKey::Channel => Intrinsic::ChannelType(Term::type_ground()),
+        HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
+        HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
+    };
+
+    match intrinsic_form(former, false) {
+        IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
+        IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
+        _ => None,
+    }
+}
+
 fn absolute(spellings: &Spellings, global: &Global) -> String {
     spell(spellings, &Qualifier::empty(), None, global).unwrap_or_else(|| match global {
         Global::Authored(path) => path.join(),

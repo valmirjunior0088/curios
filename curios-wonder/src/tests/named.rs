@@ -293,7 +293,7 @@ fn a_re_exported_path_answers_the_declaration_behind_it() {
     );
 }
 
-/// A concept is answered with its methods and the witnesses in scope, the program's own among them, each by what it is keyed on.
+/// A concept is answered with its methods and the witnesses in scope, the program's own among them, each by what it is keyed on, written as a reader outside every module writes it: a carrier's head by its former's path as any other head by its own.
 #[test]
 fn a_concept_is_answered_with_its_witnesses_in_scope() {
     let described = described(POINT, "/std/Show").expect("the library declares it");
@@ -306,7 +306,7 @@ fn a_concept_is_answered_with_its_witnesses_in_scope() {
         .next_back()
         .expect("the program's own witness is answered last");
 
-    assert!(keyed(&described).contains(&"Nat"));
+    assert!(keyed(&described).contains(&"/std/Nat"));
     assert_eq!(
         (
             point.keyed.as_str(),
