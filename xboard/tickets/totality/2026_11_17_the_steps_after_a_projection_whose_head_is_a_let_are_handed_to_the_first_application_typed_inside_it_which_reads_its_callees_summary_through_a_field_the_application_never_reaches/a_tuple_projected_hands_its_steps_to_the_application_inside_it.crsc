@@ -1,0 +1,20 @@
+-- `/g`'s field lambda applies its own `f` below `n`. `/spin` projects a field out of a tuple literal whose first field is `/g(n, …)` and whose second applies its argument at `n`: the steps after the projection are handed to `/g`'s call, the first application typed inside the tuple, which leaves the list after them what `/g`'s field applies `f` with, and the application around the projection hands it to its own argument, so `c` is bounded below `n`. The projection runs the tuple's own field, which applies the callback at `n`.
+let /g: (n: #NatType, u: (#NatType) -> #NatType) -> {
+    #NatType,
+    ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType} =
+    (n: #NatType, u: (#NatType) -> #NatType) =>
+        (
+            u(0),
+            (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+                #{goal = #NatType}
+                match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end);
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) =>
+        (
+            /g(n, (x: #NatType) => x),
+            (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) => f(n)).1((c: #NatType) =>
+            /spin(c));
+
+/spin(0)

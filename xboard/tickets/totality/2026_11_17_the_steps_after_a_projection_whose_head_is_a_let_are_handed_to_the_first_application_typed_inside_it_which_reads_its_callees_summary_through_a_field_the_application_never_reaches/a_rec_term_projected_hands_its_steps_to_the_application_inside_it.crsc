@@ -1,0 +1,22 @@
+-- The tuple carrier's recursion with a `rec` term as the projected head: its member's body, `/g(n, …)`, is typed before its tail, a tuple that applies the callback at `n`.
+let /g: (n: #NatType, u: (#NatType) -> #NatType) -> {
+    #NatType,
+    ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType} =
+    (n: #NatType, u: (#NatType) -> #NatType) =>
+        (
+            u(0),
+            (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+                #{goal = #NatType}
+                match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end);
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) =>
+        (
+            #{node = Rec}
+            (let z: {#NatType, ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType} =
+                /g(n, (x: #NatType) => x);
+            (0, (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) => f(n)))).1((
+            c: #NatType) => /spin(c));
+
+/spin(0)

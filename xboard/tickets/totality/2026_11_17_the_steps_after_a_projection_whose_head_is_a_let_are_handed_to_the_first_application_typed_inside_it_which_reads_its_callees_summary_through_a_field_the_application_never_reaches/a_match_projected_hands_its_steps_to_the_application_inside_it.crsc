@@ -1,0 +1,30 @@
+-- The tuple carrier's recursion with a match as the projected head: its scrutinee, a constructor holding `/g(n, …)`, is typed first, and its one arm answers a tuple that applies the callback at `n`.
+induct /Box: Type
+| box({#NatType, ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType})
+end
+
+let /g: (n: #NatType, u: (#NatType) -> #NatType) -> {
+    #NatType,
+    ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType} =
+    (n: #NatType, u: (#NatType) -> #NatType) =>
+        (
+            u(0),
+            (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+                #{goal = #NatType}
+                match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end);
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) =>
+        (
+            #{
+                goal = {
+                    #NatType,
+                    ((#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+                        #{node = InductType}
+                        /sys/Bool/False()}}
+            match #{node = Variant} /Box/box(/g(n, (x: #NatType) => x))
+            | box(r) => (0, (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) => f(n))
+            end).1((c: #NatType) => /spin(c));
+
+/spin(0)

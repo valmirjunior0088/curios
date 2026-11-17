@@ -1,0 +1,30 @@
+-- The tuple carrier's recursion with a structure's literal as the projected head: `/g(n, …)` is its first field, the first application typed inside it.
+#{value_sort = Type}
+struct /P: Type {
+    a: {#NatType, ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType},
+    b: ((#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+        #{node = InductType}
+        /sys/Bool/False(),
+}
+
+let /g: (n: #NatType, u: (#NatType) -> #NatType) -> {
+    #NatType,
+    ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType} =
+    (n: #NatType, u: (#NatType) -> #NatType) =>
+        (
+            u(0),
+            (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+                #{goal = #NatType}
+                match n | 0 => 0 | k + 1 => #{goal = #NatType} match f(k) end end);
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) =>
+        (
+            #{field = Struct(/P, 1)}
+            /P() {
+                /g(n, (x: #NatType) => x),
+                (f: (#NatType) -> #{node = InductType} /sys/Bool/False()) => f(n) }.1)((
+            c: #NatType) => /spin(c));
+
+/spin(0)

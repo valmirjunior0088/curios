@@ -5,3 +5,28 @@ status = "open"
 what = "a recursion through a callback handed to `/g` inside a `let` that a projection reads, graded by the summary of `/g`'s field lambda, which the call never reaches"
 source = "a_let_projected_hands_its_steps_to_the_application_inside_it.crsc"
 refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
+
+[[witness]]
+what = "the same recursion with a tuple literal whose first field is `/g`'s call as the projected head"
+source = "a_tuple_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
+
+[[witness]]
+what = "the same recursion with a structure's literal whose first field is `/g`'s call as the projected head"
+source = "a_structure_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
+
+[[witness]]
+what = "the same recursion with a match whose scrutinee holds `/g`'s call as the projected head"
+source = "a_match_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
+
+[[witness]]
+what = "the same recursion with a `rec` term whose member's body is `/g`'s call as the projected head"
+source = "a_rec_term_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
+
+[[witness]]
+what = "the same recursion with a list fold whose list holds `/g`'s call as the projected head"
+source = "a_list_fold_projected_hands_its_steps_to_the_application_inside_it.crsc"
+refused = [{ by = "certifier", error = "NotDescending", within = "/spin" }]
