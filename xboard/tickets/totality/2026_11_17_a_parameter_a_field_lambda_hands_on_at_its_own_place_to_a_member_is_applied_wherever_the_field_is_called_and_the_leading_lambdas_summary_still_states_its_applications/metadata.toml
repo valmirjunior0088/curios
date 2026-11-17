@@ -12,6 +12,11 @@ source = "a_member_a_field_hands_on_to_a_member.crs"
 refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
 
 [[witness]]
+what = "the same recursion through a field of a record `def`'s field hands on to `app`, graded by the leading lambdas' summary of the field"
+source = "a_record_a_field_hands_on_to_a_member.crs"
+refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
+
+[[witness]]
 what = "the same recursion, as a term"
 source = "a_callback_a_field_hands_on_to_a_member.crsc"
 refused = [{ by = "certifier", error = "NotTotal" }]

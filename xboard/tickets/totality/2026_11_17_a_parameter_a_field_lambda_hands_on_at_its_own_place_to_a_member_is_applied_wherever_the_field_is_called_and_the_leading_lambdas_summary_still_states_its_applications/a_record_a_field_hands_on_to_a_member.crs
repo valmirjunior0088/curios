@@ -1,0 +1,26 @@
+-- `def`'s field lambda hands its record `e` on to `app`, which applies `e.0` at `n`, so the summary of `def`'s leading lambdas states `e.0(k)` alone, below `n`, as the applications of `e`'s field: `spin(c)` in the record `spin` hands `def` is graded below `n`, and `spin(0)` is `h(def(0, …), 0)`, which is `app(0, …)`, which is `spin(0)` again.
+use /std/{Nat};
+use /std/Bool/{False};
+
+let def(n: Nat, e: {(Nat) -> False}) -> {Nat, (Nat) -> False} =
+    (
+        match n
+        | 0 => 0
+        | k + 1 => match e.0(k) end
+        end,
+        (m) => app(n, e))
+and app(n: Nat, e: {(Nat) -> False}) -> False =
+    match n
+    | 0 => e.0(n)
+    | k + 1 =>
+        let _ = def(k, e);
+        e.0(n)
+    end;
+
+let h(r: {Nat, (Nat) -> False}, y: Nat) -> False =
+    r.1(y);
+
+let spin(n: Nat) -> False =
+    h(def(n, ((c) => spin(c),)), n);
+
+spin(0)
