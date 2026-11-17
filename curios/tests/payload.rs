@@ -318,7 +318,7 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
         assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
         // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are, which is what refuses each command again.
         assert!(
-            said.contains("wanted: /std/ops/Add(/std/Bool)"),
+            said.contains("wanted: `/std/ops/Add(/std/Bool)`"),
             "{command:?}: {said}"
         );
     }

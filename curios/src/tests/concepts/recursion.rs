@@ -166,7 +166,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
 
     let report = error(source);
     assert!(
-        report.contains("the witness of Show(A) and the witness of Show(B) need one another"),
+        report.contains("the witness of `Show(A)` and the witness of `Show(B)` need one another"),
         "expected the cycle named by its two concept applications:\n{report}"
     );
     assert!(
@@ -206,7 +206,7 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
             "expected a cycle, by name:\n{report}"
         );
         assert!(
-            report.contains("`describe`") && report.contains("the witness of Show(Box)"),
+            report.contains("`describe`") && report.contains("the witness of `Show(Box)`"),
             "expected both members named:\n{report}"
         );
         assert!(

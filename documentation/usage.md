@@ -121,8 +121,8 @@ What the compiler says of a program is a report, and every report has one form, 
 
 ```text
 type mismatch
-│  inferred: Nat
-│  expected: Str
+│  inferred: `Nat`
+│  expected: `Str`
 │
 │  3 │ let label: Str = double(21);
 │    │                  ^^^^^^^^^^
@@ -130,7 +130,7 @@ type mismatch
 └─ [error] demo.crs:3:18
 ```
 
-The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A place in the compiler's own library, which no file on the machine holds, closes on its name instead, the package and the file's path within it: `/std/List.crs:12:5`. A report about a file as a whole shows no code and closes on the file alone, as `[format]` does for a text the formatter would rewrite ([`wonder`](#wonder)), and a way out that is a command stands above the last line, behind `try`. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
+The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Whatever a report shows of a program — a term, a name, a pattern, a label, a value as written — stands in backticks, behind a label or inside a sentence, so the program's text is told from the report's words by one rule. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A place in the compiler's own library, which no file on the machine holds, closes on its name instead, the package and the file's path within it: `/std/List.crs:12:5`. A report about a file as a whole shows no code and closes on the file alone, as `[format]` does for a text the formatter would rewrite ([`wonder`](#wonder)), and a way out that is a command stands above the last line, behind `try`. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
 
 ```text
 declaration cycle
@@ -160,9 +160,9 @@ What a command refuses before it compiles anything is a report of the same form:
 
 ```text
 hash mismatch
-│  the dependency `json` was fetched from https://example.org/json at v1.2
-│  expected: c1:ab12…
-│  obtained: c1:9f3c…
+│  the dependency `json` was fetched from `https://example.org/json` at `v1.2`
+│  expected: `c1:ab12…`
+│  obtained: `c1:9f3c…`
 │  intended if this row pins a branch or a tag, and it has moved
 │  pay close attention if this row pins a commit, which should not move
 │  a tree that changed under one means its history was rewritten

@@ -12,7 +12,7 @@ use {
     },
     crate::{Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
-    curios_common::{Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
+    curios_common::{Code, Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
         Anchors, ArgumentSite, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort,
         Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
@@ -20,6 +20,15 @@ use {
     curios_surface::{Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
 };
+
+/// Each of `items`, a list of a program's names a fact shows, in backticks and joined by commas.
+fn codes<T: fmt::Display>(items: impl IntoIterator<Item = T>) -> String {
+    items
+        .into_iter()
+        .map(|item| Code(item).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 /// What a spent budget was refused, beneath the report it ends: the row of the charge it could not afford, with what that charge was and what was left, as the certifier names it.
 fn spent(f: &mut Said, refusal: &ReduceError) {
@@ -41,19 +50,19 @@ pub fn unreachable_arm_note(said: &mut Said, dead: &DeadArm, spelling: &Rc<Spell
     match dead {
         DeadArm::Guard { guard, case } => said.stating(format_args!(
             "its guard {} is always {}",
-            guard.spelled(spelling),
-            case.spelled(spelling),
+            Code(guard.spelled(spelling)),
+            Code(case.spelled(spelling)),
         )),
         DeadArm::EnclosingGuard { guard, case } => said.stating(format_args!(
             "in it the guard {} is always {}",
-            guard.spelled(spelling),
-            case.spelled(spelling),
+            Code(guard.spelled(spelling)),
+            Code(case.spelled(spelling)),
         )),
         DeadArm::Indices { case, scrutinee } => {
             said.stating(format_args!(
                 "its case has type {} and its scrutinee has type {}",
-                case.spelled(spelling),
-                scrutinee.spelled(spelling),
+                Code(case.spelled(spelling)),
+                Code(scrutinee.spelled(spelling)),
             ));
             said.stating("the arm may be left out");
         }
@@ -538,13 +547,16 @@ impl Displayed<'_> {
         // A term of one type where a carrier's was wanted is a type mismatch, said as one.
         let carried = |f: &mut Said, head_type: &Term, expected: &str| {
             f.text("type mismatch");
-            f.stating(format_args!("inferred: {}", head_type.spelled(spelling)));
-            f.stating(format_args!("expected: {expected}"));
+            f.stating(format_args!(
+                "inferred: {}",
+                Code(head_type.spelled(spelling))
+            ));
+            f.stating(format_args!("expected: {}", Code(expected)));
         };
         match self.0 {
             Error::ReduceExhausted { term, refusal } => {
                 f.text("budget spent");
-                f.stating(format_args!("reducing: {}", term.spelled(spelling)));
+                f.stating(format_args!("reducing: {}", Code(term.spelled(spelling))));
                 spent(f, refusal)
             }
             Error::ConvertExhausted {
@@ -553,8 +565,8 @@ impl Displayed<'_> {
                 refusal,
             } => {
                 f.text("budget spent");
-                f.stating(format_args!("comparing: {}", this.spelled(spelling)));
-                f.stating(format_args!("with: {}", that.spelled(spelling)));
+                f.stating(format_args!("comparing: {}", Code(this.spelled(spelling))));
+                f.stating(format_args!("with: {}", Code(that.spelled(spelling))));
                 spent(f, refusal)
             }
             Error::TypeMismatch {
@@ -596,8 +608,8 @@ impl Displayed<'_> {
                     false => ("type mismatch", "inferred"),
                 };
                 f.text(tag);
-                f.stating(format_args!("{side}: {shown_inferred}"));
-                f.stating(format_args!("expected: {shown_expected}"));
+                f.stating(format_args!("{side}: {}", Code(&shown_inferred)));
+                f.stating(format_args!("expected: {}", Code(&shown_expected)));
                 // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq()(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq()(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
                 let inferred_is_sort = matches!(&***inferred, Subterm::Sort(_));
                 let expected_is_sort = matches!(&***expected, Subterm::Sort(_));
@@ -633,7 +645,11 @@ impl Displayed<'_> {
                     Watched::Described(_) | Watched::Goal(_) => "where it stands",
                 };
                 f.text("rejected candidate");
-                f.stating(format_args!("{} cannot be {candidate}", named(watched)));
+                f.stating(format_args!(
+                    "{} cannot be {}",
+                    named(watched),
+                    Code(&candidate)
+                ));
                 f.stating(format_args!("it does not check {born}"));
                 // The check's own report, under whatever located or scoped it: the candidate is no term of the program, and where it failed is this report's place.
                 // One fact: what the check said, its own facts beneath its tag.
@@ -658,8 +674,11 @@ impl Displayed<'_> {
             }
             Error::UnembeddedAction { action, expected } => {
                 f.text("monad mismatch");
-                f.stating(format_args!("action: {}", action.spelled(spelling)));
-                f.stating(format_args!("expected: {}", expected.spelled(spelling)));
+                f.stating(format_args!("action: {}", Code(action.spelled(spelling))));
+                f.stating(format_args!(
+                    "expected: {}",
+                    Code(expected.spelled(spelling))
+                ));
                 f.stating("an action is embedded through a declared `Lift` witness");
                 f.stating("that needs its monad to be read from its head's declaration");
                 f.stating("write `lift(action)` to embed this one explicitly");
@@ -675,12 +694,15 @@ impl Displayed<'_> {
                 f.text("universe inconsistency");
                 f.stating(format_args!(
                     "this {} would need to be strictly below itself",
-                    curios_core::inconsistent_sort(path)
+                    Code(curios_core::inconsistent_sort(path))
                 ));
                 f.stating(format_args!(
-                    "required: {} ≤ {}",
-                    renamed_level(lower, &names),
-                    renamed_level(upper, &names)
+                    "required: {}",
+                    Code(format!(
+                        "{} ≤ {}",
+                        renamed_level(lower, &names),
+                        renamed_level(upper, &names)
+                    ))
                 ));
                 for instantiated in curios_core::instantiated_on(path) {
                     f.stating(format_args!(
@@ -719,7 +741,7 @@ impl Displayed<'_> {
                 let reduced = reduced.spelled(spelling).to_string();
                 let head_type = head_type.spelled(spelling).to_string();
                 f.text("not a function");
-                f.stating(format_args!("applied: a term of type {head_type}"));
+                f.stating(format_args!("applied: a term of type {}", Code(&head_type)));
                 // The reduced form is not spelled: it is the unfolded definition stuck on its argument, and the written type is what the reader can act on.
                 if reduced != head_type {
                     f.stating("which does not reduce to a function type");
@@ -730,7 +752,10 @@ impl Displayed<'_> {
                 function_typed,
             } => {
                 f.text("unexpected function");
-                f.stating(format_args!("expected: {}", expected.spelled(spelling)));
+                f.stating(format_args!(
+                    "expected: {}",
+                    Code(expected.spelled(spelling))
+                ));
                 if let Some(hint) = function_typed {
                     let name = match &hint.parameter {
                         Some(name) => format!("`{name}`, "),
@@ -747,7 +772,7 @@ impl Displayed<'_> {
                 f.text("not a tuple");
                 f.stating(format_args!(
                     "projected from: a term of type {}",
-                    head_type.spelled(spelling)
+                    Code(head_type.spelled(spelling))
                 ));
             }
             Error::NotATupleType {
@@ -755,7 +780,10 @@ impl Displayed<'_> {
                 unit_for_a_type,
             } => {
                 f.text("unexpected tuple");
-                f.stating(format_args!("expected: {}", expected.spelled(spelling)));
+                f.stating(format_args!(
+                    "expected: {}",
+                    Code(expected.spelled(spelling))
+                ));
                 if *unit_for_a_type {
                     f.stating("`()` is the unit value, and a type stands here");
                     f.stating("the unit type is written `{}`");
@@ -776,7 +804,7 @@ impl Displayed<'_> {
                 f.stating(format_args!("no field is named `{label}`"));
                 match available.is_empty() {
                     true => f.stating("the tuple type has no labeled fields"),
-                    false => f.stating(format_args!("available: {}", available.join(", "))),
+                    false => f.stating(format_args!("available: {}", codes(available))),
                 }
             }
             Error::DuplicateTupleLabel { label } => {
@@ -921,7 +949,10 @@ impl Displayed<'_> {
                     true => "a match with no arms eliminates only a type with no constructors",
                     false => "constructor arms match a value of an inductive type",
                 });
-                f.stating(format_args!("scrutinee: {}", head_type.spelled(spelling)));
+                f.stating(format_args!(
+                    "scrutinee: {}",
+                    Code(head_type.spelled(spelling))
+                ));
             }
             Error::SortDecided { prop, at_decider } => {
                 let sort = match prop {
@@ -1066,7 +1097,7 @@ impl Displayed<'_> {
             }
             Error::NotAStructType { found } => {
                 f.text("not a struct");
-                f.stating(format_args!("found: {}", found.spelled(spelling)));
+                f.stating(format_args!("found: {}", Code(found.spelled(spelling))));
             }
             Error::StructArityMismatch {
                 name,
@@ -1096,10 +1127,10 @@ impl Displayed<'_> {
                 ));
                 f.stating(format_args!("written: {got}"));
                 if !missing.is_empty() {
-                    f.stating(format_args!("missing: {}", missing.join(", ")));
+                    f.stating(format_args!("missing: {}", codes(missing)));
                 }
                 if !surplus.is_empty() {
-                    f.stating(format_args!("no such field: {}", surplus.join(", ")));
+                    f.stating(format_args!("no such field: {}", codes(surplus)));
                 }
             }
             Error::UnknownDeclaration { name } => {
@@ -1116,7 +1147,7 @@ impl Displayed<'_> {
                     "`{}` has no field `{label}` at that position",
                     spelling.symbol(name)
                 ));
-                f.stating(format_args!("fields in order: {}", available.join(", ")));
+                f.stating(format_args!("fields in order: {}", codes(available)));
             }
             Error::UseEntryOutsideConcept { name } => {
                 f.text("not a concept");
@@ -1144,8 +1175,8 @@ impl Displayed<'_> {
             Error::SpreadBaseTypeMismatch { name, found } => {
                 let name = spelling.symbol(name);
                 f.text("type mismatch");
-                f.stating(format_args!("inferred: {}", found.spelled(spelling)));
-                f.stating(format_args!("expected: {name}"));
+                f.stating(format_args!("inferred: {}", Code(found.spelled(spelling))));
+                f.stating(format_args!("expected: {}", Code(&name)));
                 f.stating(format_args!(
                     "the `..` base of a `{name}` literal is itself a `{name}`"
                 ));
@@ -1164,7 +1195,7 @@ impl Displayed<'_> {
                     "overrides after a `..` spread follow the field order of `{}`",
                     spelling.symbol(name)
                 ));
-                f.stating(format_args!("order: {}", order.join(", ")));
+                f.stating(format_args!("order: {}", codes(order)));
             }
             Error::PrivateField { name, field } => {
                 f.text("private field");
@@ -1320,7 +1351,10 @@ impl Displayed<'_> {
                 f.stating(format_args!(
                     "a `{head}` pattern matches a value of that structure"
                 ));
-                f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
+                f.stating(format_args!(
+                    "scrutinee: {}",
+                    Code(scrutinee.spelled(spelling))
+                ));
             }
             Error::MatrixTupleArity { written, scrutinee } => {
                 f.text("pattern mismatch");
@@ -1331,7 +1365,10 @@ impl Displayed<'_> {
                         "a tuple pattern of {written} fields matches a tuple of {written} fields"
                     )),
                 }
-                f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
+                f.stating(format_args!(
+                    "scrutinee: {}",
+                    Code(scrutinee.spelled(spelling))
+                ));
                 if *written > 0 && matches!(&***scrutinee, Subterm::TupleType(_)) {
                     f.stating("write a pattern for every field, `_` for one it does not read");
                 }
@@ -1355,7 +1392,10 @@ impl Displayed<'_> {
                         format!("`{pattern}` takes a `Str` apart by its bytes")
                     }
                 });
-                f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
+                f.stating(format_args!(
+                    "scrutinee: {}",
+                    Code(scrutinee.spelled(spelling))
+                ));
                 f.stating("match a natural the value gives, or test it in a guard");
             }
             Error::MatrixByteSuccessor { successor } => {
@@ -1389,7 +1429,10 @@ impl Displayed<'_> {
             Error::PostponedCheck { expected, watching } => {
                 f.text("undetermined type");
                 f.stating("the expected type of this expression never gained structure");
-                f.stating(format_args!("expected: {}", expected.spelled(spelling)));
+                f.stating(format_args!(
+                    "expected: {}",
+                    Code(expected.spelled(spelling))
+                ));
                 if !watching.is_empty() {
                     let watching = watching.iter().map(named).collect::<Vec<_>>();
                     f.stating(format_args!("never solved: {}", watching.join(", ")));
@@ -1407,8 +1450,8 @@ impl Displayed<'_> {
                 let both_bare = this == "?" && that == "?";
                 f.text("undecided conversion");
                 if !(both_bare && !watching.is_empty()) {
-                    f.stating(format_args!("between: {this}"));
-                    f.stating(format_args!("and: {that}"));
+                    f.stating(format_args!("between: {}", Code(&this)));
+                    f.stating(format_args!("and: {}", Code(&that)));
                 }
                 if !watching.is_empty() {
                     let watching = watching.iter().map(named).collect::<Vec<_>>();
@@ -1429,8 +1472,8 @@ impl Displayed<'_> {
                     "two types each give {} a value, and the values differ",
                     named(watched)
                 ));
-                f.stating(format_args!("one: {}", one.spelled(spelling)));
-                f.stating(format_args!("another: {}", another.spelled(spelling)));
+                f.stating(format_args!("one: {}", Code(one.spelled(spelling))));
+                f.stating(format_args!("another: {}", Code(another.spelled(spelling))));
                 f.stating("write it to say which is meant");
             }
             Error::BangRegionUndetermined => {
@@ -1441,7 +1484,7 @@ impl Displayed<'_> {
             }
             Error::BangRegionNotAMonad { region, owner } => {
                 f.text("not a monad");
-                f.stating(format_args!("region: {}", region.spelled(spelling)));
+                f.stating(format_args!("region: {}", Code(region.spelled(spelling))));
                 f.stating("`!` sequences in its region's monad, read from the region's type");
                 if let RegionOwner::Function = owner {
                     f.stating("a function whose result is not a monad has nowhere to sequence one");
@@ -1494,7 +1537,7 @@ impl Displayed<'_> {
                         };
                         let mut why =
                             Said::line(format!("no {given} or expected type determined it"));
-                        why.stating(format_args!("its type: {bound}"));
+                        why.stating(format_args!("its type: {}", Code(&bound)));
 
                         why
                     }
@@ -1606,7 +1649,7 @@ impl Displayed<'_> {
                 f.stating(format_args!(
                     "a {given_as} was given where {slot} takes a {taken_as}"
                 ));
-                f.stating(format_args!("given: {}", given.spelled(spelling)));
+                f.stating(format_args!("given: {}", Code(given.spelled(spelling))));
                 f.stating(format_args!(
                     "no {given_as} stands where a `{declared}` is declared"
                 ));
@@ -1788,13 +1831,15 @@ impl Displayed<'_> {
                 };
                 let goal = written.unwrap_or(goal).spelled(spelling);
                 f.text("no witness");
-                f.stating(format_args!("wanted: {goal}"));
+                f.stating(format_args!("wanted: {}", Code(&goal)));
                 if let Some(diagnosis) = shape {
                     // A tuple shape is the only identity a twin can drop, so the sentence names labels and nothing decides between two of them: `diagnose_shape` bares tuple labels alone and answers `None` when that leaves the key unchanged.
                     let ShapeDiagnosis { wanted, bare } = &**diagnosis;
                     f.stating("labels are part of the type");
                     f.stating(format_args!(
-                        "the witness for {bare} does not cover {wanted}"
+                        "the witness for {} does not cover {}",
+                        Code(bare),
+                        Code(wanted)
                     ));
                     f.stating("name a struct for the labeled product, or declare the witness for this shape");
                 }
@@ -1826,31 +1871,35 @@ impl Displayed<'_> {
                             _ => "a",
                         };
                         f.stating(format_args!(
-                            "needed to sequence {article} {source} action in this {target} region"
+                            "needed to sequence {article} {} action in this {} region",
+                            Code(&source),
+                            Code(&target)
                         ));
                         if let Some(runner) = &diagnosis.runner {
                             f.stating(format_args!(
                                 "{} hands the action's {} back to this region",
-                                runner.run.spelled(spelling),
-                                runner.result.spelled(spelling)
+                                Code(runner.run.spelled(spelling)),
+                                Code(runner.result.spelled(spelling))
                             ));
                             f.stating(format_args!(
                                 "a region whose own type is a {} sequences it",
-                                runner.family.spelled(spelling)
+                                Code(runner.family.spelled(spelling))
                             ));
                         }
                         if !diagnosis.source_is_monad {
-                            f.stating(format_args!("{source} is not a monad"));
+                            f.stating(format_args!("{} is not a monad", Code(&source)));
                             f.stating("no `Monad` witness exists for it, so no embedding out of it can be declared");
                         }
                         if !diagnosis.chain.is_empty() {
                             // One fact: the heading, and each embedding it heads on a line beneath it.
                             f.stating(format_args!(
-                                "declared embeddings chain from {source} to {target}:"
+                                "declared embeddings chain from {} to {}:",
+                                Code(&source),
+                                Code(&target)
                             ));
                             for (pair, module) in &diagnosis.chain {
                                 let module = declaring_module(module);
-                                f.text(format_args!("\n  Lift{pair}, declared in {module}"));
+                                f.text(format_args!("\n  `Lift{pair}`, declared in {module}"));
                             }
                             f.stating("embeddings never chain automatically");
                             f.stating(format_args!(
@@ -1936,11 +1985,11 @@ impl Displayed<'_> {
                 second,
             } => {
                 f.text("ambiguous witness");
-                f.stating(format_args!("wanted: {}", goal.spelled(spelling)));
+                f.stating(format_args!("wanted: {}", Code(goal.spelled(spelling))));
                 f.stating(format_args!(
                     "both {} and {} match at the same superclass depth",
-                    first.spelled(spelling),
-                    second.spelled(spelling)
+                    Code(first.spelled(spelling)),
+                    Code(second.spelled(spelling))
                 ));
             }
             Error::CyclicSuperclass { concept } => {
@@ -1965,7 +2014,7 @@ impl Displayed<'_> {
                 f.stating(format_args!(
                     "parameter {} of its concept reduces to {}",
                     position + 1,
-                    head.spelled(spelling)
+                    Code(head.spelled(spelling))
                 ));
                 f.stating("a parameter's head is an inductive, a struct, an intrinsic type or a tuple type");
             }
@@ -2014,7 +2063,7 @@ impl Displayed<'_> {
             Error::UseParameterNotAConcept { found, proposition } => {
                 f.text("not a concept");
                 f.stating("the type of a `use` parameter is a concept application");
-                f.stating(format_args!("found: {}", found.spelled(spelling)));
+                f.stating(format_args!("found: {}", Code(found.spelled(spelling))));
                 if *proposition {
                     f.stating("a proof is discharged through an implicit parameter");
                     f.stating("write `@` in place of `use`");
@@ -2023,7 +2072,7 @@ impl Displayed<'_> {
             Error::ImplicitConceptMemberUnfillable { found } => {
                 f.text("unfillable parameter");
                 f.stating("an `@` parameter at a concept's type that no later type mentions is never filled");
-                f.stating(format_args!("found: {}", found.spelled(spelling)));
+                f.stating(format_args!("found: {}", Code(found.spelled(spelling))));
                 f.stating("an `@` parameter is inferred from the types after it");
                 f.stating("resolution fills only `use` parameters");
                 f.stating(
@@ -2032,7 +2081,7 @@ impl Displayed<'_> {
             }
             Error::NonRegularWitnessPremise { premise } => {
                 f.text("non-regular premise");
-                f.stating(format_args!("premise: {}", premise.spelled(spelling)));
+                f.stating(format_args!("premise: {}", Code(premise.spelled(spelling))));
                 f.stating(
                     "every `use` premise is smaller than the witness's own concept application",
                 );

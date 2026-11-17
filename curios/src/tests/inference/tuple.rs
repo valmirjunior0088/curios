@@ -65,7 +65,7 @@ fn a_settled_tuple_reports_the_obligation_it_unblocked() {
 
     let report = error(source);
     assert!(
-        report.contains("wanted: Show({x: Bool, y: Bool})"),
+        report.contains("wanted: `Show({x: Bool, y: Bool})`"),
         "expected the witness goal the tuple unblocked:\n{report}"
     );
 }
@@ -203,7 +203,8 @@ fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
 
     let report = error(source);
     assert!(
-        report.contains("inferred: {Nat, Bool}") && report.contains("expected: {a: Nat, b: Bool}"),
+        report.contains("inferred: `{Nat, Bool}`")
+            && report.contains("expected: `{a: Nat, b: Bool}`"),
         "expected the bare literal's mismatch:\n{report}"
     );
 }
@@ -341,7 +342,7 @@ fn a_tuple_of_proofs_is_refused_where_a_type_is_declared() {
     assert!(
         report.contains(
             "a proposition was given where the implicit argument `A` of `id` takes a type"
-        ) && report.contains("given: {True, True}"),
+        ) && report.contains("given: `{True, True}`"),
         "unexpected report:\n{report}"
     );
 }

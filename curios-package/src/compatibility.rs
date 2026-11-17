@@ -5,7 +5,7 @@ mod tests;
 
 use {
     crate::{MANIFEST, Package, Refused, Umbrella},
-    curios_common::Report,
+    curios_common::{Code, Report},
     semver::Version,
     std::{
         fmt,
@@ -46,12 +46,15 @@ impl CompilerVersion {
         };
         if !accepted {
             let required = match self.minimum {
-                true => format!("this package requires Curios {} or later", self.version),
-                false => format!("this package requires Curios {}", self.version),
+                true => format!(
+                    "this package requires Curios {} or later",
+                    Code(&self.version)
+                ),
+                false => format!("this package requires Curios {}", Code(&self.version)),
             };
             return Err(Refused::of("compiler mismatch")
                 .stating(required)
-                .stating(format_args!("this compiler is Curios {current}"))
+                .stating(format_args!("this compiler is Curios `{current}`"))
                 .value(["compiler"])
                 .located_at(manifest));
         }
@@ -72,9 +75,9 @@ impl FromStr for CompilerVersion {
             .map(|version| Self { version, minimum })
             .map_err(|error| {
                 Refused::of("invalid version")
-                    .stating(format_args!("written: {spelling:?}"))
+                    .stating(format_args!("written: {}", Code(format!("{spelling:?}"))))
                     .stating(format_args!(
-                        "`compiler` is a SemVer version such as \"{current}\", or a minimum, \"{MINIMUM} {current}\"",
+                        "`compiler` is a SemVer version such as `\"{current}\"`, or a minimum, `\"{MINIMUM} {current}\"`",
                         current = Self::current()
                     ))
                     .stating(error)

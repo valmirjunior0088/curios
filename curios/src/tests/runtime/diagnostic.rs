@@ -13,7 +13,7 @@ fn uses_source_binder_names() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: (n: Nat) -> Nat"),
+        error.contains("inferred: `(n: Nat) -> Nat`"),
         "binder lost its source name: {error}"
     );
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
@@ -31,7 +31,7 @@ fn disambiguates_shadowed_binders() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: (n: Nat) -> (n2: Nat) -> Nat"),
+        error.contains("inferred: `(n: Nat) -> (n2: Nat) -> Nat`"),
         "shadowed binders not disambiguated: {error}"
     );
     assert!(!error.contains('#'), "fresh-name suffix leaked: {error}");
@@ -48,7 +48,7 @@ fn shortens_global_names() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Vec(Nat, n)"),
+        error.contains("inferred: `Vec(Nat, n)`"),
         "globals not shortened: {error}"
     );
     assert!(
@@ -72,7 +72,7 @@ fn collapses_witness_dispatch_in_index() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Vec(Nat, 1)"),
+        error.contains("inferred: `Vec(Nat, 1)`"),
         "witness dispatch not collapsed to its value: {error}"
     );
     assert!(
@@ -93,7 +93,7 @@ fn spells_index_arithmetic_infix() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Vec(Nat, n + m + 1)"),
+        error.contains("inferred: `Vec(Nat, n + m + 1)`"),
         "index arithmetic not spelled infix: {error}"
     );
 }
@@ -109,7 +109,7 @@ fn parenthesizes_a_reduced_successor_operand() {
 
     let error = error(source);
     assert!(
-        error.contains("expected: Eq(@Nat)(n - (k + 1), 0)"),
+        error.contains("expected: `Eq(@Nat)(n - (k + 1), 0)`"),
         "successor operand not parenthesized: {error}"
     );
     assert!(
@@ -130,11 +130,11 @@ fn keeps_the_name_of_a_stalled_unfolding() {
 
     let error = error(source);
     assert!(
-        error.contains("inferred: Eq(@Nat)(double(n), double(n))"),
+        error.contains("inferred: `Eq(@Nat)(double(n), double(n))`"),
         "stalled unfolding not kept by name: {error}"
     );
     assert!(
-        error.contains("expected: Eq(@Nat)(double(n), "),
+        error.contains("expected: `Eq(@Nat)(double(n), "),
         "stalled unfolding not kept by name: {error}"
     );
     assert!(
@@ -169,19 +169,19 @@ fn names_a_family_in_a_report_raised_on_a_reduct() {
     for (declaration, said) in [
         (
             "pub let member: Type = { held };",
-            "inferred: Holder(Sized(Nat))",
+            "inferred: `Holder(Sized(Nat))`",
         ),
         (
             "pub let field: Nat = held.0;",
-            "projected from: a term of type Holder(Sized(Nat))",
+            "projected from: a term of type `Holder(Sized(Nat))`",
         ),
         (
             "pub let field: Nat = wrapped.0;",
-            "projected from: a term of type (Sized(Nat)(0)) -> Nat",
+            "projected from: a term of type `(Sized(Nat)(0)) -> Nat`",
         ),
         (
             "pub let arm: Nat = match wrapped | x() => 0 end;",
-            "scrutinee: (Sized(Nat)(0)) -> Nat",
+            "scrutinee: `(Sized(Nat)(0)) -> Nat`",
         ),
         (
             "pub let count: Nat = match held | 0 => 0 | _ + 1 => 1 end;",

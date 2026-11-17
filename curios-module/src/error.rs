@@ -1,5 +1,5 @@
 use {
-    curios_common::{About, Report, Said, Span},
+    curios_common::{About, Code, Report, Said, Span},
     curios_parse::ParserError,
     std::{fmt, io, path::PathBuf},
 };
@@ -221,7 +221,7 @@ impl Error {
             Error::Unresolved { failure, .. } => failure.say(f),
             Error::ModuleNotFound { path } => {
                 f.text("unknown module");
-                f.stating(format_args!("not found: {path}"));
+                f.stating(format_args!("not found: {}", Code(path)));
             }
             Error::OpaqueConstructorsCannotBeReExported { induct_decl } => {
                 f.text("private representation");

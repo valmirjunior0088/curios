@@ -353,18 +353,18 @@ fn what_is_said_is_a_line_and_the_facts_begun_after_it() {
     said.text("type ");
     said.text("mismatch");
     said.fact();
-    said.text("inferred: Nat");
+    said.text("inferred: `Nat`");
     said.stating("expected: List(\n  Str)");
 
     assert_eq!(
         said.to_string(),
-        "type mismatch\n  inferred: Nat\n  expected: List(\n    Str)"
+        "type mismatch\n  inferred: `Nat`\n  expected: List(\n    Str)"
     );
     let report = Report::of(None, said);
     assert_eq!(report.headline, "type mismatch");
-    assert_eq!(report.facts, ["inferred: Nat", "expected: List(\n  Str)"]);
+    assert_eq!(report.facts, ["inferred: `Nat`", "expected: List(\n  Str)"]);
     assert_eq!(
         report.rendered(Kind::Error, &Style::plain()),
-        "type mismatch\n│  inferred: Nat\n│  expected: List(\n│    Str)\n└─ [error]"
+        "type mismatch\n│  inferred: `Nat`\n│  expected: List(\n│    Str)\n└─ [error]"
     );
 }

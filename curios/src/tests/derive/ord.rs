@@ -83,7 +83,7 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
     let report = error(source);
     assert!(
         report.contains(
-            "wanted: /std/ops/Eql(Colour)\n│  needed by `Ord` for its `/std/ops/Eql` superclass"
+            "wanted: `/std/ops/Eql(Colour)`\n│  needed by `Ord` for its `/std/ops/Eql` superclass"
         ),
         "{report}"
     );

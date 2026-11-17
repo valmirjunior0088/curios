@@ -19,7 +19,7 @@ fn a_width_is_read_from_its_digits_alone() {
     assert_eq!("72".parse::<Width>().map(Width::columns), Ok(72));
     for spelling in ["72px", "-72", "", "seventy"] {
         let refusal = spelling.parse::<Width>().expect_err(spelling);
-        assert!(refusal.contains(&format!("{spelling:?}")), "{refusal}");
+        assert!(refusal.contains(&format!("`{spelling}`")), "{refusal}");
     }
     assert!(
         LINE_WIDTH

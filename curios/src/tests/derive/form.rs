@@ -78,7 +78,7 @@ fn a_proposition_is_no_key_of_a_derived_witness() {
 
     let report = error(source);
     assert!(
-        report.contains("type mismatch\n│  inferred: Prop\n│  expected: Type"),
+        report.contains("type mismatch\n│  inferred: `Prop`\n│  expected: `Type`"),
         "{report}"
     );
 }
@@ -182,7 +182,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         "#;
     let report = error(premise);
     assert!(
-        report.contains("wanted: Spell(A)\n│  needed by `Box/boxed` for payload #1 — add `use Spell(A)` to the telescope"),
+        report.contains("wanted: `Spell(A)`\n│  needed by `Box/boxed` for payload #1 — add `use Spell(A)` to the telescope"),
         "{report}"
     );
 
@@ -196,7 +196,8 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     // The goal's spelling is the deferred-goal report's, rendered as every report renders a type — the nominal name, not its recursive-group projection; the derivation's contribution is the provenance line, located at the declaration.
     let report = error(unwitnessed);
     assert!(
-        report.contains("wanted: Spell(Opaque)\n│  needed by `Holder/holds` for payload `inner`\n"),
+        report
+            .contains("wanted: `Spell(Opaque)`\n│  needed by `Holder/holds` for payload `inner`\n"),
         "{report}"
     );
     assert!(report.contains("satisfy Spell(Holder) { .. }"), "{report}");
@@ -326,7 +327,7 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
     let report = error(derived);
     let written = error(written);
     assert!(
-        report.contains("type mismatch\n│  inferred: (A: Type) -> Type\n│  expected: Type"),
+        report.contains("type mismatch\n│  inferred: `(A: Type) -> Type`\n│  expected: `Type`"),
         "{report}"
     );
     // Identical but for the quoted source line: the same frame, message and caret column, because the body is not where the refusal comes from.

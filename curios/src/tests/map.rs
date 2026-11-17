@@ -31,7 +31,7 @@ fn a_colliding_key_witness_is_rejected() {
 
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
-    assert!(message.contains("expected: Eq(@Side)(a, b)"), "{message}");
+    assert!(message.contains("expected: `Eq(@Side)(a, b)`"), "{message}");
 }
 
 // A walk of the trie is in the order of the encodings, so an encoding out of its type's order does not fail a lookup either — it enumerates a map's keys in an order no reader of the type expects. `Key/monotone` states that obligation: the order of two keys is `Bytes/ord` of their encodings. `left` is below `right` by their declaration and its byte is above `right`'s, the encodings are distinct so `injective` is discharged, and the law is refused at the one pair it is false of.
@@ -78,7 +78,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
     assert!(
-        message.contains("expected: Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/gt())"),
+        message.contains("expected: `Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/gt())`"),
         "{message}"
     );
 }

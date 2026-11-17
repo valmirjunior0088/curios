@@ -44,7 +44,7 @@ fn a_compiler_version_is_bare_or_a_minimum_and_no_other_range() {
             .to_string();
         assert!(
             error.contains("`compiler` is a SemVer version such as")
-                && error.contains("or a minimum, \">= "),
+                && error.contains("or a minimum, `\">= "),
             "{error}"
         );
     }
@@ -92,13 +92,13 @@ fn a_minimum_accepts_its_version_and_every_later_one() {
         .render();
     assert!(
         error.contains(&format!(
-            "this package requires Curios {required} or later\n"
+            "this package requires Curios `{required}` or later\n"
         )),
         "{error}"
     );
     assert!(
         error.contains(&format!(
-            "this compiler is Curios {}",
+            "this compiler is Curios `{}`",
             CompilerVersion::current()
         )),
         "{error}"
@@ -177,12 +177,12 @@ fn another_version_newer_or_older_names_the_manifest_and_both_versions() {
             "{error}"
         );
         assert!(
-            error.contains(&format!("this package requires Curios {required}\n")),
+            error.contains(&format!("this package requires Curios `{required}`\n")),
             "{error}"
         );
         assert!(
             error.contains(&format!(
-                "this compiler is Curios {}",
+                "this compiler is Curios `{}`",
                 CompilerVersion::current()
             )),
             "{error}"

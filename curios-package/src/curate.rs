@@ -14,7 +14,7 @@ use {
         Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused, Row,
         Snapshot, Step, Store, Subject, Target, TreeHash,
     },
-    curios_common::Report,
+    curios_common::{Code, Report},
     std::{
         collections::BTreeSet,
         fmt, fs, io,
@@ -335,7 +335,7 @@ fn attempted(
         Ok(output) if output.status.success() => Some(Ok(())),
         Ok(output) => Some(Err(Refused::of("fetch failed")
             .stating(format_args!(
-                "{subject} could not be fetched from {url} with `{program}`"
+                "{subject} could not be fetched from `{url}` with `{program}`"
             ))
             .stating(String::from_utf8_lossy(&output.stderr).trim()))),
     }
@@ -375,7 +375,7 @@ pub fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), Re
     }
 
     Err(Refused::of("no fetcher")
-        .stating(format_args!("{subject} is fetched from {url}"))
+        .stating(format_args!("{subject} is fetched from `{url}`"))
         .stating("neither `curl` nor `wget` is on `PATH`")
         .stating("this toolchain reaches the network through whichever of them is installed"))
 }
@@ -399,11 +399,11 @@ fn accept_module(
             "hash",
             Refused::of("hash mismatch")
                 .stating(format_args!(
-                    "the foreign module `{}` of `{}` was fetched from {}",
+                    "the foreign module `{}` of `{}` was fetched from `{}`",
                     acquisition.name, acquisition.package, acquisition.url
                 ))
-                .stating(format_args!("expected: {}", acquisition.hash))
-                .stating(format_args!("obtained: {delivered}"))
+                .stating(format_args!("expected: {}", Code(&acquisition.hash)))
+                .stating(format_args!("obtained: {}", Code(&delivered)))
                 .stating("intended if the publisher re-cut this version and said so, or you repointed this row yourself")
                 .stating("pay close attention if nothing announced a change")
                 .stating("an artifact replaced in place, under a version already published, is what a compromised release looks like")
@@ -499,11 +499,14 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
         return Err(acquisition.written.refuse(
             Refused::of("hash mismatch")
                 .stating(format_args!(
-                    "the dependency `{}` was fetched from {} at {}",
+                    "the dependency `{}` was fetched from `{}` at `{}`",
                     acquisition.name, acquisition.url, acquisition.snapshot.rev
                 ))
-                .stating(format_args!("expected: {}", acquisition.snapshot.hash))
-                .stating(format_args!("obtained: {delivered}"))
+                .stating(format_args!(
+                    "expected: {}",
+                    Code(&acquisition.snapshot.hash)
+                ))
+                .stating(format_args!("obtained: {}", Code(&delivered)))
                 .stating("intended if this row pins a branch or a tag, and it has moved")
                 .stating("pay close attention if this row pins a commit, which should not move")
                 .stating("a tree that changed under one means its history was rewritten")

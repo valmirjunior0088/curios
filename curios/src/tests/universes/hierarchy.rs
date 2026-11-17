@@ -172,8 +172,8 @@ fn a_pair_of_a_proposition_and_its_proof_is_no_proposition() {
         "#,
     );
 
-    assert!(message.contains("inferred: Type"), "got: {message}");
-    assert!(message.contains("expected: Prop"), "got: {message}");
+    assert!(message.contains("inferred: `Type`"), "got: {message}");
+    assert!(message.contains("expected: `Prop`"), "got: {message}");
     assert!(
         message.contains("let Packed: Prop = {P: Prop, p: P};"),
         "got: {message}"
@@ -212,11 +212,11 @@ fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy()
 
     let message = error(source);
     assert!(
-        message.contains("this Type would need to be strictly below itself"),
+        message.contains("this `Type` would need to be strictly below itself"),
         "{message}"
     );
     assert!(
-        message.contains("required: ?u1+1 ≤ ?u1"),
+        message.contains("required: `?u1+1 ≤ ?u1`"),
         "the message numbers its levels within itself:\n{message}"
     );
     assert!(
@@ -259,7 +259,7 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
 
     let message = error(source);
     assert!(
-        message.contains("this Type would need to be strictly below itself"),
+        message.contains("this `Type` would need to be strictly below itself"),
         "{message}"
     );
     assert!(
@@ -333,7 +333,7 @@ fn a_conflict_a_schemes_bound_closes_names_the_declaration_instantiated() {
 
     let message = error(&source);
     assert!(
-        message.contains("this Type would need to be strictly below itself"),
+        message.contains("this `Type` would need to be strictly below itself"),
         "{message}"
     );
     assert!(

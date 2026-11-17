@@ -36,7 +36,7 @@ fn a_labeled_goal_does_not_reach_the_positional_witness() {
         "#;
 
     assert!(error(source).contains(
-        "wanted: Tag({x: Nat, y: Bool})\n│  labels are part of the type\n│  the witness for {_, _} does not cover {x: _, y: _}\n│  name a struct for the labeled product, or declare the witness for this shape"
+        "wanted: `Tag({x: Nat, y: Bool})`\n│  labels are part of the type\n│  the witness for `{_, _}` does not cover `{x: _, y: _}`\n│  name a struct for the labeled product, or declare the witness for this shape"
     ));
 }
 

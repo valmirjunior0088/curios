@@ -152,11 +152,11 @@ fn two_dictionaries_make_two_types() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "got: {message}");
     assert!(
-        message.contains("inferred: Slot(Nat, Str)"),
+        message.contains("inferred: `Slot(Nat, Str)`"),
         "got: {message}"
     );
     assert!(
-        message.contains("expected: Slot(Nat, use Key { (a, b) => false }, Str)"),
+        message.contains("expected: `Slot(Nat, use Key { (a, b) => false }, Str)`"),
         "got: {message}"
     );
 }
@@ -445,7 +445,7 @@ fn a_superclass_is_the_registered_dictionary_whatever_a_field_names() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "got: {message}");
     assert!(
-        message.contains("inferred: Slot(Nat, use Hashy { (n) => 0 }, Nat)"),
+        message.contains("inferred: `Slot(Nat, use Hashy { (n) => 0 }, Nat)`"),
         "got: {message}"
     );
 }

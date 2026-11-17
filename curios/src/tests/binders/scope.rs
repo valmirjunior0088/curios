@@ -147,7 +147,7 @@ fn a_foreign_declarations_operands_have_no_names() {
     );
 
     assert!(
-        message.contains("inferred: (Nat, Bytes) -> /std/Io(Nat)"),
+        message.contains("inferred: `(Nat, Bytes) -> /std/Io(Nat)`"),
         "got: {message}"
     );
 }

@@ -128,8 +128,8 @@ fn two_imitations_that_give_an_implicit_two_functions_refuse_the_call() {
 
         assert!(
             report.contains("two types each give the implicit argument `M` of `both` a value, and the values differ")
-                && report.contains(&format!("one: (x0) => Two({one}, x0)"))
-                && report.contains(&format!("another: (x0) => Two({another}, x0)")),
+                && report.contains(&format!("one: `(x0) => Two({one}, x0)`"))
+                && report.contains(&format!("another: `(x0) => Two({another}, x0)`")),
             "unexpected report for `both({arguments})`:\n{report}"
         );
     }

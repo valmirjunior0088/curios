@@ -46,8 +46,8 @@ Then ask what it makes of that, with `curios wonder vector.crs`:
 
 ```text
 type mismatch
-│  inferred: Vec(Nat, 0)
-│  expected: Vec(Nat, 1)
+│  inferred: `Vec(Nat, 0)`
+│  expected: `Vec(Nat, 1)`
 │
 │  7 │     empty;
 │    │     ^^^^^

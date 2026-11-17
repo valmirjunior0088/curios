@@ -19,7 +19,7 @@ use {
         CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
         TreeHash,
     },
-    curios_common::{About, Report, Said, Source, is_identifier, is_reserved},
+    curios_common::{About, Code, Report, Said, Source, is_identifier, is_reserved},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -636,8 +636,8 @@ impl Delivery {
                         "the foreign module `{name}` at {} is not what it is pinned to",
                         path.display()
                     ))
-                    .stating(format_args!("expected: {}", self.hash))
-                    .stating(format_args!("obtained: {delivered}"))
+                    .stating(format_args!("expected: {}", Code(&self.hash)))
+                    .stating(format_args!("obtained: {}", Code(&delivered)))
                     .stating("intended if you rebuilt the module from source you control")
                     .stating("pay close attention if you did not rebuild it, or a dependency delivered it rather than you building it")
                     .trying(format!(

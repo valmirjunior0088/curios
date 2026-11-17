@@ -177,7 +177,7 @@ fn a_mismatched_argument_names_the_parameter_it_was_checked_as() {
         "#,
     );
     assert!(
-        report.contains("expected: /std/Str\n│  checked as `s`, the 2nd argument of `pair`"),
+        report.contains("expected: `/std/Str`\n│  checked as `s`, the 2nd argument of `pair`"),
         "unexpected report:\n{report}"
     );
 }

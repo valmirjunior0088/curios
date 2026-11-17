@@ -107,7 +107,8 @@ fn a_destructuring_nothing_types_is_refused_at_its_pattern() {
         "#,
     );
     assert!(
-        report.contains("a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: ?")
+        report
+            .contains("a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: `?`")
             && report.contains("let (a, b) = p;"),
         "the report should point at the destructuring:\n{report}"
     );
@@ -144,7 +145,7 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
     );
     assert!(boxed.contains("let boxed : Boxed()"), "{boxed}");
     assert!(
-        boxed.contains("term mismatch") && boxed.contains("written: (n) => n + 1"),
+        boxed.contains("term mismatch") && boxed.contains("written: `(n) => n + 1`"),
         "{boxed}"
     );
 
@@ -159,7 +160,7 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
         "#,
     );
     assert!(
-        typed.contains("type mismatch") && typed.contains("inferred: Tagged(@List(Nat))([1])"),
+        typed.contains("type mismatch") && typed.contains("inferred: `Tagged(@List(Nat))([1])`"),
         "{typed}"
     );
 }

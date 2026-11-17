@@ -275,6 +275,16 @@ pub enum About {
     Named(String),
 }
 
+/// A piece of a program a report shows — a term, a name, a pattern, a label, a value as written — in backticks, wherever it stands in a fact, behind a label or inside a sentence: the one rule by which a reader and a tool tell the program's text from the report's words ([A command narrates on one transcript and reports in blocks](../../documentation/design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)).
+#[derive(Debug, Clone, Copy)]
+pub struct Code<T>(pub T);
+
+impl<T: fmt::Display> fmt::Display for Code<T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "`{}`", self.0)
+    }
+}
+
 /// What a report says before it stands anywhere, as whoever says it builds it: a tag, and each fact beneath it. The first line begun is the tag, and every one begun after it a fact, so which is which is how it was built and nothing reads it back out of text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]

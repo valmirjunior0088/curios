@@ -75,7 +75,7 @@ fn a_disagreement_the_reader_can_already_see_keeps_its_spelling() {
     let shown = rendered(family("Bool", vec![]), family("Nat", vec![]));
 
     assert!(
-        shown.contains("inferred: /Bool") && shown.contains("expected: /Nat"),
+        shown.contains("inferred: `/Bool`") && shown.contains("expected: `/Nat`"),
         "expected the reader's own spelling:\n{shown}"
     );
 }
@@ -139,7 +139,7 @@ fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
 
     assert_eq!(
         Displayed(&error, spelling, &[]).to_string(),
-        "rejected candidate\n  an inferred hole cannot be /Candidate\n  it does not check where it stands\n  type mismatch\n    inferred: /Left\n    expected: /Right"
+        "rejected candidate\n  an inferred hole cannot be `/Candidate`\n  it does not check where it stands\n  type mismatch\n    inferred: `/Left`\n    expected: `/Right`"
     );
 }
 
@@ -175,12 +175,12 @@ fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
     });
 
     assert!(
-        implicit.contains("\n  the implicit argument of `/f` cannot be /Candidate\n"),
+        implicit.contains("\n  the implicit argument of `/f` cannot be `/Candidate`\n"),
         "{implicit}"
     );
     assert!(
         witness.starts_with(
-            "rejected candidate\n  the witness argument of `/f` for its 2nd `use` premise cannot be /Candidate"
+            "rejected candidate\n  the witness argument of `/f` for its 2nd `use` premise cannot be `/Candidate`"
         ),
         "{witness}"
     );

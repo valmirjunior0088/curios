@@ -338,7 +338,7 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
 
         let other = error(&under("B"));
         assert!(
-            other.contains("a `B` pattern matches a value of that structure\n│  scrutinee: A"),
+            other.contains("a `B` pattern matches a value of that structure\n│  scrutinee: `A`"),
             "{other}"
         );
         let unknown = error(&under("Nope"));
@@ -375,7 +375,7 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
             let error = error(&under(pattern));
             assert!(
                 error.contains(&format!(
-                    "a tuple pattern of {fields} matches a tuple of {fields}\n│  scrutinee: {{Nat, Nat, Nat}}"
+                    "a tuple pattern of {fields} matches a tuple of {fields}\n│  scrutinee: `{{Nat, Nat, Nat}}`"
                 )),
                 "{written}: {error}"
             );
@@ -388,7 +388,7 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
     ));
     assert!(
         error.contains(
-            "a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: Nat\n"
+            "a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: `Nat`\n"
         ),
         "{error}"
     );
@@ -425,7 +425,7 @@ fn the_pattern_of_no_fields_takes_apart_the_unit_alone() {
             written
         ));
         assert!(
-            error.contains("`()` matches the value of `{}`\n│  scrutinee: Nat"),
+            error.contains("`()` matches the value of `{}`\n│  scrutinee: `Nat`"),
             "{written}: {error}"
         );
         let column = written.find(at).expect("the place is written") + 1;

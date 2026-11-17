@@ -275,7 +275,7 @@ fn a_runtime_format_string_is_refused_by_its_written_type() {
 
     assert!(refused.contains("not a function"), "{refused}");
     assert!(
-        refused.contains("applied: a term of type Fmt/format_type_with(Io({}), Fmt/parse(s))"),
+        refused.contains("applied: a term of type `Fmt/format_type_with(Io({}), Fmt/parse(s))`"),
         "the type as written:\n{refused}"
     );
     assert!(

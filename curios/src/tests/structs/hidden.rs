@@ -103,7 +103,8 @@ fn a_hidden_fields_entry_is_held_to_its_mark_its_run_and_its_name() {
 
     let misnamed = refused("Sized { @size = 2, items = two }");
     assert!(
-        misnamed.contains("has no field `@size` at that position\n│  fields in order: @len, items"),
+        misnamed
+            .contains("has no field `@size` at that position\n│  fields in order: `@len`, `items`"),
         "{misnamed}"
     );
 }

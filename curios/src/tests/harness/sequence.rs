@@ -117,7 +117,7 @@ fn a_program_refuses_to_discard_a_nonunit_test_payload() {
         "#,
     );
     assert!(
-        refusal.contains("inferred: Nat") && refusal.contains("expected: {}"),
+        refusal.contains("inferred: `Nat`") && refusal.contains("expected: `{}`"),
         "{refusal}"
     );
 }

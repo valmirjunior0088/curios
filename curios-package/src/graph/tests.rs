@@ -579,7 +579,7 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
 
         let refusal = mounts(&root.join("app")).expect_err(name);
         assert!(
-            refusal.contains(&format!("is pinned to `abc123` ({hash}) by `{pinned}`")),
+            refusal.contains(&format!("is pinned to `abc123` (`{hash}`) by `{pinned}`")),
             "{name}: {refusal}"
         );
         assert!(

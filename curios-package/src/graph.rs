@@ -136,7 +136,7 @@ impl Walk<'_> {
                                 earlier.dependent
                             ))
                             .stating(format_args!(
-                                "and taken live by `{}` from {}",
+                                "and taken live by `{}` from `{}`",
                                 dependent.name,
                                 live.display()
                             ))
@@ -152,7 +152,7 @@ impl Walk<'_> {
                                 dependent.name
                             ))
                             .stating(format_args!(
-                                "and taken live by `{}` from {}",
+                                "and taken live by `{}` from `{}`",
                                 earlier.dependent,
                                 earlier.directory.display()
                             ))
@@ -372,9 +372,9 @@ impl Walk<'_> {
                     true => Ok(tree),
                     false => Err(written.refuse(
                         Refused::of("not fetched")
-                            .stating(format_args!("`{name}` is fetched from {url} at {rev}"))
+                            .stating(format_args!("`{name}` is fetched from `{url}` at `{rev}`"))
                             .stating("nothing has materialized it")
-                            .stating(format_args!("the delivered tree must hash to {hash}"))
+                            .stating(format_args!("the delivered tree must hash to `{hash}`"))
                             .trying("curios curate"),
                     )),
                 }
@@ -385,5 +385,5 @@ impl Walk<'_> {
 
 /// A snapshot as a refusal spells it.
 fn describe(snapshot: &Snapshot) -> String {
-    format!("`{}` ({})", snapshot.rev, snapshot.hash)
+    format!("`{}` (`{}`)", snapshot.rev, snapshot.hash)
 }

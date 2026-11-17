@@ -90,7 +90,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
 
     assert!(refusal.starts_with("hash mismatch\n"), "{refusal}");
     assert!(
-        refusal.contains(&format!("obtained: {delivered}")),
+        refusal.contains(&format!("obtained: `{delivered}`")),
         "{refusal}"
     );
     assert!(
@@ -613,7 +613,7 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     assert!(refusal.starts_with("hash mismatch\n"), "{refusal}");
     assert!(
         refusal.contains(&format!(
-            "obtained: {}",
+            "obtained: `{}`",
             FileHash::of_bytes(b"\0asm\x01\0\0\0")
         )),
         "the refusal states what arrived: {refusal}"

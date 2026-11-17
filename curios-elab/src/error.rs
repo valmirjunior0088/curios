@@ -7,7 +7,7 @@ mod tests;
 use {
     super::{Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
-    curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
+    curios_common::{Code, InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
     curios_core::{
         Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
         Extent, Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError,
@@ -96,7 +96,7 @@ impl CycleMember {
         match self {
             CycleMember::Named(name) => format!("`{}`", spelling.symbol(name)),
             CycleMember::Witness { type_, .. } => {
-                format!("the witness of {}", type_.spelled(spelling))
+                format!("the witness of {}", Code(type_.spelled(spelling)))
             }
         }
     }

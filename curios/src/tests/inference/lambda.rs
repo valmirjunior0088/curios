@@ -153,7 +153,7 @@ fn a_body_the_other_lambdas_type_refuses_is_refused_in_either_order() {
         )));
 
         assert!(
-            report.contains("wanted: /std/ops/Add(Byte)"),
+            report.contains("wanted: `/std/ops/Add(Byte)`"),
             "unexpected report for `{call}`:\n{report}"
         );
     }
@@ -171,8 +171,8 @@ fn a_choice_in_a_body_is_taken_where_its_lambdas_call_completes() {
     ));
 
     assert!(
-        report.contains("inferred: (x: Byte) -> Nat")
-            && report.contains("expected: (Byte) -> Byte"),
+        report.contains("inferred: `(x: Byte) -> Nat`")
+            && report.contains("expected: `(Byte) -> Byte`"),
         "unexpected report:\n{report}"
     );
 }
@@ -219,8 +219,8 @@ fn a_function_type_with_a_hidden_binder_is_refused_after_either_binding() {
         )));
 
         assert!(
-            report.contains("inferred: (x: Nat) -> Nat")
-                && report.contains("expected: (@n: Nat, Nat) -> Nat"),
+            report.contains("inferred: `(x: Nat) -> Nat`")
+                && report.contains("expected: `(@n: Nat, Nat) -> Nat`"),
             "unexpected report for `{binding}`:\n{report}"
         );
     }
@@ -238,7 +238,8 @@ fn a_numeral_in_a_lambda_bound_through_a_call_is_its_default_on_the_next_line() 
     ));
 
     assert!(
-        report.contains("inferred: (x: Nat) -> Nat") && report.contains("expected: (Byte) -> Byte"),
+        report.contains("inferred: `(x: Nat) -> Nat`")
+            && report.contains("expected: `(Byte) -> Byte`"),
         "unexpected report:\n{report}"
     );
 }

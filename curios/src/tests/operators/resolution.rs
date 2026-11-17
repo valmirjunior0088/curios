@@ -200,7 +200,7 @@ fn infix_literal_against_a_solved_operand_type_names_the_type() {
     "#;
     let error = error(source);
     assert!(
-        error.contains("inferred: Nat") && error.contains("expected: Str"),
+        error.contains("inferred: `Nat`") && error.contains("expected: `Str`"),
         "unexpected error: {error}"
     );
 }

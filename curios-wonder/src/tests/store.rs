@@ -859,7 +859,7 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
     );
     let refusal = verdict.expect_err("`f` in `b.crs` is refused");
     assert!(
-        refusal.contains("wanted: /std/ops/Add(/std/Bool)"),
+        refusal.contains("wanted: `/std/ops/Add(/std/Bool)`"),
         "{refusal}"
     );
 }

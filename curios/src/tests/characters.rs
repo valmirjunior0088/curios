@@ -55,7 +55,7 @@ fn an_operator_between_characters_is_decided_at_char() {
         "#,
     );
     assert!(
-        report.contains("wanted: /std/ops/Add(Char)"),
+        report.contains("wanted: `/std/ops/Add(Char)`"),
         "unexpected report:\n{report}"
     );
 }

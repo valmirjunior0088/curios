@@ -182,7 +182,7 @@ fn a_numeral_nothing_pins_is_its_default_where_the_next_line_reads_it() {
     ));
 
     assert!(
-        report.contains("inferred: Nat") && report.contains("expected: Int"),
+        report.contains("inferred: `Nat`") && report.contains("expected: `Int`"),
         "unexpected report:\n{report}"
     );
 }

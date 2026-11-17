@@ -148,7 +148,7 @@ fn a_report_spells_a_row_as_its_declaration_is_reached() {
         .expect("the two calls are not one");
 
     assert!(
-        refusal.contains("expected: Eq(@Io(Nat))(inner/deep(1), Io/pure(@Nat, 1))"),
+        refusal.contains("expected: `Eq(@Io(Nat))(inner/deep(1), Io/pure(@Nat, 1))`"),
         "{refusal}"
     );
 }
@@ -167,7 +167,7 @@ fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
 
     assert!(
         refusal.contains(
-            "expected: Eq(@Io(/std/List(/std/Bytes)))(/std/Proc/proc_args(), Io/pure(@/std/List(/std/Bytes), []))"
+            "expected: `Eq(@Io(/std/List(/std/Bytes)))(/std/Proc/proc_args(), Io/pure(@/std/List(/std/Bytes), []))`"
         ),
         "{refusal}"
     );

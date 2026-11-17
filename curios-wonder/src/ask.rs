@@ -11,7 +11,8 @@ use {
         diagnostics, placed, stage, unit_stage, written,
     },
     curios_common::{
-        About, Kind, LINE_WIDTH, Qualifier, Report, STDIN_NAME, Said, Source, SourceName, Style,
+        About, Code, Kind, LINE_WIDTH, Qualifier, Report, STDIN_NAME, Said, Source, SourceName,
+        Style,
     },
     curios_core::{Declared, Totality},
     curios_cps::{Fate, Outcome},
@@ -797,7 +798,7 @@ fn block(described: &Described, listing: Option<String>) -> Report {
         None => declared.to_string(),
     };
     if described.path != described.asked {
-        kind.push_str(&format!(", declared at {}", described.path));
+        kind.push_str(&format!(", declared at {}", Code(&described.path)));
     }
     let about = match described.declaration.as_ref().and_then(Declaration::place) {
         Some(place) => About::Place(place.clone()),
@@ -806,7 +807,7 @@ fn block(described: &Described, listing: Option<String>) -> Report {
     let mut report = Report::about(about, Said::line(&described.asked)).stating(kind);
 
     if let Some(type_) = &described.type_ {
-        report = report.stating(format!("type: {type_}"));
+        report = report.stating(format!("type: {}", Code(type_)));
     }
     match described.totality {
         Some(Totality::Total) => report = report.stating("totality: total"),
@@ -822,7 +823,12 @@ fn block(described: &Described, listing: Option<String>) -> Report {
         _ => None,
     };
     if let Some(members) = members.filter(|_| !described.members.is_empty()) {
-        report = report.stating(listed(&format!("{members}:"), &described.members));
+        let quoted = described
+            .members
+            .iter()
+            .map(|member| Code(member).to_string())
+            .collect::<Vec<_>>();
+        report = report.stating(listed(&format!("{members}:"), &quoted));
     }
     if let Some(witnesses) = &described.witnesses {
         match witnesses.len() {

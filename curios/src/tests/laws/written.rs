@@ -1627,7 +1627,7 @@ fn a_float_law_carried_to_where_it_is_most_fragile_carries_only_true() {
         );
         let error = typecheck(&source).expect_err("a law carried to a pattern proves `False`");
         assert!(
-            error.contains("inferred: True"),
+            error.contains("inferred: `True`"),
             "`{left}` against `{right}` at `{a}`, `{b}`, `{c}` is refused otherwise than by carrying `True`:\n{error}"
         );
     }

@@ -19,7 +19,7 @@ fn a_non_monad_action_is_called_out() {
 
     let error = typecheck(source).expect_err("a non-monad action must refuse");
     assert!(
-        error.contains("Box is not a monad"),
+        error.contains("`Box` is not a monad"),
         "expected the non-monad refinement, got: {error}"
     );
 }
@@ -131,7 +131,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
         ),
     ] {
         let error = typecheck(source).expect_err("a non-monadic region must refuse");
-        assert!(error.contains(&format!("region: {region}")), "{error}");
+        assert!(error.contains(&format!("region: `{region}`")), "{error}");
         assert!(!error.contains("Monad/bind"), "{error}");
     }
 }
@@ -140,11 +140,11 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
 #[test]
 fn values_and_functions_report_the_same_invalid_sequencing_types() {
     for (binding, refusal) in [
-        ("let n: Nat = Io/pure(3)!;", "region: Nat"),
-        ("let cell: Cell({}) = Cell/new()!;", "region: Cell({})"),
+        ("let n: Nat = Io/pure(3)!;", "region: `Nat`"),
+        ("let cell: Cell({}) = Cell/new()!;", "region: `Cell({})`"),
         (
             "let xs: List(Nat) = Io/pure([1])!;",
-            "wanted: /std/Monad/Lift(Io, List)",
+            "wanted: `/std/Monad/Lift(Io, List)`",
         ),
     ] {
         let function = binding.replacen(':', "() ->", 1);

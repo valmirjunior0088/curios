@@ -535,7 +535,7 @@ fn fetched_module(
         written.refuse(
             Refused::of("unreadable file")
                 .stating(format_args!(
-                    "what was fetched from {url} could not be read"
+                    "what was fetched from `{url}` could not be read"
                 ))
                 .stating(error),
         )

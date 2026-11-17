@@ -126,7 +126,7 @@ fn struct_wrong_field_count_rejected() {
         "#,
     );
     assert!(
-        short.contains("has 2 fields\n│  written: 1") && short.contains("missing: snd"),
+        short.contains("has 2 fields\n│  written: 1") && short.contains("missing: `snd`"),
         "unexpected error: {short}"
     );
 
@@ -139,7 +139,7 @@ fn struct_wrong_field_count_rejected() {
         "#,
     );
     assert!(
-        long.contains("has 2 fields\n│  written: 3") && long.contains("no such field: third"),
+        long.contains("has 2 fields\n│  written: 3") && long.contains("no such field: `third`"),
         "unexpected error: {long}"
     );
 }
@@ -333,7 +333,7 @@ fn a_mismatch_names_an_unlabeled_tuple_the_way_source_writes_it() {
 
     let report = error(source);
     assert!(
-        report.contains("expected: {Nat, Bool, Str}"),
+        report.contains("expected: `{Nat, Bool, Str}`"),
         "expected the unlabeled product spelled as written:\n{report}"
     );
 }

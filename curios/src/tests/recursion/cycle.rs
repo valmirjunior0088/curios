@@ -123,7 +123,7 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
             }
             /std/print(Show/show(B/b()))
             "#,
-            "the witness of Show(A) alone, and the witness of Show(B) alone",
+            "the witness of `Show(A)` alone, and the witness of `Show(B)` alone",
         ),
     ];
 

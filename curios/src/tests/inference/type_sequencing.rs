@@ -64,7 +64,7 @@ fn an_io_description_of_a_type_is_no_type() {
     )
     .expect_err("Io has no eliminator that could extract the type");
     assert!(
-        error.contains("inferred: Io(Type)") && error.contains("expected: Type"),
+        error.contains("inferred: `Io(Type)`") && error.contains("expected: `Type`"),
         "{error}"
     );
 }

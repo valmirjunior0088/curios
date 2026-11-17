@@ -165,7 +165,9 @@ fn the_arms_after_a_failed_condition_learn_it_and_after_a_missed_bind_nothing() 
         "#;
     let report = error(bind);
     assert!(
-        report.contains("type mismatch\n│  inferred: True\n│  expected: Holds(Bool/xor(b, true))"),
+        report.contains(
+            "type mismatch\n│  inferred: `True`\n│  expected: `Holds(Bool/xor(b, true))`"
+        ),
         "{report}"
     );
 }

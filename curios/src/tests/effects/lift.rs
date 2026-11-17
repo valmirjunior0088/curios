@@ -164,8 +164,8 @@ fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
     let error = typecheck(source).expect_err("an unlifted action must refuse");
     assert!(
         error.contains("monad mismatch")
-            && error.contains("action: Io({})")
-            && error.contains("expected: Job(")
+            && error.contains("action: `Io({})`")
+            && error.contains("expected: `Job(")
             && error.contains("acts.0!")
             && !error.contains("jpure(())!"),
         "expected the report at the projection's own `!`, got: {error}"
@@ -276,7 +276,7 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(
-        error.contains("wanted: Monad/Lift(Io, Job)"),
+        error.contains("wanted: `Monad/Lift(Io, Job)`"),
         "expected the embedding report, got: {error}"
     );
 }
@@ -336,8 +336,8 @@ fn a_missing_edge_reports_the_lift_witness() {
     let error = typecheck(source).expect_err("a missing edge must refuse");
     // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("wanted: Monad/Lift(Io, Job)")
-            && error.contains("needed to sequence an Io action in this Job region"),
+        error.contains("wanted: `Monad/Lift(Io, Job)`")
+            && error.contains("needed to sequence an `Io` action in this `Job` region"),
         "expected the embedding report with folded formers, got: {error}"
     );
 }
@@ -355,9 +355,9 @@ fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
 
     let error = typecheck(source).expect_err("a byte action in a text region must refuse");
     assert!(
-        error.contains("wanted: /std/Monad/Lift(Parse(/std/Bytes), Parse(Str))")
+        error.contains("wanted: `/std/Monad/Lift(Parse(/std/Bytes), Parse(Str))`")
             && error.contains(
-                "needed to sequence a Parse(/std/Bytes) action in this Parse(Str) region"
+                "needed to sequence a `Parse(/std/Bytes)` action in this `Parse(Str)` region"
             ),
         "expected the embedding report with the monads as written, got: {error}"
     );
@@ -405,7 +405,7 @@ fn a_missing_composite_reports_the_declared_chain() {
 
     let error = typecheck(source).expect_err("no composite Io-into-Sched edge exists");
     assert!(
-        error.contains("declared embeddings chain from Io to Sched")
+        error.contains("declared embeddings chain from `Io` to `Sched`")
             && error.contains("embeddings never chain automatically"),
         "expected the chain report, got: {error}"
     );
@@ -427,13 +427,13 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
 
     assert!(
         error.contains(
-            "needed to sequence a (x0) => Try(Io, Io/Error, x0) action in this Io region"
+            "needed to sequence a `(x0) => Try(Io, Io/Error, x0)` action in this `Io` region"
         ),
         "expected the missing edge, got: {error}"
     );
     assert!(
         error.contains(
-            "Try/run hands the action's Result back to this region\n│  a region whose own type is a Try sequences it"
+            "`Try/run` hands the action's `Result` back to this region\n│  a region whose own type is a `Try` sequences it"
         ),
         "expected what is written instead, got: {error}"
     );

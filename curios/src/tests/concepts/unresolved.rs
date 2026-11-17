@@ -106,7 +106,7 @@ fn a_missing_witness_over_a_nominal_type_spells_its_name() {
         /std/print(spelled)
         "#,
     );
-    assert!(report.contains("wanted: Spell(Opaque)"), "{report}");
+    assert!(report.contains("wanted: `Spell(Opaque)`"), "{report}");
 }
 
 // A premise a witness could not have discharged is named by the witness that needed it. A witness is anonymous, so its minted name is nothing a reader can find; its concept and the head it occupies are what coherence names it by.
@@ -122,7 +122,7 @@ fn a_missing_premise_names_the_witness_that_needed_it() {
     );
     assert!(
         report.contains(
-            "wanted: Show(Foo)\n│  needed by the witness of `Show` for head `List` for its 1st `use` premise"
+            "wanted: `Show(Foo)`\n│  needed by the witness of `Show` for head `List` for its 1st `use` premise"
         ) && !report.contains("witness~"),
         "{report}"
     );

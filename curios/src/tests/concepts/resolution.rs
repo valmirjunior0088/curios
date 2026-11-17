@@ -360,7 +360,7 @@ fn a_use_parameter_at_a_proposition_is_refused_where_it_is_declared() {
     );
     assert!(
         report.contains("the type of a `use` parameter is a concept application")
-            && report.contains("found: Holds(n < 10)")
+            && report.contains("found: `Holds(n < 10)`")
             && report.contains("write `@` in place of `use`")
             && !report.contains("no witness"),
         "unexpected report:\n{report}"
@@ -383,7 +383,7 @@ fn a_witness_premise_at_a_proposition_is_refused() {
     );
     assert!(
         report.contains("the type of a `use` parameter is a concept application")
-            && report.contains("found: Holds(0 < 1)"),
+            && report.contains("found: `Holds(0 < 1)`"),
         "unexpected report:\n{report}"
     );
 }
@@ -431,7 +431,7 @@ fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_de
     assert!(
         report.contains(
             "an `@` parameter at a concept's type that no later type mentions is never filled"
-        ) && report.contains("found: Show(A)")
+        ) && report.contains("found: `Show(A)`")
             && report.contains("write `use` in place of `@`"),
         "unexpected report:\n{report}"
     );
@@ -470,7 +470,7 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
         "#;
     let report = error(reduced);
     assert!(
-        report.contains("type mismatch\n│  inferred: True\n│  expected: Holds(x == x)"),
+        report.contains("type mismatch\n│  inferred: `True`\n│  expected: `Holds(x == x)`"),
         "{report}"
     );
 

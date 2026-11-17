@@ -6,7 +6,7 @@
 
 use {
     crate::ErasedNames,
-    curios_common::{Note, Report, Said},
+    curios_common::{Code, Note, Report, Said},
     curios_surface::Spellable,
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -197,7 +197,7 @@ impl Error {
         match self {
             Self::Exhausted { term, refusal } => {
                 let mut said = Said::line("budget spent");
-                said.stating(format_args!("erasing: {}", term.spelled(spelling)));
+                said.stating(format_args!("erasing: {}", Code(term.spelled(spelling))));
                 if let curios_core::ReduceError::Exhausted {
                     category,
                     remaining,

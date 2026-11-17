@@ -362,7 +362,7 @@ fn a_cycle_through_a_witness_notes_where_the_witness_is_declared() {
         noted(source),
         [note(
             "Show(Mine)",
-            "the witness of Show(Mine) is declared here"
+            "the witness of `Show(Mine)` is declared here"
         )]
     );
 }

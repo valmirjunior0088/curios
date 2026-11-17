@@ -15,7 +15,7 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("inferred: Prop") && error.contains("expected: Eq(@?)(?, ?)"),
+        error.contains("inferred: `Prop`") && error.contains("expected: `Eq(@?)(?, ?)`"),
         "unexpected report: {error}"
     );
     assert!(
@@ -40,7 +40,7 @@ fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
     assert!(
         error.contains(
             "a proposition was given where the implicit argument `A` of `keep` takes a type"
-        ) && error.contains("given: True"),
+        ) && error.contains("given: `True`"),
         "unexpected report: {error}"
     );
     assert!(!error.contains("expected: ?"), "unexpected report: {error}");
@@ -72,7 +72,7 @@ fn a_value_handed_to_an_implicit_proposition_is_reported_as_a_type() {
     assert!(
         error.contains(
             "a type was given where the implicit argument `P` of `proves` takes a proposition"
-        ) && error.contains("given: Nat"),
+        ) && error.contains("given: `Nat`"),
         "unexpected report: {error}"
     );
     assert!(!error.contains("expected: ?"), "unexpected report: {error}");
@@ -199,7 +199,7 @@ fn mismatch_reports_spell_no_universe_instances() {
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(
-        error.contains("inferred: Option(Nat)"),
+        error.contains("inferred: `Option(Nat)`"),
         "unexpected error: {error}"
     );
     assert!(!error.contains(".{"), "universe instance leaked: {error}");
@@ -238,11 +238,11 @@ fn a_mismatch_marks_an_implicit_nominal_parameter() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("inferred: Eq(@Nat)(5, 5)"),
+        error.contains("inferred: `Eq(@Nat)(5, 5)`"),
         "implicit parameter not marked: {error}"
     );
     assert!(
-        error.contains("expected: Eq(@Nat)(5, 6)"),
+        error.contains("expected: `Eq(@Nat)(5, 6)`"),
         "implicit parameter not marked: {error}"
     );
 }
@@ -259,7 +259,7 @@ fn a_mismatch_leaves_an_explicit_nominal_parameter_unmarked() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("inferred: Option(Bool)") && error.contains("expected: Option(Nat)"),
+        error.contains("inferred: `Option(Bool)`") && error.contains("expected: `Option(Nat)`"),
         "explicit parameter wrongly marked: {error}"
     );
 }
@@ -277,7 +277,7 @@ fn a_mismatch_marks_an_implicit_struct_parameter() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("inferred: Box(@Nat)"),
+        error.contains("inferred: `Box(@Nat)`"),
         "implicit struct parameter not marked: {error}"
     );
 }
@@ -304,8 +304,8 @@ fn a_stuck_call_under_a_constructor_is_spelled_by_its_name() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("inferred: Eq(@N)(N/s(add(k, N/z())), N/s(add(k, N/z())))")
-            && error.contains("expected: Eq(@N)(N/s(add(k, N/z())), N/s(k))"),
+        error.contains("inferred: `Eq(@N)(N/s(add(k, N/z())), N/s(add(k, N/z())))`")
+            && error.contains("expected: `Eq(@N)(N/s(add(k, N/z())), N/s(k))`"),
         "unexpected report: {error}"
     );
 }
@@ -340,7 +340,7 @@ fn a_term_that_is_no_type_where_one_is_wanted_is_located_at_itself() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("inferred: {Type, Type}")
+        error.contains("inferred: `{Type, Type}`")
             && error.contains("let pair: (Byte, Byte) = (1, 2);"),
         "located elsewhere: {error}"
     );

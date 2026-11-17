@@ -177,7 +177,7 @@ fn uninferred_implicit_names_the_binder_and_function() {
     );
     // A type argument was never an obligation: the report says nothing determined it, not that nothing discharged `Type`.
     assert!(
-        error.contains("no argument or expected type determined it\n│  its type: Type"),
+        error.contains("no argument or expected type determined it\n│  its type: `Type`"),
         "unexpected error: {error}"
     );
 }

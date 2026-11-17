@@ -184,7 +184,7 @@ fn a_match_with_no_arms_over_a_carrier_says_what_it_eliminates() {
     );
     assert!(
         error.contains("a match with no arms eliminates only a type with no constructors")
-            && error.contains("scrutinee: Nat"),
+            && error.contains("scrutinee: `Nat`"),
         "unexpected error: {error}"
     );
 }

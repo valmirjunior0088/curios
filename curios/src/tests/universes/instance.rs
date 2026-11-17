@@ -125,7 +125,7 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
             report.contains("need one another")
                 && report.contains("`Holder`")
                 && report.contains("`Later`")
-                && report.contains("the witness of Sized(Nat)"),
+                && report.contains("the witness of `Sized(Nat)`"),
             "expected the family, its payload's type and the witness refused as one cycle:\n{report}"
         );
     }

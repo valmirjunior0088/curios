@@ -247,8 +247,8 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
         "#,
     );
     assert!(
-        error.contains("inferred: Prop")
-            && error.contains("expected: Type")
+        error.contains("inferred: `Prop`")
+            && error.contains("expected: `Type`")
             && !error.contains("certifier refusal"),
         "{error}"
     );
@@ -293,7 +293,7 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
             and val: T(2) = id(@T(2), m);
             val(m);",
         "outer(3)",
-        "expected: (Nat) -> Nat",
+        "expected: `(Nat) -> Nat`",
     );
     refused(
         "let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
