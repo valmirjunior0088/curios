@@ -33,3 +33,83 @@ fn a_lambda_applied_to_a_let_bound_local_stands_for_what_the_let_stands_for() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// Zero ruled out of a lambda's binder is ruled out of what it stands for only where it stands for it bare. Applied on the spot to `n + 1`, the binder is a successor, which a dispatch's default rules zero out of whatever `n` is, so `n - 1` past it is at most `n`, and at `0` the call hands `f` its own argument. The control applies the lambda to `n`, which the default then rules zero out of, so the call descends.
+#[test]
+fn zero_ruled_out_of_a_binder_standing_for_a_successor_is_ruled_out_of_no_parameter() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let f(n : Nat) -> Bool =
+            ((x : Nat) => match x | 0 => false | _ => f(n - 1) end)(n);
+
+        let F(n : Nat) -> Prop = Bool/Holds(f(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("end)(n);", "end)(n + 1);")])
+    .by_elaborator_in("/F", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/F", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// What an arm establishes of a lambda's binder, and so of the parameter the binder stands for, leaves with the arm: past a `let` whose value split the binder, the parameter is neither the nonzero a default ruled nor the successor a `k + 1` arm read, so `n - 1` there is at most `n`, and at `0` the call hands `g` its own argument. Each control makes the call inside the arm, where it descends.
+#[test]
+fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let g(n : Nat) -> Bool =
+            ((x : Nat) =>
+                let b : Bool = match x | 0 => false | _ => g(n - 1) end;
+                match b | true => false | false => false end)(n);
+
+        let G(n : Nat) -> Prop = Bool/Holds(g(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("| _ => g(n - 1) end;", "| _ => true end;"),
+        ("| false => false end)(n);", "| false => g(n - 1) end)(n);"),
+    ])
+    .by_elaborator_in("/G", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/G", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let h(n : Nat) -> Bool =
+            ((x : Nat) =>
+                let b : Bool = match x | 0 => false | k + 1 => h(n - 1) end;
+                match b | true => false | false => false end)(n);
+
+        let H(n : Nat) -> Prop = Bool/Holds(h(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("| k + 1 => h(n - 1) end;", "| k + 1 => true end;"),
+        ("| false => false end)(n);", "| false => h(n - 1) end)(n);"),
+    ])
+    .by_elaborator_in("/H", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/H", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

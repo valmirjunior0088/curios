@@ -287,3 +287,33 @@ fn a_call_below_its_caller_only_to_a_question_descends_on_nothing() {
         Err(Error::NotDescending { .. }),
     ));
 }
+
+/// Zero ruled out of a lambda's binder is ruled out of what it stands for only where it stands for it bare: in `((x) => match x | 0 => … | _ => f(n - 1) end)(n + 1)` the default rules zero out of a successor, which says nothing of `n`, so `n - 1` is at most `n`, and at `0` the call hands back what it was handed. Mutation-checked: with the nonzero chain of `SizeContext::open` following a successor run to its tail, the call reads below `n`, and this is accepted.
+#[test]
+fn zero_ruled_out_of_a_binder_standing_for_a_successor_is_ruled_out_of_no_parameter() {
+    let body = "((x: #NatType) => #{goal = Type} match x | 0 => #NatType | _ => f(#NatSub(n, 1)) end)(#NatAdd(n, 1))";
+
+    assert!(matches!(
+        infer(&mut certifier(), &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// What an arm establishes of a lambda's binder, and so of what the binder stands for, leaves with the arm: past a `let` whose value split `x`, standing for `n`, at a default or at `pred + 1`, `n` is neither nonzero nor a successor, so `n - 1` is at most `n`. Mutation-checked: with `SizeContext::exit` putting back only the binder an arm named, and not what it stands for, `n` stays nonzero or split past the `let`, and both are accepted.
+#[test]
+fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
+    for arm in ["_", "pred + 1"] {
+        let body = fill!(
+            "((x: #NatType) => let b: #BoolType = #{goal = #BoolType} match x | 0 => false | ${arm} => true end; #{goal = Type} match b | false => f(#NatSub(n, 1)) | true => #NatType end)(n)",
+            arm
+        );
+
+        assert!(
+            matches!(
+                infer(&mut certifier(), &group(&body)),
+                Err(Error::NotDescending { .. }),
+            ),
+            "{body}"
+        );
+    }
+}
