@@ -321,6 +321,30 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
     }
 }
 
+// A natural's split has two cases, `0` and a successor, and arms that write `0` alone cover no successor: `f(3)` reaches no arm, the least such value being `1`. Refused rather than compiled with nothing to take that case. The control writes the successor's arm.
+#[test]
+fn a_successor_no_arm_writes_is_refused() {
+    control(
+        r#"
+        use /std/{Nat};
+
+        let f(n: Nat) -> Nat =
+            match n
+            | 0 => 0
+            | m + 1 => m
+            end;
+
+        /std/print(Nat/to_str(f(3)))
+        "#,
+        b"2",
+    )
+    .refused(&[("            | m + 1 => m\n", "")])
+    .by_elaborator_in(
+        "/f",
+        |error| matches!(error, Error::MatrixUncovered { value, indexed: false } if value == "1"),
+    );
+}
+
 // A string has no last case: past the bytes every string arm writes there is a string none of them matches, so a match over strings is covered only by a final arm. Without one, `f("a")` reaches no arm, and a split of the bytes would need an arm at the cons no row wrote. The control writes the final arm.
 #[test]
 fn a_string_dispatch_is_covered_only_by_a_final_arm() {

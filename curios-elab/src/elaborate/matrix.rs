@@ -1400,8 +1400,12 @@ impl<'m> Compiler<'m> {
                 }
             }
         }
+        // Each case of the split is covered or the match is refused: a row that writes `0` alone leaves every successor to no arm, the least of them `1`.
         if zeros.is_empty() {
             return Err(self.uncovered(&column, Seen::Leaf("0".to_string()), false));
+        }
+        if successors.is_empty() {
+            return Err(self.uncovered(&column, Seen::Leaf("1".to_string()), false));
         }
 
         let goal = Term::hole(context.mint_metavar());
