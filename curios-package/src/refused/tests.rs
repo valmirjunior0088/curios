@@ -55,11 +55,11 @@ fn a_row_is_found_by_its_position() {
     assert_eq!(placed(&hash), ("\"sha1:0\"".to_string(), (8, 8)));
 }
 
-/// Text that is no TOML, or holds a key no table takes, is refused where its reader stopped, and a manifest refused as a whole is reported about its file.
+/// A field no table takes is refused at its key, as text that is no TOML is where its reader stopped, and a manifest refused as a whole is reported about its file.
 #[test]
 fn the_readers_own_refusal_keeps_its_place_and_a_whole_manifest_its_file() {
     let key = reported("name = \"app\"\nnmae = \"app\"\n");
-    assert_eq!(key.headline, "syntax error");
+    assert_eq!(key.headline, "unknown field");
     assert_eq!(placed(&key).1, (2, 1));
 
     let empty = reported("");

@@ -29,7 +29,7 @@ fn a_string_shorthand_row_is_refused() {
         "#,
     );
 
-    assert!(refusal.contains("invalid type"), "{refusal}");
+    assert!(refusal.contains("`http` is a table"), "{refusal}");
 }
 
 /// Live code has no pin, so a marker row carrying one is refused rather than ignored.

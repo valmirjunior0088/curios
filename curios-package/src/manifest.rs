@@ -17,7 +17,7 @@ mod package_tests;
 use {
     crate::{
         CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
-        TreeHash,
+        TreeHash, decode,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
     serde::Deserialize,
@@ -79,17 +79,18 @@ impl Manifest {
 impl FromStr for Manifest {
     type Err = Refused;
 
+    // Parsed by toml, which refuses text that is no TOML where it stopped, then read into its shape by `decode`, which refuses a table of the wrong shape as this crate words and places every refusal of a manifest.
     fn from_str(source: &str) -> Result<Self, Self::Err> {
-        toml::from_str::<Document>(source)
-            .map_err(|error| {
-                let refused = Refused::of("syntax error").stating(error.message());
+        let table = toml::from_str::<toml::Table>(source).map_err(|error| {
+            let refused = Refused::of("syntax error").stating(error.message());
 
-                match error.span() {
-                    Some(range) => refused.range(range),
-                    None => refused,
-                }
-            })?
-            .classify()
+            match error.span() {
+                Some(range) => refused.range(range),
+                None => refused,
+            }
+        })?;
+
+        decode::<Document>(table)?.classify()
     }
 }
 

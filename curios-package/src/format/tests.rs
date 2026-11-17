@@ -55,7 +55,10 @@ fn a_key_format_does_not_take_is_refused_where_the_manifest_is_read() {
         .unwrap_err()
         .said
         .to_string();
-    assert!(refusal.contains("unknown field `widht`"), "{refusal}");
+    assert!(
+        refusal.contains("`widht` is no field of `[format]`"),
+        "{refusal}"
+    );
     assert!(refusal.contains("`width`"), "{refusal}");
 }
 
@@ -64,8 +67,8 @@ fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() 
     for (stated, refused) in [
         ("30", "a width is"),
         ("101", "a width is"),
-        ("-1", "invalid value"),
-        ("\"80\"", "invalid type"),
+        ("-1", "`width` is a whole number"),
+        ("\"80\"", "`width` is a whole number"),
     ] {
         let refusal = format!("name = \"app\"\n\n[format]\nwidth = {stated}\n")
             .parse::<Manifest>()

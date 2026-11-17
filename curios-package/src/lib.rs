@@ -17,6 +17,9 @@ mod curate;
 use curate::*;
 pub use curate::{Acquisition, Curated, Fetch, ModuleAcquisition, curate, declared_modules};
 
+mod decode;
+use decode::*;
+
 mod format;
 pub use format::FormatSettings;
 use format::*;
