@@ -1,0 +1,42 @@
+-- `g` is a member of an inline group whose body captures `h`, `p` and `q`, and the guard's scrutinee compares `g(0)` with `g(1)`, naming none of them: the split on `c` restates no equation whose key names only `g` and `k`, yet a settlement of that key unfolds `g` and reads `p` and `q` at the type the split gives them.
+((
+    c: #BoolType,
+    h: (x: #{goal = Type} match c | false => #NatType | true => {} end) -> #NatType,
+    k: (n: #NatType) -> #BoolType,
+    p: #{goal = Type} match c | false => #NatType | true => {} end,
+    q: #{goal = Type} match c | false => #NatType | true => {} end,
+    guard: /sys/Bool/Holds(
+        #{goal = #BoolType} match #NatEql(h(p), h(q)) | false => k(1) | true => k(0) end)) =>
+    #{node = Rec}
+    (let g: (i: #NatType) -> #NatType =
+        (i2: #NatType) => #{goal = #NatType} match i2 | 0 => h(p) | j + 1 => h(q) end
+    and f: (
+        gd: /sys/Bool/Holds(
+            #{goal = #BoolType}
+            match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end)) -> /sys/Bool/Holds(
+        k(0)) =
+        (
+            gd2: /sys/Bool/Holds(
+                #{goal = #BoolType}
+                match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end)) =>
+            #{goal = /sys/Bool/Holds(k(0))}
+            match #{goal = #BoolType} match #NatEql(g(0), g(1)) | false => k(1) | true => k(0) end
+            | false => #{goal = /sys/Bool/Holds(k(0))} match gd2 end
+            | true =>
+                let w: #{node = InductType} /sys/Bool/True() =
+                    #{goal = #{node = InductType} /sys/Bool/True()}
+                    match c
+                    | false => #{node = Variant} /sys/Bool/True/qed()
+                    | true =>
+                        let u: /sys/Bool/Holds(k(0)) = #{node = Variant} /sys/Bool/True/qed();
+                        #{node = Variant} /sys/Bool/True/qed()
+                    end;
+                #{node = Variant} /sys/Bool/True/qed()
+            end;
+    f(guard)))(
+    false,
+    (n2: #NatType) => n2,
+    (n3: #NatType) => #NatEql(n3, 1),
+    0,
+    1,
+    #{node = Variant} /sys/Bool/True/qed())

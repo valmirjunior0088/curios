@@ -1,0 +1,7 @@
+title = "A guard that reaches a split's variable only through a member's value is not restated in the split's arm, and the spelling it settles there answers outside it"
+status = "open"
+
+[[witness]]
+what = "a guard over two calls of a member whose body captures the locals a split re-types, settled in the split's true arm and answered after the split, as a term"
+source = "a_guard_reaching_the_split_through_a_members_value.crsc"
+refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]
