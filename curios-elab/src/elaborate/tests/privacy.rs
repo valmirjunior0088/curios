@@ -18,7 +18,7 @@ fn a_derive_transient_is_refused_outside_a_checked_witness_body() {
         Err(Error::DeriveOutsideWitness)
     ));
     assert!(matches!(
-        elaborate(&mut context, &term, Mode::Check(nat())),
+        elaborate(&mut context, &term, Mode::Check(Expectation::own(nat()))),
         Err(Error::DeriveOutsideWitness)
     ));
 }

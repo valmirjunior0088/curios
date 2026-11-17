@@ -172,6 +172,10 @@ impl Error {
                 written,
                 error: Box::new(error.shown(context)),
             },
+            Self::CheckedAs { site, error } => Self::CheckedAs {
+                site,
+                error: Box::new(error.shown(context)),
+            },
             Self::InScope { scope, error } => Self::InScope {
                 scope,
                 error: Box::new(error.shown(context)),

@@ -41,7 +41,7 @@ fn park_on(context: &mut Context, ids: &[usize]) {
     context.park(
         ParkedWork::Checking {
             term: literal.clone(),
-            expected,
+            expected: Expectation::own(expected),
             placeholder,
         },
         literal,
@@ -209,7 +209,7 @@ fn a_problem_waits_on_what_its_metavariables_were_solved_to() {
 fn a_parked_problem_states_the_choice_its_term_may_take() {
     let parked = |term: Term| ParkedWork::Checking {
         term,
-        expected: Term::hole(0),
+        expected: Expectation::own(Term::hole(0)),
         placeholder: MetavarId(1),
     };
     let goal = ParkedWork::Witness {
@@ -231,14 +231,17 @@ fn a_parked_problem_states_the_choice_its_term_may_take() {
     );
     assert_eq!(parked(lambda).choice(), Some(Choice::Lambda));
     assert_eq!(goal.choice(), Some(Choice::Witness));
-    let pair = ParkedWork::Conversion(Problem {
-        type_: Term::type_ground(),
-        this: Term::hole(0),
-        that: Term::hole(1),
-        binders: Binders::default(),
-        pairs: Pairs::default(),
-        relation: Relation::Equal,
-    });
+    let pair = ParkedWork::Conversion {
+        problem: Problem {
+            type_: Term::type_ground(),
+            this: Term::hole(0),
+            that: Term::hole(1),
+            binders: Binders::default(),
+            pairs: Pairs::default(),
+            relation: Relation::Equal,
+        },
+        site: None,
+    };
     assert_eq!(pair.choice(), Some(Choice::Spines));
     assert_eq!(
         parked(Term::tuple(Vec::<Term>::new())).choice(),

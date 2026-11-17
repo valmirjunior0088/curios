@@ -50,7 +50,7 @@ pub fn elaborate_derive(
     };
 
     // The witness's declared type elaborated before its body, so the expectation reduces to the concept's record type — a `StructType` whose name is registered as a concept.
-    let reduced = reduce_with(context, expected)?;
+    let reduced = reduce_with(context, &expected.type_)?;
     let Subterm::StructType(StructType { name, params, .. }) = &*reduced else {
         return Err(Error::derive_outside_witness().at_opt(term.extent()));
     };

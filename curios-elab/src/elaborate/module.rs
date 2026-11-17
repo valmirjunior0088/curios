@@ -11,7 +11,7 @@ use recovery::*;
 mod tests;
 
 use {
-    super::{Mode, elaborate, elaborate_func_type_sized},
+    super::{Expectation, Mode, elaborate, elaborate_func_type_sized},
     crate::{
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
         Readers, RecordKeyword, Traces, Turns, Vectors, Zonked, body_levels, check,
@@ -1582,7 +1582,7 @@ fn elaborate_entry(
     };
     context.enter_item(None);
     let mode = match &entry.type_ {
-        Some(stated) => Mode::Check(check_is_sort(context, stated)?.0),
+        Some(stated) => Mode::Check(Expectation::own(check_is_sort(context, stated)?.0)),
         None => Mode::Infer,
     };
     let (body, type_) = elaborate(context, &entry.body, mode)?;

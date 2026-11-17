@@ -16,6 +16,7 @@ impl Error {
         | Error::InDeclaration { error: inner, .. }
         | Error::InUnreachableArm { error: inner, .. }
         | Error::InAlternative { error: inner, .. }
+        | Error::CheckedAs { error: inner, .. }
         | Error::InScope { error: inner, .. } = error
         {
             error = inner;
@@ -31,6 +32,7 @@ impl Error {
             Error::Located { error, .. }
             | Error::InUnreachableArm { error, .. }
             | Error::InAlternative { error, .. }
+            | Error::CheckedAs { error, .. }
             | Error::InScope { error, .. } => error.declared_in(),
             _ => None,
         }
@@ -166,6 +168,7 @@ variants!(Error {
     InDeclaration,
     InUnreachableArm,
     InAlternative,
+    CheckedAs,
     InScope,
     Batch,
 });

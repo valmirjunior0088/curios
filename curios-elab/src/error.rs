@@ -9,9 +9,10 @@ use {
     curios_analysis::{DeclaredPart, Erased},
     curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
     curios_core::{
-        Anchors, ArgumentSite, Atom, Definition, DefinitionKind, Definitions, Exhaustion, Extent,
-        Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings,
-        Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, WitnessRole,
+        Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
+        Extent, Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError,
+        Spellings, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
+        WitnessRole,
     },
     curios_surface::{
         DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
@@ -330,13 +331,12 @@ pub enum Underivable {
     },
 }
 
-/// Where a lambda handed where no function is wanted was written as an argument, for a report that names the slot it filled.
+/// A later explicit parameter of a callee whose type is a function type, with its name and its 0-based position among the explicit parameters: the slot a lambda handed where no function is wanted was likely meant for.
 #[derive(Debug)]
-pub struct MisplacedLambda {
-    /// The slot the lambda filled.
-    pub site: ArgumentSite,
-    /// For a plain argument, a later explicit parameter whose type is a function type, with its name and 0-based position among the explicit parameters — the slot a misplaced lambda was meant for.
-    pub function_typed: Option<(Option<String>, usize)>,
+pub struct FunctionTyped {
+    pub callee: CalleeId,
+    pub parameter: Option<String>,
+    pub position: usize,
 }
 
 /// Who an inserted argument was inserted for, as a report names it.
@@ -372,6 +372,7 @@ macro_rules! shown_terms {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.$recurse($visit),
             Self::InUnreachableArm { dead, error } => {
                 for term in dead.$terms() {
@@ -612,10 +613,10 @@ pub enum Error {
         head_type: Box<Term>,
         reduced: Box<Term>,
     },
-    /// A lambda checked against a type that is no function type. `argument` says where, when the lambda was an argument: the parameter it filled and, when the callee takes a function somewhere later, which parameter that is — the report a reader who swapped two arguments needs.
+    /// A lambda checked against a type that is no function type. Where the lambda was a plain argument and its callee takes a function at a later parameter, `function_typed` names that parameter — the report a reader who swapped two arguments needs; the slot the lambda filled is the wrapper's ([`Error::CheckedAs`]).
     NotAFunctionType {
         expected: Box<Term>,
-        argument: Option<Box<MisplacedLambda>>,
+        function_typed: Option<Box<FunctionTyped>>,
     },
     NotATuple {
         head_type: Box<Term>,
@@ -1105,6 +1106,11 @@ pub enum Error {
         written: String,
         error: Box<Error>,
     },
+    /// A refusal raised against the type a term was checked at, where that type is the slot of a callee the term fills: the report says which, as every refusal raised against an argument does.
+    CheckedAs {
+        site: Box<ArgumentSite>,
+        error: Box<Error>,
+    },
     /// Where `error` arose, as its reader stands there (`ReaderScope`): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
     InScope {
         scope: ReaderScope,
@@ -1255,27 +1261,31 @@ impl Error {
     pub fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotAFunctionType {
             expected: Box::new(expected.into()),
-            argument: None,
+            function_typed: None,
         }
     }
 
-    /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through an extent wrapper if one is already on.
-    pub fn at_argument(self, site: MisplacedLambda) -> Self {
+    /// Point a lambda refused against a non-function type at the later parameter its callee takes a function as. Only that refusal takes it — the one an argument in the wrong position produces — and only once, through the wrappers already on.
+    pub fn pointing_at_function(self, hint: FunctionTyped) -> Self {
         match self {
             Self::NotAFunctionType {
                 expected,
-                argument: None,
+                function_typed: None,
             } => Self::NotAFunctionType {
                 expected,
-                argument: Some(Box::new(site)),
+                function_typed: Some(Box::new(hint)),
             },
             Self::Located { extent, error } => Self::Located {
                 extent,
-                error: Box::new(error.at_argument(site)),
+                error: Box::new(error.pointing_at_function(hint)),
             },
             Self::InScope { scope, error } => Self::InScope {
                 scope,
-                error: Box::new(error.at_argument(site)),
+                error: Box::new(error.pointing_at_function(hint)),
+            },
+            Self::CheckedAs { site, error } => Self::CheckedAs {
+                site,
+                error: Box::new(error.pointing_at_function(hint)),
             },
             error => error,
         }
@@ -1721,6 +1731,7 @@ impl Error {
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.is_incomplete(),
             Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
@@ -1859,6 +1870,17 @@ impl Error {
         }
     }
 
+    /// Say that this refusal was raised against the type of the slot `site` names, where it names one. A batch is left as it is, each member carrying its own place.
+    pub fn checked_as(self, site: Option<&ArgumentSite>) -> Self {
+        match (site, self) {
+            (None, error) | (_, error @ (Self::Batch(_) | Self::Goals(_))) => error,
+            (Some(site), error) => Self::CheckedAs {
+                site: Box::new(site.clone()),
+                error: Box::new(error),
+            },
+        }
+    }
+
     /// Say that the alternative `written` of an arm of several raised this error, typed under its own cases. A batch is left as it is, each member carrying its own place.
     pub fn in_alternative(self, written: String) -> Self {
         match self {
@@ -1877,6 +1899,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.owner(),
             _ => None,
         }
@@ -1924,7 +1947,8 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
-            | Self::InAlternative { error, .. } => error.reader_scope(),
+            | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. } => error.reader_scope(),
             _ => None,
         }
     }
@@ -1947,6 +1971,7 @@ impl Error {
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::RejectedCandidate { error, .. } => error.let_go_of_frames(),
             Self::Batch(errors) => errors.iter_mut().for_each(Self::let_go_of_frames),
             _ => {}
@@ -1983,6 +2008,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.write_terms(context),
             Self::InUnreachableArm { dead, error } => {
                 for term in dead.terms_mut() {
@@ -2216,6 +2242,7 @@ impl Error {
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.unwrapped(),
             error => error,
         }
@@ -2230,6 +2257,7 @@ impl Error {
             Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.innermost_extent(),
             Self::UniverseInconsistency { path, .. } => {
                 path.iter().find_map(|origin| origin.extent.as_ref())
@@ -2320,6 +2348,7 @@ impl Exhaustion for Error {
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
             | Self::InAlternative { error, .. }
+            | Self::CheckedAs { error, .. }
             | Self::InScope { error, .. } => error.refusal(),
             _ => None,
         }

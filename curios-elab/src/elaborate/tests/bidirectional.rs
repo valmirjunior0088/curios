@@ -27,7 +27,12 @@ fn infer_synthesizes_an_intrinsic_type() {
 fn check_accepts_a_well_typed_term() {
     let mut context = context();
 
-    let (term, type_) = elaborate(&mut context, &nat_lit(3), Mode::Check(nat())).unwrap();
+    let (term, type_) = elaborate(
+        &mut context,
+        &nat_lit(3),
+        Mode::Check(Expectation::own(nat())),
+    )
+    .unwrap();
 
     assert_eq!(term, nat_lit(3));
     assert_eq!(type_, nat());
@@ -38,7 +43,11 @@ fn check_rejects_a_type_mismatch() {
     let mut context = context();
 
     let bool_ = Subterm::Intrinsic(Intrinsic::BoolType).into();
-    let result = elaborate(&mut context, &nat_lit(3), Mode::Check(bool_));
+    let result = elaborate(
+        &mut context,
+        &nat_lit(3),
+        Mode::Check(Expectation::own(bool_)),
+    );
 
     assert!(result.is_err());
 }
@@ -52,7 +61,12 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
     let func_type = Term::func_type([(x, nat())], nat());
     let func = Term::func([(x, Term::hole(0))], nat_lit(0));
 
-    let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
+    let (term, type_) = elaborate(
+        &mut context,
+        &func,
+        Mode::Check(Expectation::own(func_type.clone())),
+    )
+    .unwrap();
 
     // Elaboration is authoritative: the rebuilt lambda carries its domain solved from the expected function type, so the hole is gone and the term is meta-free.
     assert!(term.metavars().is_empty());
@@ -102,7 +116,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     let (term, type_) = context.with_frame(|context| {
         context.assume(&x, &nat());
         let hole = Term::hole(0);
-        elaborate(context, &hole, Mode::Check(nat())).unwrap()
+        elaborate(context, &hole, Mode::Check(Expectation::own(nat()))).unwrap()
     });
 
     // Birth rebuilds the hole with the identity spine over its frozen Γ — the delayed substitution that keeps its eventual solution aligned through every later `close`/`open`.
@@ -161,13 +175,13 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     // 2^2048 rounds to infinity in the model, a value no literal spells — refused like an out-of-range Byte.
     let huge = Term::num_lit(Natural::from(2u32).pow(2048), Sign::Unmarked);
     assert!(matches!(
-        elaborate(&mut context, &huge, Mode::Check(flt())),
+        elaborate(&mut context, &huge, Mode::Check(Expectation::own(flt()))),
         Err(Error::FltLiteralOutOfRange { .. })
     ));
 
     // A magnitude inside the finite range still resolves at `Flt`.
     let small = Term::num_lit(Natural::from(42u32), Sign::Unmarked);
-    let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
+    let (term, _) = elaborate(&mut context, &small, Mode::Check(Expectation::own(flt()))).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Floating::from(42.0))));
 }
 
@@ -178,23 +192,30 @@ fn a_num_lit_realizes_at_bool_only_for_zero_and_one() {
 
     // `0` and `1` are the two bits, selected only by an expected `Bool` — the rule that lets a packed literal's constant atoms be numerals.
     let zero = Term::num_lit(Natural::from(0u32), Sign::Unmarked);
-    let (term, _) = elaborate(&mut context, &zero, Mode::Check(bool_())).unwrap();
+    let (term, _) = elaborate(&mut context, &zero, Mode::Check(Expectation::own(bool_()))).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Bool(false)));
 
     let one = Term::num_lit(Natural::from(1u32), Sign::Unmarked);
-    let (term, _) = elaborate(&mut context, &one, Mode::Check(bool_())).unwrap();
+    let (term, _) = elaborate(&mut context, &one, Mode::Check(Expectation::own(bool_()))).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Bool(true)));
 
     // Anything past a bit is refused, like an out-of-range Byte.
     let two = Term::num_lit(Natural::from(2u32), Sign::Unmarked);
     assert!(matches!(
-        elaborate(&mut context, &two, Mode::Check(bool_())),
+        elaborate(&mut context, &two, Mode::Check(Expectation::own(bool_()))),
         Err(Error::BoolLiteralOutOfRange { .. })
     ));
 
     // A negative literal has no `Bool` realization: it reports a mismatch rather than realizing.
     let negative = Term::num_lit(Natural::from(1u32), Sign::Negative);
-    assert!(elaborate(&mut context, &negative, Mode::Check(bool_())).is_err());
+    assert!(
+        elaborate(
+            &mut context,
+            &negative,
+            Mode::Check(Expectation::own(bool_()))
+        )
+        .is_err()
+    );
 }
 
 /// A monad's shape reads its context arguments as probes: one the budget cannot afford propagates the refusal, rather than keying on nothing — compatible with any region — and letting the `!` oracle go ahead on that reading.

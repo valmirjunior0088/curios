@@ -1,6 +1,6 @@
 //! What a refusal at an argument tells the reader about the call it sits in.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 // A lambda handed in where the callee takes its list — the argument order every other language uses for `map` — is refused as a lambda against a non-function type, which is true and not what the reader needs. The report names the parameter the lambda filled and the parameter the callee takes a function as.
 #[test]
@@ -162,6 +162,101 @@ fn a_witness_telescopes_undischarged_bound_names_the_witness() {
         ) && report.contains("a witness is never called")
             && !report.contains("supply it explicitly")
             && !report.contains("witness~"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A mismatch an argument's type raises names the parameter the argument was checked as, as a misplaced lambda's refusal does: the expected type is the callee's, and the reader wrote the argument, not the signature.
+#[test]
+fn a_mismatched_argument_names_the_parameter_it_was_checked_as() {
+    let report = error(
+        r#"
+        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
+        let bad() -> /std/Nat = pair(1, 2);
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        report.contains("expected: /std/Str\n│  checked as `s`, the 2nd argument of `pair`"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// The parameter travels with the type the argument is checked at, into an arm of a `match` and the tail of a block the argument is: each is checked at that type, and refused there.
+#[test]
+fn a_mismatch_in_an_arm_or_a_tail_of_an_argument_names_the_parameter() {
+    for argument in ["match b | true => \"yes\" | false => 2 end", "let k = 2; k"] {
+        let report = error(&fill!(
+            r#"
+            let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
+            let bad(b: /std/Bool) -> /std/Nat = pair(1, ${argument});
+            /std/print("no")
+            "#,
+            argument = argument
+        ));
+        assert!(
+            report.contains("checked as `s`, the 2nd argument of `pair`"),
+            "unexpected report for `{argument}`:\n{report}"
+        );
+    }
+}
+
+// A literal's field fills a slot of its structure, and an operand one of its operator, each named as its reader wrote it.
+#[test]
+fn a_mismatched_field_or_operand_names_its_slot() {
+    let field = error(
+        r#"
+        struct Point: pub Type { x: /std/Nat, y: /std/Nat }
+        let bad() -> Point = Point { x = 1, y = "two" };
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        field.contains("checked as `y`, the 2nd field of `Point`"),
+        "unexpected report:\n{field}"
+    );
+
+    let operand = error(
+        r#"
+        use /std/{Nat};
+        let bad(n: Nat) -> Nat = n + "two";
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        operand.contains("checked as the 2nd operand of `+`"),
+        "unexpected report:\n{operand}"
+    );
+}
+
+// An argument whose type waits on a later argument is checked once that argument decides it, and its refusal there still names the parameter it fills: the parked comparison keeps it.
+#[test]
+fn an_argument_checked_after_it_waited_names_the_parameter() {
+    let report = error(
+        r#"
+        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) = a;
+        let bad() -> Type = pick(true, (X) => X);
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        report.contains("checked as `a`, the 1st argument of `pick`"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A lambda's body is checked at the codomain the lambda's own check splits off its expected type, of the lambda's making: a refusal there names no parameter of the call around it.
+#[test]
+fn a_mismatch_in_a_lambdas_body_names_no_parameter() {
+    let report = error(
+        r#"
+        let apply(f: (/std/Nat) -> /std/Nat, n: /std/Nat) -> /std/Nat = f(n);
+        let bad() -> /std/Nat = apply((x) => "s", 1);
+        /std/print("no")
+        "#,
+    );
+    assert!(
+        report.contains("type mismatch") && !report.contains("checked as"),
         "unexpected report:\n{report}"
     );
 }

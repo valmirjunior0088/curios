@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames, Mode,
-        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
+        AwaitId, Binders, Choice, Context, DeadArm, Error, Expectation, HeldConversion, HeldFrames,
+        Mode, Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
         Spines, Watched, answer_witness, answers_differ, callee, elaborate, elaborate_func_settle,
         hold_spines, mismatch, no_witness_error, numeral_default, obligation_shown, pending,
         probe_open_sort, problem_outcome, reduce_forced, region_flex, resolved_for_display,
@@ -29,9 +29,18 @@ use {
     },
 };
 
-/// `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed. Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`.
+/// `elaborate` in `Check` mode, returning the *elaborated* term. Drives `term` against a known `ty` — the rebuilt, de-Bruijn-correct subterm whose lambda domains are solved and whose binders are re-closed. Elaboration is authoritative: this output, not the original lowered term, is what flows on to `zonk`/`erase`. `ty` is of the caller's own making, the slot of no callee ([`check_as`]).
 pub fn check(context: &mut Context, term: &Term, ty: Term) -> Result<Term, Error> {
-    elaborate(context, term, Mode::Check(ty)).map(|(term, _)| term)
+    check_as(context, term, Expectation::own(ty))
+}
+
+/// [`check`] against `expectation`, which names the slot of a callee `term` fills where it fills one.
+pub fn check_as(
+    context: &mut Context,
+    term: &Term,
+    expectation: Expectation,
+) -> Result<Term, Error> {
+    elaborate(context, term, Mode::Check(expectation)).map(|(term, _)| term)
 }
 
 pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
@@ -162,12 +171,14 @@ pub fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort),
     let (rebuilt, inferred) = match &**term {
         Subterm::Metavar(_) => {
             let sort = context.universes_mut().fresh_sort("type left to inference");
-            elaborate(context, term, Mode::Check(sort))?
+            elaborate(context, term, Mode::Check(Expectation::own(sort)))?
         }
         // `()` is checked against a type, so the tuple rule refuses it and says how the unit type is written.
-        Subterm::Tuple(Tuple { fields, .. }) if fields.is_empty() => {
-            elaborate(context, term, Mode::Check(Term::type_ground()))?
-        }
+        Subterm::Tuple(Tuple { fields, .. }) if fields.is_empty() => elaborate(
+            context,
+            term,
+            Mode::Check(Expectation::own(Term::type_ground())),
+        )?,
         _ => elaborate(context, term, Mode::Infer)?,
     };
 
@@ -214,7 +225,19 @@ pub fn expect(
     inferred: &Term,
     expected: &Term,
 ) -> Result<(), Error> {
+    expect_as(context, term, inferred, &Expectation::own(expected.clone()))
+}
+
+/// [`expect`] against `expectation`: a refusal of `term` there names the slot it fills, and so does the retry of a problem that waits.
+pub fn expect_as(
+    context: &mut Context,
+    term: &Term,
+    inferred: &Term,
+    expectation: &Expectation,
+) -> Result<(), Error> {
     curios_profile::profile!("typing::expect");
+    let expected = &expectation.type_;
+    let site = expectation.site.as_ref();
     let outcome = subsume_outcome(context, inferred, expected, term.extent()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::convert_exhausted(inferred.clone(), expected.clone(), refusal)
@@ -223,15 +246,23 @@ pub fn expect(
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
-        Outcome::Mismatch(beside) => Err(mismatch(context, term, inferred, expected, beside)),
+        Outcome::Mismatch(beside) => {
+            Err(mismatch(context, term, inferred, expected, beside).checked_as(site))
+        }
         // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless this is inside an oracle, where provisional success may not leak into the answer: the turnaround fails there, and the oracle records that it would have parked.
         Outcome::Blocked(goals) => {
             if !context.may_park() {
-                return Err(mismatch(context, term, inferred, expected, None));
+                return Err(mismatch(context, term, inferred, expected, None).checked_as(site));
             }
 
             for goal in goals {
-                context.park(ParkedWork::Conversion(goal), term.clone());
+                context.park(
+                    ParkedWork::Conversion {
+                        problem: goal,
+                        site: site.cloned(),
+                    },
+                    term.clone(),
+                );
             }
             context.retry_parked()
         }
@@ -407,7 +438,7 @@ impl Context<'_> {
         let mut waiting = Vec::with_capacity(choices.len());
         for choice in choices {
             let reduced = self.standing_on(&choice.frames, |context| {
-                reduce_with(context, &choice.expected)
+                reduce_with(context, &choice.expected.type_)
             })?;
             let bare = match &*reduced {
                 Subterm::Metavar(Metavar { id, .. }) if self.metavar_solution(*id).is_none() => {
@@ -462,7 +493,7 @@ impl Context<'_> {
             let default = numeral_default(self, literals);
             let choice = &waiting[at].2;
             self.standing_on(&choice.frames, |context| {
-                expect(context, &choice.written, &default, &choice.expected)
+                expect_as(context, &choice.written, &default, &choice.expected)
             })?;
             return Ok(true);
         }
@@ -502,7 +533,7 @@ impl Context<'_> {
             taken.insert(choice.placeholder);
             if self.take_checking(choice.placeholder).is_some() {
                 let checked = self.standing_on(&choice.frames, |context| {
-                    check(context, &choice.written, choice.expected.clone())
+                    check_as(context, &choice.written, choice.expected.clone())
                 })?;
                 self.fill_placeholder(choice.placeholder, checked);
             }
@@ -579,7 +610,10 @@ impl Context<'_> {
         for (conversion, problems) in left {
             for problem in problems {
                 self.repark(
-                    ParkedWork::Conversion(problem),
+                    ParkedWork::Conversion {
+                        problem,
+                        site: conversion.site.clone(),
+                    },
                     conversion.origin.clone(),
                     conversion.frames.clone(),
                 );
@@ -622,7 +656,7 @@ impl Context<'_> {
         self.fill_placeholder(choice.placeholder, rebuilt);
 
         self.standing_on(&choice.frames, |context| {
-            expect(context, &choice.written, &stated, &choice.expected)
+            expect_as(context, &choice.written, &stated, &choice.expected)
         })
     }
 
@@ -674,7 +708,7 @@ impl Context<'_> {
         }
 
         self.standing_on(&choice.frames, |context| {
-            expect(context, &choice.written, &product, &choice.expected)
+            expect_as(context, &choice.written, &product, &choice.expected)
         })?;
         // Where the metavariable was declared a type, the product is read again once the item has settled its fields ([`Context::hold_shapes`]). Where its sort was left to inference there is nothing declared to hold it to.
         if declared == Some(Quality::Type) {
@@ -700,7 +734,7 @@ impl Context<'_> {
     /// Hold each product a literal shaped, at a metavariable declared a `Type`, to that sort, now that the item has settled what the product's fields are. A product is sized where it is held to its metavariable, and a field still open there — a lambda, typed after it — is read as a type's whatever it comes to hold, so a record of propositions where a `Type` is declared would be the certifier's to refuse. It is refused here, as it is where every field is read before the product is held.
     fn hold_shapes(&mut self) -> Result<(), Error> {
         for shaped in self.take_shaped() {
-            let Subterm::Metavar(metavar) = &*shaped.expected else {
+            let Subterm::Metavar(metavar) = &*shaped.expected.type_ else {
                 continue;
             };
             let Some(declared) = self
@@ -711,7 +745,7 @@ impl Context<'_> {
                 continue;
             };
             let refused = self.standing_on(&shaped.frames, |context| {
-                let product = zonk_solved_term_metas(context, &shaped.expected);
+                let product = zonk_solved_term_metas(context, &shaped.expected.type_);
                 if quality_of(context, &product)? != Quality::Prop {
                     return Ok(None);
                 }
@@ -818,7 +852,7 @@ impl Context<'_> {
                         frames,
                         watching,
                     } = parked;
-                    if let ParkedWork::Conversion(goal) = &work
+                    if let ParkedWork::Conversion { problem: goal, .. } = &work
                         && let Some(goals) = blocked_on_written_goals(self, &watching, goal)
                     {
                         let (this, that) = obligation_shown(self, &goal.this, &goal.that);
@@ -833,7 +867,10 @@ impl Context<'_> {
                         continue;
                     }
                     return Err(match work {
-                        ParkedWork::Conversion(goal) => {
+                        ParkedWork::Conversion {
+                            problem: goal,
+                            site,
+                        } => {
                             // A conversion stuck between two witness holes reads as a bare metavariable mismatch; name the unresolved witness it actually is instead.
                             match self
                                 .witness_hole(&goal.this)
@@ -869,6 +906,7 @@ impl Context<'_> {
                                             )
                                         },
                                     )
+                                    .checked_as(site.as_ref())
                                     .at_opt(parked_origin.extent())
                                 }
                             }
@@ -879,14 +917,19 @@ impl Context<'_> {
                                 Error::bang_region_undetermined().at_opt(parked_origin.extent())
                             }
                             _ => {
-                                let blockers =
-                                    watched_blockers(self, &watching, &expected, &expected);
-                                pending(self, [&expected], move |reporting, [expected]| {
+                                let blockers = watched_blockers(
+                                    self,
+                                    &watching,
+                                    &expected.type_,
+                                    &expected.type_,
+                                );
+                                pending(self, [&expected.type_], move |reporting, [type_]| {
                                     Error::postponed_check(
-                                        resolved_for_display(reporting, &expected),
+                                        resolved_for_display(reporting, &type_),
                                         blockers,
                                     )
                                 })
+                                .checked_as(expected.site.as_ref())
                                 .at_opt(parked_origin.extent())
                             }
                         },
@@ -937,7 +980,7 @@ fn waited_on(
     work: &ParkedWork,
 ) -> BTreeMap<MetavarId, bool> {
     let waited = match work {
-        ParkedWork::Conversion(goal) => vec![&goal.this, &goal.that],
+        ParkedWork::Conversion { problem: goal, .. } => vec![&goal.this, &goal.that],
         ParkedWork::Witness { goal, .. } => vec![goal],
         _ => return BTreeMap::new(),
     };
@@ -1173,8 +1216,8 @@ fn retry_work(
     origin: Term,
     frames: HeldFrames,
 ) -> Result<(), Error> {
-    let goal = match work {
-        ParkedWork::Conversion(goal) => goal,
+    let (goal, site) = match work {
+        ParkedWork::Conversion { problem, site } => (problem, site),
         ParkedWork::Checking {
             term,
             expected,
@@ -1230,10 +1273,17 @@ fn retry_work(
     match outcome {
         Retry::Converts => Ok(()),
         // Locate the mismatch at the construct that parked it, as every sibling arm of the drain does. A parked goal outlives the frame it came from, so without this the only surviving clue is the module.
-        Retry::Mismatch(error) => Err(error.at_opt(origin.extent())),
+        Retry::Mismatch(error) => Err(error.checked_as(site.as_ref()).at_opt(origin.extent())),
         Retry::Blocked(goals) => {
             for goal in goals {
-                context.repark(ParkedWork::Conversion(goal), origin.clone(), frames.clone());
+                context.repark(
+                    ParkedWork::Conversion {
+                        problem: goal,
+                        site: site.clone(),
+                    },
+                    origin.clone(),
+                    frames.clone(),
+                );
             }
             Ok(())
         }
@@ -1255,14 +1305,14 @@ fn intrinsic_value(context: &Context, term: &Term) -> bool {
 fn retry_checking(
     context: &mut Context,
     term: Term,
-    expected: Term,
+    expected: Expectation,
     placeholder: MetavarId,
     origin: Term,
     frames: HeldFrames,
 ) -> Result<(), Error> {
     let rebuilt = context.standing_on(&frames, |context| {
         // Re-park while the term is still blocked on its expected type's structure — the same predicate that parked it, with the result-directed refinements off: at retry there is no output turnaround left to wait for, so a codomain-only block checks eagerly.
-        if blocked_on_metavar(context, &term, &expected, &BTreeSet::new(), false)? {
+        if blocked_on_metavar(context, &term, &expected.type_, &BTreeSet::new(), false)? {
             return Ok(None);
         }
 

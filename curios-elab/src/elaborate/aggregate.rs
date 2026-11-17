@@ -1,7 +1,7 @@
 use {
     super::{FieldSource, check_dependent_fields, park_checking},
     crate::{
-        Context, Error, Mode, Occurrence, check, check_is_sort, elaborate, expect, pending,
+        Context, Error, Mode, Occurrence, check, check_is_sort, elaborate, expect_as, pending,
         reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_common::Plicity,
@@ -99,13 +99,13 @@ pub fn elaborate_tuple(
         }
     };
 
-    let reduced = reduce_with(context, &expected)?;
+    let reduced = reduce_with(context, &expected.type_)?;
     let type_telescope = match Term::unwrap_or_clone(reduced.clone()) {
         Subterm::TupleType(TupleType { telescope }) => telescope,
         // `()` determines its own type: with no fields there is no dependency for an expectation to supply, so `{}` is the only thing it can be. Parking would wait for information the literal already has — and where parking is suppressed the arm below would refuse a well-typed term outright. Synthesizing and reconciling solves the metavariable instead. Non-empty literals still park: a dependent telescope can only come from the expectation, so committing to the non-dependent product there would be a guess.
         Subterm::Metavar(_) if fields.is_empty() => {
             let (rebuilt, inferred) = elaborate_tuple(context, tuple, term, Mode::Infer)?;
-            expect(context, term, &inferred, &expected)?;
+            expect_as(context, term, &inferred, &expected)?;
             return Ok((rebuilt, inferred));
         }
         // Not a tuple type *yet*. An expectation stuck on an unsolved metavariable has decided nothing — `Count(?L)`, a description-indexed payload waiting on its index — so refusing here would refuse one step before the turnaround that solves it.
@@ -115,7 +115,10 @@ pub fn elaborate_tuple(
         _ => {
             // `()` where a universe is expected is the unit value written for the unit type.
             let unit_for_a_type = fields.is_empty() && matches!(&*reduced, Subterm::Sort(_));
-            return Err(Error::not_a_tuple_type(expected.clone(), unit_for_a_type));
+            return Err(
+                Error::not_a_tuple_type(expected.type_.clone(), unit_for_a_type)
+                    .checked_as(expected.site.as_ref()),
+            );
         }
     };
 
@@ -140,11 +143,15 @@ pub fn elaborate_tuple(
         }
     }
 
-    let sources: Vec<FieldSource> = fields.iter().map(FieldSource::Written).collect();
+    // A tuple's components are checked at the telescope the tuple type states, of its own making: the slot of no callee.
+    let sources: Vec<FieldSource> = fields
+        .iter()
+        .map(|field| FieldSource::Written(field, None))
+        .collect();
     let mut elaborated = Vec::with_capacity(fields.len());
     check_dependent_fields(context, type_telescope, &sources, term, &mut elaborated)?;
 
-    Ok((Term::tuple(elaborated), expected))
+    Ok((Term::tuple(elaborated), expected.type_))
 }
 
 pub fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {

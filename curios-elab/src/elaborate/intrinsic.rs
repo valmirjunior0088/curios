@@ -1,7 +1,7 @@
 use {
-    super::{Mode, elaborate, park_checking},
+    super::{Expectation, Mode, elaborate, park_checking},
     crate::{
-        Context, ErasedSite, Error, blocked_on_metavar, check_is_sort, exhausted_bound, expect,
+        Context, ErasedSite, Error, blocked_on_metavar, check_is_sort, exhausted_bound, expect_as,
         reduce_with, sort_term,
     },
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
@@ -21,7 +21,14 @@ fn check_list_elems(
     let mut elaborated = Vec::with_capacity(elems.len());
 
     for elem in elems {
-        elaborated.push(elaborate(context, elem, Mode::Check(elem_type.clone()))?.0);
+        elaborated.push(
+            elaborate(
+                context,
+                elem,
+                Mode::Check(Expectation::own(elem_type.clone())),
+            )?
+            .0,
+        );
     }
 
     Ok(elaborated)
@@ -97,16 +104,20 @@ pub fn elaborate_demand(
     Ok(match demand {
         // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way.
         Operand::At(type_) => {
-            elaborate(context, operand, Mode::Check(type_.clone()))
-                .map_err(|error| {
-                    exhausted_bound(
-                        context,
-                        error,
-                        type_,
-                        ErasedSite::OperandBound(Box::new(operation())),
-                    )
-                })?
-                .0
+            elaborate(
+                context,
+                operand,
+                Mode::Check(Expectation::own(type_.clone())),
+            )
+            .map_err(|error| {
+                exhausted_bound(
+                    context,
+                    error,
+                    type_,
+                    ErasedSite::OperandBound(Box::new(operation())),
+                )
+            })?
+            .0
         }
         Operand::IsType => check_is_sort(context, operand)?.0,
         Operand::Function { domains, codomain } => {
@@ -120,8 +131,8 @@ pub fn elaborate_demand(
             let blocked = !context.parking_suppressed()
                 && blocked_on_metavar(context, operand, &expected, &BTreeSet::new(), false)?;
             match blocked {
-                true => park_checking(context, operand, &expected)?.0,
-                false => elaborate(context, operand, Mode::Check(expected))?.0,
+                true => park_checking(context, operand, &Expectation::own(expected))?.0,
+                false => elaborate(context, operand, Mode::Check(Expectation::own(expected)))?.0,
             }
         }
     })
@@ -142,7 +153,7 @@ pub fn elaborate_intrinsic(
         Mode::Check(expected),
     ) = (intrinsic, &mode)
         && let Subterm::Intrinsic(Intrinsic::ListType(elem_type)) =
-            &*reduce_with(context, expected)?
+            &*reduce_with(context, &expected.type_)?
     {
         let elaborated = check_list_elems(context, elems, elem_type)?;
 
@@ -151,7 +162,7 @@ pub fn elaborate_intrinsic(
                 element: elem_type.clone(),
                 items: elaborated,
             }),
-            expected.clone(),
+            expected.type_.clone(),
         ));
     }
 
@@ -163,14 +174,22 @@ pub fn elaborate_intrinsic(
         },
         Mode::Check(expected),
     ) = (intrinsic, &mode)
-        && let Subterm::Intrinsic(Intrinsic::ListType(_)) = &*reduce_with(context, expected)?
+        && let Subterm::Intrinsic(Intrinsic::ListType(_)) = &*reduce_with(context, &expected.type_)?
     {
         let type_slot = check_is_sort(context, type_slot)?.0;
-        expect(context, term, &list_type(type_slot.clone()), expected)?;
+        expect_as(context, term, &list_type(type_slot.clone()), expected)?;
 
+        // A chunk of the literal is checked at the list type the literal states, of its own making.
         let mut elaborated = Vec::with_capacity(operands.len());
         for operand in operands {
-            elaborated.push(elaborate(context, operand, Mode::Check(expected.clone()))?.0);
+            elaborated.push(
+                elaborate(
+                    context,
+                    operand,
+                    Mode::Check(Expectation::own(expected.type_.clone())),
+                )?
+                .0,
+            );
         }
 
         return Ok((
@@ -178,13 +197,13 @@ pub fn elaborate_intrinsic(
                 element: type_slot,
                 operands: elaborated,
             }),
-            expected.clone(),
+            expected.type_.clone(),
         ));
     }
 
     let (intrinsic, type_) = synth_intrinsic(context, intrinsic)?;
     if let Mode::Check(expected) = &mode {
-        expect(context, term, &type_, expected)?;
+        expect_as(context, term, &type_, expected)?;
     }
 
     Ok((Term::intrinsic(intrinsic), type_))

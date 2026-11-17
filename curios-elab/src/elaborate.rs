@@ -38,12 +38,12 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Context, Error, Occurrence, check, check_is_sort, elaborate_derive, expect},
+    super::{Context, Error, Occurrence, check, check_is_sort, elaborate_derive, expect_as},
     curios_common::{Plicity, recurse},
     curios_core::{
-        Ascribed, Extent, Func, FuncType, Global, Method, Sort, Subterm, Term, Transient,
-        Universes, foreign_operands, foreign_produced, former_spelling, instantiate_universes,
-        method_spelling,
+        ArgumentSite, Ascribed, Extent, Func, FuncType, Global, Method, Sort, Subterm, Term,
+        Transient, Universes, foreign_operands, foreign_produced, former_spelling,
+        instantiate_universes, method_spelling,
     },
     curios_surface::intrinsic_former,
     std::sync::Arc,
@@ -53,15 +53,53 @@ use {
 #[derive(Debug, Clone)]
 pub enum Mode {
     Infer,
-    Check(Term),
+    Check(Expectation),
 }
 
 impl Mode {
-    /// The expected type this mode carries — the elaboration-cache key's second component (`None` in `Infer`).
+    /// The expected type this mode carries — the elaboration-cache key's second component (`None` in `Infer`). The slot is no part of the key: the cache keeps only a run that wrote nothing, and a refusal or a constraint raised against the expectation is a write.
     fn expected(&self) -> Option<Term> {
         match self {
-            Mode::Check(expected) => Some(expected.clone()),
+            Mode::Check(expected) => Some(expected.type_.clone()),
             Mode::Infer => None,
+        }
+    }
+
+    /// `type_`, a type this mode's expectation specializes, with the slot that expectation is the type of: what a `match`'s arm is checked at, its goal at the arm's case. A synthesizing mode names no slot.
+    pub fn at(&self, type_: Term) -> Expectation {
+        match self {
+            Mode::Check(expected) => expected.at(type_),
+            Mode::Infer => Expectation::own(type_),
+        }
+    }
+}
+
+/// The type a term is checked against, and the slot of a callee it is the type of where the term fills one: what every refusal raised against it names. It travels as one value wherever the expectation flows on — a `let`'s tail, a `match`'s arms at the goal each case specializes, a parked check — and a frame that checks against a type of its own making, a lambda's body against its codomain or a binding against its annotation, states none.
+#[derive(Debug, Clone)]
+pub struct Expectation {
+    pub type_: Term,
+    pub site: Option<ArgumentSite>,
+}
+
+impl Expectation {
+    /// A type a frame checks against of its own making, the slot of no callee.
+    pub fn own(type_: Term) -> Self {
+        Self { type_, site: None }
+    }
+
+    /// The type of the slot `site` a written term fills.
+    pub fn of(type_: Term, site: ArgumentSite) -> Self {
+        Self {
+            type_,
+            site: Some(site),
+        }
+    }
+
+    /// This expectation re-aimed at `type_`, the same slot's type as a frame specializes it: a `match`'s goal at one of its cases.
+    pub fn at(&self, type_: Term) -> Self {
+        Self {
+            type_,
+            site: self.site.clone(),
         }
     }
 }
@@ -100,7 +138,7 @@ fn elaborate_ascribed(
 ) -> Result<(Term, Term), Error> {
     let (type_, _) = check_is_sort(context, &ascribed.type_)?;
     if let Mode::Check(expected) = &mode {
-        expect(context, term, &type_, expected)?;
+        expect_as(context, term, &type_, expected)?;
     }
     let checked = check(context, &ascribed.term, type_.clone())?;
 
@@ -131,14 +169,14 @@ fn elaborate_subterm(
 ) -> Result<(Term, Term), Error> {
     // A checked node declared in another monad than the region's is lifted before it elaborates, as a `!` action is — a region's tail is the second place an embedding is written, and the same declared edge carries it.
     if let Mode::Check(expected) = &mode
-        && let Some(lifted) = lift_on_check(context, term, expected)?
+        && let Some(lifted) = lift_on_check(context, term, &expected.type_)?
     {
         return elaborate(context, &lifted, mode);
     }
 
     // A bare variable whose type leads with a hidden binder waits where its expectation has not decided whether that binder is inserted.
     if let Mode::Check(expected) = &mode
-        && waits_as_reference(context, term, expected)?
+        && waits_as_reference(context, term, &expected.type_)?
         && context.may_park()
     {
         return park_checking(context, term, expected);
@@ -261,8 +299,9 @@ fn elaborate_subterm(
     };
 
     if let Mode::Check(expected) = &mode {
-        let (rebuilt, type_) = insert_implicits_on_check(context, term, rebuilt, type_, expected)?;
-        expect(context, term, &type_, expected)?;
+        let (rebuilt, type_) =
+            insert_implicits_on_check(context, term, rebuilt, type_, &expected.type_)?;
+        expect_as(context, term, &type_, expected)?;
         return Ok((rebuilt, type_));
     }
 

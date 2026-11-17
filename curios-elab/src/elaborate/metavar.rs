@@ -1,7 +1,7 @@
 use {
     super::{insert_auto_argument, method_call, method_type, reference},
     crate::{
-        Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with,
+        Context, Error, Mode, SlotPositions, attempt_witness_goal, expect_as, reduce_with,
         stuck_on_metavar,
     },
     curios_common::Plicity,
@@ -21,7 +21,8 @@ pub fn elaborate_metavar(
 
     match mode {
         // Birth: freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
-        Mode::Check(expected) => {
+        Mode::Check(expectation) => {
+            let expected = expectation.type_.clone();
             if let Some(entry) = context.metavar_entry(id) {
                 let result = entry.result().clone();
                 // `into_core` mints a hole *bare* (`Term::hole`), and the birth arm below rebuilds it over its frozen Γ — but that rebuild lands in the *returned* term, not in the node the traversal read. A node reached a second time in checking position therefore arrives bare again, and returning it unchanged puts a spineless copy of a birthed hole into a compared type, which is exactly what `solve`'s spine-arity invariant forbids. Re-attach the identity spine here so both traversals hand the same term downstream.
@@ -31,7 +32,7 @@ pub fn elaborate_metavar(
                     (metavar.spine.is_empty() && !entry.telescope().is_empty()).then(|| {
                         MetavarSpine::identity_over(entry.telescope().iter().map(|(name, _)| name))
                     });
-                expect(context, term, &result, &expected)?;
+                expect_as(context, term, &result, &expectation)?;
 
                 let Some(spine) = restored else {
                     return Ok((term.clone(), expected));

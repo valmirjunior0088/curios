@@ -21,14 +21,17 @@ fn parked_goals_retry_under_their_frozen_refinements() {
         context.assume(&b, &Term::type_ground());
         context.refine(&b, &nat_type());
         context.park(
-            ParkedWork::Conversion(Problem {
-                type_: Term::type_ground(),
-                this: Term::free_var(&b),
-                that: nat_type(),
-                binders: Binders::default(),
-                pairs: Pairs::default(),
-                relation: Relation::Equal,
-            }),
+            ParkedWork::Conversion {
+                problem: Problem {
+                    type_: Term::type_ground(),
+                    this: Term::free_var(&b),
+                    that: nat_type(),
+                    binders: Binders::default(),
+                    pairs: Pairs::default(),
+                    relation: Relation::Equal,
+                },
+                site: None,
+            },
             Term::free_var(&b),
         );
     });
@@ -43,14 +46,17 @@ fn a_parked_goal_is_woken_by_its_types_solution() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
     context.park(
-        ParkedWork::Conversion(Problem {
-            type_: Term::hole(0),
-            this: nat(1),
-            that: nat(1),
-            binders: Binders::default(),
-            pairs: Pairs::default(),
-            relation: Relation::Equal,
-        }),
+        ParkedWork::Conversion {
+            problem: Problem {
+                type_: Term::hole(0),
+                this: nat(1),
+                that: nat(1),
+                binders: Binders::default(),
+                pairs: Pairs::default(),
+                relation: Relation::Equal,
+            },
+            site: None,
+        },
         nat(1),
     );
     assert!(context.wake_parked().is_empty());
@@ -69,14 +75,17 @@ fn parked_goals_without_their_refinement_mismatch() {
     context.with_frame(|context| {
         context.assume(&b, &Term::type_ground());
         context.park(
-            ParkedWork::Conversion(Problem {
-                type_: Term::type_ground(),
-                this: Term::free_var(&b),
-                that: nat_type(),
-                binders: Binders::default(),
-                pairs: Pairs::default(),
-                relation: Relation::Equal,
-            }),
+            ParkedWork::Conversion {
+                problem: Problem {
+                    type_: Term::type_ground(),
+                    this: Term::free_var(&b),
+                    that: nat_type(),
+                    binders: Binders::default(),
+                    pairs: Pairs::default(),
+                    relation: Relation::Equal,
+                },
+                site: None,
+            },
             Term::free_var(&b),
         );
     });
@@ -197,14 +206,17 @@ fn a_goal_parked_at_below_resumes_at_below() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
     context.park(
-        ParkedWork::Conversion(Problem {
-            type_: Term::type_ground(),
-            this: Term::type_ground(),
-            that: Term::hole(0),
-            binders: Binders::default(),
-            pairs: Pairs::default(),
-            relation: Relation::Below,
-        }),
+        ParkedWork::Conversion {
+            problem: Problem {
+                type_: Term::type_ground(),
+                this: Term::type_ground(),
+                that: Term::hole(0),
+                binders: Binders::default(),
+                pairs: Pairs::default(),
+                relation: Relation::Below,
+            },
+            site: None,
+        },
         Term::hole(0),
     );
     context.solve_metavar(MetavarId(0), Term::type_at(Level::constant(1)));
@@ -218,14 +230,17 @@ fn a_goal_parked_at_equal_resumes_at_equal() {
     let mut context = context();
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_at(Level::constant(2)));
     context.park(
-        ParkedWork::Conversion(Problem {
-            type_: Term::type_ground(),
-            this: Term::type_ground(),
-            that: Term::hole(0),
-            binders: Binders::default(),
-            pairs: Pairs::default(),
-            relation: Relation::Equal,
-        }),
+        ParkedWork::Conversion {
+            problem: Problem {
+                type_: Term::type_ground(),
+                this: Term::type_ground(),
+                that: Term::hole(0),
+                binders: Binders::default(),
+                pairs: Pairs::default(),
+                relation: Relation::Equal,
+            },
+            site: None,
+        },
         Term::hole(0),
     );
     context.solve_metavar(MetavarId(0), Term::type_at(Level::constant(1)));

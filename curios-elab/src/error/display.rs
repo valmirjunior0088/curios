@@ -363,7 +363,7 @@ fn role_said(role: &WitnessRole, callee: &Callee, spelling: &Rc<Spelling>) -> St
     }
 }
 
-/// The slot a term was checked as, as every report raised against it says it: ``checked as `n`, the 1st argument of `apply` ``, ``checked as the 1st `use` argument of `f` ``.
+/// The slot a term was checked as, as every report raised against it says it: ``checked as `n`, the 1st argument of `apply` ``, ``checked as the 1st `use` argument of `f` ``, ``checked as `x`, the 1st field of `Point` ``, ``checked as the 2nd operand of `+` ``.
 pub fn site_said(site: &ArgumentSite, spelling: &Spelling) -> String {
     let parameter = match site.parameter {
         Some(name) => format!("`{}`, ", name.as_str()),
@@ -374,9 +374,14 @@ pub fn site_said(site: &ArgumentSite, spelling: &Spelling) -> String {
         Plicity::Implicit => "`@` ",
         Plicity::Witness => "`use` ",
     };
+    let noun = match site.callee {
+        CalleeId::Structure(_) => "field",
+        CalleeId::Operator(_) => "operand",
+        _ => "argument",
+    };
 
     format!(
-        "checked as {parameter}the {} {mark}argument of `{}`",
+        "checked as {parameter}the {} {mark}{noun} of `{}`",
         ordinal(site.position),
         spelled_callee(&site.callee, spelling)
     )
@@ -685,22 +690,22 @@ impl Displayed<'_> {
                     f.stating("which does not reduce to a function type");
                 }
             }
-            Error::NotAFunctionType { expected, argument } => {
+            Error::NotAFunctionType {
+                expected,
+                function_typed,
+            } => {
                 f.text("unexpected function");
                 f.stating(format_args!("expected: {}", expected.spelled(spelling)));
-                if let Some(misplaced) = argument {
-                    f.stating(site_said(&misplaced.site, spelling));
-                    if let Some((name, position)) = &misplaced.function_typed {
-                        let name = match name {
-                            Some(name) => format!("`{name}`, "),
-                            None => String::new(),
-                        };
-                        f.stating(format_args!(
-                            "`{}` takes a function as {name}its {} argument",
-                            spelled_callee(&misplaced.site.callee, spelling),
-                            ordinal(*position)
-                        ));
-                    }
+                if let Some(hint) = function_typed {
+                    let name = match &hint.parameter {
+                        Some(name) => format!("`{name}`, "),
+                        None => String::new(),
+                    };
+                    f.stating(format_args!(
+                        "`{}` takes a function as {name}its {} argument",
+                        spelled_callee(&hint.callee, spelling),
+                        ordinal(hint.position)
+                    ));
                 }
             }
             Error::NotATuple { head_type } => {
@@ -2056,6 +2061,10 @@ impl Displayed<'_> {
             Error::InUnreachableArm { dead, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);
                 unreachable_arm_note(f, dead, spelling);
+            }
+            Error::CheckedAs { site, error } => {
+                Displayed(error, Rc::clone(spelling), anchors).say(f);
+                f.stating(site_said(site, spelling));
             }
             Error::InAlternative { written, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).say(f);

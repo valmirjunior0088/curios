@@ -3,8 +3,8 @@ use {
         Misaligned, SlotPositions, align, check_args_against, insert_auto_argument, is_placeholder,
     },
     crate::{
-        Context, Error, Mode, Occurrence, attempt_witness_goal, check, elaborate, expect, is_prop,
-        reduce_with, resolve_witness_goal,
+        Context, Error, Expectation, Mode, Occurrence, attempt_witness_goal, check, check_as,
+        elaborate, expect_as, is_prop, reduce_with, resolve_witness_goal,
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
@@ -141,7 +141,8 @@ pub fn elaborate_struct_type(
 
 /// Where one field position's value comes from: a written term to check, or — for a hidden field with no written fill — what a call's omitted argument of that mark is filled with, at the position's instantiated type: a witness goal for a concept's `use`-marked field, an inferred value or a discharged bound for an `@` field.
 pub enum FieldSource<'a> {
-    Written(&'a Term),
+    /// A written term, beside the slot of the structure it fills, where it fills one: a record literal's field does, a tuple's component is of the tuple type's own making.
+    Written(&'a Term, Option<ArgumentSite>),
     /// An unfilled `@` position, filled as a call's omitted `@` argument is ([`insert_auto_argument`]): by unification, by reduction to truth, or from the facts in scope, and reported as that argument is where nothing fills it. `label` is the field's, empty where it has none.
     Infer {
         func: CalleeId,
@@ -155,6 +156,20 @@ pub enum FieldSource<'a> {
     },
 }
 
+/// The slot of the structure `name` a literal's field at `position` fills: the field by its label, and its place among the fields of its mark.
+fn field_site(name: Global, label: &str, slots: &[Plicity], position: usize) -> ArgumentSite {
+    let plicity = slots[position];
+    ArgumentSite {
+        callee: CalleeId::Structure(name),
+        parameter: (!label.is_empty()).then(|| Symbol::new(label)),
+        plicity,
+        position: slots[..position]
+            .iter()
+            .filter(|earlier| **earlier == plicity)
+            .count(),
+    }
+}
+
 /// Check each positional field against its type in a dependent field telescope, pushing the elaborated fields onto `elaborated`. Shared by struct and tuple literal elaboration. The rest of the telescope is opened with the *elaborated* field, not the raw surface term: the elaborated form carries label projections rebuilt positionally (and implicits inserted), whereas a raw `Field::Label` substituted into a later field type would panic once that type is reduced (e.g. `Io(b.A)` arising from a field typed `Io(A)` in `{ A : Type, t : Io(A) }`). A `Resolve` source, a dictionary's superclass, mints a witness metavariable and resolves its goal where it stands ([`resolve_witness_goal`]), anchored at `origin`, and the metavariable threads the telescope like any elaborated field.
 pub fn check_dependent_fields(
     context: &mut Context,
@@ -166,7 +181,14 @@ pub fn check_dependent_fields(
     curios_profile::profile!("struct::check_dependent_fields");
     // One walk, each field type opened once at every field before it: reopening the rest after each field would rewrite every later type, whose metavariable spines name every earlier field, and make a long literal cubic.
     let (fields, ()) = tele.walk_producing(|index, _, ty| match &sources[index] {
-        FieldSource::Written(field) => check(context, field, ty),
+        FieldSource::Written(field, site) => check_as(
+            context,
+            field,
+            Expectation {
+                type_: ty,
+                site: site.clone(),
+            },
+        ),
         FieldSource::Infer {
             func,
             label,
@@ -422,7 +444,10 @@ pub fn elaborate_struct(
                 .map(|member| written[member].2)
                 .filter(|field| *slot == Plicity::Explicit || !is_placeholder(context, field));
             match field {
-                Some(field) => FieldSource::Written(field),
+                Some(field) => FieldSource::Written(
+                    field,
+                    Some(field_site(*name, labels[position], &slots, position)),
+                ),
                 None if *slot == Plicity::Implicit => FieldSource::Infer {
                     func: CalleeId::Structure(*name),
                     label: labels[position].to_string(),
@@ -530,11 +555,11 @@ pub fn seed_struct_expectation(
         && let Subterm::StructType(StructType {
             name: expected_name,
             ..
-        }) = Term::unwrap_or_clone(reduce_with(context, expected)?)
+        }) = Term::unwrap_or_clone(reduce_with(context, &expected.type_)?)
         && expected_name == *name
     {
         let seeded = Term::struct_type_at(*name, universes.clone(), resolved.to_vec());
-        expect(context, term, &seeded, expected)?;
+        expect_as(context, term, &seeded, expected)?;
     }
     Ok(())
 }
@@ -696,7 +721,10 @@ pub fn elaborate_struct_spread(
             .iter()
             .enumerate()
             .map(|(position, override_)| match override_ {
-                Some(field) => FieldSource::Written(field),
+                Some(field) => FieldSource::Written(
+                    field,
+                    Some(field_site(*name, labels[position], &slots, position)),
+                ),
                 None if slots[position] == Plicity::Implicit => FieldSource::Infer {
                     func: CalleeId::Structure(*name),
                     label: labels[position].to_string(),
@@ -705,7 +733,7 @@ pub fn elaborate_struct_spread(
                         .filter(|earlier| **earlier == Plicity::Implicit)
                         .count(),
                 },
-                None => FieldSource::Written(&copies[position]),
+                None => FieldSource::Written(&copies[position], None),
             })
             .collect();
         let mut elaborated = Vec::with_capacity(sources.len());

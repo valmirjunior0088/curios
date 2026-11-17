@@ -16,11 +16,11 @@
 
 use {
     super::{
-        BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
-        elaborate, payload_fills,
+        BoolSplit, Expectation, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit,
+        SwitchSplit, elaborate, payload_fills,
     },
     crate::{
-        Context, Error, HeldFrames, WrittenLiteral, check, expect, pending, reduce_with,
+        Context, Error, HeldFrames, WrittenLiteral, check, expect_as, pending, reduce_with,
         resolved_for_display, stuck_on_metavar,
     },
     curios_common::{Plicity, recurse},
@@ -466,8 +466,8 @@ impl<'m> Compiler<'m> {
         lines: Vec<Line<'m>>,
         expected: Term,
     ) -> Result<Term, Error> {
-        recurse(|| self.columns(context, columns, lines, false, Mode::Check(expected)))
-            .map(|(arm, _)| arm)
+        let mode = Mode::Check(self.mode.at(expected));
+        recurse(|| self.columns(context, columns, lines, false, mode)).map(|(arm, _)| arm)
     }
 
     /// The rows of a column a dispatch is about to split, with the column read by each row that writes a binder there: its name is bound to the column, and the row is under whichever case of the column the compiler puts it, none of which it states.
@@ -682,7 +682,7 @@ impl<'m> Compiler<'m> {
             unreachable!("a row is put under a case beneath a dispatch");
         };
 
-        Ok((self.walked(context, &line)?, expected))
+        Ok((self.walked(context, &line)?, expected.type_))
     }
 
     /// The first candidate at a leaf when it has guards to run, and `rest`, the candidates after it: what a value there takes where one of its guards fails.
@@ -715,11 +715,12 @@ impl<'m> Compiler<'m> {
             return context.awaiting(|context| {
                 let split = Rc::new(BoolSplit::resolve(context, scrutinee, &goal, &mode)?);
                 let false_case = split.arm(context, false, |context, expected| {
-                    recurse(|| self.leaf(context, rest, Mode::Check(expected))).map(|(arm, _)| arm)
+                    let mode = Mode::Check(self.mode.at(expected));
+                    recurse(|| self.leaf(context, rest, mode)).map(|(arm, _)| arm)
                 })?;
                 let true_case = split.arm(context, true, |context, expected| {
-                    recurse(|| self.leaf(context, vec![line], Mode::Check(expected)))
-                        .map(|(arm, _)| arm)
+                    let mode = Mode::Check(self.mode.at(expected));
+                    recurse(|| self.leaf(context, vec![line], mode)).map(|(arm, _)| arm)
                 })?;
 
                 Ok(split.rebuild(false_case, true_case))
@@ -732,8 +733,9 @@ impl<'m> Compiler<'m> {
             false => {
                 let function = self.failing(context, line);
                 let expected = failing_type(context, &type_);
-                let (function, _) = elaborate(context, &function, Mode::Check(expected))
-                    .map_err(|error| self.in_alternative(row, error))?;
+                let (function, _) =
+                    elaborate(context, &function, Mode::Check(Expectation::own(expected)))
+                        .map_err(|error| self.in_alternative(row, error))?;
 
                 function
             }
@@ -800,9 +802,9 @@ impl<'m> Compiler<'m> {
             .as_ref()
             .expect("a case is entered beneath the outermost dispatch");
         let stands = stands.clone();
-        expect(context, self.term, &stands, &expected)?;
+        expect_as(context, self.term, &stands, &expected)?;
 
-        Ok((stand_in, expected))
+        Ok((stand_in, expected.type_))
     }
 
     /// Note the outermost dispatch where it is resolved, with the column it is of and the type the match stands at.
@@ -1811,7 +1813,7 @@ impl<'m> Compiler<'m> {
             .expect("a row is walked beneath the outermost dispatch");
         match at == column {
             true => (Some(outermost.clone()), mode, false),
-            false => (None, Mode::Check(stands.clone()), true),
+            false => (None, Mode::Check(self.mode.at(stands.clone())), true),
         }
     }
 
@@ -1827,7 +1829,7 @@ impl<'m> Compiler<'m> {
         if columns.is_empty() {
             // A row that states no case at all is read as the row that cannot fail is: against the type the match stands at.
             let mode = match (top, &self.outermost) {
-                (true, Some((_, _, stands))) => Mode::Check(stands.clone()),
+                (true, Some((_, _, stands))) => Mode::Check(self.mode.at(stands.clone())),
                 _ => mode,
             };
             let cases = line.cases.clone();
@@ -1837,8 +1839,9 @@ impl<'m> Compiler<'m> {
                     unreachable!("a row is walked against the type its case stands at");
                 };
                 let function = self.failing(context, line);
-                let expected = failing_type(context, &type_);
-                let (body, _) = elaborate(context, &function, Mode::Check(expected))?;
+                let expected = failing_type(context, &type_.type_);
+                let (body, _) =
+                    elaborate(context, &function, Mode::Check(Expectation::own(expected)))?;
 
                 return Ok(Walked { cases, body });
             }
@@ -1895,7 +1898,8 @@ impl<'m> Compiler<'m> {
                        line: Line<'m>,
                        expected: Term| {
             let reached = recurse(|| {
-                compiler.alone_over(context, columns, line, false, Mode::Check(expected))
+                let mode = Mode::Check(compiler.mode.at(expected));
+                compiler.alone_over(context, columns, line, false, mode)
             })?;
             let body = reached.body.clone();
             walked = Some(reached);

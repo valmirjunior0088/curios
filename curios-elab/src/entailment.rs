@@ -36,7 +36,7 @@ mod tests;
 
 use {
     crate::{
-        Context, Error, Mode, elaborate, named_members, reduce_with, same_uncommitted,
+        Context, Error, Expectation, Mode, elaborate, named_members, reduce_with, same_uncommitted,
         zonk_solved_term_metas,
     },
     curios_algebra::{LinearForm, Monomial},
@@ -327,8 +327,13 @@ fn arms_of(facts: &Facts) -> Vec<Arms> {
 fn check(context: &mut Context, candidate: &Term, bound: &Term) -> Result<Option<Term>, Error> {
     curios_profile::profile!("entailment::check");
     let mark = context.solution_mark();
-    let result =
-        context.with_oracle(|context| elaborate(context, candidate, Mode::Check(bound.clone())));
+    let result = context.with_oracle(|context| {
+        elaborate(
+            context,
+            candidate,
+            Mode::Check(Expectation::own(bound.clone())),
+        )
+    });
     let verdict = result
         .probed()
         .map(|checked| checked.map(|(proof, _)| proof));

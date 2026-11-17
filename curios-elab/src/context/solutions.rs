@@ -6,7 +6,7 @@
 
 use {
     super::{BirthTelescope, HeldFrames},
-    crate::{DeadArm, Problem, Refusal},
+    crate::{DeadArm, Expectation, Problem, Refusal},
     curios_common::Entropy,
     curios_core::{
         ArgumentSite, Bound, Extent, Free, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
@@ -150,12 +150,15 @@ pub enum MetaKind {
 /// The work a parked problem will retry.
 #[derive(Debug)]
 pub enum ParkedWork {
-    /// A conversion constraint that quiesced blocked on unsolved metavariables.
-    Conversion(Problem),
+    /// A conversion constraint that quiesced blocked on unsolved metavariables, beside the slot of the callee whose type it holds a term to, where it holds one: what its retry's refusal names.
+    Conversion {
+        problem: Problem,
+        site: Option<ArgumentSite>,
+    },
     /// A whole checking problem: a form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled. The term is elaborated once: whatever runs the check — a wake's retry, a term's completion, the drain — holds the problem out of the store while it does.
     Checking {
         term: Term,
-        expected: Term,
+        expected: Expectation,
         placeholder: MetavarId,
     },
     /// A witness-resolution goal whose key type is not yet rigid: `slot` is the metavariable standing in the omitted `use`-argument's place, `goal` its (concept application) type. Woken when a watched metavariable solves; resolution then retries standing on the frames the goal holds.
@@ -282,6 +285,8 @@ fn unindex(index: &mut HashMap<MetavarId, BTreeSet<u64>>, key: &MetavarId, seria
 pub struct ParkedConversion {
     pub at: u64,
     pub problem: Problem,
+    /// The slot of the callee whose type the conversion holds a term to, where it holds one.
+    pub site: Option<ArgumentSite>,
     pub origin: Term,
     pub frames: HeldFrames,
 }
@@ -313,7 +318,7 @@ impl ParkedWork {
             },
             ParkedWork::Witness { .. } => Some(Choice::Witness),
             // Whether its sides are two applications of one definition is read where the choice is taken, through what has been solved since it parked.
-            ParkedWork::Conversion(_) => Some(Choice::Spines),
+            ParkedWork::Conversion { .. } => Some(Choice::Spines),
             _ => None,
         }
     }
@@ -324,7 +329,7 @@ impl ParkedWork {
 pub struct ParkedChoice {
     pub choice: Choice,
     pub written: Term,
-    pub expected: Term,
+    pub expected: Expectation,
     pub placeholder: MetavarId,
     pub frames: HeldFrames,
 }
@@ -599,7 +604,7 @@ impl Solutions {
             .parked
             .problems()
             .filter(awaited)
-            .filter(|parked| matches!(parked.work, ParkedWork::Conversion(_)))
+            .filter(|parked| matches!(parked.work, ParkedWork::Conversion { .. }))
             .map(|parked| parked.watching.clone())
             .collect();
 
@@ -619,9 +624,10 @@ impl Solutions {
                 self.outermost(unsolved) == term
             })
             .filter_map(|(at, parked)| match &parked.work {
-                ParkedWork::Conversion(problem) => Some(ParkedConversion {
+                ParkedWork::Conversion { problem, site } => Some(ParkedConversion {
                     at,
                     problem: problem.clone(),
+                    site: site.clone(),
                     origin: parked.origin.clone(),
                     frames: parked.frames.clone(),
                 }),
@@ -636,7 +642,7 @@ impl Solutions {
             if self
                 .parked
                 .get(*serial)
-                .is_some_and(|parked| matches!(parked.work, ParkedWork::Conversion(_)))
+                .is_some_and(|parked| matches!(parked.work, ParkedWork::Conversion { .. }))
             {
                 self.parked.take(*serial);
             }
@@ -676,7 +682,7 @@ impl Solutions {
             .problems()
             .filter_map(ParkedProblem::as_choice)
             .find(
-                |parked| matches!(&*parked.expected, Subterm::Metavar(metavar) if metavar.id == id),
+                |parked| matches!(&*parked.expected.type_, Subterm::Metavar(metavar) if metavar.id == id),
             )
     }
 
@@ -961,8 +967,10 @@ impl Solutions {
     pub fn park(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
         let watching = match &work {
             // Its type as well as its sides: a goal postponed because the type it is compared at is unsolved wakes when that type is.
-            ParkedWork::Conversion(goal) => self.unsolved_in([&goal.this, &goal.that, &goal.type_]),
-            ParkedWork::Checking { expected, .. } => self.unsolved_in([expected]),
+            ParkedWork::Conversion { problem: goal, .. } => {
+                self.unsolved_in([&goal.this, &goal.that, &goal.type_])
+            }
+            ParkedWork::Checking { expected, .. } => self.unsolved_in([&expected.type_]),
             // Its slot as well as its goal: unification may solve the slot, which ends the goal, and the slot is what a term awaits where the goal holds no metavariable.
             ParkedWork::Witness { slot, goal, .. } => {
                 let mut watching = self.unsolved_in([goal]);
@@ -1014,7 +1022,7 @@ impl Solutions {
         for parked in self.parked.problems() {
             if let ParkedWork::Checking { term, expected, .. } = &parked.work
                 && let Subterm::Transient(Transient::NumLit(literal)) = &**term
-                && matches!(&**expected, Subterm::Metavar(_))
+                && matches!(&*expected.type_, Subterm::Metavar(_))
                 && let [id] = parked.watching.iter().copied().collect::<Vec<_>>()[..]
             {
                 waiting.entry(id).or_default().push(literal.clone());

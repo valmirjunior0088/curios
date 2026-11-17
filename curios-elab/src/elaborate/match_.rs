@@ -3,9 +3,9 @@
 //! An eliminator *resolves* its scrutinee and its result, *enters* a case, which is the frame an arm is typed in and the type it is typed at, and *rebuilds* the match from its arms ([`NominalSplit`], [`BoolSplit`], [`SwitchSplit`], [`NatSplit`], [`SequenceSplit`]). What an arm's body is comes from whoever asked: a match written one level deep hands its lowered arm to be checked ([`elaborate_match`]), and the matrix compiler hands the rows of the case over the columns left (`matrix`). So what an arm assumes is stated once and read by both.
 
 use {
-    super::{Misaligned, Mode, align, elaborate, stands_at},
+    super::{Expectation, Misaligned, Mode, align, elaborate, stands_at},
     crate::{
-        BinderSite, Context, Error, check, check_is_sort, dead_guard, decided_sort_of, expect,
+        BinderSite, Context, Error, check_as, check_is_sort, dead_guard, decided_sort_of, expect,
         hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
         resolved_for_display, same_uncommitted, solve_case_indices, stuck_on_metavar,
         zonk_solved_term_metas,
@@ -173,7 +173,7 @@ fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term
 /// The goal a match's arms inhabit, `written` being the goal lowering minted or a rebuilt match holds: the expected type where the match is checked, which each arm inhabits at its case with the scrutinee standing for it, and where it is inferred the written goal checked as a type, which the arms then solve. A match whose arms answer types that depend on their case is therefore checked, as a `let` or a signature checks it.
 fn resolve_goal(context: &mut Context, written: &Term, mode: &Mode) -> Result<Term, Error> {
     match mode {
-        Mode::Check(expected) => Ok(zonk_solved_term_metas(context, expected)),
+        Mode::Check(expected) => Ok(zonk_solved_term_metas(context, &expected.type_)),
         Mode::Infer => Ok(check_is_sort(context, written)?.0),
     }
 }
@@ -295,14 +295,14 @@ fn elaborate_nat_match(
 ) -> Result<(Term, Term), Error> {
     let split = NatSplit::resolve(context, scrutinee, goal, &mode)?;
     let zero = split.zero(context, |context, expected| {
-        check(context, zero_case, expected)
+        check_as(context, zero_case, mode.at(expected))
     })?;
 
     let predecessor = context.fresh_for(succ_case.hint(0), succ_case.written(0));
     let successor = split.successor(context, &predecessor, |context, expected| {
         let body = succ_case.open(&[&Term::free_var(&predecessor)]);
 
-        check(context, &body, expected)
+        check_as(context, &body, mode.at(expected))
     })?;
 
     Ok(split.rebuild(zero, &predecessor, successor))
@@ -519,7 +519,7 @@ fn elaborate_sequence_match(
 ) -> Result<(Term, Term), Error> {
     let split = SequenceSplit::resolve(context, sequence, scrutinee, goal, &mode)?;
     let empty = split.empty(context, |context, expected| {
-        check(context, empty_case, expected)
+        check_as(context, empty_case, mode.at(expected))
     })?;
 
     let binders = [
@@ -530,7 +530,7 @@ fn elaborate_sequence_match(
         let [atom, tail] = &binders;
         let body = cons_case.open(&[&Term::free_var(atom), &Term::free_var(tail)]);
 
-        check(context, &body, expected)
+        check_as(context, &body, mode.at(expected))
     })?;
 
     Ok(split.rebuild(empty, &binders, cons))
@@ -616,12 +616,12 @@ fn elaborate_switch(
     let mut cases_elaborated = Vec::with_capacity(cases.len());
     for (n, body) in cases {
         let body = split.arm(context, n, |context, expected| {
-            check(context, body, expected)
+            check_as(context, body, mode.at(expected))
         })?;
         cases_elaborated.push((n.clone(), body));
     }
     let default = split.default(context, |context, expected| {
-        check(context, default, expected)
+        check_as(context, default, mode.at(expected))
     })?;
 
     Ok(split.rebuild(cases_elaborated, default))
@@ -645,11 +645,11 @@ pub fn elaborate_match(
     // A rebuilt match coming back through re-elaboration at its goal: the goal *is* the expected type it was elaborated against, so it re-elaborates checked against that goal, where lowering's goal is a hole the mode decides. Checked at another spelling of that type — the one an arm around it specializes now, where its first elaboration met the scrutinee behind a metavariable not yet substituted — it keeps the goal it holds, so elaborating what elaboration built gives it back: conversion compares two goals with no arm's equation, and a rebuilt copy of a recursive member that differed from the member in a goal's spelling would be another term to it.
     let written = !matches!(&*m.goal, Subterm::Metavar(metavar) if metavar.is_hole());
     let mode = match (written, mode) {
-        (true, Mode::Infer) => Mode::Check(m.goal.clone()),
+        (true, Mode::Infer) => Mode::Check(Expectation::own(m.goal.clone())),
         (true, Mode::Check(expected))
-            if m.goal != expected && kept_goal(context, &m.goal, &expected)? =>
+            if m.goal != expected.type_ && kept_goal(context, &m.goal, &expected.type_)? =>
         {
-            Mode::Check(m.goal.clone())
+            Mode::Check(expected.at(m.goal.clone()))
         }
         (_, mode) => mode,
     };
@@ -793,10 +793,10 @@ fn elaborate_bool_match(
 ) -> Result<(Term, Term), Error> {
     let split = BoolSplit::resolve(context, scrutinee, goal, &mode)?;
     let false_case = split.arm(context, false, |context, expected| {
-        check(context, false_case, expected)
+        check_as(context, false_case, mode.at(expected))
     })?;
     let true_case = split.arm(context, true, |context, expected| {
-        check(context, true_case, expected)
+        check_as(context, true_case, mode.at(expected))
     })?;
 
     Ok(split.rebuild(false_case, true_case))
@@ -1331,7 +1331,7 @@ fn elaborate_induct_match(
         let written = written.iter().collect::<Vec<_>>();
         cases_elaborated.push(
             split.arm(context, tag, payload, &labels, |context, expected| {
-                check(context, &scope.open(&written), expected)
+                check_as(context, &scope.open(&written), mode.at(expected))
             })?,
         );
     }
@@ -1339,7 +1339,7 @@ fn elaborate_induct_match(
     let default = default
         .map(|default| {
             split.default(context, |context, expected| {
-                check(context, default, expected)
+                check_as(context, default, mode.at(expected))
             })
         })
         .transpose()?;

@@ -1,10 +1,10 @@
 use {
     super::{Misaligned, align, method_call, park_checking, trivially_inhabited},
     crate::{
-        Context, Entailed, ErasedSite, Error, HeldFrames, MisplacedLambda, Mode, ParkedWork,
-        attempt_witness_goal, blocked_on_metavar, callee, check, check_is_sort, dead_guard,
-        elaborate, entail, exhausted_bound, expect, is_prop, reduce_with, resolve_witness_goal,
-        stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
+        Context, Entailed, ErasedSite, Error, Expectation, FunctionTyped, HeldFrames, Mode,
+        ParkedWork, attempt_witness_goal, blocked_on_metavar, callee, check_as, check_is_sort,
+        dead_guard, elaborate, entail, exhausted_bound, expect_as, is_prop, reduce_with,
+        resolve_witness_goal, stuck_on_metavar, transitively_ground, zonk_solved_term_metas,
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
@@ -437,6 +437,7 @@ pub fn elaborate_apply(
     // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
     let expected_ground = match &mode {
         Mode::Check(expected) => expected
+            .type_
             .metavars()
             .iter()
             .all(|&id| transitively_ground(context, id)),
@@ -467,18 +468,32 @@ pub fn elaborate_apply(
                             expected_ground,
                         )?
                     };
+                // The argument is checked as the slot it fills, which every refusal raised against its type names, the conflict its constraints close among them; a `use` slot's binder goes unnamed, since no program names it.
+                let site = ArgumentSite {
+                    callee: func_label.clone(),
+                    parameter: match plicity {
+                        Plicity::Witness => None,
+                        _ => hint.map(Symbol::new),
+                    },
+                    plicity: *plicity,
+                    position,
+                };
+                let expectation = Expectation::of(ty.clone(), site);
                 if blocked {
-                    park_checking(context, &written, &ty)?.0
+                    park_checking(context, &written, &expectation)?.0
                 } else {
-                    check(context, &written, ty.clone()).map_err(|error| {
-                        error.at_argument(argument_site(
+                    check_as(context, &written, expectation).map_err(
+                        |error| match function_typed(
                             &func_label,
                             *plicity,
                             position,
                             &opened_link(&cursor),
                             &marks[index + 1..],
-                        ))
-                    })?
+                        ) {
+                            Some(hint) => error.pointing_at_function(hint),
+                            None => error,
+                        },
+                    )?
                 }
             }
             None if *plicity == Plicity::Witness => insert_witness_argument(
@@ -500,7 +515,7 @@ pub fn elaborate_apply(
 
     if let Mode::Check(expected) = &mode {
         // The output carries any parked argument's placeholder, which *blocks* rather than manufacturing a raw substitution's false mismatches — conversion waits on a placeholder, never solving one to what the expectation states in its argument's place — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
-        expect(context, term, &output, expected)?;
+        expect_as(context, term, &output, expected)?;
     }
 
     // A method named by its path is its η-form, so its call is that form opened at the call's arguments: the projection off the witness the call fills, as an operator's is.
@@ -520,7 +535,7 @@ pub fn is_placeholder(context: &Context, term: &Term) -> bool {
     matches!(&**term, Subterm::Metavar(metavar) if metavar.is_hole() && context.metavar_entry(metavar.id).is_none())
 }
 
-/// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
+/// The link at the cursor's entry, opened at every argument before it: what [`function_typed`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
 fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     match cursor.rest() {
         Telescope::Cons(_, _, link, ..) => link,
@@ -528,47 +543,39 @@ fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     }
 }
 
-/// Where the argument just checked sits: the parameter it filled, the mark it was written with and its position among the arguments written with that mark, and — for a plain argument — the next explicit parameter of function type, if any, the slot a lambda handed in here was likely meant for.
+/// For a plain argument just checked, the next explicit parameter of function type, if any: the slot a lambda handed in here was likely meant for.
 ///
-/// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
-fn argument_site(
+/// A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
+fn function_typed(
     function: &CalleeId,
     plicity: Plicity,
     position: usize,
     rest: &Scope<One, Telescope<Term>>,
     later_plicities: &[Plicity],
-) -> MisplacedLambda {
-    let mut function_typed = None;
-    if plicity == Plicity::Explicit {
-        let mut cursor = rest.body();
-        let mut explicit = position + 1;
-        for later in later_plicities {
-            let Telescope::Cons(_, ty, next, ..) = cursor else {
-                break;
-            };
-            if *later == Plicity::Explicit {
-                if matches!(&**ty, Subterm::FuncType(_)) {
-                    function_typed = Some((next.first_hint().map(str::to_string), explicit));
-                    break;
-                }
-                explicit += 1;
+) -> Option<FunctionTyped> {
+    if plicity != Plicity::Explicit {
+        return None;
+    }
+    let mut cursor = rest.body();
+    let mut explicit = position + 1;
+    for later in later_plicities {
+        let Telescope::Cons(_, ty, next, ..) = cursor else {
+            break;
+        };
+        if *later == Plicity::Explicit {
+            if matches!(&**ty, Subterm::FuncType(_)) {
+                return Some(FunctionTyped {
+                    callee: function.clone(),
+                    parameter: next.first_hint().map(str::to_string),
+                    position: explicit,
+                });
             }
-            cursor = next.body();
+            explicit += 1;
         }
+        cursor = next.body();
     }
-    let parameter = match plicity {
-        Plicity::Explicit | Plicity::Implicit => rest.first_hint().map(Symbol::new),
-        Plicity::Witness => None,
-    };
-    MisplacedLambda {
-        site: ArgumentSite {
-            callee: function.clone(),
-            parameter,
-            plicity,
-            position,
-        },
-        function_typed,
-    }
+
+    None
 }
 
 /// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.

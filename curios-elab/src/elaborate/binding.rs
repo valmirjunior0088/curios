@@ -3,16 +3,16 @@ use {
         Misaligned, align, check_witness_domain, insert_auto_argument, method_type, stands_at,
     },
     crate::{
-        BinderSite, Binding, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode,
-        Occurrence, ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns, check,
-        check_is_sort, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
-        read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
-        stuck_on_metavar, written_monad, zonk_solved_term_metas,
+        BinderSite, Binding, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Expectation,
+        Mode, Occurrence, ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns,
+        check, check_is_sort, convert, elaborate, expect, expect_as, metavar_origins,
+        metavar_spines, mismatch, read_by_value, reduce_with, resolve_witness_goal,
+        resolve_witness_goal_or, stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
     curios_common::{InfixOp, Plicity, Symbol, recurse},
     curios_core::{
-        Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
+        Advance, ArgumentSite, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey,
+        Infix, Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
         Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole,
     },
     curios_num::{Floating, Integer, Rounding},
@@ -24,7 +24,7 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
     curios_profile::profile!("binding::elaborate_let");
     // The type a `!` in this block reads its region off, where the block is checked: what a binding of the region's monad is an action of.
     let region = match &mode {
-        Mode::Check(expected) => Some(expected.clone()),
+        Mode::Check(expected) => Some(expected.type_.clone()),
         Mode::Infer => None,
     };
     context.with_frame(|context| {
@@ -292,9 +292,9 @@ pub fn elaborate_func(
 pub fn park_checking(
     context: &mut Context,
     term: &Term,
-    expected: &Term,
+    expected: &Expectation,
 ) -> Result<(Term, Term), Error> {
-    let (placeholder, stand_in) = context.fresh_placeholder(expected.clone(), term.extent());
+    let (placeholder, stand_in) = context.fresh_placeholder(expected.type_.clone(), term.extent());
     context.park(
         ParkedWork::Checking {
             term: term.clone(),
@@ -304,7 +304,7 @@ pub fn park_checking(
         term.clone(),
     );
 
-    Ok((stand_in, expected.clone()))
+    Ok((stand_in, expected.type_.clone()))
 }
 
 /// Resolve a polymorphic numeric literal ([`NumLit`]) to a concrete scalar intrinsic. In `Check` mode the expected type pins the choice. One still stuck on an unsolved metavariable that a term awaits parks the literal: what that term has yet to read may give the type, and where nothing does, the term's completion gives the numerals it awaits their shape default together ([`Context::complete`], [`numeral_default`]). Where no term awaits the type, and in `Infer` mode, the literal takes its shape default at once, so the next line reads a type. Decimal literals never reach here; they parse straight to `Flt`.
@@ -324,13 +324,13 @@ pub fn elaborate_num_lit(
 
     let target = match &mode {
         Mode::Check(expected) => {
-            let reduced = reduce_with(context, expected)?;
+            let reduced = reduce_with(context, &expected.type_)?;
             match stuck_on_metavar(context, &reduced) {
                 true => {
                     // A type some term awaits may still be given by what that term has yet to read, so the numeral waits for it and takes its default with the others that term awaits ([`Context::complete`]). Parked at the spelling the solutions so far give, so that what it watches is what the type is stuck on.
-                    let spelled = zonk_solved_term_metas(context, expected);
+                    let spelled = zonk_solved_term_metas(context, &expected.type_);
                     if context.awaits_any(&spelled) && context.may_park() {
-                        return park_checking(context, term, &spelled);
+                        return park_checking(context, term, &expected.at(spelled));
                     }
                     // No term awaits the type, so nothing more is coming: the shape default, at once. The closing `expect` solves a bare metavariable to it, and parks the comparison with a type stuck on one.
                     Term::unwrap_or_clone(default_type.clone())
@@ -397,7 +397,8 @@ pub fn elaborate_num_lit(
                 } else {
                     default_type
                 };
-                return Err(mismatch(context, term, &inferred, expected, None));
+                return Err(mismatch(context, term, &inferred, &expected.type_, None)
+                    .checked_as(expected.site.as_ref()));
             }
         },
         NumLit::Character(character) => {
@@ -427,7 +428,7 @@ pub fn elaborate_num_lit(
     };
 
     if let Mode::Check(expected) = &mode {
-        expect(context, term, &type_, expected)?;
+        expect_as(context, term, &type_, expected)?;
     }
 
     Ok((Term::intrinsic(intrinsic), type_))
@@ -617,7 +618,7 @@ pub fn elaborate_bang(
     };
 
     // Strict postponement: a region whose monad is not yet rigid parks the whole bang and re-checks when the expected type's metavariables solve; the drain reports the region as undetermined if they never do.
-    let region = reduce_with(context, expected)?;
+    let region = reduce_with(context, &expected.type_)?;
     if region_flex(context, &region) {
         return park_checking(context, term, expected);
     }
@@ -629,7 +630,7 @@ pub fn elaborate_bang(
     let action = match (region_shape, action_shape) {
         (Some(region_shape), Some(action_shape)) if region_shape.embeds(&action_shape) => {
             let wrapped = lift_wrapped(context, &bang.action, term.extent());
-            note_embedding_site(context, &wrapped, &bang.action, expected);
+            note_embedding_site(context, &wrapped, &bang.action, &expected.type_);
             wrapped
         }
         _ => bang.action.clone(),
@@ -1141,12 +1142,23 @@ pub fn elaborate_infix(
         .is_some_and(|method| method.returns_operand(&operand_type))
         && let Mode::Check(expected) = &mode
     {
-        expect(context, term, &operand_type, expected)?;
+        expect_as(context, term, &operand_type, expected)?;
     }
 
     // The operands as written, each at `?T`. A literal read while `?T` is open waits for it, the operator being the term that awaits it: the other operand pins it, or the operator's completion gives the literals their default.
-    let left = elaborate(context, &infix.left, Mode::Check(operand_type.clone()))?.0;
-    let right = elaborate(context, &infix.right, Mode::Check(operand_type.clone()))?.0;
+    let operand = |position| {
+        Mode::Check(Expectation::of(
+            operand_type.clone(),
+            ArgumentSite {
+                callee: CalleeId::Operator(infix.op),
+                parameter: None,
+                plicity: Plicity::Explicit,
+                position,
+            },
+        ))
+    };
+    let left = elaborate(context, &infix.left, operand(0))?.0;
+    let right = elaborate(context, &infix.right, operand(1))?.0;
 
     // The registry entry was absent — report it now that the operand type has structure to name.
     let Some(method) = method else {
@@ -1174,7 +1186,7 @@ pub fn elaborate_infix(
     let rebuilt = Term::apply_marked(Term::from(read), arguments);
 
     if let Mode::Check(expected) = &mode {
-        expect(context, term, &result_type, expected)?;
+        expect_as(context, term, &result_type, expected)?;
     }
 
     Ok((rebuilt, result_type))
@@ -1192,16 +1204,20 @@ pub fn elaborate_func_check(
     telescope: &Telescope<Term>,
     written_plicities: &[Plicity],
     term: &Term,
-    expected: Term,
+    expectation: Expectation,
 ) -> Result<(Term, Term), Error> {
-    let reduced_expected = reduce_with(context, &expected)?;
+    let reduced_expected = reduce_with(context, &expectation.type_)?;
     let ft = match Term::unwrap_or_clone(reduced_expected) {
         Subterm::FuncType(ft) => ft,
         Subterm::Metavar(_) if context.may_park() => {
-            return park_checking(context, term, &expected);
+            return park_checking(context, term, &expectation);
         }
-        _ => return Err(Error::not_a_function_type(expected.clone())),
+        _ => {
+            return Err(Error::not_a_function_type(expectation.type_.clone())
+                .checked_as(expectation.site.as_ref()));
+        }
     };
+    let expected = expectation.type_;
 
     // How many of these slots a lambda must write. The hidden ones are inserted from the expected type, so they are the parameters an arity refusal may not count.
     fn explicit(plicities: &[Plicity]) -> usize {
