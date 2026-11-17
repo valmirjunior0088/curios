@@ -801,6 +801,8 @@ fn check_free_monoid(
             let Subterm::Intrinsic(Intrinsic::ListType(scrutinee_elem)) = &**scrutinee_type else {
                 return Err(Error::Unclassified(scrutinee_type.clone()));
             };
+            // The element type a split states is typed before it is held to its scrutinee's, as a stated instance is: a type is accepted by typing it, and a call in it is one this check grades.
+            infer_type(certifier, elem)?;
             if !convert(certifier, &Term::type_ground(), elem, scrutinee_elem)? {
                 return Err(Error::Mismatch {
                     inferred: Box::new(elem.clone()),

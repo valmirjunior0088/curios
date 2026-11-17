@@ -226,3 +226,21 @@ fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_fo
         assert!(infer(&mut certifier(), &group(body)).is_ok(), "{body}");
     }
 }
+
+
+/// A carrier's element type is typed where the match states it, so a call standing there is recorded: `f(n)` sits in the element type of a split over `id(l)`, which no reduction reads past conversion and no variable's solution types. Mutation-checked: converting the element type without typing it leaves the group with no call, and it is accepted.
+#[test]
+fn a_call_in_a_carriers_element_type_is_recorded() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        "let /id: (l: #ListType(#NatType)) -> #ListType(#NatType) = (l: #ListType(#NatType)) => l;",
+    );
+
+    let body = "#{goal = Type, cases = {carrier = {elem = ((x: Type) => #NatType)(f(n))}}} match /id(#List(#NatType, [])) | [] => #NatType | [h, ..t] => #NatType end";
+
+    assert!(matches!(
+        infer(&mut certifier, &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
