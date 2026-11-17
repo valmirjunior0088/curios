@@ -17,7 +17,7 @@ use {
         Anchors, ArgumentSite, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort,
         Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
     },
-    curios_surface::{ReaderPosition, Spellable, Spelling},
+    curios_surface::{Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
@@ -478,10 +478,7 @@ impl fmt::Display for Displayed<'_> {
                     .iter()
                     .map(|report| {
                         let spelling =
-                            Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
-                                owner: report.owner,
-                                witnesses: Rc::clone(&report.witnesses),
-                            }));
+                            Rc::new(spelling.as_ref().clone().for_reader(report.reader()));
                         let span = report.extent.and_then(|extent| extent.resolved(anchors));
 
                         Report::of(span, goal_said(report, &spelling))
@@ -1883,10 +1880,7 @@ impl Displayed<'_> {
             // A batch of goals is a report each, which `Display` and `Error::reports` make; said as one, each goal's line and facts follow the last's.
             Error::Goals(reports) => {
                 for report in reports {
-                    let spelling = Rc::new(spelling.as_ref().clone().for_reader(ReaderPosition {
-                        owner: report.owner,
-                        witnesses: Rc::clone(&report.witnesses),
-                    }));
+                    let spelling = Rc::new(spelling.as_ref().clone().for_reader(report.reader()));
                     f.extend(goal_said(report, &spelling));
                 }
             }

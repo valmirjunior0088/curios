@@ -54,6 +54,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
             let spelling = reading.spelling().for_reader(ReaderPosition {
                 owner: Some(owner),
                 witnesses: Rc::default(),
+                locals: Rc::default(),
             });
             let rename = build_rename(&display_names(term), &spelling);
             let spelling = Rc::new(spelling.with_pretty_names(Rc::new(rename)));

@@ -11,7 +11,7 @@ use {
     curios_core::{
         Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
         Extent, Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError,
-        Spellings, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
+        Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
         WitnessRole,
     },
     curios_surface::{
@@ -50,10 +50,11 @@ impl DeadArm {
     }
 }
 
-/// Where the reader of an error stands ([`Error::InScope`]): the witness binders in scope where it arose, outermost first, and, until the error is settled where it is final (`Error::settled`), the frames it arose in, which settling stands on. A settled error lets its frames go, so no state of the elaboration outlives the refusal.
+/// Where the reader of an error stands ([`Error::InScope`]): the witness binders and the locals in scope where it arose, outermost first, and, until the error is settled where it is final (`Error::settled`), the frames it arose in, which settling stands on. A settled error lets its frames go, so no state of the elaboration outlives the refusal; the locals are read off them where the scope is held, so a report spells a global past one a local hides whenever it is made.
 #[derive(Debug, Clone)]
 pub struct ReaderScope {
     witnesses: Rc<[Free]>,
+    locals: Rc<[Free]>,
     frames: Option<HeldFrames>,
 }
 
@@ -62,13 +63,16 @@ impl ReaderScope {
     pub fn held(witnesses: Vec<Free>, frames: HeldFrames) -> Self {
         Self {
             witnesses: Rc::from(witnesses),
+            locals: frames.locals().copied().collect(),
             frames: Some(frames),
         }
     }
 
     /// Whether this scope says nothing a report's reader would not know at the top of their declaration.
     fn is_empty(&self) -> bool {
-        self.witnesses.is_empty() && self.frames.as_ref().is_none_or(HeldFrames::is_empty)
+        self.witnesses.is_empty()
+            && self.locals.is_empty()
+            && self.frames.as_ref().is_none_or(HeldFrames::is_empty)
     }
 }
 
@@ -133,6 +137,22 @@ pub struct GoalReport {
 }
 
 impl GoalReport {
+    /// Where the goal's reader stands: the definition it was written in, the witness binders in scope there, and the locals of its scope.
+    pub(crate) fn reader(&self) -> ReaderPosition {
+        ReaderPosition {
+            owner: self.owner,
+            witnesses: Rc::clone(&self.witnesses),
+            locals: self
+                .scope
+                .iter()
+                .filter_map(|(name, _)| match &**name {
+                    Subterm::Var(var) => var.as_free().copied(),
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
+
     /// Whether a term this report shows beside its scope's lines mentions `binder`: a scope binder's type, the goal, the solution, an obligation or a candidate. Where one does, the printer names the binder there, and a binder no source spells is named on its own line the same way.
     fn mentions(&self, binder: &Free) -> bool {
         let mentions = |term: &Term| term.mentions_free(binder);
@@ -1971,11 +1991,19 @@ impl Error {
         }
     }
 
-    /// The witness binders in scope where this error's reader stands: the reader position its report is spelled for.
-    fn witness_scope(&self) -> Rc<[Free]> {
-        self.reader_scope()
-            .map(|scope| Rc::clone(&scope.witnesses))
-            .unwrap_or_default()
+    /// Where this error's reader stands: the declaration it arose in, and the witness binders and locals in scope there, the reader position its report is spelled for.
+    fn reader(&self) -> ReaderPosition {
+        let scope = self.reader_scope();
+
+        ReaderPosition {
+            owner: self.owner(),
+            witnesses: scope
+                .map(|scope| Rc::clone(&scope.witnesses))
+                .unwrap_or_default(),
+            locals: scope
+                .map(|scope| Rc::clone(&scope.locals))
+                .unwrap_or_default(),
+        }
     }
 
     /// Let go of the frames every scope recorded on this error holds.
@@ -2091,15 +2119,9 @@ impl Error {
                 .collect();
         }
 
-        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and witness scope.
-        let for_reader = |owner: Option<Global>, witnesses: Rc<[Free]>| {
-            Rc::new(
-                spelling
-                    .as_ref()
-                    .clone()
-                    .for_reader(ReaderPosition { owner, witnesses }),
-            )
-        };
+        // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and scope.
+        let for_reader =
+            |position: ReaderPosition| Rc::new(spelling.as_ref().clone().for_reader(position));
 
         // A report lands on what it is about: the position stamped on it, and where it has none, or one whose text is gone, the name of the declaration it arose in.
         let placed = |extent: Option<&Extent>, owner: Option<Global>| {
@@ -2112,7 +2134,7 @@ impl Error {
             return goals
                 .iter()
                 .map(|goal| {
-                    let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
+                    let spelling = for_reader(goal.reader());
                     // Said before it is asked how its terms printed, which is known once every one has.
                     let said = goal_said(goal, &spelling);
 
@@ -2124,7 +2146,7 @@ impl Error {
                 .collect();
         }
 
-        let spelling = for_reader(self.owner(), self.witness_scope());
+        let spelling = for_reader(self.reader());
         let spelling = &Rc::new(
             spelling
                 .as_ref()

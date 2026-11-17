@@ -70,6 +70,20 @@ fn an_answer_naming_another_modules_own_declaration_is_declined() {
     assert!(declined(source));
 }
 
+#[test]
+fn a_goal_under_a_local_that_hides_an_import_is_spelled_past_it() {
+    // `@Nat` binds a parameter over the import, so `Nat` written in the body is the local: the goal's type reads back as the declaration only by its absolute path.
+    let source = r#"
+        use /std/{Nat};
+        pub let f: (@n: Nat, x: Nat) -> Nat = (@Nat, x) => let y: ? = x; y;
+        /std/print("")
+    "#;
+
+    let pasted = pasted(source).unwrap();
+    assert!(pasted.contains("let y: /std/Nat = x"), "{pasted}");
+    reads_back(source).unwrap();
+}
+
 /// Every public declaration of `/std` the entry root can reach, each by the shortest absolute path reaching it — one per declaration, whichever re-export that is.
 fn standard_declarations() -> Vec<Qualifier> {
     let standard = Qualifier::from(["std"]);

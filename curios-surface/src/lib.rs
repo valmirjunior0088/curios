@@ -31,6 +31,7 @@ pub use term::{
 
 mod spell;
 pub use spell::spell;
+use spell::*;
 
 mod from_core;
 pub use from_core::written_pattern;

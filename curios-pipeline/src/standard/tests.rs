@@ -1454,6 +1454,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             let spelling = unplaced.clone().for_reader(ReaderPosition {
                 owner: Some(owner),
                 witnesses: Rc::default(),
+                locals: Rc::default(),
             });
             let rename = build_rename(&display_names(term), &spelling);
             let spelling = Rc::new(spelling.with_pretty_names(Rc::new(rename)));

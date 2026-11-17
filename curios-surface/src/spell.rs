@@ -11,6 +11,18 @@ pub fn spell(
     owner: Option<&curios_core::Global>,
     global: &curios_core::Global,
 ) -> Option<String> {
+    spellings_reaching(spellings, island, owner, global)
+        .into_iter()
+        .next()
+}
+
+/// Every spelling [`spell`] chooses among, shortest first, of two equally short the one it takes first: what a reader standing where a local hides a spelling's head chooses among past it.
+pub fn spellings_reaching(
+    spellings: &curios_core::Spellings,
+    island: &Qualifier,
+    owner: Option<&curios_core::Global>,
+    global: &curios_core::Global,
+) -> Vec<String> {
     let sees = |written: &curios_core::WritablePath| {
         written.audience.iter().any(|root| island.is_within(root))
     };
@@ -110,7 +122,6 @@ pub fn spell(
     );
     candidates.extend(through);
 
+    candidates.sort_by_key(|spelling| (spelling.split('/').count(), spelling.len()));
     candidates
-        .into_iter()
-        .min_by_key(|spelling| (spelling.split('/').count(), spelling.len()))
 }

@@ -391,6 +391,7 @@ pub fn spelling_at(
     reading.spelling().for_reader(ReaderPosition {
         owner: Some(owner),
         witnesses: Rc::default(),
+        locals: Rc::default(),
     })
 }
 

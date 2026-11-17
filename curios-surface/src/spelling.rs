@@ -6,8 +6,8 @@ use {
         DecoratorField, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign, TopLet,
         TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
         level_spelled, literal_of, nested, print_core_entry, print_core_item, print_core_term,
-        print_shown, print_shown_entry, print_shown_item, print_term, record_declared, spell,
-        string, sub, tree, universe_context_written, value, word, word_value,
+        print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
+        spellings_reaching, string, sub, tree, universe_context_written, value, word, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
@@ -37,7 +37,7 @@ use {
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the certifier's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility — each past one whose head a local in scope there is written as, which resolution meets first ([`ReaderPosition`]). Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the certifier's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder --stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -146,11 +146,12 @@ impl FormScope {
     }
 }
 
-/// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
+/// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, the witness binders in scope there, outermost first, which no program refers to by name, and the locals in scope there, whose written names a reader's spelling of a global reaches before it reaches the global.
 #[derive(Clone, Debug, Default)]
 pub struct ReaderPosition {
     pub owner: Option<Global>,
     pub witnesses: Rc<[Free]>,
+    pub locals: Rc<[Free]>,
 }
 
 /// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, asked of the definition a reader stands in, with the spellings already asked for.
@@ -163,8 +164,8 @@ pub struct ReaderNames {
 /// The module the definition a global names sits in, asked for by the global ([`Definition::island`]): what a reader standing in it reaches a name from.
 pub type Islands = Box<dyn Fn(&Global) -> Option<Qualifier>>;
 
-/// The spellings a render already asked for, keyed by the definition the reader stands in and the global spelled — `None` where the reader can reach it by none.
-type Asked = HashMap<(Option<Global>, Global), Option<String>>;
+/// The spellings a render already asked for, keyed by the definition the reader stands in and the global spelled, shortest first — none where the reader can reach it by none.
+type Asked = HashMap<(Option<Global>, Global), Rc<[String]>>;
 
 impl ReaderNames {
     pub fn new(spellings: Rc<Spellings>, islands: Islands) -> Self {
@@ -175,19 +176,31 @@ impl ReaderNames {
         }
     }
 
+    /// The shortest spelling of `global` the reader reaches it by: the first whose head no local in scope is written as, since resolution meets a binder before any declaration, so a spelling a local hides reaches the local where the reader writes it. An absolute path's head is no name, and stands past every local.
     fn spell(&self, reader: &ReaderPosition, global: &Global) -> Option<String> {
         let key = (reader.owner, *global);
-        if let Some(spelled) = self.memo.borrow().get(&key) {
-            return spelled.clone();
-        }
-        let island = reader
-            .owner
-            .as_ref()
-            .and_then(|owner| (self.islands)(owner))
-            .unwrap_or_else(Qualifier::empty);
-        let spelled = spell(&self.spellings, &island, reader.owner.as_ref(), global);
-        self.memo.borrow_mut().insert(key, spelled.clone());
-        spelled
+        let asked = self.memo.borrow().get(&key).cloned();
+        let spellings = match asked {
+            Some(spellings) => spellings,
+            None => {
+                let island = reader
+                    .owner
+                    .as_ref()
+                    .and_then(|owner| (self.islands)(owner))
+                    .unwrap_or_else(Qualifier::empty);
+                let spellings: Rc<[String]> =
+                    spellings_reaching(&self.spellings, &island, reader.owner.as_ref(), global)
+                        .into();
+                self.memo.borrow_mut().insert(key, Rc::clone(&spellings));
+                spellings
+            }
+        };
+        let hidden = |spelling: &str| {
+            let head = spelling.split('/').next().unwrap_or_default();
+            reader.locals.iter().any(|local| local.hint() == Some(head))
+        };
+
+        spellings.iter().find(|spelling| !hidden(spelling)).cloned()
     }
 }
 
@@ -255,7 +268,7 @@ impl Spelling {
         self
     }
 
-    /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set: spelling a name for a reader is resolution in reverse ([`spell()`]).
+    /// The name the reader reaches `global` by, `None` inside where they reach it by none. `None` outside where no reader's names are set: spelling a name for a reader is resolution in reverse ([`spell()`](crate::spell())), past a local in scope that hides a spelling.
     fn read(&self, global: &Global) -> Option<Option<String>> {
         let names = self.names.as_ref()?;
 

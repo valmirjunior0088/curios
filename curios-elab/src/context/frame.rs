@@ -786,6 +786,13 @@ impl HeldFrames {
             .flat_map(|frame| frame.witnesses.iter().map(|(_, witness)| witness))
     }
 
+    /// The locals the frames hold, outermost first: the binders a report about what was judged under them spells a global past, where one's written name is the global's spelling.
+    pub fn locals(&self) -> impl Iterator<Item = &Free> {
+        self.0
+            .iter()
+            .flat_map(|frame| frame.locals.iter().map(|(_, (name, _))| name))
+    }
+
     /// Why the innermost arm among the frames is never taken, where its scrutinee's indices rule one out: an implicit born there and never solved is reported with it once the arm has closed.
     pub fn dead_arm(&self) -> Option<&Rc<DeadArm>> {
         self.0.as_ref()?.dead_arm.as_ref()

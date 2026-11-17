@@ -179,6 +179,7 @@ impl Error {
         let spelling = Rc::new(spelling.for_reader(curios_surface::ReaderPosition {
             owner: None,
             witnesses: Rc::default(),
+            locals: Rc::default(),
         }));
 
         vec![Report {
