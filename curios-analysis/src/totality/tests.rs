@@ -12,6 +12,8 @@ use {
     std::slice,
 };
 
+mod closure;
+
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
 ///
 /// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live under `tests/driven/`, driven by the actual certifier.

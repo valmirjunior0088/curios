@@ -311,8 +311,11 @@ fn field_application(steps: &[Segment]) -> Option<(Vec<usize>, Vec<Term>)> {
 pub fn decide(calls: Vec<Call>) -> Totality {
     curios_profile::profile!("decide");
     match close(calls) {
+        // A call from a part to itself whose matrix is not square was graded over other than the part's parameters, so it claims nothing, as a closure that cannot compose it does.
         Some(closed) => match closed.iter().all(|call| {
-            call.caller != call.callee || !call.matrix.is_idempotent() || call.matrix.descends()
+            call.caller != call.callee
+                || (call.matrix.rows() == call.matrix.columns()
+                    && (!call.matrix.is_idempotent() || call.matrix.descends()))
         }) {
             true => Totality::Total,
             false => Totality::Partial,

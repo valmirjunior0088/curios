@@ -227,7 +227,6 @@ fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_fo
     }
 }
 
-
 /// A carrier's element type is typed where the match states it, so a call standing there is recorded: `f(n)` sits in the element type of a split over `id(l)`, which no reduction reads past conversion and no variable's solution types. Mutation-checked: converting the element type without typing it leaves the group with no call, and it is accepted.
 #[test]
 fn a_call_in_a_carriers_element_type_is_recorded() {
@@ -254,4 +253,17 @@ fn a_lambda_applied_to_a_let_bound_local_stands_for_what_the_let_stands_for() {
     );
 
     assert!(infer(&mut certifier(), &group(&body)).is_ok(), "{body}");
+}
+
+/// A self-call the closure cannot read as a square matrix does not descend: `t(n, n)` in `m`'s type is typed before `m` is bound, so it is graded against `n` alone, one row short of `t`'s two parameters, and a cycle through it is one `decide` reads as `Partial` rather than passes. Mutation-checked: with `decide` passing a self-call whose matrix is not square, and `close` dropping a pair it cannot compose, the group closes with no cycle and is accepted.
+#[test]
+fn a_self_call_graded_short_in_a_leading_binders_type_does_not_descend() {
+    let group = term(
+        "#{node = Rec} (let t: (n: #NatType, m: #NatType) -> Type = (n: #NatType, m: ((y: Type) => #NatType)(t(n, n))) => #NatType; t)",
+    );
+
+    assert!(matches!(
+        infer(&mut certifier(), &group),
+        Err(Error::NotDescending { .. }),
+    ));
 }

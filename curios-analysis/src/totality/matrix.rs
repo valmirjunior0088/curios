@@ -24,7 +24,7 @@ pub struct Call {
     pub matrix: CallMatrix,
 }
 
-/// Close the call matrices transitively, or `None` if the closure outgrows [`closure_limit`] for the members the calls name.
+/// Close the call matrices transitively, or `None` if the closure outgrows [`closure_limit`] for the members the calls name, or if two calls that follow each other do not compose: a call graded over other than its caller part's parameters is one no path through the group can be read off, so the closure claims nothing rather than drop it.
 ///
 /// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `/std/Cli/check`'s `problems` calls `beneath` which calls back, and only the composite path is a cycle.
 ///
@@ -49,13 +49,11 @@ pub fn close(calls: Vec<Call>) -> Option<Vec<Call>> {
     while let Some(first) = frontier.pop() {
         let mut discovered = Vec::new();
         for second in &generators {
-            if first.callee == second.caller
-                && let Some(matrix) = first.matrix.compose(&second.matrix)
-            {
+            if first.callee == second.caller {
                 discovered.push(Call {
                     caller: first.caller,
                     callee: second.callee,
-                    matrix,
+                    matrix: first.matrix.compose(&second.matrix)?,
                 });
             }
         }
