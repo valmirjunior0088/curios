@@ -18,12 +18,14 @@ use {
         Advance, Applications, ClosedMemo, Cost, Free, Global, InductDecl, Intrinsic, Polarity,
         Probe, ReduceError, Reducer, StructDecl, Subterm, Term, Variance,
     },
-    std::ops::Deref,
+    std::{mem, ops::Deref},
 };
 
 /// The certifier while it reads by value: what reduction, conversion and classification may ask of it, made only by the doors of this module.
 pub struct ByValue<'b, 's> {
     certifier: &'b mut Certifier<'s>,
+    /// Whether the reading's reduction is plain: it asks the certifier's conversion nothing ([`ByValue::plainly`]). A mode of the reading, and of nothing else, so typing, which runs over no reading, has none to be in.
+    plain: bool,
 }
 
 impl<'s> Deref for ByValue<'_, 's> {
@@ -43,7 +45,13 @@ impl<'s> Certifier<'s> {
     ) -> T {
         let terms = terms.map(|term| self.scope.by_value(term));
 
-        read(&mut ByValue { certifier: self }, terms)
+        read(
+            &mut ByValue {
+                certifier: self,
+                plain: false,
+            },
+            terms,
+        )
     }
 
     /// Assume an arm's case equation: within the arm, `scrutinee` — as written, and as its dispatch resolves — is `value`, definitionally. Assumed inside the arm's [`Certifier::scoped`] bracket, which is what scopes it.
@@ -163,13 +171,24 @@ impl ByValue<'_, '_> {
         outcome
     }
 
-    /// Run `read` with reduction plain: it asks the certifier's conversion nothing ([`Certifier::plainly`]).
+    /// Run `read` with reduction plain: it asks the certifier's conversion nothing, at a stuck fold, at a missed equation, at a stuck elimination's atoms or at a one-arm match of a proposition.
+    ///
+    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance is sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
+    ///
+    /// **Each of the two reductions keeps its own answers.** A local-bearing reduct is remembered by the reduction that took it, and so are a sort and a comparison's verdict, which are read through reducts (`Memos`); an equation's reduced spelling is settled once for each. So what plain reduction made of a term never answers for a judgment's, nor the other way, and no answer depends on which of the two asked first.
+    ///
+    /// **Nothing is typed under it.** The mode is the reading's, and a reading offers no typing, so the types and the checks the certifier remembers, and the erased halves it classifies positions by, are a judgment's alone, and none is filed twice.
     pub fn plainly<T>(&mut self, read: impl FnOnce(&mut Self) -> T) -> T {
-        let previous = self.certifier.scope.begin_plain();
+        let outer = mem::replace(&mut self.plain, true);
         let answer = read(self);
-        self.certifier.scope.end_plain(previous);
+        self.plain = outer;
 
         answer
+    }
+
+    /// Whether this reading's reduction is plain ([`ByValue::plainly`]).
+    pub fn plain(&self) -> bool {
+        self.plain
     }
 
     /// Run `read` with the equation at `index` and every equation inside it withheld: the view an equation's reduced spelling is settled in ([`ByValue::settle_refinement`]) and its scrutinee asked about (`ByValue::asked_scrutinee`).
@@ -177,7 +196,7 @@ impl ByValue<'_, '_> {
     /// Withholding equations is a change to the set in force, and so is restoring them: what was read off the scope under the equations in force is set aside while `read` runs and handed back where they are restored, and what `read` read under the narrowed ones goes (`Memos::set_aside`). Withholding is `Scope::hide_refinements_from`'s to justify.
     pub fn withholding<T>(&mut self, index: usize, read: impl FnOnce(&mut Self) -> T) -> T {
         let outer = self.certifier.scope.hide_refinements_from(index);
-        let aside = self.certifier.memos.set_aside(self.certifier.scope.plain());
+        let aside = self.certifier.memos.set_aside(self.plain);
         let outcome = read(self);
         self.certifier.scope.show_refinements(outer);
         self.certifier.memos.hand_back(aside);
@@ -200,14 +219,68 @@ impl ByValue<'_, '_> {
 
         match reduct.probed() {
             Ok(settled) => {
-                self.certifier.scope.settle_refinement(index, settled);
+                self.certifier
+                    .scope
+                    .settle_refinement(index, self.plain, settled);
                 Ok(())
             }
             Err(spent) => {
-                self.certifier.scope.settle_refinement(index, None);
+                self.certifier
+                    .scope
+                    .settle_refinement(index, self.plain, None);
                 Err(spent)
             }
         }
+    }
+
+    /// The case value `term` is refined to under a reduced spelling this reading's reduction already settled, innermost arm first (`Scope::refinement_of_reduct`).
+    pub fn refinement_of_reduct(&self, term: &Term) -> Option<Term> {
+        self.certifier.scope.refinement_of_reduct(term, self.plain)
+    }
+
+    /// The equations in force whose reduced spelling this reading's reduction settled and that `candidate` could be a reduct of, innermost first, each as its position, that spelling and its value.
+    pub fn settled_refinements(
+        &self,
+        candidate: &Term,
+        proofs: &[Free],
+    ) -> Vec<(usize, Term, Term)> {
+        self.certifier
+            .scope
+            .settled_refinements(candidate, proofs, self.plain)
+    }
+
+    /// The innermost equation in force whose reduced spelling this reading's reduction has not asked for and could be `candidate`, as its position and the term to reduce.
+    pub fn unasked_refinement(&self, candidate: &Term, proofs: &[Free]) -> Option<(usize, Term)> {
+        self.certifier
+            .scope
+            .unasked_refinement(candidate, proofs, self.plain)
+    }
+
+    /// The remembered weak-head reduct of `term` this reading's reduction took, per entry point, handed back for nothing.
+    ///
+    /// The one hit that cannot fail, because it spends no steps and mints no identity: the certifier did not perform this computation, and charging it what a memo-free evaluator would have spent, in units or in identities, would run a judgment out on work nobody did. `Spend`'s module documentation and `Memos` state the two halves of why that is safe.
+    pub fn whnf_hit(&self, term: &Term, forced: bool) -> Option<Term> {
+        self.certifier.memos.whnf(term, forced, self.plain)
+    }
+
+    /// The remembered sort of `type_`, read by this reading's reduction, with nothing spent and nothing minted, as every hit is. A local-free type's, read with no case equation in force, is the declaration's; one read off the scope, for a type naming a local or under an equation, is taken only while the binders it was read under stand.
+    pub fn sort_hit(&self, type_: &Term) -> Option<Sort> {
+        self.certifier.standing(self.certifier.memos.sort(
+            type_,
+            self.certifier.has_refinements(),
+            self.plain,
+        ))
+    }
+
+    /// The remembered verdict of comparing `this` with `that` at `type_` by this reading's reduction, under the lives a typing has, with the pairs of heads its derivation unfolded. Only a verdict reached with no pair of heads left apart is ever filed, so it is the verdict wherever none of those pairs is being unfolded.
+    pub fn convert_hit(&self, type_: &Term, this: &Term, that: &Term) -> Option<Converted> {
+        self.certifier.standing(self.certifier.memos.converted(
+            type_,
+            this,
+            that,
+            self.certifier.has_refinements(),
+            self.plain,
+        ))
     }
 
     /// The binders `term` names that are themselves proofs: opened at a proposition, so conversion reads them nowhere, and a stuck form naming one the key of an equation does not may still be that key's term (`curios_analysis::could_reduce_to`).
@@ -261,21 +334,23 @@ impl ByValue<'_, '_> {
         self.certifier.advance_assumed(walk, domain)
     }
 
-    /// Remember a `term`'s weak-head reduct, which [`Certifier::whnf_hit`] hands back.
+    /// Remember a `term`'s weak-head reduct, which [`ByValue::whnf_hit`] hands back.
     ///
     /// **Stored for nothing.** `Memos::begin_declaration` clears the table exactly where `Spend::restore_budget` fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
     pub fn whnf_store(&mut self, term: Term, forced: bool, reduct: Term) {
-        let plain = self.certifier.scope.plain();
-        self.certifier.memos.store_whnf(term, forced, plain, reduct);
+        self.certifier
+            .memos
+            .store_whnf(term, forced, self.plain, reduct);
     }
 
     /// Remember `type_`'s sort, beside the binders in scope now.
     pub fn sort_store(&mut self, type_: Term, sort: Sort) {
+        let plain = self.plain;
         let certifier = &mut *self.certifier;
         certifier.memos.store_sort(
             type_,
             certifier.scope.has_refinements(),
-            certifier.scope.plain(),
+            plain,
             certifier.scope.prefix(),
             sort,
         );
@@ -283,11 +358,12 @@ impl ByValue<'_, '_> {
 
     /// Remember the verdict of comparing `this` with `that` at `type_`, with the pairs of heads its derivation unfolded.
     pub fn convert_store(&mut self, type_: &Term, this: &Term, that: &Term, converted: Converted) {
+        let plain = self.plain;
         let certifier = &mut *self.certifier;
         certifier.memos.store_converted(
             (type_.clone(), this.clone(), that.clone()),
             certifier.scope.has_refinements(),
-            certifier.scope.plain(),
+            plain,
             certifier.scope.prefix(),
             converted,
         );
@@ -371,5 +447,68 @@ impl Env for ByValue<'_, '_> {
 
     fn refined(&self) -> Vec<(Term, Term)> {
         Env::refined(&**self)
+    }
+}
+
+/// The certifier's side of the shared-analysis seam, for an analysis typing started: its reduction a door ([`ByValue`]).
+impl Env for Certifier<'_> {
+    type Error = Error;
+
+    /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads. A door, so the term is read by value, in a reading whose reduction is plain.
+    fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        Ok(self.read_by_value([term], |certifier, [term]| {
+            certifier.plainly(|certifier| certifier.reduce_forced(term))
+        })?)
+    }
+
+    fn assumption(&self, name: &Free) -> Option<&Term> {
+        self.local_type(name)
+    }
+
+    fn is_local(&self, name: &Free) -> bool {
+        self.local_type(name).is_some()
+    }
+
+    fn fresh(&mut self, hint: Option<&str>) -> Free {
+        Certifier::fresh(self, hint)
+    }
+
+    /// None: what the certifier hands a shared analysis it reads by value already — a door unfolded it, or the scope holds it so — but for a graded call's arguments, whose variables an arm's index inversion solved the size order reads as written (`Certifier::graded`).
+    fn unfold(&self, _: &Free) -> Option<&Term> {
+        None
+    }
+
+    fn body(&self, name: &Global) -> Option<&Term> {
+        Certifier::body(self, name)
+    }
+
+    fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
+        Certifier::induct_decl(self, name)
+    }
+
+    fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
+        Certifier::struct_decl(self, name)
+    }
+
+    fn polarity(&self, name: &Global, index: usize) -> Polarity {
+        Certifier::polarity(self, name, index)
+    }
+
+    /// Whether a walk filed the family's vector: the certifier registers every family of a module before it judges any, so one stored after the family judged is held and not judged.
+    fn judged(&self, name: &Global) -> bool {
+        Certifier::judged(self, name)
+    }
+
+    fn variance(&self, name: &Global, index: usize) -> Variance {
+        Certifier::variance(self, name, index)
+    }
+
+    fn applications(&self, name: &Global) -> Option<Applications> {
+        Certifier::applications(self, name)
+    }
+
+    /// The case equations of the arms in force, each keyed by value where it was recorded (`Certifier::refine`) and restated under an arm's solution (`Scope::restate`), so none names a `let`-bound local.
+    fn refined(&self) -> Vec<(Term, Term)> {
+        self.scope.refined()
     }
 }

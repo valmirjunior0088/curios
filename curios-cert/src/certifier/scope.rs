@@ -7,7 +7,7 @@
 use {
     curios_analysis::{could_reduce_to, reads_solved, records_case_equation},
     curios_core::{Free, Term},
-    std::{collections::HashMap, iter, mem},
+    std::{collections::HashMap, iter},
 };
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
@@ -34,7 +34,7 @@ struct Refinement {
     resolved: Option<Term>,
     /// The value this case assumes the scrutinee is.
     value: Term,
-    /// The weak-head normal form of `key` twice over — as a judgment reduces it, and as plain reduction does ([`Scope::plain`]) — each computed at most once and only when a probe of that reduction has already missed the written spelling. See [`Scope::unasked_refinement`].
+    /// The weak-head normal form of `key` twice over — as a judgment reduces it, and as plain reduction does, a reading's mode ([`ByValue::plainly`](super::ByValue::plainly)) — each computed at most once and only when a probe of that reduction has already missed the written spelling. See [`Scope::unasked_refinement`].
     ///
     /// One for each because a probe is compared with the spelling reduced the way the probe was: plain reduction asks its checker's conversion nothing, so where a key holds a fold only a question decides, its two reducts are two terms.
     reducts: [Reduct; 2],
@@ -104,8 +104,6 @@ pub struct Scope {
     refinements: Vec<Refinement>,
     /// How many equations are currently in force, when that is fewer than there are. `Some(n)` withholds everything from `n` inwards for the duration of one [`Scope::unasked_refinement`] settlement — see [`Scope::hide_refinements_from`].
     hidden: Option<usize>,
-    /// Whether reduction is plain: it asks the certifier's conversion nothing. Set while a question reduction put to conversion is answered, which is what ends the regress, and while a shared analysis reads a term (`Env::force`), which may rest on no verdict of conversion's. Plain reduction reads the reduced spellings it settled itself, as a judgment's reads its own.
-    plain: bool,
     /// How many binders this walk has opened, closed ones included.
     openings: u64,
 }
@@ -368,8 +366,8 @@ impl Scope {
     /// The case value `term` is refined to under a *reduced* spelling already settled, innermost arm first.
     ///
     /// The escalation the written spelling's probe misses reach, and it settles nothing itself: an equation whose reduced spelling has never been asked for cannot answer here.
-    pub fn refinement_of_reduct(&self, term: &Term) -> Option<Term> {
-        let plain = usize::from(self.plain);
+    pub fn refinement_of_reduct(&self, term: &Term, plain: bool) -> Option<Term> {
+        let plain = usize::from(plain);
         self.in_force_innermost_first()
             .find(|entry| match &entry.reducts[plain] {
                 Reduct::Known(Some(reduct)) => reduct == term,
@@ -383,8 +381,9 @@ impl Scope {
         &self,
         candidate: &Term,
         proofs: &[Free],
+        plain: bool,
     ) -> Vec<(usize, Term, Term)> {
-        let plain = usize::from(self.plain);
+        let plain = usize::from(plain);
         self.refinements[..self.in_force()]
             .iter()
             .enumerate()
@@ -405,8 +404,13 @@ impl Scope {
     ///
     /// **Reading the limit here is also what makes the settlement loop finite**, and that is a second job rather than a restatement of the first. An entry being settled is outside the limit for the whole of its own reduction, so a probe reached from inside cannot select it again; relaxing this while keeping the probes' half sends `refined_reduct` back into the entry it is already settling.
     /// **`candidate` is what decides whether the reduction happens at all**, and without that test the deferral buys nothing. A settlement is the whole cost the two-tier key exists to avoid, and a probe reached under freshly opened binders — `Sort::of` walking a telescope, an arm body's own erasure obligations — presents a stuck form on almost every reduction, so *some* term would trigger a settlement in any arm whatever. What [`could_reduce_to`] tests is the one thing a reduct's spelling cannot lie about.
-    pub fn unasked_refinement(&self, candidate: &Term, proofs: &[Free]) -> Option<(usize, Term)> {
-        let plain = usize::from(self.plain);
+    pub fn unasked_refinement(
+        &self,
+        candidate: &Term,
+        proofs: &[Free],
+        plain: bool,
+    ) -> Option<(usize, Term)> {
+        let plain = usize::from(plain);
         self.refinements[..self.in_force()]
             .iter()
             .enumerate()
@@ -431,24 +435,9 @@ impl Scope {
     }
 
     /// Record what the equation at `index` reduces to, or that reducing it refused.
-    pub fn settle_refinement(&mut self, index: usize, reduct: Option<Term>) {
-        let plain = usize::from(self.plain);
+    pub fn settle_refinement(&mut self, index: usize, plain: bool, reduct: Option<Term>) {
+        let plain = usize::from(plain);
         self.refinements[index].reducts[plain] = Reduct::Known(reduct);
-    }
-
-    /// Whether reduction is plain: it asks the certifier's conversion nothing.
-    pub fn plain(&self) -> bool {
-        self.plain
-    }
-
-    /// Make reduction plain, handing back whether it was already for [`Scope::end_plain`].
-    pub fn begin_plain(&mut self) -> bool {
-        mem::replace(&mut self.plain, true)
-    }
-
-    /// Put back what [`Scope::begin_plain`] handed out.
-    pub fn end_plain(&mut self, previous: bool) {
-        self.plain = previous;
     }
 
     /// Withhold the equation at `index` and every equation inside it, handing back the previous limit for [`Scope::show_refinements`].

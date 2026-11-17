@@ -216,9 +216,9 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
 
     assert_eq!(convert(&mut certifier, &nat, &left, &right), Ok(false));
     assert_eq!(
-        certifier
-            .convert_hit(&nat, &left, &right)
-            .map(|remembered| remembered.verdict),
+        reading(&mut certifier, |certifier| certifier
+            .convert_hit(&nat, &left, &right))
+        .map(|remembered| remembered.verdict),
         None
     );
 
@@ -226,17 +226,17 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     let redex = term("((x: Type) => x)(#NatType)");
     assert_eq!(convert(&mut certifier, &ground, &redex, &nat), Ok(true));
     assert_eq!(
-        certifier
-            .convert_hit(&ground, &redex, &nat)
-            .map(|remembered| remembered.verdict),
+        reading(&mut certifier, |certifier| certifier
+            .convert_hit(&ground, &redex, &nat))
+        .map(|remembered| remembered.verdict),
         Some(true)
     );
 
     certifier.restore_budget();
     assert_eq!(
-        certifier
-            .convert_hit(&ground, &redex, &nat)
-            .map(|remembered| remembered.verdict),
+        reading(&mut certifier, |certifier| certifier
+            .convert_hit(&ground, &redex, &nat))
+        .map(|remembered| remembered.verdict),
         None
     );
 }

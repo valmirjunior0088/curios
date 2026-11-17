@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*,
+    crate::certifier::by_value::test_support::*,
     crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
     curios_common::fill,
@@ -266,21 +267,25 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
         term("#{node = InductType} /Judged()"),
     );
 
-    certifier
-        .plainly(|certifier| Sort::of(certifier, &read))
-        .expect("classifies");
-    assert!(certifier.sort_hit(&read).is_none());
-    assert!(
+    reading(&mut certifier, |certifier| {
         certifier
-            .plainly(|certifier| certifier.sort_hit(&read))
-            .is_some()
-    );
+            .plainly(|certifier| certifier.sort_of(&read))
+            .expect("classifies");
+        assert!(certifier.sort_hit(&read).is_none());
+        assert!(
+            certifier
+                .plainly(|certifier| certifier.sort_hit(&read))
+                .is_some()
+        );
+    });
 
     Sort::of(&mut certifier, &judged).expect("classifies");
-    assert!(
-        certifier
-            .plainly(|certifier| certifier.sort_hit(&judged))
-            .is_none()
-    );
-    assert!(certifier.sort_hit(&judged).is_some());
+    reading(&mut certifier, |certifier| {
+        assert!(
+            certifier
+                .plainly(|certifier| certifier.sort_hit(&judged))
+                .is_none()
+        );
+        assert!(certifier.sort_hit(&judged).is_some());
+    });
 }
