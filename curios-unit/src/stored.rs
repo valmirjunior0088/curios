@@ -57,7 +57,7 @@ pub fn recorded(reads: &[(PathBuf, Arc<Source>)]) -> Option<Vec<(SourceName, Str
     Some(recorded)
 }
 
-/// What a slot file opens with, so a slot is told from anything else by its first bytes rather than by guessing where a record might end. Versioned in the address's schema tag rather than here: a slot written under an older framing is not found rather than found and misread.
+/// What a slot file opens with, so a slot is told from anything else by its first bytes rather than by guessing where a record might end. Versioned by the compiler its address names rather than here: a slot another compiler framed is not found rather than found and misread.
 const MAGIC: &[u8; 8] = b"crslot\0\0";
 
 /// The bytes of one slot file: the magic, the record's length, the record, then the artifact.
