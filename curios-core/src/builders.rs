@@ -4,7 +4,7 @@
 
 use {
     super::{
-        Apply, Ascribed, Bang, Func, FuncType, Global, Infix, Intrinsic, Level, Matrix, NumLit,
+        Apply, Ascribed, Bang, Declared, Func, Global, Infix, Intrinsic, Level, Matrix, NumLit,
         Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
     },
     curios_common::{InfixOp, Sign, StringSyntax, SyntaxName},
@@ -196,18 +196,8 @@ impl Intrinsic {
 impl Term {
     /// Return the declaration a direct type-family alias's head names, as it is written.
     ///
-    /// The declared type must structurally end in a literal [`Subterm::Sort`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
+    /// The declared type must declare a type as written ([`Declared::defined`]): a literal [`Subterm::Sort`] past function-type telescopes alone. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
     pub fn direct_type_alias_target(&self, declared_type: &Term) -> Option<Global> {
-        fn ends_in_literal_sort(term: &Term) -> bool {
-            match &**term {
-                Subterm::Sort(_) => true,
-                Subterm::FuncType(FuncType { telescope, .. }) => {
-                    ends_in_literal_sort(telescope.terminal())
-                }
-                _ => false,
-            }
-        }
-
         fn application_head(term: &Term) -> Option<Global> {
             match &**term {
                 Subterm::Apply(Apply { head, .. }) => application_head(head),
@@ -223,7 +213,7 @@ impl Term {
             }
         }
 
-        ends_in_literal_sort(declared_type)
+        matches!(Declared::defined(declared_type), Declared::Type)
             .then(|| direct_head(self))
             .flatten()
     }

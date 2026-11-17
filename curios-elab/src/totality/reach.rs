@@ -13,7 +13,7 @@
 use {
     crate::ErasedSite,
     curios_core::{
-        Bound, Definition, Definitions, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item,
+        Bound, Declared, Definition, Definitions, Enter, Entrypoint, Func, Global, Intrinsic, Item,
         Match, Struct, Subterm, Telescope, Term, Variant,
     },
     std::{
@@ -53,7 +53,7 @@ pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> 
             settled: None,
         });
         push(&mut positions, &of_type, &definition.type_);
-        if ends_in_sort(&definition.type_) {
+        if matches!(Declared::defined(&definition.type_), Declared::Type) {
             let of_body = Rc::new(ErasedSite::BodyOf(name));
             push(&mut positions, &of_body, &definition.body);
         }
@@ -126,27 +126,6 @@ fn entries<B: Bound>(
     while let Telescope::Cons(_, entry, rest, ..) = telescope {
         push(positions, site, entry);
         telescope = rest.body();
-    }
-}
-
-/// Whether this type's terminal, after peeling every arrow, is a sort — the test for "this definition denotes a type or a proposition".
-fn ends_in_sort(type_: &Term) -> bool {
-    let mut current = type_.clone();
-    loop {
-        let next = match &*current {
-            Subterm::Sort(_) => return true,
-            Subterm::FuncType(FuncType { telescope, .. }) => {
-                let mut telescope = telescope;
-                loop {
-                    match telescope {
-                        Telescope::Done(inner) => break (**inner).clone(),
-                        Telescope::Cons(_, _, rest, ..) => telescope = rest.body(),
-                    }
-                }
-            }
-            _ => return false,
-        };
-        current = next;
     }
 }
 
