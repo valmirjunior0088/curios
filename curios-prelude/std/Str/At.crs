@@ -143,7 +143,9 @@ pub let skip(
 ) -> {past: At(s), progress: Bool/Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let hopped = hop(@rest.bytes, proved());
-    (past = of_after(s, at, At { offset = hopped.width }), progress = hopped.positive);
+    (
+        past = At { offset = at.offset + hopped.width, @_, @boundary = hopped.boundary },
+        progress = hopped.positive);
 
 --- The character at `at`, the position past it, and the proof that it lies past.
 pub let next(
@@ -152,8 +154,11 @@ pub let next(
     @here: Bool/Holds(at.offset < Bytes/len(s.bytes)),
 ) -> {char: Char, past: At(s), progress: Bool/Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
-    let stepped = skip(s, at, @here);
-    (char = lead(rest.valid, proved()), past = stepped.past, progress = stepped.progress);
+    let hopped = hop(@rest.bytes, proved());
+    (
+        char = lead(rest.valid, proved()),
+        past = At { offset = at.offset + hopped.width, @_, @boundary = hopped.boundary },
+        progress = hopped.positive);
 
 --- The character at `at`, the position past it and the proof that it lies past, or `none` at the end of `s`.
 pub let try_next(
