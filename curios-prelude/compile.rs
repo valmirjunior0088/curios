@@ -17,7 +17,7 @@ use {
     curios_erase::{ErasedUnit, Erasures, erase_unit},
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit, prepare_prelude},
     curios_surface::Spelling,
-    curios_unit::{Indexed, Record, Unit, framed, packed},
+    curios_unit::{Indexed, Record, Unit, framed, packed, recorded},
     std::{
         collections::BTreeSet,
         fs,
@@ -293,7 +293,7 @@ fn certified(
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
 ///
-/// The record is the compiler's own account of the tree the root was built from, by canonical path on the machine that built it. That is the intended meaning: a checkout claiming `/std` is the tree the archive came from exactly when the paths agree, and a compiler moved to another machine or built from another checkout records paths no other tree has.
+/// The record is the compiler's own account of the tree the root was built from: each file by the name the package `std` gives it, with the digest of its text, the same bytes wherever the tree stood. A checkout claiming `/std` holds the tree the archive came from exactly when its files hold those texts.
 fn write_image(
     directory: &Path,
     root: &str,
@@ -321,6 +321,7 @@ fn write_image(
     );
 
     // The compiler's own library is no package's, and no manifest claims a declaration of it: its rows are the host's to answer.
+    let reads = recorded(&reads).unwrap_or_else(|| panic!("/{root} reads a file for no package"));
     let record = Record::of(reads, after, Vec::new(), digest(first.index()));
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));

@@ -390,7 +390,7 @@ fn a_unit_is_not_reused_under_other_claims() {
     assert!(reused(&root), "then stored under the claims it has now");
 }
 
-/// A slot filed by one project must not answer for another's, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do.
+/// A slot filed by one project does not answer for another's source where its files hold other texts, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do: its record's names resolve to this project's files.
 ///
 /// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable.
 #[test]
@@ -406,7 +406,7 @@ fn a_slot_does_not_answer_for_another_projects_source() {
 
     assert!(
         !reused(&mine),
-        "their record names their files, which are not mine to have read"
+        "their record names texts my files do not hold"
     );
 }
 
@@ -606,9 +606,9 @@ fn a_unit_kept_without_being_filed_leaves_the_slot_as_it_was() {
     assert_ne!(slots(&root), before, "a build files what it compiled");
 }
 
-/// Another project's slot names files this project could not have read, so it is no baseline either — the containment clause a hit is held to.
+/// Another project's slot for a package of the same name is a baseline as any slot is: a recompile over it keeps what it lowered from the texts this project still holds, and lowers again what this project wrote otherwise.
 #[test]
-fn another_projects_slot_is_no_baseline() {
+fn another_projects_slot_is_a_baseline() {
     let mine = project("baseline-mine");
     let theirs = project("baseline-theirs");
 
@@ -619,8 +619,32 @@ fn another_projects_slot_is_no_baseline() {
 
     assert_eq!(
         folded_overlaid(&mine, &Overlay::default()),
-        ["compiling /shape"]
+        ["recompiling /shape"]
     );
+}
+
+/// A slot another project filed answers for this one where this project's files hold the texts it was compiled from: the unit is the one this project would compile, so a store shared across projects compiles it once.
+#[test]
+fn a_slot_answers_for_another_project_holding_its_texts() {
+    let mine = project("sharing-mine");
+    let theirs = project("sharing-theirs");
+
+    assert!(!reused(&theirs), "nothing is stored for the first compile");
+    stage(&theirs, &mine);
+
+    assert!(reused(&mine));
+}
+
+/// A project moved to another directory keeps its stored units: a record names each file by its package, and the package's files hold the texts they did wherever it stands.
+#[test]
+fn a_moved_project_keeps_its_stored_units() {
+    let root = project("moved-from");
+    assert!(!reused(&root), "nothing is stored for the first compile");
+
+    let moved = temporary("moved-to");
+    copied(&root, &moved);
+
+    assert!(reused(&moved));
 }
 
 /// An entry with a declaration of its own, so the unit of its declarations holds something.

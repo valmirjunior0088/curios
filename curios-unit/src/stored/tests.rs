@@ -1,18 +1,6 @@
 //! The stored-unit framing, and what a record says about where a unit came from.
 
-use super::*;
-
-fn of_reads(reads: &[&str]) -> Record {
-    Record {
-        reads: reads
-            .iter()
-            .map(|path| (path.to_string(), "digest".to_string()))
-            .collect(),
-        after: Vec::new(),
-        answers: Vec::new(),
-        unit: "unit".to_string(),
-    }
-}
+use {super::*, std::path::Path};
 
 #[test]
 fn a_slot_frames_its_record_ahead_of_the_artifact_and_reads_both_back() {
@@ -50,16 +38,37 @@ fn a_slots_record_is_found_from_its_preamble_alone() {
     assert_eq!(record_length(&[0; PREAMBLE]), None);
 }
 
-/// Containment is checked per read against every directory, so one read outside all of them is enough to refuse the record.
+/// A record names each file by its name, in the order of the names whatever order the files were read in, and a file read for no package leaves no record to name it.
 #[test]
-fn a_read_outside_every_directory_is_not_within_them() {
-    let record = of_reads(&["/w/std/lib.crs", "/elsewhere/std/Nat.crs"]);
-    let directories = [Path::new("/w/std"), Path::new("/w/other")];
+fn a_record_names_its_reads_by_name_and_none_read_for_no_package() {
+    let named = |path: &str, text: &str| {
+        let name = SourceName::of("app", Path::new(path)).expect("a plain path");
+        let file = PathBuf::from("/w/app").join(path);
 
-    assert!(!read_within(&directories, &record.reads));
-    assert!(read_within(
-        &directories,
-        &of_reads(&["/w/std/lib.crs", "/w/other/lib.crs"]).reads
-    ));
-    assert!(read_within(&directories, &of_reads(&[]).reads));
+        (
+            file.clone(),
+            Arc::new(Source::of(Some(name), Some(file), text)),
+        )
+    };
+    let reads = [named("util.crs", "b"), named("lib.crs", "a")];
+
+    assert_eq!(
+        recorded(&reads).expect("every read is named"),
+        [
+            (
+                SourceName::of("app", Path::new("lib.crs")).unwrap(),
+                digest(b"a")
+            ),
+            (
+                SourceName::of("app", Path::new("util.crs")).unwrap(),
+                digest(b"b")
+            ),
+        ]
+    );
+
+    let loose = (
+        PathBuf::from("/w/scratch.crs"),
+        Source::held("/w/scratch.crs", "c"),
+    );
+    assert_eq!(recorded(&[reads[0].clone(), loose]), None);
 }

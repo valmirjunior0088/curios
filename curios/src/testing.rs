@@ -45,6 +45,8 @@ pub fn page_name(named: &Named) -> String {
 struct Filing {
     root: PathBuf,
     package: String,
+    /// The entry, by the name its package gives it: what the payload is verified against.
+    entry: SourceName,
     executable: Option<String>,
     reserved: String,
     manifest: PathBuf,
@@ -142,6 +144,8 @@ impl TestSubject {
             filing: Some(Filing {
                 root: root.to_path_buf(),
                 package: package.to_string(),
+                entry: SourceName::of(package, Path::new(LIBRARY))
+                    .expect("a package's name and its header's are plain names"),
                 executable: None,
                 reserved: "tests/".to_string(),
                 manifest: manifest.to_path_buf(),
@@ -153,18 +157,22 @@ impl TestSubject {
     fn declared(program: curios_package::Program) -> Result<Self, CompileError> {
         let home = program.home().expect("a declared program has a home");
         let name = home.executable.clone();
-        let filing = Filing {
-            root: home.root.clone(),
-            package: home.package.clone(),
-            executable: Some(home.executable.clone()),
-            reserved: format!("tests/{}", home.executable),
-            manifest: home.manifest.clone(),
-        };
         let declares = program.declares();
         let Entry::File(entry) = program.entry().clone() else {
             unreachable!("a declared program is written in a file");
         };
         let (entrypoint, loader, source) = opened(&entry, Some(&home.package_root()))?;
+        let filing = Filing {
+            root: home.root.clone(),
+            package: home.package.clone(),
+            entry: source
+                .name()
+                .cloned()
+                .expect("a declared program's entry is named by its package"),
+            executable: Some(home.executable.clone()),
+            reserved: format!("tests/{}", home.executable),
+            manifest: home.manifest.clone(),
+        };
         let loader = match declares {
             Some(declares) => loader.declaring(declares),
             None => loader,
@@ -252,7 +260,7 @@ impl TestSubject {
         let program = self.filing.as_ref().map(|filing| Program {
             package: &filing.package,
             executable: &filing.reserved,
-            entry: &self.entry,
+            entry: &filing.entry,
             text: &self.text,
             loader: &self.loader,
             tests: Some(under),

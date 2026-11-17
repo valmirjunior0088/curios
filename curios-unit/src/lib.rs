@@ -19,8 +19,8 @@ pub use unit::{ArchivedUnit, Unit};
 mod stored;
 use stored::*;
 pub use stored::{
-    ArchivedRecord, PREAMBLE, Record, apart_parts, digested, framed, halves, read_within,
-    record_length, segments,
+    ArchivedRecord, PREAMBLE, Record, apart_parts, framed, halves, record_length, recorded,
+    segments,
 };
 
 mod pack;

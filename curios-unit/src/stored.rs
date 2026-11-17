@@ -7,11 +7,8 @@ mod tests;
 
 use {
     curios_archive::{Bytes, parted},
-    curios_common::{Digest, Object, Source, digest},
-    std::{
-        path::{Path, PathBuf},
-        sync::Arc,
-    },
+    curios_common::{Digest, Object, Source, SourceName, digest},
+    std::{path::PathBuf, sync::Arc},
 };
 
 /// What a stored unit must still be true of to be believed.
@@ -20,8 +17,8 @@ use {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct Record {
-    /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` collects its vector out of a `BTreeMap`.
-    pub reads: Vec<(String, String)>,
+    /// Each file the compilation read, by the name its package gives it, with the digest of the text that was parsed from it, in the order of the names ([`recorded`]). A name and no path: a record is the same bytes wherever its package stands, and whoever verifies it resolves each name through the packages of the source asking.
+    pub reads: Vec<(SourceName, String)>,
     /// What each unit the compilation could have read contained: the units it may name and the ones those may name in turn, each by the prefixes it claims and the digest of the bytes its own slot holds, in the order of those prefixes. A unit outside them is not named, so what it holds decides nothing here.
     pub after: Vec<(String, String)>,
     /// The `foreign` declarations the unit's package said a module answers when it was compiled, each beside the manifest row that names it, as its source carried them. A claim is held to a declaration of the unit where the unit is compiled or restored, and a program's stored payload is taken with no unit compiled or restored at all: recorded here, a manifest whose claims have changed since is a disagreement, so the claims it holds now are held as any are.
@@ -31,15 +28,15 @@ pub struct Record {
 }
 
 impl Record {
-    /// The record of a unit compiled from `reads` after units containing `after`, under a package claiming `answers`, whose own bytes digest to `unit`.
+    /// The record of a unit compiled from `reads`, as [`recorded`] spells them, after units containing `after`, under a package claiming `answers`, whose own bytes digest to `unit`.
     pub fn of(
-        reads: Vec<(PathBuf, Arc<Source>)>,
+        reads: Vec<(SourceName, String)>,
         after: Vec<(String, String)>,
         answers: Vec<(String, String)>,
         unit: String,
     ) -> Self {
         Self {
-            reads: digested(reads),
+            reads,
             after,
             answers,
             unit,
@@ -47,38 +44,17 @@ impl Record {
     }
 }
 
-/// A read log as a record spells it: each file by canonical path, with the digest of the text that was parsed from it.
-pub fn digested(reads: Vec<(PathBuf, Arc<Source>)>) -> Vec<(String, String)> {
-    reads
-        .into_iter()
-        .map(|(path, text)| {
-            (
-                path.to_string_lossy().into_owned(),
-                digest(text.text().as_bytes()),
-            )
-        })
-        .collect()
-}
-
-/// Whether every file in `reads` lies under one of `directories`.
+/// A read log as a record spells it: each file by the name its package gives it, with the digest of the text that was parsed from it, in the order of the names. `None` where a file was read for no package, which no record can name: a unit that read one has no place in a store.
 ///
-/// This is what keeps a shared store from admitting across projects. A slot's address carries no file contents, so two projects that each hold a package of one name, compiled by one compiler after one chain, address the same slot; without this, the second opens the first's record, finds the first's files unchanged on disk because nothing touched them, and is handed a unit compiled from source it has never seen. Checking containment rather than re-deriving the read set keeps the check exact: a git dependency is materialized once under the shared store and read from that same path by every project, so genuine sharing survives.
-pub fn read_within(directories: &[&Path], reads: &[(String, String)]) -> bool {
-    // Canonical on both sides, because a record's paths are canonical and a source's directories are however the manifest walk spelled them.
-    let within = directories
+/// **A name resolves only to a file of the asking source's own packages**, which is what keeps a store shared across projects from handing one project a unit compiled from another's files: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, and so is the unit this project would compile.
+pub fn recorded(reads: &[(PathBuf, Arc<Source>)]) -> Option<Vec<(SourceName, String)>> {
+    let mut recorded = reads
         .iter()
-        .map(|directory| {
-            directory
-                .canonicalize()
-                .unwrap_or_else(|_| directory.to_path_buf())
-        })
-        .collect::<Vec<_>>();
+        .map(|(_, source)| Some((source.name()?.clone(), digest(source.text().as_bytes()))))
+        .collect::<Option<Vec<_>>>()?;
+    recorded.sort();
 
-    reads.iter().all(|(path, _)| {
-        within
-            .iter()
-            .any(|directory| Path::new(path).starts_with(directory))
-    })
+    Some(recorded)
 }
 
 /// What a slot file opens with, so a slot is told from anything else by its first bytes rather than by guessing where a record might end. Versioned in the address's schema tag rather than here: a slot written under an older framing is not found rather than found and misread.

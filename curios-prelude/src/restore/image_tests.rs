@@ -2,14 +2,15 @@
 
 use {
     super::{test_support::*, *},
+    crate::test_support::*,
     curios_cert::certify_definitions,
-    curios_common::{Qualifier, Style, digest},
+    curios_common::{Qualifier, SourceName, Style, digest},
     curios_core::{Anchors, Global, Item, Size},
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
     curios_unit::{Record, segments},
-    std::{collections::BTreeSet, path::PathBuf, thread, time::Instant},
+    std::{collections::BTreeSet, thread, time::Instant},
 };
 
 #[test]
@@ -61,11 +62,14 @@ fn the_std_image_records_the_sys_image_as_its_predecessor() {
 /// The read set is closed and every authored module is registered, so the record and the tree agree exactly: the record is the compiler's own account of which sources the image came from.
 #[test]
 fn the_std_record_names_every_authored_source_and_no_other() {
+    let directory = std_directory();
     let authored = crate::tests::authored()
         .into_iter()
         .map(|path| {
-            path.canonicalize()
-                .expect("an authored source canonicalizes")
+            let below = path
+                .strip_prefix(&directory)
+                .expect("an authored source of `/std`");
+            SourceName::of("std", below).expect("a plain path")
         })
         .collect::<BTreeSet<_>>();
 
@@ -73,10 +77,30 @@ fn the_std_record_names_every_authored_source_and_no_other() {
     let recorded = std
         .reads
         .iter()
-        .map(|(path, _)| PathBuf::from(path))
+        .map(|(name, _)| name.clone())
         .collect::<BTreeSet<_>>();
 
     assert_eq!(recorded, authored);
+}
+
+/// No byte of the prelude's images holds the directory they were built in: what an image keeps of a source is its name, so one tree built in two directories is one image, and a compiler carries no directory of the machine that built it.
+#[test]
+fn no_image_holds_the_directory_it_was_built_in() {
+    let built_in = std_directory();
+    let built_in = built_in.to_string_lossy();
+    let images = ROOTS
+        .into_iter()
+        .flat_map(|(root, bytes, pack)| [(root, bytes), (root, pack)])
+        .chain([("documentation", DOCUMENTATION_BYTES)]);
+
+    for (image, bytes) in images {
+        assert!(
+            !bytes
+                .windows(built_in.len())
+                .any(|window| window == built_in.as_bytes()),
+            "an image of /{image} holds {built_in}"
+        );
+    }
 }
 
 /// The record ahead of each image digests exactly the index behind it, as a slot's record digests the index it was filed with.

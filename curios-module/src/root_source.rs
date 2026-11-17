@@ -308,7 +308,7 @@ impl RootSource {
     ///
     /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a store.
     ///
-    /// Canonical paths, so the same file reached through a relative invocation and an absolute one is one entry. The consequence is that moving a project invalidates its records, which costs one recompile and then re-records.
+    /// Keyed by canonical path within the process, so the same file reached through a relative invocation and an absolute one is one entry; what outlives the process holds each by its name (`curios_unit::recorded`), so a project moved keeps its records.
     pub fn reads(&self) -> Vec<(PathBuf, Arc<Source>)> {
         self.reads
             .borrow()

@@ -21,17 +21,18 @@ pub use payload::*;
 
 use {
     crate::{Packs, opened, replace},
-    curios_common::{Candidates, Qualifier, digest},
-    curios_module::{Compiled, Overlay, UnitSource},
+    curios_common::{Candidates, Qualifier, Source, SourceName, digest},
+    curios_module::{Compiled, Overlay, PackageRoot, UnitSource},
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier, complete_records},
-    curios_unit::{Indexed, Record, Unit, digested, read_within},
+    curios_unit::{Indexed, Record, Unit, recorded},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet},
         fs, io,
         path::{Path, PathBuf},
         rc::Rc,
+        sync::Arc,
         time::SystemTime,
     },
 };
@@ -76,8 +77,28 @@ fn identity(source: &UnitSource<'_>) -> Identity {
     )
 }
 
-/// Each file one unit read, by canonical path, with the digest of the text parsed from it — spelled as a record spells it, since a restored unit's log *is* its record's.
-type ReadLog = Vec<(String, String)>;
+/// Each file one unit read, by the file this process reads it from, with the digest of the text parsed from it: a record's reads resolved for the source asking, or a compile's own.
+type ReadLog = Vec<(PathBuf, String)>;
+
+/// The log of a source's own `reads`: each file it read, with the digest of the text parsed from it.
+fn logged(reads: &[(PathBuf, Arc<Source>)]) -> ReadLog {
+    reads
+        .iter()
+        .map(|(file, source)| (file.clone(), digest(source.text().as_bytes())))
+        .collect()
+}
+
+/// What a record's `reads` log for a source reading for `packages`: each name resolved to the file one of the packages holds under it. `None` where a name is of no package the source reads for, which no file of this project answers.
+fn resolved(packages: &[PackageRoot], reads: &[(SourceName, String)]) -> Option<ReadLog> {
+    reads
+        .iter()
+        .map(|(name, digest)| {
+            let file = packages.iter().find_map(|package| package.file_of(name))?;
+
+            Some((file, digest.clone()))
+        })
+        .collect()
+}
 
 /// A unit a session has in hand for a source — compiled by a fold of its own, or restored from a slot — beside the slot it stands at and every unit the fold had taken before it: what a kept unit is offered with.
 struct Kept {
@@ -253,7 +274,7 @@ impl Verdicts {
         }
 
         // Whether or not it could be kept: a unit after this one is checked against this one either way.
-        self.take(source, digested(source.reads()), Some(unit.clone()), None);
+        self.take(source, logged(&source.reads()), Some(unit.clone()), None);
     }
 
     /// Hold `unit` as what the session has for `source` at `slot`, after the units this fold has taken so far, replacing whatever it held for that unit before: `digest` names the bytes the slot holds that it is, where it is one the slot holds. Nothing where no session is attached.
@@ -335,7 +356,7 @@ impl Verdicts {
 
         self.take(
             source,
-            digested(source.reads()),
+            logged(&source.reads()),
             Some(unit.clone()),
             Some(contained),
         );
@@ -475,9 +496,8 @@ impl Verdicts {
             let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
 
             let reach = reach(source, &taken);
-            if !agrees(source, &record, &reach, &taken, None)
-                || !intact(&record.unit, &opened.artifact()?)
-            {
+            let reads = agreeing(source, &record, &reach, &taken, None)?;
+            if !intact(&record.unit, &opened.artifact()?) {
                 return None;
             }
 
@@ -485,7 +505,7 @@ impl Verdicts {
                 key: key(source),
                 prefixes: source.claims().iter().map(|mount| mount.prefix).collect(),
                 reach,
-                reads: record.reads,
+                reads,
                 unit: None,
                 contained: Some(record.unit),
                 entry: false,
@@ -523,12 +543,10 @@ impl Verdicts {
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
 
-        {
+        let reads = {
             let taken = self.taken.borrow();
-            if !agrees(source, &record, &reach(source, &taken), &taken, overlay) {
-                return None;
-            }
-        }
+            agreeing(source, &record, &reach(source, &taken), &taken, overlay)?
+        };
 
         // The record agreed, so it names the bytes the slot holds: a unit this session holds as those very bytes is the slot's unit, and is handed back with the artifact unread.
         let contained = record.unit;
@@ -545,18 +563,13 @@ impl Verdicts {
         };
         // Held as a compiled unit is, so the first edit to this unit is recompiled over the copy in hand rather than over the slot read back again.
         self.hold(source, slot, &restored, Some(contained.clone()));
-        // A hit's log is its record's, verified against the text just now, and spelled as the compile that filed it spelled it.
-        self.take(
-            source,
-            record.reads,
-            Some(restored.clone()),
-            Some(contained),
-        );
+        // A hit's log is its record's, resolved for this source and verified against the text just now.
+        self.take(source, reads, Some(restored.clone()), Some(contained));
 
         Some(restored)
     }
 
-    /// The unit an earlier compilation of `source` filed under this address, whatever its files and the units before it now hold, with the units of this fold it was compiled after: intact, and read from files this source could itself have read. `None` is nothing filed, a slot that will not read back, or another project's files.
+    /// The unit an earlier compilation of `source` filed under this address, whatever its files and the units before it now hold, with the units of this fold it was compiled after: intact. `None` is nothing filed, or a slot that will not read back. A slot another project filed for a package of the same name is a baseline as any is: what a recompile keeps of it, it keeps where this project's text is the text it was lowered from.
     ///
     /// **A baseline is offered whatever moved.** What the files hold now is what the recompile lowers and compares, and what the units before it hold now is what each stage asks its own reads of again: the record says which of them contain what they did, and every other is one the baseline was not compiled after.
     ///
@@ -566,9 +579,6 @@ impl Verdicts {
 
         let opened = opened(&self.store.as_ref()?.verdict(&slot))?;
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
-        if !read_within(&source.directories(), &record.reads) {
-            return None;
-        }
         let index = opened.artifact()?;
         if !intact(&record.unit, &index) {
             return None;
@@ -619,11 +629,14 @@ impl Verdicts {
             return None;
         }
 
+        // A unit that read a file for no package has nothing a record can name it by.
+        let reads = recorded(&source.reads())?;
         let stored = unit.stored().ok()?;
 
         Some(Placement {
             path: store.verdict(&slot),
             slot,
+            reads,
             after,
             contained: digest(stored.index()),
             stored,
@@ -635,6 +648,7 @@ impl Verdicts {
 struct Placement {
     path: PathBuf,
     slot: String,
+    reads: Vec<(SourceName, String)>,
     after: Vec<(String, String)>,
     contained: String,
     stored: Indexed,
@@ -686,13 +700,13 @@ impl Cache for Verdicts {
                 .last()
                 .is_none_or(|last| last.key != key(source))
             {
-                self.take(source, digested(source.reads()), Some(unit.clone()), None);
+                self.take(source, logged(&source.reads()), Some(unit.clone()), None);
             }
             return;
         };
 
         let record = Record::of(
-            source.reads(),
+            placement.reads,
             placement.after,
             source.answered().to_vec(),
             placement.contained.clone(),
@@ -717,29 +731,30 @@ impl Cache for Verdicts {
     }
 }
 
-/// Whether `record` still describes the world: every unit `source` could have read — `reach`, of `taken` — contains what the record says it did, every file it names still holds the text it was read as — through `overlay`, where the compilation reads through one — and each is a file `source` could itself have read.
+/// What `record` logs for `source`, where it still describes the world: every unit `source` could have read — `reach`, of `taken` — contains what the record says it did, and every name it records is a file one of `source`'s packages holds, which still holds the text it was read as — through `overlay`, where the compilation reads through one. `None` where it does not.
 ///
 /// **Judged before the artifact is read.** A record is small and an artifact is the unit, so a miss — text an editor holds edited, a unit before it that moved — is decided by the record alone. What the slot's artifact digests to is asked after, of a slot the record agrees about and only where its artifact is read ([`intact`]): a torn or damaged slot is still refused before anything in it is believed.
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list. And so is a unit the source could have read that the record does not name, or names with other contents: one that joined its scope, left it, or changed.
 ///
-/// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects: `curios_unit::read_within` states why it is a containment check rather than a re-derivation of the read set.
+/// **A recorded name resolves only through `source`'s own packages**, and that is what keeps a *shared* store from admitting across projects: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, after units holding what it was compiled after — the unit this project would compile (`curios_unit::recorded`).
 ///
 /// **And every file `source` has read already must be one the record names, holding the text it holds now.** An entry's unit is filed by its executable and not by its root file, and the source logs that root as read the moment it is opened ([`RootSource::opened`](curios_module::RootSource)): a record that names other files, every one of which still stands, is the record of another file, as after a manifest points its executable elsewhere.
-fn agrees(
+fn agreeing(
     source: &UnitSource<'_>,
     record: &Record,
     reach: &BTreeSet<String>,
     taken: &[Taken],
     overlay: Option<&Overlay>,
-) -> bool {
-    record.answers == source.answered()
+) -> Option<ReadLog> {
+    let reads = resolved(&source.packages(), &record.reads)?;
+    let agrees = record.answers == source.answered()
         && contents(reach, taken).is_some_and(|contents| contents == record.after)
-        && read_within(&source.directories(), &record.reads)
-        && digested(source.reads())
-            .iter()
-            .all(|read| record.reads.contains(read))
-        && unchanged(&record.reads, overlay)
+        && recorded(&source.reads())
+            .is_some_and(|logged| logged.iter().all(|read| record.reads.contains(read)))
+        && unchanged(&reads, overlay);
+
+    agrees.then_some(reads)
 }
 
 /// Whether `index` is the bytes a record naming `contained` was written with: what makes a damaged slot that still deserializes a miss rather than a belief.
@@ -755,13 +770,11 @@ pub fn chained(recorded: &[String], filed: &[String]) -> bool {
 /// Whether every file in `reads` still holds the text it was recorded as — the overlay's text for a file `overlay` holds, since that is what the compilation would read, and the disk's for every other.
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other.
-pub fn unchanged(reads: &[(String, String)], overlay: Option<&Overlay>) -> bool {
-    reads.iter().all(|(path, recorded)| {
-        let path = Path::new(path);
-
-        match overlay.and_then(|overlay| overlay.get(path)) {
+pub fn unchanged(reads: &[(PathBuf, String)], overlay: Option<&Overlay>) -> bool {
+    reads.iter().all(
+        |(path, recorded)| match overlay.and_then(|overlay| overlay.get(path)) {
             Some(text) => &digest(text.as_bytes()) == recorded,
             None => fs::read(path).is_ok_and(|bytes| &digest(&bytes) == recorded),
-        }
-    })
+        },
+    )
 }

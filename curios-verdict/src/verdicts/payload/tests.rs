@@ -11,7 +11,7 @@ use {
     curios_module::{open_entrypoint, read_module},
     curios_pipeline::{Cache, Fold},
     curios_wasm::to_bytes,
-    std::path::PathBuf,
+    std::path::{Path, PathBuf},
 };
 
 /// The engine every invocation here files under. A constant, because the engine is the one address part this crate is handed rather than computes, and no test here is about two engines.
@@ -72,7 +72,9 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     let program = Program {
         package: &package,
         executable: &name,
-        entry: &entry,
+        entry: source
+            .name()
+            .expect("a declared entry is named by its package"),
         text: source.text(),
         loader: &loader,
         tests: None,

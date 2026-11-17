@@ -854,7 +854,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
         fs::create_dir_all(&directory).expect("the directory is made");
         fs::write(&file, text).expect("the text is written");
 
-        Source::read(&file).expect("the text reads back")
+        text.to_string()
     };
     let store = || Verdicts::alone(directory.join("project"));
 
@@ -865,7 +865,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
             &store(),
             Predecessors::over(prelude),
             &UnitSource::mounted(&tested_root),
-            tested.text(),
+            &tested,
         )
     })
     .map(|_| ())
@@ -885,7 +885,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
             &verdicts,
             Predecessors::over(prelude),
             &UnitSource::mounted(&built_root),
-            built.text(),
+            &built,
         )
     })
     .err();

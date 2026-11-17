@@ -10,7 +10,7 @@ mod tests;
 use {
     crate::Verdicts,
     curios_abi::ForeignStore,
-    curios_common::{Source, test_support::Temporary},
+    curios_common::test_support::Temporary,
     curios_core::{Certification, Definitions, Global},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
@@ -141,7 +141,7 @@ impl History {
             .iter()
             .find(|(at, ..)| at == mount)
             .expect("the unit was walked");
-        let text = Source::read(file).map_err(|error| stored(error.to_string()))?;
+        let text = fs::read_to_string(file).map_err(|error| stored(error.to_string()))?;
         let root = RootSource::one_file(mount, file, &text);
         filing.put(
             &UnitSource::mounted(&root),
@@ -181,8 +181,8 @@ impl History {
                 mount: mount.clone(),
                 why,
             };
-            let text =
-                Source::read(file).map_err(|error| stopped(Unbuilt::Stored(error.to_string())))?;
+            let text = fs::read_to_string(file)
+                .map_err(|error| stopped(Unbuilt::Stored(error.to_string())))?;
             let root = RootSource::one_file(mount, file, &text);
             let source = UnitSource::mounted(&root);
             let unit = with_prelude(|prelude| {
@@ -200,7 +200,7 @@ impl History {
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),
-                    Written::CoreText => read(verdicts, predecessors, &source, text.text()),
+                    Written::CoreText => read(verdicts, predecessors, &source, &text),
                 }
             })
             .map_err(stopped)?;

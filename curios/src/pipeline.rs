@@ -65,18 +65,18 @@ pub fn payload_of(
         None => loader,
     };
 
-    // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry file to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
+    // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry its package names to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
     let filed = cache
         .as_ref()
         .zip(declared.as_ref())
-        .zip(entry.as_deref())
-        .map(|((cache, name), path)| {
+        .zip(source.name())
+        .map(|((cache, name), entry)| {
             (
                 cache,
                 curios_verdict::Program {
                     package: &name.0,
                     executable: &name.1,
-                    entry: path,
+                    entry,
                     text: source.text(),
                     loader: &loader,
                     tests: None,

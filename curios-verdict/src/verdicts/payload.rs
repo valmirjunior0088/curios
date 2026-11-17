@@ -10,13 +10,14 @@
 mod tests;
 
 use {
+    super::resolved,
     crate::{Verdicts, chained, replace, unchanged},
     curios_abi::ForeignStore,
-    curios_common::{Qualifier, digest},
+    curios_common::{Qualifier, SourceName, digest},
     curios_module::{RootSource, UnitSource},
     curios_package::{Runs, payload_slot},
-    curios_unit::{digested, read_within, segments},
-    std::{collections::BTreeSet, fs, io, path::Path},
+    curios_unit::{recorded, segments},
+    std::{collections::BTreeSet, fs, io},
 };
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
@@ -27,8 +28,8 @@ pub struct Program<'a> {
     pub package: &'a str,
     /// The executable, by the name its manifest row gives it.
     pub executable: &'a str,
-    /// The `.crs` file the program is compiled from.
-    pub entry: &'a Path,
+    /// The `.crs` file the program is compiled from, by the name its package gives it: a program filed here is one a package declares.
+    pub entry: &'a SourceName,
     /// The text that was parsed from it — the parsed text, never a re-read.
     pub text: &'a str,
     /// The loader the entry's own `mod` declarations resolve through, and afterwards the log of what they read.
@@ -44,12 +45,12 @@ pub struct Program<'a> {
 /// `foreigns` is the other kind: an *output* of the compilation rather than an input it rested on, so nothing verifies it — the payload's digest already answers for the bytes it was derived alongside. It is here because a reused payload still has to be linked, and the rows a program's `ffi` imports are typed by cannot be recovered from the module: `Nat` and `Int` both cross as an `i64`, and `Bytes` and `Handle` share one reference type, so a re-derivation from the wasm import types would lose what a result is boxed as. Filing what the compilation already computed is the only reading that cannot disagree with itself.
 #[curios_archive::archived]
 struct Record {
-    /// The entry file, by canonical path and the digest of the text that was parsed from it.
+    /// The entry file, by the name its package gives it and the digest of the text that was parsed from it ([`entered`]).
     ///
-    /// Apart from `reads` because no loader ever reads it, and the *path* is checked for equality rather than containment: the asking invocation knows exactly which file it opened, so nothing weaker is called for. That check is this family's counterpart of the unit record's containment clause — without it, two projects each declaring a package and an executable of one name would address one slot and be handed each other's program.
-    entry: (String, String),
-    /// Each file the entry's loader read, by canonical path, with the digest of the text that was parsed from it.
-    reads: Vec<(String, String)>,
+    /// Checked for equality: the asking invocation knows exactly which file it opened, so a manifest that points its executable at another file is a miss whatever the file the record names still holds.
+    entry: (SourceName, String),
+    /// Each file the entry's loader read, by the name its package gives it, with the digest of the text that was parsed from it, as a unit's record names its reads (`curios_unit::recorded`).
+    reads: Vec<(SourceName, String)>,
     /// What each unit of the compilation contained, in fold order — the digest of the bytes its own unit slot holds.
     predecessors: Vec<String>,
     /// The prefixes the program's tests were scheduled under, spelled and in order ([`selection`]), or `None` for a program.
@@ -112,9 +113,13 @@ impl Verdicts {
             return;
         };
 
+        // A loader that read a file for no package has nothing a record can name it by.
+        let Some(reads) = recorded(&program.loader.reads()) else {
+            return;
+        };
         let record = Record {
-            entry: (canonical(program.entry), digest(program.text.as_bytes())),
-            reads: digested(program.loader.reads()),
+            entry: entered(program),
+            reads,
             predecessors: filed,
             tests: selection(program),
             declares: declared(program),
@@ -152,9 +157,9 @@ fn agrees(program: &Program<'_>, record: &Record, units: &[String], bytes: &[u8]
         && chained(&record.predecessors, units)
         && record.tests == selection(program)
         && record.declares == declared(program)
-        && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
-        && read_within(&program.loader.directories(), &record.reads)
-        && unchanged(&record.reads, None)
+        && record.entry == entered(program)
+        && resolved(&program.loader.packages(), &record.reads)
+            .is_some_and(|reads| unchanged(&reads, None))
 }
 
 /// The prefixes `program`'s tests are scheduled under, as a record holds them: spelled, sorted and each once, since a selection is a set and two orders of one are one program.
@@ -177,12 +182,7 @@ fn declared(program: &Program<'_>) -> Option<Vec<String>> {
         .map(|prefixes| prefixes.iter().map(Qualifier::join).collect())
 }
 
-/// A path as a record spells it: canonical, so the same file reached through a relative invocation and an absolute one is one entry.
-///
-/// A path that will not canonicalize is spelled as given rather than dropped, which mirrors what the loader records. The consequence is the unit family's: moving a project invalidates its records, costing one recompile before they are rewritten.
-fn canonical(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .into_owned()
+/// The entry of `program` as a record spells it: by the name its package gives it, with the digest of the text that was parsed from it.
+fn entered(program: &Program<'_>) -> (SourceName, String) {
+    (program.entry.clone(), digest(program.text.as_bytes()))
 }
