@@ -385,7 +385,7 @@ impl Certifier<'_> {
         let group = Keyed::new(group.clone());
         self.calls.verdicts.insert(group.clone(), totality);
         self.calls.members_enclosing.insert(group, enclosing);
-        // Not while a position is being classified: that types the position's *type*, and a group there is not one the position's term holds.
+        // Not while a reader reads: its judgments are no item's check, deciding a position's erased half among them, and a group it types is not one the position's term holds.
         if totality != Totality::Total && !self.positions.suppressed() {
             self.calls.partial += 1;
         }
@@ -395,7 +395,7 @@ impl Certifier<'_> {
 
     /// Record the call a path rooted at `head` makes, its `steps` read as [`part_calls`] reads them, when `head` is a member of a group whose body is being checked: each part the path reaches, with the arguments it hands that part.
     ///
-    /// Not while a position is being classified: deciding a position's erased half types that position's *type*, which may name a member — `T(n)`, a sibling computing the type — without being a call any body makes.
+    /// Not while a reader reads: its judgments are no item's check, deciding a position's erased half among them, which may read a member — `T(n)`, a sibling computing the type — without that being a call any body makes.
     pub(super) fn record_call(&mut self, head: &Free, steps: &[Segment]) -> Result<(), Error> {
         if self.calls.frames.is_empty() || self.positions.suppressed() {
             return Ok(());
