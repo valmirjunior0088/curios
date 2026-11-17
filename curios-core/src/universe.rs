@@ -7,7 +7,7 @@
 //! A constraint is its inequality alone, so its equality, its hash and its archived bytes are the inequality's, and a context's are its counts' and its constraints': where a constraint was raised is the elaborator's solver's, which holds it beside the constraint ([`UniverseConstraintOrigin`]). Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before ANF.
 
 use {
-    super::{Extent, Global},
+    super::{Bound, Extent, Global, instantiate_universes},
     curios_common::Mint,
     std::{collections::BTreeMap, fmt, hash::Hash},
 };
@@ -521,6 +521,30 @@ impl UniverseContext {
     pub fn stated_by(&self, universes: &Universes) -> bool {
         universes.levels.len() == self.parameter_count
             && universes.qualities.len() == self.quality_count
+    }
+
+    /// [`Self::stated_by`], refused by the count `universes` falls short or long of: what a reader of this scheme at `universes` asks before it reads a facet there.
+    pub fn check_instance(&self, universes: &Universes) -> Result<(), UniverseError> {
+        if universes.levels.len() != self.parameter_count {
+            return Err(UniverseError::InstanceArity {
+                expected: self.parameter_count,
+                got: universes.levels.len(),
+            });
+        }
+        if universes.qualities.len() != self.quality_count {
+            return Err(UniverseError::QualityArity {
+                expected: self.quality_count,
+                got: universes.qualities.len(),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// `value`, stated under this scheme, read at `universes`, an instance that states it ([`Self::check_instance`]): what a reader of a facet at an instance a term already holds takes, the instance's bounds having been raised where it was minted.
+    pub fn read_at<B: Bound>(&self, value: &B, universes: &Universes) -> Result<B, UniverseError> {
+        self.check_instance(universes)?;
+        instantiate_universes(value, universes)
     }
 
     /// Whether this context mentions only what it declares: no constraint level naming a parameter past `parameter_count`, and none holding a metavariable.

@@ -1665,11 +1665,11 @@ impl UniverseSolver {
         self.constraints.substitute_head(head, &solution)
     }
 
-    /// Instantiate a closed context for one use, `occurrence` where a term names it, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
+    /// Instantiate a closed context for one use, `occurrence`, returning its fresh argument vector after inserting the substituted residual constraints transactionally. The levels it mints are the use's own — `Provenance::Occurrence`.
     pub fn instantiate(
         &mut self,
         context: &UniverseContext,
-        occurrence: Option<Occurrence>,
+        occurrence: Occurrence,
     ) -> Result<Universes, UniverseError> {
         let levels = (0..context.parameter_count)
             .map(|_| Level::meta(self.mint(Provenance::Occurrence, None)))
@@ -1683,28 +1683,19 @@ impl UniverseSolver {
         Ok(universes)
     }
 
-    /// Insert a closed context's residual constraints at an already chosen occurrence instance, each restated under `occurrence` where there is one: at the place the occurrence is written, and naming the declaration it instantiates. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
+    /// Insert a closed context's residual constraints at an already chosen occurrence instance, each restated under `occurrence`: at the place the occurrence is written, and naming the declaration it instantiates. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
+    ///
+    /// **A scheme's bounds are raised where an occurrence mints its instance, and nowhere else.** A term that holds an instance holds one whose bounds the occurrence that minted it raised, or one a definition's body states under the scheme that definition was checked under, whose bounds the restatement of that scheme at its own occurrence entails; so a reader of a facet at an instance a term already holds asks only that it states the scheme ([`UniverseContext::check_instance`]), and every bound restated names whose it is.
     ///
     /// A stored context is validated where it is built ([`Self::generalize`]) and where it is restored (`validate_universes`), not here: every occurrence of every polymorphic binding instantiates, and re-deciding a context's consistency per occurrence repeats a whole constraint solve for an invariant that cannot have changed.
     pub fn instantiate_at(
         &mut self,
         context: &UniverseContext,
         universes: &Universes,
-        occurrence: Option<Occurrence>,
+        occurrence: Occurrence,
     ) -> Result<(), UniverseError> {
+        context.check_instance(universes)?;
         let levels = &universes.levels;
-        if levels.len() != context.parameter_count {
-            return Err(UniverseError::InstanceArity {
-                expected: context.parameter_count,
-                got: levels.len(),
-            });
-        }
-        if universes.qualities.len() != context.quality_count {
-            return Err(UniverseError::QualityArity {
-                expected: context.quality_count,
-                got: universes.qualities.len(),
-            });
-        }
         let mark = self.mark();
         for constraint in &context.constraints {
             let substitute = |level: &Level| {
@@ -1726,10 +1717,10 @@ impl UniverseSolver {
                     return Err(error);
                 }
             };
-            // A scheme stores its inequalities alone, so where its declaration raised one is no part of it. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is raised again where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is. One restated with no occurrence in hand carries neither.
+            // A scheme stores its inequalities alone, so where its declaration raised one is no part of it. A conflict is found once the terms that forced it are checked and left behind, so nothing places it on its way out: the constraint is raised again where the occurrence that instantiates it is written and names the declaration instantiated, and the conflict it closes is reported at a term its reader wrote, with whose bound it is.
             let origin = UniverseConstraintOrigin {
-                extent: occurrence.and_then(|occurrence| occurrence.extent),
-                instantiated: occurrence.map(|occurrence| occurrence.instantiated),
+                extent: occurrence.extent,
+                instantiated: Some(occurrence.instantiated),
                 ..UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation)
             };
             if let Err(error) = self.add_constraint(instantiated, origin) {

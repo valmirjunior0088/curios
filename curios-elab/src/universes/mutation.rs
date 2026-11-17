@@ -73,7 +73,7 @@ impl<'a> UniverseMutation<'a> {
     pub fn instantiate(
         &mut self,
         context: &UniverseContext,
-        occurrence: Option<Occurrence>,
+        occurrence: Occurrence,
     ) -> Result<Universes, UniverseError> {
         self.solver.instantiate(context, occurrence)
     }
@@ -82,7 +82,7 @@ impl<'a> UniverseMutation<'a> {
         &mut self,
         context: &UniverseContext,
         universes: &Universes,
-        occurrence: Option<Occurrence>,
+        occurrence: Occurrence,
     ) -> Result<(), UniverseError> {
         self.solver.instantiate_at(context, universes, occurrence)
     }

@@ -17,8 +17,8 @@ fn contexts_are_alpha_stable_and_instances_are_fresh() {
     };
     universe_context_validate(&context).unwrap();
     let mut solver = UniverseSolver::new(7);
-    let first = solver.instantiate(&context, None).unwrap();
-    let second = solver.instantiate(&context, None).unwrap();
+    let first = solver.instantiate(&context, unwritten_use()).unwrap();
+    let second = solver.instantiate(&context, unwritten_use()).unwrap();
     let first_metas = first
         .levels
         .iter()

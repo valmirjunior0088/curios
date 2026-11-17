@@ -315,7 +315,7 @@ pub fn elaborate_induct_type(
             extent,
         };
         let (arity, universes) =
-            context.instantiate_universe_bound(&universe_context, &arity, Some(occurrence))?;
+            context.instantiate_universe_bound(&universe_context, &arity, occurrence)?;
         let result_sort = instantiate_universes(&result_sort, &universes).map_err(Error::from)?;
         (arity, result_sort, universes)
     } else {
@@ -393,7 +393,7 @@ pub fn elaborate_variant(
             instantiated: *name,
             extent,
         };
-        context.instantiate_universe_bound(&universe_context, &signature, Some(occurrence))?
+        context.instantiate_universe_bound(&universe_context, &signature, occurrence)?
     } else {
         let signature = context
             .induct_facet(name, written_universes, |at| {

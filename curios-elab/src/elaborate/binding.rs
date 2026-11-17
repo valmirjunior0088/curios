@@ -574,7 +574,7 @@ fn infix_method(
         extent: term.extent(),
     };
     let (_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
+        context.instantiate_universe_bound(&concept.universe_context, &(), occurrence)?;
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
@@ -584,11 +584,9 @@ fn infix_method(
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
 
     // The method's type at `?T`, read out of the concept's lowered structure through the one operation that answers this — opened at the goal's own universes and parameter, so this and `elaborate_proj` agree by construction rather than by two derivations staying in step.
-    let arity = context.instantiate_universe_bound_at(
-        &struct_decl.universe_context,
-        &struct_decl.arity,
-        &universes,
-    )?;
+    let arity = struct_decl
+        .universe_context
+        .read_at(&struct_decl.arity, &universes)?;
     let field = Field::Struct(*concept_name, index);
     let method_type = arity
         .open(&[operand_type])
@@ -678,7 +676,7 @@ fn sequencing_witness(
         extent: term.extent(),
     };
     let (_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &(), Some(occurrence))?;
+        context.instantiate_universe_bound(&concept.universe_context, &(), occurrence)?;
     let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Method {

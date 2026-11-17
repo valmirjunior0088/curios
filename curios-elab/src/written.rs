@@ -8,9 +8,9 @@
 
 use {
     crate::{
-        Binders, Context, Entailed, InductCase, Opened, Outcome, Resolution, convert_outcome,
-        entail, enter_induct_case, is_prop, method_type, reduce_with, reference, refine_head,
-        resolve_witness, synth_neutral, trivially_inhabited, zonk_solved_term_metas,
+        Binders, Context, Entailed, InductCase, Occurrence, Opened, Outcome, Resolution,
+        convert_outcome, entail, enter_induct_case, is_prop, method_type, reduce_with, reference,
+        refine_head, resolve_witness, synth_neutral, trivially_inhabited, zonk_solved_term_metas,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -210,8 +210,16 @@ impl Writing {
                         let declaration = context.induct_decl(&variant.name)?;
                         let universe_context = declaration.universe_context().clone();
                         let case = declaration.constructor(&variant.tag)?.clone();
+                        let occurrence = Occurrence {
+                            instantiated: variant.name,
+                            extent: None,
+                        };
                         let (payload, _) = context
-                            .instantiate_universe_bound(&universe_context, case.payload(), None)
+                            .instantiate_universe_bound(
+                                &universe_context,
+                                case.payload(),
+                                occurrence,
+                            )
                             .ok()?;
                         Some(payload.open(&params.iter().collect::<Vec<_>>()))
                     });
@@ -238,8 +246,16 @@ impl Writing {
                                 let declaration = context.struct_decl(&literal.name)?;
                                 let universe_context = declaration.universe_context.clone();
                                 let arity = declaration.arity.clone();
+                                let occurrence = Occurrence {
+                                    instantiated: literal.name,
+                                    extent: None,
+                                };
                                 let (arity, _) = context
-                                    .instantiate_universe_bound(&universe_context, &arity, None)
+                                    .instantiate_universe_bound(
+                                        &universe_context,
+                                        &arity,
+                                        occurrence,
+                                    )
                                     .ok()?;
                                 Some(arity.open(&params.iter().collect::<Vec<_>>()))
                             },

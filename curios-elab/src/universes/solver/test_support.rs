@@ -1,6 +1,6 @@
-//! What the suites read of the universe solver and ask of it that no judgment does: its constraints and open scopes, minimization over the whole store, and an origin to raise a constraint at.
+//! What the suites read of the universe solver and ask of it that no judgment does: its constraints and open scopes, minimization over the whole store, an origin to raise a constraint at and a use to mint an instance at.
 
-use {super::*, std::collections::BTreeSet};
+use {super::*, curios_common::Qualifier, std::collections::BTreeSet};
 
 /// The test surface over the solver's private state, kept beside the tests rather than gated inside the production module.
 impl UniverseSolver {
@@ -28,6 +28,14 @@ impl UniverseSolver {
             .map(UniverseMetaId)
             .collect::<BTreeSet<_>>();
         self.solve_flexible_in(&metas)
+    }
+}
+
+/// A use of a declaration no term wrote: the occurrence a test mints a scheme's instance at.
+pub fn unwritten_use() -> Occurrence {
+    Occurrence {
+        instantiated: Global::Authored(Qualifier::from(["app", "used"])),
+        extent: None,
     }
 }
 

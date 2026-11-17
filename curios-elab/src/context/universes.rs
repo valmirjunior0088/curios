@@ -6,9 +6,8 @@ use {
         stamp_if_moved, zonk_universe_levels,
     },
     curios_core::{
-        Bound, Extent, Global, InductDecl, InductInstance, Level, Quality, StructDecl,
-        StructInstance, Term, UniverseContext, UniverseError, UniverseMetaId, Universes,
-        instantiate_universes,
+        Bound, Extent, Global, InductInstance, Level, Quality, StructInstance, Term,
+        UniverseContext, UniverseError, UniverseMetaId, Universes, instantiate_universes,
     },
     std::collections::BTreeSet,
 };
@@ -65,7 +64,7 @@ impl<'s> Context<'s> {
         };
         let universes = self
             .universes_mut()
-            .instantiate(&universe_context, Some(occurrence))?;
+            .instantiate(&universe_context, occurrence)?;
         let type_ = instantiate_universes(&type_, &universes)?;
         Ok(Some((type_, universes)))
     }
@@ -110,21 +109,22 @@ impl<'s> Context<'s> {
             .instantiate_at(
                 &universe_context,
                 universes,
-                Some(Occurrence {
+                Occurrence {
                     instantiated: *name,
                     extent,
-                }),
+                },
             )
             .map_err(Error::from)?;
         let type_ = instantiate_universes(&type_, universes).map_err(Error::from)?;
         Ok(Some(type_))
     }
 
+    /// `value`, stated under `universe_context`, at a fresh instance of it the occurrence `occurrence` mints, whose bounds are restated there.
     pub(crate) fn instantiate_universe_bound<B: Bound>(
         &mut self,
         universe_context: &UniverseContext,
         value: &B,
-        occurrence: Option<Occurrence>,
+        occurrence: Occurrence,
     ) -> Result<(B, Universes), Error> {
         if universe_context.width() == 0 {
             return Ok((value.clone(), Universes::default()));
@@ -137,112 +137,38 @@ impl<'s> Context<'s> {
         Ok((value, universes))
     }
 
-    pub(crate) fn instantiate_universe_bound_at<B: Bound>(
-        &mut self,
-        universe_context: &UniverseContext,
-        value: &B,
-        universes: &Universes,
-    ) -> Result<B, UniverseError> {
-        #[cfg(feature = "profile")]
-        if universes.levels.len() != universe_context.parameter_count {
-            curios_profile::note!(
-                target: "curios_elab::universe",
-                expected = universe_context.parameter_count,
-                got = universes.levels.len(),
-                "bound instance arity mismatch",
-            );
-        }
-        self.universes_mut()
-            .instantiate_at(universe_context, universes, None)?;
-        instantiate_universes(value, universes)
-    }
-
-    pub(crate) fn instantiate_induct_decl_at(
-        &mut self,
-        induct_decl: &InductDecl,
-        universes: &Universes,
-    ) -> Result<InductDecl, UniverseError> {
-        #[cfg(feature = "profile")]
-        if universes.levels.len() != induct_decl.universe_context().parameter_count {
-            curios_profile::note!(
-                target: "curios_elab::universe",
-                module = ?induct_decl.module(),
-                expected = induct_decl.universe_context().parameter_count,
-                got = universes.levels.len(),
-                "induct instance arity mismatch",
-            );
-        }
-        self.universes_mut()
-            .instantiate_at(induct_decl.universe_context(), universes, None)?;
-        induct_decl.at(universes).whole()
-    }
-
-    /// What `read` takes of the inductive declaration `name` at the occurrence `universes`, the declaration's constraints instantiated where the occurrence stands, or `None` where `name` declares no inductive: a read instantiates the facet it takes — the sort, the arity, one constructor — and pays for no other, where [`Context::instantiate_induct_decl_at`] instantiates every constructor.
+    /// What `read` takes of the inductive declaration `name` at `universes`, an instance a term already holds, raising no bound, or `None` where `name` declares no inductive: a read instantiates the facet it takes — the sort, the arity, one constructor — and pays for no other, where a derivation reads every constructor.
     pub(crate) fn induct_facet<T>(
-        &mut self,
+        &self,
         name: &Global,
         universes: &Universes,
         read: impl FnOnce(InductInstance<'_>) -> Result<T, UniverseError>,
     ) -> Option<Result<T, UniverseError>> {
-        let (universe_context, read) = {
-            let induct_decl = self.induct_decl(name)?;
-            (
-                induct_decl.universe_context().clone(),
-                read(induct_decl.at(universes)),
-            )
-        };
+        let induct_decl = self.induct_decl(name)?;
 
         Some(
-            self.universes_mut()
-                .instantiate_at(&universe_context, universes, None)
-                .and(read),
+            induct_decl
+                .universe_context()
+                .check_instance(universes)
+                .and_then(|()| read(induct_decl.at(universes))),
         )
     }
 
-    /// [`Context::induct_facet`] for the structure declaration `name`: a read of the sort, the parameters or one field pays for that facet, where [`Context::instantiate_struct_decl_at`] instantiates every field.
+    /// [`Context::induct_facet`] for the structure declaration `name`: a read of the sort, the parameters or one field pays for that facet, where a derivation reads every field.
     pub(crate) fn struct_facet<T>(
-        &mut self,
+        &self,
         name: &Global,
         universes: &Universes,
         read: impl FnOnce(StructInstance<'_>) -> Result<T, UniverseError>,
     ) -> Option<Result<T, UniverseError>> {
-        let (universe_context, read) = {
-            let struct_decl = self.struct_decl(name)?;
-            (
-                struct_decl.universe_context.clone(),
-                read(struct_decl.at(universes)),
-            )
-        };
+        let struct_decl = self.struct_decl(name)?;
 
         Some(
-            self.universes_mut()
-                .instantiate_at(&universe_context, universes, None)
-                .and(read),
+            struct_decl
+                .universe_context
+                .check_instance(universes)
+                .and_then(|()| read(struct_decl.at(universes))),
         )
-    }
-
-    pub(crate) fn instantiate_struct_decl_at(
-        &mut self,
-        struct_decl: &StructDecl,
-        universes: &Universes,
-    ) -> Result<StructDecl, UniverseError> {
-        #[cfg(feature = "profile")]
-        if universes.levels.len() != struct_decl.universe_context.parameter_count {
-            curios_profile::note!(
-                target: "curios_elab::universe",
-                module = ?struct_decl.module,
-                expected = struct_decl.universe_context.parameter_count,
-                got = universes.levels.len(),
-                "struct instance arity mismatch",
-            );
-        }
-        self.universes_mut()
-            .instantiate_at(&struct_decl.universe_context, universes, None)?;
-        let mut instantiated = struct_decl.clone();
-        instantiated.arity = instantiate_universes(&instantiated.arity, universes)?;
-        instantiated.result_sort = instantiate_universes(&instantiated.result_sort, universes)?;
-        instantiated.universe_context = UniverseContext::empty();
-        Ok(instantiated)
     }
 
     /// [`Frames::set_universe_context`](super::Frames::set_universe_context), with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.

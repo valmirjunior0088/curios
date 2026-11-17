@@ -142,8 +142,10 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
             let Some(decl) = context.induct_decl(name).cloned() else {
                 return Err(site.refuse(Underivable::NotDeclared));
             };
-            let decl = context
-                .instantiate_induct_decl_at(&decl, universes)
+            let decl = decl
+                .universe_context()
+                .check_instance(universes)
+                .and_then(|()| decl.at(universes).whole())
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module(), decl.rep_public())?;
             Ok(Subject::Induct {
@@ -163,8 +165,10 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
             let Some(decl) = context.struct_decl(name).cloned() else {
                 return Err(site.refuse(Underivable::NotDeclared));
             };
-            let decl = context
-                .instantiate_struct_decl_at(&decl, universes)
+            let decl = decl
+                .universe_context
+                .check_instance(universes)
+                .and_then(|()| decl.at(universes).whole())
                 .map_err(Error::from)?;
             transparent(context, site, name, &decl.module, decl.rep_public)?;
             Ok(Subject::Struct {

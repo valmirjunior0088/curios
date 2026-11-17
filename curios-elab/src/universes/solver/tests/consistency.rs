@@ -20,24 +20,6 @@ fn raised_in_a_scheme() -> UniverseContext {
     }
 }
 
-/// A constraint instantiated from a scheme with no occurrence in hand is raised at no place and names nothing: a scheme stores its inequalities alone, so nothing of where its declaration raised one reaches an instance of it.
-#[test]
-fn a_constraint_instantiated_from_a_scheme_carries_no_position() {
-    let scheme = raised_in_a_scheme();
-    let mut solver = UniverseSolver::new(0);
-
-    solver.instantiate(&scheme, None).unwrap();
-
-    let constraints = solver.constraints();
-    let [(_, origin)] = constraints.as_slice() else {
-        panic!("one constraint, got {constraints:?}");
-    };
-    assert_eq!(
-        **origin,
-        UniverseConstraintOrigin::new(UniverseConstraintKind::SchemeInstantiation)
-    );
-}
-
 /// A constraint an occurrence instantiates is restated where the occurrence is written and names the declaration the occurrence instantiates: the conflict it closes is reported at a term its reader wrote, with whose bound it is.
 #[test]
 fn a_constraint_an_occurrence_instantiates_takes_its_place_and_names_what_it_instantiates() {
@@ -54,10 +36,10 @@ fn a_constraint_an_occurrence_instantiates_takes_its_place_and_names_what_it_ins
     solver
         .instantiate(
             &scheme,
-            Some(Occurrence {
+            Occurrence {
                 instantiated: used,
                 extent: Some(written),
-            }),
+            },
         )
         .unwrap();
 

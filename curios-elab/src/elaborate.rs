@@ -339,9 +339,10 @@ pub fn method_form(
         extent,
     };
     let (type_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &type_, Some(occurrence))?;
-    let form = context
-        .instantiate_universe_bound_at(&concept.universe_context, &form, &universes)
+        context.instantiate_universe_bound(&concept.universe_context, &type_, occurrence)?;
+    let form = concept
+        .universe_context
+        .read_at(&form, &universes)
         .map_err(Error::from)?;
 
     Ok(Some((form, type_)))

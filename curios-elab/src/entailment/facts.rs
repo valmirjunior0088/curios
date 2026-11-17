@@ -1762,11 +1762,7 @@ pub fn statements(
             {
                 return Ok(Vec::new());
             }
-            let arity = context.instantiate_universe_bound_at(
-                &decl.universe_context,
-                &decl.arity,
-                universes,
-            )?;
+            let arity = decl.universe_context.read_at(&decl.arity, universes)?;
             (
                 arity.open(&params.iter().collect::<Vec<_>>()),
                 Some(*family),

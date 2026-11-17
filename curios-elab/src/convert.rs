@@ -42,8 +42,8 @@ use {
         Free, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
         Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin, Paired, Probe, Proj, Quality,
         Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, Universes, Variance, Variant, paired,
+        TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin, UniverseError, Universes,
+        Variance, Variant, paired,
     },
     std::{
         collections::{HashMap, HashSet, VecDeque},
@@ -103,17 +103,6 @@ impl Beside {
 
 /// The binders a candidate lambda abstracts: each one's mark, its label and its domain.
 type CandidateBinders = Vec<(Plicity, Free, Term)>;
-
-fn instantiate_bound_at<B: Bound>(
-    context: &mut Context,
-    universe_context: &UniverseContext,
-    value: &B,
-    universes: &Universes,
-) -> Result<B, ReduceError> {
-    context
-        .instantiate_universe_bound_at(universe_context, value, universes)
-        .map_err(ReduceError::Universe)
-}
 
 pub fn convert(
     context: &mut Context,
@@ -1342,13 +1331,11 @@ impl Convert {
         // Recover the field types from the registry (instantiated at this side's parameters) so each field compares at its own type — η and proof irrelevance fire per field, as `compare_tuple` does with the tuple type's telescope. Falls back to `Type` if the struct is somehow absent.
         let telescope = match context.struct_decl(&this.name).cloned() {
             Some(struct_decl) => Some(
-                instantiate_bound_at(
-                    context,
-                    &struct_decl.universe_context,
-                    &struct_decl.arity,
-                    &this.universes,
-                )?
-                .open(&this.params.iter().collect::<Vec<_>>()),
+                struct_decl
+                    .universe_context
+                    .read_at(&struct_decl.arity, &this.universes)
+                    .map_err(ReduceError::Universe)?
+                    .open(&this.params.iter().collect::<Vec<_>>()),
             ),
             None => None,
         };
@@ -1718,13 +1705,11 @@ impl Convert {
                 params,
             }) if *name == struct_.name => match context.struct_decl(name).cloned() {
                 Some(struct_decl) => Some(
-                    instantiate_bound_at(
-                        context,
-                        &struct_decl.universe_context,
-                        &struct_decl.arity,
-                        universes,
-                    )?
-                    .open(&params.iter().collect::<Vec<_>>()),
+                    struct_decl
+                        .universe_context
+                        .read_at(&struct_decl.arity, universes)
+                        .map_err(ReduceError::Universe)?
+                        .open(&params.iter().collect::<Vec<_>>()),
                 ),
                 None => None,
             },
@@ -2419,7 +2404,7 @@ impl Convert {
         };
         let fresh = context
             .universes_mut()
-            .instantiate(&scheme, Some(occurrence))
+            .instantiate(&scheme, occurrence)
             .map_err(ReduceError::Universe)?;
         Self::compare_instance_levels(context, name, &fresh, universes)?;
 

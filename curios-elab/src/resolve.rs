@@ -502,22 +502,12 @@ pub fn resolve_witness(
     }
 
     // Steps 2–3 need a concept goal; anything else has no projections and no table to consult.
-    let Some((concept_name, universes, params)) = concept_app else {
+    let Some((concept_name, _, params)) = concept_app else {
         return Ok(match saw_undecided {
             true => Resolution::Flex,
             false => Resolution::NoMatch,
         });
     };
-    // Its universe context alone: the entry lists every method, which a goal reads none of.
-    let universe_context = context
-        .concept(&concept_name)
-        .map(|concept| concept.universe_context.clone())
-        .expect("the goal was classified as a registered concept");
-    context
-        .universes_mut()
-        .instantiate_at(&universe_context, &universes, None)
-        .map_err(Error::from)?;
-
     // Step 2: superclass projections of local binders, breadth-first by depth. The graph is acyclic (checked at registration), so this is finite; two matches at the same minimal depth are ambiguous.
     let mut frontier: Vec<Term> = Vec::new();
     for (name, type_) in binders.iter().rev() {
@@ -661,11 +651,9 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
         return Ok(Vec::new());
     };
 
-    let arity = context.instantiate_universe_bound_at(
-        &struct_decl.universe_context,
-        &struct_decl.arity,
-        universes,
-    )?;
+    let arity = struct_decl
+        .universe_context
+        .read_at(&struct_decl.arity, universes)?;
     let telescope = arity.open(&params.iter().collect::<Vec<_>>());
     // An edge is a `use` field of the concept's telescope, so where the edges stand is the telescope's to say.
     let mut out = Vec::new();
@@ -711,11 +699,9 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
                 .struct_decl(name)
                 .cloned()
                 .ok_or_else(|| Error::unknown_declaration(*name))?;
-            let arity = context.instantiate_universe_bound_at(
-                &struct_decl.universe_context,
-                &struct_decl.arity,
-                universes,
-            )?;
+            let arity = struct_decl
+                .universe_context
+                .read_at(&struct_decl.arity, universes)?;
             Ok(arity
                 .open(&params.iter().collect::<Vec<_>>())
                 .field_type_from(&proj.head, &proj.field)
@@ -742,7 +728,7 @@ fn instantiate(
     let (signature, universes) = context.instantiate_universe_bound(
         &witness.universe_context,
         &witness.signature,
-        Some(occurrence),
+        occurrence,
     )?;
     let minted = universes.clone();
     let head = declared(context, witness.name, universes);

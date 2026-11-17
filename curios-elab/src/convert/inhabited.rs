@@ -1,7 +1,7 @@
 //! Whether a type has one inhabitant by its shape, which conversion reads where eta cannot be fired: between two neutrals at a nominal struct, and at the type a lookup gives two sides their position handed none.
 
 use {
-    super::{Binders, Opened, instantiate_bound_at},
+    super::{Binders, Opened},
     crate::{Context, is_prop_to, reduce_forced, sort_of_under},
     curios_analysis::struct_reaches_itself,
     curios_common::recurse,
@@ -86,12 +86,10 @@ fn inhabited_once(
                 if declaration.param_count() != params.len() {
                     return Ok(false);
                 }
-                let arity = instantiate_bound_at(
-                    context,
-                    &declaration.universe_context,
-                    &declaration.arity,
-                    universes,
-                )?;
+                let arity = declaration
+                    .universe_context
+                    .read_at(&declaration.arity, universes)
+                    .map_err(ReduceError::Universe)?;
                 let fields = arity.open(&params.iter().collect::<Vec<_>>());
 
                 entered.push(*name);

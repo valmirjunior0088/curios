@@ -1,6 +1,6 @@
 //! Held levels: what a signature holds where conversion compares it stays the declaration's parameter with its bounds, where a level nothing holds settles or is minimized.
 
-use crate::universes::solver::*;
+use crate::universes::solver::{test_support::*, *};
 
 fn conversion() -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion)
@@ -13,7 +13,7 @@ fn occurrence(solver: &mut UniverseSolver) -> UniverseMetaId {
         quality_count: 0,
         constraints: Vec::new(),
     };
-    let instance = solver.instantiate(&scheme, None).unwrap();
+    let instance = solver.instantiate(&scheme, unwritten_use()).unwrap();
 
     bare_meta(&instance.levels[0]).expect("an instance's level is one bare meta")
 }

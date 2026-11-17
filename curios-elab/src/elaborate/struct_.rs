@@ -22,17 +22,15 @@ fn instantiate_struct_decl(
 ) -> Result<(StructDecl, Universes), Error> {
     let (arity, universes) = match universes {
         Some(universes) => (
-            context.instantiate_universe_bound_at(
-                &struct_decl.universe_context,
-                &struct_decl.arity,
-                universes,
-            )?,
+            struct_decl
+                .universe_context
+                .read_at(&struct_decl.arity, universes)?,
             universes.clone(),
         ),
         None => context.instantiate_universe_bound(
             &struct_decl.universe_context,
             &struct_decl.arity,
-            Some(occurrence),
+            occurrence,
         )?,
     };
     let arguments = universes.clone();
@@ -85,7 +83,7 @@ pub fn elaborate_struct_type(
             extent: term.extent(),
         };
         let (parameters, universes) =
-            context.instantiate_universe_bound(&universe_context, &written, Some(occurrence))?;
+            context.instantiate_universe_bound(&universe_context, &written, occurrence)?;
         let result_sort = instantiate_universes(&written_sort, &universes).map_err(Error::from)?;
         (parameters, result_sort, universes)
     } else {
