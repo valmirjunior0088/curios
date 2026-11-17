@@ -125,3 +125,29 @@ fn two_members_reading_each_other_below_their_arguments_stand() {
         "#;
     assert_eq!(run(source), b"42");
 }
+
+// A member known to terminate is read as the scope stands where it is unfolded: `g` reads `c`, and in `m`'s `true` arm on `c` it is `7`, so the arm's `Holds(g(3) == 7)` holds by reduction in both checkers. `a_member_read_in_an_arm_reads_what_the_arm_bound` puts the same to the certifier alone.
+#[test]
+fn a_member_read_in_an_arm_reads_what_the_arm_bound() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+
+        let f(c: Bool) -> Nat =
+            let g(i: Nat) -> Nat =
+                match c | true => 7 | false => i end
+            and m(_u: {}) -> Nat =
+                match c
+                | true =>
+                    let _h: Holds(g(3) == 7) = True/qed();
+                    0
+                | false => 1
+                end;
+            m(());
+
+        /std/print(Nat/to_str(f(true)))
+        "#,
+        b"0",
+    );
+}

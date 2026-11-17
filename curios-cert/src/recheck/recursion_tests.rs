@@ -905,3 +905,32 @@ fn a_knot_across_turns_is_refused_for_not_descending() {
         "{verdicts:?}"
     );
 }
+
+/// A member known to terminate unfolds to its selection read as the scope stands where it is unfolded: `g` reads `c`, and in `m`'s `true` arm on `c`, which binds `c` to `true`, `g(3)` is `7`, so the arm's `Holds(g(3) == 7)` holds by reduction, as the elaborator reads it. Mutation-checked: with `step_var` handing the selection on as the group's reading left it, `c` stands in it as written, `g(3) == 7` is stuck, and `/f` is refused.
+#[test]
+fn a_member_read_in_an_arm_reads_what_the_arm_bound() {
+    let module = r#"
+let /f: (c: #BoolType) -> #NatType =
+    (c: #BoolType) =>
+        #{node = Rec}
+        (let g: (i: #NatType) -> #NatType =
+            (i2: #NatType) => #{goal = #NatType} match c | false => i2 | true => 7 end
+        and m: (u: {}) -> #NatType =
+            (u2: {}) =>
+                #{goal = #NatType}
+                match c
+                | false => 1
+                | true =>
+                    let w: /std/Bool/Holds(#NatEql(g(3), 7)) = #{node = Variant} /std/Bool/True/qed();
+                    0
+                end;
+        m(()));
+"#;
+    let verdicts = text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+
+    assert_eq!(
+        verdicts,
+        Vec::new(),
+        "a member's selection read under an arm's solution"
+    );
+}

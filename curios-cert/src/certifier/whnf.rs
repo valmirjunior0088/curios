@@ -424,9 +424,9 @@ pub fn canonical_operands(certifier: &mut ByValue, term: &Term) -> Result<Term, 
 fn step_var(certifier: &mut ByValue, var: Var) -> Result<Step, ReduceError> {
     // A bound index stops here as a local with no binding does: one reaching here is refused where the module entered (`curios_core::open_positions_of`).
     if let Some(free) = var.as_free() {
-        // A member known to terminate unfolds in its group's bodies to its selection out of the known members (`check_group`); every other local is a neutral.
+        // A member known to terminate unfolds in its group's bodies to its selection out of the known members (`check_group`), read by value as the scope stands here, since an arm inside a body may since have bound a local the selection names; every other local is a neutral.
         if let Some(member) = certifier.calls.member_value(free) {
-            return Ok(Step::Continue(member));
+            return Ok(Step::Continue(certifier.scope.by_value(&member)));
         }
     }
 
