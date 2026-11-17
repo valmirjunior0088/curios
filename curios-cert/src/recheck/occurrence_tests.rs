@@ -428,3 +428,51 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         "expected `Nat`, found `/demo/Box/Box(Nat)`"
     );
 }
+
+/// The same forgery, smuggled in as a `List` split's carrier element type, which the split states and the walk reads by converting it with its scrutinee's: `Eq(@True)(v, w)` over two `Nat`s converts with `Eq(@True)(qed(), qed())`, so the cons arm's head stands at the forged equation, and eliminating it at `(Held(v)) -> Held(w)` reads both indices at its case. Every body states its binders, and the refl arm's `Held(z)` is a `Nat` index typed at `True`, which refuses it; typed where the split states it, the element type is refused first, a `Nat` at `True`. The empty arm is ill-typed and withdrawn, the scrutinee computing to a cons.
+#[test]
+fn a_bogus_occurrence_behind_a_carriers_element_type_is_refused() {
+    let verdicts = text_verdicts(&fill!(
+        r#"${EQUALITY}
+induct /False: pub Prop
+end
+
+induct /Held: (n: #NatType) -> pub Type
+| yes(): (0)
+end
+
+let /idl: (l: #ListType(#{node = InductType} /Eq(#{node = InductType} /True())(#{node = Variant} /True/qed(), #{node = Variant} /True/qed()))) ->
+    #ListType(#{node = InductType} /Eq(#{node = InductType} /True())(#{node = Variant} /True/qed(), #{node = Variant} /True/qed())) =
+    (l: #ListType(#{node = InductType} /Eq(#{node = InductType} /True())(#{node = Variant} /True/qed(), #{node = Variant} /True/qed()))) => l;
+
+let /cast: (v: #NatType, w: #NatType) -> (u: #{node = InductType} /Held()(v)) -> #{node = InductType} /Held()(w) =
+    (v: #NatType, w: #NatType) =>
+        #{
+            goal = (u: #{node = InductType} /Held()(v)) -> #{node = InductType} /Held()(w),
+            cases = {carrier = {elem = #{node = InductType} /Eq(#{node = InductType} /True())(v, w)}}}
+        match /idl(#List(#{node = InductType} /Eq(#{node = InductType} /True())(#{node = Variant} /True/qed(), #{node = Variant} /True/qed()), [#{node = Variant} /Eq/refl(@#{node = InductType} /True(), #{node = Variant} /True/qed())]))
+        | [] => 0
+        | [h, ..t] =>
+            #{goal = (u: #{node = InductType} /Held()(v)) -> #{node = InductType} /Held()(w)}
+            match h
+            | refl(z) => (u2: #{node = InductType} /Held()(z)) => u2
+            end
+        end;
+
+let /held: #{node = InductType} /Held()(1) =
+    /cast(0, 1)(#{node = Variant} /Held/yes());
+
+let /boom: #{node = InductType} /False() =
+    #{goal = #{node = InductType} /False()} match /held end;
+"#,
+        EQUALITY
+    ));
+
+    assert!(
+        refuses(&verdicts, Some("cast"), |error| matches!(
+            error,
+            Error::Mismatch { .. }
+        )),
+        "the certifier accepted a forged equation standing as a carrier's element type: {verdicts:?}",
+    );
+}

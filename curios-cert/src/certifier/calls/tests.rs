@@ -317,3 +317,93 @@ fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
         );
     }
 }
+
+/// A proposition with one proof, which the fixtures below that state a proof declare.
+const TRUE: &str = "induct /True: pub Prop\n| qed()\nend";
+
+/// The instance a match states is typed where it is held to the scrutinee's type, so a call standing only there is recorded: `f(n)` sits in the stated instance of a split over `qed()`, which reduction reads the arm's payload off and no arm names. Mutation-checked: converting the stated instance with the scrutinee's type without typing it leaves the group with no call, and it is accepted.
+#[test]
+fn a_call_in_a_matchs_stated_instance_is_recorded() {
+    let mut certifier = certifier();
+    declared(&mut certifier, TRUE);
+
+    let body = "#{goal = Type, cases = {stated = ((y: Type) => #{node = InductType} /True())(f(n))}} match #{node = Variant} /True/qed() | qed() => #NatType end";
+
+    assert!(matches!(
+        infer(&mut certifier, &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// An argument at a proposition is typed as every argument is, so a call standing only in a proof is recorded: `f(n)` sits in the proof `/keep` takes beside the type it answers, which erasure deletes and `/keep`'s reduct drops.
+#[test]
+fn a_call_in_a_proof_argument_is_recorded() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        &fill!(
+            "${TRUE}\nlet /keep: (b: Type, p: #{node = InductType} /True()) -> Type = (b: Type, p: #{node = InductType} /True()) => b;",
+            TRUE
+        ),
+    );
+
+    let body = "/keep(#NatType, ((y: Type) => #{node = Variant} /True/qed())(f(n)))";
+
+    assert!(matches!(
+        infer(&mut certifier, &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// An intrinsic's type operand is typed, so a call standing only in a list literal's element type is recorded: `f(n)` sits in the element type of the empty list a split takes apart, and no arm or goal names it. Mutation-checked: classifying a type operand by its sort without typing it (`check_is_type`) leaves the group with no call, and it is accepted.
+#[test]
+fn a_call_in_a_list_literals_element_type_is_recorded() {
+    let body = "#{goal = Type, cases = {carrier = {elem = #NatType}}} match #List(((y: Type) => #NatType)(f(n)), []) | [] => #NatType | [h, ..t] => #NatType end";
+
+    assert!(matches!(
+        infer(&mut certifier(), &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// A curried spine whose head is a lambda applied on the spot binds its later list to the lambda the head's body is, as what that binder stands for: in `((x) => (y) => f(y))(0)(n)` the call is at the caller's own argument and the gate refuses it, and through a split of `y` the call is below `n` and the group is accepted. Mutation-checked: reading the spine one list at a time, the arguments past the head lambda's binders left unbound, refuses the split.
+#[test]
+fn a_curried_spine_binds_its_later_list_to_the_lambda_its_head_answers() {
+    assert!(matches!(
+        infer(
+            &mut certifier(),
+            &group("((x: #NatType) => (y: #NatType) => f(y))(0)(n)")
+        ),
+        Err(Error::NotDescending { .. }),
+    ));
+
+    let body = fill!(
+        "((x: #NatType) => (y: #NatType) => ${split})(0)(n)",
+        split = split("y", "f(pred)")
+    );
+    assert!(infer(&mut certifier(), &group(&body)).is_ok());
+}
+
+/// A member handed in a curried spine's later list is named bare, a call graded unknown, whatever the lambda the head answers does with it: `((x) => (h) => h(x))(n)(f)` applies `f` at the caller's own argument, and the gate refuses it. Mutation-checked: with `record_call` removed from `infer_within`'s `Var` rule, the group has no call and is accepted.
+#[test]
+fn a_member_handed_in_a_later_list_is_a_call_of_unknown_grade() {
+    let body = "((x: #NatType) => (h: (k: #NatType) -> Type) => h(x))(n)(f)";
+
+    assert!(matches!(
+        infer(&mut certifier(), &group(body)),
+        Err(Error::NotDescending { .. }),
+    ));
+}
+
+/// A member called across two argument lists makes one call of its two leading lambdas: `t(n)(m)` hands `t` both its parameters back, and the gate refuses it. Mutation-checked: recording a call only at an application whose own head is a member local leaves the group with no call, and it is accepted.
+#[test]
+fn a_member_called_across_two_lists_is_one_call_of_both_its_parameters() {
+    let group = term(
+        "#{node = Rec} (let t: (n: #NatType) -> (m: #NatType) -> Type = (n: #NatType) => (m: #NatType) => t(n)(m); t)",
+    );
+
+    assert!(matches!(
+        infer(&mut certifier(), &group),
+        Err(Error::NotDescending { .. }),
+    ));
+}
