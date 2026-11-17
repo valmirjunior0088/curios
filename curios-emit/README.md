@@ -52,6 +52,14 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-anf` bu
 
 **Rejected.** Waiting for the engine to inline the subtype check (Wasmtime issue #13484), which leaves every unknown call paying the walk until it lands, on the engine's schedule.
 
+### A function binds again the constant data it reads
+
+**Decision.** A value `curios_cps::Module::constant_data` states, read by a function that binds it nowhere in itself, is bound again at that function's entry, under its own name and after the constants its data names, and is not among what the function is handed: no caller loads it and no recursive call passes it on. The hoister interns that binding into the one global equal data shares, so it costs one `global.get`. A constant whose data holds the closure of a function that is handed something stays handed in, with every constant naming it, since a closure capturing a computed value is no constant aggregate and would be built at every entry. `a_function_reading_constant_data_takes_in_only_what_holds_a_closure_over_a_computed_value` pins it.
+
+**Rationale.** A constant is one value wherever it is bound, so its name keeps the carrier the representation chose for it and every declaration keyed on it, and nothing is renamed. Handed in, a constant widens the signature of every function that reads it or reaches one that does, by one parameter for each distinct constant, and every call loads each of them.
+
+**Rejected.** Constants as a module-level item of the machine CFG, read by name from any function: a second representation of what the hoister already interns. Binding again under a minted name, which the representation's carriers, keyed by the value's own name, would not reach.
+
 ### A shape past the engine's limits spills into a trailing struct
 
 **Decision.** Once a module is emitted, a struct type past the engine's 10 000 fields keeps 9 999 and a last field holding a struct of the rest, nested again where that is past the limit, and a function type past its 1 000 parameters or results keeps 999 and passes the rest as one struct (`spill_wide_shapes`, before locals are allocated). A tail is built first, from the top of the stack where `struct.new` finds its fields, and a field past the kept ones is read through each struct before it; a caller packs the arguments past the kept ones and a function spreads them into its parameters' locals at its entry; a function packs its results past the kept ones at each return and at its end, and a caller spreads them back onto the stack. A signature's tail is a final struct alone in its recursion group, so two signatures that spill one list spill it into one type, and a tail call hands it through.

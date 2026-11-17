@@ -892,6 +892,103 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
     module
 }
 
+/// `main` binds `sum`, a computed number, and two constant tuples: `held`, over a number, and `closing`, over the closure of `answer`, which reads `sum`. It then calls `reader`, which reads the element of each tuple and answers the number.
+pub fn constants_read_by_a_function() -> curios_cps::Module {
+    let mut module = curios_cps::Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let answer = module.reserve_function();
+    let answer_return = module.reserve_continuation();
+    let reader = module.reserve_function();
+    let reader_return = module.reserve_continuation();
+    let [sum, held, closing, number, closure] = ["sum", "held", "closing", "number", "closure"]
+        .map(|name| module.add_value(Some(name.into())));
+
+    let answer_body = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+        target: answer_return,
+        args: vec![curios_cps::Atom::Value(sum)],
+    }));
+    module.define_function(
+        answer,
+        curios_cps::Function {
+            debug_name: Some("answer".into()),
+            params: vec![],
+            return_cont: answer_return,
+            body: answer_body,
+            droppable: curios_cps::Droppable::Never,
+        },
+    );
+
+    let hand_back = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+        target: reader_return,
+        args: vec![curios_cps::Atom::Value(number)],
+    }));
+    let read_closing = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: closure,
+        op: curios_cps::Intrinsic::TupleGet(0),
+        args: vec![curios_cps::Atom::Value(closing)],
+        next: hand_back,
+    });
+    let read_held = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: number,
+        op: curios_cps::Intrinsic::TupleGet(0),
+        args: vec![curios_cps::Atom::Value(held)],
+        next: read_closing,
+    });
+    module.define_function(
+        reader,
+        curios_cps::Function {
+            debug_name: Some("reader".into()),
+            params: vec![],
+            return_cont: reader_return,
+            body: read_held,
+            droppable: curios_cps::Droppable::Never,
+        },
+    );
+
+    let call = module.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(reader),
+        args: vec![],
+        return_to: main_return,
+    });
+    let bind_reader = module.add_node(curios_cps::Node::LetFun {
+        functions: vec![reader],
+        body: call,
+    });
+    let build_closing = module.add_node(curios_cps::Node::LetValue {
+        result: closing,
+        value: curios_cps::ValueExpr::Tuple(vec![curios_cps::Atom::Fun(answer)]),
+        next: bind_reader,
+    });
+    let build_held = module.add_node(curios_cps::Node::LetValue {
+        result: held,
+        value: curios_cps::ValueExpr::Tuple(vec![nat(2)]),
+        next: build_closing,
+    });
+    let bind_answer = module.add_node(curios_cps::Node::LetFun {
+        functions: vec![answer],
+        body: build_held,
+    });
+    let compute = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: sum,
+        op: curios_cps::Intrinsic::NatAdd,
+        args: vec![nat(1), nat(2)],
+        next: bind_answer,
+    });
+    module.define_function(
+        main,
+        curios_cps::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body: compute,
+            droppable: curios_cps::Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
 /// A tuple over a computed element — not constant, so it must stay an inline allocation.
 pub fn runtime_tuple() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();

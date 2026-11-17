@@ -108,6 +108,27 @@ fn a_block_takes_no_parameter_for_a_hoisted_binding() {
     assert_contains(&wat(&module), "global.get $const/");
 }
 
+/// A function reading constant data binds it again at its entry, where hoisting reads it from its global, rather than taking it in at every call: `reader` takes nothing for the tuple over a number. A constant holding the closure of a function that reads a computed value is no such data, since built at every entry it would allocate where handing it in does not, so `reader` takes that one in.
+#[test]
+fn a_function_reading_constant_data_takes_in_only_what_holds_a_closure_over_a_computed_value() {
+    let wat = wat(&constants_read_by_a_function());
+    assert_eq!(params_of(&wat, "reader"), 1, "{wat}");
+    assert_contains(&wat, "global.get $const/");
+}
+
+/// How many parameters the function whose emitted name ends in `hint` takes, read off the line after its header, where an unbounded rendering lists them all.
+fn params_of(wat: &str, hint: &str) -> usize {
+    let header = format!("${hint} (type ");
+    let start = wat
+        .find(&header)
+        .unwrap_or_else(|| panic!("`{hint}` is emitted"));
+    wat[start..]
+        .lines()
+        .nth(1)
+        .filter(|line| line.trim_start().starts_with("(param "))
+        .map_or(0, |line| line.matches("(param ").count())
+}
+
 /// How many parameters the blocks of `structured` take, and how many arguments its jumps hand.
 fn captures(structured: &mut EmissionModule) -> (usize, usize) {
     fn count(region: &EmissionBody, taken: &mut usize, handed: &mut usize) {

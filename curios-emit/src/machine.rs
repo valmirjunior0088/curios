@@ -222,56 +222,50 @@ pub fn lower(
     source
         .verify_unflowed()
         .expect("invalid high CPS at machine boundary");
-    let mut free_values = source
+    let defined = source
         .functions()
         .iter()
         .enumerate()
         .filter_map(|(index, function)| {
             function.as_ref()?;
-            let function = curios_cps::FunctionId::from_index(index);
-            Some((function, free_runtime_values(source, function)))
+            Some(curios_cps::FunctionId::from_index(index))
         })
+        .collect::<Vec<_>>();
+    let owned_values = defined
+        .iter()
+        .map(|function| (*function, owned_runtime_values(source, *function)))
         .collect::<BTreeMap<_, _>>();
-    let owned_values = free_values
-        .keys()
-        .copied()
-        .map(|function| (function, owned_runtime_values(source, function)))
+    let dependencies = defined
+        .iter()
+        .map(|function| (*function, referenced_functions(source, *function)))
         .collect::<BTreeMap<_, _>>();
-    let dependencies = free_values
-        .keys()
-        .copied()
-        .map(|function| (function, referenced_functions(source, function)))
-        .collect::<BTreeMap<_, _>>();
-    // A function needs what it reads and what each function it reaches needs, less what it binds itself, to a least fixpoint taken a function at a time: one is asked again only where what a function it reaches needs has grown. Asked whole until a round changes nothing, a nesting of n functions, each reaching the one inside it, would take n rounds over every function.
-    let mut dependents = BTreeMap::<curios_cps::FunctionId, Vec<curios_cps::FunctionId>>::new();
-    for (function, reached) in &dependencies {
-        for dependency in reached {
-            dependents.entry(*dependency).or_default().push(*function);
-        }
-    }
-    let mut pending = free_values.keys().copied().collect::<VecDeque<_>>();
-    let mut queued = pending.iter().copied().collect::<BTreeSet<_>>();
-    while let Some(function) = pending.pop_front() {
-        queued.remove(&function);
-        let mut required = free_values[&function]
+    let constants = constant_definitions(source);
+    // A constant a function reads is bound again at its entry where every closure its data holds takes nothing in: that closure is then constant data too, built once in a global, where one capturing a runtime value would be built at every entry. Leaving a constant out grows what the functions reading its closure need, so the set is narrowed until it holds.
+    let mut rebound = constants.keys().copied().collect::<BTreeSet<_>>();
+    let free_values = loop {
+        let free_values = required_values(source, &owned_values, &dependencies, &rebound);
+        let closed = rebound
             .iter()
             .copied()
+            .filter(|value| {
+                curios_cps::atoms(source.node(constants[value]).unwrap())
+                    .into_iter()
+                    .all(|atom| match atom {
+                        curios_cps::Atom::Fun(function) => free_values[function].is_empty(),
+                        curios_cps::Atom::Value(named) => rebound.contains(named),
+                        curios_cps::Atom::Literal(_) | curios_cps::Atom::Filler => true,
+                    })
+            })
             .collect::<BTreeSet<_>>();
-        for dependency in &dependencies[&function] {
-            required.extend(free_values[dependency].iter().copied());
+        if closed.len() == rebound.len() {
+            break free_values;
         }
-        required.retain(|value| !owned_values[&function].contains(value));
-        let required = required.into_iter().collect::<Vec<_>>();
-        if required == free_values[&function] {
-            continue;
-        }
-        free_values.insert(function, required);
-        for dependent in dependents.get(&function).into_iter().flatten() {
-            if queued.insert(*dependent) {
-                pending.push_back(*dependent);
-            }
-        }
-    }
+        rebound = closed;
+    };
+    let constants = constants
+        .into_iter()
+        .filter(|(value, _)| rebound.contains(value))
+        .collect::<BTreeMap<_, _>>();
     let escaping = source.escaping_functions();
     let wrappers = escaping
         .iter()
@@ -305,6 +299,7 @@ pub fn lower(
             id,
             function,
             &free_values,
+            &constants,
             results,
             &value_entropy,
         )
@@ -332,6 +327,74 @@ pub fn lower(
     };
     module.verify().expect("invalid closed machine CFG");
     module
+}
+
+/// Each value [`curios_cps::Module::constant_data`] states, by the `LetValue` that binds it.
+fn constant_definitions(
+    source: &curios_cps::Module,
+) -> BTreeMap<curios_cps::ValueId, curios_cps::NodeId> {
+    let constant = source.constant_data();
+    source
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            curios_cps::Node::LetValue { result, .. } if constant.contains(result) => {
+                Some((*result, id))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// What each function is handed beside its parameters: what it reads and what each function it reaches needs, less what it binds itself and the constants of `rebound`, which it binds again ([`MachineFunctionLowerer::bind_constants_again`]).
+fn required_values(
+    source: &curios_cps::Module,
+    owned_values: &BTreeMap<curios_cps::FunctionId, BTreeSet<MachineValueId>>,
+    dependencies: &BTreeMap<curios_cps::FunctionId, BTreeSet<curios_cps::FunctionId>>,
+    rebound: &BTreeSet<curios_cps::ValueId>,
+) -> BTreeMap<curios_cps::FunctionId, Vec<MachineValueId>> {
+    let rebound = rebound
+        .iter()
+        .map(|value| value_id(*value))
+        .collect::<BTreeSet<_>>();
+    let mut free_values = owned_values
+        .keys()
+        .map(|function| {
+            let mut free = free_runtime_values(source, *function);
+            free.retain(|value| !rebound.contains(value));
+            (*function, free)
+        })
+        .collect::<BTreeMap<_, _>>();
+    // A function needs what it reads and what each function it reaches needs, less what it binds itself, to a least fixpoint taken a function at a time: one is asked again only where what a function it reaches needs has grown. Asked whole until a round changes nothing, a nesting of n functions, each reaching the one inside it, would take n rounds over every function.
+    let mut dependents = BTreeMap::<curios_cps::FunctionId, Vec<curios_cps::FunctionId>>::new();
+    for (function, reached) in dependencies {
+        for dependency in reached {
+            dependents.entry(*dependency).or_default().push(*function);
+        }
+    }
+    let mut pending = free_values.keys().copied().collect::<VecDeque<_>>();
+    let mut queued = pending.iter().copied().collect::<BTreeSet<_>>();
+    while let Some(function) = pending.pop_front() {
+        queued.remove(&function);
+        let mut required = free_values[&function]
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        for dependency in &dependencies[&function] {
+            required.extend(free_values[dependency].iter().copied());
+        }
+        required.retain(|value| !owned_values[&function].contains(value));
+        let required = required.into_iter().collect::<Vec<_>>();
+        if required == free_values[&function] {
+            continue;
+        }
+        free_values.insert(function, required);
+        for dependent in dependents.get(&function).into_iter().flatten() {
+            if queued.insert(*dependent) {
+                pending.push_back(*dependent);
+            }
+        }
+    }
+    free_values
 }
 
 fn free_runtime_values(
@@ -481,6 +544,8 @@ pub struct MachineFunctionLowerer<'a> {
     id: curios_cps::FunctionId,
     function: &'a curios_cps::Function,
     free_values: &'a BTreeMap<curios_cps::FunctionId, Vec<MachineValueId>>,
+    /// The constants a function binds again rather than being handed, by the `LetValue` that binds each.
+    constants: &'a BTreeMap<curios_cps::ValueId, curios_cps::NodeId>,
     results: Vec<Option<curios_cps::Repr>>,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
@@ -497,6 +562,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         id: curios_cps::FunctionId,
         function: &'a curios_cps::Function,
         free_values: &'a BTreeMap<curios_cps::FunctionId, Vec<MachineValueId>>,
+        constants: &'a BTreeMap<curios_cps::ValueId, curios_cps::NodeId>,
         results: Vec<Option<curios_cps::Repr>>,
         value_entropy: &'a Entropy<MachineValueId>,
     ) -> Self {
@@ -507,6 +573,7 @@ impl<'a> MachineFunctionLowerer<'a> {
             id,
             function,
             free_values,
+            constants,
             results,
             blocks: BTreeMap::new(),
             block_scopes: BTreeMap::new(),
@@ -520,12 +587,16 @@ impl<'a> MachineFunctionLowerer<'a> {
 
     fn lower(mut self) -> MachineFunction {
         let entry = MachineBlockId(0);
+        let mut again = self.bind_constants_again();
         self.work.push_back((entry, self.function.body, vec![]));
         while let Some((block, node, params)) = self.work.pop_front() {
             if self.blocks.contains_key(&block) {
                 continue;
             }
-            let block_body = self.lower_block(block, node, params);
+            let mut block_body = self.lower_block(block, node, params);
+            if block == entry {
+                block_body.instructions.splice(0..0, again.drain(..));
+            }
             self.blocks.insert(block, block_body);
         }
         MachineFunction {
@@ -560,28 +631,6 @@ impl<'a> MachineFunctionLowerer<'a> {
                     next,
                 } => {
                     let value = match value {
-                        curios_cps::ValueExpr::Literal(literal) => {
-                            MachineConstruct::Literal(literal.clone())
-                        }
-                        curios_cps::ValueExpr::List(values) => MachineConstruct::List(
-                            values
-                                .iter()
-                                .map(|atom| self.lower_atom(atom, &mut instructions))
-                                .collect(),
-                        ),
-                        curios_cps::ValueExpr::Tuple(values) => MachineConstruct::Tuple(
-                            values
-                                .iter()
-                                .map(|atom| self.lower_atom(atom, &mut instructions))
-                                .collect(),
-                        ),
-                        curios_cps::ValueExpr::Row(row, values) => MachineConstruct::Row(
-                            *row,
-                            values
-                                .iter()
-                                .map(|atom| self.lower_atom(atom, &mut instructions))
-                                .collect(),
-                        ),
                         curios_cps::ValueExpr::Rebuilt { of, row, slots } => {
                             let of = self.lower_atom(of, &mut instructions);
                             let values = slots
@@ -598,6 +647,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                             node_id = *next;
                             continue;
                         }
+                        value => self.construct(value, &mut instructions),
                     };
                     instructions.push(MachineInstruction::Construct {
                         result: value_id(*result),
@@ -857,6 +907,80 @@ impl<'a> MachineFunctionLowerer<'a> {
             curios_cps::Node::Unreachable => MachineTerminator::Unreachable,
             _ => unreachable!("non-terminal CPS node reached terminal lowering"),
         }
+    }
+
+    /// `value`'s construction, its operands lowered into `instructions`: any but a rebuild, which writes where it stands.
+    fn construct(
+        &mut self,
+        value: &curios_cps::ValueExpr,
+        instructions: &mut Vec<MachineInstruction>,
+    ) -> MachineConstruct {
+        match value {
+            curios_cps::ValueExpr::Literal(literal) => MachineConstruct::Literal(literal.clone()),
+            curios_cps::ValueExpr::List(values) => {
+                MachineConstruct::List(self.lower_atoms(values, instructions))
+            }
+            curios_cps::ValueExpr::Tuple(values) => {
+                MachineConstruct::Tuple(self.lower_atoms(values, instructions))
+            }
+            curios_cps::ValueExpr::Row(row, values) => {
+                MachineConstruct::Row(*row, self.lower_atoms(values, instructions))
+            }
+            curios_cps::ValueExpr::Rebuilt { .. } => {
+                unreachable!("a rebuild is no construction")
+            }
+        }
+    }
+
+    /// Bind again, at the function's entry, each constant it reads and binds nowhere in itself, under its own name and after the constants its data names: a constant is one value wherever it is bound, so its name keeps the carrier the representation gave it, and hoisting interns every binding of equal data into one global, which the function reads rather than being handed the constant at every call ([`hoist_consts`](crate::hoist_consts)).
+    fn bind_constants_again(&mut self) -> Vec<MachineInstruction> {
+        let owned = owned_runtime_values(self.source, self.id);
+        let mut pending = Vec::new();
+        for node in function_nodes(self.source, self.id) {
+            let node = self.source.node(node).unwrap();
+            for atom in curios_cps::atoms(node) {
+                if let curios_cps::Atom::Value(value) = atom {
+                    pending.push((*value, false));
+                }
+            }
+            if let curios_cps::Node::ApplyFun {
+                callee: curios_cps::Callee::Closure(value),
+                ..
+            } = node
+            {
+                pending.push((*value, false));
+            }
+        }
+        // After what it names, in a walk of its own: a constant's data names only constants bound before it, so the walk meets no cycle, and a long chain of them deepens no stack.
+        let mut seen = BTreeSet::new();
+        let mut instructions = Vec::new();
+        while let Some((value, named_first)) = pending.pop() {
+            let Some(binding) = self.constants.get(&value) else {
+                continue;
+            };
+            let Some(curios_cps::Node::LetValue { value: data, .. }) = self.source.node(*binding)
+            else {
+                unreachable!("a constant is bound by a `LetValue`")
+            };
+            if named_first {
+                let construct = self.construct(data, &mut instructions);
+                instructions.push(MachineInstruction::Construct {
+                    result: value_id(value),
+                    value: construct,
+                });
+                continue;
+            }
+            if owned.contains(&value_id(value)) || !seen.insert(value) {
+                continue;
+            }
+            pending.push((value, true));
+            for atom in curios_cps::atoms(self.source.node(*binding).unwrap()) {
+                if let curios_cps::Atom::Value(named) = atom {
+                    pending.push((*named, false));
+                }
+            }
+        }
+        instructions
     }
 
     fn lower_atoms(
