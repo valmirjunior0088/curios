@@ -330,9 +330,9 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             };
 
             // A projection is a step of the path its head starts, typed as part of it, and the path's call is recorded where the path ends: a member's field applied is a call of the part it reaches, and one named unapplied a call it cannot grade ([`Certifier::record_call`]).
-            // The steps after this projection, its own field first, go to its head, so a definition's call the path roots at reads the part it reaches; whatever the head hands the argument lists after them stays for the application around this one.
+            // The steps after this projection, its own field first, go to its head where the head is a step of the same path, an application or a projection, as an application hands its own, so a definition's call the path roots at reads the part it reaches; whatever the head hands the argument lists after them stays for the application around this one. Any other head — a `let`, a match — types its applications as spines of their own, which reach no field of this path.
             let later = certifier.calls.take_later();
-            if !later.is_empty() {
+            if !later.is_empty() && matches!(&**head, Subterm::Apply(_) | Subterm::Proj(_)) {
                 let mut steps = vec![Segment::Field(index)];
                 steps.extend(later);
                 certifier.calls.set_later(steps);
