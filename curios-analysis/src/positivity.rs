@@ -8,6 +8,8 @@
 //!
 //! Acceptance is one predicate: the diagonal of the closed occurrence relation must be [`Polarity::Strict`] or [`Polarity::Unused`] for every declaration — no declaration reaches itself through a non-strict path. That predicate does not change. Every future improvement to the analysis changes how precisely `occurrences` computes, never what the test admits.
 //!
+//! A structure meets a second rule once it is strictly positive: it reaches itself through no path of record fields alone, a field of a structure or a component of a tuple at every step ([`Holding`]). Such a structure has no finite value, and the size order reads a field strictly below its record, so a recursion on one would descend without end on the open value a checker reduces a type under.
+//!
 //! # Asked before the pass has run
 //!
 //! Conversion asks whether a struct reaches itself while a unit's items are still being checked, to end its reading of a type's inhabitants, and the relation above does not exist yet: the pass runs over finished declarations, after the items whose conversions ask. [`struct_reaches_itself`] answers from the declarations as they are written. It reads the same diagonal coarsely — any mention counts, at whatever polarity and whatever it would reduce to — so it answers yes wherever the pass would and in more places besides. Its answer ends a walk early and admits nothing: whatever it says, a type judged to have one inhabitant is one whose every field was judged.
@@ -29,7 +31,7 @@ use {
         Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         hash::{Hash, Hasher},
     },
 };
@@ -39,6 +41,8 @@ use {
 pub enum PositivityRefusal<E> {
     /// A declaration reaches itself through a non-strict path.
     NotPositive(NotPositive),
+    /// A structure reaches itself through record fields alone, so it has no finite value.
+    HoldsItself(HoldsItself),
     /// The driver refused a reduction while `name` was being walked — its budget ran out — and the set is refused for it.
     ///
     /// Reported instead of what the analysis computed past it, which may be the refusal's own doing: the term the driver could not reduce was read at `Mixed`, so a recursion through it that would have read `Strict` reads as a non-strict path back, and a vector that would have read `Strict` holds a `Mixed` no declaration put there. `name` is where the budget went, not necessarily a declaration a verdict would have fallen on, since a `Mixed` vector reaches every declaration that composes through it.
@@ -73,6 +77,14 @@ pub struct NotPositive {
     pub part: DeclaredPart,
     pub type_: Term,
     pub polarity: Polarity,
+}
+
+/// A structure refused by the second formation rule: `name`'s `part` leads back to `name` through a field of a structure or a component of a tuple at every step, so `name` has no finite value. The driver owns the rendering; `type_` is the part's type, for a diagnostic that points at real source.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HoldsItself {
+    pub name: Global,
+    pub part: DeclaredPart,
+    pub type_: Term,
 }
 
 /// The declaration set an analysis runs over: the `induct` and `struct` entries of one declaration, a group's taken together.
@@ -161,7 +173,145 @@ pub fn positivity_vectors<E: Env>(
         )));
     }
 
+    // A structure strictly positive in itself may still hold itself through its fields alone, which no finite value does.
+    let mut holding = Holding {
+        env,
+        declarations,
+        held: BTreeMap::new(),
+        underway: Vec::new(),
+    };
+    for name in names
+        .iter()
+        .filter(|name| declarations.struct_(name).is_some())
+    {
+        match holding.held(name) {
+            Ok(_) => {}
+            Err(Stop::Holds(holds)) => return Err(PositivityRefusal::HoldsItself(holds)),
+            Err(Stop::Refused { name, error }) => {
+                return Err(PositivityRefusal::Exhausted { name, error });
+            }
+        }
+    }
+
     Ok(vectors.computed)
+}
+
+/// What each structure holds through record fields alone, read off its declaration where the walk first meets it: the second formation rule, that no structure reaches itself so.
+///
+/// A position is field-only where every step to it is a field of a structure or a component of a tuple. A parameter at one is held; a structure at one is entered, and an argument it is given at a parameter it holds continues the position; anything else — a family, a function, an intrinsic, a stuck form — ends it. A family between ends a path because a case of a variable is stuck where a projection of one reduces, and an applied field is read no further (the `Subterm::Proj` arm of totality's `Grader::shape_read`), so it is fields alone that the size order reads below a binder without end.
+///
+/// Meeting a structure whose own walk is underway is a path back to it, so the walk is exact and it ends: a structure is entered once, its summary kept for the rest of the pass, and one that grows its own arguments, `struct Q(A) { q: Q({A, A}) }`, meets itself on its first step. A structure outside the set is read off its declaration as the driver holds it, which a structure judged earlier cannot name one of the set through but at the arguments it is handed.
+///
+/// A node one structure's walk has entered is not entered again, told apart by its address and held so the address stays the node's, as the strict-positivity walk's [`Entered`] is: the walk of one structure reads its parameters alone, so a node a second path reaches holds what it held on the first, and a field typed by a tower of tuples, each level naming the one below twice, is walked in its size and not in its paths.
+struct Holding<'d, 'e, E: Env> {
+    env: &'e mut E,
+    declarations: Declarations<'d>,
+    /// The parameters each structure walked so far holds at a field-only position.
+    held: BTreeMap<Global, BTreeSet<usize>>,
+    /// The structures whose walks are underway, outermost first, each with the field it is in and that field's type.
+    underway: Vec<(Global, DeclaredPart, Term)>,
+}
+
+/// Why a [`Holding`] walk stopped short of a summary.
+enum Stop<E> {
+    Holds(HoldsItself),
+    Refused { name: Global, error: E },
+}
+
+impl<E: Env> Holding<'_, '_, E> {
+    /// The parameters the structure `name` holds at a field-only position, walked where it is first met. A name the driver holds no structure for holds nothing.
+    fn held(&mut self, name: &Global) -> Result<BTreeSet<usize>, Stop<E::Error>> {
+        if let Some(held) = self.held.get(name) {
+            return Ok(held.clone());
+        }
+        let declaration = match self.declarations.struct_(name) {
+            Some(declaration) => declaration.clone(),
+            None => match self.env.struct_decl(name) {
+                Some(declaration) => declaration.clone(),
+                None => return Ok(BTreeSet::new()),
+            },
+        };
+        let params = binders(self.env, &declaration.arity);
+        let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
+        let mut held = BTreeSet::new();
+        let mut entered = HashMap::new();
+        for (member, type_) in labelled(self.env, &declaration.fields_at(&arguments)) {
+            self.underway
+                .push((*name, DeclaredPart::Field(member), type_.clone()));
+            self.position(&type_, &params, &mut held, &mut entered)?;
+            self.underway.pop();
+        }
+        self.held.insert(*name, held.clone());
+
+        Ok(held)
+    }
+
+    /// Walk the field-only position `type_` of the structure whose parameters are `params`, into `held`, past every node `entered` holds, by its address.
+    fn position(
+        &mut self,
+        type_: &Term,
+        params: &[Free],
+        held: &mut BTreeSet<usize>,
+        entered: &mut HashMap<usize, Term>,
+    ) -> Result<(), Stop<E::Error>> {
+        recurse(|| self.position_within(type_, params, held, entered))
+    }
+
+    fn position_within(
+        &mut self,
+        type_: &Term,
+        params: &[Free],
+        held: &mut BTreeSet<usize>,
+        entered: &mut HashMap<usize, Term>,
+    ) -> Result<(), Stop<E::Error>> {
+        if entered.insert(type_.identity(), type_.clone()).is_some() {
+            return Ok(());
+        }
+        let type_ = match forceable(type_) {
+            true => self.env.force(type_).map_err(|error| Stop::Refused {
+                name: self.underway.last().expect("a walk is underway").0,
+                error,
+            })?,
+            false => type_.clone(),
+        };
+        match &*type_ {
+            Subterm::Var(var) => {
+                if let Some(free) = var.as_free()
+                    && let Some(index) = params.iter().position(|param| param == free)
+                {
+                    held.insert(index);
+                }
+            }
+            Subterm::TupleType(TupleType { telescope }) => {
+                let mut cursor = telescope.cursor();
+                while let Some((_, component)) = cursor.entry() {
+                    self.position(&component, params, held, entered)?;
+                    cursor.advance_fresh(|hint| self.env.fresh(hint));
+                }
+            }
+            Subterm::StructType(StructType {
+                name,
+                params: arguments,
+                ..
+            }) => {
+                if let Some((name, part, type_)) = self
+                    .underway
+                    .iter()
+                    .find(|(underway, ..)| underway == name)
+                    .cloned()
+                {
+                    return Err(Stop::Holds(HoldsItself { name, part, type_ }));
+                }
+                for index in self.held(name)? {
+                    if let Some(argument) = arguments.get(index) {
+                        self.position(argument, params, held, entered)?;
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
 /// Whether the struct `name` reaches itself: whether its own name is among the globals its parameters' and fields' types name, or among those the structs they name do, each declaration read once.

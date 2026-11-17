@@ -1805,6 +1805,13 @@ fn positivity_verdict(refusal: PositivityRefusal<Error>) -> Verdict {
                 polarity: refusal.polarity,
             },
         },
+        PositivityRefusal::HoldsItself(refusal) => Verdict {
+            name: Some(refusal.name),
+            error: Error::HoldsItself {
+                name: refusal.name,
+                part: refusal.part,
+            },
+        },
         PositivityRefusal::Exhausted { name, error } => Verdict {
             name: Some(name),
             error,

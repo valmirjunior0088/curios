@@ -233,37 +233,39 @@ fn a_field_of_the_proposition_matched_is_below_the_proof_it_was_taken_from() {
     });
 }
 
-// A structure that holds itself has no finite value, so a field of one below it claims nothing a closed term can reach: `absurd` descends on `s.next` and stands, and the refusal is the one value whose field is itself, `s`, a recursion that does not descend, which a proof reaching it may not reach.
+// A structure that holds itself through its fields alone has no finite value, and a field of one reads strictly below it, so a recursion on its fields descends without end on the open value a type is reduced under: `F(x) = F(x.next)` over `struct S { next: S }` unfolds `x.next.next…` wherever `F(x)` stands in a type, until the budget refuses it. It is refused where it is declared, in each way a path back through fields alone is spelled: a field of its own type, a component of a tuple, a parameter another structure holds at a field, and its own declaration at arguments its field grows, which the walk meets on its first step. The control holds itself through a family at each of those places, and through a list beside them, and stands; the certifier's twin is `recheck::positivity_tests`'s test of this name.
 #[test]
-fn a_structure_holding_itself_has_no_value_a_proof_reaches() {
-    control(
+fn a_record_holding_itself_through_fields_alone_is_refused() {
+    let control = control(
         r#"
-        use /std/Bool/{False};
+        use /std/{List, Option};
 
-        struct Stream: Type {
-            next: Stream,
-        }
+        struct S: Type { next: Option(S) }
 
-        let absurd(s: Stream) -> False = absurd(s.next);
+        struct T: Type { kids: List(T) }
+
+        struct Pair(A: Type): Type { first: A, second: A }
+
+        struct U: Type { pair: Pair(Option(U)) }
+
+        struct Q(A: Type): Type { q: Option(Q({A, A})) }
 
         /std/print("ok")
         "#,
         b"ok",
-    )
-    .refused(&[(
-        r#"/std/print("ok")"#,
-        r#"let s: Stream = Stream { next = s };
-
-        let bad: False = absurd(s);
-
-        /std/print("ok")"#,
-    )])
-    .by_elaborator_in("/bad", |error| {
-        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
-    })
-    .by_certifier_in("/bad", |error| {
-        matches!(error, curios_cert::Error::NotTotal { .. })
-    });
+    );
+    for (from, to, at) in [
+        ("next: Option(S)", "next: S", "/S"),
+        ("next: Option(S)", "next: {Option(S), S}", "/S"),
+        ("pair: Pair(Option(U))", "pair: Pair(U)", "/U"),
+        ("q: Option(Q({A, A}))", "q: Q({A, A})", "/Q"),
+    ] {
+        control
+            .refused(&[(from, to)])
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::HoldsItself { .. })
+            });
+    }
 }
 
 // `/std/Json/encode` recurses through `List/map`, on the elements of an array and on the second field of each pair of an object, each element bounded below the list it is drawn from: with a projection read below the binder it projects, the library's encoder is total, and a type may reach it.

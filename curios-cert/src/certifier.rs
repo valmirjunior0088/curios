@@ -205,6 +205,8 @@ pub enum Error {
         part: DeclaredPart,
         polarity: Polarity,
     },
+    /// A structure that reaches itself through record fields alone: `part` of `name` leads back to `name` through a field of a structure or a component of a tuple at every step. It has no finite value, and the size order reads a field strictly below its record, so without this gate a type-level recursion on its fields descends without end on the open value a type is reduced under.
+    HoldsItself { name: Global, part: DeclaredPart },
     /// A declaration carried as indifferent to a universe level its own telescopes mention. The item walk compared two instances of `name` on the carried vector's word, so a vector claiming an irrelevance the recomputation denies is a conversion nothing licensed.
     VarianceDenied { name: Global, level: usize },
     /// A constructor payload, uniform parameter, or field whose level exceeds the declaring family's result sort — the size condition that keeps an inductive from containing the universe it lives in.
@@ -472,25 +474,18 @@ impl fmt::Display for Displayed<'_> {
                 name,
                 part,
                 polarity,
-            } => {
-                let member = |member: &MemberLabel| match member {
-                    MemberLabel::Written(label) => label.clone(),
-                    MemberLabel::Place(place) => place.to_string(),
-                };
-                let part = match part {
-                    DeclaredPart::Payload {
-                        constructor,
-                        member: payload,
-                    } => format!("{constructor}({})", member(payload)),
-                    DeclaredPart::Field(field) => member(field),
-                    DeclaredPart::Whole => "this declaration".to_string(),
-                };
-                write!(
-                    formatter,
-                    "`{part}` of `{}` reaches back to it at {polarity:?}, which is not strictly positive",
-                    name.faithful()
-                )
-            }
+            } => write!(
+                formatter,
+                "`{}` of `{}` reaches back to it at {polarity:?}, which is not strictly positive",
+                named_part(part),
+                name.faithful()
+            ),
+            Error::HoldsItself { name, part } => write!(
+                formatter,
+                "`{}` of `{}` reaches back to it through record fields alone, so it has no finite value",
+                named_part(part),
+                name.faithful()
+            ),
             Error::VarianceDenied { name, level } => write!(
                 formatter,
                 "`{}` is carried as indifferent to its universe level {level}, which its declaration mentions",
@@ -509,6 +504,22 @@ impl fmt::Display for Displayed<'_> {
                 notation.level(upper),
             ),
         }
+    }
+}
+
+/// The piece of a declaration a refused path leaves from, as a refusal names it: a payload by its constructor, a field by its label, or the declaration whole.
+fn named_part(part: &DeclaredPart) -> String {
+    let member = |member: &MemberLabel| match member {
+        MemberLabel::Written(label) => label.clone(),
+        MemberLabel::Place(place) => place.to_string(),
+    };
+    match part {
+        DeclaredPart::Payload {
+            constructor,
+            member: payload,
+        } => format!("{constructor}({})", member(payload)),
+        DeclaredPart::Field(field) => member(field),
+        DeclaredPart::Whole => "this declaration".to_string(),
     }
 }
 

@@ -429,7 +429,9 @@ macro_rules! shown_terms {
             | Self::MatrixTupleArity { scrutinee, .. }
             | Self::MatrixLiteralColumn { scrutinee, .. } => $visit(scrutinee),
             Self::InformativePropStruct { field_type, .. } => $visit(field_type),
-            Self::NotStrictlyPositive { site_type, .. } => $visit(site_type),
+            Self::NotStrictlyPositive { site_type, .. } | Self::HoldsItself { site_type, .. } => {
+                $visit(site_type)
+            }
             Self::OperatorUndefined { type_, .. } => $visit(type_),
             Self::ImplicitAtOtherSort { given, .. } => $visit(given),
             Self::UninferredImplicit {
@@ -813,6 +815,12 @@ pub enum Error {
         part: DeclaredPart,
         site_type: Box<Term>,
         polarity: Polarity,
+    },
+    /// A `struct` that reaches itself through record fields alone: a field of a structure or a component of a tuple at every step from `part`, whose type is `site_type`, back to `name`. Such a record has no finite value, and the size order reads a field strictly below its record, so a recursion on one descends without end on the open value a type is reduced under.
+    HoldsItself {
+        name: Global,
+        part: DeclaredPart,
+        site_type: Box<Term>,
     },
     /// A position erasure deletes is not known to terminate.
     ///
@@ -1457,6 +1465,14 @@ impl Error {
             part,
             site_type: Box::new(site_type.into()),
             polarity,
+        }
+    }
+
+    pub fn holds_itself<T: Into<Term>>(name: Global, part: DeclaredPart, site_type: T) -> Self {
+        Self::HoldsItself {
+            name,
+            part,
+            site_type: Box::new(site_type.into()),
         }
     }
 

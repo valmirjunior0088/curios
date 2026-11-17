@@ -306,3 +306,48 @@ fn a_family_is_indexed_by_nothing_that_holds_it() {
         );
     }
 }
+
+/// `/S` holds itself through its own field, `/Tup` through a component of a tuple, `/U` through the field `/Pair` holds its parameter at, and `/Grow` through its own declaration at an argument its field grows; `/T`, `/V` and `/Shrink` hold themselves through the family `/Opt` at the same places.
+const HOLDING_ITSELF: &str = r#"
+induct /Opt(A: Type): pub Type
+| none()
+| some(a: A)
+end
+struct /Pair(A: Type): pub Type { first: A, second: A }
+struct /S: pub Type { next: #{node = StructType} /S() }
+struct /Tup: pub Type { next: {#NatType, #{node = StructType} /Tup()} }
+struct /U: pub Type { pair: #{node = StructType} /Pair(#{node = StructType} /U()) }
+struct /Grow(A: Type): pub Type { next: #{node = StructType} /Grow({A, A}) }
+struct /T: pub Type { next: #{node = InductType} /Opt(#{node = StructType} /T()) }
+struct /V: pub Type { pair: #{node = StructType} /Pair(#{node = InductType} /Opt(#{node = StructType} /V())) }
+struct /Shrink(A: Type): pub Type { next: #{node = InductType} /Opt(#{node = StructType} /Shrink({A, A})) }
+/std/Bool/True/qed()
+"#;
+
+// A record that holds itself through its fields alone has no finite value, and the size order reads a field strictly below its record, so it is refused where it is declared, whichever way the path back is spelled; a family between ends the path, and the records holding themselves through one stand. `curios`'s `tests::rules::totality_projection` puts the same records to the elaborator under this name.
+#[test]
+fn a_record_holding_itself_through_fields_alone_is_refused() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${HOLDING_ITSELF}",
+        PROPOSITIONS,
+        HOLDING_ITSELF
+    ));
+
+    // The closing term is put to `False` and refused as any proof of it is; what the declarations are refused with is the question.
+    let refused = verdicts
+        .iter()
+        .filter(|verdict| verdict.name.is_some())
+        .map(|verdict| match verdict {
+            Verdict {
+                name: Some(name),
+                error: Error::HoldsItself { .. },
+            } => Some(*name),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        refused,
+        ["S", "Tup", "U", "Grow"].map(|name| Some(global(name))),
+        "{verdicts:?}"
+    );
+}

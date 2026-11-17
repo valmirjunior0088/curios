@@ -74,6 +74,30 @@ fn counted(count: usize, noun: &str) -> String {
     }
 }
 
+/// The piece of a declaration a refused path leaves from, `site_type` its type, as the line that says so names it.
+fn declared_part(part: &DeclaredPart, site_type: &str) -> String {
+    match part {
+        DeclaredPart::Payload {
+            constructor,
+            member: MemberLabel::Written(label),
+        } => format!("the payload `{label}` of `{constructor}`, a `{site_type}`"),
+        DeclaredPart::Payload {
+            constructor,
+            member: MemberLabel::Place(place),
+        } => format!(
+            "the {} payload of `{constructor}`, a `{site_type}`",
+            ordinal(*place)
+        ),
+        DeclaredPart::Field(MemberLabel::Written(label)) => {
+            format!("its field `{label}`, a `{site_type}`")
+        }
+        DeclaredPart::Field(MemberLabel::Place(place)) => {
+            format!("its {} field, a `{site_type}`", ordinal(*place))
+        }
+        DeclaredPart::Whole => "its own declaration".to_string(),
+    }
+}
+
 /// What one goal's report says, under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction.
 ///
 /// **What is said is the answer to what a goal asks.** A goal asks what goes where it stands, so the line is the type expected there, or, where the compiler worked out what stands there, what it inferred; a term too wide for a line is said as a fact beneath a line that says only which of the two it is. The facts are the scope, what the search for a bound said, the equations the goal is held to, and the candidates that fit.
@@ -995,31 +1019,25 @@ impl Displayed<'_> {
                 polarity,
             } => {
                 let name = spelling.symbol(name);
-                let site_type = site_type.spelled(spelling);
-                let through = match part {
-                    DeclaredPart::Payload {
-                        constructor,
-                        member: MemberLabel::Written(label),
-                    } => format!("the payload `{label}` of `{constructor}`, a `{site_type}`"),
-                    DeclaredPart::Payload {
-                        constructor,
-                        member: MemberLabel::Place(place),
-                    } => format!(
-                        "the {} payload of `{constructor}`, a `{site_type}`",
-                        ordinal(*place)
-                    ),
-                    DeclaredPart::Field(MemberLabel::Written(label)) => {
-                        format!("its field `{label}`, a `{site_type}`")
-                    }
-                    DeclaredPart::Field(MemberLabel::Place(place)) => {
-                        format!("its {} field, a `{site_type}`", ordinal(*place))
-                    }
-                    DeclaredPart::Whole => "its own declaration".to_string(),
-                };
+                let through = declared_part(part, &site_type.spelled(spelling).to_string());
                 f.text("not strictly positive");
                 f.stating(format_args!("`{name}` occurs in itself {polarity}"));
                 f.stating(format_args!("through {through}"));
                 f.stating("a recursive occurrence is a plain payload, never left of an arrow");
+            }
+            Error::HoldsItself {
+                name,
+                part,
+                site_type,
+            } => {
+                let name = spelling.symbol(name);
+                let through = declared_part(part, &site_type.spelled(spelling).to_string());
+                f.text("holds itself");
+                f.stating(format_args!(
+                    "`{name}` reaches itself through record fields alone"
+                ));
+                f.stating(format_args!("through {through}"));
+                f.stating("such a record has no finite value: hold it through a family, a function or a container, as `Option` holds one");
             }
             Error::PartialInErasedPosition {
                 erased,

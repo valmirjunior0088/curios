@@ -43,8 +43,8 @@ use unfolding::*;
 mod positivity;
 use positivity::*;
 pub use positivity::{
-    Declarations, DeclaredPart, MemberLabel, NotPositive, PositivityRefusal, positivity_vectors,
-    struct_reaches_itself,
+    Declarations, DeclaredPart, HoldsItself, MemberLabel, NotPositive, PositivityRefusal,
+    positivity_vectors, struct_reaches_itself,
 };
 
 mod variance;

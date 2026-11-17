@@ -46,6 +46,11 @@ pub fn decide_polarities(context: &mut Context, published: &Published) -> Result
                     )
                     .at_opt(written)
                 }
+                PositivityRefusal::HoldsItself(refusal) => {
+                    let written = refusal.type_.extent();
+
+                    Error::holds_itself(refusal.name, refusal.part, refusal.type_).at_opt(written)
+                }
                 PositivityRefusal::Exhausted { name, error } => error.in_declaration([name]),
             }
         })?;

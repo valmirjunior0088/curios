@@ -311,6 +311,7 @@ variants!(Error {
     MissingArm,
     NotDescending,
     NotPositive,
+    HoldsItself,
     VarianceDenied,
     Oversized,
     NotTotal,

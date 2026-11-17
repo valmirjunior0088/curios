@@ -110,6 +110,7 @@ variants!(Error {
     RecordOverTwoSorts,
     InformativePropStruct,
     NotStrictlyPositive,
+    HoldsItself,
     PartialInErasedPosition,
     NotAStructType,
     StructArityMismatch,

@@ -565,7 +565,7 @@ fn unary_induct(payload: curios_core::Term) -> curios_core::InductDecl {
     )
 }
 
-/// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload records its carrier, `Flt`.
+/// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose single-constructor family names itself is `Opaque` because the visited guard cuts the cycle, a struct holding itself through its fields alone being refused where it is declared; a boxed `Flt` payload records its carrier, `Flt`.
 #[test]
 fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let mut struct_decls = BTreeMap::new();
@@ -580,7 +580,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         nominal("Outer"),
         newtype_struct("o", struct_type_of("Meters")),
     );
-    struct_decls.insert(nominal("Loop"), newtype_struct("s", struct_type_of("Loop")));
     let induct_type = |family: &str| {
         curios_core::Term::induct_type(
             nominal(family),
@@ -590,7 +589,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     };
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Wrapped"), unary_induct(struct_type_of("Outer")));
-    induct_decls.insert(nominal("Knotted"), unary_induct(struct_type_of("Loop")));
     induct_decls.insert(
         nominal("Boxed"),
         unary_induct(curios_core::Term::intrinsic(
@@ -625,7 +623,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     };
     let (built, types): (Vec<_>, Vec<_>) = [
         ("Wrapped", struct_type_of("Outer")),
-        ("Knotted", struct_type_of("Loop")),
         (
             "Boxed",
             curios_core::Term::intrinsic(curios_core::Intrinsic::FltType),
@@ -638,7 +635,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     .unzip();
     let body = curios_core::Term::tuple(built);
     let expected = curios_core::Term::tuple_type(
-        ["a", "b", "c", "d", "e"]
+        ["a", "b", "c", "d"]
             .into_iter()
             .map(|label| fresh(Some(label)))
             .zip(types),
@@ -659,10 +656,6 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     assert_eq!(
         payload(&erased, "/Wrapped"),
         vec![("x", curios_anf::FieldShape::Number)]
-    );
-    assert_eq!(
-        payload(&erased, "/Knotted"),
-        vec![("x", curios_anf::FieldShape::Opaque)]
     );
     // `Boxed` holds a `Flt`, and the recorder names that carrier rather than merely withholding `immediate`.
     assert_eq!(
