@@ -206,7 +206,7 @@ fn help_describes_the_optional_subject_and_program_tail() {
     let help = error.to_string();
     assert!(help.contains("curios run [OPTIONS] [SUBJECT] [ARGS]..."));
     assert!(help.contains(&RUN.subject_help()));
-    assert!(help.contains("begin with -- to omit SUBJECT"));
+    assert!(help.contains("begin with `--` to omit SUBJECT"));
     Cli::command().debug_assert();
 }
 

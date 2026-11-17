@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, NAME, RUN, STAGE,
-        TEST, TESTS, WITNESSES,
+        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, NAME, PORT, RUN,
+        STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -15,7 +15,7 @@ use {
         error::{ContextKind, ContextValue, ErrorKind},
         value_parser,
     },
-    curios_common::{Qualifier, Report},
+    curios_common::{Code, Qualifier, Report},
     curios_elab::DEFAULT_BUDGET,
     curios_package::{FormatSettings, Refused, Target},
     curios_pipeline::Stage,
@@ -49,8 +49,14 @@ pub enum Color {
     Never,
 }
 
-/// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder --stage`'s help text.
-static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
+/// [`curios_pipeline::Stage::NAMES`], each quoted and joined with `, `, computed once on first use — `wonder --stage`'s help text.
+static NAMES: LazyLock<String> = LazyLock::new(|| {
+    Stage::NAMES
+        .iter()
+        .map(|name| Code(name).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+});
 
 /// Which manifest governs, for a command that resolves against a package.
 #[derive(Debug, Args)]
@@ -59,7 +65,7 @@ pub struct ManifestFlag {
     #[arg(
         long = "manifest",
         value_name = "PATH",
-        help = "Use this curios.toml as the governing package's, instead of the nearest one"
+        help = "Use this `curios.toml` as the governing package's, instead of the nearest one"
     )]
     pub manifest: Option<PathBuf>,
 }
@@ -70,8 +76,9 @@ pub struct Elaboration {
     #[arg(
         long,
         default_value_t = DEFAULT_BUDGET,
+        hide_default_value = true,
         value_name = "UNITS",
-        help = "Units of reduction work each declaration may spend while type checking"
+        help = format!("Units of reduction work each declaration may spend while type checking (default: {})", Code(DEFAULT_BUDGET))
     )]
     pub budget: u64,
 
@@ -83,7 +90,7 @@ pub struct Elaboration {
 pub enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(
-        about = "Execute an executable, a .crs file, or standard input, or serve its page to a browser",
+        about = "Execute an executable, a `.crs` file, or standard input, or serve its page to a browser",
         override_usage = "curios run [OPTIONS] [SUBJECT] [ARGS]..."
     )]
     Run {
@@ -96,14 +103,16 @@ pub enum Mode {
             value_enum,
             value_name = "TARGET",
             default_value_t = TargetValue(Target::Native),
-            help = "What the program runs on: `native` runs it here, `browser` serves its page on loopback until stopped"
+            hide_default_value = true,
+            hide_possible_values = true,
+            help = "What the program runs on: `native` runs it here, `browser` serves its page on loopback until stopped (default: `native`)"
         )]
         target: TargetValue,
 
         #[arg(
             long,
             value_name = "PORT",
-            help = "The loopback port a page is served on, beside `--target browser` (default: 8000)"
+            help = format!("The loopback port a page is served on, beside `--target browser` (default: {})", Code(PORT))
         )]
         port: Option<u16>,
 
@@ -112,8 +121,8 @@ pub enum Mode {
 
         #[arg(
             trailing_var_arg = true,
-            value_name = "SUBJECT_OR_ARGS",
-            help = format!("{}. Following words are program arguments (read via /std/Proc/args); begin with -- to omit SUBJECT", RUN.subject_help())
+            value_names = ["SUBJECT", "ARGS"],
+            help = format!("{}. Following words are program arguments (read via `/std/Proc/args`); begin with `--` to omit SUBJECT", RUN.subject_help())
         )]
         args: Vec<OsString>,
     },
@@ -129,7 +138,9 @@ pub enum Mode {
             value_enum,
             value_name = "TARGET",
             default_value_t = TargetValue(Target::Native),
-            help = "What the program is built for: `native` writes an executable, `browser` a directory holding a page"
+            hide_default_value = true,
+            hide_possible_values = true,
+            help = "What the program is built for: `native` writes an executable, `browser` a directory holding a page (default: `native`)"
         )]
         target: TargetValue,
 
@@ -182,21 +193,23 @@ pub enum Mode {
             value_enum,
             value_name = "TARGET",
             default_value_t = TargetValue(Target::Native),
-            help = "What the tests run on: `native` runs them here, `browser` serves their pages on loopback until every selected test has reported"
+            hide_default_value = true,
+            hide_possible_values = true,
+            help = "What the tests run on: `native` runs them here, `browser` serves their pages on loopback until every selected test has reported (default: `native`)"
         )]
         target: TargetValue,
 
         #[arg(
             long,
             value_name = "PORT",
-            help = "The loopback port the pages are served on, beside `--target browser` (default: 8000)"
+            help = format!("The loopback port the pages are served on, beside `--target browser` (default: {})", Code(PORT))
         )]
         port: Option<u16>,
 
         #[arg(
             long,
             value_name = "PREFIX",
-            help = "Run only the tests at or under the path PREFIX, e.g. /app/Map; repeated, a test any of them selects runs"
+            help = "Run only the tests at or under the path PREFIX, e.g. `/app/Map`; repeated, a test any of them selects runs"
         )]
         filter: Vec<String>,
 
@@ -241,7 +254,7 @@ pub enum Mode {
     },
 
     /// Each subject is admitted alone, and what they name is rewritten once however many of them name it; the reasoning is `documentation/usage.md`'s Formatting.
-    #[command(about = "Format .crs and .crsc files canonically, in place")]
+    #[command(about = "Format `.crs` and `.crsc` files canonically, in place")]
     Format {
         #[arg(value_name = "SUBJECT", help = FORMAT.subject_help())]
         subjects: Vec<String>,
@@ -308,6 +321,7 @@ pub enum Pinned {
         #[arg(
             long,
             value_name = "TARGET",
+            hide_possible_values = true,
             help = "The target whose table of the row is written: `native` for a WebAssembly module, `browser` for a JavaScript gateway"
         )]
         target: TargetValue,
@@ -582,7 +596,7 @@ impl FromArgMatches for Query {
 // The stock template omits the version, so `--help` and `--version` answer different questions and a bug report quoting help output says nothing about which build produced it. Naming it here puts it on the one page anybody reads first.
 #[command(
     version,
-    about,
+    about = "Compile, run and test Curios programs, manage their packages, and ask the compiler about them",
     help_template = "\
 {name} {version}
 {about-with-newline}
@@ -611,8 +625,10 @@ struct ParsedCli {
         value_name = "WHEN",
         value_enum,
         default_value_t = Color::Auto,
+        hide_default_value = true,
+        hide_possible_values = true,
         global = true,
-        help = "Paint what the command reports on standard error"
+        help = "Paint what the command reports on standard error: `auto` where standard error is a terminal and `NO_COLOR` is not set, `always` or `never` (default: `auto`)"
     )]
     pub color: Color,
 

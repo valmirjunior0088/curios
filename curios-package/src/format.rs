@@ -71,7 +71,7 @@ impl FormatSettings {
 /// `--width`'s help, its bounds read off the constants that set them.
 fn width_help() -> String {
     format!(
-        "The columns a formatted line is written within, {NARROWEST} through {LINE_WIDTH}, for standard input or a file no package governs; a package states its own under `[format]` (default: {LINE_WIDTH})"
+        "The columns a formatted line is written within, `{NARROWEST}` through `{LINE_WIDTH}`, for standard input or a file no package governs; a package states its own under `[format]` (default: `{LINE_WIDTH}`)"
     )
 }
 

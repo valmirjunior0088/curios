@@ -397,15 +397,15 @@ impl Contract {
     /// What a SUBJECT's help says for this command: the forms its argument takes, and what none means.
     pub fn subject_help(&self) -> String {
         let forms = match (self.accepts, self.own_file_only) {
-            (Accepts::Library, _) => "A .crs file a library declares",
+            (Accepts::Library, _) => "A `.crs` file a library declares",
             (Accepts::Files, _) => {
-                "A declared executable's name, a path to a .crs or .crsc file, or `-` for standard input"
+                "A declared executable's name, a path to a `.crs` or `.crsc` file, or `-` for standard input"
             }
             (_, true) => {
-                "A declared executable's name, a program's own .crs file, or `-` for standard input"
+                "A declared executable's name, a program's own `.crs` file, or `-` for standard input"
             }
             (_, false) => {
-                "A declared executable's name, a path to a .crs file, or `-` for standard input"
+                "A declared executable's name, a path to a `.crs` file, or `-` for standard input"
             }
         };
 
