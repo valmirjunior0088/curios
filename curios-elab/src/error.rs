@@ -2346,6 +2346,8 @@ pub enum ErasedSite {
     EntryType,
     /// A parameter of a type former.
     ParameterOf(Global),
+    /// An index of a family.
+    IndexOf(Global),
     /// A payload of a constructor of `family`.
     PayloadOf { family: Global, constructor: Atom },
     /// A field of a structure.

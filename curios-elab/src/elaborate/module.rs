@@ -29,8 +29,9 @@ use {
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
         Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Minted,
-        Names, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
-        Term, Totality, UniverseConstraintOrigin, Universes, Visit, stamp_declaration_instance,
+        Names, Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
+        stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -138,7 +139,7 @@ fn case_telescope_entries(
     ))
 }
 
-/// A struct former's written type, elaborated as [`check_is_sort`] elaborates a type, with the level typing read each of its parameters at handed back beside it, in order: what the struct's parameters are sized by ([`elaborate_struct`]). A former with no parameter is declared at its result sort and hands back none.
+/// A former's type as its entry spells it, elaborated as [`check_is_sort`] elaborates a type, with the level typing read each binder of its first call at handed back beside it, in order: a record's parameters, which its fields are sized against ([`elaborate_struct`]), and a family's, which its constructors are ([`elaborate_induct_constructors`]), or its indices where it takes no parameter. A former that takes nothing is declared at its result sort and hands back none.
 ///
 /// Its function type is walked by the walk every function type is, which reads each domain's sort, and around it this does what [`elaborate`] does around a term, as `elaborate_func_settle` does: the refusal placed at the term, the extent restamped, the settled node recorded. The elaboration cache is not consulted, a former's type being elaborated once.
 fn check_former_type(context: &mut Context, type_: &Term) -> Result<(Term, Vec<Level>), Error> {
@@ -177,56 +178,7 @@ fn assume_telescope_entries<B: Bound>(
     (entries, cursor.body().expect("a cursor past every entry"))
 }
 
-/// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an index type lowered without the hidden arguments elaboration inserts (e.g. `Eq`'s `@A`, which its written application never states) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
-///
-/// Called from `elaborate_module_rec` after the group's signatures are reassumed rebuilt and *before* any body is checked, since the type-constructor bodies' `InductType` nodes check their arguments against this very telescope. An index type that names a member of the group resolves through the assumed signatures here, and the group is refused for it once elaborated ([`indexed_by_its_group`]). A name with no registry entry is an ordinary binding; no-op.
-fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<Level>, Error> {
-    let Some(induct_decl) = context.induct_decl(name).cloned() else {
-        return Ok(Vec::new());
-    };
-
-    let owned = |labels: Vec<&str>| {
-        labels
-            .iter()
-            .map(|label| label.to_string())
-            .collect::<Vec<_>>()
-    };
-    let param_labels = owned(induct_decl.arity().labels());
-    let index_labels = {
-        let mut walk = induct_decl.arity();
-        loop {
-            match walk {
-                Telescope::Cons(_, _, rest, ..) => walk = rest.body(),
-                Telescope::Done(indices) => break owned(indices.labels()),
-            }
-        }
-    };
-
-    // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
-    let (param_entries, param_levels, index_entries) = context.with_frame(|context| {
-        // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
-        // A family's arity is typed and not sized, by either checker: its constructors' telescopes, which hold its parameters again, are, at the levels read here.
-        let (params, levels, inner) =
-            check_telescope_entries(context, induct_decl.arity().clone())?;
-        let (indices, _, ()) = check_telescope_entries(context, inner)?;
-
-        Ok::<_, Error>((params, levels, indices))
-    })?;
-
-    let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let index_refs = index_labels.iter().map(String::as_str).collect::<Vec<_>>();
-    let arity = Telescope::build_marked(
-        param_entries,
-        Telescope::build_marked(index_entries, ()).relabel(&index_refs),
-    )
-    .relabel(&param_refs);
-
-    context.update_induct(name, induct_decl.with_arity(arity));
-
-    Ok(param_levels)
-}
-
-/// Rebuild a registry entry's constructor signatures with *elaborated* types — the second phase of the registry rebuild (see [`elaborate_induct_indices`]), each opening with the family's parameters as that phase elaborated them, at the levels it read them at ([`case_telescope_entries`]). Payload types may apply the inductive group's type constructors, so this runs from `elaborate_module_rec` only after the group's rebuilt bodies are defined; each terminal — the constructed `InductType` normal form — routes through `elaborate_induct_type`, which checks the parameters and the case's target indices against the already-rebuilt index telescope and returns another `InductType` node, the shape `case_target_indices` and the match elaborators rely on.
+/// Rebuild a registry entry's constructor signatures with *elaborated* types — the second phase of an entry's elaboration ([`elaborate_module_nominal`]), each opening with the family's parameters as its former's type elaborated them, at the levels typing read them at ([`case_telescope_entries`]). Payload types may apply the item's families, so this runs only once every member is defined; each terminal — the constructed `InductType` normal form — routes through `elaborate_induct_type`, which checks the parameters and the case's target indices against the entry's elaborated index telescope and returns another `InductType` node, the shape `case_target_indices` and the match elaborators rely on.
 fn elaborate_induct_constructors(
     context: &mut Context,
     name: &Global,
@@ -291,7 +243,7 @@ fn elaborate_induct_constructors(
     Ok(())
 }
 
-/// Rebuild a struct's registry telescopes with *elaborated* types, so the field types `erase` and later construction sites consult are saturated (implicit insertion) and reduce correctly — the struct analogue of [`elaborate_induct_indices`], over the single (params-first) field telescope. Called from `elaborate_module_let` once the type-former is defined (field types may mention the struct itself and earlier items). A name with no registry entry is an ordinary binding; no-op.
+/// Rebuild a struct's registry telescopes with *elaborated* types, so the field types `erase` and later construction sites consult are saturated (implicit insertion) and reduce correctly — the struct analogue of [`elaborate_induct_constructors`], over the field telescope its parameters end in. Called once every member of the item is defined, since a field type may mention the struct itself and its siblings ([`elaborate_module_nominal`]). A name with no registry entry is an ordinary binding; no-op.
 ///
 /// `parameters` are the levels typing read the struct's parameters at, where its former's type was elaborated ([`check_former_type`]), one to each: the parameters are opened here rather than checked, so no check of their own reads them again.
 fn elaborate_struct(
@@ -341,7 +293,7 @@ fn elaborate_struct(
 
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
     //
-    // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
+    // The parameters are opened rather than checked: they are the ones the former's type elaborated ([`share_former_telescope`]), which the struct's name is defined at. Elaborating them again would file a second set of universe instances beside the ones already in play.
     let (param_entries, field_entries, field_levels, supers) =
         context.with_frame(|context| -> Result<_, Error> {
             // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
@@ -434,63 +386,91 @@ fn elaborate_struct(
     Ok(())
 }
 
-/// Replace a struct's registry parameter telescope with the one its type-former's declared type already carries, before that former's body is checked.
+/// Replace a nominal entry's telescope with the one `type_`, its former's type as [`check_former_type`] elaborated it from the entry's spelling, came out with: a record's parameters, and a family's parameters and indices. The entry is elaborated once, as its former's type, and takes that elaboration as its own, so its telescope and its former's are one term and no second set of universe instances is filed beside the first.
 ///
-/// The lowerer files a `StructDecl` whose arity is the *written* telescope, untouched by elaboration (`curios-module/src/into_core.rs`, `universe_context: empty()`). The former's body is the `StructType` node over its own parameters, and `elaborate_struct_type` checks those parameters against that arity — against terms carrying no universe instances, while the binders the body meets come from `type_`, which was just elaborated and does carry them.
-///
-/// The two can never be reconciled, and not for want of trying: [`Frames::var_reduct`](crate::context) refuses to unfold a universe-polymorphic global reached through a bare `Var`, because there is no instance to substitute into its body. So the raw side is irreducible by construction, and conversion is being handed a problem no reduction could decide. Elaborating the telescope a second time here would only mint a *third* set of instances; taking the one the former's type already holds makes the comparison compare a term with itself.
-///
-/// Parameters only. A field type may mention the struct itself, so the field telescope stays with [`elaborate_struct`], which runs once the former is defined; a parameter type cannot, since the struct is not yet a type where its own parameters are written.
-fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
-    let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return;
-    };
-    let count = struct_decl.param_count();
-    // A nullary struct has no parameters to share, and its former is declared at the result sort rather than at a function type.
-    if count == 0 {
+/// A record's fields stay as lowered, opened at the parameters: a field type may name the record itself and its siblings, so the fields elaborate once every member is defined ([`elaborate_struct`]); a parameter's cannot, since a former is no type where its own parameters are written.
+fn share_former_telescope(context: &mut Context, name: &Global, type_: &Term) {
+    if let Some(record) = context.struct_decl(name).cloned() {
+        let count = record.param_count();
+        let (params, _, fields) = opened_in_step(context, type_, &record.arity, count);
+        context.update_struct(
+            name,
+            StructDecl {
+                arity: Telescope::build_marked(params, fields),
+                ..record
+            },
+        );
         return;
     }
-
-    // Both invariants below belong to the lowerer, and both are stated rather than tolerated because `elaborate_struct` *opens* this telescope instead of re-checking it: a silent return would leave the raw arity in place with nothing downstream left to notice.
-    let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
-        unreachable!("a parameterized struct's type-former is declared at a function type");
+    let Some(family) = context.induct_decl(name).cloned() else {
+        return;
     };
+    let owned = |labels: Vec<&str>| {
+        labels
+            .iter()
+            .map(|label| label.to_string())
+            .collect::<Vec<_>>()
+    };
+    let param_labels = owned(family.arity().labels());
+    let (params, rest, indices) =
+        opened_in_step(context, type_, family.arity(), family.param_count());
+    let index_labels = owned(indices.labels());
+    let (indices, _, ()) = opened_in_step(context, &rest, &indices, family.index_count());
 
+    let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let index_refs = index_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let arity = Telescope::build_marked(
+        params,
+        Telescope::build_marked(indices, ()).relabel(&index_refs),
+    )
+    .relabel(&param_refs);
+
+    context.update_induct(name, family.with_arity(arity));
+}
+
+/// The first `count` binders of `type_`'s first call, opened in step with `lowered`'s first `count` entries at one fresh binder each, under the mark and the domain the elaborated type states and the hint the lowered telescope keeps; with what `type_` returns past them and what `lowered` ends in past them, both opened at those binders. `type_` itself, where `count` is none.
+fn opened_in_step<B: Bound>(
+    context: &mut Context,
+    type_: &Term,
+    lowered: &Telescope<B>,
+    count: usize,
+) -> (Members, Term, B) {
+    let mut cursor = lowered.cursor();
+    if count == 0 {
+        let body = cursor
+            .body()
+            .expect("a telescope of no entry is its terminal");
+        return (Vec::new(), type_.clone(), body);
+    }
+    // A former's type takes each nonempty group of its entry's telescope in one call, both being spelled from one telescope (`curios_core::former_spelling`).
+    let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
+        unreachable!("a former's type takes a nonempty group of its entry's telescope in one call");
+    };
     let mut written = telescope.cursor();
-    let mut lowered = struct_decl.arity.cursor();
-    let mut params = Vec::with_capacity(count);
+    let mut binders = Vec::with_capacity(count);
     for _ in 0..count {
-        let (Some((_, domain)), Some((hint, _))) = (written.entry(), lowered.entry()) else {
-            unreachable!(
-                "the former's telescope and the registry arity lower from one parameter list"
-            );
+        let (Some((_, domain)), Some(mark), Some((hint, _))) =
+            (written.entry(), written.mark(), cursor.entry())
+        else {
+            unreachable!("a former's type and its entry are spelled from one telescope");
         };
-        // Under the mark the former's own type states, which is the registry arity's too: a `use` parameter is in the witness scope of the fields below it.
-        let mark = written.mark().expect("an entry stands at the cursor");
-        // One binder opens both sides, so a later domain and the field telescope below refer to the same one.
+        // One binder opens both sides, so a later domain, an index and a field telescope below refer to the same one.
         let binder = context.fresh(hint);
         let occurrence = Term::free_var(&binder);
         written.advance(occurrence.clone());
-        lowered.advance(occurrence);
-        params.push((mark, binder, domain));
+        cursor.advance(occurrence);
+        binders.push((mark, binder, domain));
     }
 
-    let fields = lowered
-        .body()
-        .expect("the arity's parameters are exactly `param_count` entries");
-
-    context.update_struct(
-        name,
-        StructDecl {
-            universe_context: struct_decl.universe_context,
-            arity: Telescope::build_marked(params, fields),
-            result_sort: struct_decl.result_sort,
-            module: struct_decl.module,
-            rep_public: struct_decl.rep_public,
-            polarities: struct_decl.polarities,
-            variances: struct_decl.variances,
-        },
-    );
+    (
+        binders,
+        written
+            .body()
+            .expect("a former's call holds its group and no more"),
+        cursor
+            .body()
+            .expect("an entry's group holds as many binders as its former's call"),
+    )
 }
 
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
@@ -501,11 +481,7 @@ fn elaborate_module_let(
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
-    // A struct's former is typed over its parameters, which are sized at the levels that typing reads ([`elaborate_struct`]).
-    let (type_, parameters) = match context.struct_decl(&def.name).is_some() {
-        true => check_former_type(context, &def.type_)?,
-        false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
-    };
+    let type_ = check_is_sort(context, &def.type_)?.0;
 
     // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
     if context.is_witness_declaration(&def.name) {
@@ -518,9 +494,6 @@ fn elaborate_module_let(
         )
         .map_err(|error| error.at_opt(def.type_.extent()))?;
     }
-
-    // Before the body: a struct former's body checks its parameters against the registry arity, which is lowered raw. Share the elaborated telescope the type above just produced, so the two sides are one term.
-    share_struct_params(context, &def.name, &type_);
 
     context.enter_value(&def.kind);
     let (solved_from, checked_from) = (context.solutions_committed(), context.checked_mark());
@@ -555,8 +528,6 @@ fn elaborate_module_let(
         context.define_declaring(&name, &type_, &body, &def.kind);
     }
 
-    // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
-    elaborate_struct(context, &def.name, &parameters)?;
     // What the declaration parked is settled before its levels close: a witness's was, above.
     if !context.is_witness_declaration(&def.name) {
         context.drain_parked()?;
@@ -593,7 +564,6 @@ fn elaborate_module_let(
         context.define_declaring(&name, &type_, &member, &def.kind);
         context.set_universe_context(&name, universe_context.clone());
         context.update_witness_scheme(&def.name, universe_context, type_);
-        record_variances(context, &[def.name])?;
         context.restore_checked_site(outer_site);
 
         // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
@@ -613,9 +583,7 @@ fn elaborate_module_let(
     if context.is_witness_declaration(&def.name) {
         context.update_witness_scheme(&def.name, universe_context.clone(), type_.clone());
     }
-    // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
-    record_variances(context, &[def.name])?;
-    // After a struct's own vector, which its former's body is read by. Filed where the item is published, as the context's binding of the name is.
+    // Filed where the item is published, as the context's binding of the name is.
     let vectors = Vectors {
         variances: definition_variances(context, &universe_context, &type_, &body)?,
         field_variances: field_variances(&universe_context, &type_, &body),
@@ -645,6 +613,300 @@ fn elaborate_module_let(
     Ok((Item::Let(Box::new(definition)), vec![(def.name, vectors)]))
 }
 
+/// The entry `name` declares as the registry holds it while its item elaborates: a family's, a record's, or a concept's with its record. `None` for a name that declares none.
+fn registered(context: &Context, name: &Global) -> Option<Nominal> {
+    if let Some(family) = context.induct_decl(name) {
+        return Some(Nominal::Inductive(family.clone()));
+    }
+    let record = context.struct_decl(name)?.clone();
+
+    Some(match context.concept(name) {
+        Some(concept) => Nominal::Concept {
+            concept: concept.clone(),
+            record,
+        },
+        None => Nominal::Struct(record),
+    })
+}
+
+/// The former `def`, a member of a nominal item, as the entry the registry holds for it now spells it ([`Definition::former`]).
+fn spelled(context: &Context, def: &Definition) -> Definition {
+    let entry =
+        registered(context, &def.name).expect("a member of a nominal item declares an entry");
+
+    Definition::former(def.name, def.island, entry)
+}
+
+/// Obligation (T)'s early net over a nominal entry's telescope as it was lowered, before any of it is elaborated: its parameters, and a family's indices. A record's fields take theirs where they elaborate ([`elaborate_struct`]). Entries stay closed under the binders before them, and only the globals they name matter here, so nothing is opened.
+fn check_entry_totality(context: &mut Context, name: &Global) -> Result<(), Error> {
+    // A record's arity ends in its fields, a family's in its indices.
+    let (arity, indexed) = match registered(context, name) {
+        Some(Nominal::Inductive(family)) => (family.arity().clone(), true),
+        Some(Nominal::Struct(record) | Nominal::Concept { record, .. }) => (record.arity, false),
+        None => return Ok(()),
+    };
+    let mut written = &arity;
+    let indices = loop {
+        match written {
+            Telescope::Cons(_, entry, rest, ..) => {
+                check_written_type_totality(context, entry, ErasedSite::ParameterOf(*name))?;
+                written = rest.body();
+            }
+            Telescope::Done(indices) => break &**indices,
+        }
+    };
+    if indexed {
+        let mut written = indices;
+        while let Telescope::Cons(_, entry, rest, ..) = written {
+            check_written_type_totality(context, entry, ErasedSite::IndexOf(*name))?;
+            written = rest.body();
+        }
+    }
+
+    Ok(())
+}
+
+/// Type-check a nominal declaration's item — a family, a record or a concept, alone or in a group of one kind — by its entries alone, and return its rebuilt item.
+///
+/// **An entry is elaborated once.** Its former's type, spelled from the entry ([`Definition::former`]), is elaborated, and the entry takes the telescope that came out ([`share_former_telescope`]), so the two are one term. The member's name is then defined at that type and at the body its entry spells, so a domain written after it, a payload or a field reads it as any former's occurrence is read ([`reference`](super::reference)): no local stands for it and no body of its own is checked. Its constructors or fields follow once every member is defined, its levels close over its entries as a group's close over its signatures ([`close_group_levels`]), and each former is published as its finished entry spells it.
+fn elaborate_module_nominal(context: &mut Context, item: &Item) -> Result<(Item, Vectors), Error> {
+    let defs = item.definitions();
+    let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
+    // Where what the item records begins, so what it names of its members can be stamped with their instance once they have one.
+    let solved_from = context.solutions_committed();
+    let checked_from = context.checked_mark();
+
+    // Each member's signature, in the order they are written: a domain reads the members written before it, and the item is refused below where one does.
+    let mut types = Vec::with_capacity(defs.len());
+    let mut parameters = Vec::with_capacity(defs.len());
+    for def in &defs {
+        let outer_site = context.set_checked_site(def.name);
+        check_entry_totality(context, &def.name)?;
+        // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
+        context.enter_declaration(Some(def.name));
+        let (type_, levels) = check_former_type(context, &spelled(context, def).type_)?;
+        share_former_telescope(context, &def.name, &type_);
+        context.define_declaring(&def.name, &type_, &spelled(context, def).body, &def.kind);
+        context.restore_checked_site(outer_site);
+        types.push(type_);
+        parameters.push(levels);
+    }
+
+    // Each entry's constructors or fields, once every member is defined: a payload or a field may name any of them.
+    for (def, levels) in defs.iter().zip(&mut parameters) {
+        let outer_site = context.set_checked_site(def.name);
+        context.enter_declaration(Some(def.name));
+        context.enter_value(&def.kind);
+        if let Some(family) = context.induct_decl(&def.name) {
+            // A family's first call is its indices where it takes no parameter.
+            levels.truncate(family.param_count());
+        }
+        elaborate_induct_constructors(context, &def.name, levels)?;
+        elaborate_struct(context, &def.name, levels)?;
+        context.restore_checked_site(outer_site);
+    }
+    context.drain_parked()?;
+
+    for name in &names {
+        if let Some(family) = context.induct_decl(name).cloned() {
+            let arity = zonk_solved_term_metas(context, family.arity());
+            let result_sort = zonk_solved_term_metas(context, family.result_sort());
+            let zonked = family
+                .with_arity(arity)
+                .with_result_sort(result_sort)
+                .with_cases(|case| {
+                    case.rewritten(|payload| zonk_solved_term_metas(context, payload))
+                });
+            context.update_induct(name, zonked);
+        }
+        if let Some(record) = context.struct_decl(name).cloned() {
+            let arity = zonk_arity(context, &record.arity)?;
+            let result_sort = zonk(context, &record.result_sort)?;
+            context.update_struct(
+                name,
+                StructDecl {
+                    arity,
+                    result_sort,
+                    ..record
+                },
+            );
+        }
+    }
+
+    // A nominal item is one cycle of what its entries reach, and no former's domains name a member: read once the entries are elaborated, before the item's levels close.
+    let parts = nominal_parts(context, &names);
+    if parts.len() > 1 {
+        return Err(Error::group_apart(&defs, &types, &parts));
+    }
+    if let Some((name, member)) = indexed_by_its_group(context, &names) {
+        return Err(Error::IndexedByItsGroup { name, member }.in_declaration([name]));
+    }
+
+    let types = types
+        .iter()
+        .map(|type_| zonk_solved_term_metas(context, type_))
+        .collect::<Vec<_>>();
+    let bodies = defs
+        .iter()
+        .map(|def| spelled(context, def).body)
+        .collect::<Vec<_>>();
+    let universe_context = close_group_levels(context, &names, &types, &bodies)?;
+
+    // The members are monomorphic in their own universes, so every occurrence of a member in an entry denotes the item's own instance, which it carries from here on.
+    let instance = universe_context.identity_instance();
+    let owned = names.iter().copied().collect::<BTreeSet<_>>();
+    let outside = Outside {
+        owned: &owned,
+        instance: &instance,
+        locals: &[],
+        declared: &[],
+    };
+    for name in &names {
+        if let Some(family) = context.induct_decl(name).cloned() {
+            let arity = outside.stored(context, family.arity())?;
+            let result_sort = outside.stored(context, family.result_sort())?;
+            let stored = family
+                .with_arity(arity)
+                .with_result_sort(result_sort)
+                .try_with_cases(|case| {
+                    case.try_rewritten(|payload| outside.stored(context, payload))
+                })?
+                .with_universe_context(universe_context.clone());
+            context.update_induct(name, stored);
+        }
+        if let Some(record) = context.struct_decl(name).cloned() {
+            let arity = outside.stored(context, &record.arity)?;
+            let result_sort = outside.stored(context, &record.result_sort)?;
+            context.update_struct(
+                name,
+                StructDecl {
+                    universe_context: universe_context.clone(),
+                    arity,
+                    result_sort,
+                    ..record
+                },
+            );
+        }
+        if let Some(concept) = context.concept(name).cloned() {
+            context.update_concept(
+                name,
+                ConceptDecl {
+                    universe_context: universe_context.clone(),
+                    ..concept
+                },
+            );
+        }
+    }
+    outside.restate_recorded(context, solved_from, checked_from)?;
+
+    let formers = defs
+        .iter()
+        .map(|def| spelled(context, def))
+        .collect::<Vec<_>>();
+    match item {
+        Item::Let(_) => publish_former(context, formers, &universe_context),
+        Item::Rec(_) => {
+            let locals = names
+                .iter()
+                .map(|name| context.fresh(name.qualifier().map(Qualifier::last)))
+                .collect::<Vec<_>>();
+            let rec = RecItem::try_new(locals.into_iter().zip(formers).collect())?;
+            for (index, definition) in rec.exports().iter().enumerate() {
+                context.redeclare(&definition.name, &rec.group().member_type(index));
+                context.define_declaration(
+                    &definition.name,
+                    &Term::rec_proj(rec.group().clone(), index),
+                    &definition.kind,
+                );
+                context.set_universe_context(&definition.name, universe_context.clone());
+            }
+            // A later item may compare two instances of a family this item declares, so each one's variance is settled here, with the formers defined and the entries stamped.
+            record_variances(context, &names)?;
+            let group = group_totality(context, rec.group())?;
+            for definition in rec.definitions() {
+                record_definition_totality(context, &definition, group)?;
+            }
+            record_applications(context, &rec);
+
+            // A group's member files no vector.
+            Ok((Item::Rec(rec), Vectors::default()))
+        }
+    }
+}
+
+/// Publish the one former of a nominal item that is no group, `formers` holding it alone, under `universe_context`: defined at its type and its body, its entry's variance settled, and the vectors it files as a definition does.
+fn publish_former(
+    context: &mut Context,
+    mut formers: Vec<Definition>,
+    universe_context: &UniverseContext,
+) -> Result<(Item, Vectors), Error> {
+    let former = formers
+        .pop()
+        .expect("a nominal item that is no group holds one former");
+    context.redeclare(&former.name, &former.type_);
+    context.define_declaration(&former.name, &former.body, &former.kind);
+    context.set_universe_context(&former.name, universe_context.clone());
+    // A later item may compare two instances of the record, so its variance is settled here, before the vectors read the former's body.
+    record_variances(context, &[former.name])?;
+    let vectors = Vectors {
+        variances: definition_variances(context, universe_context, &former.type_, &former.body)?,
+        field_variances: field_variances(universe_context, &former.type_, &former.body),
+        parameter_field: parameter_field(&former.type_, &former.body),
+    };
+
+    record_definition_totality(context, &former, Totality::Total)?;
+    if let Ok(Some(applications)) = definition_applications(context, &former.body) {
+        context.record_definition_applications(&former.name, applications);
+    }
+    Ok((Item::Let(Box::new(former)), vectors))
+}
+
+/// Close the levels of a declaration whose members are `names`, their signatures `types` and their values `bodies`, and hand back the context they are generalized under.
+///
+/// The declaration's interface is its members' signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one [`finalize_definition`] applies, read over the members: a level one member keeps in its interface stays there for all of them, since they share a context, and only a level every member confines to its result sort is determined. A declaration of one member is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
+fn close_group_levels(
+    context: &mut Context,
+    names: &[Global],
+    types: &[Term],
+    bodies: &[Term],
+) -> Result<UniverseContext, Error> {
+    let mut interface = types
+        .iter()
+        .flat_map(|type_| context.universe_metas_in(type_))
+        .collect::<BTreeSet<_>>();
+    let mut determined = BTreeSet::new();
+    let mut kept = BTreeSet::new();
+    for type_ in types {
+        let member_determined = result_sort_only_metas(context, type_);
+        for meta in context.universe_metas_in(type_) {
+            if !member_determined.contains(&meta) {
+                kept.insert(meta);
+            }
+        }
+        determined.extend(member_determined);
+    }
+    determined.retain(|meta| !kept.contains(meta));
+    interface.retain(|meta| !determined.contains(meta));
+    let mut internal = bodies
+        .iter()
+        .flat_map(|body| context.universe_metas_in(body))
+        .collect::<BTreeSet<_>>();
+    internal.extend(determined.iter().copied());
+    let mut compared = sort_family_levels(context, names, &mut interface, &mut internal);
+    for type_ in types {
+        compared.extend(compared_levels(context, type_));
+    }
+    // A member that answers a type is read as a `let` that does: what its body holds joins the interface, held.
+    for (type_, body) in types.iter().zip(bodies) {
+        let unfolded = body_levels(context, type_, body, &determined);
+        interface.extend(unfolded.iter().copied());
+        compared.extend(unfolded);
+    }
+
+    let owned = names.iter().copied().collect::<BTreeSet<_>>();
+    context.finalize_universe_metas(&owned, interface, internal, compared)
+}
+
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
 fn elaborate_module_rec(
     context: &mut Context,
@@ -670,85 +932,17 @@ fn elaborate_module_rec(
         })
     })?;
 
-    for def in &defs {
-        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
-            continue;
-        };
-        let arity = zonk_solved_term_metas(context, induct_decl.arity());
-        let result_sort = zonk_solved_term_metas(context, induct_decl.result_sort());
-        let zonked = induct_decl
-            .with_arity(arity)
-            .with_result_sort(result_sort)
-            .with_cases(|case| case.rewritten(|payload| zonk_solved_term_metas(context, payload)));
-        context.update_induct(&def.name, zonked);
-    }
-    for def in &defs {
-        if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
-            let arity = zonk_arity(context, &struct_decl.arity)?;
-            let result_sort = zonk(context, &struct_decl.result_sort)?;
-            context.update_struct(
-                &def.name,
-                StructDecl {
-                    universe_context: struct_decl.universe_context,
-                    arity,
-                    result_sort,
-                    module: struct_decl.module,
-                    rep_public: struct_decl.rep_public,
-                    polarities: struct_decl.polarities,
-                    variances: struct_decl.variances,
-                },
-            );
-        }
-    }
-
-    // A top-level group is one cycle of what its members reach: read once their terms and registry entries are elaborated, so a witness's resolutions count, and before the group's levels close, which a member outside the cycle would share.
-    let parts = group_parts(context, &defs, &locals, &types, &bodies);
+    // A top-level group is one cycle of what its members reach: read once their terms are elaborated, so a witness's resolutions count, and before the group's levels close, which a member outside the cycle would share.
+    let parts = group_parts(&defs, &locals, &types, &bodies);
     if parts.len() > 1 {
         return Err(Error::group_apart(&defs, &types, &parts));
     }
-    if let Some((name, member)) = indexed_by_its_group(context, &defs, &locals) {
-        return Err(Error::IndexedByItsGroup { name, member }.in_declaration([name]));
-    }
 
-    // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one `finalize_definition` applies, read over the group: a level one member keeps in its interface stays there for all of them, since the group shares a context, and only a level every member confines to its result sort is determined. A group of one is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
-    let mut interface = types
-        .iter()
-        .flat_map(|type_| context.universe_metas_in(type_))
-        .collect::<BTreeSet<_>>();
-    let mut determined = BTreeSet::new();
-    let mut kept = BTreeSet::new();
-    for type_ in &types {
-        let member_determined = result_sort_only_metas(context, type_);
-        for meta in context.universe_metas_in(type_) {
-            if !member_determined.contains(&meta) {
-                kept.insert(meta);
-            }
-        }
-        determined.extend(member_determined);
-    }
-    determined.retain(|meta| !kept.contains(meta));
-    interface.retain(|meta| !determined.contains(meta));
-    let mut internal = bodies
-        .iter()
-        .flat_map(|body| context.universe_metas_in(body))
-        .collect::<BTreeSet<_>>();
-    internal.extend(determined.iter().copied());
     let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
-    let mut compared = sort_family_levels(context, &names, &mut interface, &mut internal);
-    for type_ in &types {
-        compared.extend(compared_levels(context, type_));
-    }
-    // A member that answers a type is read as a `let` that does: what its body holds joins the group's interface, held.
-    for (type_, body) in types.iter().zip(&bodies) {
-        let unfolded = body_levels(context, type_, body, &determined);
-        interface.extend(unfolded.iter().copied());
-        compared.extend(unfolded);
-    }
-    let owned = defs.iter().map(|def| def.name).collect::<BTreeSet<_>>();
-    let universe_context =
-        context.finalize_universe_metas(&owned, interface, internal, compared)?;
+    let universe_context = close_group_levels(context, &names, &types, &bodies)?;
+    let owned = names.iter().copied().collect::<BTreeSet<_>>();
 
-    // The group's members are monomorphic in their own universes, so every nominal occurrence of a member family — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
+    // The group's members are monomorphic in their own universes, so every occurrence of a member in a signature or a body denotes the group's own instance, which it carries from here on.
     let instance = universe_context.identity_instance();
     let declared = defs
         .iter()
@@ -773,47 +967,6 @@ fn elaborate_module_rec(
         .iter()
         .map(|body| outside.stamped(context, body))
         .collect::<Result<Vec<_>, _>>()?;
-
-    for def in &defs {
-        let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
-            continue;
-        };
-        let arity = outside.stored(context, induct_decl.arity())?;
-        let result_sort = outside.stored(context, induct_decl.result_sort())?;
-        let stored = induct_decl
-            .with_arity(arity)
-            .with_result_sort(result_sort)
-            .try_with_cases(|case| case.try_rewritten(|payload| outside.stored(context, payload)))?
-            .with_universe_context(universe_context.clone());
-        context.update_induct(&def.name, stored);
-    }
-    // A struct or concept registry entry is stamped as an inductive's is: stored outside the group, it names a member by its declaration.
-    for def in &defs {
-        if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
-            context.update_struct(
-                &def.name,
-                StructDecl {
-                    universe_context: universe_context.clone(),
-                    arity: outside.stored(context, &struct_decl.arity)?,
-                    result_sort: outside.stored(context, &struct_decl.result_sort)?,
-                    module: struct_decl.module,
-                    rep_public: struct_decl.rep_public,
-                    polarities: struct_decl.polarities,
-                    variances: struct_decl.variances,
-                },
-            );
-        }
-        if let Some(concept) = context.concept(&def.name).cloned() {
-            context.update_concept(
-                &def.name,
-                ConceptDecl {
-                    universe_context: universe_context.clone(),
-                    fields: concept.fields,
-                    supers: concept.supers,
-                },
-            );
-        }
-    }
     outside.restate_recorded(context, solved_from, checked_from)?;
 
     let definitions = defs
@@ -850,14 +1003,6 @@ fn elaborate_module_rec(
             );
         }
     }
-
-    // A later item may compare two instances of a family this group declares, so each one's variance is settled here, with the formers defined at their finalized bodies and the registry entries stamped.
-    let declared = rec
-        .exports()
-        .iter()
-        .map(|definition| definition.name)
-        .collect::<Vec<_>>();
-    record_variances(context, &declared)?;
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
     let group = group_totality(context, rec.group())?;
@@ -983,27 +1128,21 @@ impl Outside<'_> {
     }
 }
 
-/// A group's members elaborated, each named by its local ([`Context::within_group`]): every signature, the member in scope from its own on; every body, reading its siblings' signatures through their slots; the registry entries they rebuild; and whatever they parked, drained, so the group closes over finished terms and no hole in it is filled once it has closed. Their signatures and bodies, with what is solved of them materialized.
+/// A group's members elaborated, each named by its local ([`Context::within_group`]): every signature, the member in scope from its own on; every body, reading its siblings' signatures through their slots; and whatever they parked, drained, so the group closes over finished terms and no hole in it is filled once it has closed. Their signatures and bodies, with what is solved of them materialized.
 fn elaborate_members(
     context: &mut Context,
     defs: &[Definition],
     locals: &[Free],
 ) -> Result<(Vec<Term>, Vec<Term>), Error> {
     let mut types = Vec::with_capacity(defs.len());
-    // Each struct former's parameters, at the levels typing read them at, as `elaborate_module_let` reads a lone one's.
-    let mut parameters = Vec::with_capacity(defs.len());
     for (def, local) in defs.iter().zip(locals) {
         check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
-        let (type_, levels) = match context.struct_decl(&def.name).is_some() {
-            true => check_former_type(context, &def.type_)?,
-            false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
-        };
+        let type_ = check_is_sort(context, &def.type_)?.0;
         // In scope from its own signature on, at the type it elaborated to: a signature reads the members written before it, and no type is judged before it is elaborated.
         context.assume(local, &type_);
         types.push(type_);
-        parameters.push(levels);
     }
 
     // A `satisfy … and …` group registers every member's signature before any body elaborates, as `elaborate_module_let` does for one witness: the bodies resolve through one another's entries, and through their own.
@@ -1018,17 +1157,6 @@ fn elaborate_members(
             )
             .map_err(|error| error.at_opt(def.type_.extent()))?;
         }
-    }
-
-    // A struct group's formers check their parameters against registry arities lowered raw, exactly as a lone former does — see `share_struct_params`.
-    for (def, type_) in defs.iter().zip(&types) {
-        share_struct_params(context, &def.name, type_);
-    }
-
-    // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
-    let mut param_levels = Vec::with_capacity(defs.len());
-    for def in defs {
-        param_levels.push(elaborate_induct_indices(context, &def.name)?);
     }
 
     // A member is read through its slot, which reads through once the member's turn finds it known to terminate, as `elaborate_rec` states.
@@ -1070,15 +1198,6 @@ fn elaborate_members(
         bodies.push(body);
     }
     context.retry_parked()?;
-
-    // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the bodies are defined.
-    for (def, levels) in defs.iter().zip(&param_levels) {
-        elaborate_induct_constructors(context, &def.name, levels)?;
-    }
-    // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
-    for (def, levels) in defs.iter().zip(&parameters) {
-        elaborate_struct(context, &def.name, levels)?;
-    }
     context.drain_parked()?;
     // Before the members are defined into the context, because the shape this refuses makes reducing a *use* of one of them unfold without end.
     turns.close(context, &site)?;
@@ -1096,77 +1215,81 @@ fn elaborate_members(
     Ok((types, bodies))
 }
 
-/// The first member of a top-level group whose former's domains, a family's parameters and indices or a record's or a concept's parameters, name a member of the group, beside the member they name: by its local, which the group's terms name it by, or by the nominal head a construction of its family holds, as [`group_parts`] reads a member's reach. Positivity walks no index binder type, which is sound only because nothing the group declares stands there, and a family indexed by a family it is declared with is induction-induction, which no decision admits ([`Error::IndexedByItsGroup`]).
-fn indexed_by_its_group(
-    context: &Context,
-    defs: &[Definition],
-    locals: &[Free],
-) -> Option<(Global, Global)> {
-    defs.iter().find_map(|def| {
-        let mut domains = Vec::new();
-        if let Some(entry) = context.induct_decl(&def.name) {
-            domains.extend(entry.former_domains().into_iter().cloned());
-        }
-        if let Some(entry) = context.struct_decl(&def.name) {
-            domains.extend(entry.former_domains().into_iter().cloned());
-        }
-        defs.iter().zip(locals).find_map(|(member, local)| {
+/// The first member of a nominal item whose former's domains, a family's parameters and indices or a record's or a concept's parameters, name a member of the item, beside the member they name, by the nominal head a construction of its family holds. Positivity walks no index binder type, which is sound only because nothing the item declares stands there, and a family indexed by a family it is declared with is induction-induction, which no decision admits ([`Error::IndexedByItsGroup`]).
+fn indexed_by_its_group(context: &Context, names: &[Global]) -> Option<(Global, Global)> {
+    names.iter().find_map(|name| {
+        let domains = registered(context, name)
+            .map(|entry| {
+                entry
+                    .former_domains()
+                    .into_iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        names.iter().find_map(|member| {
             domains
                 .iter()
-                .any(|domain| {
-                    domain.reaches().contains(&member.name) || domain.mentions().contains(*local)
-                })
-                .then_some((def.name, member.name))
+                .any(|domain| domain.reaches().contains(member))
+                .then_some((*name, *member))
         })
     })
 }
 
-/// The parts a top-level group's members fall into by what each reaches of the others, through its type, its body and its registry entry — a sibling by its local, which the group's terms name it by, or by the nominal head a construction of its family holds: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.
+/// The parts a top-level group's members fall into by what each reaches of the others, through its type and its body — a sibling by its local, which the group's terms name it by: the cycles of that relation, each its members' positions in the order they are written, the parts in the order of their first members. One part where the group is one cycle.
 ///
 /// A declaration reads any other wherever it is written, so a group ties nothing but declarations that need one another, and one part is all a group may be ([`Error::GroupApart`]).
 fn group_parts(
-    context: &Context,
     defs: &[Definition],
     locals: &[Free],
     types: &[Term],
     bodies: &[Term],
 ) -> Vec<Vec<usize>> {
-    let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
-    let edges = names
+    let edges = types
         .iter()
-        .zip(types.iter().zip(bodies))
-        .map(|(name, (type_, body))| {
+        .zip(bodies)
+        .map(|(type_, body)| {
             let mut reached = type_.reaches();
             reached.extend(body.reaches());
-            let mut frees = vec![type_.mentions(), body.mentions()];
-            if let Some(entry) = context.induct_decl(name) {
-                reached.extend(entry.reaches());
-                frees.push(entry.arity().mentions());
-                frees.push(entry.result_sort().mentions());
-                frees.extend(
-                    entry
-                        .constructors()
-                        .iter()
-                        .map(|(_, constructor)| constructor.payload().mentions()),
-                );
-            }
-            if let Some(entry) = context.struct_decl(name) {
-                reached.extend(entry.reaches());
-                frees.push(entry.arity.mentions());
-                frees.push(entry.result_sort.mentions());
-            }
-            names
-                .iter()
+            let frees = [type_.mentions(), body.mentions()];
+            defs.iter()
                 .zip(locals)
                 .enumerate()
                 .filter(|(_, (other, local))| {
-                    reached.contains(other) || frees.iter().any(|free| free.contains(*local))
+                    reached.contains(&other.name) || frees.iter().any(|free| free.contains(*local))
                 })
                 .map(|(index, _)| index)
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let reach = (0..names.len())
+
+    cycles(&edges)
+}
+
+/// The parts a nominal item's members fall into by what each one's entry reaches of the others, as [`group_parts`] reads a group's: a sibling by the nominal head a construction of its family or record holds.
+fn nominal_parts(context: &Context, names: &[Global]) -> Vec<Vec<usize>> {
+    let edges = names
+        .iter()
+        .map(|name| {
+            let reached = registered(context, name)
+                .map(|entry| entry.reaches())
+                .unwrap_or_default();
+            names
+                .iter()
+                .enumerate()
+                .filter(|(_, other)| reached.contains(*other))
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    cycles(&edges)
+}
+
+/// The cycles of the relation `edges` states over its positions, each its positions in order, the cycles in the order of their first positions.
+fn cycles(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    let count = edges.len();
+    let reach = (0..count)
         .map(|start| {
             let mut seen = BTreeSet::from([start]);
             let mut stack = vec![start];
@@ -1181,13 +1304,13 @@ fn group_parts(
         })
         .collect::<Vec<_>>();
 
-    let mut placed = vec![false; names.len()];
+    let mut placed = vec![false; count];
     let mut parts = Vec::new();
-    for member in 0..names.len() {
+    for member in 0..count {
         if placed[member] {
             continue;
         }
-        let part = (member..names.len())
+        let part = (member..count)
             .filter(|&other| {
                 !placed[other] && reach[member].contains(&other) && reach[other].contains(&member)
             })
@@ -1229,6 +1352,8 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     let recorded = context.checked_mark();
 
     let (elaborated, vectors) = match item {
+        // A nominal declaration's item is elaborated by its entries, whichever item it lowered to.
+        _ if !item.nominals().is_empty() => elaborate_module_nominal(context, item),
         Item::Let(definition) => elaborate_module_let(context, definition),
         Item::Rec(rec) => {
             elaborate_module_rec(context, rec).map(|(rec, vectors)| (Item::Rec(rec), vectors))

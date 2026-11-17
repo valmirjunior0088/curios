@@ -646,3 +646,34 @@ fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call()
         matches!(error, curios_elab::Error::TypeMismatch { .. })
     });
 }
+
+// A family's index types are positions of a type, read off its entry: `F`'s index is typed `Eq()(fine(0), 0)`, and the refusal turns `fine` into `spin`, which never descends, so (T) refuses it where it stands, as an index of `F`.
+#[test]
+fn a_partial_index_type_is_refused_as_an_index_of_its_family() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        let fine(n: Nat) -> Nat = n;
+        let spin(n: Nat) -> Nat = spin(n);
+
+        induct F: (p: Eq()(fine(0), 0)) -> Type
+        | f(): (Eq/refl())
+        end
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Eq()(fine(0), 0)", "Eq()(spin(0), 0)")])
+    .by_elaborator_in("/F", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                site: curios_elab::ErasedSite::IndexOf(family),
+                ..
+            } if *family == global("/F")
+        )
+    });
+}

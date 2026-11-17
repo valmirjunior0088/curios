@@ -327,6 +327,7 @@ impl ErasedSite {
             }
             ErasedSite::EntryType => "the entrypoint's type".to_string(),
             ErasedSite::ParameterOf(name) => format!("a parameter of {}", quoted(name)),
+            ErasedSite::IndexOf(name) => format!("an index of {}", quoted(name)),
             ErasedSite::PayloadOf {
                 family,
                 constructor,

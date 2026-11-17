@@ -1,13 +1,10 @@
 //! How a declaration's levels close into its scheme, and the levels a family's instances hold sorted from those it leaves to its callers.
 
 use {
-    crate::{
-        Context, Error, body_levels, compared_levels, family_levels, zonk, zonk_arity,
-        zonk_solved_term_metas,
-    },
+    crate::{Context, Error, body_levels, compared_levels, family_levels, zonk_solved_term_metas},
     curios_core::{
-        ConceptDecl, FuncType, Global, StructDecl, Subterm, Telescope, Term, UniverseContext,
-        UniverseMetaId, stamp_declaration_instance, universe_metas,
+        FuncType, Global, Subterm, Telescope, Term, UniverseContext, UniverseMetaId,
+        stamp_declaration_instance, universe_metas,
     },
     std::collections::BTreeSet,
 };
@@ -122,24 +119,7 @@ pub fn finalize_definition(
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
-    if let Some(struct_decl) = context.struct_decl(name).cloned() {
-        let arity = zonk_arity(context, &struct_decl.arity)?;
-        let result_sort = zonk(context, &struct_decl.result_sort)?;
-        context.update_struct(
-            name,
-            StructDecl {
-                universe_context: struct_decl.universe_context,
-                arity,
-                result_sort,
-                module: struct_decl.module,
-                rep_public: struct_decl.rep_public,
-                polarities: struct_decl.polarities,
-                variances: struct_decl.variances,
-            },
-        );
-    }
-
-    // The signature and any registry telescope form the declaration's interface: a use site instantiates exactly these. Levels reachable only through the body are internal classifiers and are minimized instead, as are the levels of the result sort — see [`result_sort_only_metas`].
+    // The signature forms the declaration's interface: a use site instantiates exactly it. Levels reachable only through the body are internal classifiers and are minimized instead, as are the levels of the result sort — see [`result_sort_only_metas`].
     let determined = result_sort_only_metas(context, &type_);
     let mut interface = context.universe_metas_in(&type_);
     interface.retain(|meta| !determined.contains(meta));
@@ -156,43 +136,10 @@ pub fn finalize_definition(
     let universe_context =
         context.finalize_universe_metas(&owned, interface, internal, compared)?;
     let instance = universe_context.identity_instance();
-    // A definition's own nominal forms, in its signature, body and registry entry, denote its own instance; a witness whose body names itself names it by the local its group of one closes over — see [`elaborate_module_let`].
+    // A definition's own nominal forms, in its signature and body, denote its own instance; a witness whose body names itself names it by the local its group of one closes over — see [`elaborate_module_let`].
     let type_ =
         stamp_declaration_instance(&context.zonk_universe_levels(&type_)?, &owned, &instance);
     let body = stamp_declaration_instance(&context.zonk_universe_levels(&body)?, &owned, &instance);
-
-    if let Some(struct_decl) = context.struct_decl(name).cloned() {
-        context.update_struct(
-            name,
-            StructDecl {
-                universe_context: universe_context.clone(),
-                arity: stamp_declaration_instance(
-                    &context.zonk_universe_levels(&struct_decl.arity)?,
-                    &owned,
-                    &instance,
-                ),
-                result_sort: stamp_declaration_instance(
-                    &context.zonk_universe_levels(&struct_decl.result_sort)?,
-                    &owned,
-                    &instance,
-                ),
-                module: struct_decl.module,
-                rep_public: struct_decl.rep_public,
-                polarities: struct_decl.polarities,
-                variances: struct_decl.variances,
-            },
-        );
-    }
-    if let Some(concept) = context.concept(name).cloned() {
-        context.update_concept(
-            name,
-            ConceptDecl {
-                universe_context: universe_context.clone(),
-                fields: concept.fields,
-                supers: concept.supers,
-            },
-        );
-    }
 
     Ok((universe_context, type_, body))
 }

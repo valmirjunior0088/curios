@@ -21,6 +21,7 @@ mod irrelevance;
 mod large_elimination;
 mod metavariable;
 mod mutation;
+mod nominal;
 mod one_inhabitant;
 mod plicity;
 mod positivity_composition;

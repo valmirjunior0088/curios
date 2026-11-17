@@ -61,7 +61,7 @@ impl<'s> Program<'s> {
         Ok(())
     }
 
-    /// Overwrite an already-registered inductive's metadata with a rebuilt telescope — called mid-elaboration by `elaborate_induct_indices`/ `elaborate_induct_constructors` to refine the same declaration's own entry, not to register a new one, so unlike [`Program::register_induct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked [`Program::induct_decl`] first (a construction bug otherwise, not a user-facing case).
+    /// Overwrite an already-registered inductive's metadata with a rebuilt telescope — called mid-elaboration by `share_former_telescope` and `elaborate_induct_constructors` to refine the same declaration's own entry, not to register a new one, so unlike [`Program::register_induct`] this always overwrites. Panics if `name` has no prior entry — every caller is expected to have checked [`Program::induct_decl`] first (a construction bug otherwise, not a user-facing case).
     pub fn update_induct(&mut self, name: &Global, induct_decl: InductDecl) {
         assert!(
             self.induct_decls.contains_key(name),

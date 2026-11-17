@@ -190,6 +190,23 @@ pub struct FlatLet {
 }
 
 impl FlatLet {
+    /// The nominal declaration's former `former`, made of its lowered entry ([`curios_core::Definition::former`]), declaring `members` beside itself and written where `span` says.
+    pub fn former(
+        former: curios_core::Definition,
+        members: Vec<(curios_core::Global, Option<Span>)>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            name: former.name,
+            kind: former.kind,
+            span,
+            members,
+            island: former.island,
+            type_: former.type_,
+            body: former.body,
+        }
+    }
+
     pub fn into_core(self) -> curios_core::Definition {
         curios_core::Definition {
             island: self.island,

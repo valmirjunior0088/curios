@@ -1742,10 +1742,6 @@ fn process_items(
                                 Ok((param.plicity, param_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
-                        let param_vars = param_binders
-                            .iter()
-                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
-                            .collect::<Vec<_>>();
 
                         // The head's index telescope. An unnamed entry has no name, so no later index type depends on it.
                         let index_tys = u
@@ -1759,11 +1755,6 @@ fn process_items(
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
                         drop(head_prefixes);
-
-                        let index_vars = index_binders
-                            .iter()
-                            .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
-                            .collect::<Vec<_>>();
 
                         // Registry entry: the parameter telescope plus each case's payload under the parameters, ending in that *case's* target expressions over its payload binders. `Telescope::build_marked` captures the payload labels in the payload types and the terminal, and the case's scope the parameters', mirroring `func_type`.
                         let constructors = u
@@ -1817,7 +1808,7 @@ fn process_items(
                             // Collected in written order: a constructor's position here is the runtime tag `erase` gives it (`InductDecl::constructors`), so the sequence is the declaration's, not a collation of its labels.
                             .collect::<Result<Vec<_>, Error>>()?;
 
-                        // The declared result sort (`Type`/`Prop`) — closed, so it lowers in the base context. It is both the registry entry's sort and the type-constructor's codomain.
+                        // The declared result sort (`Type`/`Prop`) — closed, so it lowers in the base context. It is the registry entry's sort, which its former's type ends in.
                         let result_sort = lower.term(&u.result_sort)?;
 
                         lowered.induct_decls.insert(
@@ -1826,36 +1817,17 @@ fn process_items(
                             curios_core::InductDecl::new(
                                 curios_core::UniverseContext::empty(),
                                 curios_core::Telescope::build_marked(
-                                    param_tys.clone(),
-                                    curios_core::Telescope::build(index_tys.iter().cloned(), ()),
+                                    param_tys,
+                                    curios_core::Telescope::build(index_tys, ()),
                                 ),
                                 curios_core::Constructors::try_from(constructors)
                                     .expect("discovery refuses a repeated case"),
-                                result_sort.clone(),
+                                result_sort,
                                 context.island(),
                                 u.rep_pub,
                             ),
                         );
 
-                        let induct_decl =
-                            curios_core::Term::induct_type(name, param_vars, index_vars);
-
-                        // The type constructor takes its parameters and then its indices, one call each: `Vec : (T : Type) -> (n : Nat) -> Type`, applied `Vec(T)(n)`, so `Vec(T)` is the family its matches eliminate — see documentation/design/theory/a-call-fills-one-parameter-group.md. A family with only one of the two takes it in one call, and a nullary one is its normal form outright. Parameters keep their declared marks (`@` makes one implicit at use sites); indices are always explicit.
-                        let index_binders = index_tys
-                            .iter()
-                            .cloned()
-                            .map(|(n, t)| (Plicity::Explicit, n, t))
-                            .collect::<Vec<_>>();
-                        let (type_, body) = [param_tys.clone(), index_binders]
-                            .into_iter()
-                            .filter(|group| !group.is_empty())
-                            .rev()
-                            .fold((result_sort, induct_decl), |(type_, body), group| {
-                                (
-                                    curios_core::Term::func_type_marked(group.clone(), type_),
-                                    curios_core::Term::func_marked(group, body),
-                                )
-                            });
                         // Its constructors are names its former declares beside itself, each written at its tag, which the family's entry makes and no definition holds.
                         let owner = context.prefixed(&u.label);
                         let members = u
@@ -1868,19 +1840,17 @@ fn process_items(
                                 )
                             })
                             .collect();
-                        Ok(FlatLet {
-                            members,
-                            kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                        Ok(FlatLet::former(
+                            curios_core::Definition::former(
+                                name,
+                                context.island(),
                                 curios_core::Nominal::Inductive(
                                     lowered.induct_decls[&name].clone(),
                                 ),
-                            )),
-                            span: u.label.span().cloned(),
-                            name: curios_core::Global::Authored(context.prefixed(&u.label)),
-                            island: context.island(),
-                            type_,
-                            body,
-                        })
+                            ),
+                            members,
+                            u.label.span().cloned(),
+                        ))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
@@ -1917,10 +1887,6 @@ fn process_items(
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     drop(prefixes);
-                    let param_vars = param_binders
-                        .iter()
-                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
-                        .collect::<Vec<_>>();
 
                     // A repeated label is refused at the one that arrived second, as a repeated declaration is. Nothing else catches it: a structure's fields are not module declarations, so they never reach `insert_binding`'s check, and the telescope below would keep both — a literal would set them both and every `.label` read the first, silently. The tuple-type twin of this is `curios_elab`'s `DuplicateTupleLabel`, which a `struct` never reaches because its fields never elaborate as one.
                     let mut declared = BTreeSet::new();
@@ -1956,7 +1922,7 @@ fn process_items(
                         .collect::<Result<Vec<_>, Error>>()?;
                     drop(prefixes);
 
-                    // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
+                    // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; the registry entry's sort, which its former's type ends in.
                     let result_sort = lower.term(&s.result_sort)?;
 
                     lowered.struct_decls.insert(
@@ -1964,10 +1930,10 @@ fn process_items(
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
                             arity: curios_core::Telescope::build_marked(
-                                param_tys.clone(),
+                                param_tys,
                                 curios_core::Telescope::build_marked(field_tys, ()),
                             ),
-                            result_sort: result_sort.clone(),
+                            result_sort,
                             module,
                             rep_public: s.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
@@ -1976,28 +1942,16 @@ fn process_items(
                         },
                     );
 
-                    // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bytes)` reduces to `StructType { Pair, [Nat, Bytes] }`. No value constructor.
-                    let struct_type = curios_core::Term::struct_type(name, param_vars);
-                    let (type_, body) = if param_tys.is_empty() {
-                        (result_sort, struct_type)
-                    } else {
-                        (
-                            curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                            curios_core::Term::func_marked(param_tys, struct_type),
-                        )
-                    };
-
-                    formers.push(FlatLet {
-                        members: Vec::new(),
-                        kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                    // The type-former, `Pair : (A : Type, B : Type) -> Type`, as its entry spells it. No value constructor.
+                    formers.push(FlatLet::former(
+                        curios_core::Definition::former(
+                            name,
+                            context.island(),
                             curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
-                        )),
-                        span: s.label.span().cloned(),
-                        name: curios_core::Global::Authored(context.prefixed(&s.label)),
-                        island: context.island(),
-                        type_,
-                        body,
-                    });
+                        ),
+                        Vec::new(),
+                        s.label.span().cloned(),
+                    ));
                 }
                 lowered.items.push(match formers.len() {
                     1 => FlatItem::Let(formers.pop().expect("a `struct` item has a member")),
@@ -2042,10 +1996,6 @@ fn process_items(
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
                     drop(prefixes);
-                    let param_vars = param_binders
-                        .iter()
-                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
-                        .collect::<Vec<_>>();
 
                     // A superclass field is anonymous: it has no label, so nothing projects it or names it in a later field's type, and resolution reaches it by index.
                     let field_labels = concept
@@ -2086,15 +2036,15 @@ fn process_items(
 
                     // The record shape drives struct literals and projections, and a method's call is read off it ([`curios_core::method_spelling`]).
                     let arity = curios_core::Telescope::build_marked(
-                        param_tys.clone(),
+                        param_tys,
                         curios_core::Telescope::build_marked(field_tys, ()),
                     );
                     lowered.struct_decls.insert(
                         name,
                         curios_core::StructDecl {
                             universe_context: curios_core::UniverseContext::empty(),
-                            arity: arity.clone(),
-                            result_sort: result_sort.clone(),
+                            arity,
+                            result_sort,
                             module,
                             rep_public: concept.rep_pub,
                             // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
@@ -2113,43 +2063,33 @@ fn process_items(
                         },
                     );
 
-                    // The type-former, exactly like a representation-public struct's.
-                    let struct_type = curios_core::Term::struct_type(name, param_vars.clone());
-                    let (type_, body) = if param_tys.is_empty() {
-                        (result_sort, struct_type)
-                    } else {
-                        (
-                            curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                            curios_core::Term::func_marked(param_tys.clone(), struct_type),
-                        )
-                    };
-                    formers.push(FlatLet {
-                        // Each labelled field is a method, reached by its path in the namespace the concept's head seeds for it, and declared by the former alone: a superclass edge has no label.
-                        members: concept
-                            .fields
-                            .iter()
-                            .filter_map(|field| field.label.as_ref())
-                            .map(|label| {
-                                (
-                                    curios_core::Global::Authored(
-                                        context.prefixed(&concept.label).with(label),
-                                    ),
-                                    label.span().cloned(),
-                                )
-                            })
-                            .collect(),
-                        kind: curios_core::DefinitionKind::Nominal(Rc::new(
+                    // Each labelled field is a method, reached by its path in the namespace the concept's head seeds for it, and declared by the former alone: a superclass edge has no label.
+                    let methods = concept
+                        .fields
+                        .iter()
+                        .filter_map(|field| field.label.as_ref())
+                        .map(|label| {
+                            (
+                                curios_core::Global::Authored(
+                                    context.prefixed(&concept.label).with(label),
+                                ),
+                                label.span().cloned(),
+                            )
+                        })
+                        .collect();
+                    // The type-former, as its entry spells it, exactly like a representation-public struct's.
+                    formers.push(FlatLet::former(
+                        curios_core::Definition::former(
+                            name,
+                            context.island(),
                             curios_core::Nominal::Concept {
                                 concept: lowered.concepts[&name].clone(),
                                 record: lowered.struct_decls[&name].clone(),
                             },
-                        )),
-                        span: concept.label.span().cloned(),
-                        name: curios_core::Global::Authored(context.prefixed(&concept.label)),
-                        island: context.island(),
-                        type_,
-                        body,
-                    });
+                        ),
+                        methods,
+                        concept.label.span().cloned(),
+                    ));
                 }
                 lowered.items.push(match formers.len() {
                     1 => FlatItem::Let(formers.pop().expect("a `concept` item has a member")),
