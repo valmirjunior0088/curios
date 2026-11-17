@@ -728,3 +728,37 @@ fn a_bodys_cycle_of_levels_closes_at_its_least_solution() {
     let parameters = universe_parameters(source);
     assert_eq!(parameters.get("/read"), Some(&0), "{parameters:?}");
 }
+
+// **A stuck `match` holds the levels its arms reduce to.** `M` holds a proposition `Good` computes by a `match` on `M`'s own field, which no instance decides: read through its arms, opened and forced, `List/len`'s instance in the `some` arm is the `#ListLen` it reduces to and holds no level, so `M` keeps the one level a family stating the same would, and `Good`'s own vector holds none. Read closed, the instance held its level, and `M` took a second one, invariant. The control's arm answers a `Type`, which holds the level it stands at.
+#[test]
+fn a_stuck_match_holds_the_levels_its_arms_reduce_to() {
+    let source = r#"
+        use /std/{Nat, List, Option, Bool};
+        pub let Good(@V: Type, r: Option(List(V))) -> Prop =
+            match r | none() => Bool/True | some(l) => Bool/Holds(List/len(l) < 9) end;
+        pub struct M(V: Type): pub Type { root: Option(List(V)), @ok: Good(root) }
+        pub let Sized(@V: Type, r: Option(List(V))) -> Type =
+            match r | none() => {} | some(_) => Type end;
+        /std/print("held")
+        "#;
+
+    // Run whole, the program is certified too, which recomputes `M`'s vector and refuses an irrelevance it would deny.
+    assert_eq!(run(source), b"held");
+    let parameters = universe_parameters(source);
+    assert_eq!(parameters.get("/M"), Some(&1), "{parameters:?}");
+    let families = family_variances(source);
+    assert_eq!(
+        families.get("/M").map(String::as_str),
+        Some("*"),
+        "{families:?}"
+    );
+    let definitions = definition_variances(source);
+    assert!(
+        !definitions["/Good"].contains('='),
+        "a level only a closed arm held: {definitions:?}"
+    );
+    assert!(
+        definitions["/Sized"].contains('='),
+        "a level an arm answers at: {definitions:?}"
+    );
+}

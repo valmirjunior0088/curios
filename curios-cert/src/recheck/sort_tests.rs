@@ -429,7 +429,7 @@ let /T: Type =
     assert_eq!(definition.value_sort, Some(term("Type")));
 }
 
-/// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::rules::positivity_computed_type` puts the same declaration to the elaborator under this name. Rename both or neither.
+/// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and the match is read through its arm, so the occurrence is refused whatever a use states. `curios`'s `tests::rules::positivity_computed_type` puts the same declaration to the elaborator under this name. Rename both or neither.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     let verdicts = text_verdicts(

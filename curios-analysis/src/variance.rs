@@ -2,7 +2,7 @@
 //!
 //! A level is **irrelevant** when no constructor payload, index target, field or index type mentions it except through a position that is itself irrelevant: another family's irrelevant level, or an instance reduction removes. Every other level is **invariant**, and none is covariant. A parameter's type and the result sort go unread: they bound a level from below and say nothing of what an instance holds. An irrelevant level leaves two instances' constructor telescopes identical, targets included, so the two have the same inhabitants and every elimination reads the same telescopes.
 //!
-//! The walk reads each type's reduct, as [`positivity_vectors`](crate::positivity_vectors) does and for its reason: a type-level `let` has to be opened to see the former it names, and a `/sys` former unfolds to an intrinsic one that carries no level. What the walk cannot see through marks every level it carries. That is the refusing direction, an invariant level being compared for equality as every level was before a vector existed.
+//! The walk reads each type's reduct, as [`positivity_vectors`](crate::positivity_vectors) does and for its reason: a type-level `let` has to be opened to see the former it names, and a `/sys` former unfolds to an intrinsic one that carries no level. A `match` the reduct is stuck on is read as conversion compares two of it ([`crate::opened`]): its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, so an instance an arm holds marks only what it reduces to. What the walk cannot see through marks every level it carries. That is the refusing direction, an invariant level being compared for equality as every level was before a vector existed.
 //!
 //! The same walk over terms its caller chose answers which levels they hold ([`held_levels`], [`held_by`]): a definition's body where its levels have closed, a group's telescopes while they are open. What a held level means there is the caller's to say.
 //!
@@ -11,7 +11,7 @@
 //! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The certifier reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
 
 use {
-    crate::{Declarations, Env, binders, forceable, labelled, rec_member},
+    crate::{Declarations, Env, binders, forceable, labelled, opened, rec_member},
     curios_common::recurse,
     curios_core::{
         Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
@@ -468,6 +468,19 @@ impl<E: Env> Walk<'_, E> {
                     self.level(level);
                 }
                 self.children(&term);
+            }
+
+            // A `match` the reduction left stuck, under no binder this walk has not opened, is read as conversion compares two of it: its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, a mention an arm's reduction removes being no mention.
+            Subterm::Match(matched) if term.reach() == 0 => {
+                let opened = opened(self.env, matched);
+                for part in opened
+                    .suppliers
+                    .iter()
+                    .chain(&opened.annotations)
+                    .chain(&opened.arms)
+                {
+                    self.walk(part);
+                }
             }
 
             Subterm::Apply(_)

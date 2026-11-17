@@ -853,47 +853,51 @@ fn define_guard(certifier: &mut Certifier, guard: &Global, defined: bool) {
     .expect("a name is declared once");
 }
 
-/// A payload type reduction cannot fire is read as nothing the walk concludes from: `Bad`'s constructor takes `match g | false => Nat | true => Bad end`, and with `g` a `Bool` the certifier holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. The walk reads a stuck form through its children at `Mixed`, so the self-occurrence in an arm is a non-strict path back and the set is refused by the rule — not for the budget, a stuck reduction being no refusal. The control defines `g` as `true`: the match fires to `Bad`, a strict self-occurrence, and the set is admitted, which says the refusal is the stuck shape's.
+/// A payload type reduction cannot fire is read as the arms it reduces to at every instance: `Bad`'s constructor takes `match g | false => Nat | true => … end`, and with `g` a `Bool` the certifier holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. Each arm is read where the match stands, so an arm holding `Bad` strictly admits the set and one holding it left of an arrow refuses it by the rule — not for the budget, a stuck reduction being no refusal. Defined as `true`, `g` fires the match to that arm, read the same way.
 #[test]
-fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
+fn a_payload_stuck_on_a_neutral_is_read_through_its_arms() {
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
     let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
     let guard = Global::Authored(Qualifier::from(["g"]));
-    let payload = Term::bool_match(
-        Term::instance(guard, Universes::default()),
-        Term::type_ground(),
-        Term::intrinsic(Intrinsic::NatType),
-        bad_type,
+    let negative = Term::func_type(
+        [(Free::local(1, Some("x")), bad_type.clone())],
+        nat_type.clone(),
     );
 
     for defined in [false, true] {
-        let mut certifier = certifier();
-        define_guard(&mut certifier, &guard, defined);
-        let mut inducts = BTreeMap::new();
-        inducts.insert(
-            bad_name,
-            single_payload(payload.clone(), Term::type_ground()),
-        );
-        for (name, entry) in &inducts {
-            certifier
-                .declare_induct(name, entry)
-                .expect("a name is declared once");
-        }
+        for (arm, admitted) in [(&bad_type, true), (&negative, false)] {
+            let payload = Term::bool_match(
+                Term::instance(guard, Universes::default()),
+                Term::type_ground(),
+                nat_type.clone(),
+                arm.clone(),
+            );
+            let mut certifier = certifier();
+            define_guard(&mut certifier, &guard, defined);
+            let mut inducts = BTreeMap::new();
+            inducts.insert(bad_name, single_payload(payload, Term::type_ground()));
+            for (name, entry) in &inducts {
+                certifier
+                    .declare_induct(name, entry)
+                    .expect("a name is declared once");
+            }
 
-        let verdict =
-            positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()));
-        match defined {
-            false => assert!(
-                matches!(&verdict, Err(PositivityRefusal::NotPositive(refusal)) if refusal.name == bad_name),
-                "a match stuck on a neutral, refused by the rule: {verdict:?}",
-            ),
-            true => assert_eq!(
-                verdict
-                    .ok()
-                    .and_then(|vectors| vectors.get(&bad_name).cloned()),
-                Some(Vec::new()),
-                "the match fired to a strict self-occurrence is admitted",
-            ),
+            let verdict =
+                positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()));
+            match admitted {
+                true => assert_eq!(
+                    verdict
+                        .ok()
+                        .and_then(|vectors| vectors.get(&bad_name).cloned()),
+                    Some(Vec::new()),
+                    "an arm holding the family strictly is admitted, `g` defined: {defined}",
+                ),
+                false => assert!(
+                    matches!(&verdict, Err(PositivityRefusal::NotPositive(refusal)) if refusal.name == bad_name),
+                    "an arm holding the family left of an arrow is refused by the rule, `g` defined: {defined}: {verdict:?}",
+                ),
+            }
         }
     }
 }

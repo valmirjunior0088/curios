@@ -351,3 +351,49 @@ fn a_record_holding_itself_through_fields_alone_is_refused() {
         "{verdicts:?}"
     );
 }
+
+/// `D(r : Opt(Type)) | c(f : match r | none() => {} | some(X) => (X) -> Void end)` beside `G | g(D(some(G)))`: the head of a stuck `match` carries a type into the arm that puts it left of an arrow.
+const A_HEAD_CARRYING_A_TYPE: &str = r#"
+induct /Void: pub Type
+end
+
+induct /Opt(A: #{level = 1} Type): pub #{level = 1} Type
+| none()
+| some(x: A)
+end
+
+induct /D(r: #{node = InductType} /Opt(Type)): pub Type
+| c(
+    f:
+        #{goal = Type}
+        match r
+        | none() => {}
+        | some(X) => (x: X) -> #{node = InductType} /Void()
+        end
+)
+end
+
+induct /G: pub Type
+| g(d: #{node = InductType} /D(#{node = Variant} /Opt/some(@Type, #{node = InductType} /G())))
+end
+
+/std/Bool/False
+"#;
+
+// The arm reads the binder its head supplies, so the head is read at `Mixed` and `/G`, holding a `/D` whose head holds `/G`, reaches itself both ways. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
+#[test]
+fn a_head_carrying_a_type_into_an_arm_is_read_at_mixed() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_HEAD_CARRYING_A_TYPE}",
+        PROPOSITIONS,
+        A_HEAD_CARRYING_A_TYPE
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("G"))
+                && matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}"
+    );
+}

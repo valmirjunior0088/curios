@@ -4,12 +4,12 @@ use {
     crate::tests::test_support::*,
     curios_cert::Verdict,
     curios_common::{Qualifier, test_support::Variants},
-    curios_core::{Global, Term, WitnessKey},
+    curios_core::{Global, Polarity, Term, WitnessKey},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::{EntryTail, Examined, Refused, test_support::*},
     curios_surface::{Entrypoint, Spellable, Spelling},
-    std::{fmt, rc::Rc},
+    std::{collections::BTreeMap, fmt, rc::Rc},
 };
 
 /// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the certifier's where the elaborator built it a module.
@@ -93,6 +93,31 @@ fn refused(source: &str) -> Refusals {
 }
 
 /// The declaration an absolute path names, as an error carries it.
+/// Every family's polarity vector as its unit carries it, an `induct`'s and a `struct`'s, keyed by the family's name.
+pub fn family_polarities(source: &str) -> BTreeMap<String, Vec<Polarity>> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
+
+    let inducts = program
+        .definitions
+        .induct_decls()
+        .into_iter()
+        .map(|(name, declaration)| {
+            (
+                name.faithful().to_string(),
+                declaration.polarities().to_vec(),
+            )
+        });
+    let structs = program
+        .definitions
+        .struct_decls()
+        .into_iter()
+        .map(|(name, declaration)| (name.faithful().to_string(), declaration.polarities.clone()));
+    inducts.chain(structs).collect()
+}
+
 pub fn global(path: &str) -> Global {
     Global::Authored(Qualifier::from(
         path.strip_prefix('/').expect("an absolute path").split('/'),

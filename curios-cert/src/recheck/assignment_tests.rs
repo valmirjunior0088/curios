@@ -540,11 +540,9 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
     );
 }
 
-/// A parameter's polarity is decided on the entry as stated, where a match on an equation at a sort left to the caller stands and is read at `Mixed`, so a family that holds its parameter left of an arrow at `Prop` alone is never composed through as positive in it. The route to `False` stands but for `/G`. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
-///
-/// Mutation-check: have positivity's `Walk::opaque` visit no child of a match, and `/F`'s vector reads `B` unused, `/G` is accepted, and the module is admitted at `False`.
+/// A parameter's polarity is decided on the entry as stated, where a match on an equation at a sort left to the caller stands and is read through its arm, which holds the parameter left of an arrow: a family that does so at `Prop` alone is never composed through as positive in it. The route to `False` stands but for `/G`. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
 #[test]
-fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
+fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_where_the_arm_puts_it() {
     let verdicts = verdicts(A_PARAMETER_BEHIND_A_MATCH);
 
     assert!(

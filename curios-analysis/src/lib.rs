@@ -40,6 +40,9 @@ pub use specialize::{reads_solved, retyped, scrutinee_solution};
 mod unfolding;
 use unfolding::*;
 
+mod reading;
+use reading::*;
+
 mod positivity;
 use positivity::*;
 pub use positivity::{

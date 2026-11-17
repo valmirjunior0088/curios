@@ -10,6 +10,10 @@
 //!
 //! A structure meets a second rule once it is strictly positive: it reaches itself through no path of record fields alone, a field of a structure or a component of a tuple at every step ([`Holding`]). Such a structure has no finite value, and the size order reads a field strictly below its record, so a recursion on one would descend without end on the open value a checker reduces a type under.
 //!
+//! # Read through what a type computes
+//!
+//! A type-level definition is forced to the form it reduces to, and a `match` that form is stuck on is read as the arms it reduces to at every instance ([`crate::opened`]): each at the polarity the `match` stands at, and what supplies an arm's binders, the head or the instance definitional K fires on, at `Mixed` where an arm reads one. Its annotations — the goal, a list's element type, and a supplier no arm reads — stand in no reduct, so no parameter is read in them; a declaration they name is read at `Mixed`, since a `match` does not say which family it takes apart and an annotation naming one is the only witness that a type computes by taking apart a value of it. Every other form the walk cannot see through is read whole at `Mixed` ([`Walk::opaque`]).
+//!
 //! # Asked before the pass has run
 //!
 //! Conversion asks whether a struct reaches itself while a unit's items are still being checked, to end its reading of a type's inhabitants, and the relation above does not exist yet: the pass runs over finished declarations, after the items whose conversions ask. [`struct_reaches_itself`] answers from the declarations as they are written. It reads the same diagonal coarsely — any mention counts, at whatever polarity and whatever it would reduce to — so it answers yes wherever the pass would and in more places besides. Its answer ends a walk early and admits nothing: whatever it says, a type judged to have one inhabitant is one whose every field was judged.
@@ -24,15 +28,16 @@
 mod tests;
 
 use {
-    crate::{Env, forceable},
+    crate::{Env, forceable, opened},
     curios_common::recurse,
     curios_core::{
-        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Mention,
-        Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Advance, Atom, Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, Match,
+        Mention, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         hash::{Hash, Hasher},
+        mem,
     },
 };
 
@@ -459,6 +464,7 @@ fn sweep<E: Env>(
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
             entered: HashSet::new(),
+            reading: Reading::Content,
             found: BTreeMap::new(),
             refused: None,
         };
@@ -593,6 +599,7 @@ fn refusal<E: Env>(
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
             entered: HashSet::new(),
+            reading: Reading::Content,
             found: BTreeMap::new(),
             refused: None,
         };
@@ -676,11 +683,22 @@ struct Walk<'a, E: Env> {
     ///
     /// [`Self::unfolded`] cannot serve. It keys on a name, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
     forcing: Vec<(RecGroup, usize)>,
-    /// The nodes this traversal has entered. A node entered again at the same polarity inside the same members records what it recorded, so a node a reduct shares is walked once however many paths reach it — where [`Self::forcing`]'s sibling occurrences, on paths inside different members, are each still walked.
+    /// The nodes this traversal has entered. A node entered again at the same polarity inside the same members, read the same way, records what it recorded, so a node a reduct shares is walked once however many paths reach it — where [`Self::forcing`]'s sibling occurrences, on paths inside different members, are each still walked.
     entered: HashSet<Entered>,
+    /// How what is walked now is read: as what a type holds, or as an annotation no reduct holds.
+    reading: Reading,
     found: BTreeMap<Target, Polarity>,
     /// The first reduction the driver refused on this traversal, kept for [`positivity_vectors`] to report.
     refused: Option<E::Error>,
+}
+
+/// How a walk reads what it is walking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Reading {
+    /// What a type holds: every target where it stands.
+    Content,
+    /// What annotates a term and stands in none of its reducts — a stuck `match`'s goal and a list's element type, and a head no arm reads a binder of. No parameter reaches a type through it, so none is recorded; a declaration is, at `Mixed`, since an annotation naming a family is the only witness that a type takes apart a value of it.
+    Annotation,
 }
 
 /// The `rec` member `term` is a folded call to, if it is one ([`Subterm::called_member`]).
@@ -691,10 +709,11 @@ pub fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
         .map(|(group, index)| (group.clone(), index))
 }
 
-/// A node as a walk entered it, at a polarity, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
+/// A node as a walk entered it, at a polarity, read a way, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
 struct Entered {
     node: Term,
     polarity: Polarity,
+    reading: Reading,
     inside: Vec<(RecGroup, usize)>,
 }
 
@@ -702,6 +721,7 @@ impl PartialEq for Entered {
     fn eq(&self, other: &Self) -> bool {
         self.node.identity() == other.node.identity()
             && self.polarity == other.polarity
+            && self.reading == other.reading
             && self.inside == other.inside
     }
 }
@@ -712,12 +732,16 @@ impl Hash for Entered {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.node.identity().hash(state);
         self.polarity.hash(state);
+        self.reading.hash(state);
         self.inside.hash(state);
     }
 }
 
 impl<E: Env> Walk<'_, E> {
     fn record(&mut self, target: Target, polarity: Polarity) {
+        if self.reading == Reading::Annotation && matches!(target, Target::Param(_)) {
+            return;
+        }
         self.found
             .entry(target)
             .and_modify(|found| *found = found.join(polarity))
@@ -776,6 +800,30 @@ impl<E: Env> Walk<'_, E> {
         }
     }
 
+    /// A stuck `match`, read as what it reduces to: every instance reduces it to one arm, its binders supplied by the head or by the instance the `match` states, so each arm is read at the polarity the `match` stands at, opened against fresh binders, and the suppliers at `Mixed` where an arm reads one of its binders. Where none does they only select an arm, whose reading the arms' join bounds, and are read as annotations, as the goal and a list's element type are.
+    fn stuck(&mut self, matched: &Match, polarity: Polarity) {
+        let opened = opened(self.env, matched);
+        for arm in &opened.arms {
+            self.walk(arm, polarity);
+        }
+        for supplier in &opened.suppliers {
+            match opened.reads_a_binder {
+                true => self.walk(supplier, Polarity::Mixed),
+                false => self.annotation(supplier),
+            }
+        }
+        for annotation in &opened.annotations {
+            self.annotation(annotation);
+        }
+    }
+
+    /// Walk `term` as an annotation ([`Reading::Annotation`]), at `Mixed`.
+    fn annotation(&mut self, term: &Term) {
+        let outer = mem::replace(&mut self.reading, Reading::Annotation);
+        self.walk(term, Polarity::Mixed);
+        self.reading = outer;
+    }
+
     /// A form the walk cannot see through: descend into every direct child at `Mixed`.
     ///
     /// `Mixed` is a *result*, never a stop. Halting here would let a recursive occurrence hidden inside a stuck `match` arm or a lambda body pass unseen, which is a soundness hole rather than a missed refinement. The descent reuses `Subterm::any_child_term` so a new term former cannot be added without this walk following it.
@@ -830,6 +878,7 @@ impl<E: Env> Walk<'_, E> {
         if !self.entered.insert(Entered {
             node: term.clone(),
             polarity,
+            reading: self.reading,
             inside: self.forcing.clone(),
         }) {
             return;
@@ -899,6 +948,9 @@ impl<E: Env> Walk<'_, E> {
 
             // A host call is opaque for the same reason an effectful intrinsic is: its result comes from outside the program, so nothing about the declaration being checked can be read out of it.
             Subterm::Foreign(_) => self.opaque(&term),
+
+            // A `match` the reduction left stuck, under no binder this walk has not opened, is read as the arms it reduces to at every instance.
+            Subterm::Match(matched) if term.reach() == 0 => self.stuck(matched, polarity),
 
             Subterm::Apply(_)
             | Subterm::Func(_)

@@ -1,4 +1,4 @@
-//! A type the walk computes or unfolds before it reads an occurrence: an alias, a type-level match decided or stuck, a sort a caller would decide, and a field or payload a type-level `rec` computes.
+//! A type the walk computes or unfolds before it reads an occurrence: an alias, a type-level match decided or stuck and read through its arms, a sort a caller would decide, and a field or payload a type-level `rec` computes.
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_common::fill,
@@ -113,9 +113,9 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
     });
 }
 
-// The same `match` stuck on a parameter is no arm at all: the analysis answers that it cannot see through it, whatever the arms hold — here both are strict — which is the safe reading of a position it has not read. The control decides the same `match` at `true`.
+// The same `match` stuck on a parameter is read as the arms it reduces to at every instance: both hold the family strictly, so it is admitted whatever `b` is, and `b`, which only selects an arm, is no occurrence. The control puts the family left of an arrow in one arm, which some instance reduces to: strict in one arm and negative in the other, it stands both ways.
 #[test]
-fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
+fn an_occurrence_behind_a_stuck_type_level_match_is_read_where_its_arms_put_it() {
     control(
         r#"
         use /std/{Bool, Nat};
@@ -128,14 +128,14 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
 
         induct Stuck(b : Bool) : pub Type
         | leaf()
-        | c(Pick(true, Stuck(b)))
+        | c(Pick(b, Stuck(b)))
         end
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("Pick(true, Stuck(b))", "Pick(b, Stuck(b))")])
+    .refused(&[("{Nat, X}", "(X) -> Nat")])
     .by_elaborator_in("/Stuck", |error| {
         matches!(
             error,
@@ -147,7 +147,88 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
     });
 }
 
-// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the certifier under this name. The control's arm holds no occurrence.
+// A `Bool` parameter a stuck `match` only selects on reaches no type the declaration holds, so it is read at `Unused`, where it was read at `Mixed` when the walk could not see through the `match`.
+#[test]
+fn a_parameter_a_stuck_match_only_selects_on_is_unused() {
+    let polarities = family_polarities(
+        r#"
+        use /std/{Bool, Nat};
+
+        let Pick(b : Bool, X : Type) -> Type =
+            match b
+            | true => {Nat, X}
+            | false => X
+            end;
+
+        induct Stuck(b : Bool) : pub Type
+        | leaf()
+        | c(Pick(b, Nat))
+        end
+
+        /std/print("ok")
+        "#,
+    );
+    assert_eq!(polarities["/Stuck"], vec![Polarity::Unused]);
+}
+
+// A head that carries a type into the arm that reads it: `D`'s `r` is a list of types the arm puts left of an arrow, so the head is read at `Mixed` and `G`, holding a `D` whose `r` holds `G`, reaches itself both ways. `curios-cert`'s `recheck::positivity_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control holds a `D` at no type.
+#[test]
+fn a_head_carrying_a_type_into_an_arm_is_read_at_mixed() {
+    control(
+        r#"
+        use /std/{Option};
+
+        induct Void: pub Type
+        end
+
+        induct D(r: Option(Type)): pub Type
+        | c(f: match r | some(X) => (X) -> Void | none() => {} end)
+        end
+
+        induct G: pub Type
+        | g(d: D(Option/none()))
+        end
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("D(Option/none())", "D(Option/some(G))")])
+    .by_elaborator_in(
+        "/G",
+        |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/G")),
+    );
+}
+
+// A list `match`'s element type annotates it and stands in no arm's reduct, so a type parameter named only there is no occurrence: `T` is strict in `L` through its list, and `N`, holding an `L` of itself, is admitted. The control names the family itself as the element type, which is read as anywhere: an annotation naming a family is the only witness that a type takes apart a value of it.
+#[test]
+fn a_list_matchs_element_type_is_read_for_its_declarations_alone() {
+    control(
+        r#"
+        use /std/{Nat, List};
+
+        let Head(@X: Type, l: List(X), Y: Type) -> Type =
+            match l | [] => {} | [_, .._] => Y end;
+
+        struct L(T: Type, Y: Type): pub Type { l: List(T), f: Head(l, Y) }
+
+        induct N: pub Type
+        | leaf()
+        | n(x: L(N, Nat))
+        end
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("n(x: L(N, Nat))", "n(l: List(N), f: Head(@N, l, Nat))")])
+    .by_elaborator_in(
+        "/N",
+        |error| matches!(error, Error::NotStrictlyPositive { name, .. } if *name == global("/N")),
+    );
+}
+
+// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and the match is read through its arm, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the certifier under this name. The control's arm holds no occurrence.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     control(
@@ -170,9 +251,9 @@ fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     );
 }
 
-// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control's `G` holds an `F` at `{}` in `B`.
+// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, and the match is read through its arm, so `B` is negative in `F` and `G`, holding an `F` at `Prop` with itself at `B`, reaches itself negatively. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control's `G` holds an `F` at `{}` in `B`.
 #[test]
-fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
+fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_where_the_arm_puts_it() {
     control(
         r#"
         use /std/{Eq};
@@ -197,7 +278,7 @@ fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
     );
 }
 
-// A field whose type a self-calling type-level `rec` computes. The walk forces the `rec` head, cannot see through the stuck `match` it exposes, descends into the arm holding the recursive call, opens that arm against a fresh binder — and forces the same node again, one level deeper, forever. `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so each unfolding hands the walk a structurally identical group; nothing but a guard keyed on that group stops the descent, and `unfolded` cannot be it because an inline group has no name to key on.
+// A field whose type a self-calling type-level `rec` computes. The walk forces the `rec` head, reads the stuck `match` it exposes through its arms, descends into the arm holding the recursive call, opens that arm against a fresh binder — and forces the same node again, one level deeper, forever. `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so each unfolding hands the walk a structurally identical group; nothing but a guard keyed on that group stops the descent, and `unfolded` cannot be it because an inline group has no name to key on.
 #[test]
 fn a_field_type_a_self_calling_rec_computes_is_admitted() {
     let source = r#"

@@ -53,29 +53,38 @@ pub fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
         .collect()
 }
 
-/// Every inductive family's variance vector as its unit carries it, keyed by the family's name: `*` for an irrelevant level and `=` for an invariant one.
+/// Every family's variance vector as its unit carries it, an `induct`'s and a `struct`'s, keyed by the family's name: `*` for an irrelevant level and `=` for an invariant one.
 pub fn family_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
     let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the fixture type-checks")
         .program;
+    let spelled = |variances: &[Variance]| {
+        variances
+            .iter()
+            .map(|variance| match variance {
+                Variance::Irrelevant => '*',
+                Variance::Invariant => '=',
+            })
+            .collect::<String>()
+    };
 
-    program
+    let inducts = program
         .definitions
         .induct_decls()
-        .iter()
+        .into_iter()
         .map(|(name, declaration)| {
-            let spelled = declaration
-                .variances()
-                .iter()
-                .map(|variance| match variance {
-                    Variance::Irrelevant => '*',
-                    Variance::Invariant => '=',
-                })
-                .collect();
-            (name.faithful().to_string(), spelled)
-        })
-        .collect()
+            (
+                name.faithful().to_string(),
+                spelled(declaration.variances()),
+            )
+        });
+    let structs = program
+        .definitions
+        .struct_decls()
+        .into_iter()
+        .map(|(name, declaration)| (name.faithful().to_string(), spelled(&declaration.variances)));
+    inducts.chain(structs).collect()
 }
 
 /// Every definition's finalized type as it prints, universe instances included, keyed as [`universe_parameters`] keys it.

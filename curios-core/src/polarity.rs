@@ -71,7 +71,8 @@ impl fmt::Display for Polarity {
             Polarity::Strict => "strictly positively",
             Polarity::Pos => "positively, but not strictly",
             Polarity::Neg => "negatively",
-            Polarity::Mixed => "in a position the checker cannot see through",
+            // The join of a strict and a negative reading, and what a form the walk cannot see through is read as: no provenance tells the two apart, so the words hold of both.
+            Polarity::Mixed => "both positively and negatively, as far as the checker can tell",
         };
         formatter.write_str(described)
     }

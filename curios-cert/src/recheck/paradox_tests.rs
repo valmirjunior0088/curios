@@ -476,7 +476,7 @@ end
 /std/Bool/False
 "#;
 
-/// Each family is refused at the polarity it reaches itself at, a `Strict` vector its entry states being read by nothing: a merely positive occurrence, as Cantor's argument needs, at `Pos`; through `/W`'s parameter at the `Neg` the certifier computed; behind a stuck match at `Mixed`; and through what reduction leaves of a projection, a `let` and an application at `Neg`.
+/// Each family is refused at the polarity it reaches itself at, a `Strict` vector its entry states being read by nothing: a merely positive occurrence, as Cantor's argument needs, at `Pos`; through `/W`'s parameter at the `Neg` the certifier computed; behind a stuck match, read through the arm that holds it left of an arrow, at `Neg`; and through what reduction leaves of a projection, a `let` and an application at `Neg`.
 #[test]
 fn a_family_reaching_itself_through_any_non_strict_shape_is_refused() {
     let verdicts = core_text_verdicts(&fill!(
@@ -490,7 +490,7 @@ fn a_family_reaching_itself_through_any_non_strict_shape_is_refused() {
         ("CPProp", Polarity::Pos),
         ("NN", Polarity::Pos),
         ("UsesW", Polarity::Neg),
-        ("StuckMatch", Polarity::Mixed),
+        ("StuckMatch", Polarity::Neg),
         ("Projected", Polarity::Neg),
         ("LetBound", Polarity::Neg),
         ("Applied", Polarity::Neg),
