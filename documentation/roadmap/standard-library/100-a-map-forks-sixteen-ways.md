@@ -4,7 +4,7 @@ Adopted: `/std/Map` states its invariant where its reader looks for it and walks
 
 Working specification for `/std/Map`'s trie forking on four bits of its key's encoding where it forks on one, its children held compressed in a list. It restates [`Map` is a crit-bit trie, and its shape is its API](../../../curios-prelude/README.md#map-is-a-crit-bit-trie-and-its-shape-is-its-api) and [A map holds the proof that its trie is sound](../../../curios-prelude/README.md#a-map-holds-the-proof-that-its-trie-is-sound); what a map promises — its keys in their type's order, one shape for one set of entries, `try_get`'s laws and extensionality — is unchanged.
 
-Its next step is stage 1, a delivery. Stage 2 waits on [Positivity reads through a definition and past a datum](../theory/101-positivity-reads-through-a-definition-and-past-a-datum.md) and on the [compilation finding](../compilation/000-findings.md) that a walk that only reads a value it is handed in a loop owns it.
+Its next step is stage 1, a delivery. Stage 2 waits on [A type is read through what it computes](../theory/101-a-type-is-read-through-what-it-computes.md) and on the [compilation finding](../compilation/000-findings.md) that a walk that only reads a value it is handed in a loop owns it.
 
 ## What this builds on
 
