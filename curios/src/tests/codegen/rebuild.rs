@@ -246,6 +246,80 @@ fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
     assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
 }
 
+/// A map a read-only walk takes apart before an insert: `Map/update` reads the value at its key through `try_get`'s descent, which the optimizer makes a loop, and `Map/has` asks the same of a key before an insert at it, each arm inserting another value. The loop only reads the map it is handed, so its parameter borrows it, the insert after it holds the one name the map goes by, and it rebuilds its node at every level as an insert alone does. Mutation-checked: with a jump into a continuation counted as consuming what it hands, both copy every level.
+#[test]
+fn a_map_a_loop_reads_before_an_insert_rebuilds_its_node_at_every_level() {
+    for insert in [
+        "Map/update(m, y, (_) => Option/some(k))",
+        "match Map/has(m, y) | true => Map/insert(m, y, k + 1) | false => Map/insert(m, y, k) end",
+    ] {
+        let walk = fill!(
+            r#"
+            let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+                match n
+                | 0 => m
+                | k + 1 =>
+                    let y = 75 * x % 65537;
+                    walk(k, y, ${insert})
+                end;
+            "#,
+            insert
+        );
+        let (_, module) = modules(&program(
+            &walk,
+            "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+        ));
+        assert_eq!(
+            copies_keeping_a_slot(&module, "/std/Map/internal/Node/insert"),
+            0,
+            "{insert}:\n{module}"
+        );
+        assert!(rebuilds_of(&module, NODE) >= 8, "{insert}:\n{module}");
+    }
+}
+
+/// One map handed at once to a parameter that only reads it and to one that inserts into it, by a jump into a loop and by a call: the reader names the object the insert would write, so it does not borrow it, and each program answers as it does when the insert copies. And a loop reading a map the function around it inserts into while the loop's parameter is live: the insert would write what the parameter still reads, and the program answers as if it copied. The optimizer reorders, splits and routes these programs so that no rule of the borrow alone decides them; each rule is held to its own shape in `curios-cps`'s `rebuild::tests`, and these hold whole programs to their answers.
+#[test]
+fn a_map_a_reader_holds_beside_its_insert_answers_as_if_copied() {
+    let definitions = r#"
+        let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+            match n | 0 => m | k + 1 => fill(k, Map/insert(m, n, n + 6)) end;
+        let looped(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =
+            match k
+            | 0 =>
+                let b2 = Map/insert(b, 1, 99);
+                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/len(b2)
+            | j + 1 => looped(a, b, j)
+            end;
+        let called(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =
+            match k
+            | 0 =>
+                let b2 = Map/insert(b, 1, 99);
+                Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/len(b2)
+            | j + 1 => match called(a, b, j) | 0 => 1 | i + 1 => i + 1 end
+            end;
+        let outer(x: Map(Nat, Nat), n: Nat) -> Nat =
+            let probe(t: Map(Nat, Nat), k: Nat) -> Nat =
+                match k
+                | 0 =>
+                    let x2 = Map/insert(x, 1, 99);
+                    Map/len(x2) * 1000 + Option/unwrap_or(Map/try_get(t, 1), 0)
+                | j + 1 => probe(t, j)
+                end;
+            probe(x, n);
+    "#;
+    for start in [
+        "(let m = fill(n % 50 + 3, Map/empty()); looped(m, m, n % 7))",
+        "(let m = fill(n % 50 + 3, Map/empty()); let p = fill(n % 50 + 4, Map/empty()); called(m, m, n % 7) + called(p, p, n % 7) * 100000)",
+        "outer(fill(n % 50 + 3, Map/empty()), n % 7)",
+    ] {
+        let (lowered, module) = modules(&program(definitions, start));
+        let mut kept = lowered;
+        curios_cps::optimize(&mut kept);
+        assert_eq!(run(&module, "300"), run(&kept, "300"), "{start}");
+    }
+}
+
 /// Two loops each threading a map of its own through its inserts: `walk` stays a function both call, whose loop hands its map back where it ends, and what a later round does to the map it is handed is done to another map than the one a round took apart, so each insert still reaches the version that rebuilds its node at every level.
 #[test]
 fn map_insert_rebuilds_its_node_in_each_of_two_loops_threading_a_map_of_its_own() {

@@ -6,7 +6,9 @@
 //!
 //! **Constants by tag.** A constant is one global every use shares, and it reaches every parameter it is handed to and every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out. A row's constructors share its slots, a leaf's payload a fork's child, so a slot is followed under the constructor that writes it and read under the one a test around the read decides.
 //!
-//! **Borrowing.** A parameter a function only reads is borrowed, so its caller keeps the value it handed, unless the function rebuilds it, captures it, or must own a field of it, as Lean's inference owns what it resets. Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
+//! **Borrowing.** A parameter a function or a continuation only reads is borrowed, so whoever handed it the value keeps it: a call or a jump into a borrowed parameter is a read, and a read-only walk the optimizer made a loop leaves its caller's value unique for the rebuild after it, as Lean's borrow inference treats a join point as a local function whose parameters carry a borrow flag (`Lean.Compiler.IR.Borrow`). A parameter owns where it is rebuilt, captured or consumed, or where a field of it that a rebuild could write — one that may be a row or a tuple, read from no payload's slot — must be owned, as Lean's inference owns what it resets. Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
+//!
+//! **A borrow is one name among several.** A borrowed parameter names an object its holder still holds, so nothing may write into that object while the parameter is live. A transfer handing it to a borrowed parameter and to an owned one, as itself or as a field of the other, owns both; a continuation's region building a row its parameter is read at keeps the parameter owned; and a continuation's parameter, which lives on past the jump that bound it where a function's lives within the call, owns where what it was handed is consumed, or a rebuild writes into it, while it is live. The last is read off the rebuilds the facts admit, so borrowing and rebuilding are decided again until no rebuild writes under a borrow.
 
 use {
     super::{
@@ -32,16 +34,26 @@ pub struct Rebuild {
 pub fn rebuilds(module: &Module) -> Vec<Rebuild> {
     let shape = Shape::of(module);
     let tags = constant_tags(module, &shape);
-    let owned = BTreeSet::new();
+    let owned = Borrowed::new();
     let first = Facts::solve(module, &shape, &owned).rebuilds(&tags);
     let reused = first
         .iter()
         .map(|rebuild| rebuild.of)
         .collect::<BTreeSet<_>>();
-    let borrowed = shape.borrowed(module, &reused);
-    match borrowed.is_empty() {
-        true => first,
-        false => Facts::solve(module, &shape, &borrowed).rebuilds(&tags),
+    let mut candidates = shape.function_receivers(module);
+    candidates.extend(shape.continuation_receivers(module));
+    // A rebuild writing into what a borrowed continuation parameter holds, where the parameter is live, would write what it still reads: that parameter owns, and borrowing is decided again over what is left, since a jump into it consumes once more.
+    loop {
+        let borrowed = shape.borrowed(module, &reused, candidates);
+        if borrowed.is_empty() {
+            return first;
+        }
+        let found = Facts::solve(module, &shape, &borrowed).rebuilds(&tags);
+        let clashing = shape.rebuilt_under(module, &found, &borrowed);
+        if clashing.is_empty() {
+            return found;
+        }
+        candidates = borrowed.difference(&clashing).copied().collect();
     }
 }
 
@@ -61,7 +73,12 @@ pub struct Routes {
 /// Both versions of every function solved together, as the greatest fixpoint of uniqueness over both: a call reaches its callee's reuse version where it hands each parameter that version assumes a unique value dead after it, and a call's result takes the facts of the version it reaches, so a loop threading what a reuse version hands back holds it unique where that is consistent. A reuse version counts only where a call from a version that counts reaches it, so a cycle no unique value enters never does.
 pub fn routes(module: &Module) -> Routes {
     let shape = Shape::of(module);
-    let borrowed = BTreeSet::new();
+    // A continuation that only reads what a jump hands it keeps it its holder's, so a map a loop probes and a call then inserts into reaches the insert unique. A function's parameters stay owned here: which of them its reuse version rebuilds is what this decides.
+    let borrowed = shape.borrowed(
+        module,
+        &BTreeSet::new(),
+        shape.continuation_receivers(module),
+    );
     let mut assumed = BTreeMap::<FunctionId, BTreeSet<usize>>::new();
     for (function, definition) in module.live_functions() {
         if shape.open.contains(&function) {
@@ -914,13 +931,50 @@ enum Site {
     Store,
     /// Handed to a known function's parameter.
     Call(FunctionId, usize),
-    /// Handed to a continuation, on a jump or on one edge of a switch.
-    Jump(ContinuationId),
+    /// Handed to a continuation's parameter, on a jump or on one edge of a switch.
+    Jump(ContinuationId, usize),
     /// Handed back to the function's caller.
     Return(usize),
     /// Handed where nothing in the module follows it: a closure's argument, a host's, a cell's, a channel's, an operation's, or the value a rebuild writes into.
     Escape,
 }
+
+/// A parameter a value may be handed to for reading alone, its holder keeping it: a known function's or a continuation's, by its place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Receiver {
+    Param(FunctionId, usize),
+    ContParam(ContinuationId, usize),
+}
+
+impl Receiver {
+    /// Its place among its function's or its continuation's parameters.
+    fn place(self) -> usize {
+        match self {
+            Receiver::Param(_, place) | Receiver::ContParam(_, place) => place,
+        }
+    }
+
+    /// The parameter at `place` of the same function or continuation.
+    fn beside(self, place: usize) -> Receiver {
+        match self {
+            Receiver::Param(function, _) => Receiver::Param(function, place),
+            Receiver::ContParam(continuation, _) => Receiver::ContParam(continuation, place),
+        }
+    }
+
+    /// The value it binds in `module`.
+    fn param(self, module: &Module) -> ValueId {
+        match self {
+            Receiver::Param(function, index) => module.function(function).unwrap().params[index],
+            Receiver::ContParam(continuation, index) => {
+                module.continuation(continuation).unwrap().params[index]
+            }
+        }
+    }
+}
+
+/// The parameters that only read what they are handed ([`Shape::borrowed`]).
+type Borrowed = BTreeSet<Receiver>;
 
 /// Where a value is defined.
 #[derive(Debug, Clone, Copy)]
@@ -1426,15 +1480,18 @@ impl Shape {
         reached
     }
 
-    /// Where `value` is consumed, a call to a borrowed parameter being a read.
-    fn consumed(&self, value: ValueId, borrowed: &BTreeSet<(FunctionId, usize)>) -> Vec<Point> {
+    /// Where `value` is consumed, a call or a jump handing it to a borrowed parameter being a read.
+    fn consumed(&self, value: ValueId, borrowed: &Borrowed) -> Vec<Point> {
         self.uses
             .get(&value)
             .into_iter()
             .flatten()
             .filter(|(_, site, _)| match site {
                 Site::Read => false,
-                Site::Call(callee, index) => !borrowed.contains(&(*callee, *index)),
+                Site::Call(callee, index) => !borrowed.contains(&Receiver::Param(*callee, *index)),
+                Site::Jump(target, index) => {
+                    !borrowed.contains(&Receiver::ContParam(*target, *index))
+                }
                 _ => true,
             })
             .map(|(node, _, into)| Point {
@@ -1532,24 +1589,85 @@ impl Shape {
         }
     }
 
-    /// The parameters a function only reads, given the values rebuilt when every parameter is owned: optimistic, each demoted where it must own.
+    /// Every parameter a known function takes: what [`Shape::borrowed`] starts from where functions borrow.
+    fn function_receivers(&self, module: &Module) -> Borrowed {
+        module
+            .live_functions()
+            .filter(|(function, _)| !self.open.contains(function))
+            .flat_map(|(function, definition)| {
+                (0..definition.params.len()).map(move |index| Receiver::Param(function, index))
+            })
+            .collect()
+    }
+
+    /// Every parameter of a continuation jumps enter that nothing its region builds could rebuild: what [`Shape::borrowed`] starts from where continuations borrow. A continuation a call resumes takes what the callee hands back, which no caller keeps, so its parameters own; and one whose region builds a row its parameter or a field of it is read at keeps the parameter owned, a rebuild there writing into it.
+    fn continuation_receivers(&self, module: &Module) -> Borrowed {
+        module
+            .live_continuations()
+            .filter(|(continuation, _)| {
+                !self.resumes.contains_key(continuation) && self.entries.contains_key(continuation)
+            })
+            .flat_map(|(continuation, definition)| {
+                let built = self.rows_built_within(module, continuation);
+                definition
+                    .params
+                    .iter()
+                    .enumerate()
+                    .filter(move |(_, param)| {
+                        !self
+                            .with_fields(**param)
+                            .iter()
+                            .any(|value| matches!(self.read_at.get(value), Some(Some(row)) if built.contains(row)))
+                    })
+                    .map(move |(index, _)| Receiver::ContParam(continuation, index))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// The rows the region of `continuation` builds: its body's constructions and those of the continuations defined within it.
+    fn rows_built_within(&self, module: &Module, continuation: ContinuationId) -> BTreeSet<RowId> {
+        let mut region = BTreeSet::from([Block::Cont(continuation)]);
+        loop {
+            let before = region.len();
+            for (nested, definer) in &self.defined_at {
+                if region.contains(&self.place[definer].0) {
+                    region.insert(Block::Cont(*nested));
+                }
+            }
+            if region.len() == before {
+                break;
+            }
+        }
+        self.place
+            .iter()
+            .filter(|(_, (block, _))| region.contains(block))
+            .filter_map(|(node, _)| match module.node(*node) {
+                Some(Node::LetValue {
+                    value: ValueExpr::Row(row, _),
+                    ..
+                }) => Some(*row),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Of `candidates`, the parameters that only read what they are handed, given the values rebuilt when every parameter is owned: optimistic, each demoted where it must own ([`Shape::must_own`]), where a transfer into it hands what it is handed to an owned parameter too ([`Shape::handed_beside_an_owner`]), and, a continuation's, where what it is handed is consumed while it is live ([`Shape::consumed_under`]).
     fn borrowed(
         &self,
         module: &Module,
         reused: &BTreeSet<ValueId>,
-    ) -> BTreeSet<(FunctionId, usize)> {
-        let mut borrowed = module
-            .live_functions()
-            .filter(|(function, _)| !self.open.contains(function))
-            .flat_map(|(function, definition)| {
-                (0..definition.params.len()).map(move |index| (function, index))
-            })
-            .collect::<BTreeSet<_>>();
+        candidates: Borrowed,
+    ) -> Borrowed {
+        let aggregates = aggregates(module, self);
+        let mut borrowed = candidates;
         loop {
             let snapshot = borrowed.clone();
-            borrowed.retain(|(function, index)| {
-                let param = module.function(*function).unwrap().params[*index];
-                !self.must_own(param, &snapshot, reused)
+            borrowed.retain(|receiver| {
+                let param = receiver.param(module);
+                !self.must_own(module, param, &snapshot, reused, &aggregates)
+                    && !self.handed_beside_an_owner(module, *receiver, &snapshot)
+                    && !self.consumed_under(module, *receiver, param, &snapshot)
             });
             if borrowed.len() == snapshot.len() {
                 return borrowed;
@@ -1557,12 +1675,114 @@ impl Shape {
         }
     }
 
-    /// Whether a function must own `value`: it consumes it, captures it or rebuilds it, or must own a field of it.
+    /// The arguments every transfer into `receiver`'s function or continuation hands, by place: its known calls, or the jumps and switch edges entering it.
+    fn transfers(&self, module: &Module, receiver: Receiver) -> Vec<Vec<Atom>> {
+        match receiver {
+            Receiver::Param(function, _) => self
+                .calls
+                .get(&function)
+                .into_iter()
+                .flatten()
+                .filter_map(|call| match module.node(*call) {
+                    Some(Node::ApplyFun { args, .. }) => Some(args.clone()),
+                    _ => None,
+                })
+                .collect(),
+            Receiver::ContParam(continuation, _) => self
+                .entries
+                .get(&continuation)
+                .into_iter()
+                .flatten()
+                .map(|entry| entry.args.clone())
+                .collect(),
+        }
+    }
+
+    /// Whether a transfer into `receiver` hands what it hands `receiver` to an owned parameter of the same transfer too, as itself, as a field of it, or holding it as a field: that parameter could be rebuilt in place while `receiver` still reads what it names.
+    fn handed_beside_an_owner(
+        &self,
+        module: &Module,
+        receiver: Receiver,
+        borrowed: &Borrowed,
+    ) -> bool {
+        let place = receiver.place();
+        self.transfers(module, receiver).iter().any(|args| {
+            let Some(Atom::Value(handed)) = args.get(place) else {
+                return false;
+            };
+            let held = self.with_fields(*handed);
+            args.iter().enumerate().any(|(other, atom)| {
+                other != place
+                    && !borrowed.contains(&receiver.beside(other))
+                    && matches!(atom, Atom::Value(owned)
+                        if held.contains(owned) || self.with_fields(*owned).contains(handed))
+            })
+        })
+    }
+
+    /// Whether a value a jump hands the continuation parameter `receiver` binds as `param`, or a field read off it, is consumed while `param` is live: a function's parameter lives within its call, while its caller waits, so it never is. Its consumer could rebuild in place what `param` still reads.
+    fn consumed_under(
+        &self,
+        module: &Module,
+        receiver: Receiver,
+        param: ValueId,
+        borrowed: &Borrowed,
+    ) -> bool {
+        let Receiver::ContParam(_, index) = receiver else {
+            return false;
+        };
+        self.transfers(module, receiver).iter().any(|args| {
+            let Some(Atom::Value(handed)) = args.get(index) else {
+                return false;
+            };
+            self.with_fields(*handed).iter().any(|value| {
+                self.consumed(*value, borrowed)
+                    .iter()
+                    .any(|point| self.live_after(module, *point, param))
+            })
+        })
+    }
+
+    /// Of the continuation parameters `borrowed` holds, those live where one of `rebuilds` writes into a value a jump hands them, or a field read off one: the rebuild would write what the parameter still reads.
+    fn rebuilt_under(
+        &self,
+        module: &Module,
+        rebuilds: &[Rebuild],
+        borrowed: &Borrowed,
+    ) -> Borrowed {
+        borrowed
+            .iter()
+            .filter(|receiver| matches!(receiver, Receiver::ContParam(..)))
+            .filter(|receiver| {
+                let param = receiver.param(module);
+                let Receiver::ContParam(_, index) = **receiver else {
+                    return false;
+                };
+                let held = self
+                    .transfers(module, **receiver)
+                    .iter()
+                    .filter_map(|args| match args.get(index) {
+                        Some(Atom::Value(handed)) => Some(self.with_fields(*handed)),
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect::<BTreeSet<_>>();
+                rebuilds
+                    .iter()
+                    .any(|rebuild| held.contains(&rebuild.of) && self.live_at(rebuild.node, param))
+            })
+            .copied()
+            .collect()
+    }
+
+    /// Whether whoever binds `value` must own it: it consumes it, captures it or rebuilds it, or must own a field of it that a rebuild could write, one that may be a row or a tuple, read from no payload's slot. A payload's slot carries its own sharing and nothing takes apart what it holds, so handing one on owns nothing of its holder.
     fn must_own(
         &self,
+        module: &Module,
         value: ValueId,
-        borrowed: &BTreeSet<(FunctionId, usize)>,
+        borrowed: &Borrowed,
         reused: &BTreeSet<ValueId>,
+        aggregates: &BTreeSet<ValueId>,
     ) -> bool {
         reused.contains(&value)
             || self.captured.contains(&value)
@@ -1572,7 +1792,12 @@ impl Shape {
                 .get(&value)
                 .into_iter()
                 .flatten()
-                .any(|field| self.must_own(*field, borrowed, reused))
+                .filter(|field| {
+                    aggregates.contains(field)
+                        && !slot_read(module, self, value, self.binder[field])
+                            .is_some_and(|slot| self.payload.contains(&slot))
+                })
+                .any(|field| self.must_own(module, *field, borrowed, reused, aggregates))
     }
 }
 
@@ -1623,7 +1848,7 @@ fn node_sites(node: &Node, own_return: ContinuationId) -> Vec<(ValueId, Site, Ed
             for (index, atom) in edge.args.iter().enumerate() {
                 let site = match edge.target == own_return {
                     true => Site::Return(index),
-                    false => Site::Jump(edge.target),
+                    false => Site::Jump(edge.target, index),
                 };
                 push(atom, site, None);
             }
@@ -1639,7 +1864,7 @@ fn node_sites(node: &Node, own_return: ContinuationId) -> Vec<(ValueId, Site, Ed
                 for (index, atom) in edge.args.iter().enumerate() {
                     let site = match edge.target == own_return {
                         true => Site::Return(index),
-                        false => Site::Jump(edge.target),
+                        false => Site::Jump(edge.target, index),
                     };
                     push(atom, site, Some((edge.target, key)));
                 }
@@ -1733,16 +1958,12 @@ enum Key {
 struct Facts<'s> {
     module: &'s Module,
     shape: &'s Shape,
-    borrowed: &'s BTreeSet<(FunctionId, usize)>,
+    borrowed: &'s Borrowed,
     shared: BTreeSet<ValueId>,
 }
 
 impl<'s> Facts<'s> {
-    fn solve(
-        module: &'s Module,
-        shape: &'s Shape,
-        borrowed: &'s BTreeSet<(FunctionId, usize)>,
-    ) -> Self {
+    fn solve(module: &'s Module, shape: &'s Shape, borrowed: &'s Borrowed) -> Self {
         let aggregates = &aggregates(module, shape);
         let sources = sources(module, shape, borrowed, &BTreeMap::new(), aggregates);
         let arities = module.return_arities();
@@ -1962,7 +2183,7 @@ impl<'s> Facts<'s> {
 fn sources(
     module: &Module,
     shape: &Shape,
-    borrowed: &BTreeSet<(FunctionId, usize)>,
+    borrowed: &Borrowed,
     assumed: &BTreeMap<FunctionId, BTreeSet<usize>>,
     aggregates: &BTreeSet<ValueId>,
 ) -> BTreeSet<Key> {
@@ -1997,7 +2218,7 @@ fn sources(
             }
             Def::Param(function, index) => {
                 shape.open.contains(function)
-                    || borrowed.contains(&(*function, *index))
+                    || borrowed.contains(&Receiver::Param(*function, *index))
                     || shape.calls.get(function).is_none_or(|calls| {
                         calls.iter().any(|call| {
                             let handed = match module.node(*call) {
@@ -2008,21 +2229,23 @@ fn sources(
                         })
                     })
             }
+            // A borrowed parameter reads what its holder keeps, so it is never the one name an object goes by.
             Def::ContParam(continuation, index) => {
-                shape
-                    .entries
-                    .get(continuation)
-                    .into_iter()
-                    .flatten()
-                    .any(|entry| {
-                        may_hold_a_row(entry.args.get(*index))
-                            && !arg_dead(
-                                shape,
-                                &entry.args[*index],
-                                &entry.args,
-                                Block::Cont(*continuation),
-                            )
-                    })
+                borrowed.contains(&Receiver::ContParam(*continuation, *index))
+                    || shape
+                        .entries
+                        .get(continuation)
+                        .into_iter()
+                        .flatten()
+                        .any(|entry| {
+                            may_hold_a_row(entry.args.get(*index))
+                                && !arg_dead(
+                                    shape,
+                                    &entry.args[*index],
+                                    &entry.args,
+                                    Block::Cont(*continuation),
+                                )
+                        })
                     || shape
                         .resumes
                         .get(continuation)

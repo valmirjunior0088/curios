@@ -1030,3 +1030,238 @@ fn a_child_read_before_its_holder_is_handed_on_is_written_into_by_nothing_the_ca
         assert_eq!(found.len(), rebuilt, "apart: {apart}: {found:?}\n{module}");
     }
 }
+
+/// How what a continuation's borrowed parameter reads could be written into while the parameter is live ([`written_while_read`]).
+#[derive(Clone, Copy, Debug)]
+enum Write {
+    /// The jump that binds the parameter hands a field read out of what it hands the parameter to an owned parameter beside it, which the continuation rebuilds.
+    Field,
+    /// The continuation hands the value it entered the parameter with to an owned parameter of a continuation it defines, which rebuilds it.
+    Jumped,
+    /// The continuation builds a `Pair` beside that value dying.
+    Built,
+}
+
+/// `main` builds two `Pair`s nothing else holds, `p` and `q`, each over a `Pair` of its own, reads `p`'s tag, and `q`'s where `apart`, and enters a continuation `k` with `p` at `a`, which `k` reads only by handing it to `peek`, a function reading its tag, after a write `write` names: into what `a` names, or, where `apart`, into what `q` holds.
+fn written_while_read(write: Write, apart: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let peek = module.reserve_function();
+    let peek_return = module.reserve_continuation();
+    let [s, s_slot] = ["s", "s_slot"].map(|name| module.add_value(Some(name.into())));
+
+    // `peek(s)`: read the tag and hand it back, a number that holds nothing a rebuild writes, so `peek` only reads what it is handed.
+    let peek_hands = module.add_node(Node::ApplyCont(Edge {
+        target: peek_return,
+        args: vec![Atom::Value(s_slot)],
+    }));
+    let peek_body = module.add_node(Node::LetIntrinsic {
+        result: s_slot,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(s)],
+        next: peek_hands,
+    });
+    module.define_function(
+        peek,
+        Function {
+            debug_name: Some("peek".into()),
+            params: vec![s],
+            return_cont: peek_return,
+            body: peek_body,
+            droppable: Droppable::Never,
+        },
+    );
+
+    let [x, inner_p, inner_q, p, q, p_tag, a, peeked] =
+        ["x", "inner_p", "inner_q", "p", "q", "p_tag", "a", "peeked"]
+            .map(|name| module.add_value(Some(name.into())));
+    let written = match apart {
+        true => q,
+        false => p,
+    };
+
+    // Within `k`, after the write: `peek(a)`, then a halt on what it read.
+    let exit = module.add_node(halt(vec![Atom::Value(peeked)]));
+    let after_peek = module.reserve_continuation();
+    module.define_continuation(
+        after_peek,
+        Continuation {
+            debug_name: None,
+            params: vec![peeked],
+            body: exit,
+        },
+    );
+    let call_peek = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(peek),
+        args: vec![Atom::Value(a)],
+        return_to: after_peek,
+    });
+    let peek_scope = module.add_node(Node::LetCont {
+        continuations: vec![after_peek],
+        body: call_peek,
+    });
+    // `target` read at its slot, and a `Pair` built of what it read beside it dying, then `next`.
+    let rebuild = |module: &mut Module, target: ValueId, next: NodeId| {
+        let [slot, built] = ["slot", "built"].map(|name| module.add_value(Some(name.into())));
+        let build = module.add_node(Node::LetValue {
+            result: built,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(slot)]),
+            next,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: slot,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(target)],
+            next: build,
+        })
+    };
+    let (params, args, k_body, held) = match write {
+        Write::Field => {
+            let [b, held] = ["b", "held"].map(|name| module.add_value(Some(name.into())));
+            let body = rebuild(&mut module, b, peek_scope);
+            (
+                vec![a, b],
+                vec![Atom::Value(p), Atom::Value(held)],
+                body,
+                Some(held),
+            )
+        }
+        Write::Jumped => {
+            let o = module.add_value(Some("o".into()));
+            let j = module.reserve_continuation();
+            let j_body = rebuild(&mut module, o, peek_scope);
+            module.define_continuation(
+                j,
+                Continuation {
+                    debug_name: Some("j".into()),
+                    params: vec![o],
+                    body: j_body,
+                },
+            );
+            let jump = module.add_node(Node::ApplyCont(Edge {
+                target: j,
+                args: vec![Atom::Value(written)],
+            }));
+            let body = module.add_node(Node::LetCont {
+                continuations: vec![j],
+                body: jump,
+            });
+            (vec![a], vec![Atom::Value(p)], body, None)
+        }
+        Write::Built => {
+            let built = module.add_value(Some("built".into()));
+            let body = module.add_node(Node::LetValue {
+                result: built,
+                value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+                next: peek_scope,
+            });
+            (vec![a], vec![Atom::Value(p)], body, None)
+        }
+    };
+    let k = module.reserve_continuation();
+    module.define_continuation(
+        k,
+        Continuation {
+            debug_name: Some("k".into()),
+            params,
+            body: k_body,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge { target: k, args }));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![k],
+        body: enter,
+    });
+
+    // `main`: `p` and `q`, `p` read as a `Pair` and `q` only where it is the one written, and for `Field` the field handed beside `p` read out of what is written.
+    let after_reads = match held {
+        Some(held) => module.add_node(Node::LetIntrinsic {
+            result: held,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(written)],
+            next: scope,
+        }),
+        None => scope,
+    };
+    let read_q = match (apart, write) {
+        (true, Write::Jumped | Write::Built) => {
+            let q_tag = module.add_value(Some("q_tag".into()));
+            module.add_node(Node::LetIntrinsic {
+                result: q_tag,
+                op: Intrinsic::RowGet(pair, 0),
+                args: vec![Atom::Value(q)],
+                next: after_reads,
+            })
+        }
+        _ => after_reads,
+    };
+    let read_p = module.add_node(Node::LetIntrinsic {
+        result: p_tag,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(p)],
+        next: read_q,
+    });
+    let build_q = module.add_node(Node::LetValue {
+        result: q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_q)]),
+        next: read_p,
+    });
+    let build_p = module.add_node(Node::LetValue {
+        result: p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner_p)]),
+        next: build_q,
+    });
+    let build_inner_q = module.add_node(Node::LetValue {
+        result: inner_q,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_p,
+    });
+    let build_inner_p = module.add_node(Node::LetValue {
+        result: inner_p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: build_inner_q,
+    });
+    let compute_x = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: build_inner_p,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![peek],
+        body: compute_x,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A continuation's parameter that only reads what it was handed is borrowed, and nothing writes into what it names while it is live: not an owned parameter the same jump hands a field read out of it, which the continuation rebuilds; not an owned parameter of a continuation it hands that value to, which rebuilds it; and not a construction beside that value dying. Each is written into where it is `q`'s, which nothing the parameter reads is. Mutation-checked, each write against the rule only it answers to: with a value handed to a borrowed parameter beside a field of it handed to an owned one left borrowed, `Field` rebuilds `p`'s inner `Pair`; with a value consumed while the parameter is live left borrowed, `Jumped` rebuilds `p`; and with the rebuilds the facts admit not read against the borrows, `Built` does.
+#[test]
+fn what_a_borrowed_continuation_parameter_reads_is_written_into_by_nothing_while_it_is_live() {
+    for write in [Write::Field, Write::Jumped, Write::Built] {
+        for (apart, rebuilt) in [(false, 0), (true, 1)] {
+            let module = written_while_read(write, apart);
+            assert_eq!(
+                rebuilds(&module).len(),
+                rebuilt,
+                "{write:?}, apart: {apart}\n{module}"
+            );
+        }
+    }
+}
