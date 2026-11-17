@@ -1,5 +1,5 @@
 use /std/{Bool, Option, Eq, Map};
-use /std/Set/{Set, empty, insert, remove, union};
+use /std/Set/{Set, empty, insert, remove, union, intersection, difference};
 
 --- Whether `k` is an element.
 pub let has(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Bool =
@@ -67,6 +67,40 @@ pub let of_union(
     Eq/trans(
         held(Map/try_get/of_union(a.map, b.map, k)),
         either(Map/try_get(a.map, k), Map/try_get(b.map, k)));
+
+-- Whether an option a condition filters holds a value: whether it held one and the condition holds.
+let kept(
+    @A: Type,
+    x: Option(A),
+    c: Bool,
+) -> Eq()(Option/is_some(Option/filter(x, (_: A) => c)), Option/is_some(x) && c) =
+    match x
+    | some(_) | none() => match c | true | false => Eq/refl() end
+    end;
+
+--- An element of `intersection` is an element of both.
+pub let of_intersection(
+    @K: Type,
+    use Map/Key(K),
+    a: Set(K),
+    b: Set(K),
+    k: K,
+) -> Eq()(has(intersection(a, b), k), has(a, k) && has(b, k)) =
+    Eq/trans(
+        held(Map/try_get/of_intersection(a.map, b.map, k)),
+        kept(Map/try_get(a.map, k), Map/has(b.map, k)));
+
+--- An element of `difference` is an element of the first and no element of the second.
+pub let of_difference(
+    @K: Type,
+    use Map/Key(K),
+    a: Set(K),
+    b: Set(K),
+    k: K,
+) -> Eq()(has(difference(a, b), k), has(a, k) && Bool/not(has(b, k))) =
+    Eq/trans(
+        held(Map/try_get/of_difference(a.map, b.map, k)),
+        kept(Map/try_get(a.map, k), Bool/not(Map/has(b.map, k))));
 
 -- Two options of the unit type that agree on whether they hold a value are one option: the value each holds is `()`.
 let held_once(

@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, Option, List, Eq, Hash, Bytes};
 use /std/List/{Member};
-use /std/Map/{Map, Key, Rooted, Grounded, grounded, empty, insert, remove, map, union, filter,
-    update, to_list};
+use /std/Map/{Map, Key, Rooted, Grounded, grounded, empty, has, insert, remove, map, union, filter,
+    intersection, difference, update, to_list};
 use /std/Map/internal/{Node};
 use /std/Map/bits/{bit, Apart};
 
@@ -491,6 +491,32 @@ pub let of_filter(
     | none() => Eq/refl()
     | some(n) => kept_all(n, grounded(m.rooted), pred, empty(), key)
     end;
+
+--- `intersection` has at every key the first map's value where the second has an entry there, and none otherwise.
+pub let of_intersection(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @W: Type,
+    a: Map(K, V),
+    b: Map(K, W),
+    key: K,
+) -> Eq()(try_get(intersection(a, b), key), Option/filter(try_get(a, key), (_: V) => has(b, key))) =
+    of_filter(a, (k: K, _: V) => has(b, k), key);
+
+--- `difference` has at every key the first map's value where the second has no entry there, and none otherwise.
+pub let of_difference(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @W: Type,
+    a: Map(K, V),
+    b: Map(K, W),
+    key: K,
+) -> Eq()(
+    try_get(difference(a, b), key),
+    Option/filter(try_get(a, key), (_: V) => Bool/not(has(b, key)))) =
+    of_filter(a, (k: K, _: V) => Bool/not(has(b, k)), key);
 
 --- `update` sets the value at its key to what `f` answers of the value there.
 pub let of_update(

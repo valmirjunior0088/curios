@@ -220,6 +220,28 @@ pub let filter(@K: Type, use Key(K), @V: Type, m: Map(K, V), pred: (K, V) -> Boo
 pub let union(@K: Type, use Key(K), @V: Type, a: Map(K, V), b: Map(K, V)) -> Map(K, V) =
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
+--- The entries of `a` at a key `b` has an entry at. `b`'s values are not read, so it may hold any.
+pub let intersection(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @W: Type,
+    a: Map(K, V),
+    b: Map(K, W),
+) -> Map(K, V) =
+    filter(a, (k: K, _: V) => has(b, k));
+
+--- The entries of `a` at a key `b` has no entry at. `b`'s values are not read, so it may hold any.
+pub let difference(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @W: Type,
+    a: Map(K, V),
+    b: Map(K, W),
+) -> Map(K, V) =
+    filter(a, (k: K, _: V) => Bool/not(has(b, k)));
+
 --- `m`, built under the dictionary `from`, as a map under the one in scope. Every entry is inserted again, since the shape of a trie is its dictionary's.
 pub let rekey(@K: Type, @from: Key(K), use Key(K), @V: Type, m: Map(K, use from, V)) -> Map(K, V) =
     fold(@K, use from, m, empty(), (k, v, acc) => insert(acc, k, v));

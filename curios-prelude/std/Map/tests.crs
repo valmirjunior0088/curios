@@ -389,3 +389,49 @@ test a_set_stores_its_keys_typed_and_unions =
         Test/equal(
             Set/fold(Set/of_list(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc),
             6)]);
+
+-- An intersection keeps the first map's entries at the keys the second has, and a difference the rest, whatever the second's values are; a set's are its map's.
+test intersection_and_difference_part_the_first_map_by_the_seconds_keys =
+    let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
+    let keys: Map(Str, Bool) = Map/of_list([("b", true), ("c", false), ("z", true)]);
+    let s = Set/of_list(["a", "b", "c"]);
+    let t = Set/of_list(["b", "c", "d"]);
+    Test/all([
+        Test/equal(Map/intersection(m, keys), Map/of_list([("b", 2), ("c", 3)])),
+        Test/equal(Map/difference(m, keys), Map/of_list([("a", 1)])),
+        Test/equal(Set/intersection(s, t), Set/of_list(["b", "c"])),
+        Test/equal(Set/difference(s, t), Set/of_list(["a"]))]);
+
+-- An intersection and a difference by one map part another: their union is that map, decided by reduction.
+let _an_intersection_and_a_difference_part_a_map: Eq()(
+    Map/union(
+        Map/intersection(
+            Map/of_list([(1, "a"), (2, "b"), (300, "c")]),
+            Map/of_list([(2, ()), (4, ())])),
+        Map/difference(
+            Map/of_list([(1, "a"), (2, "b"), (300, "c")]),
+            Map/of_list([(2, ()), (4, ())]))),
+    Map/of_list([(1, "a"), (2, "b"), (300, "c")])) =
+    Eq/refl();
+
+-- No element of an intersection is an element of the difference by the same set, for every two sets: the laws state each as the two decisions at the key, false together in every case.
+let _an_intersection_and_a_difference_share_no_element(
+    @K: Type,
+    use Map/Key(K),
+    a: Set(K),
+    b: Set(K),
+    k: K,
+) -> Eq()(Set/has(Set/intersection(a, b), k) && Set/has(Set/difference(a, b), k), false) =
+    let apart(x: Bool, y: Bool) -> Eq()(x && y && (x && Bool/not(y)), false) =
+        match x
+        | true | false => match y | true | false => Eq/refl() end
+        end;
+    Eq/trans(
+        Eq/cong(
+            (x: Bool) => x && Set/has(Set/difference(a, b), k),
+            Set/has/of_intersection(a, b, k)),
+        Eq/trans(
+            Eq/cong(
+                (y: Bool) => Set/has(a, k) && Set/has(b, k) && y,
+                Set/has/of_difference(a, b, k)),
+            apart(Set/has(a, k), Set/has(b, k))));
