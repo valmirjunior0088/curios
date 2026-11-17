@@ -15,7 +15,7 @@ use {
         error::{ContextKind, ContextValue, ErrorKind},
         value_parser,
     },
-    curios_common::{Code, Qualifier, Report},
+    curios_common::{Code, Qualifier, Report, nearest},
     curios_elab::DEFAULT_BUDGET,
     curios_package::{FormatSettings, Refused, Target},
     curios_pipeline::Stage,
@@ -657,11 +657,12 @@ impl CommandFactory for Cli {
 
 /// What a line that does not parse is refused for, as a report: the tag of the refusal, what was written and what would have been taken, read off what clap kept of its own refusal, and the command whose help says what it takes. `words` are the line's, which is where the command it names is read from.
 ///
-/// **Read off the refusal's parts, never its text.** Clap keeps what a refusal is of as data — the argument, the value, the nearest it knows — and words it for a reader of its own; the parts are what a report is built from, so a release that rewords its message changes nothing here.
+/// **Read off the refusal's parts, never its text.** Clap keeps what a refusal is of as data — the argument, the value — and words it for a reader of its own; the parts are what a report is built from, so a release that rewords its message changes nothing here. A near miss is offered by the rule every report offering a name follows, `nearest`, over the names the command takes, rather than by clap's own measure, which offers `format` for `frobnicate`.
 pub fn refused(error: &Error, words: &[OsString]) -> Box<Report> {
-    // The command the line names, as far down as its words name one: `curios pin dependency`.
-    let root = Cli::command();
-    let (named, _) = words.iter().skip(1).filter_map(|word| word.to_str()).fold(
+    // The command the line names, as far down as its words name one: `curios pin dependency`. Built, so each command holds what clap adds to it, `--help` and the global flags among them, which a near miss may have meant.
+    let mut root = Cli::command();
+    root.build();
+    let (named, command) = words.iter().skip(1).filter_map(|word| word.to_str()).fold(
         ("curios".to_string(), &root),
         |(named, command), word| match command.find_subcommand(word) {
             Some(below) => (format!("{named} {word}"), below),
@@ -684,9 +685,13 @@ pub fn refused(error: &Error, words: &[OsString]) -> Box<Report> {
     };
     // An argument as clap names it carries the placeholder of its value, `--output <PATH>`: the flag is its first word.
     let flag = |argument: &str| argument.split(' ').next().unwrap_or_default().to_string();
-    let nearest = |refused: Refused, kind| match texts(kind) {
-        near if near.is_empty() => refused,
-        near => refused.stating(format_args!("the nearest: {}", quoted(near))),
+    // The name the house's rule finds nearest to `written` among `candidates`, the one every report suggesting a name follows, rather than clap's own.
+    let suggesting = |refused: Refused, written: &str, candidates: Vec<String>| match nearest(
+        written,
+        candidates.iter().map(String::as_str),
+    ) {
+        Some(near) => refused.stating(format_args!("the nearest: {}", Code(near))),
+        None => refused,
     };
 
     let argument = text(ContextKind::InvalidArg);
@@ -695,19 +700,27 @@ pub fn refused(error: &Error, words: &[OsString]) -> Box<Report> {
             let word = text(ContextKind::InvalidSubcommand);
 
             (
-                nearest(
+                suggesting(
                     Refused::of("unknown command")
                         .stating(format_args!("`{word}` is no command of `{named}`")),
-                    ContextKind::SuggestedSubcommand,
+                    &word,
+                    command
+                        .get_subcommands()
+                        .map(|below| below.get_name().to_string())
+                        .collect(),
                 ),
                 word,
             )
         }
         ErrorKind::UnknownArgument if argument.starts_with('-') => (
-            nearest(
+            suggesting(
                 Refused::of("unknown flag")
                     .stating(format_args!("`{argument}` is no flag of `{named}`")),
-                ContextKind::SuggestedArg,
+                &argument,
+                command
+                    .get_arguments()
+                    .filter_map(|known| Some(format!("--{}", known.get_long()?)))
+                    .collect(),
             ),
             argument,
         ),

@@ -273,7 +273,15 @@ fn a_line_that_does_not_parse_is_refused_as_a_report() {
     for (words, expected) in [
         (
             vec!["curios", "rnu"],
-            "unknown command\n│  `rnu` is no command of `curios`\n├─ try; curios --help\n└─ [error] rnu",
+            "unknown command\n│  `rnu` is no command of `curios`\n│  the nearest: `run`\n├─ try; curios --help\n└─ [error] rnu",
+        ),
+        (
+            vec!["curios", "frobnicate"],
+            "unknown command\n│  `frobnicate` is no command of `curios`\n├─ try; curios --help\n└─ [error] frobnicate",
+        ),
+        (
+            vec!["curios", "wonder", "--stag", "core"],
+            "unknown flag\n│  `--stag` is no flag of `curios wonder`\n│  the nearest: `--stage`\n├─ try; curios wonder --help\n└─ [error] --stag",
         ),
         (
             vec!["curios", "run", "--colour", "x"],
