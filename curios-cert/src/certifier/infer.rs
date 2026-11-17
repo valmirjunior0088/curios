@@ -617,7 +617,7 @@ fn check_cases(
             certifier.assume_guard(sized, &value)?;
             let mut solutions = Vec::new();
             assumed = eliminate::assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
-            certifier.assume_arm(sized, &value)?;
+            certifier.assume_arm(sized, &value, &[])?;
             eliminate::bind_solutions(certifier, &solutions)?;
 
             check(certifier, body, &expected)
@@ -764,7 +764,7 @@ fn check_free_monoid(
                     &cons_value,
                     &mut solutions,
                 )?;
-                certifier.assume_arm(sized, &size_value)?;
+                certifier.assume_arm(sized, &size_value, &names)?;
                 eliminate::bind_solutions(certifier, &solutions)?;
 
                 check(certifier, body, &expected)

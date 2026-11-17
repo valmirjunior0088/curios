@@ -30,7 +30,7 @@ fn readable(term: &Term) -> bool {
 /// Each nested `match` on a binder introduced by an outer arm adds one level — `/std/Str/utf8`'s `advanced` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
 pub const EXPAND_FUEL: usize = 16;
 
-/// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm, and for nothing where the scrutinee is an expression.
+/// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm. Where the scrutinee is an expression no binder stands for the case, and the case's own binders stand below the expression's value instead (`below_scrutinee`).
 ///
 /// **An index inversion's solutions are no part of it.** A solution is an equation conversion concluded — [`solve_indices`](crate::solve_indices) is the one analysis that borrows a driver's conversion — and at a `Prop`-sorted type conversion is proof irrelevance, which every proof of a proposition satisfies. A target holding a proposition's constructor is therefore one spelling of the scrutinee among all of them, and a payload read below the binder through it grades below a value no reduction took apart. The size order reads what reduction took apart and nothing conversion concluded, which is the line [`Env::force`] already draws by reducing plainly.
 ///
@@ -39,6 +39,17 @@ pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
     match &**scrutinee {
         Subterm::Var(var) => var.as_free().cloned(),
         _ => None,
+    }
+}
+
+/// The shape each binder an arm opens stands at where its scrutinee is an expression, the expression read as `scrutinee`: strictly below the value the expression reads at or below, a case's binders being its value's children. `None` where the expression reads at or below no value a call is measured against, and the binders stand for nothing.
+///
+/// A case of an expression takes apart the expression's value as a case of a binder takes apart the binder's, so its binders stand below that value as a binder's payloads stand below the binder: a payload of a case on `x.next` is below `x`. The expression is read as a graded call reads its arguments, so nothing an index inversion concluded enters through it.
+pub fn below_scrutinee(scrutinee: &Shape) -> Option<Shape> {
+    match scrutinee {
+        Shape::Atom(_) => Some(Shape::smaller(scrutinee.clone())),
+        Shape::Smaller(below) | Shape::AtMost(below) => Some(Shape::Smaller(below.clone())),
+        Shape::Node(..) | Shape::UnaryRun { .. } | Shape::ElemRun { .. } | Shape::Opaque => None,
     }
 }
 
@@ -99,18 +110,38 @@ impl SizeContext {
         Ok(())
     }
 
-    /// [`SizeContext::enter`] with the refinement already a shape — the discovery walk builds an arm's shape from the binders it opened.
+    /// Enter an arm whose scrutinee is an expression: each of `binders`, the case's own, stands below the value `scrutinee` reads at or below (`below_scrutinee`), `scrutinee` read against the context as it stands before the arm. A read the budget refuses opens nothing, as [`SizeContext::enter`]'s does.
+    pub fn enter_below<E: Env>(
+        &mut self,
+        env: &mut E,
+        scrutinee: &Term,
+        binders: &[Free],
+    ) -> Result<(), E::Error> {
+        let shape = Grader::new(env, self).shape_of(scrutinee)?;
+        let refines = below_scrutinee(&shape)
+            .map(|below| {
+                binders
+                    .iter()
+                    .map(|binder| (*binder, below.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.open(refines, None, Vec::new());
+        Ok(())
+    }
+
+    /// [`SizeContext::enter`] with each refinement already a shape — the discovery walk builds an arm's shape from the binders it opened.
     ///
     /// The three kinds of scoped knowledge open together because they close together: a boolean arm refines its scrutinee *and* rules out zero, an inductive arm refines its scrutinee *and* binds payloads, and one bracket is one thing to keep balanced instead of three.
     pub(super) fn open(
         &mut self,
-        refine: Option<(Free, Shape)>,
+        refines: impl IntoIterator<Item = (Free, Shape)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
     ) {
         // A binder that stands for another, bare — a lambda's binder applied on the spot to it — is one value with it wherever the lambda's body runs, so a case refining the one refines the other in the same bracket.
         let mut refined = Vec::new();
-        if let Some((binder, shape)) = refine {
+        for (binder, shape) in refines {
             let mut next = Some(binder);
             while let Some(binder) = next.take() {
                 next = match self.refined.get(&binder) {

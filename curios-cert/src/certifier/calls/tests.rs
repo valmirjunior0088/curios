@@ -442,3 +442,25 @@ fn a_guard_after_an_inversion_rules_zero_out_of_the_variable_a_call_names() {
 
     assert!(infer(&mut certifier, &group).is_ok());
 }
+
+/// A case of an expression takes its value apart as a case of a binder does, so the binders it opens are below the value the expression reads at: a payload of a case on `x.next` is below `x`, and the call on it descends. Mutation-checked: with an expression's case refining nothing, the payload stands for no value below `x`, and the group is refused.
+#[test]
+fn a_case_on_a_field_takes_apart_what_is_below_the_record() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        "induct /Opt(A: Type): pub Type\n| none()\n| some(a: A)\nend\nstruct /S: pub Type { next: #{node = InductType} /Opt(#{node = StructType} /S()) }",
+    );
+    let group = |call: &str| {
+        term(&fill!(
+            "#{node = Rec} (let f: (x: #{node = StructType} /S()) -> Type = (x: #{node = StructType} /S()) => #{goal = Type} match #{field = Struct(/S, 0)} x.0 | none() => #NatType | some(y) => ${call} end; f)",
+            call
+        ))
+    };
+
+    assert!(infer(&mut certifier, &group("f(y)")).is_ok());
+    assert!(matches!(
+        infer(&mut certifier, &group("f(x)")),
+        Err(Error::NotDescending { .. }),
+    ));
+}

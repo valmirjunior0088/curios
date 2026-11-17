@@ -233,6 +233,29 @@ fn a_field_of_the_proposition_matched_is_below_the_proof_it_was_taken_from() {
     });
 }
 
+// A case of an expression takes its value apart as a case of a binder does, so the binders it opens are below the value the expression reads at: a payload of a case on `x.next` is below `x`, and `F(y)` descends where it is reached by a type. The refusal hands `F` back `x` itself, which the elaborator raises where `F` is declared, so the certifier's refusal of it is its own suite's (`certifier::calls::tests`, under this name).
+#[test]
+fn a_case_on_a_field_takes_apart_what_is_below_the_record() {
+    control(
+        r#"
+        use /std/{Option};
+
+        struct S: Type { next: Option(S) }
+
+        let F(x: S) -> Type = match x.next | none() => {} | some(y) => F(y) end;
+
+        let g(x: S, y: F(x)) -> F(x) = y;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| some(y) => F(y) end", "| some(y) => F(x) end")])
+    .by_elaborator_in("/F", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    });
+}
+
 // A structure that holds itself through its fields alone has no finite value, and a field of one reads strictly below it, so a recursion on its fields descends without end on the open value a type is reduced under: `F(x) = F(x.next)` over `struct S { next: S }` unfolds `x.next.next…` wherever `F(x)` stands in a type, until the budget refuses it. It is refused where it is declared, in each way a path back through fields alone is spelled: a field of its own type, a component of a tuple, a parameter another structure holds at a field, and its own declaration at arguments its field grows, which the walk meets on its first step. The control holds itself through a family at each of those places, and through a list beside them, and stands; the certifier's twin is `recheck::positivity_tests`'s test of this name.
 #[test]
 fn a_record_holding_itself_through_fields_alone_is_refused() {

@@ -2,7 +2,7 @@
 //!
 //! Like the erased positions, this is the certifier's *output*, collected during the typing walk because that is the only place the answer is available. A group's members are assumed under fresh locals while its bodies are checked (`check_group`), so a recursive call, as the certifier types it, is an application whose spine head is one of those locals, and every such application the walk types is a call it records. What the walk types is every position it accepts, which is what makes the set fail closed where a separate traversal fails open: a position that traversal never visits contributes no edge, and a group with no edges is accepted.
 //!
-//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
+//! **Graded when recorded.** A call is graded by the shared [`grade`] once its arguments are typed, against the caller's parameters as the member's leading lambdas bound them, under a [`SizeContext`] the arms enclosing the call built: each arm's own case, where it scrutinizes a binder, its binders below the value it scrutinizes, where it scrutinizes an expression, and nothing its index inversion solved ([`Certifier::assume_arm`]) — its payload binders, the nonzero facts a boolean or switch arm establishes, and, where a lambda is applied on the spot, each of its binders standing for its argument. The context lives in the certifier's scope brackets: `Certifier::scoped` marks it and retracts it with the binders, so an arm's knowledge leaves with the arm on every path.
 //!
 //! **Closed per group.** When `check_group` has checked every body, the group's calls close to a verdict through the shared [`decide`] — the local gate's, and the one obligations (T) and (V) read for the group, an inline one included. A group the walk never typed has no verdict, and a reader takes that as `Partial`.
 
@@ -617,17 +617,32 @@ impl Certifier<'_> {
         self.enter_size(Some((*binder, value)), None, Vec::new())
     }
 
-    /// What an arm that scrutinizes `scrutinee` at `value` establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, the arm's own spelling of the case.
+    /// What an arm that scrutinizes `scrutinee` at `value`, opening `binders`, establishes, within its bracket: the scrutinee, where it is a binder, stands for `value`, the arm's own spelling of the case, and where it is an expression, each of `binders` stands below the expression's value ([`SizeContext::enter_below`]).
     ///
     /// Nothing the arm's index inversion solved enters the size order, for the reason [`refined_by_arm`] states; what it solves still specializes the arm for typing, which `bind_solutions` binds.
-    pub(super) fn assume_arm(&mut self, scrutinee: &Term, value: &Term) -> Result<(), Error> {
+    pub(super) fn assume_arm(
+        &mut self,
+        scrutinee: &Term,
+        value: &Term,
+        binders: &[Free],
+    ) -> Result<(), Error> {
         if !self.recording() {
             return Ok(());
         }
-        if let Some(binder) = refined_by_arm(scrutinee) {
-            self.refine_size(&binder, value)?;
+        match refined_by_arm(scrutinee) {
+            Some(binder) => self.refine_size(&binder, value),
+            None if binders.is_empty() => Ok(()),
+            None => self.below_size(scrutinee, binders),
         }
-        Ok(())
+    }
+
+    /// Within the current bracket, each of `binders` stands below the value the expression `scrutinee` reads at, as [`Certifier::enter_size`] enters a refinement.
+    fn below_size(&mut self, scrutinee: &Term, binders: &[Free]) -> Result<(), Error> {
+        let mut context = mem::take(&mut self.calls.context);
+        let entered = context.enter_below(self, scrutinee, binders);
+        self.calls.context = context;
+        self.memos.begin_sizes();
+        entered
     }
 
     /// What a boolean arm taken at `value` establishes about the comparison `scrutinee` makes, within its bracket: the binder it rules zero out for. The comparison is handed as a graded call reads it, as [`Certifier::assume_arm`]'s scrutinee is: a binder an index inversion solved stands as written, so zero is ruled out of the binder a call names, and nothing an inversion concluded enters the size order.

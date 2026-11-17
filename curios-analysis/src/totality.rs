@@ -612,15 +612,41 @@ impl<E: Env> Walk<'_, E> {
     /// Take on what an arm establishes, walk its body under it, and put it back.
     fn scoped(
         &mut self,
-        refine: Option<(Free, Shape)>,
+        refines: impl IntoIterator<Item = (Free, Shape)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
         body: &Term,
     ) -> Result<(), E::Error> {
-        self.context.open(refine, nonzero, payloads);
+        self.context.open(refines, nonzero, payloads);
         self.walk_term(body)?;
         self.context.exit();
         Ok(())
+    }
+
+    /// What an arm whose case opens `binders` refines: the binder its scrutinee is, to the case's `shape`, or where the scrutinee `head` is an expression, each of `binders` to below the expression's value ([`below_scrutinee`]), read in the arm's own call.
+    fn arm_refines(
+        &mut self,
+        head: &Term,
+        scrutinee: Option<Free>,
+        shape: Shape,
+        binders: &[Free],
+    ) -> Result<Vec<(Free, Shape)>, E::Error> {
+        if let Some(scrutinee) = scrutinee {
+            return Ok(vec![(scrutinee, shape)]);
+        }
+        if binders.is_empty() {
+            return Ok(Vec::new());
+        }
+        let below = below_scrutinee(&self.grader().shape_of(head)?);
+
+        Ok(below
+            .map(|below| {
+                binders
+                    .iter()
+                    .map(|binder| (*binder, below.clone()))
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     /// Walk each of `terms`, in order.
@@ -731,7 +757,8 @@ impl<E: Env> Walk<'_, E> {
                         Tag::Variant(tag.clone()),
                         binders.iter().map(|b| Shape::Atom(*b)),
                     );
-                    self.scoped(refine(scrutinee, shape), None, binders, &body)?;
+                    let refines = self.arm_refines(head, scrutinee, shape, &binders)?;
+                    self.scoped(refines, None, binders, &body)?;
                 }
                 if let Some(default) = default {
                     self.walk_term(default)?;
@@ -751,7 +778,8 @@ impl<E: Env> Walk<'_, E> {
                     self.empty_arm(&scrutinee, Carriers::Unary, empty_case)?;
                     let (binders, body) = self.open_one(cons_case);
                     let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
-                    self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)?;
+                    let refines = self.arm_refines(head, scrutinee, shape, &binders)?;
+                    self.scoped(refines, None, Vec::new(), &body)?;
                 }
                 Carrier::Bytes {
                     empty_case,
@@ -759,7 +787,7 @@ impl<E: Env> Walk<'_, E> {
                     ..
                 } => {
                     self.empty_arm(&scrutinee, Carriers::Bytes, empty_case)?;
-                    self.elem_cons(scrutinee, Carriers::Bytes, cons_case)?;
+                    self.elem_cons(head, scrutinee, Carriers::Bytes, cons_case)?;
                 }
                 Carrier::List {
                     elem,
@@ -768,7 +796,7 @@ impl<E: Env> Walk<'_, E> {
                 } => {
                     self.walk_term(elem)?;
                     self.empty_arm(&scrutinee, Carriers::List, empty_case)?;
-                    self.elem_cons(scrutinee, Carriers::List, cons_case)?;
+                    self.elem_cons(head, scrutinee, Carriers::List, cons_case)?;
                 }
             },
         }
@@ -786,9 +814,10 @@ impl<E: Env> Walk<'_, E> {
         self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
 
-    /// The cons arm of a `Bytes`/`List` case split, binding the generator and the tail.
+    /// The cons arm of a `Bytes`/`List` case split of `head`, binding the generator and the tail.
     fn elem_cons(
         &mut self,
+        head: &Term,
         scrutinee: Option<Free>,
         carriers: Carriers,
         cons_case: &Scope<Two>,
@@ -799,7 +828,8 @@ impl<E: Env> Walk<'_, E> {
             vec![Shape::Atom(binders[0])],
             Shape::Atom(binders[1]),
         );
-        self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)
+        let refines = self.arm_refines(head, scrutinee, shape, &binders)?;
+        self.scoped(refines, None, Vec::new(), &body)
     }
 
     fn step(&mut self, term: &Term) -> Result<(), E::Error> {

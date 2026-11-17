@@ -166,7 +166,7 @@ fn check_arm(
                 let checked = certifier.tried(|certifier| {
                     assumed = assume_case_value(certifier, scrutinee, &value, &mut solutions)?;
                     // What the call recorder grades under within the arm: the case the arm names, and the payload binders — an application of one reads as the payload it came from.
-                    certifier.assume_arm(sized, &value)?;
+                    certifier.assume_arm(sized, &value, binders)?;
                     certifier.assume_payloads(binders)?;
 
                     let refs = payload.iter().collect::<Vec<_>>();
