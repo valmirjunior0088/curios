@@ -41,3 +41,4 @@ mod totality_partiality;
 mod totality_projection;
 mod totality_proof_release;
 mod totality_record;
+mod totality_standing;

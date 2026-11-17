@@ -244,3 +244,14 @@ fn a_call_in_a_carriers_element_type_is_recorded() {
         Err(Error::NotDescending { .. }),
     ));
 }
+
+/// A lambda applied on the spot to a `let`-bound local stands for what the `let` stands for, as every graded call reads the local: in `let u = n; ((x) => match x | 0 => … | pred + 1 => f(pred) end)(u)` the arm takes `n` apart, so the call descends. Mutation-checked: with `infer_telescope` handing `refine_size` the argument as written, `x` stands for `u`, which no graded call names, and the group is refused.
+#[test]
+fn a_lambda_applied_to_a_let_bound_local_stands_for_what_the_let_stands_for() {
+    let body = fill!(
+        "let u: #NatType = n; ((x: #NatType) => ${split})(u)",
+        split = split("x", "f(pred)")
+    );
+
+    assert!(infer(&mut certifier(), &group(&body)).is_ok(), "{body}");
+}

@@ -1238,8 +1238,10 @@ fn infer_telescope(
             infer_type(certifier, &domain)?;
 
             let binder = certifier.advance_assumed(&mut cursor, &domain);
+            // The binder stands for its argument as a graded call reads it, a `let`-bound local by what it stands for, so what an arm rules of the binder reaches the parameter a call is graded against.
             if let Some(argument) = arguments.get(entries.len()) {
-                certifier.refine_size(&binder, argument)?;
+                let graded = certifier.graded(argument);
+                certifier.refine_size(&binder, &graded)?;
             }
             entries.push((mark, binder, domain));
         }
