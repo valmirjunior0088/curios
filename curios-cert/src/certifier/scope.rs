@@ -7,7 +7,7 @@
 use {
     curios_analysis::{could_reduce_to, reads_solved, records_case_equation},
     curios_core::{Free, Term},
-    std::{collections::HashMap, iter},
+    std::collections::HashMap,
 };
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
@@ -295,24 +295,28 @@ impl Scope {
     ///
     /// **The recorded equation steps aside rather than standing beside its instance.** Nothing a reader in the arm is handed names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
     ///
-    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it, names one, read through to the end ([`reads_solved`]). Binding a solved variable re-types the first kind of local and binds the second again (`Certifier::bind`), and a settlement reads both, a `let` by its value and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
+    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it or `member_value` knows it as a member of a group being checked, names one, read through to the end ([`reads_solved`]). Binding a solved variable re-types the first kind of local and binds the second again (`Certifier::bind`), and a settlement reads all three, a `let` by its value, a member known to terminate by its selection and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
-    pub fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
+    pub fn restate(
+        &mut self,
+        solutions: &[(Free, Term)],
+        member_value: impl Fn(&Free) -> Option<Term>,
+    ) -> Vec<(Term, Term)> {
         assert!(
             self.hidden.is_none(),
             "an arm's solution restated while an equation's reduced spelling was being settled"
         );
 
-        // A local's type is held by value, and so is a `let`'s value, so neither names a `let` the reading would have to follow further.
-        let reads = |name: &Free| match self.innermost.get(name) {
-            Some(&at) => {
-                let local = &self.locals[at];
-                iter::once(local.type_.clone())
-                    .chain(local.value.as_ref().map(|value| value.term.clone()))
-                    .collect()
-            }
-            None => Vec::new(),
+        // A local's type is held by value, and so is a `let`'s value, so neither names a `let` the reading would have to follow further; a member's selection names the locals its group's bodies captured.
+        let reads = |name: &Free| {
+            let local = self.innermost.get(name).map(|&at| &self.locals[at]);
+            local
+                .map(|local| local.type_.clone())
+                .into_iter()
+                .chain(local.and_then(|local| local.value.as_ref().map(|value| value.term.clone())))
+                .chain(member_value(name))
+                .collect::<Vec<_>>()
         };
         let solved = |term: &Term| reads_solved(term, solutions, &reads);
         let restating = self

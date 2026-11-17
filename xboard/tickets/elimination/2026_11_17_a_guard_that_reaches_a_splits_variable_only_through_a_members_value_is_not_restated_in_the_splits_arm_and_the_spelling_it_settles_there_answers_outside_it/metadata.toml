@@ -1,5 +1,5 @@
 title = "A guard that reaches a split's variable only through a member's value is not restated in the split's arm, and the spelling it settles there answers outside it"
-status = "open"
+status = "fixed"
 
 [[witness]]
 what = "a guard over two calls of a local member whose body captures the locals a split re-types, settled in the split's true arm and answered after the split"

@@ -10,8 +10,8 @@ use {
     curios_analysis::{reads_solved, records_case_equation},
     curios_common::Plicity,
     curios_core::{
-        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Term, Universes,
-        project_erased_universes,
+        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
+        Universes, project_erased_universes,
     },
     std::rc::Rc,
 };
@@ -335,7 +335,7 @@ impl<'s> Context<'s> {
     ///
     /// **The recorded equation steps aside, as the certifier's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
     ///
-    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, read through to the end (`curios_analysis::reads_solved`, the rule the certifier restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
+    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, or a member of a group being checked whose body names it once reduction reads through its slot, read through to the end (`curios_analysis::reads_solved`, the rule the certifier restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
     ///
     /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
     fn restate_equations(&mut self, name: &Free, value: &Term) {
@@ -343,15 +343,22 @@ impl<'s> Context<'s> {
             return;
         }
         let solution = [(*name, value.clone())];
-        // Each read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable.
+        // Each read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable. A member of a group being checked is defined as its slot, which zonk spells as the member, so a slot reduction reads through — its member known to terminate — is read through here too, its body naming the locals the group captured.
         let reads = |local: &Free| -> Vec<Term> {
             if !curios_analysis::Env::is_local(self, local) {
                 return Vec::new();
             }
+            let member = self.definition_body(local).and_then(|body| match &**body {
+                Subterm::Metavar(slot) if !self.is_withheld_rec_slot(slot.id) => {
+                    self.resolve_metavar(slot)
+                }
+                _ => None,
+            });
             self.assumption(local)
                 .into_iter()
                 .chain(self.definition_body(local))
                 .map(|read| zonk_solved_term_metas(self, read))
+                .chain(member)
                 .collect()
         };
         let named = self

@@ -1135,7 +1135,10 @@ impl<'s> Certifier<'s> {
 
     /// Restate the equations in force under an arm's solution, answering the restated ones ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
     pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
-        let restated = self.scope.restate(solutions);
+        let calls = &self.calls;
+        let restated = self
+            .scope
+            .restate(solutions, |name| calls.member_value(name));
         if !restated.is_empty() {
             self.memos.begin_equations();
         }
