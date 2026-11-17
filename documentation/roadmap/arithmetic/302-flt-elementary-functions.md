@@ -2,7 +2,7 @@
 
 **Not refined yet.** Each function waits for its own consumer. The next delivery is one named function, with its signatures, rounding and exception contracts, recipe, boundary detection and independent reference settled before implementation. That consumer releases no other function; shared machinery is built only as that delivery needs it.
 
-This specification reserves the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. [Alternate exception handling](304-flt-exception-handling.md) is a separate, independently retirable capability. The float laws — the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) identities and `/std/Flt`'s theorems over the bits, `eq_of_le_bytes` and `total_key_injective` — are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. It waits for a consumer, and it runs at run time alone (*Termination*, below).
+This specification reserves the correctly rounded elementary functions IEEE 754-2019 §9.2 recommends. The float laws — the [declared](../../design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md) identities and `/std/Flt`'s theorems over the bits, `eq_of_le_bytes` and `total_key_injective` — are independent of this delivery; the elementary functions consume them only in their proofs, never in their execution. It waits for a consumer, and it runs at run time alone (*Termination*, below).
 
 ## What this builds on
 
@@ -46,5 +46,3 @@ Each elementary function is checked against the exact path at a raised precision
 - Each delivered function is complete in its four forms, correctly rounded in every direction, with the exceptions of Table 9.1, a boundary test with coverage evidence and any fueled twin's bound established. Its delivery waits on no unrelated function.
 - As a function lands, its public contracts go to `/std/Flt` and its name is removed from the pending list above. The remaining functions keep their own consumer gates; this specification retires only when no function remains pending.
 - Before this specification is deleted, what it states is recorded in `/std/Flt`'s documentation, signatures and tests, no reference to this filename remains.
-
-Retirement does not wait for alternate exception handling. Update its link to this specification to the permanent elementary-function contracts if that work remains pending.

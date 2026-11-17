@@ -1,6 +1,6 @@
 # A proof is known by its mark
 
-**Not refined yet.** This specification reserves the form in which conversion and erasure read whether a term is a proof off the term, where each reads it off a type today. It is not an implementation plan.
+**Not refined yet.** This specification reserves the form in which conversion and erasure read whether a term is a proof off the term, where each reads it off a type today. It is not an implementation plan. Its next step is a bounded investigation, the third question under *Not known*: how many comparisons at a position handed no type the lookup decides that the head would not, over `/sys` and `/std`, which ends naming whether the form removes a cost worth its design.
 
 [Conversion is one relation in both checkers](../../design/soundness/conversion-is-one-relation-in-both-checkers.md) has two terms at a position handed no type decided by the type a lookup gives both. That is sound for as long as what a checker remembers of a verdict is dropped wherever a binder's assumed type moves, which is a discipline its stores keep and no property of the relation.
 

@@ -1,6 +1,6 @@
 # What a compiled program still pays at run time
 
-**Not refined yet.** This specification reserves two costs a compiled program pays that its source does not ask for, each given a specification of its own when it is refined. It is not an implementation plan.
+**Not refined yet.** This specification reserves two costs a compiled program pays that its source does not ask for, each given a specification of its own when it is refined. It is not an implementation plan: each waits for a consumer, contification across contexts for a program attribution names as paying for a function returned to from several contexts, and reconstruction past an opaque source for one the current analysis declines.
 
 ## What is missing
 

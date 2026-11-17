@@ -29,7 +29,7 @@
 
 - **Compiling in lowering**, by either guess about a binder's cases, or by skipping a default no constructor reaches, which stops checking a default a reader wrote after exhaustive arms.
 - **A body bound once as a local function and applied from each leaf.** Core has no equation outside an arm, so the certifier types such a function without the arm's cases, and a function written without its parameters' types is refused.
-- **A second kind of Core node that shares a body among leaves.** The certifier would need a rule for what the body may assume. What the copies cost in a compiled program is [a body an arm writes once is emitted once](../../roadmap/compilation/204-a-body-an-arm-writes-once-is-emitted-once.md)'s.
+- **A second kind of Core node that shares a body among leaves.** The certifier would need a rule for what the body may assume. What the copies cost in a compiled program is [a body an arm writes once is emitted once](../../roadmap/compilation/201-a-body-an-arm-writes-once-is-emitted-once.md)'s.
 - **Keeping a hole for the type of a default bound once**, which is what types it in inference, and **a copy of it at each leaf**, for the ladder.
 - **A group for every constructor, named or not**, and **choosing the column to split by necessity**, which changes what every match compiles to for trees nothing has found large.
 - **Typing an arm once, where its alternatives' cases are shared**, which refuses a proof that holds case by case and asks a name bound at different places to have one type across contexts. OCaml discards the type equations an alternative learns, and GHC's or-patterns bind no names, each for that reason.

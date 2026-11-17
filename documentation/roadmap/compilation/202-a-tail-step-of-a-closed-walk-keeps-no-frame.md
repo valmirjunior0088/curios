@@ -1,6 +1,6 @@
 # A tail step of a closed walk keeps no frame
 
-**Not refined yet.** This specification reserves running a closed recursive walk in the machine at a stack that does not grow with the walk. It is not an implementation plan: it waits on the design of a tail frame named under *Refinement*.
+**Not refined yet.** This specification reserves running a closed recursive walk in the machine at a stack that does not grow with the walk. It is not an implementation plan: it waits on the design of a tail frame named under *Refinement*. Its next step is the census under *What is known* retaken at the current commit, the fold drop (`85aba1ed2`) having put every such walk under a `Frame::RecGuard`: where the peaks above a `Frame::Memo` or a `Frame::RecGuard` stay under a hundredth of each half's units, this specification is deleted, and otherwise the tail frame's design is next.
 
 ## What is missing
 

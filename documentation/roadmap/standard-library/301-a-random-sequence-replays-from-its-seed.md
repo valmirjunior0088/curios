@@ -5,7 +5,7 @@
 ## What is missing
 
 - **`/std/rand` reads the host and nothing else.** `curios-prelude/std/rand.crs` is `bytes(n) -> Io(Bytes)` over the `rand_bytes` row, the operating system's entropy inside `Io`. No value of `/std` computes a sequence from a seed, so a program cannot replay a run, and a function outside `Io` cannot draw at all.
-- **The corpus rolls its own.** `programs/rng_state.crs`, `programs/rng_manual.crs`, `programs/spines/spines.crs` and `programs/churn/churn.crs` each step `75 * x % 65537`, a Lehmer generator of period at most 65,536, chosen so that every product stays below `2^30`, the range a `Nat` is held unboxed in ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
+- **The corpus rolls its own.** `programs/rng_state.crs`, `programs/rng_manual.crs`, `programs/lcg/lcg.crs`, `programs/chain/chain.crs`, `programs/spines/spines.crs`, `programs/churn/churn.crs` and the three `programs/rope_push_*.crs` each step `75 * x % 65537`, a Lehmer generator of period at most 65,536, chosen so that every product stays below `2^30`, the range a `Nat` is held unboxed in ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
 
 ## What is known
 

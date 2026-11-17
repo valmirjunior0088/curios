@@ -1,6 +1,6 @@
 # A program spreads its work over instances that share nothing
 
-**Not refined yet.** This specification reserves running one program as several instances of its module, each with a heap of its own, exchanging messages and failing alone, so that a program uses more than one core and a fault ends less than the whole program. It is not an implementation plan: it waits on the design decisions under *Open questions*, and on a consumer. It is not [item tasks](../compilation/302-item-tasks.md), which runs the compiler's own work on several threads.
+**Not refined yet.** This specification reserves running one program as several instances of its module, each with a heap of its own, exchanging messages and failing alone, so that a program uses more than one core and a fault ends less than the whole program. It is not an implementation plan: it waits on the design decisions under *Open questions*, and on a consumer. It is not [item tasks](../compilation/300-item-tasks.md), which runs the compiler's own work on several threads.
 
 ## What is missing
 

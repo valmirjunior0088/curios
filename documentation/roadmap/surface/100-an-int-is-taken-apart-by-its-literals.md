@@ -1,6 +1,8 @@
 # An `Int` is taken apart by its literals
 
-A column of `Int` takes no literal pattern: `| -1 =>` is refused where it is written, as a signed numeral no pattern takes (`curios-surface`'s `refuse_numeral_pattern`), and `| 1 =>` at an `Int` column by the match compiler, as a numeral at a column that is neither a `Nat` nor a `Byte` (`curios-elab`'s `MatrixLiteralColumn`). A test of an integer's value is a guard, `| i, i == -1 =>`, or a match on the comparison, which `/std` writes eight times, `match v.mantissa == +0 | true => … | false => … end` among them (`/std/Flt`, `/std/Flt/signals`, `/std/Flt/reduction`, `/std/time/iso8601`). Taken apart by its literals, an `Int` would be dispatched as a `Nat` is: each literal a case, a binder the rest, the arm refined to the value it takes.
+Adopted: an `Int` column takes its literals as patterns, as a `Nat` column does, so a test of an integer's value is a case of a match and its arm knows the value it took, where today `| -1 =>` is refused beside a `Nat` column's `| 1 =>`, and the test is a guard or a match on a comparison that teaches the arm nothing.
+
+A column of `Int` takes no literal pattern: `| -1 =>` is refused where it is written, as a signed numeral no pattern takes (`curios-surface`'s `refuse_numeral_pattern`), and `| 1 =>` at an `Int` column by the match compiler, as a numeral at a column that is neither a `Nat` nor a `Byte` (`curios-elab`'s `MatrixLiteralColumn`). A test of an integer's value is a guard, `| i, i == -1 =>`, or a match on the comparison, which `/std` writes eight times, each `match <mantissa> == +0 | true => … | false => … end` (`/std/Flt`, `/std/Flt/signals`, `/std/Flt/reduction`). Taken apart by its literals, an `Int` would be dispatched as a `Nat` is: each literal a case, a binder the rest, the arm refined to the value it takes.
 
 ## What is missing
 
