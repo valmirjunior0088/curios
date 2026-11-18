@@ -68,15 +68,6 @@ pub let get(
 
 --- `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
-    -- An empty map is constant data, which only a copying descent may be handed: answered here, a loop filling one from empty hands the descent maps nothing else holds.
-    match m.root
-    | empty() => Map { root = Node/leaf(key, v), @sound = Bool/True/qed() }
-    | leaf(_, _) => put(m, key, v)
-    | branch(_, _) => put(m, key, v)
-    end;
-
--- `insert` into a map that holds something: one descent from its root.
-let put(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
     let k = Hash/hash(key);
     match Node/insert(m.root, key, k, v, @Eq/refl(), @m.sound)
     | vacant(_) => Map { root = Node/leaf(key, v), @sound = Bool/True/qed() }

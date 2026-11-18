@@ -2,7 +2,6 @@ use /std/{Nat, Bool, Option, List, Vec, Eq, Hash, Bytes, proved};
 use /std/List/{Member};
 use /std/Map/{Map, Key, empty, has, insert, remove, map, union, filter, intersection, difference,
     update, to_list};
-use /std/Map/{put};
 use /std/Map/internal/{Node};
 use /std/Map/digits/{digit, small, Apart};
 
@@ -115,21 +114,6 @@ pub let of_insert(
     key: K,
     v: V,
 ) -> Eq()(try_get(insert(m, key, v), key), Option/some(v)) =
-    match m.root
-    | empty() => Eq/refl()
-    | leaf(_, _) => of_put(m, key, v)
-    | branch(_, _) => of_put(m, key, v)
-    end;
-
--- `put` sets the value at its key.
-let of_put(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    m: Map(K, V),
-    key: K,
-    v: V,
-) -> Eq()(try_get(put(m, key, v), key), Option/some(v)) =
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(_) => Eq/refl()
     | added(_, @_, @answers, @_) | replaced(_, @_, @answers, @_) => answers(Hash/hash(key))
@@ -149,30 +133,6 @@ pub let of_insert_other(
     other: K,
     apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(try_get(insert(m, key, v), other), try_get(m, other)) =
-    match m.root
-    | empty() =>
-        Eq/subst(
-            (b: Bool) =>
-                Eq()(
-                    match b | true => Option/some(v) | false => Option/none() end,
-                    Option/none(@V)),
-            Eq/sym(apart_codes(key, other, apart)),
-            Eq/refl())
-    | leaf(_, _) => of_put_other(m, key, v, other, apart)
-    | branch(_, _) => of_put_other(m, key, v, other, apart)
-    end;
-
--- `put` leaves the value at every other key as it was.
-let of_put_other(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    m: Map(K, V),
-    key: K,
-    v: V,
-    other: K,
-    apart: (Eq()(other, key)) -> Bool/False,
-) -> Eq()(try_get(put(m, key, v), other), try_get(m, other)) =
     let codes = apart_codes(key, other, apart);
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(gap) =>

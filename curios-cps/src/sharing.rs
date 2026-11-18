@@ -998,7 +998,7 @@ fn payload_slots(module: &Module, shape: &Shape) -> BTreeSet<SlotKey> {
     payload
 }
 
-/// The version of its callee `call` reaches, where `shared` judges its arguments: the reuse version where each parameter that version assumes is handed a unique value dead after the call, and no constant itself, of which a rebuild writes nothing.
+/// The version of its callee `call` reaches, where `shared` judges its arguments: the reuse version where each parameter that version assumes is handed a unique value dead after the call, constant data among them, which a rebuild there writes into only under a test of its tag that rules every constant out, as **Constants by tag** has it in every version.
 fn route(
     module: &Module,
     shape: &Shape,
@@ -1017,10 +1017,9 @@ fn route(
     match assumed.get(callee) {
         Some(params)
             if params.iter().all(|index| {
-                args.get(*index).is_some_and(|atom| {
-                    matches!(atom, Atom::Value(value) if !shape.constant.contains(value))
-                        && !shared(atom)
-                }) && handed_dead(module, shape, call, *index)
+                args.get(*index)
+                    .is_some_and(|atom| matches!(atom, Atom::Value(_)) && !shared(atom))
+                    && handed_dead(module, shape, call, *index)
             }) =>
         {
             World::Reuse

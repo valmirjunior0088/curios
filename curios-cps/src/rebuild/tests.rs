@@ -8,8 +8,8 @@ fn nat(value: u32) -> Atom {
     Atom::Literal(Literal::Nat(Natural::from(value)))
 }
 
-/// `bump(t)` reads both slots of a `Pair` and builds a `Pair` of its second; `main` hands it a constant `Pair`, then what that call handed back, which nothing else holds.
-fn called_both_ways() -> Module {
+/// `bump(t)` reads both slots of a `Pair` and builds a `Pair` of its second; `main` hands it a constant `Pair`, then what that call handed back, which nothing else holds. Where `tested`, `bump` builds only where `t`'s tag is `1`, the constant's being `0`, and hands `t` back otherwise.
+fn called_both_ways(tested: bool) -> Module {
     let mut module = Module::new();
     let pair = module.add_row(Row {
         debug_name: Some("Pair".into()),
@@ -36,11 +36,43 @@ fn called_both_ways() -> Module {
         args: vec![Atom::Value(t)],
         next: build,
     });
+    let after_tag = match tested {
+        false => read_x,
+        true => {
+            let built = module.reserve_continuation();
+            module.define_continuation(
+                built,
+                Continuation {
+                    debug_name: None,
+                    params: vec![],
+                    body: read_x,
+                },
+            );
+            let switch = module.add_node(Node::Switch {
+                scrutinee: Atom::Value(tag),
+                cases: std::collections::BTreeMap::from([(
+                    1,
+                    Edge {
+                        target: built,
+                        args: vec![],
+                    },
+                )]),
+                default: Some(Edge {
+                    target: bump_return,
+                    args: vec![Atom::Value(t)],
+                }),
+            });
+            module.add_node(Node::LetCont {
+                continuations: vec![built],
+                body: switch,
+            })
+        }
+    };
     let read_tag = module.add_node(Node::LetIntrinsic {
         result: tag,
         op: Intrinsic::RowGet(pair, 0),
         args: vec![Atom::Value(t)],
-        next: read_x,
+        next: after_tag,
     });
     module.define_function(
         bump,
@@ -113,15 +145,21 @@ fn called_both_ways() -> Module {
     module
 }
 
-/// A function one call hands a constant and another a value nothing else holds is copied for the second as its reuse version, which rebuilds what it takes apart while the original, still handed the constant, rebuilds nothing; with no allowance nothing is copied and nothing rebuilt.
+/// A function one call hands a constant and another a value nothing else holds rebuilds what it takes apart only under a test of its tag that rules the constant's out: a constant shares nothing, so both calls hand `t` a value nothing else holds and reach one version, copied within the allowance or the original without one, and the constant is kept from the rebuild by its tag alone, where nothing tests it nothing being rebuilt. Mutation-checked: routing a call that hands a constant to the original, as `route` once did, keeps the original beside its copy and rebuilds the untested `bump` in the copy.
 #[test]
-fn a_function_called_both_ways_is_copied_for_its_unique_call_within_the_allowance() {
-    for (allowance, functions, rebuilt) in [(REBUILD_COPY_NODE_LIMIT, 3, 1), (0, 2, 0)] {
-        let mut module = called_both_ways();
-        copy_reuse_versions(&mut module, CopyBudget::new(allowance));
-        module.verify().unwrap();
-        assert_eq!(module.live_functions().count(), functions, "{module}");
-        assert_eq!(in_place(&module).rows.len(), rebuilt, "{module}");
+fn a_value_a_constant_may_be_is_rebuilt_only_under_a_test_of_its_tag() {
+    for tested in [true, false] {
+        for allowance in [REBUILD_COPY_NODE_LIMIT, 0] {
+            let mut module = called_both_ways(tested);
+            copy_reuse_versions(&mut module, CopyBudget::new(allowance));
+            module.verify().unwrap();
+            assert_eq!(module.live_functions().count(), 2, "{module}");
+            assert_eq!(
+                in_place(&module).rows.len(),
+                usize::from(tested),
+                "tested: {tested}, allowance: {allowance}\n{module}"
+            );
+        }
     }
 }
 
