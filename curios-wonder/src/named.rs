@@ -110,32 +110,9 @@ pub struct Written {
     pub names: Vec<Named>,
 }
 
-/// Every text of `file` that `subject` was lowered from, with the names each writes, in the order they are written — none for a file the subject is not written in. `overlay` and `cache` behave as they do for `diagnostics`, and nothing is filed of the subject itself, which is not compiled.
-///
-/// The refusal is a subject that has nothing to read: one that does not parse or lower, or whose scope could not be compiled.
-pub fn written(
-    budget: u64,
-    subject: Subject,
-    file: &Path,
-    overlay: &Overlay,
-    cache: Option<&Verdicts>,
-    progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Vec<Written>, Vec<Diagnosis>> {
-    let reading = Reading::of(file);
-
-    lowering(
-        budget,
-        subject,
-        overlay,
-        cache,
-        progress,
-        |scope, own, entry| reading.read(scope, own, entry),
-    )
-}
-
 /// The declaration the name written at `line` and `column` of `file` names, as [`described`] answers one but for its type and its totality: what the lowering says of it, the subject lowered and elaborated nowhere, so a file that does not check answers as one that does. `None` where no name stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
 ///
-/// The refusal is a subject that has nothing to read, as `written`'s is.
+/// The refusal is a subject that has nothing to read: one that does not parse or lower, or whose scope could not be compiled.
 pub fn placed(
     budget: u64,
     subject: Subject,

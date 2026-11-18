@@ -40,8 +40,8 @@ mod ask;
 use ask::*;
 pub use ask::{
     Ended, Place, Scope, Staged, Telling, answer, file_subject, not_a_program, wonder_at,
-    wonder_cost, wonder_declarations, wonder_diagnostics, wonder_exports, wonder_name,
-    wonder_stage, wonder_tests, wonder_witnesses,
+    wonder_cost, wonder_diagnostics, wonder_exports, wonder_name, wonder_stage, wonder_tests,
+    wonder_witnesses,
 };
 
 mod server;

@@ -350,23 +350,10 @@ fn a_place_in_the_standard_librarys_package_answers() {
     assert!(answer.starts_with("/std/Bool/not\n"), "{answer:?}");
 }
 
-/// What a file declares is one row a definition, and a place where nothing is named is an answer of nothing: both exit 0.
+/// A place where nothing is named is an answer of nothing, and exits 0.
 #[test]
-fn a_files_declarations_are_listed_and_a_place_naming_nothing_answers_nothing() {
-    let root = project("declarations");
-
-    let listed = curios(&root, &["wonder", "--declarations", "util.crs"], "");
-    assert!(
-        listed.status.success(),
-        "{}",
-        String::from_utf8_lossy(&listed.stderr)
-    );
-    let rows = stdout(&listed);
-    assert!(
-        rows.starts_with("/app/util/word\tdefinition\t") && rows.ends_with("util.crs:1:9\n"),
-        "{rows}"
-    );
-    assert_eq!(rows.lines().count(), 1, "{rows}");
+fn a_place_naming_nothing_answers_nothing() {
+    let root = project("nothing-named");
 
     // The `pub` a declaration opens with names nothing.
     let nothing = curios(&root, &["wonder", "--at", "1:1", "util.crs"], "");

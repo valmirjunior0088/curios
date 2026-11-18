@@ -1,4 +1,4 @@
-//! What `wonder --at` and `wonder --declarations` answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --at`, `wonder --name` and `wonder --witnesses` answer of the declaration a place or a path names.
+//! What `wonder --at` and the server's document symbols answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --at`, `wonder --name` and `wonder --witnesses` answer of the declaration a place or a path names.
 
 use {
     crate::*,
@@ -11,9 +11,9 @@ use {
     std::path::Path,
 };
 
-/// Every text of `program`, asked the way the one-shot transport asks of standard input, reading through `overlay`.
+/// Every text of `program`, read as the editor's check reads a document, of standard input, through `overlay`.
 fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
-    crate::written(
+    crate::checked(
         DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
@@ -23,12 +23,12 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
             declares: None,
             package: None,
         },
-        Path::new("<stdin>"),
         overlay,
         None,
+        Path::new("<stdin>"),
         &mut |_| {},
     )
-    .expect("the program lowers")
+    .written
 }
 
 /// The name standing at the `nth` occurrence of `written` in `program`, `within` bytes into it.
@@ -188,17 +188,17 @@ fn a_library_is_asked_through_one_of_its_files() {
     let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
         .expect("the text is written as a module");
 
-    let texts = crate::written(
+    let texts = crate::checked(
         DEFAULT_BUDGET,
         Subject::Unit {
             units: vec![library],
         },
-        file,
         &overlay,
         None,
+        file,
         &mut |_| {},
     )
-    .expect("the library lowers");
+    .written;
     let offset = LIBRARY.rfind("answer").expect("the library writes it");
     let named = Named::at(texts.iter().flat_map(|text| &text.names), offset)
         .expect("a name stands at the use");

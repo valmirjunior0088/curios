@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, EXPORTS, FORMAT, LINT, NAME, PORT,
-        RUN, STAGE, TEST, TESTS, WITNESSES,
+        AT, COMPILE, COST, DIAGNOSTICS, DOCUMENT, EXPORTS, FORMAT, LINT, NAME, PORT, RUN, STAGE,
+        TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -434,7 +434,6 @@ pub enum Query {
     Stage(String),
     /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
     At(Place),
-    Declarations,
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),
     /// The witnesses in scope a declaration by its path takes part in, found as [`Query::Name`] finds it.
@@ -515,12 +514,6 @@ impl Args for Query {
                         "The name written at a place of a file, the place as a diagnostic prints one, a line and a column each from one: its declaration, what it is declared as, and where",
                     )),
             )
-            .arg(flag(
-                "declarations",
-                DECLARATIONS.query_help(
-                    "Every definition a file declares, one row per line, in the order they are written",
-                ),
-            ))
             .arg(
                 Arg::new("name")
                     .long("name")
@@ -563,7 +556,6 @@ impl Args for Query {
                         "cost",
                         "stage",
                         "at",
-                        "declarations",
                         "name",
                         "witnesses",
                         "server",
@@ -589,8 +581,6 @@ impl FromArgMatches for Query {
             Query::Stage(name.clone())
         } else if let Some(place) = matches.get_one::<Place>("at") {
             Query::At(*place)
-        } else if matches.get_flag("declarations") {
-            Query::Declarations
         } else if let Some(path) = matches.get_one::<Qualifier>("name") {
             Query::Name(*path, matches.get_flag("exports").then_some(View::Exports))
         } else if let Some(path) = matches.get_one::<Qualifier>("witnesses") {

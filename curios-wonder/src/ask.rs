@@ -6,9 +6,9 @@
 
 use {
     crate::{
-        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Refusal,
-        Rendering, Severity, Subject, Uncosted, Written, checked, cost, declared_tests, described,
-        diagnostics, exported, placed, stage, unit_stage, written,
+        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Origin, Refusal, Rendering,
+        Severity, Subject, Uncosted, checked, cost, declared_tests, described, diagnostics,
+        exported, placed, stage, unit_stage,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -331,27 +331,6 @@ impl Asked {
         });
 
         fates
-    }
-
-    /// What `file` of the subject writes, text by text.
-    pub fn written(
-        self,
-        budget: u64,
-        overlay: &Overlay,
-        file: &Path,
-        telling: &mut dyn Telling,
-    ) -> Result<Vec<Written>, Vec<Diagnosis>> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
-        let texts = written(budget, subject, file, overlay, cache, &mut |progress| {
-            telling.step(progress, cache);
-        });
-        telling.ended(match &texts {
-            Err(diagnostics) => Ended::of(diagnostics),
-            Ok(_) => Ended::Done,
-        });
-
-        texts
     }
 
     /// What the name written at `place` of `file` of the subject names ([`placed`]).
@@ -734,23 +713,6 @@ pub fn wonder_at(
     Ok(())
 }
 
-/// `wonder --declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `telling` is told as [`wonder_diagnostics`]' is.
-pub fn wonder_declarations(
-    budget: u64,
-    staged: Staged,
-    telling: &mut dyn Telling,
-) -> Result<(), CompileError> {
-    for_names(budget, staged, telling, |texts| {
-        for named in texts
-            .iter()
-            .flat_map(|text| &text.names)
-            .filter(|named| named.declares)
-        {
-            answer(format_args!("{}\n", row(named)));
-        }
-    })
-}
-
 /// `wonder --name PATH [SUBJECT]`: the declaration `path` names in `scope`, to stdout — a block, then its whole text as its author wrote it, where its unit read one. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_name(
     budget: u64,
@@ -993,27 +955,6 @@ fn listed(lead: &str, items: &[String]) -> String {
     lines.join("\n")
 }
 
-/// What the file `staged` is asked through writes, handed to `answer`: the one it was selected through, a program's own entry, or a library's header. A subject with nothing to read stops as a build does, what stopped it going to stderr.
-fn for_names(
-    budget: u64,
-    staged: Staged,
-    telling: &mut dyn Telling,
-    answer: impl FnOnce(&[Written]),
-) -> Result<(), CompileError> {
-    let overlay = Overlay::default();
-    let (asked, file) = asked_about(staged)?;
-
-    let texts = asked.written(budget, &overlay, &file, telling);
-    match texts {
-        Ok(texts) => {
-            telling.answering();
-            answer(&texts);
-            Ok(())
-        }
-        Err(diagnostics) => Err(stopped(diagnostics)),
-    }
-}
-
 /// The question `staged` is asked as, beside the file a question about one file of it is about: the one it was selected through, a program's own entry, or a library's header.
 fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
     match staged {
@@ -1031,20 +972,6 @@ fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
 
             Ok((Asked::about_library(library), file))
         }
-    }
-}
-
-/// One name as a row: the declaration's path, what it is declared as, and where its name is written, a tab between each — the place left out where no file holds it.
-fn row(named: &Named) -> String {
-    let declared = declared_as(named.declared);
-
-    match named.declaration.as_ref().and_then(Declaration::place) {
-        Some(place) => format!(
-            "{}\t{declared}\t{}",
-            named.name,
-            place.place(&Style::plain())
-        ),
-        None => format!("{}\t{declared}", named.name),
     }
 }
 
