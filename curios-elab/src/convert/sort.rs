@@ -232,6 +232,7 @@ fn classify_under(
             | Intrinsic::ListMap { .. }
             | Intrinsic::ListFold { .. }
             | Intrinsic::ListSlice { .. }
+            | Intrinsic::ListSet { .. }
             | Intrinsic::Nat(..)
             | Intrinsic::NatAdd(..)
             | Intrinsic::NatAnd(..)

@@ -61,6 +61,10 @@ pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
 pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Bool/Holds(i < n)) -> T =
     List/get(@T, v.list, i);
 
+--- `v` with `x` at `i`, under the evidence that `i < n`: the count carries over, since an update keeps the length.
+pub let set(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, x: T, @ok: Bool/Holds(i < n)) -> Vec(T, n) =
+    Vec { list = List/set(@T, v.list, i, x), counted = v.counted };
+
 --- The first element of a nonempty vector.
 pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
     get(v, 0);

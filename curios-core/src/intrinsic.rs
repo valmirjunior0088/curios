@@ -343,6 +343,14 @@ pub enum Intrinsic<T = Term> {
         length: T,
         within: T,
     },
+    /// `list` with `item` at `index`, under `in_range`'s `index < len(list)` as [`Intrinsic::ListGet`] takes it, with no answer outside its domain. To the free monoid it is a located operation and no shape: it reduces where `get` locates a read, into the operand holding the index, and `len` reads through it to `list`.
+    ListSet {
+        element: T,
+        list: T,
+        index: T,
+        item: T,
+        in_range: T,
+    },
     ListAppend {
         element: T,
         list: T,
@@ -694,6 +702,24 @@ impl Intrinsic {
             start: start.into(),
             length: length.into(),
             within: within.into(),
+        }
+    }
+
+    /// A `ListSet` node from term-shaped element type, list, index, element, and the proof of the index's bound.
+    pub fn list_set<T, L, I, X, P>(type_: T, list: L, index: I, item: X, in_range: P) -> Self
+    where
+        T: Into<Term>,
+        L: Into<Term>,
+        I: Into<Term>,
+        X: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::ListSet {
+            element: type_.into(),
+            list: list.into(),
+            index: index.into(),
+            item: item.into(),
+            in_range: in_range.into(),
         }
     }
 
@@ -1128,6 +1154,20 @@ impl Intrinsic {
                 bound(visit, p);
             }
 
+            Intrinsic::ListSet {
+                element: a,
+                list: b,
+                index: c,
+                item: d,
+                in_range: p,
+            } => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(d);
+                bound(visit, p);
+            }
+
             Intrinsic::BytesConcat { operands: terms } => terms.iter().for_each(&mut *visit),
 
             Intrinsic::List {
@@ -1502,6 +1542,19 @@ impl Intrinsic {
                 start: visit.visit_subterm(start),
                 length: visit.visit_subterm(length),
                 within: visit.visit_subterm(within),
+            },
+            Intrinsic::ListSet {
+                element: ty,
+                list,
+                index,
+                item,
+                in_range,
+            } => Intrinsic::ListSet {
+                element: visit.visit_subterm(ty),
+                list: visit.visit_subterm(list),
+                index: visit.visit_subterm(index),
+                item: visit.visit_subterm(item),
+                in_range: visit.visit_subterm(in_range),
             },
             Intrinsic::ListAppend {
                 element: ty,
@@ -1922,6 +1975,19 @@ impl<T> Intrinsic<T> {
                 start: operand(start)?,
                 length: operand(length)?,
                 within: operand(within)?,
+            },
+            Intrinsic::ListSet {
+                element: ty,
+                list,
+                index,
+                item,
+                in_range,
+            } => Intrinsic::ListSet {
+                element: operand(ty)?,
+                list: operand(list)?,
+                index: operand(index)?,
+                item: operand(item)?,
+                in_range: operand(in_range)?,
             },
             Intrinsic::ListAppend {
                 element: ty,

@@ -441,6 +441,7 @@ pub struct Table<'a> {
     list_force: OnceCell<curios_wasm::FuncName>,
     bytes_exact: OnceCell<curios_wasm::FuncName>,
     list_exact: OnceCell<curios_wasm::FuncName>,
+    list_set: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
     list_empty: OnceCell<curios_wasm::GlobalName>,
     frames_used: OnceCell<curios_wasm::GlobalName>,
@@ -561,6 +562,7 @@ impl<'a> Table<'a> {
             list_force: OnceCell::new(),
             bytes_exact: OnceCell::new(),
             list_exact: OnceCell::new(),
+            list_set: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
             list_empty: OnceCell::new(),
             frames_used: OnceCell::new(),
@@ -1137,6 +1139,17 @@ impl<'a> Table<'a> {
 
     pub fn list_exact_used(&self) -> bool {
         self.list_exact.get().is_some()
+    }
+
+    /// `$list/set (ref $rope/list, i32, ref null any) -> (ref $rope/list)`: a fresh leaf over a copy of the run with one element written, trapping past its end.
+    pub fn list_set_func(&self) -> curios_wasm::FuncName {
+        self.list_set
+            .get_or_init(|| curios_wasm::FuncName::from("list/set"))
+            .clone()
+    }
+
+    pub fn list_set_used(&self) -> bool {
+        self.list_set.get().is_some()
     }
 
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force a `List(Bytes)` / `List(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.

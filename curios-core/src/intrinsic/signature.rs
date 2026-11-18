@@ -420,6 +420,25 @@ impl Intrinsic {
                 ],
                 list_type(element.clone()),
             ),
+            // `get`'s bound, for the element an update writes is one `get` reads at the same index.
+            Self::ListSet {
+                element,
+                list,
+                index,
+                ..
+            } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::At(list_type(element.clone())),
+                    Operand::At(nat_type()),
+                    Operand::At(element.clone()),
+                    Operand::At(holds(Self::NatLt(
+                        index.clone(),
+                        list_len(element.clone(), list.clone()),
+                    ))),
+                ],
+                list_type(element.clone()),
+            ),
             Self::ListAppend { element, .. } => sig(
                 vec![
                     Operand::IsType,

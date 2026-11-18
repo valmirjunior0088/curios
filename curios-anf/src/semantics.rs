@@ -323,7 +323,7 @@ impl Semantics {
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
         match operation {
             SequenceOp::BytesGet | SequenceOp::ListGet => LocalBehavior::trap(),
-            SequenceOp::BytesSlice | SequenceOp::ListSlice => {
+            SequenceOp::BytesSlice | SequenceOp::ListSlice | SequenceOp::ListSet => {
                 LocalBehavior::trap().with_alloc(Allocation::Immutable)
             }
             SequenceOp::BytesAppend
@@ -645,6 +645,7 @@ impl Semantics {
                 SequenceOp::ListLen
                 | SequenceOp::ListGet
                 | SequenceOp::ListSlice
+                | SequenceOp::ListSet
                 | SequenceOp::ListAppend
                 | SequenceOp::ListConcat
                 | SequenceOp::ListBuild => return None,
@@ -757,7 +758,8 @@ impl Semantics {
             | SequenceOp::ListBuild
             | SequenceOp::ListLen
             | SequenceOp::ListGet
-            | SequenceOp::ListSlice => None,
+            | SequenceOp::ListSlice
+            | SequenceOp::ListSet => None,
         }
     }
 }

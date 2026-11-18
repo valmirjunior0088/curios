@@ -891,6 +891,7 @@ fn sequence_name(operation: SequenceOp) -> String {
         SequenceOp::ListLen => ("List", "len"),
         SequenceOp::ListGet => ("List", "get"),
         SequenceOp::ListSlice => ("List", "slice"),
+        SequenceOp::ListSet => ("List", "set"),
         SequenceOp::ListAppend => ("List", "append"),
         SequenceOp::ListConcat => ("List", "concat"),
     };

@@ -453,3 +453,169 @@ fn a_pair_no_byte_opens_stays_neutral() {
         "`a == x[h, ..b]` stays a comparison while `a` shows no byte"
     );
 }
+
+/// **An update is located where a read is.** Over every grouping of a run, the element read back at the index written is the one written, every other is the one there before, and the length is the run's: `set` narrows into the operand `get` reads from, so the two cannot disagree on where an index lies.
+#[test]
+fn an_update_reads_back_however_its_run_is_grouped() {
+    let whole: &[u32] = &[1, 2, 3, 4, 5];
+    let elem = symbol(1000, "T");
+    let written = symbol(77, "x");
+    let concat = |parts: Vec<Term>| {
+        Term::intrinsic(Intrinsic::ListConcat {
+            element: elem.clone(),
+            operands: parts,
+        })
+    };
+
+    let groupings = [
+        list_of(whole),
+        concat(vec![list_of(&whole[..2]), list_of(&whole[2..])]),
+        concat(vec![
+            concat(vec![list_of(&whole[..1]), list_of(&whole[1..2])]),
+            list_of(&whole[2..]),
+        ]),
+    ];
+
+    for spelling in groupings {
+        for index in 0..whole.len() {
+            let updated = Term::intrinsic(Intrinsic::list_set(
+                elem.clone(),
+                spelling.clone(),
+                lit(index as u32),
+                written.clone(),
+                qed(),
+            ));
+            let length = reduce_intrinsic(
+                &mut Folding,
+                &Intrinsic::ListLen {
+                    element: elem.clone(),
+                    list: updated.clone(),
+                },
+            )
+            .expect("a length over an update reduces");
+
+            assert_eq!(
+                length,
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(whole.len()))),
+                "an update at {index} keeps the length",
+            );
+
+            for (at, before) in whole.iter().enumerate() {
+                let read =
+                    Intrinsic::list_get(elem.clone(), updated.clone(), lit(at as u32), qed());
+                let element = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
+                let expected = match at == index {
+                    true => written.clone(),
+                    false => symbol(*before, "e"),
+                };
+
+                assert_eq!(
+                    element,
+                    Term::unwrap_or_clone(expected),
+                    "index {at} after an update at {index} is the same however the run is grouped",
+                );
+            }
+        }
+    }
+}
+
+/// An index past the end of a run measured whole writes nothing: the update stays a node, as a read past the end does, and no element is invented for it.
+#[test]
+fn an_update_past_the_end_of_a_run_is_stuck() {
+    let elem = symbol(1000, "T");
+    let split = Term::intrinsic(Intrinsic::ListConcat {
+        element: elem.clone(),
+        operands: vec![list_of(&[1]), list_of(&[2])],
+    });
+
+    for spelling in [list_of(&[1, 2]), split] {
+        let update = Intrinsic::list_set(elem.clone(), spelling, lit(2), symbol(77, "x"), qed());
+        let reduced = reduce_intrinsic(&mut Folding, &update).expect("an update reduces");
+
+        assert!(
+            matches!(reduced, Subterm::Intrinsic(Intrinsic::ListSet { .. })),
+            "an update past the end is stuck: {reduced:?}",
+        );
+    }
+}
+
+/// **On symbolic seams an update narrows where a read does, and only there.** At the seam before a last operand of one element it replaces that operand, and inside the last operand it is that operand's update at the distance left. The control is an index inside an earlier operand, which declines: the later operands' lengths would stand in the narrowed bound, which no proof in hand states.
+#[test]
+fn an_update_on_a_symbolic_seam_narrows_as_a_read_does() {
+    let elem = symbol(1000, "T");
+    let (xs, ys, zs) = (symbol(0, "xs"), symbol(1, "ys"), symbol(2, "zs"));
+    let (kept, written) = (symbol(3, "k"), symbol(77, "x"));
+    let concat = |parts: Vec<Term>| {
+        Term::intrinsic(Intrinsic::ListConcat {
+            element: elem.clone(),
+            operands: parts,
+        })
+    };
+    let single = |item: &Term| {
+        Term::intrinsic(Intrinsic::List {
+            element: elem.clone(),
+            items: vec![item.clone()],
+        })
+    };
+    let len = |list: &Term| {
+        Term::intrinsic(Intrinsic::ListLen {
+            element: elem.clone(),
+            list: list.clone(),
+        })
+    };
+    let set = |list: Term, index: Term| {
+        Term::intrinsic(Intrinsic::list_set(
+            elem.clone(),
+            list,
+            index,
+            written.clone(),
+            qed(),
+        ))
+    };
+
+    assert_eq!(
+        fold(set(concat(vec![xs.clone(), single(&kept)]), len(&xs))),
+        fold(concat(vec![xs.clone(), single(&written)])),
+        "an update at the seam before a last element replaces it",
+    );
+    assert_eq!(
+        fold(set(
+            concat(vec![xs.clone(), ys.clone()]),
+            plus(len(&xs), lit(1))
+        )),
+        fold(concat(vec![xs.clone(), set(ys.clone(), lit(1))])),
+        "an update inside the last operand is that operand's",
+    );
+
+    let earlier = fold(set(
+        concat(vec![xs.clone(), ys, zs]),
+        plus(len(&xs), lit(1)),
+    ));
+
+    assert!(
+        matches!(&*earlier, Subterm::Intrinsic(Intrinsic::ListSet { .. })),
+        "an update inside an earlier operand declines: {earlier:?}",
+    );
+}
+
+/// `len(set(xs, i, x))` is `len(xs)` whatever `xs` and `i` are: an update writes one element and keeps the rest, so the measure passes through it, as through a map.
+#[test]
+fn a_length_passes_through_an_update() {
+    let elem = symbol(1000, "T");
+    let (xs, index) = (symbol(0, "xs"), symbol(1, "i"));
+    let len = |list: Term| {
+        Term::intrinsic(Intrinsic::ListLen {
+            element: elem.clone(),
+            list,
+        })
+    };
+    let updated = Term::intrinsic(Intrinsic::list_set(
+        elem.clone(),
+        xs.clone(),
+        index,
+        symbol(77, "x"),
+        qed(),
+    ));
+
+    assert_eq!(fold(len(updated)), fold(len(xs)));
+}

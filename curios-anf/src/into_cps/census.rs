@@ -246,7 +246,8 @@ fn shared(module: &Module, schema: ProductId) -> bool {
 /// How a value fares as operand `position` of `operation`: the carrier positions of the read forms are indexing-shaped, growth and construction poison every position, and a position a list could never occupy by typing is poisoned rather than reasoned about.
 fn sequence_use(operation: SequenceOp, position: usize) -> UseKind {
     match (operation, position) {
-        (SequenceOp::ListLen, 0) | (SequenceOp::ListGet | SequenceOp::ListSlice, 0) => {
+        (SequenceOp::ListLen, 0)
+        | (SequenceOp::ListGet | SequenceOp::ListSlice | SequenceOp::ListSet, 0) => {
             UseKind::ListEvidence
         }
         (SequenceOp::BytesLen | SequenceOp::BytesEql, _) => UseKind::Neutral,

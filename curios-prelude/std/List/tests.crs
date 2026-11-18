@@ -193,3 +193,12 @@ let _texts_sort_in_order(
 
 let _a_sort_of_texts_rearranges(l: List(Str)) -> Permutation()(l, List/sort(l)) =
     List/sort/permuted(l);
+
+-- An update writes one element and keeps the rest, and the list it was made from still reads as it did.
+test set_writes_one_element_and_keeps_the_rest =
+    let l = [3, 1, 4, 1, 5];
+    Test/all([
+        Test/equal(List/set(l, 0, 9), [9, 1, 4, 1, 5]),
+        Test/equal(List/set(l, 4, 9), [3, 1, 4, 1, 9]),
+        Test/equal(List/set(List/set(l, 2, 7), 2, 8), [3, 1, 8, 1, 5]),
+        Test/equal(l, [3, 1, 4, 1, 5])]);

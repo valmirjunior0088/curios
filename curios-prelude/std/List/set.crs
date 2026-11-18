@@ -1,0 +1,54 @@
+pub use /sys/List/{set};
+
+use /std/{List, Nat, Bool, Eq, proved};
+
+--- An update keeps the length, by reduction: the measure passes through it.
+pub let len(
+    @T: Type,
+    l: List(T),
+    i: Nat,
+    x: T,
+    @ok: Bool/Holds(i < List/len(l)),
+) -> Eq()(List/len(List/set(l, i, x)), List/len(l)) =
+    Eq/refl();
+
+--- The element at the index an update writes is the one written.
+pub let at(
+    @T: Type,
+    l: List(T),
+    i: Nat,
+    x: T,
+    @ok: Bool/Holds(i < List/len(l)),
+) -> Eq()(List/get(List/set(l, i, x), i), x) =
+    match l
+    | [] => match ok end
+    | [_, ..t] => match i | 0 => Eq/refl() | j + 1 => at(t, j, x, @proved()) end
+    end;
+
+--- An element at another index than the one an update writes is the one there before.
+pub let other(
+    @T: Type,
+    l: List(T),
+    i: Nat,
+    j: Nat,
+    x: T,
+    @ok: Bool/Holds(i < List/len(l)),
+    @within: Bool/Holds(j < List/len(l)),
+    apart: Bool/Holds(i != j),
+) -> Eq()(List/get(List/set(l, i, x), j), List/get(l, j)) =
+    match l
+    | [] => match ok end
+    | [_, ..t] =>
+        match i
+        | 0 =>
+            match j
+            | 0 => match apart end
+            | _ + 1 => Eq/refl()
+            end
+        | i1 + 1 =>
+            match j
+            | 0 => Eq/refl()
+            | j1 + 1 => other(t, i1, j1, x, @proved(), @proved(), proved())
+            end
+        end
+    end;

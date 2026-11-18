@@ -1441,6 +1441,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
             | Intrinsic::ListLen { .. }
             | Intrinsic::ListGet { .. }
             | Intrinsic::ListSlice { .. }
+            | Intrinsic::ListSet { .. }
             | Intrinsic::ListAppend { .. }
             | Intrinsic::ListConcat { .. }
             | Intrinsic::ListMap { .. }

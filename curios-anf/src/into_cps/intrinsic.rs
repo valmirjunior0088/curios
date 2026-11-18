@@ -96,6 +96,7 @@ pub fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cps::In
         SequenceOp::ListLen => curios_cps::Intrinsic::ListLen,
         SequenceOp::ListGet => curios_cps::Intrinsic::ListGet,
         SequenceOp::ListSlice => curios_cps::Intrinsic::ListSlice,
+        SequenceOp::ListSet => curios_cps::Intrinsic::ListSet,
         SequenceOp::ListAppend => curios_cps::Intrinsic::ListAppend,
         SequenceOp::ListConcat => curios_cps::Intrinsic::ListConcat(arity),
         SequenceOp::ListBuild => unreachable!("ListBuild is lowered as a list value"),

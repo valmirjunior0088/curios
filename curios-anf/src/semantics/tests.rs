@@ -281,6 +281,7 @@ fn every_sequence_operation() -> Vec<SequenceOp> {
         ListLen => ListLen,
         ListGet => ListGet,
         ListSlice => ListSlice,
+        ListSet => ListSet,
         ListAppend => ListAppend,
         ListConcat => ListConcat,
     ]

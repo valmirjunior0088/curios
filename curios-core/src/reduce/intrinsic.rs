@@ -1593,6 +1593,18 @@ pub fn reduce_intrinsic(
                     &Intrinsic::list_len(from.clone(), inner.clone()),
                 );
             }
+            // `len(set(xs, i, x)) = len(xs)`: an update writes one element and keeps the rest, so the measure passes through it as through a map.
+            if let Subterm::Intrinsic(Intrinsic::ListSet {
+                element,
+                list: inner,
+                ..
+            }) = &*list
+            {
+                return reduce_intrinsic(
+                    reducer,
+                    &Intrinsic::list_len(element.clone(), inner.clone()),
+                );
+            }
             reduce_homomorphism(
                 reducer,
                 list_shape(list),
@@ -1717,6 +1729,139 @@ pub fn reduce_intrinsic(
                 type_,
                 list,
                 index_reduced,
+                in_range.clone(),
+            )))
+        }
+        Intrinsic::ListSet {
+            element: type_,
+            list,
+            index,
+            item,
+            in_range,
+        } => {
+            let type_ = reducer.reduce(type_.clone())?;
+            let list = reducer.reduce_forced(list.clone())?;
+            let index_reduced = reducer.reduce_forced(index.clone())?;
+            let i = as_index(&index_reduced);
+            // A concrete index into a literal run writes the element there, and one past its end is stuck, as `get`'s read is.
+            if let (
+                Subterm::Intrinsic(Intrinsic::List {
+                    element: list_elem,
+                    items: elems,
+                }),
+                Some(i),
+            ) = (&*list, i)
+            {
+                if i < elems.len() {
+                    // A rebuilt run is charged whole, as an append's is.
+                    reducer.spend(Cost::collection(elems.len() as u64))?;
+                    let mut elems = elems.clone();
+                    elems[i] = item.clone();
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::List {
+                            element: list_elem.clone(),
+                            items: elems,
+                        }))
+                        .map(Term::unwrap_or_clone);
+                }
+                return Ok(Subterm::Intrinsic(Intrinsic::list_set(
+                    type_,
+                    list,
+                    index_reduced,
+                    item.clone(),
+                    in_range.clone(),
+                )));
+            }
+            // An index into a concatenation or an append is written into the operand `get` would read it from, under the same bound, the rest kept: an update is located where a read is.
+            let written = match FreeMonoid::List.locate(
+                reducer,
+                &list,
+                &index_reduced,
+                &Words::new(Element(type_.clone())),
+            )? {
+                Some(Located::Whole { mut operands, at }) => {
+                    operands[at] = Term::intrinsic(Intrinsic::List {
+                        element: type_.clone(),
+                        items: vec![item.clone()],
+                    });
+                    Some(operands)
+                }
+                Some(Located::Inside {
+                    mut operands,
+                    at,
+                    start,
+                }) => {
+                    operands[at] = Term::intrinsic(Intrinsic::list_set(
+                        type_.clone(),
+                        operands[at].clone(),
+                        start,
+                        item.clone(),
+                        in_range.clone(),
+                    ));
+                    Some(operands)
+                }
+                Some(Located::Past) => {
+                    return Ok(Subterm::Intrinsic(Intrinsic::list_set(
+                        type_,
+                        list,
+                        index_reduced,
+                        item.clone(),
+                        in_range.clone(),
+                    )));
+                }
+                None => None,
+            };
+            if let Some(operands) = written {
+                return reducer
+                    .reduce(Term::intrinsic(Intrinsic::list_concat(type_, operands)))
+                    .map(Term::unwrap_or_clone);
+            }
+            // A cons is written by its index's form, `set([h, ..t], 0, x) = [x, ..t]` and `set([h, ..t], i + 1, x) = [h, ..set(t, i, x)]`, under the same bound, so an induction over the list reduces through an update as it does through a read.
+            if let Some((head, tail)) = peel_first_elem(&list) {
+                let rebuilt = match &*index_reduced {
+                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Some(Intrinsic::list_concat(
+                        type_.clone(),
+                        [
+                            Term::intrinsic(Intrinsic::List {
+                                element: type_.clone(),
+                                items: vec![item.clone()],
+                            }),
+                            tail,
+                        ],
+                    )),
+                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
+                        let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+                        let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
+                        Some(Intrinsic::list_concat(
+                            type_.clone(),
+                            [
+                                Term::intrinsic(Intrinsic::List {
+                                    element: type_.clone(),
+                                    items: vec![head],
+                                }),
+                                Term::intrinsic(Intrinsic::list_set(
+                                    type_.clone(),
+                                    tail,
+                                    prev,
+                                    item.clone(),
+                                    in_range.clone(),
+                                )),
+                            ],
+                        ))
+                    }
+                    _ => None,
+                };
+                if let Some(rebuilt) = rebuilt {
+                    return reducer
+                        .reduce(Term::intrinsic(rebuilt))
+                        .map(Term::unwrap_or_clone);
+                }
+            }
+            Ok(Subterm::Intrinsic(Intrinsic::list_set(
+                type_,
+                list,
+                index_reduced,
+                item.clone(),
                 in_range.clone(),
             )))
         }

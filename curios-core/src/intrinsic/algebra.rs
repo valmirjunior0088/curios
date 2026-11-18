@@ -392,6 +392,7 @@ impl Intrinsic {
             | Intrinsic::ListLen { .. }
             | Intrinsic::ListGet { .. }
             | Intrinsic::ListSlice { .. }
+            | Intrinsic::ListSet { .. }
             | Intrinsic::ListAppend { .. }
             | Intrinsic::ListConcat { .. }
             | Intrinsic::ListMap { .. }

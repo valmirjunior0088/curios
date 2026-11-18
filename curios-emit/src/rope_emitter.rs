@@ -2,6 +2,7 @@
 //!
 //! - `$<carrier>/force` flattens a `Bytes` or `List` rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is written by `$<carrier>/write`, which puts each piece at the offset the lengths before it give and recurses into the shorter of two halves still to be walked, so its depth is at most 31 calls whatever the rope's and it allocates nothing but the payload. The run's first piece decides where it goes, before anything is written: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the write fills the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece a flattened node, and exactly the run otherwise. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/exact` answers a run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run otherwise — for what leaves the rope as a flat array: a leaf sealed over a forced payload, and a host operand.
+//! - `$list/set` copies a run into a fresh payload exactly its length and writes one element there, sealing a fresh leaf: a payload's slots are written once, so an update never writes the one it reads.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the window, O(1) over a flat-available base: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — O(n) once, which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
 //! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), off a flattened node's cache, and at a node never flattened from the child that holds the element where that child is flat-available — so a read of what was just appended copies nothing — with `force` only where the child is not.
@@ -165,6 +166,76 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             concrete_val(rope.payload.clone(), false),
             vec![
                 (p, concrete_val(rope.payload.clone(), true)),
+                (n, i32_type()),
+                (out, concrete_val(rope.payload.clone(), true)),
+            ],
+            instrs,
+        );
+    }
+
+    /// `$list/set (ref $rope/list, i32, ref null any) -> (ref $rope/list)`: the run with one element written, in a fresh leaf.
+    ///
+    /// ```wat
+    /// out := array.new_default <payload> r.len
+    /// array.copy out[0..] <- force(r)[0..r.len]
+    /// array.set out[i] <- x                  ;; traps past the run's end
+    /// leaf{0, r.len, out}
+    /// ```
+    pub fn emit_set_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let r = curios_wasm::LocalName::from("r");
+        let i = curios_wasm::LocalName::from("i");
+        let x = curios_wasm::LocalName::from("x");
+        let n = curios_wasm::LocalName::from("n");
+        let out = curios_wasm::LocalName::from("out");
+
+        let instrs = wasm![
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            set(&n),
+            get(&n),
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: rope.payload.clone(),
+            },
+            set(&out),
+            get(&out),
+            i32_const(0),
+            get(&r),
+            call(&force_func),
+            i32_const(0),
+            get(&n),
+            curios_wasm::Instr::ArrayCopy {
+                target_name: rope.payload.clone(),
+                source_name: rope.payload.clone(),
+            },
+            get(&out),
+            get(&i),
+            get(&x),
+            curios_wasm::Instr::ArraySet {
+                type_name: rope.payload.clone(),
+            },
+            i32_const(0),
+            get(&n),
+            get(&out),
+            curios_wasm::Instr::RefAsNonNull,
+            curios_wasm::Instr::StructNew {
+                type_name: rope.leaf.clone(),
+            },
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![
+                (r, concrete_val(rope.base.clone(), false)),
+                (i, i32_type()),
+                (x, Table::top_type(true)),
+            ],
+            concrete_val(rope.base.clone(), false),
+            vec![
                 (n, i32_type()),
                 (out, concrete_val(rope.payload.clone(), true)),
             ],

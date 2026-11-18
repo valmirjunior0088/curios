@@ -522,6 +522,7 @@ impl<'m> Evaluator<'m> {
             SequenceOp::ListLen
             | SequenceOp::ListGet
             | SequenceOp::ListSlice
+            | SequenceOp::ListSet
             | SequenceOp::ListAppend
             | SequenceOp::ListConcat
             | SequenceOp::ListBuild => outcome(interpret_list(operation, &operands)),
@@ -723,6 +724,17 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             Some(window) => Ok(Value::List(window)),
             None => Err(Bail::Trap),
         },
+        // An index past the end has no element to write, as it has none to read.
+        SequenceOp::ListSet => {
+            let at = index(1)?;
+            let mut elements = list(0)?.to_vec();
+            match (elements.get_mut(at), operands.get(2)) {
+                (Some(slot), Some(element)) => *slot = element.clone(),
+                (None, Some(_)) => return Err(Bail::Trap),
+                (_, None) => return Err(Bail::Arity),
+            }
+            Ok(Value::List(ListWindow::new(elements)))
+        }
         SequenceOp::ListAppend => {
             let list = list(0)?;
             list_within(list.len().checked_add(1))?;

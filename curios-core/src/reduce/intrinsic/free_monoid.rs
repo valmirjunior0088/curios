@@ -335,6 +335,69 @@ impl FreeMonoid {
             },
         }))
     }
+
+    /// The operand of a juxtaposition that holds the generator at `start`, with every operand kept, for a located operation that rewrites that one alone — or `None` where neither of [`FreeMonoid::window`]'s strategies reaches it.
+    ///
+    /// **The same two strategies, so an update lands wherever a read does, and a narrowed bound is the caller's own.** The concrete one runs only over a value it measures whole, where both the caller's bound and the narrowed one close to `True`; the symbolic one narrows into the last operand alone, where the consumed prefix taken off both sides of the caller's bound is the bound on that operand, as `seam_window` states.
+    pub(super) fn locate<S: Sequence>(
+        self,
+        reducer: &mut impl Reducer,
+        value: &Term,
+        start: &Term,
+        words: &Words<S>,
+    ) -> Result<Option<Located>, ReduceError> {
+        let Some(operands) = self.concatenated(value) else {
+            return Ok(None);
+        };
+        if let (Some(start), Some(_)) = (as_index(start), self.measure(value)) {
+            let mut before = 0;
+            for (at, operand) in operands.iter().enumerate() {
+                let length = self.measure(operand).unwrap_or_default();
+                if start < before + length {
+                    reducer.spend(Cost::collection(operands.len() as u64))?;
+                    let start = Term::intrinsic(Intrinsic::Nat(Nat::new(start - before)));
+                    return Ok(Some(Located::Inside {
+                        operands,
+                        at,
+                        start,
+                    }));
+                }
+                before += length;
+            }
+            return Ok(Some(Located::Past));
+        }
+
+        let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        let seam = seam_window(words, &operands, start, &one, |operand| {
+            reducer.reduce_forced(words.measure(operand))
+        })?;
+        Ok(match seam {
+            Some(Seam::Parts(range)) if range.len() == 1 => Some(Located::Whole {
+                at: range.start,
+                operands,
+            }),
+            Some(Seam::Inside { operand, start }) => Some(Located::Inside {
+                operands,
+                at: operand,
+                start,
+            }),
+            _ => None,
+        })
+    }
+}
+
+/// Where [`FreeMonoid::locate`] found a generator among a juxtaposition's `operands`.
+pub enum Located {
+    /// The operand at `at` is the generator alone, a window of one at its seams.
+    Whole { operands: Vec<Term>, at: usize },
+    /// The generator is `start` into the operand at `at`.
+    Inside {
+        operands: Vec<Term>,
+        at: usize,
+        start: Term,
+    },
+    /// Past the end of a value measured whole.
+    Past,
 }
 
 /// [`bytes_piece`] over the element carrier, restoring the element type every `List` value carries.

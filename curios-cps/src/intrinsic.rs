@@ -97,6 +97,8 @@ pub enum Intrinsic {
     ListLen,
     ListGet,
     ListSlice,
+    /// `(list, index, element) -> list`: `list` with `element` at `index`, a copy of its run with the one slot written.
+    ListSet,
     /// The `List` mirror of [`Intrinsic::BytesRest`].
     ListRest,
     ListAppend,
@@ -160,7 +162,13 @@ impl Intrinsic {
             (Self::BytesAnd | Self::BytesOr | Self::BytesXor, _) => Repr::Bytes,
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` carrier as an append's does.
             (Self::BytesReplicate, _) => Repr::Nat,
-            (Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend, 0) => Repr::List,
+            (
+                Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend | Self::ListSet,
+                0,
+            ) => Repr::List,
+            (Self::ListSet, 1) => Repr::Length,
+            // The element an update writes is carried, as an appended one is.
+            (Self::ListSet, _) => Repr::Ref,
             (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Length,
             // A chunk element is one packed byte, carried at the `Nat` carrier like an append's.
             (Self::BytesChunk(_), _) => Repr::Nat,
@@ -423,6 +431,7 @@ impl Intrinsic {
             | Self::BytesXor => Repr::Bytes,
             Self::FltToLeBytes => Repr::Bytes,
             Self::ListSlice
+            | Self::ListSet
             | Self::ListRest
             | Self::ListAppend
             | Self::ListConcat(_)
@@ -531,7 +540,11 @@ impl Intrinsic {
             | Self::ListGet
             | Self::ListRest
             | Self::ListAppend => 2,
-            Self::BytesSlice | Self::ListSlice | Self::WindowExtent | Self::FltFma(_) => 3,
+            Self::BytesSlice
+            | Self::ListSlice
+            | Self::ListSet
+            | Self::WindowExtent
+            | Self::FltFma(_) => 3,
             Self::BytesConcat(arity)
             | Self::ListConcat(arity)
             | Self::BytesChunk(arity)
@@ -561,6 +574,7 @@ impl Intrinsic {
             | Self::BytesRest
             | Self::ListGet
             | Self::ListSlice
+            | Self::ListSet
             | Self::ListRest
             | Self::TupleGet(_)
             | Self::RowGet(..)
@@ -731,6 +745,7 @@ impl Intrinsic {
             | Self::BytesChunk(_)
             | Self::ListLen
             | Self::ListSlice
+            | Self::ListSet
             | Self::ListRest
             | Self::ListAppend
             | Self::ListConcat(_)

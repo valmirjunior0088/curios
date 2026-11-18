@@ -372,6 +372,7 @@ impl Eraser<'_> {
                 Ok(outcome)
             }
             curios_core::Intrinsic::ListSlice { .. } => seq!(curios_anf::SequenceOp::ListSlice),
+            curios_core::Intrinsic::ListSet { .. } => seq!(curios_anf::SequenceOp::ListSet),
             curios_core::Intrinsic::ListAppend { .. } => seq!(curios_anf::SequenceOp::ListAppend),
             curios_core::Intrinsic::ListConcat { .. } => seq!(curios_anf::SequenceOp::ListConcat),
             curios_core::Intrinsic::ListMap { .. } => {

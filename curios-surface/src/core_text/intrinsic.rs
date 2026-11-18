@@ -463,6 +463,22 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
                 value(sub(within, frame)),
             ],
         ),
+        Intrinsic::ListSet {
+            element,
+            list,
+            index,
+            item,
+            in_range,
+        } => called(
+            "ListSet",
+            vec![
+                value(sub(element, frame)),
+                value(sub(list, frame)),
+                value(sub(index, frame)),
+                value(sub(item, frame)),
+                value(sub(in_range, frame)),
+            ],
+        ),
         Intrinsic::ListAppend {
             element,
             list,
@@ -1241,6 +1257,16 @@ pub fn intrinsic_read(
                 start: term(start, reader)?,
                 length: term(length, reader)?,
                 within: term(within, reader)?,
+            }
+        }
+        "ListSet" => {
+            let [element, list, index, item, in_range] = operands(intrinsic, span)?;
+            Intrinsic::ListSet {
+                element: term(element, reader)?,
+                list: term(list, reader)?,
+                index: term(index, reader)?,
+                item: term(item, reader)?,
+                in_range: term(in_range, reader)?,
             }
         }
         "ListAppend" => {

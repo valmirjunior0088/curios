@@ -34,6 +34,8 @@ pub enum SequenceOp {
     ListGet,
     /// `(list, start, length) -> list`: the `List` mirror of [`SequenceOp::BytesSlice`].
     ListSlice,
+    /// `(list, index, element) -> list`: `list` with `element` at `index`; out of bounds traps.
+    ListSet,
     /// `(list, element) -> list`: append one element.
     ListAppend,
     /// `(lists…) -> list`: concatenate any number of lists.
@@ -63,7 +65,7 @@ impl SequenceOp {
             | Self::BytesXor
             | Self::ListGet
             | Self::ListAppend => SequenceArity::Exactly(2),
-            Self::BytesSlice | Self::ListSlice => SequenceArity::Exactly(3),
+            Self::BytesSlice | Self::ListSlice | Self::ListSet => SequenceArity::Exactly(3),
             Self::BytesConcat | Self::ListBuild | Self::ListConcat => SequenceArity::AnyCount,
         }
     }

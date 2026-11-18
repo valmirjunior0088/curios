@@ -95,6 +95,11 @@ const EDGES: &[Edge] = &[
         inside: "let edge: Nat = List/get([7], 0);",
         outside: "let edge: Nat = List/get([7], 1);",
     },
+    Edge {
+        operation: "List/set",
+        inside: "let edge: List(Nat) = List/set([7], 0, 1);",
+        outside: "let edge: List(Nat) = List/set([7], 1, 1);",
+    },
     // A window may end at the end, and may be empty there: the bound is on where it ends.
     Edge {
         operation: "Bytes/slice",

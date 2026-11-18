@@ -774,6 +774,21 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             ),
         ),
         documented(
+            &["`a` with `x` at `i`, under the evidence that `i` is within the length."],
+            operation(
+                "set",
+                &["T", "a", "i", "x", "ok"],
+                syntax,
+                Intrinsic::ListSet {
+                    element: name("T"),
+                    list: name("a"),
+                    index: name("i"),
+                    item: name("x"),
+                    in_range: name("ok"),
+                },
+            ),
+        ),
+        documented(
             &["`a` with `x` added after its last element."],
             operation(
                 "append",

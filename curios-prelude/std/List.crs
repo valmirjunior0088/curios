@@ -3,6 +3,10 @@ mod tests;
 pub use /sys/{let List};
 pub use /sys/List/{get, len, slice, map, fold};
 
+--- A list with one element replaced, with its laws: the length kept, the element written read back, every other read as before.
+pub mod set;
+pub use set/{let set};
+
 --- That a value is an element of a list, as a proposition, with its laws.
 pub mod Member;
 pub use Member/{let Member};

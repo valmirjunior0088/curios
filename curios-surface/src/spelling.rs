@@ -1660,6 +1660,17 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![ty],
             explicits: vec![list, start, length],
         },
+        Intrinsic::ListSet {
+            element: ty,
+            list,
+            index,
+            item,
+            in_range: _,
+        } => IntrinsicForm::Call {
+            path: "List/set".into(),
+            implicits: vec![ty],
+            explicits: vec![list, index, item],
+        },
         Intrinsic::ListAppend {
             element: _,
             list,

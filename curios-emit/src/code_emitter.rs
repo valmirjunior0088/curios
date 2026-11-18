@@ -2647,6 +2647,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
+            curios_cps::Intrinsic::ListSet => {
+                let set = self.context.table().list_set_func();
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
+                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(&args[2], LoadAs::Null));
+                self.emit_instr(curios_wasm::Instr::Call { func_name: set });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             curios_cps::Intrinsic::ListAppend => {
                 let rope = self.context.table().list_rope();
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Null);

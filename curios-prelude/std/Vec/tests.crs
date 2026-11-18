@@ -6,6 +6,12 @@ test get_reads_a_literal_index_under_the_decided_bound =
     let v: Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/cons(30, Vec/nil())));
     Test/equal([Vec/get(v, 0), Vec/get(v, 1), Vec/get(v, 2)], [10, 20, 30]);
 
+-- An update keeps the count, so it answers a vector of the same length, and the one written reads back.
+test set_writes_an_element_at_the_same_length =
+    let v: Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/cons(30, Vec/nil())));
+    let w: Vec(Nat, 3) = Vec/set(v, 1, 25);
+    Test/all([Test/equal(Vec/to_list(w), [10, 25, 30]), Test/equal(Vec/get(w, 1), 25)]);
+
 -- A list is already counted by `List/len`, so `of_list` keeps the list it was given and takes that length as the index.
 test of_list_and_to_list_round_trip_at_the_lists_own_length =
     let v = Vec/of_list([1, 2, 3]);

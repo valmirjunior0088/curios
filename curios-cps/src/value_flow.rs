@@ -621,6 +621,11 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                                 flow(solver, source(&args[1]), FlowKey::Element)
                             });
                         }
+                        Intrinsic::ListSet => {
+                            rules.add(move |solver| {
+                                flow(solver, source(&args[2]), FlowKey::Element)
+                            });
+                        }
                         // A number, a word, a float, a sequence or a list of what the list key holds already: nothing a closure call or a read follows.
                         Intrinsic::BoolAnd
                         | Intrinsic::BoolOr
