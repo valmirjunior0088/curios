@@ -431,7 +431,12 @@ impl<'s> Context<'s> {
             Item::Let(definition) => {
                 let name = definition.name;
                 self.redeclare(&name, &definition.type_);
-                self.define_published(&name, &definition.body, &definition.kind, definition.proof);
+                self.define_published(
+                    &name,
+                    &definition.body,
+                    Some(&definition.kind),
+                    definition.proof,
+                );
                 self.set_universe_context(&name, definition.universe_context.clone());
                 // The sort a value inhabits is published with the body, by the mark that withholds both (`curios_core::Definition::published`).
                 self.typing
@@ -454,7 +459,7 @@ impl<'s> Context<'s> {
                     self.define_published(
                         &name,
                         &Term::rec_proj(rec.group().clone(), index),
-                        &definition.kind,
+                        Some(&definition.kind),
                         definition.proof,
                     );
                     if self.is_witness_declaration(&definition.name) {
@@ -472,7 +477,7 @@ impl<'s> Context<'s> {
             let name = constructor.name;
             self.forget(&name);
             self.declare(&name, &constructor.type_);
-            self.define_published(&name, &constructor.body, &constructor.kind, false);
+            self.define_published(&name, &constructor.body, None, false);
             self.set_universe_context(&name, constructor.universe_context.clone());
             self.record_definition_totality(&name, curios_core::Totality::Total);
         }

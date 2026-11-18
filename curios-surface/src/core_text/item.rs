@@ -7,9 +7,8 @@
 use {
     super::{
         Fields, ReadError, Reader, Refusal, concept_entry_read, core_read, family_entry_read,
-        malformed, record_entry_read, term_global, term_word, universe_context_read, value_bool,
-        value_global, value_list, value_module, value_string, value_term, value_variant,
-        value_word,
+        malformed, record_entry_read, universe_context_read, value_bool, value_global, value_list,
+        value_module, value_string, value_term, value_variant, value_word,
     },
     crate::{
         CoreFile, CoreItem, CoreMember, CoreText, CoreValue, FormScope, LetSignature, TopForeign,
@@ -18,8 +17,8 @@ use {
     curios_abi::ForeignFunction,
     curios_common::Qualifier,
     curios_core::{
-        Atom, ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item,
-        Nominal, RecItem, Term, UniverseContext,
+        ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item, Nominal,
+        RecItem, Term, UniverseContext,
     },
     std::sync::Arc,
 };
@@ -114,7 +113,7 @@ fn foreign_definition_read(
         fields.finish()?;
         return Ok(None);
     }
-    let island = island_read(&mut fields, &row.core.name, None)?;
+    let island = island_read(&mut fields, &row.core.name)?;
     fields.finish()?;
     let scope = reader.scope("a foreign row's form", span)?;
     let function = reader
@@ -134,7 +133,7 @@ fn foreign_definition_read(
 fn test_read(test: &TopTest<CoreText>, reader: &mut Reader<'_>) -> Result<Definition, ReadError> {
     let span = test.label.span();
     let mut fields = Fields::of(&test.core.fields, span)?;
-    let island = island_read(&mut fields, &test.core.name, None)?;
+    let island = island_read(&mut fields, &test.core.name)?;
     fields.finish()?;
     let scope = reader.scope("a test's form", span)?;
     let family = Global::Authored(scope.syntax.test.test_type.qualifier());
@@ -154,18 +153,13 @@ fn test_read(test: &TopTest<CoreText>, reader: &mut Reader<'_>) -> Result<Defini
     ))
 }
 
-/// The module a definition's decorator places it in: its name's parent where it states none, or its family's for a constructor, whose name stands below its family's.
-fn island_read(
-    fields: &mut Fields<'_>,
-    name: &Global,
-    owner: Option<&Qualifier>,
-) -> Result<Qualifier, ReadError> {
+/// The module a definition's decorator places it in: its name's parent where it states none.
+fn island_read(fields: &mut Fields<'_>, name: &Global) -> Result<Qualifier, ReadError> {
     match fields.take("island") {
         Some(value) => value_module(value),
-        None => Ok(match (owner, name) {
-            (Some(owner), _) => owner.without_last(),
-            (None, Global::Authored(path)) => path.without_last(),
-            (None, Global::Witness(id)) => *id.module(),
+        None => Ok(match name {
+            Global::Authored(path) => path.without_last(),
+            Global::Witness(id) => *id.module(),
         }),
     }
 }
@@ -295,11 +289,7 @@ fn member_read(
         *scheme = Some(context.clone());
     }
     let kind = fields.take("kind").map(kind_read).transpose()?;
-    let owner = match &kind {
-        Some(DefinitionKind::InductiveConstructor { owner, .. }) => Some(*owner),
-        _ => None,
-    };
-    let island = island_read(&mut fields, &name, owner.as_ref())?;
+    let island = island_read(&mut fields, &name)?;
     let proof = fields
         .take("proof")
         .map(value_bool)
@@ -408,31 +398,12 @@ fn nominal_read(
     }
 }
 
-/// What a definition is declared as, where it is not what its keyword declares: `Witness`, `Test`, or a constructor of a family, `InductiveConstructor {owner = /F, tag = t}`, which a definition the module holds states and no reader takes it at: a constructor is its family's, which the family's form declares.
+/// What a definition is declared as, where it is not what its keyword declares: `Witness` or `Test`. A constructor is no kind a definition states: it is its family's, which the family's form declares, so a definition stating itself one is refused here.
 fn kind_read(value: &CoreValue) -> Result<DefinitionKind, ReadError> {
-    let term = value_term(value)?;
-    if let crate::Subterm::StructLit(literal) = term.as_subterm()
-        && super::literal_variant(literal) == Some("InductiveConstructor")
-    {
-        let mut fields = super::literal_fields(literal)?;
-        let owner = match term_global(fields.term("owner")?) {
-            Some(Global::Authored(owner)) => owner,
-            _ => return Err(malformed("a constructor's family by its path", value)),
-        };
-        let tag = term_word(fields.term("tag")?)
-            .ok_or_else(|| malformed("a constructor's tag", value))?;
-        fields.finish()?;
-        return Ok(DefinitionKind::InductiveConstructor {
-            owner,
-            tag: Atom::from(tag),
-        });
-    }
-    match value_variant(value)? {
+    let refused = || malformed("a definition's kind: `Witness` or `Test`", value);
+    match value_variant(value).map_err(|_| refused())? {
         ("Witness", held) if held.is_empty() => Ok(DefinitionKind::Witness),
         ("Test", held) if held.is_empty() => Ok(DefinitionKind::Test),
-        _ => Err(malformed(
-            "a definition's kind: `Witness`, `Test` or `InductiveConstructor {…}`",
-            value,
-        )),
+        _ => Err(refused()),
     }
 }

@@ -200,24 +200,32 @@ fn inductive_constructor_ownership_is_explicit() {
         Type
         "#,
     );
-    let schemes = definitions
+    // A former by what it is declared as, its entry being its own; a constructor by what it is made as, which names its family.
+    let formers = definitions
         .items
         .iter()
-        .flat_map(|item| item.definitions().into_iter().chain(item.constructors()))
+        .flat_map(|item| item.definitions())
         .map(|definition| {
-            // A former by what it is declared as, its entry being its own; a constructor by its kind, which names its family.
             (
                 definition.name,
                 definition.kind.declared(&definition.type_),
-                definition
-                    .kind
-                    .nominal()
-                    .is_none()
-                    .then(|| definition.kind.clone()),
+                None,
                 definition.universe_context.parameter_count,
             )
-        })
-        .collect::<Vec<_>>();
+        });
+    let constructors = definitions
+        .items
+        .iter()
+        .flat_map(|item| item.constructors())
+        .map(|constructor| {
+            (
+                constructor.name,
+                constructor.declared(),
+                Some(constructor.made),
+                constructor.universe_context.parameter_count,
+            )
+        });
+    let schemes = formers.chain(constructors).collect::<Vec<_>>();
 
     // The family, then its constructors in the order its cases are written, each made of the family's entry at its levels.
     assert_eq!(
@@ -232,7 +240,7 @@ fn inductive_constructor_ownership_is_explicit() {
             (
                 global_name("/Result/success"),
                 curios_core::Declared::Constructor,
-                Some(curios_core::DefinitionKind::InductiveConstructor {
+                Some(curios_core::MadeKind::Constructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("success"),
                 }),
@@ -241,7 +249,7 @@ fn inductive_constructor_ownership_is_explicit() {
             (
                 global_name("/Result/failure"),
                 curios_core::Declared::Constructor,
-                Some(curios_core::DefinitionKind::InductiveConstructor {
+                Some(curios_core::MadeKind::Constructor {
                     owner: Qualifier::from(["Result"]),
                     tag: curios_core::Atom::from("failure"),
                 }),

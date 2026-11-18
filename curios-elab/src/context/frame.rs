@@ -63,11 +63,11 @@ impl DefEntry {
     }
 
     /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
-    pub fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
+    pub fn published(term: Term, kind: Option<DefinitionKind>, proof: bool) -> Self {
         Self {
             by_value: None,
             term,
-            kind: Some(kind),
+            kind,
             proof,
             depth: 0,
         }

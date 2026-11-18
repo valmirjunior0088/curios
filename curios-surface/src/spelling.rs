@@ -5,15 +5,15 @@ use {
         CoreEntry, CoreFile, CoreHead, CoreItem, CoreMember, CoreText, CoreValue, Decoration,
         DecoratorField, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign, TopLet,
         TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
-        level_spelled, literal_of, nested, print_core_entry, print_core_item, print_core_term,
-        print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
-        spellings_reaching, string, sub, tree, universe_context_written, value, word, word_value,
+        level_spelled, nested, print_core_entry, print_core_item, print_core_term, print_shown,
+        print_shown_entry, print_shown_item, print_term, record_declared, spellings_reaching,
+        string, sub, tree, universe_context_written, value, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
-        Global, HeadKey, InductArm, Instance, Intrinsic, Item, Label, Level, Lexicon, Marks,
+        Global, HeadKey, InductArm, Instance, Intrinsic, Item, Label, Level, Lexicon, Made, Marks,
         Members, Mention, Nat, Nominal, Notation, Program, Scope, Sharing, Spellings, StructDecl,
         Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort,
         suffixes_of,
@@ -2421,7 +2421,7 @@ fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
     let mut terms = vec![definition.type_.clone(), definition.body.clone()];
     if let (Nominal::Inductive(declaration), Global::Authored(owner)) = (nominal, definition.name) {
         terms.extend(
-            Definition::constructors(owner, definition.island, declaration)
+            Made::constructors(owner, definition.island, declaration)
                 .into_iter()
                 .map(|constructor| constructor.type_),
         );
@@ -2581,23 +2581,9 @@ fn definition_fields<D: Rendered>(
         DefinitionKind::Authored | DefinitionKind::Nominal(_) => {}
         DefinitionKind::Witness => fields.push(("kind", word_value("Witness"))),
         DefinitionKind::Test => fields.push(("kind", word_value("Test"))),
-        // A variant that holds fields is written as a structure's literal is.
-        DefinitionKind::InductiveConstructor { owner, tag } => fields.push((
-            "kind",
-            value(literal_of(
-                "InductiveConstructor",
-                vec![
-                    ("owner", word(spelling.symbol(&Global::Authored(*owner)))),
-                    ("tag", word(tag.as_string())),
-                ],
-            )),
-        )),
     }
-    // A definition's island defaults to its name's parent, and a constructor's, whose name stands below its family's, to its family's.
-    let parent = match kind {
-        DefinitionKind::InductiveConstructor { owner, .. } => Some(owner.without_last()),
-        _ => name.qualifier().map(Qualifier::without_last),
-    };
+    // A definition's island defaults to its name's parent.
+    let parent = name.qualifier().map(Qualifier::without_last);
     if parent.as_ref() != Some(island) {
         fields.push(("island", module_written(island, spelling)));
     }

@@ -301,30 +301,17 @@ fn a_version_is_written_as_the_module_it_holds() {
     assert_eq!(version.faithful().to_string(), made.faithful().to_string());
 }
 
-/// `/Bit/two`, a `let` stating it is a constructor of `/Bit`, whose form declares none of that name, and defined as `1`.
-fn stated_constructor() -> Definition {
-    let mut stated = Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit())
-        .swap_remove(1);
-    stated.name = global(&["Bit", "two"]);
-    stated.kind = DefinitionKind::InductiveConstructor {
-        owner: Qualifier::from(["Bit"]),
-        tag: Atom::from("two"),
-    };
-    stated.body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-
-    stated
-}
-
-/// A `let` stating a constructor's kind is written out under the kind it states: Core holds it, though only a family's form declares a constructor.
+/// A constructor is its family's, made of the family's entry, and no kind a definition states: a definition stating itself one is refused where Core text reads it, by the kinds a definition does state.
 #[test]
-fn a_definition_stating_a_constructors_kind_is_written_out_under_it() {
-    let written = module(bit(), vec![stated_constructor()])
-        .faithful()
-        .to_string();
+fn a_definition_stating_itself_a_constructor_is_refused_where_it_is_read() {
+    let text = "induct /Bit: pub Type\n| one()\nend\n#{kind = InductiveConstructor { owner = /Bit, tag = two }} let /Bit/two: /Bit = 1;\n";
+    let file = text.parse::<CoreFile>().unwrap();
+    let error = to_core(&file, None).map(|_| ()).expect_err(text);
 
     assert!(
-        written.contains("#{kind = InductiveConstructor { owner = /Bit, tag = two }} let /Bit/two"),
-        "{written}"
+        matches!(&error.refusal, Refusal::Malformed(what) if what.contains("`Witness` or `Test`")),
+        "{:?}",
+        error.refusal
     );
 }
 
@@ -631,7 +618,6 @@ fn every_module_written_reads_back_as_itself() {
     );
     let modules = [
         module(bit(), Vec::new()),
-        module(bit(), vec![stated_constructor()]),
         Definitions {
             items: vec![Item::Let(Box::new(record))].into(),
         },

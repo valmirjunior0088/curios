@@ -624,19 +624,13 @@ type Located = HashMap<Global, (usize, usize)>;
 
 /// How a lowered definition was introduced.
 ///
-/// This is elaboration metadata, not a fact inferred from the flattened qualified name. In particular, a module and a nominal type may share a qualifier without turning ordinary module members into generated nominal members.
-///
-/// A generated member names its origin in full: `InductiveConstructor` carries both the inductive it belongs to *and* which constructor it is, so the registry correspondence is read off the pair rather than re-synthesized by joining an owner and a tag into a name and looking that name up.
+/// This is elaboration metadata, not a fact inferred from the flattened qualified name. In particular, a module and a nominal type may share a qualifier without turning ordinary module members into generated nominal members. A constructor is no kind of definition: an item makes it of its family's entry where it is read ([`Made`]), and holds none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum DefinitionKind {
     Authored,
     /// A nominal declaration's former, with the entry it is the former of: what says a definition is one, so no former is spelled without its entry and no entry without its former.
     Nominal(Rc<Nominal>),
-    InductiveConstructor {
-        owner: Qualifier,
-        tag: Atom,
-    },
     Witness,
     Test,
 }
@@ -646,14 +640,6 @@ impl DefinitionKind {
     pub fn nominal(&self) -> Option<&Nominal> {
         match self {
             DefinitionKind::Nominal(nominal) => Some(nominal),
-            _ => None,
-        }
-    }
-
-    /// The declaration a generated definition was generated from: a constructor's family. `None` for a written one.
-    pub fn generated_from(&self) -> Option<Qualifier> {
-        match self {
-            DefinitionKind::InductiveConstructor { owner, .. } => Some(*owner),
             _ => None,
         }
     }
@@ -687,7 +673,6 @@ impl DefinitionKind {
         match self {
             DefinitionKind::Authored => Declared::defined(type_),
             DefinitionKind::Nominal(_) => self.former().expect("a nominal is a former"),
-            DefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
             DefinitionKind::Witness => Declared::Witness,
             DefinitionKind::Test => Declared::Test,
         }
@@ -843,6 +828,92 @@ pub struct Definition {
     pub value_sort: Option<Term>,
     pub type_: Term,
     pub body: Term,
+}
+
+/// A name an item declares and holds in none of its definitions, as the item makes it of what it does hold: a family's constructor, made of its family's entry ([`Made::constructors`]). Its type and its value are its maker's, at the maker's own levels, so nothing about it is stated anywhere else, and it is read where it is asked for rather than held.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Made {
+    pub name: Global,
+    pub made: MadeKind,
+    pub universe_context: UniverseContext,
+    /// The module its maker sits in, which it shares.
+    pub island: Qualifier,
+    pub type_: Term,
+    pub body: Term,
+}
+
+/// What a made name is, and of what it is made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum MadeKind {
+    /// The constructor `tag` of the family `owner`.
+    Constructor { owner: Qualifier, tag: Atom },
+}
+
+impl Made {
+    /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, each binding a proof where the signature's does, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
+    ///
+    /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
+    pub fn constructors(
+        owner: Qualifier,
+        island: Qualifier,
+        declaration: &InductDecl,
+    ) -> Vec<Self> {
+        let family = Global::Authored(owner);
+        let universes = declaration.universe_context().identity_instance();
+        let params = declaration.param_count();
+        declaration
+            .constructors()
+            .iter()
+            .map(|(tag, case)| {
+                let signature = declaration.signature(case);
+                let proofs = signature.proofs();
+                let (binders, indices) = opened(signature.cursor());
+                let variables = variables(&binders);
+                let (leading, payload) = variables.split_at(params.min(variables.len()));
+                let type_ =
+                    Term::induct_type_at(family, universes.clone(), leading.to_vec(), indices);
+                let injection = Term::variant_at(
+                    family,
+                    universes.clone(),
+                    leading.to_vec(),
+                    tag.clone(),
+                    payload.to_vec(),
+                );
+
+                Self {
+                    name: Global::Authored(owner.with(tag.as_str())),
+                    made: MadeKind::Constructor {
+                        owner,
+                        tag: tag.clone(),
+                    },
+                    universe_context: declaration.universe_context().clone(),
+                    island,
+                    type_: Term::from(Subterm::FuncType(FuncType {
+                        telescope: Telescope::build_marked(binders.clone(), type_)
+                            .with_proofs(&proofs),
+                    })),
+                    body: Term::from(Subterm::Func(Func {
+                        telescope: Telescope::build_marked(binders, injection).with_proofs(&proofs),
+                    })),
+                }
+            })
+            .collect()
+    }
+
+    /// The declaration this name is made of.
+    pub fn owner(&self) -> Qualifier {
+        match &self.made {
+            MadeKind::Constructor { owner, .. } => *owner,
+        }
+    }
+
+    /// What this name is declared as.
+    pub fn declared(&self) -> Declared {
+        match self.made {
+            MadeKind::Constructor { .. } => Declared::Constructor,
+        }
+    }
 }
 
 /// The field of one of its own binders a definition's value is: where its value, beneath its own binders, is a field of one of them, which binder and which slot, as the elaborator's level alignment reads it ([`Families::parameter_field`](crate::Families::parameter_field)).
@@ -1135,58 +1206,6 @@ impl Definition {
         }
     }
 
-    /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, each binding a proof where the signature's does, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
-    ///
-    /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
-    pub fn constructors(
-        owner: Qualifier,
-        island: Qualifier,
-        declaration: &InductDecl,
-    ) -> Vec<Self> {
-        let family = Global::Authored(owner);
-        let universes = declaration.universe_context().identity_instance();
-        let params = declaration.param_count();
-        declaration
-            .constructors()
-            .iter()
-            .map(|(tag, case)| {
-                let signature = declaration.signature(case);
-                let proofs = signature.proofs();
-                let (binders, indices) = opened(signature.cursor());
-                let variables = variables(&binders);
-                let (leading, payload) = variables.split_at(params.min(variables.len()));
-                let type_ =
-                    Term::induct_type_at(family, universes.clone(), leading.to_vec(), indices);
-                let injection = Term::variant_at(
-                    family,
-                    universes.clone(),
-                    leading.to_vec(),
-                    tag.clone(),
-                    payload.to_vec(),
-                );
-
-                Self {
-                    name: Global::Authored(owner.with(tag.as_str())),
-                    universe_context: declaration.universe_context().clone(),
-                    kind: DefinitionKind::InductiveConstructor {
-                        owner,
-                        tag: tag.clone(),
-                    },
-                    island,
-                    value_sort: None,
-                    proof: false,
-                    type_: Term::from(Subterm::FuncType(FuncType {
-                        telescope: Telescope::build_marked(binders.clone(), type_)
-                            .with_proofs(&proofs),
-                    })),
-                    body: Term::from(Subterm::Func(Func {
-                        telescope: Telescope::build_marked(binders, injection).with_proofs(&proofs),
-                    })),
-                }
-            })
-            .collect()
-    }
-
     /// The definition a `foreign` row declares under `name`, made from the row: a function of its wire parameters, each explicit and hintless, ahead of which a row that does not return takes the type it yields, hidden, at a level of the definition's own; answering the row's call over them, at the type the row produces ([`foreign_produced`]).
     ///
     /// **The one spelling of a foreign row's definition.** The lowering writes a `foreign` declaration's definition so, and a reader of Core text makes it so from the row a `foreign` form states.
@@ -1379,19 +1398,17 @@ impl Item {
         own.into_iter().chain(self.constructor_names()).collect()
     }
 
-    /// What this item declares each of its names as, in the order of [`Item::declared_names`]. A definition the item holds is no constructor whatever its kind states: a constructor is its family's, which the item declares beside its definitions.
+    /// What this item declares each of its names as, in the order of [`Item::declared_names`]: each definition it holds as it is written, then each constructor of a family it declares.
     pub fn declared(&self) -> Vec<Declared> {
-        let held = |kind: &DefinitionKind, type_: &Term| match kind.declared(type_) {
-            Declared::Constructor => Declared::defined(type_),
-            declared => declared,
-        };
         let own = match self {
-            Item::Let(definition) => vec![held(&definition.kind, &definition.type_)],
+            Item::Let(definition) => vec![definition.kind.declared(&definition.type_)],
             Item::Rec(rec) => rec
                 .definitions
                 .iter()
                 .enumerate()
-                .map(|(member, definition)| held(&definition.kind, &rec.group.member_type(member)))
+                .map(|(member, definition)| {
+                    definition.kind.declared(&rec.group.member_type(member))
+                })
                 .collect(),
         };
         let constructors = self.constructor_names().len();
@@ -1437,18 +1454,16 @@ impl Item {
         }
     }
 
-    /// The value constructors of each family this item declares, as each family's entry makes them ([`Definition::constructors`]): what the item declares beside its definitions and holds in none of them, so a constructor is its family's by construction.
-    pub fn constructors(&self) -> Vec<Definition> {
+    /// The value constructors of each family this item declares, as each family's entry makes them ([`Made::constructors`]): what the item declares beside its definitions and holds in none of them, so a constructor is its family's by construction.
+    pub fn constructors(&self) -> Vec<Made> {
         self.families()
             .into_iter()
-            .flat_map(|(owner, island, declaration)| {
-                Definition::constructors(owner, island, declaration)
-            })
+            .flat_map(|(owner, island, declaration)| Made::constructors(owner, island, declaration))
             .collect()
     }
 
     /// The constructor `name` of a family this item declares, as its family's entry makes it.
-    pub fn constructor(&self, name: &Global) -> Option<Definition> {
+    pub fn constructor(&self, name: &Global) -> Option<Made> {
         let Global::Authored(path) = name else {
             return None;
         };
@@ -1458,7 +1473,7 @@ impl Item {
             .into_iter()
             .find(|(family, _, _)| *family == owner)?;
 
-        Definition::constructors(owner, island, declaration)
+        Made::constructors(owner, island, declaration)
             .into_iter()
             .find(|constructor| constructor.name == *name)
     }
@@ -1784,8 +1799,8 @@ impl Definitions {
         item.definitions()
             .into_iter()
             .find(|definition| definition.name == *name)
-            .or_else(|| item.constructor(name))
             .map(|definition| definition.island)
+            .or_else(|| item.constructor(name).map(|constructor| constructor.island))
     }
 
     /// What this unit's structures and constructors are written by ([`Members`]): each structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
@@ -1857,12 +1872,12 @@ impl Entrypoint {
     }
 }
 
-/// The definition `name` names among those `item` declares, at `at` among its names: one of its own, a group's member as [`RecItem::definitions`] materializes it, or a constructor of a family it declares as the family's entry makes it.
+/// The definition `name` names among those `item` holds, at `at` among its names: one of its own, or a group's member as [`RecItem::definitions`] materializes it. A constructor is made, not held, so it names none.
 fn item_definition(item: &Item, name: &Global, at: usize) -> Option<Definition> {
     match item {
         Item::Let(definition) if definition.name == *name => Some(Definition::clone(definition)),
         Item::Rec(rec) if at < rec.exports().len() => rec.definitions().into_iter().nth(at),
-        _ => item.constructor(name),
+        _ => None,
     }
 }
 

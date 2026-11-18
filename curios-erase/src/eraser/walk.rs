@@ -27,7 +27,7 @@ pub enum Outcome {
 pub type Externals<'s> = &'s dyn Fn(&curios_core::Global, Sorts) -> Option<&'s ErasedItem>;
 
 /// How one item's erasure reads a constructor off the family that declares it, its own unit's or a unit in scope's: the family a name constructs a value of, which the certifier's environment does not say.
-pub type Constructors<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_core::Definition>;
+pub type Constructors<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_core::Made>;
 
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.
 #[derive(Debug, Default)]
@@ -89,7 +89,7 @@ impl<'s> Eraser<'s> {
     }
 
     /// The constructor `name`, as its family's entry makes it, where it is one.
-    pub fn constructor(&self, name: &curios_core::Global) -> Option<&'s curios_core::Definition> {
+    pub fn constructor(&self, name: &curios_core::Global) -> Option<&'s curios_core::Made> {
         (self.constructors)(name)
     }
 

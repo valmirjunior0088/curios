@@ -193,13 +193,23 @@ pub fn declared(certifier: &mut Certifier, text: &str) {
                     .expect("a name is declared once");
             }
         }
-        for definition in item.definitions().into_iter().chain(item.constructors()) {
+        for definition in item.definitions() {
             certifier
                 .define(
                     &definition.name,
                     &definition.type_,
                     &definition.body,
                     &definition.universe_context,
+                )
+                .expect("a name is declared once");
+        }
+        for constructor in item.constructors() {
+            certifier
+                .define(
+                    &constructor.name,
+                    &constructor.type_,
+                    &constructor.body,
+                    &constructor.universe_context,
                 )
                 .expect("a name is declared once");
         }

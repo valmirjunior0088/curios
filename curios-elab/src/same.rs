@@ -11,10 +11,11 @@ mod tests;
 
 use {
     crate::{Classified, Parts, Question, Traces},
-    curios_common::digest,
+    curios_common::{Qualifier, digest},
     curios_core::{
-        Bound, ConceptDecl, Definition, DefinitionKind, Definitions, InductDecl, Item,
-        MetaRenaming, Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
+        Bound, ConceptDecl, Definition, DefinitionKind, Definitions, Global, InductDecl, Item,
+        Made, MadeKind, MetaRenaming, Nominal, Place, Places, RecItem, Sharing, StructDecl,
+        Telescope, Term, UniverseContext,
     },
 };
 
@@ -153,7 +154,7 @@ impl Same {
 
 /// The digest of the part of a declaration `question` asks, where `module` holds the declaration at the place `places` keeps for it: what a unit records of a part it read of another unit, and what the part is asked again by, once the unit it was read from is no longer the one in scope. `Ok(None)` where the name declares no such part, which is an answer as any other is; `Err` where the part will not archive.
 ///
-/// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is its inequalities alone ([`UniverseContext`](curios_core::UniverseContext)), so its bytes are what its equality reads. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
+/// **Two parts digest alike exactly where [`Same`] calls them one.** A part is consed alone ([`Sharing`]), which leaves one node for each structure under its binders' names and no position on any, then archived and digested, so what `spelled_alike` compares is what the bytes spell; a universe scheme is its inequalities alone ([`UniverseContext`]), so its bytes are what its equality reads. Each part holds what [`Same`] reads of it and nothing else: a signature its kind, a body its signature, and a group's member the group whole.
 pub fn part_digest(
     definitions: &Definitions,
     places: &Places,
@@ -177,6 +178,46 @@ pub fn part_digest(
     )
 }
 
+/// The declaration a question asks of, as a digest reads it: its name and what it is, as written or as made, where it sits, whether it is a proof, and its parts, held whole or through its group.
+struct Asked<'a> {
+    name: Global,
+    written: Option<&'a DefinitionKind>,
+    made: Option<MadeKind>,
+    island: Qualifier,
+    proof: bool,
+    group: Option<&'a RecItem>,
+    plain: Option<Plain<'a>>,
+}
+
+/// What a digest reads of a declaration held whole: its type, its value, its scheme, and the sort its value inhabits, where it states one. A definition's, or a made name's, which states none.
+#[derive(Clone, Copy)]
+struct Plain<'a> {
+    type_: &'a Term,
+    body: &'a Term,
+    universe_context: &'a UniverseContext,
+    sort: Option<&'a Term>,
+}
+
+impl<'a> Plain<'a> {
+    fn of(definition: &'a Definition) -> Self {
+        Self {
+            type_: &definition.type_,
+            body: &definition.body,
+            universe_context: &definition.universe_context,
+            sort: definition.published().1,
+        }
+    }
+
+    fn made(made: &'a Made) -> Self {
+        Self {
+            type_: &made.type_,
+            body: &made.body,
+            universe_context: &made.universe_context,
+            sort: None,
+        }
+    }
+}
+
 /// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`, beside what its elaboration concluded of the definition `classified`: what a walk asks of an item it holds in hand, before any module places it.
 pub fn item_part_digest(
     item: &Item,
@@ -187,27 +228,29 @@ pub fn item_part_digest(
     let sharing = Sharing::new();
     let totality = classified.totality;
     let made;
-    // A definition of its own, a group's member with the group it is read through, or a constructor as its family's entry makes it.
-    let (name, held, island, proof, group, plain) = match (item, place) {
-        (Item::Let(definition), Place::Let(_)) => (
-            definition.name,
-            &definition.kind,
-            definition.island,
-            definition.proof,
-            None,
-            Some(&**definition),
-        ),
+    // A definition of its own, a group's member with the group it is read through, or a constructor as its family's entry makes it, which is no definition and states no kind.
+    let asked = match (item, place) {
+        (Item::Let(definition), Place::Let(_)) => Asked {
+            name: definition.name,
+            written: Some(&definition.kind),
+            made: None,
+            island: definition.island,
+            proof: definition.proof,
+            group: None,
+            plain: Some(Plain::of(definition)),
+        },
         (Item::Rec(rec), Place::Member { member, .. }) => {
             let definition = &rec.exports()[member as usize];
 
-            (
-                definition.name,
-                &definition.kind,
-                definition.island,
-                definition.proof,
-                Some(rec),
-                None,
-            )
+            Asked {
+                name: definition.name,
+                written: Some(&definition.kind),
+                made: None,
+                island: definition.island,
+                proof: definition.proof,
+                group: Some(rec),
+                plain: None,
+            }
         }
         (_, Place::Constructor { .. }) => {
             made = question
@@ -215,24 +258,42 @@ pub fn item_part_digest(
                 .and_then(|name| item.constructor(name))
                 .expect("a constructor's place is its family's item");
 
-            (
-                made.name,
-                &made.kind,
-                made.island,
-                made.proof,
-                None,
-                Some(&made),
-            )
+            Asked {
+                name: made.name,
+                written: None,
+                made: Some(made.made.clone()),
+                island: made.island,
+                proof: false,
+                group: None,
+                plain: Some(Plain::made(&made)),
+            }
         }
         _ => unreachable!("a name's place is its item's"),
     };
+    let Asked {
+        name,
+        written: held,
+        made: made_as,
+        island,
+        proof,
+        group,
+        plain,
+    } = asked;
 
-    // What the name is declared as, the entry a former carries left out: the entry is a part of its own.
-    let origin = (!matches!(held, DefinitionKind::Nominal(_))).then(|| held.clone());
-    let kind = (name, held.former(), origin, island);
+    // What the name is declared as, the entry a former carries left out: the entry is a part of its own. A made name is what it is made as.
+    let origin = held
+        .filter(|held| !matches!(held, DefinitionKind::Nominal(_)))
+        .cloned();
+    let kind = (
+        name,
+        held.and_then(DefinitionKind::former),
+        origin,
+        made_as,
+        island,
+    );
     let signature = || match (plain, group) {
         (Some(definition), _) => {
-            let type_ = sharing.share(&definition.type_);
+            let type_ = sharing.share(definition.type_);
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
@@ -262,7 +323,7 @@ pub fn item_part_digest(
         }
         (None, None) => unreachable!("a name is a definition's or a member's"),
     };
-    let entry = held.nominal();
+    let entry = held.and_then(DefinitionKind::nominal);
 
     match question {
         Question::Kind(_) => sealed(curios_archive::to_bytes(&kind)).map(Some),
@@ -271,7 +332,7 @@ pub fn item_part_digest(
             // A proof unfolds to nothing, and a group's member to its group, which its signature holds.
             let body = plain
                 .filter(|_| !proof)
-                .map(|definition| sharing.share(&definition.body));
+                .map(|definition| sharing.share(definition.body));
             let part = (signature()?, totality, proof, body);
 
             sealed(curios_archive::to_bytes(&part)).map(Some)
@@ -284,7 +345,7 @@ pub fn item_part_digest(
         Question::Sort(_) => {
             // A group's member files none.
             let sort = plain
-                .and_then(|definition| definition.published().1)
+                .and_then(|definition| definition.sort)
                 .map(|sort| sharing.share(sort));
 
             sealed(curios_archive::to_bytes(&sort)).map(Some)

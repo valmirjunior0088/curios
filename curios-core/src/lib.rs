@@ -44,9 +44,9 @@ pub use definitions::{
     ArchivedDefinition, ArchivedDefinitionKind, ArchivedDefinitions, ArchivedItem, ArchivedNominal,
     ArchivedParameterField, ArchivedRead, ArchivedReads, ArchivedRecDefinition, ArchivedRecItem,
     ArchivedTotality, Certification, Certified, Concluded, Declared, Definition, DefinitionKind,
-    Definitions, Entrypoint, HeldReads, Item, Nominal, ParameterField, Positional, Program, Read,
-    ReadBy, ReadRecord, Reads, RecDefinition, RecItem, Revision, Totality, former_spelling,
-    free_locals_of, open_positions_of, validate_stored_identities,
+    Definitions, Entrypoint, HeldReads, Item, Made, MadeKind, Nominal, ParameterField, Positional,
+    Program, Read, ReadBy, ReadRecord, Reads, RecDefinition, RecItem, Revision, Totality,
+    former_spelling, free_locals_of, open_positions_of, validate_stored_identities,
 };
 
 mod places;

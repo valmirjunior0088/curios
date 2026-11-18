@@ -802,10 +802,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// The constructor `name` of a family a unit in scope declares, as its family's entry makes it.
-    pub(super) fn constructor(
-        &self,
-        name: &curios_core::Global,
-    ) -> Option<&'a curios_core::Definition> {
+    pub(super) fn constructor(&self, name: &curios_core::Global) -> Option<&'a curios_core::Made> {
         self.cores
             .iter()
             .zip(self.places)
@@ -833,12 +830,12 @@ impl<'a> Erasures<'a> {
     }
 }
 
-/// The constructor `name` of a family `definitions` declares, where `places` holds it at a constructor's place: the definition its family's entry makes, which erasure reads for the family a call constructs a value of and for its body. A name an item defines, whatever kind its definition states, is no constructor.
+/// The constructor `name` of a family `definitions` declares, where `places` holds it at a constructor's place, as its family's entry makes it: what erasure reads for the family a call constructs a value of and for its body. A name an item defines is no constructor.
 pub fn constructor<'a>(
     definitions: &curios_core::Definitions,
     places: &'a curios_core::Places,
     name: &curios_core::Global,
-) -> Option<&'a curios_core::Definition> {
+) -> Option<&'a curios_core::Made> {
     match places.place(name)? {
         place @ curios_core::Place::Constructor { .. } => {
             Some(places.constructor(name, &definitions.items[place.item()]))

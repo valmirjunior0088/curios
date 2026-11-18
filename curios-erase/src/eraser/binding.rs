@@ -15,21 +15,33 @@ impl Eraser<'_> {
         context: &mut Reader,
         definition: &curios_core::Definition,
     ) -> Result<(), Error> {
-        let symbol = definition.name.faithful().to_string();
+        self.erase_binding(
+            context,
+            definition.name,
+            &definition.type_,
+            &definition.body,
+        )
+    }
+
+    /// Bind `name`, of `type_`, to what `body` erases to: the one door a definition and a made name are both bound through, since neither reads any more of what it is.
+    pub fn erase_binding(
+        &mut self,
+        context: &mut Reader,
+        name: curios_core::Global,
+        type_: &curios_core::Term,
+        body: &curios_core::Term,
+    ) -> Result<(), Error> {
+        let symbol = name.faithful().to_string();
         // A function's body runs where it is called, so writing one computes nothing and it is walked whatever it returns. Any other item is a value computed at initialization, which makes it a kept slot as a local binding is: a proof or a type is bound to its stand-in, and a lemma applied at the top level does not run before the program does.
-        let outcome = self.with_owner(symbol.clone(), |lowering| match &*definition.body {
-            curios_core::Subterm::Func(_) => {
-                lowering.walk(context, &definition.body, &definition.type_, Some(&symbol))
-            }
-            _ => lowering.kept_operand(context, &definition.body, &definition.type_, Some(&symbol)),
+        let outcome = self.with_owner(symbol.clone(), |lowering| match &**body {
+            curios_core::Subterm::Func(_) => lowering.walk(context, body, type_, Some(&symbol)),
+            _ => lowering.kept_operand(context, body, type_, Some(&symbol)),
         })?;
         let atom = match outcome {
             Outcome::Emitted(atom) => atom,
             // A diverging initializer (a vacuous elimination) has no result operand; give it the computed-member encoding — a value whose init block seals with the divergence terminator — so the program traps at initialization, matching the entry-block convention.
             Outcome::Diverged(terminator) => {
-                let value = self
-                    .builder
-                    .value(Some(definition.name.faithful().to_string()));
+                let value = self.builder.value(Some(name.faithful().to_string()));
                 self.builder.open_block();
                 let block = self.builder.seal_block(terminator);
                 let group = self.builder.rec_group(vec![], vec![(value, block)]);
@@ -37,7 +49,7 @@ impl Eraser<'_> {
                 curios_anf::Atom::Value(value)
             }
         };
-        self.environment.bind(definition.name, atom);
+        self.environment.bind(name, atom);
 
         Ok(())
     }

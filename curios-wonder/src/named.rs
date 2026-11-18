@@ -702,8 +702,8 @@ fn spelled(
         item.definitions()
             .into_iter()
             .find(|definition| definition.name == name)
-            .or_else(|| item.constructor(&name))
             .map(|definition| definition.type_)
+            .or_else(|| item.constructor(&name).map(|constructor| constructor.type_))
     });
 
     Described {

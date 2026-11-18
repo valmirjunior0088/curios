@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{
-        Declared, Definition, Definitions, Global, Item, Items, RecGroup, RecItem, Term, WitnessId,
+        Declared, Definitions, Global, Item, Items, Made, RecGroup, RecItem, Term, WitnessId,
         WitnessKey,
     },
     curios_common::{Keyed, Persistent, Qualifier, Sorted},
@@ -48,7 +48,7 @@ impl Place {
 struct Held {
     place: Place,
     member: Option<Rc<OnceCell<(Term, Term)>>>,
-    constructor: Option<Rc<OnceCell<Definition>>>,
+    constructor: Option<Rc<OnceCell<Made>>>,
 }
 
 /// Where a module holds each name it defines.
@@ -177,8 +177,8 @@ impl Places {
         })
     }
 
-    /// The definition the constructor `name`, which `item` declares, is read as: the one its family's entry makes ([`Item::constructor`]), kept from the first time it is asked for.
-    pub fn constructor(&self, name: &Global, item: &Item) -> &Definition {
+    /// The constructor `name`, which `item` declares, as its family's entry makes it ([`Item::constructor`]), kept from the first time it is asked for.
+    pub fn constructor(&self, name: &Global, item: &Item) -> &Made {
         let cell = self
             .places
             .get(name)

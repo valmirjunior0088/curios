@@ -529,9 +529,18 @@ fn erase_item(
         curios_core::Item::Let(definition) => lowering.erase_definition(reader, definition)?,
         curios_core::Item::Rec(rec) => lowering.erase_rec_item(reader, rec)?,
     }
-    // A family's constructors are its item's: it declares them beside its former, and each is the definition the family's entry makes.
+    // A family's constructors are its item's: it declares them beside its former, and each is made of the family's entry, read at the item's sorts as its definitions are.
     for constructor in item.constructors() {
-        lowering.erase_definition(reader, &definition_at_sorts(constructor, sorts))?;
+        let at_sorts = |term: &curios_core::Term| match sorts.is_none() {
+            true => term.clone(),
+            false => curios_core::instantiate_qualities(term, &sorts.qualities()),
+        };
+        lowering.erase_binding(
+            reader,
+            constructor.name,
+            &at_sorts(&constructor.type_),
+            &at_sorts(&constructor.body),
+        )?;
     }
     let names = item.declared_names();
     // The row of each registry entry the item declares is registered here, whether or not anything of the item constructs or matches it: every other item holds the row as an import of this one.

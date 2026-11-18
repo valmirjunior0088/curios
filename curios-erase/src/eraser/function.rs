@@ -294,7 +294,7 @@ fn named_head(head: &curios_core::Term) -> Option<(&curios_core::Global, &curios
 impl Eraser<'_> {
     /// Whether `head` names a constructor of a family that is a proposition at the call's sorts.
     ///
-    /// The owning family is read off where the name is held: a constructor is a name its family's item declares, and the definition read is the one the family's entry makes, so its [`DefinitionKind::InductiveConstructor`](curios_core::DefinitionKind::InductiveConstructor) is its family's by construction, where a kind an item states would be a claim. Splitting the name into a qualifier prefix and a last segment would instead ask whether some *other* declaration happens to be registered under this name's prefix — a question whose answer is only accidentally the same one, and which decides whether a call is dropped entirely.
+    /// The owning family is read off where the name is held: a constructor is a name its family's item declares, made of the family's entry, so the family it names ([`curios_core::Made::owner`]) is its family's by construction, where a kind an item states would be a claim. Splitting the name into a qualifier prefix and a last segment would instead ask whether some *other* declaration happens to be registered under this name's prefix — a question whose answer is only accidentally the same one, and which decides whether a call is dropped entirely.
     fn is_proof_constructor(
         &self,
         context: &mut Reader,
@@ -303,13 +303,11 @@ impl Eraser<'_> {
         let Some((name, universes)) = named_head(head) else {
             return Ok(false);
         };
-        let Some(curios_core::DefinitionKind::InductiveConstructor { owner, .. }) =
-            self.constructor(name).map(|definition| &definition.kind)
-        else {
+        let Some(owner) = self.constructor(name).map(curios_core::Made::owner) else {
             return Ok(false);
         };
         // The sort alone, rather than the declaration with every constructor: a call is erased in its own size. A constructor is its family's at the family's universes, so the call's instance is the family's.
-        let Some(declaration) = context.induct_decl(&curios_core::Global::Authored(*owner)) else {
+        let Some(declaration) = context.induct_decl(&curios_core::Global::Authored(owner)) else {
             return Ok(false);
         };
         let result_sort = declaration.at(universes).result_sort()?;
