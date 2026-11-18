@@ -1,4 +1,4 @@
--- `Map`, the crit-bit trie over `Key`-encoded bytes: lookups, the canonical shape, and the rewriting functions.
+-- `Map`, the sixteen-way trie over `Key`-encoded bytes: lookups, the canonical shape, and the rewriting functions.
 use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
 use /std/Bool/{True, False, Holds};
 
@@ -278,7 +278,7 @@ test remove_collapses_and_is_the_identity_on_an_absent_key =
         Test/equal(Map/remove(d, "b"), d),
         Test/equal(Map/remove(Map/remove(d, "a"), "c"), Map/empty())]);
 
--- Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions.
+-- Iteration order is a property of the canonical shape, not of insertion order: a branch's twigs hold the keys in the order of their digits, and the digit saying a byte is there sorts a prefix before its extensions.
 test iterates_in_lexicographic_key_order =
     let m: Map(Str, Nat) = Map/of_list([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
     Test/equal(Str/join(",", Map/keys(m)), ",a,ab,abc,b");

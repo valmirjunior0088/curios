@@ -68,13 +68,13 @@ pub fn timed(compiled: &Compiled, n: u64) -> f64 {
 ///
 /// # What it last printed
 ///
-/// Taken at `9c543476a`, release, x86-64 Linux, at a load average under two, seven readings in one sitting: 644, 647, 649, 656, 664, 672, 676 ns/insert, median 656. This sitting read unimodally, within 2% under and 3% over its median; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// Taken at `5bccb9ebd`, release, x86-64 Linux, at a load average under four, seven readings in one sitting: 263, 264, 264, 265, 265, 267, 285 ns/insert, median 265. Six of the seven read within 1% of the median and one 8% over it; a sitting on another box once read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
 ///
 /// # What the design rests on
 ///
 /// - **The key rides the i31.** Small-canonical `Bytes` — length in the top 2 payload bits, bytes LSB-first below — deletes the dependent loads of the key's bytes, which are the wall.
-/// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. A map's reads are of immediate keys, so the read protocol's *call* component is not this wall; a walk's are of one rope at every turn, which a read inside a loop keeps ([`curios-emit`'s README](../../../../curios-emit/README.md#a-read-in-a-loop-keeps-the-run-it-last-resolved)).
-/// - **The crit-bit trie stands.** An immediate key's bit test costs a few register ops, so seventeen cheap levels beat a qp-trie's four or five, each paying an O(width) child copy per rebuild.
+/// - **The leaf split is the emitter's.** At Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries 36 of the emitter's 37 `call $bytes/read` sites, counted at `5bccb9ebd`, so no level produces the call-site leaf split (`emit_seq_get`) and the invariant is written in the emitter. A map's reads are of immediate keys, so the read protocol's *call* component is not this wall; a walk's are of one rope at every turn, which a read inside a loop keeps ([`curios-emit`'s README](../../../../curios-emit/README.md#a-read-in-a-loop-keeps-the-run-it-last-resolved)).
+/// - **The trie forks sixteen ways.** A branch reads its twig by the key's digit and the descent writes each level's twig back in place where nothing else holds the list, so a level costs a read and a write of one slot and a key's five levels replace seventeen ([`Map` is a trie forking sixteen ways](../../../../curios-prelude/README.md#map-is-a-trie-forking-sixteen-ways-and-its-shape-is-its-api)).
 /// - **The map walks once.** `Node/insert` and `Node/remove` descend once and decide on the way back up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
@@ -166,16 +166,16 @@ entry()
 ///
 /// # What it last printed
 ///
-/// Taken at `9c543476a`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, alternating with its, the first of which printed:
+/// Taken at `5bccb9ebd`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, alternating with its, the first of which printed:
 ///
 /// ```text
 /// outputs at N=1000: encoded "927554", control "925689"
-///   encoded 45 ns/iter, control 6 ns/iter, key construction 39 ns/insert
+///   encoded 44 ns/iter, control 4 ns/iter, key construction 40 ns/insert
 /// ```
 ///
-/// Over the seven: encoded 43, 44, 44, 45, 45, 45, 46, median 45; control 4, 5, 5, 6, 6, 7, 7, median 6; key construction 37, 37, 39, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 656 nanoseconds, under 6%.
+/// Over the seven: encoded 40, 40, 40, 42, 42, 44, 44, median 42; control 2, 3, 3, 3, 4, 4, 5, median 3; key construction 36, 36, 36, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 265 nanoseconds, under 15%.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's fifteen surviving `br_table`s, as `wonder --stage wasm-optm` prints it at that commit, eleven sit in the program's entry, one in `/std/answered`, one in text decoding (`/std/Str/At/next`) and two in `/std/Map/internal/Node/insert` itself, none in a bit test, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's 27 surviving `br_table`s, as `wonder --stage wasm-optm` prints it at that commit, seventeen sit in the program's entry, three in `/std/Map/internal/Node/insert` itself and one in its heap version, two in the heap version's resumption, one in `/std/Map/internal/Node/fold_in`, one in `fold`'s heap version, one in `/std/answered` and one in a handle's retry, none in a digit read, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {
