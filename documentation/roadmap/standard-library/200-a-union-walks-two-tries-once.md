@@ -1,6 +1,6 @@
 # A union walks two tries once
 
-**Not refined yet.** This specification reserves building a map from two maps, or from one map's chosen entries, by one walk of their tries, where `/std/Map` inserts entry by entry today. It is not an implementation plan. No program measured spends its time there yet: `Map/union`'s one consumer in `/std` is `Set/union`, and no benchmark of `xbench` or program of `programs/` calls either.
+**Not refined yet.** This specification reserves building a map from two maps, or from one map's chosen entries, by one walk of their tries, where `/std/Map` inserts entry by entry today. It is not an implementation plan. No program measured spends its time there yet: `Map/union`'s one consumer in `/std` is `Set/union`, and no benchmark of `xbench` or program of `programs/` calls either. It waits on a consumer, a program a union's insertions dominate.
 
 ## What is missing
 

@@ -1,6 +1,6 @@
 # A report writes an intrinsic by the call that reaches it
 
-**Not refined yet.** This specification reserves spelling an intrinsic node a report shows as the `/std` call a program writes to reach it, where its reader reaches the `/sys` declaration that writes it by no name. It is not an implementation plan: two designs are named under *Refinement* and neither is drawn.
+**Not refined yet.** This specification reserves spelling an intrinsic node a report shows as the `/std` call a program writes to reach it, where its reader reaches the `/sys` declaration that writes it by no name. It is not an implementation plan: two designs are named under *Refinement* and neither is drawn. Its next step is the decision between them.
 
 ## What is missing
 

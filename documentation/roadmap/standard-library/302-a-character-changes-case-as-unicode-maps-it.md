@@ -1,6 +1,6 @@
 # A character changes case as Unicode maps it
 
-**Not refined yet.** This specification reserves case mapping, case folding and the case properties of the Unicode Character Database over `Char` and `Str`. It is not an implementation plan. No module of `/std` consumes it yet: `http` compares field names without case as RFC 9110 §5.1 reads them, over ASCII, and its first consumer would be a program that matches or displays text a person wrote.
+**Not refined yet.** This specification reserves case mapping, case folding and the case properties of the Unicode Character Database over `Char` and `Str`. It is not an implementation plan. No module of `/std` consumes it yet: `http` compares field names without case as RFC 9110 §5.1 reads them, over ASCII, and its first consumer would be a program that matches or displays text a person wrote, which releases it.
 
 ## What is missing
 

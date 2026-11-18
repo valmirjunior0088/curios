@@ -1,6 +1,6 @@
 # A registration keeps the answers a footing of stuck forms holds
 
-**Not refined yet.** This specification reserves keeping, past an equation's registration, the answers whose footing of stuck forms still stands, where every registration clears whatever read the scope today. It is not an implementation plan: the footing is a design nobody has drawn, and whether it pays is the census's to say.
+**Not refined yet.** This specification reserves keeping, past an equation's registration, the answers whose footing of stuck forms still stands, where every registration clears whatever read the scope today. It is not an implementation plan: the footing is a design nobody has drawn, and whether it pays is the census's to say. Its next step is the measurement under *Refinement*, a bounded investigation that ends keeping more or restating the decision.
 
 ## What is missing
 

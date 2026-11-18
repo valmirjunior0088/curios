@@ -2,6 +2,8 @@
 
 An editor has no semantic tokens from the server, so its colours are a grammar's guess alone. The guess is wrong in places: a capitalised name is taken for a type, though `List` is both a module and a type, and a constructor, a function and a local are all written in lower case. [Curios is coloured from one class set](../../design/tools/curios-is-coloured-from-one-class-set.md) has the server's semantic tokens lay the compiler's answer over that guess. Today the server advertises none (`ServerCapabilities`, `curios-wonder/src/server.rs`), and `wonder` answers no class.
 
+The next step is stage 1, a delivery, which settles the open question under *Open*.
+
 ## What is held, and what is missing
 
 - **A name's class is held.** Each name a check leaves for a document (`Named`, `curios-wonder/src/named.rs`) carries what its declaration is declared as. `Declared::class` (`curios-core/src/definitions.rs`) classes it, as the documentation's builder does. Whether the name is the declaration's own (`Named::declares`) and the global it resolved to (`Named::named`) are held beside it.

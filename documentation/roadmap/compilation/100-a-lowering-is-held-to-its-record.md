@@ -1,6 +1,10 @@
 # A lowering is held to its record
 
+Adopted: a census that holds every declaration's lowering to the scope its record names, so that what a recompile keeps is what a whole compile would make. A read of the scope outside the record would keep a stale lowering unseen across recompiles, and nothing checks for one today.
+
 A unit lowered over a baseline keeps a declaration's lowering where its text stands and every name its record says it resolved resolves as it did ([A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md)). That rests on the claim `curios-module/src/into_core/lowered.rs` opens with: a declaration reads its scope through two doors alone, `Context::resolve_term_name` and `Context::resolve_bare`, and each binding they read is recorded as a `Consulted`. A read outside the record would keep a stale lowering unseen, and nothing holds a lowering to its record. `curios-pipeline`'s `std_replay_census` (`src/standard/tests.rs`) holds each of `/std`'s elaborations to its trace. `std_recompile_reproduction` holds two edits, a leaf's and a hub's, to the bytes of a whole compile. `into_core_unit_over` keeps a declaration by its record, but nothing lowers one declaration with only its record's names in scope. [A compilation is a graph of item tasks](300-item-tasks.md) schedules from those records and waits on this census.
+
+The next step is stage 1, a delivery.
 
 ## What is known
 
