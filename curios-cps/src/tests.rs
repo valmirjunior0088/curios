@@ -579,6 +579,48 @@ fn verifier_rejects_a_rebuild_of_a_value_another_row_reaches() {
     );
 }
 
+/// A rebuild of what a filler's slot holds, which no flow reaches and no run holds, as where every construction of a row was itself rewritten into a rebuild.
+#[test]
+fn verifier_admits_a_rebuild_of_a_value_no_flow_reaches() {
+    let mut module = minimal_module();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Opaque, Slot::Opaque],
+    });
+    let [built, held, rebuilt, field] =
+        ["built", "held", "rebuilt", "field"].map(|name| module.add_value(Some(name.into())));
+    let next = module.function(FunctionId(0)).unwrap().body;
+    let read = module.add_node(Node::LetIntrinsic {
+        result: field,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(rebuilt)],
+        next,
+    });
+    let rebuild = module.add_node(Node::LetValue {
+        result: rebuilt,
+        value: ValueExpr::Rebuilt {
+            of: Atom::Value(held),
+            row: pair,
+            slots: vec![(0, one())],
+        },
+        next: read,
+    });
+    let hold = module.add_node(Node::LetIntrinsic {
+        result: held,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(built)],
+        next: rebuild,
+    });
+    let construction = module.add_node(Node::LetValue {
+        result: built,
+        value: ValueExpr::Row(pair, vec![Atom::Filler, Atom::Filler]),
+        next: hold,
+    });
+    module.function_mut(FunctionId(0)).unwrap().body = construction;
+
+    module.verify().unwrap();
+}
+
 /// A read of the value a rebuild wrote into, after it, would see the new slots where the program asked for the old.
 #[test]
 fn verifier_rejects_a_rebuild_of_a_value_read_after_it() {

@@ -150,6 +150,11 @@ impl<T: Ord + Copy> MayBe<T> {
         }
     }
 
+    /// Whether it may be nothing at all: what no flow reaches, which no run holds.
+    pub fn is_nothing(&self) -> bool {
+        matches!(self, MayBe::Of(items) if items.is_empty())
+    }
+
     fn nothing() -> Self {
         MayBe::Of(Ids::new())
     }

@@ -771,6 +771,51 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
     assert_eq!(rebuilds_of(&module, "/Tree"), 0, "{module}");
 }
 
+/// A node holding its twigs in a structure the program takes apart and puts back but never builds: every construction of the structure is rewritten into a rebuild, which leaves the flow none to start from, and the program compiles and answers as the same program building one twig structure does.
+#[test]
+fn a_structure_the_program_only_rebuilds_compiles_and_answers() {
+    let twigs = r#"
+        struct T(X: Type): Type { c0: X, c1: X }
+        induct N: Type
+        | empty()
+        | leaf(key: Nat, value: Nat)
+        | branch(twigs: T(N))
+        end
+        let get2(@X: Type, t: T(X), d: Nat) -> X = match d | 0 => t.c0 | _ => t.c1 end;
+        let set2(@X: Type, t: T(X), d: Nat, x: X) -> T(X) =
+            match d | 0 => T { ..t, c0 = x } | _ => T { ..t, c1 = x } end;
+        let take2(t: T(N), d: Nat) -> {N, T(N)} =
+            match d | 0 => (t.c0, T { ..t, c0 = N/empty() }) | _ => (t.c1, T { ..t, c1 = N/empty() }) end;
+        let replace(t: N, k: Nat, v: Nat) -> N =
+            match t
+            | empty() => t
+            | leaf(k0, _) => N/leaf(k0, v)
+            | branch(tw) =>
+                let d = k % 2;
+                let (s, rest) = take2(tw, d);
+                N/branch(set2(rest, d, replace(s, k / 2, v)))
+            end;
+        let first(k: Nat, v: Nat) -> N = N/leaf(k, v);
+        let insert(m: Option(N), k: Nat, v: Nat) -> Option(N) =
+            match m | none() => Option/some(first(k, v)) | some(t) => Option/some(replace(t, k, v)) end;
+        let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =
+            match i < 2 | false => acc | true => fold_twigs(tw, i + 1, fold(get2(tw, i), acc)) end
+        and fold(t: N, acc: Nat) -> Nat =
+            match t | empty() => acc | leaf(_, v) => acc + v | branch(tw) => fold_twigs(tw, 0, acc) end;
+        let walk(n: Nat, m: Option(N)) -> Option(N) = match n | 0 => m | j + 1 => walk(j, insert(m, j, j + 1)) end;
+    "#;
+    let result = "match walk(n, Option/none()) | none() => 0 | some(t) => fold(t, 0) end";
+    let (_, module) = modules(&program(twigs, result));
+    let built = twigs.replace(
+        "N/leaf(k, v);",
+        "N/branch(T { c0 = N/leaf(k, v), c1 = N/empty() });",
+    );
+    let (_, building) = modules(&program(&built, result));
+    for n in ["0", "1", "7"] {
+        assert_eq!(run(&module, n), run(&building, n), "{n}");
+    }
+}
+
 /// Every program of the corpus, and the shapes this suite rebuilds, prints one answer and exits alike whether its module rebuilds in place or not.
 #[test]
 fn a_program_answers_alike_rebuilding_in_place_or_not() {
