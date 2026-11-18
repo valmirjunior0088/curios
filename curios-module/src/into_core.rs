@@ -85,6 +85,7 @@ use {
     std::{
         cell::{Cell, OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        path::PathBuf,
         rc::Rc,
         sync::Arc,
     },
@@ -651,7 +652,7 @@ pub struct PreparedText {
     /// **Stored apart from the unit**, each source's texts an object ([`PreparedText::anchors_recorded`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
     #[archived_with(curios_archive::Skip)]
     anchors: Recorded<curios_core::Anchors>,
-    /// The packages the unit was restored for, each standing where this machine holds it: what each source of its stored texts is given its file by where they are restored ([`PreparedText::read_for`]). None for a unit lowered here, whose sources hold their files, and for one restored for no source, the prelude's image among them, whose sources hold their names alone.
+    /// The packages the unit was restored for, each standing where this machine holds it: what each source of its stored texts and of its files' scans is given its file by where they are restored ([`PreparedText::read_for`]). None for a unit lowered here, whose sources hold their files, and for one restored for no source, the prelude's image among them, whose sources hold their names alone.
     #[archived_with(curios_archive::Skip)]
     packages: Vec<PackageRoot>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
@@ -696,28 +697,34 @@ impl PreparedText {
 
     /// Where each source declaration of this unit lies, each source holding the file its name resolves to through the packages the unit was restored for. See the field.
     pub fn anchors(&self) -> &curios_core::Anchors {
-        let file_of = |name: &SourceName| {
-            self.packages
-                .iter()
-                .find_map(|package| package.file_of(name))
-        };
-
         self.anchors
             .get_with(|table, entries| {
-                curios_core::Anchors::restored_filed(table, entries, &file_of)
+                curios_core::Anchors::restored_filed(table, entries, &|name| self.file_of(name))
             })
             .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"))
     }
 
-    /// This unit, restored for a source whose files are read for `packages`: where its declarations lie is read again from what it was restored from, each source holding the file its name resolves to on this machine. A unit lowered here holds its sources' files already, and is handed back as it is.
+    /// The file `name` resolves to through the packages the unit was restored for, where it resolves: what each source this unit stores is given where it is restored.
+    fn file_of(&self, name: &SourceName) -> Option<PathBuf> {
+        self.packages
+            .iter()
+            .find_map(|package| package.file_of(name))
+    }
+
+    /// This unit, restored for a source whose files are read for `packages`: where its declarations lie and what each of its files declared are read again from what it was restored from, each source holding the file its name resolves to on this machine. A unit lowered here holds its sources' files already, and is handed back as it is.
     pub fn read_for(self, packages: Vec<PackageRoot>) -> Self {
         let anchors = match self.anchors.as_stored() {
             Some((table, entries)) => Recorded::stored(table.clone(), entries.to_vec()),
             None => return self,
         };
+        let baseline = match self.baseline.as_stored() {
+            Some((table, entries)) => Recorded::stored(table.clone(), entries.to_vec()),
+            None => self.baseline.clone(),
+        };
 
         Self {
             anchors,
+            baseline,
             packages,
             ..self
         }
@@ -896,10 +903,12 @@ impl PreparedText {
         })
     }
 
-    /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
+    /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before, each file's scan lying in a source holding the file its name resolves to as the anchors' sources do.
     fn half(&self) -> &BaselineHalf {
         self.baseline
-            .get()
+            .get_with(|table, entries| {
+                BaselineHalf::restored_filed(table, entries, &|name| self.file_of(name))
+            })
             .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"))
     }
 

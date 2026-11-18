@@ -16,10 +16,11 @@ use {
         Step, Table,
     },
     crate::PreparedText,
-    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted},
+    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted, SourceName},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
+        path::PathBuf,
         rc::Rc,
     },
 };
@@ -481,9 +482,20 @@ impl Entry<'_> {
     }
 }
 
-/// A baseline half restored out of what a unit stores of it: the rest, archived with the unit, and each record and scan an object of its own, restored beside the digest it was found by.
+/// A unit's baseline half restored with no package standing on the machine: each scan's source holds its name alone.
 impl curios_common::Records for BaselineHalf {
     fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        Self::restored_filed(table, entries, &|_| None)
+    }
+}
+
+impl BaselineHalf {
+    /// A unit's baseline half restored out of what the unit stores of it: the rest, archived with the unit, and each record and scan an object of its own, restored beside the digest it was found by, each scan lying in a source given the file `file_of` resolves its name to, where it resolves (`Scan::filed`).
+    pub fn restored_filed(
+        table: &[u8],
+        entries: &[Object],
+        file_of: &dyn Fn(&SourceName) -> Option<PathBuf>,
+    ) -> Result<Self, String> {
         let mut half = curios_archive::from_bytes::<BaselineHalf>(table)?;
         let mut records = Vec::new();
         for object in entries {
@@ -492,8 +504,10 @@ impl curios_common::Records for BaselineHalf {
                     records.push(Rc::new(Filed::stored(record, object.digest)));
                 }
                 HalfEntry::Scan(module, scan) => {
-                    half.scans
-                        .insert(module, Rc::new(Filed::stored(scan, object.digest)));
+                    half.scans.insert(
+                        module,
+                        Rc::new(Filed::stored(scan.filed(file_of), object.digest)),
+                    );
                 }
             }
         }

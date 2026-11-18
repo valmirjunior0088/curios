@@ -5,9 +5,9 @@
 //! **A file's heads are a function of its text.** A unit keeps each of its files' heads with the text they were read from ([`Scan`]), and a later lowering of the same sources that reads a file as that text takes them: the file is parsed only where one of its declarations is lowered again.
 
 use {
-    curios_common::{Report, Source, Span},
+    curios_common::{Report, Source, SourceName, Span},
     curios_surface::{Label, Module, TopItem, TopUse},
-    std::{rc::Rc, sync::Arc},
+    std::{path::PathBuf, rc::Rc, sync::Arc},
 };
 
 /// A name an item declares, and whether it is `pub`.
@@ -91,6 +91,33 @@ pub struct Headed {
 pub struct Scan {
     pub source: Arc<Source>,
     pub heads: Rc<Vec<Headed>>,
+}
+
+impl Scan {
+    /// This scan, restored, lying in a source given the file `file_of` resolves its name to, where it resolves: a source is stored by its name alone, so a scan restored for a unit whose package stands on the machine names the file its text was read from, as the unit's anchors do. Its heads are placed in that source, which holds the text they were read from.
+    pub(super) fn filed(self, file_of: &dyn Fn(&SourceName) -> Option<PathBuf>) -> Self {
+        let Some(name) = self.source.name() else {
+            return self;
+        };
+        let Some(file) = file_of(name) else {
+            return self;
+        };
+        let source = Arc::new(Source::of(
+            Some(name.clone()),
+            Some(file),
+            self.source.text(),
+        ));
+        let heads = self
+            .heads
+            .iter()
+            .map(|headed| headed.rebased(&source))
+            .collect();
+
+        Self {
+            source,
+            heads: Rc::new(heads),
+        }
+    }
 }
 
 impl Headed {

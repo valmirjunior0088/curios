@@ -5,6 +5,7 @@ use {
     std::{
         fs,
         io::Write,
+        path::Path,
         process::{Command, Stdio},
     },
 };
@@ -279,6 +280,74 @@ fn a_place_answers_the_name_written_there() {
     // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
     let again = curios(&root, &["wonder", "--at", "1:20", "app.crs"], "");
     assert_eq!(stdout(&again), answer);
+}
+
+/// A place in a library's file answers what is written there whatever the store holds of the library: here the check of the package entire files the library, beside an executable, before the place is asked.
+#[test]
+fn a_place_answers_over_a_library_a_check_filed() {
+    let root = project("at-filed");
+    let checked = curios(&root, &["wonder"], "");
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+
+    let answered = curios(&root, &["wonder", "--at", "1:9", "util.crs"], "");
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let answer = stdout(&answered);
+    assert!(answer.starts_with("/app/util/word\n"), "{answer:?}");
+}
+
+/// A place in a file of the standard library's package answers what is written there: the package is lowered over the library the compiler carries, and what it keeps of that library's files lies in the files the package holds. Asked of a copy, so the tree's own package keeps no store.
+#[test]
+fn a_place_in_the_standard_librarys_package_answers() {
+    fn copied(from: &Path, to: &Path) {
+        fs::create_dir_all(to).unwrap();
+        for entry in fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name();
+            if name == ".curios" {
+                continue;
+            }
+            match entry.file_type().unwrap().is_dir() {
+                true => copied(&entry.path(), &to.join(&name)),
+                false => {
+                    fs::copy(entry.path(), to.join(&name)).unwrap();
+                }
+            }
+        }
+    }
+
+    let root = temporary("at-std");
+    copied(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude/std"),
+        &root,
+    );
+    let text = fs::read_to_string(root.join("Bool.crs")).unwrap();
+    let line = 1 + text
+        .lines()
+        .position(|line| line.starts_with("pub let not("))
+        .expect("the library declares `not`");
+
+    let answered = curios(
+        &root,
+        &["wonder", "--at", &format!("{line}:9"), "Bool.crs"],
+        "",
+    );
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let answer = stdout(&answered);
+    assert!(answer.starts_with("/std/Bool/not\n"), "{answer:?}");
 }
 
 /// What a file declares is one row a definition, and a place where nothing is named is an answer of nothing: both exit 0.
