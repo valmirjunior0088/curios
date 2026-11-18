@@ -1469,3 +1469,46 @@ fn a_worker_backedge_projects_its_own_rebuilt_parameter() {
     assert_eq!(args.len(), 2);
     module.verify().unwrap();
 }
+
+/// A filler entering a window region stands where no run reads the window, as a product split's padding for a list field does, so it opens as an empty window over itself and reads nothing: a length read of it would refuse at run time, the filler being no rope. Mutation-checked: opened as a whole window, the entry measures the filler.
+#[test]
+fn a_filler_entering_a_window_region_opens_an_empty_window() {
+    let (mut module, header) = walk_module();
+    let entries = module
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            Node::ApplyCont(edge) if edge.target == header => Some(id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    for entry in entries {
+        if let Some(Node::ApplyCont(edge)) = module.node_mut(entry)
+            && let Some(Atom::Value(_)) = edge.args.first()
+        {
+            edge.args[0] = Atom::Filler;
+        }
+    }
+    module.verify().expect("the fixture is well-formed");
+
+    assert!(super::split_windows(&mut module));
+    module
+        .verify()
+        .expect("the window split preserves well-formedness");
+
+    let measured = module
+        .nodes()
+        .iter()
+        .flatten()
+        .filter(|node| {
+            matches!(
+                node,
+                Node::LetIntrinsic {
+                    op: Intrinsic::ListLen | Intrinsic::BytesLen,
+                    args,
+                    ..
+                } if args.first() == Some(&Atom::Filler)
+            )
+        })
+        .count();
+    assert_eq!(measured, 0, "no length read of the filler:\n{module}");
+}

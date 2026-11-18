@@ -15,10 +15,11 @@ mod tests;
 
 use {
     crate::{
-        Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Module,
-        Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr, ValueId,
-        analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
+        Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal,
+        Module, Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr,
+        ValueId, analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
     },
+    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -1017,7 +1018,7 @@ fn split_window(
 
     module.replace_values(&aliased);
 
-    // 4. Rewrite every edge into a split continuation, highest position first: a member argument travels as its fields, and any other rope opens as its own whole window with one length read above the jump.
+    // 4. Rewrite every edge into a split continuation, highest position first: a member argument travels as its fields, any other rope opens as its own whole window with one length read above the jump, and a filler, which stands where no run reads the window, opens as an empty one over itself and reads nothing.
     let carriers = splits
         .iter()
         .flat_map(|(continuation, ..)| carriers.get(continuation).into_iter().flatten().copied())
@@ -1033,6 +1034,10 @@ fn split_window(
                 let atom = edge.args[position].clone();
                 let replacement = match &atom {
                     Atom::Value(value) if fields.contains_key(value) => fields[value].to_vec(),
+                    Atom::Filler => {
+                        let empty = Atom::Literal(Literal::Nat(Natural::from(0u32)));
+                        vec![Atom::Filler, empty.clone(), empty]
+                    }
                     _ => {
                         let length =
                             module.add_value(Some(format!("window/{}/open", carrier.index())));
