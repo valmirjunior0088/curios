@@ -14,6 +14,7 @@ use {
         Cases, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
         bool_value, is_bool_connective,
     },
+    curios_num::Natural,
     std::{mem, slice},
 };
 
@@ -29,6 +30,21 @@ pub const RESOLVED_SPELLING_LAYERS: usize = 16;
 /// **Both checkers call it, and the elaborator on the certifier's spelling.** An equation one checker records and the other does not reads one arm two ways, and the arm is always a dead one: a proof the elaborator accepted there, under a guard over a top-level name, a global's projection, a local definition of a closed term or a dispatch whose method ignores its locals, is one the certifier refuses.
 pub fn records_case_equation(spelling: &Term) -> bool {
     spelling.has_local_free()
+}
+
+/// The tests a natural's dispatch on `head` over `cases` is reached past at its catch-all, one a key: `head == key`. Each is false wherever the catch-all is taken, at a literal no key names or at a successor floor past every key, so the catch-all is typed under each at `false`, as a lone guard's `false` arm is typed under its test.
+///
+/// **Both checkers read it.** A test one checker assumed and the other did not would read the catch-all two ways; each is recorded by [`records_case_equation`], as every equation is.
+pub fn catch_all_tests<'c>(
+    head: &'c Term,
+    cases: &'c [(Natural, Term)],
+) -> impl Iterator<Item = Term> + 'c {
+    cases.iter().map(|(key, _)| {
+        Term::intrinsic(Intrinsic::NatEql(
+            head.clone(),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone()))),
+        ))
+    })
 }
 
 /// Whether `scrutinee`, read as reduction leaves it, is a value of another case than `case`: a literal or a constructed value that the unifier excusing an absent arm ([`invert_indices`]) finds in a definite clash with `case`. An arm at `case` under such a scrutinee is one no reduction takes. `binders` are the case's own, which the unifier may solve; a case's value names each of them once, so the answer is the same where none is named.

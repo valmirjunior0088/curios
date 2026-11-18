@@ -10,7 +10,7 @@ use {
         resolved_for_display, same_uncommitted, solve_case_indices, stuck_on_metavar,
         zonk_solved_term_metas,
     },
-    curios_analysis::{Invert, retyped, scrutinee_solution, wholly_pinned},
+    curios_analysis::{Invert, catch_all_tests, retyped, scrutinee_solution, wholly_pinned},
     curios_common::Plicity,
     curios_core::{
         Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
@@ -574,13 +574,21 @@ impl SwitchSplit {
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
 
-    /// What any other value takes. It refines nothing, so it is typed at the result at the scrutinee itself.
+    /// What any other value takes, past every key of `cases`. It refines nothing, so it is typed at the result at the scrutinee itself, in a frame where each key's test failed, as the certifier types it (`curios_analysis::catch_all_tests`).
     pub fn default(
         &self,
         context: &mut Context,
+        cases: &[(Natural, Term)],
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
-        body(context, self.goal.clone())
+        context.with_frame(|context| {
+            let failed = Term::intrinsic(Intrinsic::Bool(false));
+            for test in catch_all_tests(&self.head, cases) {
+                refine_head(context, &test, &failed)?;
+            }
+
+            body(context, self.goal.clone())
+        })
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
@@ -620,7 +628,7 @@ fn elaborate_switch(
         })?;
         cases_elaborated.push((n.clone(), body));
     }
-    let default = split.default(context, |context, expected| {
+    let default = split.default(context, &cases_elaborated, |context, expected| {
         check_as(context, default, mode.at(expected))
     })?;
 

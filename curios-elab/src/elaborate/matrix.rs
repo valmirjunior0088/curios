@@ -1482,7 +1482,7 @@ impl<'m> Compiler<'m> {
                     cases.push((value, arm));
                 }
                 self.seen[column.seen] = Seen::Any;
-                let default = split.default(context, |context, expected| {
+                let default = split.default(context, &cases, |context, expected| {
                     self.case(context, rest, others, expected)
                 })?;
                 let (rebuilt, type_) = split.rebuild(cases, default);

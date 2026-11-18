@@ -11,7 +11,8 @@ pub use judge::{Env, Judge};
 mod case_equation;
 pub use case_equation::{
     Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead, another_case, answers, answers_classed,
-    could_reduce_to, holds_no_type, read_scrutinee, read_scrutinee_classed, records_case_equation,
+    catch_all_tests, could_reduce_to, holds_no_type, read_scrutinee, read_scrutinee_classed,
+    records_case_equation,
 };
 
 mod classify;

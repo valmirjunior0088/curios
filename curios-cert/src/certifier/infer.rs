@@ -29,7 +29,7 @@ use {
         Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, field_handed,
         infer_sort, synth_neutral,
     },
-    curios_analysis::{Segment, call_path},
+    curios_analysis::{Segment, call_path, catch_all_tests},
     curios_common::recurse,
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
@@ -693,7 +693,7 @@ fn check_cases(
                 at(certifier, literal, body)?;
             }
 
-            // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing. Enumerating zero is what rules zero out of it, which a call inside may descend on.
+            // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing. It is reached past every key, so it stands where each key's test failed, as a lone guard's `false` arm stands under its test. Enumerating zero is what rules zero out of it, which a call inside may descend on.
             let expected = goal.clone();
             certifier.scoped(|certifier| {
                 if let Subterm::Var(var) = &**sized
@@ -701,6 +701,9 @@ fn check_cases(
                     && cases.iter().any(|(key, _)| key.is_zero())
                 {
                     certifier.assume_nonzero(*binder)?;
+                }
+                for test in catch_all_tests(scrutinee, cases) {
+                    certifier.refine(test, Term::intrinsic(Intrinsic::Bool(false)))?;
                 }
 
                 check(certifier, default, &expected)
