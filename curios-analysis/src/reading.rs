@@ -1,10 +1,10 @@
-//! What a stuck `match` reduces to, read once for the walks that read a type through what it computes.
+//! What a stuck `match` reduces to, which recursive groups are read by their unfolding, and the fixpoint such a group's unfolding is read by, stated once for the walks that read a type through what it computes.
 //!
 //! Every instance of a `match` reduces it to one of its arms, whose binders the head supplies — or, where definitional K selects a proposition's sole arm, the instance the `match` states — so the arms opened against fresh binders, beside what supplies their binders, bound every reduct. The goal and a list's element type stand in no reduct: an instance that reduces the `match` drops both. Strict positivity and variance read the same parts and record different things of them, so the parts are told apart here and what each walk records stays in that walk.
 
 use {
-    crate::Env,
-    curios_core::{Arity, Carrier, Cases, Match, Scope, Term},
+    crate::{Env, group_totality},
+    curios_core::{Arity, Carrier, Cases, Match, RecGroup, Scope, Term},
 };
 
 /// A stuck `match` opened for reading: its arms, what supplies their binders, and what annotates it.
@@ -96,4 +96,21 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
 /// A fresh binder for the scope's binder at `index`, rendering as the hint it was written under.
 fn fresh<E: Env, A: Arity>(env: &mut E, scope: &Scope<A>, index: usize) -> Term {
     Term::free_var(&env.fresh(scope.hint(index)))
+}
+
+/// Whether a walk reads `group` by the least fixpoint of its unfolding: only where the group terminates ([`group_totality`]). Both checkers unfold only what terminates (`known_to_terminate`), and a walk opening a group that may not would spend its declaration's budget on an unfolding neither checker makes, before the declaration is refused for reaching it; such a group is read as written, as every form a walk cannot see through is. A reduction refused while deciding is the caller's to keep.
+pub fn read_by_unfolding<E: Env>(env: &mut E, group: &RecGroup) -> Result<bool, E::Error> {
+    Ok(group_totality(env, group)?.is_total())
+}
+
+/// The least fixpoint of `step` from `seed`: `step` applied to its own result until it hands back what it was given. A walk reading a recursive group by its unfolding climbs a finite lattice from its bottom, joining each step's reading with the estimate it read under, so the loop ends.
+pub fn least_fixpoint<S: PartialEq>(seed: S, mut step: impl FnMut(&S) -> S) -> S {
+    let mut current = seed;
+    loop {
+        let next = step(&current);
+        if next == current {
+            return current;
+        }
+        current = next;
+    }
 }

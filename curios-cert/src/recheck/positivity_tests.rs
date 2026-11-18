@@ -435,3 +435,92 @@ fn a_datum_taking_its_family_apart_reaches_the_family() {
         "{verdicts:?}"
     );
 }
+
+/// `S(X) { n : Nat, f : (rec R(k) = match k | 0 => X | k' + 1 => (R(k')) -> Void end; Opt(R(n))) }` beside `G | g(S(G))`: a group closed over the declaration's parameter, met first as `Opt`'s argument, so it is unfolded once before its cycle closes, and `X` stands left of an arrow only one level down.
+const A_GROUP_CLOSED_OVER_THE_PARAMETER: &str = r#"
+induct /Void: pub Type
+end
+
+induct /Opt(A: Type): pub Type
+| none()
+| some(x: A)
+end
+
+struct /S(X: Type): pub Type {
+    n: #NatType,
+    f:
+        #{node = Rec}
+        (let R: (k: #NatType) -> Type =
+            (k2: #NatType) =>
+                #{goal = Type}
+                match k2
+                | 0 => X
+                | x0 + 1 => (x: R(x0)) -> #{node = InductType} /Void()
+                end;
+        #{node = InductType} /Opt(R(n))),
+}
+
+induct /G: pub Type
+| g(s: #{node = StructType} /S(#{node = InductType} /G()))
+end
+
+/std/Bool/False
+"#;
+
+// What the group's body names other than through its own parameters is read through its summary too: `X`, closed over, stands strictly in the first arm and left of an arrow one unfolding down, so `/S` is mixed in it and `/G` is refused. `curios`'s `tests::rules::positivity_recursion` puts the same declarations to the elaborator under this name. Rename both or neither.
+//
+// Mutation-checked at `curios-analysis`'s summary: recording a member's own parameters alone admits `/G`.
+#[test]
+fn a_group_closed_over_the_declarations_parameter_is_read_by_its_unfolding() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GROUP_CLOSED_OVER_THE_PARAMETER}",
+        PROPOSITIONS,
+        A_GROUP_CLOSED_OVER_THE_PARAMETER
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("G"))
+                && matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}"
+    );
+}
+
+/// `/D(n)` is `{}` at zero and `(x: /B) -> /D(k)` past it, a recursive definition placed before both families; `/A` holds a `/D(n)` and `/B` holds an `/A`. Each unfolding of `/D` puts `/B` left of an arrow, so `/A` reaches `/B` negatively, and the two, declared apart, reach each other through a definition neither declares.
+const A_DEFINITION_BEFORE_BOTH: &str = r#"
+#{node = Rec}
+let /D : (n: #NatType) -> Type =
+    (n: #NatType) =>
+        #{goal = Type}
+        match n
+        | 0 => {}
+        | k + 1 => (x: #{node = InductType} /B()) -> /D(k)
+        end;
+induct /A: pub Type
+| a(n: #NatType, f: /D(n))
+end
+induct /B: pub Type
+| b(x: #{node = InductType} /A())
+end
+/std/Bool/True/qed()
+"#;
+
+// The definition is read where it is used, its recursion by the fixpoint of its unfolding, and no vector filed for it answers: `/B` stands left of an arrow in every unfolding, so the pair is refused, whichever family is walked first.
+#[test]
+fn a_recursive_definition_before_two_families_reaches_the_second_through_its_body() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_DEFINITION_BEFORE_BOTH}",
+        PROPOSITIONS,
+        A_DEFINITION_BEFORE_BOTH
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| (verdict.name == Some(global("A"))
+                || verdict.name == Some(global("B")))
+                && matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}"
+    );
+}

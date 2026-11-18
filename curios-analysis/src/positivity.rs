@@ -16,6 +16,8 @@
 //!
 //! A value standing where data is expected is a datum ([`crate::Data`]): an index of a family occurrence at its index telescope's type, a value parameter of a family or record occurrence at its parameter telescope's, the head of a `match` whose cases state a data carrier, and a `match` whose goal is data. A datum is the same value at every instance of the declaration's type parameters — no part of it is a type, and no term computes on one — so no type parameter is read inside it ([`answers_a_type`]); a value parameter and a declaration are read there as anywhere, a datum being free to compute on the one and to take apart a value of the other.
 //!
+//! A recursive call reduction leaves folded — stuck, no unfolding of it getting anywhere — and a member the walk meets again on its own path, a call read as reduction reads one ([`curios_core::Subterm::called_member`]), are not forced further, which would expose the same node one level deeper forever. Each is read by the least fixpoint of its group's unfolding ([`Summary`]): the polarity each of its parameters stands at in its body, and every other target the body reaches, its type read as an annotation, computed for the group's members together from `Unused` and kept for the walk alone, since a group may close over binders the walk opened. Only a group that terminates is read so ([`crate::read_by_unfolding`]): one that may not is read as written, at `Mixed`, its unfolding being one neither checker makes.
+//!
 //! # Asked before the pass has run
 //!
 //! Conversion asks whether a struct reaches itself while a unit's items are still being checked, to end its reading of a type's inhabitants, and the relation above does not exist yet: the pass runs over finished declarations, after the items whose conversions ask. [`struct_reaches_itself`] answers from the declarations as they are written. It reads the same diagonal coarsely — any mention counts, at whatever polarity and whatever it would reduce to — so it answers yes wherever the pass would and in more places besides. Its answer ends a walk early and admits nothing: whatever it says, a type judged to have one inhabitant is one whose every field was judged.
@@ -30,7 +32,10 @@
 mod tests;
 
 use {
-    crate::{Data, Env, codomain, forceable, opened},
+    crate::{
+        Data, Env, Segment, call_path, codomain, forceable, least_fixpoint, opened, peel,
+        read_by_unfolding,
+    },
     curios_common::recurse,
     curios_core::{
         Advance, Atom, Bound, Carrier, Cases, Free, FuncType, Global, InductDecl, InductType,
@@ -528,6 +533,8 @@ fn fixpoint<E: Env>(
             for (target, polarity) in found {
                 match target {
                     Target::Param(index) => vector[index] = vector[index].join(polarity),
+                    // A member's binder is tracked only inside a summary, which records it under the member.
+                    Target::Local(_) | Target::PassedOver(_) => {}
                     Target::Decl(other) => {
                         // A family outside the set its driver has not judged is no sink: what it reaches is unread, so it is read as reaching this declaration again, at `Mixed`.
                         let (other, polarity) =
@@ -657,6 +664,27 @@ enum Target {
     Param(usize),
     /// Another declaration, by qualified name — including the walked declaration itself, which is how a recursive occurrence is recorded.
     Decl(Global),
+    /// A parameter of a recursive member whose unfolding a walk summarizes, by the binder it was opened at ([`Summary`]): no declaration's target, recorded only inside a summary.
+    Local(Free),
+    /// Such a parameter standing where a parameter is passed over — an annotation, or a datum where it is a type parameter — which a declaration standing there is not ([`Summary::passed_over`]). Its polarity says nothing; that it was met does.
+    PassedOver(Free),
+}
+
+/// A recursive member opened for summarizing: its parameters' binders, which of them is a type parameter, its body at those binders, and its type.
+struct OpenedMember {
+    params: Vec<Free>,
+    type_params: Vec<bool>,
+    body: Term,
+    type_: Term,
+}
+
+/// What a recursive member's unfolding holds, read where a walk meets the member again on its own path: the polarity each of its parameters stands at in its body, which of them stand where a parameter is passed over, and every other target it reaches, a declaration, the declaration's parameter or an enclosing member's, its type read as an annotation. The least fixpoint over its group's members, so it bounds every finite unfolding.
+#[derive(Debug, Clone, PartialEq)]
+struct Summary {
+    params: Vec<Polarity>,
+    /// Which parameters stand in an annotation, or as a type parameter in a datum, where a parameter is passed over and a declaration is read: an argument for one is read as an annotation, as its unfolding would read what the argument names there.
+    passed_over: Vec<bool>,
+    found: BTreeMap<Target, Polarity>,
 }
 
 /// At what polarity each declaration occurs inside each other declaration — `relation[owner][mentioned]`. Transient: it exists to answer the acceptance test and is discarded, which is why nothing persists it the way parameter polarities are persisted.
@@ -689,6 +717,14 @@ struct Walk<'a, 'd, E: Env> {
     type_params: Vec<bool>,
     /// The classification of data, kept for the analysis this traversal is part of.
     data: &'a mut Data<'d>,
+    /// The parameters of the recursive members whose unfoldings this traversal summarizes, as their bodies were opened: what [`Target::Local`] records.
+    locals: Vec<Free>,
+    /// Which of `locals` is a type parameter, which a datum carries none of.
+    type_locals: BTreeSet<Free>,
+    /// The summaries this traversal computed, by group: a group it meets again is read by them ([`Summary`]). Kept for the traversal alone, since a group may close over the binders it opened.
+    summaries: HashMap<RecGroup, Option<Vec<Summary>>>,
+    /// The group whose summaries this traversal is a step of estimating, with the estimates so far, which a meet of one of its members reads.
+    estimates: Option<(RecGroup, Vec<Summary>)>,
     /// Definitions already unfolded on this traversal. A type-level `let` can be mentioned from many positions, and a recursive group can mention itself; without this the sweep in `blocked` would not terminate.
     unfolded: BTreeSet<Mention>,
     /// The `rec` members this walk is already inside, innermost last — the path, not the traversal.
@@ -790,6 +826,10 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
             vectors,
             type_params: split.type_params.clone(),
             data,
+            locals: Vec::new(),
+            type_locals: BTreeSet::new(),
+            summaries: HashMap::new(),
+            estimates: None,
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
             entered: HashSet::new(),
@@ -800,15 +840,20 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
     }
 
     fn record(&mut self, target: Target, polarity: Polarity) {
-        if let Target::Param(index) = target {
-            let skipped = match self.reading {
-                Reading::Content => false,
-                Reading::Datum => self.type_params.get(index).copied().unwrap_or(false),
-                Reading::Annotation => true,
-            };
-            if skipped {
-                return;
+        let skipped = match (&target, self.reading) {
+            (Target::Decl(_) | Target::PassedOver(_), _) | (_, Reading::Content) => false,
+            (_, Reading::Annotation) => true,
+            (Target::Param(index), Reading::Datum) => {
+                self.type_params.get(*index).copied().unwrap_or(false)
             }
+            (Target::Local(free), Reading::Datum) => self.type_locals.contains(free),
+        };
+        if skipped {
+            // A member's parameter passed over here names, at a meet, whatever its argument is, and a declaration the argument names would be read here: the meet reads that off this ([`Summary::passed_over`]).
+            if let Target::Local(free) = target {
+                self.record(Target::PassedOver(free), Polarity::Mixed);
+            }
+            return;
         }
         self.found
             .entry(target)
@@ -967,6 +1012,162 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         }
     }
 
+    /// A recursive member met again on its own path, read through its [`Summary`]: each argument at the polarity its parameter stands at in the member's body composed with where the call stands, and as an annotation too where that parameter stands where a parameter is passed over, as the unfolding would read what the argument names there; an argument past the member's parameters at `Mixed`, and every other target its unfolding reaches at where the call stands composed with its own.
+    fn meet(&mut self, term: &Term, group: &RecGroup, index: usize, polarity: Polarity) {
+        // A group not read by its unfolding is read as written ([`read_by_unfolding`]).
+        let Some(summary) = self.summary(group, index) else {
+            self.opaque(term);
+            return;
+        };
+        // The member's own arguments are the path's before its first field; a field's own, past it, are read at `Mixed`, as an argument past the member's parameters is.
+        let (_, steps) = call_path(term);
+        let mut position = 0;
+        let mut past_a_field = false;
+        for step in &steps {
+            past_a_field |= matches!(step, Segment::Field(_));
+            for argument in step.arguments() {
+                let used = match past_a_field {
+                    true => Polarity::Mixed,
+                    false => summary
+                        .params
+                        .get(position)
+                        .copied()
+                        .unwrap_or(Polarity::Mixed),
+                };
+                let passed_over =
+                    !past_a_field && summary.passed_over.get(position).copied().unwrap_or(false);
+                position += 1;
+                self.walk(argument, polarity.compose(used));
+                if passed_over {
+                    self.annotation(argument);
+                }
+            }
+        }
+        for (target, found) in summary.found {
+            self.record(target, polarity.compose(found));
+        }
+    }
+
+    /// The summary of `group`'s member at `index`: the estimate where this traversal is a step of computing it, and otherwise the fixpoint, computed once a traversal. `None` for a group not read by its unfolding.
+    fn summary(&mut self, group: &RecGroup, index: usize) -> Option<Summary> {
+        if let Some((estimating, estimates)) = &self.estimates
+            && estimating == group
+        {
+            return Some(estimates[index].clone());
+        }
+        if let Some(summaries) = self.summaries.get(group) {
+            return summaries.as_ref().map(|summaries| summaries[index].clone());
+        }
+        let summaries = self.summarize(group);
+        let summary = summaries.as_ref().map(|summaries| summaries[index].clone());
+        self.summaries.insert(group.clone(), summaries);
+        summary
+    }
+
+    /// The least fixpoint of what `group`'s members' unfoldings hold ([`least_fixpoint`]): every member's body walked at `Strict` under the others' current summaries, from every parameter `Unused` and nothing found, each step's reading joined with the estimate it read under, so the estimates only climb. Each step is a traversal of its own, with every member of the group on its path, so a member it meets is read by the estimate; it tracks the member's parameters beside this traversal's targets, and reads the member's type as an annotation.
+    fn summarize(&mut self, group: &RecGroup) -> Option<Vec<Summary>> {
+        // A refused reduction reads the group as written, and is kept for the analysis to report.
+        match read_by_unfolding(self.env, group) {
+            Ok(true) => {}
+            Ok(false) => return None,
+            Err(error) => {
+                self.refused.get_or_insert(error);
+                return None;
+            }
+        }
+        // A member's parameters are its leading lambdas', as totality counts them ([`peel`]); its type is read as an annotation.
+        let members = (0..group.length())
+            .map(|index| {
+                let (params, domains, body) = peel(self.env, group.member_body(index));
+                // A refused reduction reads the binder as a value, and is kept for the analysis to report.
+                let type_params = domains
+                    .iter()
+                    .map(|domain| {
+                        answers_a_type(self.env, domain).unwrap_or_else(|error| {
+                            self.refused.get_or_insert(error);
+                            false
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                OpenedMember {
+                    params,
+                    type_params,
+                    body,
+                    type_: group.member_type(index),
+                }
+            })
+            .collect::<Vec<_>>();
+        let seed = members
+            .iter()
+            .map(|member| Summary {
+                params: vec![Polarity::Unused; member.params.len()],
+                passed_over: vec![false; member.params.len()],
+                found: BTreeMap::new(),
+            })
+            .collect::<Vec<_>>();
+
+        Some(least_fixpoint(seed, |estimates| {
+            let mut climbed = estimates.clone();
+            for (index, member) in members.iter().enumerate() {
+                let mut locals = self.locals.clone();
+                locals.extend(&member.params);
+                let mut type_locals = self.type_locals.clone();
+                type_locals.extend(
+                    member
+                        .params
+                        .iter()
+                        .zip(&member.type_params)
+                        .filter(|(_, type_param)| **type_param)
+                        .map(|(param, _)| *param),
+                );
+                let mut step = Walk {
+                    env: &mut *self.env,
+                    params: self.params.clone(),
+                    vectors: self.vectors,
+                    type_params: self.type_params.clone(),
+                    data: &mut *self.data,
+                    locals,
+                    type_locals,
+                    summaries: HashMap::new(),
+                    estimates: Some((group.clone(), estimates.clone())),
+                    unfolded: BTreeSet::new(),
+                    forcing: (0..group.length())
+                        .map(|member| (group.clone(), member))
+                        .collect(),
+                    entered: HashSet::new(),
+                    reading: Reading::Content,
+                    found: BTreeMap::new(),
+                    refused: None,
+                };
+                step.walk(&member.body, Polarity::Strict);
+                step.annotation(&member.type_);
+                let refused = step.refused.take();
+                let mut found = step.found;
+                if self.refused.is_none() {
+                    self.refused = refused;
+                }
+
+                let summary = &mut climbed[index];
+                for (position, param) in member.params.iter().enumerate() {
+                    summary.passed_over[position] |=
+                        found.remove(&Target::PassedOver(*param)).is_some();
+                    let read = found
+                        .remove(&Target::Local(*param))
+                        .unwrap_or(Polarity::Unused);
+                    summary.params[position] = summary.params[position].join(read);
+                }
+                for (target, polarity) in found {
+                    summary
+                        .found
+                        .entry(target)
+                        .and_modify(|entry| *entry = entry.join(polarity))
+                        .or_insert(polarity);
+                }
+            }
+            climbed
+        }))
+    }
+
     /// A form the walk cannot see through: descend into every direct child at `Mixed`.
     ///
     /// `Mixed` is a *result*, never a stop. Halting here would let a recursive occurrence hidden inside a stuck `match` arm or a lambda body pass unseen, which is a soundness hole rather than a missed refinement. The descent reuses `Subterm::any_child_term` so a new term former cannot be added without this walk following it.
@@ -1027,28 +1228,33 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
             return;
         }
 
-        // A `rec` member this path is already inside is left folded. Forcing it again exposes the same node one level deeper — `member_body` substitutes the group into its own body, and every turn opens a fresh binder, so no memo on *terms* would ever see a repeat — and the descent would not terminate. Folded, it falls to `opaque` below, which still visits every child at `Mixed`: the guard costs precision, never sight.
-        //
-        // The guard fires only where the walk is already inside the member it is about to force, which is to say only on a path that has no end. A walk that reaches one never meets it, so what it costs is nothing any declaration can observe.
+        // A `rec` member this path is already inside is not forced again. Forcing it exposes the same node one level deeper — `member_body` substitutes the group into its own body, and every turn opens a fresh binder, so no memo on *terms* would ever see a repeat — and the descent would not terminate. It is read by the least fixpoint of its unfolding instead ([`Summary`]), which bounds every finite unfolding.
         let member = rec_member(term);
-        let cyclic = member
+        if let Some((group, index)) = member
             .as_ref()
-            .is_some_and(|member| self.forcing.contains(member));
-        let (term, refused) = match cyclic {
-            true => (term.clone(), false),
-            false => self.forced(term),
-        };
+            .filter(|member| self.forcing.contains(member))
+        {
+            self.meet(term, group, *index, polarity);
+            return;
+        }
+        let (term, refused) = self.forced(term);
+
+        // A recursive call reduction left folded is one no unfolding of gets anywhere, the canonical normal form of a recursion stuck on what it is handed: it is read by the least fixpoint of its group's unfolding, as a call met again on its own path is, and never forced further.
+        if !refused && let Some((group, index)) = rec_member(&term) {
+            self.meet(&term, &group, index, polarity);
+            return;
+        }
 
         // A reduction the driver refused leaves the term as written, and what it names is then read here rather than lost: a bare name would fall to the `Var` arm below and record nothing, which would admit `c(f : D)` with `D` an alias of `(Bad) -> False` whenever unfolding `D` ran out of budget. Following its definitions at `Mixed` is what `opaque` does for every other stuck shape, and it keeps a refusal in the refusing direction.
         if refused {
             self.definitions(&term);
         }
-        let entered = match (cyclic, member) {
-            (false, Some(member)) => {
+        let entered = match member {
+            Some(member) => {
                 self.forcing.push(member);
                 true
             }
-            _ => false,
+            None => false,
         };
 
         match &*term {
@@ -1057,10 +1263,12 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
 
             // A variable is the occurrence itself, and the one place `opaque` cannot serve: `any_child_term` reports no child here, a `Var`'s identity being the node's own data, so the descent would find nothing and a parameter named this way would keep the `Unused` the fixpoint seeds it at.
             Subterm::Var(var) => {
-                if let Some(free) = var.as_free()
-                    && let Some(index) = self.params.iter().position(|param| param == free)
-                {
-                    self.record(Target::Param(index), polarity);
+                if let Some(free) = var.as_free() {
+                    if let Some(index) = self.params.iter().position(|param| param == free) {
+                        self.record(Target::Param(index), polarity);
+                    } else if self.locals.contains(free) {
+                        self.record(Target::Local(*free), polarity);
+                    }
                 }
             }
 

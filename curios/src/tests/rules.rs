@@ -28,6 +28,7 @@ mod positivity_computed_type;
 mod positivity_datum;
 mod positivity_index;
 mod positivity_occurrence;
+mod positivity_recursion;
 mod proposition;
 mod proposition_elimination;
 mod sequence;

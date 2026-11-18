@@ -268,10 +268,10 @@ pub fn group_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<PartShape> {
         .collect()
 }
 
-/// Peel `body`'s leading lambdas, minting one binder per parameter, with each parameter's type over the binders before it.
+/// Peel `body`'s leading lambdas, minting one binder per parameter, with each parameter's type over the binders before it: what a member's parameters are, which totality grades its calls against and strict positivity summarizes its unfolding over.
 ///
 /// A member with no lambda — `rec inf : F = F/more(inf)`, or any of `/std/Json/decode`'s nullary parsers — has no parameter, and its self-call therefore contributes a 0×0 matrix. That matrix is idempotent and has no diagonal to descend on, so a nullary self-call is rejected, which is exactly right: nothing about it can get smaller.
-fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Vec<Term>, Term) {
+pub fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Vec<Term>, Term) {
     let mut params = Vec::new();
     let mut types = Vec::new();
     while let Subterm::Func(Func { telescope, .. }) = &*body {

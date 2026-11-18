@@ -1,11 +1,12 @@
-//! Strict positivity through a real checker: a negative or strict self-occurrence, a payload the driver cannot read refused, and the polarity vectors recomputed rather than believed.
+//! Strict positivity through a real checker: a negative or strict self-occurrence, a payload the driver cannot read refused, a group that may not terminate read as written, and the polarity vectors recomputed rather than believed.
 
 use {
     super::test_support::*,
     curios_analysis::{
-        Declarations, PositivityRefusal, positivity_vectors, struct_reaches_itself, test_support::*,
+        Declarations, Env, PositivityRefusal, positivity_vectors, struct_reaches_itself,
+        test_support::*,
     },
-    curios_cert::Certifier,
+    curios_cert::{Certifier, test_support::*},
     curios_common::Qualifier,
     curios_core::{
         Constructors, Free, Global, Intrinsic, Level, Nat, Polarity, StructDecl, StructType,
@@ -534,4 +535,54 @@ fn a_tower_of_negations_is_analysed_on_the_default_stack() {
         positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new())).is_ok(),
         "a payload that mentions no family of the analysed set is strictly positive at every depth",
     );
+}
+
+/// `/f` is a group whose call on `s(p)` hands its member `s(p)` again, so it does not terminate, under a definition whose addition forces it, and `/W`'s payload is indexed by `/f(k)`, a call the walk meets folded on `k`.
+const A_PAYLOAD_INDEXED_BY_A_RECURSION_THAT_MAY_NOT_TERMINATE: &str = r#"
+induct /N: pub Type
+| z()
+| s(p: #{node = InductType} /N())
+end
+let /next : (a: #NatType) -> #NatType =
+    (a: #NatType) => #NatAdd(a, 1);
+let /f : (k: #{node = InductType} /N()) -> #NatType =
+    #{node = Rec}
+    (let m: (k: #{node = InductType} /N()) -> #NatType =
+        (k2: #{node = InductType} /N()) =>
+            #{goal = #NatType}
+            match k2
+            | z() => 0
+            | s(p) => /next(m(/N/s(p)))
+            end;
+    m);
+induct /Zero: (n: #NatType) -> pub Type
+| here(): (0)
+end
+induct /W(k: #{node = InductType} /N()): pub Type
+| w(x: #{node = InductType} /Zero()(/f(k)))
+end
+"#;
+
+/// A group that may not terminate is read as written, never by its unfolding: neither checker unfolds it, and the walk opening it would spend the set's budget before the set is refused for reaching it, by name. A call of a member is met by the estimate where the walk meets it, but forcing the definition its arm applies reduces the addition beneath, which unfolds the call inside the reduction, so read by its unfolding, the set is refused for the budget.
+#[test]
+fn a_group_that_may_not_terminate_is_read_as_written() {
+    let mut certifier = certifier();
+    declared(
+        &mut certifier,
+        A_PAYLOAD_INDEXED_BY_A_RECURSION_THAT_MAY_NOT_TERMINATE,
+    );
+    // The three families are one set, since a family outside it the driver has not judged reaches back at `Mixed`.
+    let inducts = ["N", "Zero", "W"]
+        .map(|name| {
+            let name = Global::Authored(Qualifier::from([name]));
+            let declaration = Env::induct_decl(&certifier, &name)
+                .cloned()
+                .expect("each family is declared");
+            (name, declaration)
+        })
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+
+    let verdict = positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()));
+    assert!(verdict.is_ok(), "{verdict:?}");
 }

@@ -27,7 +27,9 @@ use matrix::*;
 
 mod part;
 use part::*;
-pub use part::{PartShape, Segment, base_part, call_path, group_parts, handed_member, part_calls};
+pub use part::{
+    PartShape, Segment, base_part, call_path, group_parts, handed_member, part_calls, peel,
+};
 
 mod shape;
 use shape::*;
