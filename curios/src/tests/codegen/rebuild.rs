@@ -198,6 +198,41 @@ const REMOVALS: &str = r#"
         match n | 0 => m | k + 1 => drain(k, Map/remove(m, k * 14 % 1009)) end;
 "#;
 
+/// A trie of eight twigs a structure holds, probed through `get`, an accessor the inliner leaves a call, before each replace takes the twig at its key out and puts back what replaces it.
+const ACCESSED_TRIE: &str = r#"
+    struct T(X: Type): Type { c0: X, c1: X, c2: X, c3: X, c4: X, c5: X, c6: X, c7: X }
+    induct N: Type
+    | empty()
+    | leaf(key: Nat, value: Nat)
+    | branch(twigs: T(N))
+    end
+    let get(@X: Type, t: T(X), d: Nat) -> X = match d | 0 => t.c0 | 1 => t.c1 | 2 => t.c2 | 3 => t.c3 | 4 => t.c4 | 5 => t.c5 | 6 => t.c6 | _ => t.c7 end;
+    let set(@X: Type, t: T(X), d: Nat, x: X) -> T(X) = match d | 0 => T { ..t, c0 = x } | 1 => T { ..t, c1 = x } | 2 => T { ..t, c2 = x } | 3 => T { ..t, c3 = x } | 4 => T { ..t, c4 = x } | 5 => T { ..t, c5 = x } | 6 => T { ..t, c6 = x } | _ => T { ..t, c7 = x } end;
+    let take(t: T(N), d: Nat) -> {N, T(N)} = match d | 0 => (t.c0, T { ..t, c0 = N/empty() }) | 1 => (t.c1, T { ..t, c1 = N/empty() }) | 2 => (t.c2, T { ..t, c2 = N/empty() }) | 3 => (t.c3, T { ..t, c3 = N/empty() }) | 4 => (t.c4, T { ..t, c4 = N/empty() }) | 5 => (t.c5, T { ..t, c5 = N/empty() }) | 6 => (t.c6, T { ..t, c6 = N/empty() }) | _ => (t.c7, T { ..t, c7 = N/empty() }) end;
+    let build(depth: Nat, k: Nat) -> N =
+        match depth | 0 => N/leaf(k, 0) | d + 1 => N/branch(T { c0 = build(d, 8 * k + 0), c1 = build(d, 8 * k + 1), c2 = build(d, 8 * k + 2), c3 = build(d, 8 * k + 3), c4 = build(d, 8 * k + 4), c5 = build(d, 8 * k + 5), c6 = build(d, 8 * k + 6), c7 = build(d, 8 * k + 7) }) end;
+    let near(t: N, k: Nat) -> Nat =
+        match t | empty() => 0 | leaf(k0, _) => k0 | branch(tw) => near(get(tw, k % 8), k / 8) end;
+    let replace(t: N, k: Nat, v: Nat) -> N =
+        match t
+        | empty() => t
+        | leaf(k0, _) => N/leaf(k0, v)
+        | branch(tw) =>
+            let d = k % 8;
+            let (s, rest) = take(tw, d);
+            N/branch(set(rest, d, replace(s, k / 8, v)))
+        end;
+    let put(t: N, k: Nat, v: Nat) -> N = match near(t, k) != 1000000007 | true => replace(t, k, v) | false => t end;
+    let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =
+        match i < 8 | false => acc | true => fold_twigs(tw, i + 1, fold(get(tw, i), acc)) end
+    and fold(t: N, acc: Nat) -> Nat =
+        match t | empty() => acc | leaf(_, v) => acc + v | branch(tw) => fold_twigs(tw, 0, acc) end;
+    let walk(n: Nat, t: N) -> N = match n | 0 => t | j + 1 => walk(j, put(t, j % 64, j)) end;
+"#;
+
+/// What the trie of [`ACCESSED_TRIE`] holds after a walk of `n` puts, summed.
+const ACCESSED_TRIE_SUM: &str = "fold(walk(n, build(2, n)), 0)";
+
 /// The constructions keeping a slot of the node the function named `name` takes, which a rebuild in place leaves none of: each reads a field of it.
 fn copies_keeping_a_slot(module: &Module, name: &str) -> usize {
     let taken = module
@@ -771,6 +806,25 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
     assert_eq!(rebuilds_of(&module, "/Tree"), 0, "{module}");
 }
 
+/// A probe through an accessor before each replace: `get` hands back a field of the twigs it is handed, so a call of it reads them as a row read in the probe's own body would, its parameter borrowing them, and every level the replace takes apart is rebuilt as where the probe reads the twigs itself. Mutation-checked: with an accessor's returned field making its parameter own, the probe consumes the trie and nothing is rebuilt.
+#[test]
+fn a_probe_through_an_accessor_leaves_what_it_reads_to_be_rebuilt() {
+    let (_, module) = modules(&program(ACCESSED_TRIE, ACCESSED_TRIE_SUM));
+    let inline = ACCESSED_TRIE.replace(
+        "near(get(tw, k % 8), k / 8)",
+        "near(match k % 8 | 0 => tw.c0 | 1 => tw.c1 | 2 => tw.c2 | 3 => tw.c3 | 4 => tw.c4 | 5 => tw.c5 | 6 => tw.c6 | _ => tw.c7 end, k / 8)",
+    );
+    let (_, read_inline) = modules(&program(&inline, ACCESSED_TRIE_SUM));
+    assert!(rebuilds_of(&module, "/N") > 0, "{module}");
+    for row in ["/N", "/T"] {
+        assert_eq!(
+            rebuilds_of(&module, row),
+            rebuilds_of(&read_inline, row),
+            "{row}"
+        );
+    }
+}
+
 /// A node holding its twigs in a structure the program takes apart and puts back but never builds: every construction of the structure is rewritten into a rebuild, which leaves the flow none to start from, and the program compiles and answers as the same program building one twig structure does.
 #[test]
 fn a_structure_the_program_only_rebuilds_compiles_and_answers() {
@@ -984,7 +1038,9 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
     let union = program(TWO_WALKS, TWO_WALKS_UNION);
     let filtered = program(TWO_WALKS, WALK_FILTERED);
     let pairs = program(TWO_WALKS, PAIRS_AS_A_MAP);
+    let accessed = program(ACCESSED_TRIE, ACCESSED_TRIE_SUM);
     for (source, n) in corpus.into_iter().chain([
+        (accessed, "300"),
         (heap, "300"),
         (spines, "300"),
         (removals, "300"),

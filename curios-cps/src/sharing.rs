@@ -6,7 +6,7 @@
 //!
 //! **Constants by tag.** A constant is one global every use shares, and it reaches every parameter it is handed to and every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out. A row's constructors share its slots, a leaf's payload a fork's child, so a slot is followed under the constructor that writes it and read under the one a test around the read decides.
 //!
-//! **Borrowing.** A parameter a function or a continuation only reads is borrowed, so whoever handed it the value keeps it: a call or a jump into a borrowed parameter is a read, and a read-only walk the optimizer made a loop leaves its caller's value unique for the rebuild after it, as Lean's borrow inference treats a join point as a local function whose parameters carry a borrow flag (`Lean.Compiler.IR.Borrow`). A parameter owns where it is rebuilt, captured or consumed, or where a field of it that a rebuild could write — one that may be a row or a tuple, read from no payload's slot — must be owned, as Lean's inference owns what it resets. Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
+//! **Borrowing.** A parameter a function or a continuation only reads is borrowed, so whoever handed it the value keeps it: a call or a jump into a borrowed parameter is a read, and a read-only walk the optimizer made a loop leaves its caller's value unique for the rebuild after it, as Lean's borrow inference treats a join point as a local function whose parameters carry a borrow flag (`Lean.Compiler.IR.Borrow`). A parameter owns where it is rebuilt, captured or consumed, or where a field of it that a rebuild could write — one that may be a row or a tuple, read from no payload's slot — must be owned, as Lean's inference owns what it resets. An accessor, a function each return of which hands back at one position what one row read of one parameter binds, owns nothing for it: a call of it reads what it hands that parameter as a row read in the caller's own body would, at the call, and the value the call resumes with is judged as that field read is ([`Shape::read_through_accessors`]). Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
 //!
 //! **A borrow is one name among several.** A borrowed parameter names an object its holder still holds, so nothing may write into that object while the parameter is live. A transfer handing it to a borrowed parameter and to an owned one, as itself or as a field of the other, owns both; a continuation's region building a row its parameter is read at keeps the parameter owned; and a continuation's parameter, which lives on past the jump that bound it where a function's lives within the call, owns where what it was handed is consumed, or a rebuild writes into it, while it is live. The last is read off the rebuilds the facts admit, so borrowing and rebuilding are decided again until no rebuild writes under a borrow.
 
@@ -183,6 +183,26 @@ pub fn routes(module: &Module) -> Routes {
                                 {
                                     solver.join((world, Key::Value(value)), Shared(true));
                                 }
+                            }
+                        });
+                    }
+                    Def::ContParam(_, _)
+                        if let Some(access) = shape.accessed_under(value, &borrowed) =>
+                    {
+                        let of = access.of;
+                        let consumed_after = shape
+                            .consumed(of, &borrowed)
+                            .iter()
+                            .any(|point| shape.reaches_holding(of, access.call, point.node));
+                        let slots = access.slots.clone();
+                        rules.add(move |solver| {
+                            let marked = slots.iter().any(|slot| {
+                                solver
+                                    .fact(&(World::Base, Key::Slot(*slot)))
+                                    .is_some_and(|fact| fact.0)
+                            });
+                            if consumed_after || marked || shared(solver, world, &Atom::Value(of)) {
+                                solver.join((world, Key::Value(value)), Shared(true));
                             }
                         });
                     }
@@ -1000,6 +1020,15 @@ struct Entry {
     case: Option<(NodeId, u32)>,
 }
 
+/// What a call reads through an accessor: the value it handed the parameter the accessor reads, the call, that parameter, and the slots the accessor's row reads of it may be.
+#[derive(Debug, Clone)]
+struct Access {
+    of: ValueId,
+    call: NodeId,
+    param: Receiver,
+    slots: Vec<SlotKey>,
+}
+
 /// A point a value is consumed at: a node, or one edge of a switch, which the switch's other edges do not take.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Point {
@@ -1029,6 +1058,10 @@ struct Shape {
     fields: BTreeMap<ValueId, Vec<ValueId>>,
     /// The slot each projection reads.
     slot_of: BTreeMap<ValueId, usize>,
+    /// The values a call reads through an accessor, each a field read of what the call handed it ([`Shape::read_through_accessors`]).
+    accessed: BTreeMap<ValueId, Access>,
+    /// The values an accessor's row read of a parameter binds, which its return alone hands on.
+    handed_by_accessors: BTreeSet<ValueId>,
     /// The row reads of each value: the row and what the read binds.
     row_reads: BTreeMap<ValueId, Vec<(RowId, ValueId)>>,
     /// The values each function's nodes name but do not bind, and the functions defined within it name likewise.
@@ -1069,6 +1102,8 @@ impl Shape {
             read_at: BTreeMap::new(),
             fields: BTreeMap::new(),
             slot_of: BTreeMap::new(),
+            accessed: BTreeMap::new(),
+            handed_by_accessors: BTreeSet::new(),
             row_reads: BTreeMap::new(),
             captured: BTreeSet::new(),
             live_in: BTreeMap::new(),
@@ -1320,9 +1355,139 @@ impl Shape {
                 *last = (*last).max(at);
             }
         }
+        shape.read_through_accessors(module);
         shape.live_in = live_in(module, &shape, &blocks);
         shape.payload = payload_slots(module, &shape);
         shape
+    }
+
+    /// A function each return of which hands back, at one position, what one row read of one parameter binds and nothing else uses is an accessor there, and a call of it reads what it hands that parameter as a row read in the caller's own body would, at the call: the resumed value joins the field reads of the value the call handed, beside the slots the accessor reads may be, and the parameter need not own for it, its holder keeping what it reads ([`Shape::must_own`]). A continuation another call or a jump also enters is no one call's read.
+    fn read_through_accessors(&mut self, module: &Module) {
+        let arities = module.return_arities();
+        let mut reads =
+            BTreeMap::<(FunctionId, usize), Vec<Option<(usize, SlotKey, ValueId)>>>::new();
+        for (function, nodes) in &self.returns {
+            for node in nodes {
+                match module.node(*node) {
+                    Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
+                        for (index, atom) in handed_back(module, *function, *node) {
+                            let read = match atom {
+                                Atom::Value(value) => {
+                                    self.one_read_of_a_param(module, *function, *value)
+                                }
+                                _ => None,
+                            };
+                            reads.entry((*function, index)).or_default().push(read);
+                        }
+                    }
+                    // A tail call or an operation hands back what this function reads nothing of.
+                    _ => {
+                        for index in 0..arities.get(function).copied().unwrap_or(0) {
+                            reads.entry((*function, index)).or_default().push(None);
+                        }
+                    }
+                }
+            }
+        }
+        let accessors = reads
+            .into_iter()
+            .filter_map(|(at, reads)| {
+                let reads = reads.into_iter().collect::<Option<Vec<_>>>()?;
+                let param = reads.first()?.0;
+                reads
+                    .iter()
+                    .all(|(read, _, _)| *read == param)
+                    .then_some((at, (param, reads)))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (callee, calls) in &self.calls {
+            for call in calls {
+                let Some(Node::ApplyFun {
+                    args, return_to, ..
+                }) = module.node(*call)
+                else {
+                    continue;
+                };
+                if self
+                    .resumes
+                    .get(return_to)
+                    .is_none_or(|resumes| resumes.len() != 1)
+                    || self.entries.contains_key(return_to)
+                {
+                    continue;
+                }
+                let Some(continuation) = module.continuation(*return_to) else {
+                    continue;
+                };
+                for (index, resumed) in continuation.params.iter().enumerate() {
+                    let Some((param, reads)) = accessors.get(&(*callee, index)) else {
+                        continue;
+                    };
+                    let Some(Atom::Value(of)) = args.get(*param) else {
+                        continue;
+                    };
+                    self.accessed.insert(
+                        *resumed,
+                        Access {
+                            of: *of,
+                            call: *call,
+                            param: Receiver::Param(*callee, *param),
+                            slots: reads.iter().map(|(_, slot, _)| *slot).collect(),
+                        },
+                    );
+                    self.fields.entry(*of).or_default().push(*resumed);
+                    self.binder.insert(*resumed, *call);
+                }
+            }
+        }
+        self.handed_by_accessors = accessors
+            .into_values()
+            .flat_map(|(_, reads)| reads.into_iter().map(|(_, _, value)| value))
+            .collect();
+    }
+
+    /// The parameter, the slot and the value of `value`'s binding where it is one row read of a parameter of `function` and nothing but a return uses it.
+    fn one_read_of_a_param(
+        &self,
+        module: &Module,
+        function: FunctionId,
+        value: ValueId,
+    ) -> Option<(usize, SlotKey, ValueId)> {
+        let Some(Def::Field(of)) = self.defs.get(&value) else {
+            return None;
+        };
+        let Some(Def::Param(home, param)) = self.defs.get(of) else {
+            return None;
+        };
+        if *home != function || self.uses.get(&value).map_or(0, Vec::len) != 1 {
+            return None;
+        }
+        slot_read(module, self, *of, self.binder[&value]).map(|slot| (*param, slot, value))
+    }
+
+    /// Whether two field reads of one value may read one slot: two row reads of it, or a read through an accessor, which may read any slot of what it is handed.
+    fn may_read_one_slot(&self, a: ValueId, b: ValueId) -> bool {
+        self.accessed.contains_key(&a)
+            || self.accessed.contains_key(&b)
+            || self.slot_of.get(&a) == self.slot_of.get(&b)
+    }
+
+    /// Whether a field read of `of` binding `value` names one object with another read of a slot it may read, either running after the other while `of` names one object, or with itself on a later round of a loop that binds `of` once.
+    fn read_again(&self, value: ValueId, of: ValueId) -> bool {
+        self.returns_without_rebinding(of, self.binder[&value])
+            || self.fields.get(&of).into_iter().flatten().any(|other| {
+                *other != value
+                    && self.may_read_one_slot(*other, value)
+                    && (self.reaches_as_one(of, self.binder[&value], self.binder[other])
+                        || self.reaches_as_one(of, self.binder[other], self.binder[&value]))
+            })
+    }
+
+    /// The read through an accessor binding `value`, where the accessor's parameter is borrowed: an owned one takes what it is handed, and a call to it is no read.
+    fn accessed_under(&self, value: ValueId, borrowed: &Borrowed) -> Option<&Access> {
+        self.accessed
+            .get(&value)
+            .filter(|access| borrowed.contains(&access.param))
     }
 
     /// Whether `value` is read after the consumption at `point`, on its edge.
@@ -1794,6 +1959,7 @@ impl Shape {
                 .flatten()
                 .filter(|field| {
                     aggregates.contains(field)
+                        && !self.handed_by_accessors.contains(field)
                         && !slot_read(module, self, value, self.binder[field])
                             .is_some_and(|slot| self.payload.contains(&slot))
                 })
@@ -2020,6 +2186,25 @@ impl<'s> Facts<'s> {
                             }
                         });
                     }
+                    // A read through an accessor is a field read of what the call handed it, at the call.
+                    Def::ContParam(_, _)
+                        if let Some(access) = shape.accessed_under(value, borrowed) =>
+                    {
+                        let of = access.of;
+                        let consumed_after = shape
+                            .consumed(of, borrowed)
+                            .iter()
+                            .any(|point| shape.reaches_holding(of, access.call, point.node));
+                        let slots = access.slots.clone();
+                        rules.add(move |solver| {
+                            let marked = slots.iter().any(|slot| {
+                                solver.fact(&Key::Slot(*slot)).is_some_and(|fact| fact.0)
+                            });
+                            if consumed_after || marked || shared(solver, &Atom::Value(of)) {
+                                solver.join(Key::Value(value), Shared(true));
+                            }
+                        });
+                    }
                     Def::ContParam(continuation, index) => {
                         let entries = shape
                             .entries
@@ -2229,6 +2414,9 @@ fn sources(
                         })
                     })
             }
+            Def::ContParam(_, _) if let Some(access) = shape.accessed_under(*value, borrowed) => {
+                shape.read_again(*value, access.of)
+            }
             // A borrowed parameter reads what its holder keeps, so it is never the one name an object goes by.
             Def::ContParam(continuation, index) => {
                 borrowed.contains(&Receiver::ContParam(*continuation, *index))
@@ -2262,19 +2450,7 @@ fn sources(
                         })
             }
             // Two reads of one slot name one object where one can run after the other while the value they read names one object, and so does one read on two rounds of a loop that binds what it reads once.
-            Def::Field(of) => {
-                shape.returns_without_rebinding(*of, shape.binder[value])
-                    || shape.fields.get(of).into_iter().flatten().any(|other| {
-                        *other != *value
-                            && shape.slot_of.get(other) == shape.slot_of.get(value)
-                            && (shape.reaches_as_one(*of, shape.binder[value], shape.binder[other])
-                                || shape.reaches_as_one(
-                                    *of,
-                                    shape.binder[other],
-                                    shape.binder[value],
-                                ))
-                    })
-            }
+            Def::Field(of) => shape.read_again(*value, *of),
         };
         if source || twice || not_last || outlived || shape.captured.contains(value) {
             sources.insert(Key::Value(*value));
