@@ -537,7 +537,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-format SUBJECT — Files, store None, leaves Rewritten, options --check --width --manifest
+format SUBJECT — Files, store None, leaves Rewritten, options --check --line-width --manifest
   work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs within 100
   work/app: serve → files serve.crs helper.crs helper/deep.crs within 100
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml

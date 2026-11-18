@@ -616,7 +616,7 @@ fn formatting_answers_within_the_width_the_documents_package_states() {
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {NARROWEST}\n",
             compiler = env!("CARGO_PKG_VERSION")
         ),
     );
@@ -627,7 +627,11 @@ fn formatting_answers_within_the_width_the_documents_package_states() {
 
     // What `curios format` writes within the same width, read off standard input, which no manifest governs.
     let width = NARROWEST.to_string();
-    let expected = stdout(&curios(&root, &["format", "--width", &width, "-"], text));
+    let expected = stdout(&curios(
+        &root,
+        &["format", "--line-width", &width, "-"],
+        text,
+    ));
     assert_ne!(expected, text);
 
     let mut editor = Editor::launch(&root);

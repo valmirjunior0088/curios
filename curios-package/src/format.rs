@@ -21,9 +21,9 @@ use {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct FormatSettings {
     /// The columns a formatted line is written within.
-    #[arg(long, value_name = "COLUMNS", help = width_help())]
-    #[serde(default, deserialize_with = "width")]
-    pub width: Option<Width>,
+    #[arg(long, value_name = "COLUMNS", help = line_width_help())]
+    #[serde(default, deserialize_with = "line_width")]
+    pub line_width: Option<Width>,
 }
 
 impl FormatSettings {
@@ -42,15 +42,15 @@ impl FormatSettings {
                         ))
                         .stating("a flag does not override it")
                         .stating("write the setting under its `[format]` table, or format the text through standard input, which no manifest governs")
-                        .about_named("--width"));
+                        .about_named("--line-width"));
                 }
                 stated.cloned().unwrap_or_default()
             }
         };
 
         // Every setting is named here, so one added to the struct does not compile until it is read.
-        let Self { width } = settings;
-        Ok(width.unwrap_or_default())
+        let Self { line_width } = settings;
+        Ok(line_width.unwrap_or_default())
     }
 
     /// [`FormatSettings::width_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose stated compiler the running one must be, and under nothing where no package governs it.
@@ -68,15 +68,15 @@ impl FormatSettings {
     }
 }
 
-/// `--width`'s help, its bounds read off the constants that set them.
-fn width_help() -> String {
+/// `--line-width`'s help, its bounds read off the constants that set them.
+fn line_width_help() -> String {
     format!(
         "The columns a formatted line is written within, `{NARROWEST}` through `{LINE_WIDTH}`, for standard input or a file no package governs; a package states its own under `[format]` (default: `{LINE_WIDTH}`)"
     )
 }
 
-/// `width` as a manifest spells it: a whole number of columns, refused where the formatter admits no such width.
-fn width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Width>, D::Error> {
+/// `line-width` as a manifest spells it: a whole number of columns, refused where the formatter admits no such width.
+fn line_width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Width>, D::Error> {
     let columns = u64::deserialize(deserializer)?;
     let columns = usize::try_from(columns).map_err(D::Error::custom)?;
 

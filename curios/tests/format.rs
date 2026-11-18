@@ -128,13 +128,13 @@ fn narrow(text: &str) -> bool {
     text.lines().all(|line| line.chars().count() <= NARROWEST)
 }
 
-/// `--width` formats standard input and a file no package governs within it, the two alike, where the default leaves the text as it is.
+/// `--line-width` formats standard input and a file no package governs within it, the two alike, where the default leaves the text as it is.
 #[test]
 fn a_width_formats_standard_input_and_a_file_no_package_governs_within_it() {
     let root = temporary("width-loose");
     write(&root, "loose.crs", WIDE);
 
-    let piped = curios(&root, &["format", "--width", &narrowest(), "-"], WIDE);
+    let piped = curios(&root, &["format", "--line-width", &narrowest(), "-"], WIDE);
     let piped_text = String::from_utf8_lossy(&piped.stdout).into_owned();
     assert!(
         piped.status.success(),
@@ -149,7 +149,11 @@ fn a_width_formats_standard_input_and_a_file_no_package_governs_within_it() {
             .status
             .success()
     );
-    let rewritten = curios(&root, &["format", "--width", &narrowest(), "loose.crs"], "");
+    let rewritten = curios(
+        &root,
+        &["format", "--line-width", &narrowest(), "loose.crs"],
+        "",
+    );
     assert!(
         rewritten.status.success(),
         "{}",
@@ -169,7 +173,7 @@ fn a_package_formats_within_the_width_its_manifest_states() {
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {NARROWEST}\n",
             compiler = env!("CARGO_PKG_VERSION")
         ),
     );
@@ -197,7 +201,7 @@ fn a_package_formats_within_the_width_its_manifest_states() {
     );
 }
 
-/// `--width` reaches no file a package governs, since the package states its own: the command is refused before any subject is written, the one no package governs included.
+/// `--line-width` reaches no file a package governs, since the package states its own: the command is refused before any subject is written, the one no package governs included.
 #[test]
 fn a_width_is_refused_for_a_file_a_package_governs_before_anything_is_written() {
     let root = temporary("width-governed");
@@ -217,7 +221,7 @@ fn a_width_is_refused_for_a_file_a_package_governs_before_anything_is_written() 
         &root,
         &[
             "format",
-            "--width",
+            "--line-width",
             &narrowest(),
             "loose.crs",
             "app/lib.crs",

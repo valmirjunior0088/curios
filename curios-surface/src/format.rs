@@ -34,7 +34,7 @@ impl Width {
         match (NARROWEST..=LINE_WIDTH).contains(&columns) {
             true => Ok(Self(columns)),
             false => Err(format!(
-                "a width is {NARROWEST} through {LINE_WIDTH} columns, and `{columns}` is not"
+                "a line width is {NARROWEST} through {LINE_WIDTH} columns, and `{columns}` is not"
             )),
         }
     }
@@ -57,7 +57,7 @@ impl FromStr for Width {
     fn from_str(spelling: &str) -> Result<Self, String> {
         let columns = spelling.parse().map_err(|_| {
             format!(
-                "a width is a number of columns, {NARROWEST} through {LINE_WIDTH}, not `{spelling}`"
+                "a line width is a number of columns, {NARROWEST} through {LINE_WIDTH}, not `{spelling}`"
             )
         })?;
         Self::new(columns)

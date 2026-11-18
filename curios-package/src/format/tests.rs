@@ -21,7 +21,7 @@ fn width(columns: usize) -> Width {
 
 fn flags(columns: usize) -> FormatSettings {
     FormatSettings {
-        width: Some(width(columns)),
+        line_width: Some(width(columns)),
     }
 }
 
@@ -30,7 +30,7 @@ fn a_package_and_an_umbrella_each_state_a_width_under_format() {
     let Ok(Manifest::Package(package)) = concat!(
         "name = \"app\"\ncompiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\n\n[format]\nwidth = 72\n"
+        "\"\n\n[format]\nline-width = 72\n"
     )
     .parse() else {
         panic!("a package's manifest");
@@ -40,7 +40,7 @@ fn a_package_and_an_umbrella_each_state_a_width_under_format() {
     let Ok(Manifest::Umbrella(umbrella)) = concat!(
         "compiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\nmembers = []\n\n[format]\nwidth = 80\n"
+        "\"\nmembers = []\n\n[format]\nline-width = 80\n"
     )
     .parse() else {
         panic!("an umbrella's manifest");
@@ -59,18 +59,18 @@ fn a_key_format_does_not_take_is_refused_where_the_manifest_is_read() {
         refusal.contains("`widht` is no field of `[format]`"),
         "{refusal}"
     );
-    assert!(refusal.contains("`width`"), "{refusal}");
+    assert!(refusal.contains("`line-width`"), "{refusal}");
 }
 
 #[test]
 fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() {
     for (stated, refused) in [
-        ("30", "a width is"),
-        ("101", "a width is"),
-        ("-1", "`width` is a whole number"),
-        ("\"80\"", "`width` is a whole number"),
+        ("30", "a line width is"),
+        ("101", "a line width is"),
+        ("-1", "`line-width` is a whole number"),
+        ("\"80\"", "`line-width` is a whole number"),
     ] {
-        let refusal = format!("name = \"app\"\n\n[format]\nwidth = {stated}\n")
+        let refusal = format!("name = \"app\"\n\n[format]\nline-width = {stated}\n")
             .parse::<Manifest>()
             .unwrap_err()
             .said
@@ -88,7 +88,7 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
         concat!(
             "name = \"stated\"\ncompiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\n\n[format]\nwidth = 72\n"
+            "\"\n\n[format]\nline-width = 72\n"
         ),
     );
     write(
@@ -118,14 +118,14 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nmembers = [\"app\", \"own\"]\n\n[format]\nwidth = 60\n"
+            "\"\nmembers = [\"app\", \"own\"]\n\n[format]\nline-width = 60\n"
         ),
     );
     write(&root, "app/curios.toml", "name = \"app\"\n");
     write(
         &root,
         "own/curios.toml",
-        "name = \"own\"\n\n[format]\nwidth = 90\n",
+        "name = \"own\"\n\n[format]\nline-width = 90\n",
     );
 
     let member = Governing::of(&root.join("app")).expect("a member");
@@ -167,7 +167,7 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nmembers = []\n\n[format]\nwidth = 80\n"
+            "\"\nmembers = []\n\n[format]\nline-width = 80\n"
         ),
     );
     write(&root, "work/scratch.crs", "");

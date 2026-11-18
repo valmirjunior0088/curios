@@ -16,13 +16,13 @@ fn reported(text: &str) -> (String, String) {
 /// A field no table takes is refused at its key, with the fields its table takes and the one it was nearest to.
 #[test]
 fn a_field_no_table_takes_is_refused_at_its_key() {
-    let (said, at) = reported("name = \"app\"\n\n[format]\nwidht = 80\n");
+    let (said, at) = reported("name = \"app\"\n\n[format]\nline-widht = 80\n");
 
     assert_eq!(
         said,
-        "unknown field\n  `widht` is no field of `[format]`\n  it takes: `width`\n  the nearest: `width`"
+        "unknown field\n  `line-widht` is no field of `[format]`\n  it takes: `line-width`\n  the nearest: `line-width`"
     );
-    assert_eq!(at, "widht");
+    assert_eq!(at, "line-widht");
 }
 
 /// A row that leaves out a field it requires is refused at the row, by the table TOML heads it with.
