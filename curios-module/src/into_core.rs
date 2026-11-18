@@ -2431,7 +2431,7 @@ pub fn into_core_unit(
 
 /// [`into_core_unit`] over `baseline`, the unit an earlier text of the same sources lowered to: a declaration the baseline lowered from the text it is written in now, every name it resolved resolving as it did, is the baseline's and is not lowered again. The unit is the one lowering the whole of it gives.
 ///
-/// `settled` says that `predecessors` are the units `baseline` was lowered against: what an edit moved is then found from the edit, and a declaration no edit can have reached is kept unasked. Where it is false, every declaration is asked.
+/// `settled` says that `predecessors` are the units `baseline` was lowered against: what an edit moved is then found from the edit, and a declaration no edit can have reached is kept unasked. Where it is false, or where the mounts `source` may write are not the ones the baseline's could, every declaration is asked.
 pub fn into_core_unit_over(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
@@ -2570,9 +2570,17 @@ fn into_core_unit_within(
     let visible_mounts = source.visible_mounts(predecessors, &own);
     let reach = Reach::over(&mounts, &visible_mounts);
 
-    // Where the units in scope are the ones the baseline was lowered against, the export view is the baseline's with what the edit reached resolved again; where one moved, every module's is resolved again, since a `pub use` may read it.
+    // Where the units in scope are the ones the baseline was lowered against, the export view is the baseline's with what the edit reached resolved again; where one moved, every module's is resolved again, since a `pub use` may read it. The mounts the unit may write are read as the units in scope are, by every path a declaration writes, and no record names them, so a baseline lowered where the unit could write others is asked whole too.
+    let writable = |mounts: &[Mount]| {
+        mounts
+            .iter()
+            .map(|mount| mount.prefix)
+            .collect::<BTreeSet<_>>()
+    };
     let settled = over
-        .filter(|(_, settled)| *settled)
+        .filter(|(baseline, settled)| {
+            *settled && writable(&baseline.visible) == writable(&visible_mounts)
+        })
         .map(|(baseline, _)| baseline);
     let (public, revised) = match settled {
         Some(baseline) => {

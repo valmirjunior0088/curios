@@ -274,6 +274,44 @@ fn a_namespace_that_stops_or_starts_being_a_concepts_is_read_again_by_its_reader
     }
 }
 
+/// The unit `/dep`, declaring `x`, under a directory of its own.
+fn dependency(name: &str) -> (Temporary, PreparedText) {
+    let root = files(name, &[("lib.crs", "pub let x : Type = Type;\n")]);
+    let source = RootSource::mounted("dep", RootKind::Ordinary, root.join("lib.crs"), &*root);
+    let unit = into_core_unit(&UnitSource::mounted(&source), &[], syntax()).unwrap();
+
+    (root, unit)
+}
+
+/// A unit lowered over a baseline whose writable mounts are not its own asks every declaration: one writing `/dep` lowers as the whole lowering does, to the name that resolved to nothing, where the unit may no longer write `/dep` while it is still mounted and where it is no longer mounted at all.
+#[test]
+fn a_baseline_lowered_under_another_reach_is_asked_whole() {
+    let (_dependency, dep) = dependency("reach-dep");
+    let root = files(
+        "reach",
+        &[
+            ("lib.crs", "pub mod a;\n"),
+            ("a.crs", "pub let y : Type = /dep/x;\n"),
+        ],
+    );
+    let source = library(&root);
+    let baseline = into_core_unit(
+        &UnitSource::mounted(&source).seeing(vec![Qualifier::from(["dep"])]),
+        &[&dep],
+        syntax(),
+    )
+    .unwrap();
+
+    for predecessors in [&[&dep][..], &[]] {
+        baseline.paths();
+        let unit = UnitSource::mounted(&source).seeing(Vec::new());
+        let over = into_core_unit_over(&unit, predecessors, syntax(), &baseline, true).unwrap();
+        let whole = into_core_unit(&unit, predecessors, syntax()).unwrap();
+
+        same_unit(&over, &whole);
+    }
+}
+
 /// A binding made private is seen by its module alone, and a binding added is seen as a whole lowering decides.
 #[test]
 fn a_binding_made_private_is_seen_by_its_module_alone() {
