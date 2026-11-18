@@ -53,15 +53,16 @@ fn a_bind_guard_that_cannot_fail_is_rejected() {
 }
 
 #[test]
-fn named_catch_all_is_rejected() {
-    // A named final arm among concrete constructor arms is not a catch-all, and the name may have been meant as a constructor, which is written with its payload list.
-    let error = run_err("match m | some(x) => x | none => 0 end");
-    assert!(
-        error.contains("named final arm")
-            && error.contains("`| _ =>`")
-            && error.contains("`| none() =>`"),
-        "unexpected error: {error}"
-    );
+fn a_named_final_arm_lowers_as_a_row_binding_its_name() {
+    // A named final arm after arms that dispatch lowers as the `_` there does, a row that takes nothing apart, binding its name: whether the name is a constructor of what the arms take apart is elaboration's to say, which reads the scrutinee's family.
+    let term = run("match m | some(x) => x | rest => 0 end");
+
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    let last = matrix.rows().last().expect("the match has rows");
+    assert!(matches!(last.pattern, curios_core::Pattern::Binder));
+    assert_eq!(last.pattern.binders(), 1);
 }
 
 #[test]
@@ -112,22 +113,18 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
     assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BytesConcat"));
 }
 
-/// The match lowering's refusals stand at the binder they are about: a named final arm, and an irrefutable bind guard.
+/// A bind guard that takes nothing apart is refused at the binder it binds, the part of the arm the refusal is about.
 #[test]
 fn a_match_refusal_stands_at_the_binder_it_is_about() {
-    for (source, underlined) in [
-        ("match m | some(x) => x | rest => 0 end", "rest"),
-        ("match | some(x) = m => x | y = m => 0 | _ => 1 end", "y"),
-    ] {
-        let report = run_err_report(source);
-        // The caret line under the source's one line: blanks to where the part begins, then a caret for each of its characters.
-        let at = source.find(underlined).expect("the part is written");
-        let carets = format!("│ {}{}", " ".repeat(at), "^".repeat(underlined.len()));
-        assert!(
-            report.lines().any(|line| line.ends_with(&carets)),
-            "{source}\n{report}"
-        );
-    }
+    let (source, underlined) = ("match | some(x) = m => x | y = m => 0 | _ => 1 end", "y");
+    let report = run_err_report(source);
+    // The caret line under the source's one line: blanks to where the part begins, then a caret for each of its characters.
+    let at = source.find(underlined).expect("the part is written");
+    let carets = format!("│ {}{}", " ".repeat(at), "^".repeat(underlined.len()));
+    assert!(
+        report.lines().any(|line| line.ends_with(&carets)),
+        "{source}\n{report}"
+    );
 }
 
 #[test]

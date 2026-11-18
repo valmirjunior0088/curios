@@ -611,6 +611,8 @@ pub struct Declaring {
     unbound: RefCell<BTreeMap<curios_core::Free, curios_core::Unresolved>>,
     // Every written site of the declaration being lowered no written name reads: what `curios-elab` decides the binder lints from. The declaration's, since a written binder's place is.
     unread: RefCell<Vec<curios_core::Unread>>,
+    // The lints the lowering of the declaration being lowered decided, its last fact being the text as written. The declaration's, as its unread sites are.
+    lints: RefCell<Vec<curios_core::Lint>>,
 }
 
 impl Declaring {
@@ -625,6 +627,7 @@ impl Declaring {
             sorts,
             unbound,
             unread,
+            lints,
         } = self;
 
         metavars.reset();
@@ -635,6 +638,7 @@ impl Declaring {
         sorts.begin();
         unbound.borrow_mut().clear();
         unread.borrow_mut().clear();
+        lints.borrow_mut().clear();
     }
 }
 
@@ -651,6 +655,7 @@ impl Shared {
                 sorts: WrittenSorts::default(),
                 unbound: RefCell::default(),
                 unread: RefCell::default(),
+                lints: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
             minted: RefCell::default(),
@@ -777,6 +782,11 @@ impl<'a> Context<'a> {
     /// Record `sites` of the declaration being lowered as ones no written name reads, beside what it minted.
     pub fn unread(&self, sites: impl IntoIterator<Item = curios_core::Unread>) {
         self.shared.declaring.unread.borrow_mut().extend(sites);
+    }
+
+    /// Record `lint`, which the lowering decided of the declaration being lowered ([`curios_core::Mints::lints`]).
+    pub fn lint(&self, lint: curios_core::Lint) {
+        self.shared.declaring.lints.borrow_mut().push(lint);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.
@@ -922,6 +932,7 @@ impl<'a> Context<'a> {
             universes: self.shared.declaring.universe_seeds.borrow().clone(),
             qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
             unread: self.shared.declaring.unread.borrow().clone(),
+            lints: self.shared.declaring.lints.borrow().clone(),
         }
     }
 

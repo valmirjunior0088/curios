@@ -1,10 +1,10 @@
 use {
     super::{Binder, Lowerer, RegionFrame, bindable},
     crate::Error,
-    curios_common::Span,
+    curios_common::{Said, Span},
     curios_surface::{
         Alternative, Elements, Guard, HeadlessArm, HeadlessMatch, Label, Match, MatchPattern,
-        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Term,
+        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Subterm, Term,
     },
     std::collections::BTreeSet,
 };
@@ -36,7 +36,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
-        self.headed(head, &match_.arms, Self::region)
+        self.headed(&match_.head, head, &match_.arms, Self::region)
     }
 
     /// A match with no head inside a region: there is no scrutinee to run ahead of the arms, so nothing hoists, and each guard and each body is a region of its own.
@@ -84,16 +84,19 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         )
     }
 
-    /// Lowers a headed match — its scrutinee already lowered — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
+    /// Lowers a headed match — its scrutinee already lowered, `written` the head as it is written — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
     ///
-    /// A final arm that binds a name after arms that dispatch is refused, read off the arms as they are written: it is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]).
+    /// A final arm that binds a name after arms that dispatch takes every value they leave under that name, and where the head is a name it renames what the head already names, which `renaming-binder` reports ([`Self::renaming`]). Whether the name is a constructor of what the arms dispatch over is elaboration's to say, which reads the scrutinee's family.
     pub fn headed(
         &self,
+        written: &Term,
         head: curios_core::Term,
         arms: &[MatrixArm],
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        dispatching(arms)?;
+        if let Some(lint) = self.renaming(written, arms) {
+            self.lowerer.context.lint(lint);
+        }
 
         let arms = arms
             .iter()
@@ -104,6 +107,26 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             head,
             arms,
         }))
+    }
+
+    /// The `renaming-binder` lint of a match whose head is written as a name and whose final arm binds the default its arms leave ([`default_binder`]): the arm's name is the head's again, so it reads under a second name what the first already names. Decided here, where the text as written is the last fact it needs.
+    fn renaming(&self, written: &Term, arms: &[MatrixArm]) -> Option<curios_core::Lint> {
+        let Subterm::Name(head) = written.as_subterm() else {
+            return None;
+        };
+        let (binder, span) = default_binder(arms)?;
+        let head = head.join();
+        let mut said = Said::line("renaming binder");
+        said.stating(format_args!(
+            "`{binder}` renames `{head}`, which this match takes apart"
+        ));
+        said.stating(format_args!("read `{head}`, or write `_`"));
+
+        Some(curios_core::Lint {
+            kind: curios_core::LintKind::RenamingBinder,
+            said,
+            at: span.and_then(|span| self.lowerer.context.extent(span)),
+        })
     }
 
     /// One arm: a row for each alternative, each its pattern and the guards and body lowered again under that pattern's names, so that each is typed apart with metavariables of its own. Every alternative binds the names the first does, since the guards and the body read each name of the arm in each of them, and a name an alternative lacks would read whatever else it names there ([`Error::MatchAlternativeNames`]).
@@ -327,40 +350,25 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 }
 
-/// The arms of a headed match that are not its default: every arm, less a final top-level bare `_` with no guard after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]), in each of their alternatives. A *named* final binder with no guard in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a default — it stays a binding — and neither is a `_` after tuple/struct arms, which project exhaustively and need none, nor a `_` beside other alternatives, which meets them, nor a guarded one, which takes nothing for itself.
-fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
+/// The name a headed match's final arm binds where it is the default its arms leave: one binder, no guard, after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]), in each of their alternatives — with where it is written. None for a `_`, which binds nothing, for a lone binder with no arm before it, which is the whole match's binding, and for one after tuple or struct arms, which project exhaustively and leave nothing.
+fn default_binder(arms: &[MatrixArm]) -> Option<(&str, Option<&Span>)> {
     let dispatches = |arm: &MatrixArm| {
         arm.alternatives
             .iter()
             .all(|alternative| alternative.pattern.is_dispatchable())
     };
-
-    match arms.split_last() {
-        Some((last, init))
-            if !init.is_empty() && init.iter().all(dispatches) && last.guards.is_empty() =>
-        {
-            match last.alternatives.as_slice() {
-                [
-                    Alternative {
-                        pattern: MatchPattern::Binder(name),
-                        ..
-                    },
-                ] if name.as_str() == "_" => Ok(init),
-                [
-                    Alternative {
-                        pattern: MatchPattern::Binder(name),
-                        span,
-                    },
-                ] => Err(placed(
-                    Error::MatchNamedCatchAll {
-                        binder: name.to_string(),
-                    },
-                    name.span().or(span.as_ref()),
-                )),
-                _ => Ok(arms),
-            }
-        }
-        _ => Ok(arms),
+    let (last, init) = arms.split_last()?;
+    if init.is_empty() || !init.iter().all(dispatches) || !last.guards.is_empty() {
+        return None;
+    }
+    match last.alternatives.as_slice() {
+        [
+            Alternative {
+                pattern: MatchPattern::Binder(name),
+                span,
+            },
+        ] if name.as_str() != "_" => Some((name.as_str(), name.span().or(span.as_ref()))),
+        _ => None,
     }
 }
 

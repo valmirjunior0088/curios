@@ -740,7 +740,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Match(match_) => {
                 // A match is handed on as the matrix of its arms, each as it is written — see `MatchCompiler::headed`. Elaboration compiles the patterns, where the scrutinee's type is known.
                 let head = self.term(&match_.head)?;
-                MatchCompiler::new(self).headed(head, &match_.arms, MatchCompiler::term)?
+                MatchCompiler::new(self).headed(
+                    &match_.head,
+                    head,
+                    &match_.arms,
+                    MatchCompiler::term,
+                )?
             }
             // A match with no head is the match of no columns — see `MatchCompiler::headless`.
             Subterm::HeadlessMatch(headless) => {

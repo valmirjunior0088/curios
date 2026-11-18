@@ -293,3 +293,42 @@ pub let whole(u: {}) -> Nat =
 
     assert_eq!(lints_of(&unit), Vec::<String>::new());
 }
+
+/// A default renaming the name its match's head is, `| m =>` under `match n`, is reported where it is written, by the head it renames, and so it is checked again over the unit the first check kept, from the record its declaration was filed with: the lowering decides it, and the declaration's record holds it. A default under a head that is an expression is the one name of the value it binds, and no rename.
+#[test]
+fn a_default_renaming_its_head_is_reported_and_one_naming_a_value_is_not() {
+    let source = "use /std/{Nat};
+
+let _renamed(n: Nat) -> Nat =
+    match n
+    | 0 => 1
+    | m => m
+    end;
+
+let _named(n: Nat) -> Nat =
+    match n + 1
+    | 0 => 1
+    | m => m
+    end;
+
+/std/print(\"x\")
+";
+    let cache = Keeping::default();
+    for round in ["first", "over the kept unit"] {
+        let Checked { entry, verdict } = checked_through(source, &cache);
+
+        assert!(verdict.is_ok(), "{round}");
+        assert_eq!(
+            entry
+                .lints
+                .iter()
+                .filter(|lint| lint.kind == LintKind::RenamingBinder)
+                .map(|lint| lint.report(&[&entry.anchors]).message())
+                .collect::<Vec<_>>(),
+            [
+                "renaming binder\n  `m` renames `n`, which this match takes apart\n  read `n`, or write `_`"
+            ],
+            "{round}"
+        );
+    }
+}

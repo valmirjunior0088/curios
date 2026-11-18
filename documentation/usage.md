@@ -450,7 +450,7 @@ curios lint app.crs      # one file, placed in its unit
 curios lint -            # the program on standard input
 ```
 
-A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are six, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
+A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are seven, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
 
 | Lint | Reports | Kept by |
 | --- | --- | --- |
@@ -460,6 +460,7 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 | `unit-wildcard` | a written `_` that binds `{}`, as elaboration decided what it binds: the pattern of a `let` that runs an action, a part of one, a parameter, or a match pattern's payload or component — an arm's whole `_` excepted, which takes what the arms before it left | writing `()`, which refuses a value that stops being `{}` |
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses, the declarations a `_` keeps unused and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | deleting it, `pub`, or naming it `_x` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
+| `renaming-binder` | a final arm's name after arms that each take the scrutinee apart, under a head written as a name: it names again what the head already names | reading the head, and writing `_` |
 
 Output is what `wonder` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing was. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal. Each unit is linted as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
 

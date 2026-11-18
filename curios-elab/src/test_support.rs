@@ -91,6 +91,7 @@ variants!(Error {
     MatchCaseMissing,
     CtorArityMismatch,
     MatrixInconsistentShape,
+    MatrixDefaultNamesAConstructor,
     MatrixDuplicateRow,
     MatrixUncovered,
     MatrixGuarded,

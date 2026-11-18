@@ -72,11 +72,6 @@ pub enum Error {
     },
     /// A bind guard `pattern = value` whose `pattern` takes nothing apart: it always matches, so the arms after it are dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindCannotFail,
-    /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
-    MatchNamedCatchAll {
-        /// The name the arm binds, which its author may have meant as a constructor.
-        binder: String,
-    },
     /// An arm whose alternatives do not all bind the same names: `name` is bound by one of them and not by the alternative the refusal stands at. The arm's body reads each name it binds, in each alternative.
     MatchAlternativeNames {
         name: String,
@@ -316,14 +311,6 @@ impl Error {
                 f.stating("a bind, `pattern = value`, takes a pattern that can fail");
                 f.stating("this one takes nothing apart, and so matches every value");
                 f.stating("write a `let`");
-            }
-            Error::MatchNamedCatchAll { binder } => {
-                f.text("named catch-all");
-                f.stating("a named final arm is no catch-all");
-                f.stating("write `| _ =>` for a default");
-                f.stating(format_args!(
-                    "or the constructor with its payload list, `| {binder}() =>`"
-                ));
             }
             Error::MatchAlternativeNames { name } => {
                 f.text("missing binder");

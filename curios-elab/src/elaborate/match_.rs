@@ -968,20 +968,10 @@ impl NominalSplit {
             return Ok(());
         };
 
-        // Each constructor as a pattern writes it, one placeholder per plain payload — a hidden one is left out — so the report shows what the arm could have named.
+        // Each constructor as a pattern writes it, so the report shows what the arm could have named.
         let constructors = family
             .constructor_order()
-            .map(|constructor| {
-                let payload = family
-                    .payload_plicities(constructor)
-                    .unwrap_or_default()
-                    .iter()
-                    .filter(|plicity| **plicity == Plicity::Explicit)
-                    .map(|_| "_")
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{constructor}({payload})")
-            })
+            .map(|constructor| spelled(family, constructor))
             .collect();
 
         Err(Error::unknown_match_constructor(
@@ -989,6 +979,15 @@ impl NominalSplit {
             tag.to_string(),
             constructors,
         ))
+    }
+
+    /// The constructor of the scrutinee's family `name` spells, as a pattern writes it: what a binder of that name standing for the arms' default was likely meant as.
+    pub fn constructor_named(&self, context: &Context, name: &str) -> Option<String> {
+        let family = self.family(context);
+        family
+            .constructor_order()
+            .find(|constructor| constructor.as_string() == name)
+            .map(|constructor| spelled(family, constructor))
     }
 
     /// The scrutinee's family as the registry holds it, read by reference: what is instantiated of it is read where it is needed, at the scrutinee's universes, whose constraints [`NominalSplit::resolve`] instantiated.
@@ -1401,4 +1400,17 @@ fn retype_locals(
         .collect::<Vec<_>>();
     let retyped = retyped(&*context, &locals, &solutions);
     context.assume_all(retyped);
+}
+
+/// `constructor` of `family` as a pattern writes it: one placeholder per plain payload, a hidden one left out.
+fn spelled(family: &InductDecl, constructor: &Atom) -> String {
+    let payload = family
+        .payload_plicities(constructor)
+        .unwrap_or_default()
+        .iter()
+        .filter(|plicity| **plicity == Plicity::Explicit)
+        .map(|_| "_")
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{constructor}({payload})")
 }

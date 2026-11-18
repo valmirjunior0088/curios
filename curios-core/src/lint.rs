@@ -20,6 +20,7 @@ pub enum LintKind {
     UnitWildcard,
     UnusedDeclaration,
     UnusedDependency,
+    RenamingBinder,
 }
 
 impl LintKind {
@@ -31,6 +32,7 @@ impl LintKind {
             LintKind::UnitWildcard => "unit-wildcard",
             LintKind::UnusedDeclaration => "unused-declaration",
             LintKind::UnusedDependency => "unused-dependency",
+            LintKind::RenamingBinder => "renaming-binder",
         }
     }
 }

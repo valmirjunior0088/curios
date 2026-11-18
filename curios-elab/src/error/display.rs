@@ -1300,6 +1300,18 @@ impl Displayed<'_> {
                 f.text("shape mismatch");
                 f.stating("the arms' patterns disagree on shape in one column");
             }
+            Error::MatrixDefaultNamesAConstructor {
+                binder,
+                constructor,
+            } => {
+                f.text("a default named as a constructor");
+                f.stating(format_args!(
+                    "`{binder}` is a constructor of what the arms before it take apart, and binds every value they leave"
+                ));
+                f.stating(format_args!(
+                    "write `{constructor}` to match the case, or another name to bind the rest"
+                ));
+            }
             Error::MatrixDuplicateRow { covered } => {
                 f.text("unreachable arm");
                 match covered {

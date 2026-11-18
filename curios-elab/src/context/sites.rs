@@ -137,7 +137,7 @@ impl Context<'_> {
             .collect()
     }
 
-    /// The binder lints of the declaration declaring `names`, decided as its record is filed: the sites its lowering found no written name reads ([`curios_core::Mints::unread`]), less every binder a proof it wrote read, worded by the class each site's openings decide now. Asked before the declaration's trace is taken, since what deciding a class reads is the declaration's too.
+    /// The binder lints of the declaration declaring `names`, decided as its record is filed: the sites its lowering found no written name reads ([`curios_core::Mints::unread`]), less every binder a proof it wrote read, worded by the class each site's openings decide now; and beside them the lints its lowering decided ([`curios_core::Mints::lints`]), which nothing elaboration writes moves. Asked before the declaration's trace is taken, since what deciding a class reads is the declaration's too.
     pub(crate) fn lints_in(&mut self, names: &[Global]) -> Vec<Lint> {
         let classes = self
             .classes_in(names)
@@ -147,9 +147,9 @@ impl Context<'_> {
         let credited = self.credited_in(names).into_iter().collect::<BTreeSet<_>>();
         // A declaration's names share what it minted, so its first holds the sites of every one.
         let minted = Rc::clone(&self.underway.minted);
-        let sites = names
-            .first()
-            .map_or(&[][..], |name| minted.of(name).unread.as_slice());
+        let mints = names.first().map(|name| minted.of(name));
+        let sites = mints.map_or(&[][..], |mints| mints.unread.as_slice());
+        let lowered = mints.map_or(&[][..], |mints| mints.lints.as_slice());
 
         binder_lints(
             sites,
@@ -160,6 +160,9 @@ impl Context<'_> {
             },
             |binder| classes.get(&(binder.declaration?, binder.ordinal)).copied(),
         )
+        .into_iter()
+        .chain(lowered.iter().cloned())
+        .collect()
     }
 
     /// Hold the binder lints of every declaration `traces` holds, the walk's as it ends, for [`Context::observed`] to hand out whatever the walk concluded.
@@ -196,6 +199,7 @@ impl Context<'_> {
             lints: std::mem::take(&mut self.underway.held)
                 .into_iter()
                 .chain(entry)
+                .chain(minted.entry.lints.iter().cloned())
                 .collect(),
         }
     }

@@ -882,6 +882,25 @@ impl<'m> Compiler<'m> {
         }
     }
 
+    /// The refusal of the arms' default where its name is a constructor of the family the outermost dispatch takes apart, the scrutinee itself ([`Error::MatrixDefaultNamesAConstructor`]): `| none =>` after `| some(x) =>` binds what the arms leave as `none`, where the case was meant. A literal's dispatch names no constructor, so over one any name stands; and a default over a tuple or a struct binds the whole, so a constructor of a field's family is no case it could mean.
+    fn default_named_as_a_constructor(
+        &self,
+        context: &Context,
+        split: &NominalSplit,
+    ) -> Option<Error> {
+        let row = self.fallthrough.as_ref()?.row;
+        if !matches!(self.row(row).pattern, Pattern::Binder) {
+            return None;
+        }
+        let binder = self.labels[row].first()?.0.clone()?;
+        let constructor = split.constructor_named(context, &binder)?;
+
+        Some(Error::MatrixDefaultNamesAConstructor {
+            binder,
+            constructor,
+        })
+    }
+
     /// Rows grouped by the constructor they name, each group the arm of its case, over the payload's columns and then the columns left. A row that writes a binder joins every group, and where the family has a constructor no row names that inversion leaves possible, the rows that write a binder are the one arm of them all. The arms are elaborated in the order the family declares its constructors, as a match written one level deep has them.
     fn variants(
         &mut self,
@@ -938,6 +957,12 @@ impl<'m> Compiler<'m> {
                     split.result_type(),
                 )
             });
+            if top
+                && column.seen == 0
+                && let Some(refused) = self.default_named_as_a_constructor(context, &split)
+            {
+                return Err(refused);
+            }
 
             // Whether a constructor no row names is left possible, which the rows that write a binder are the one arm of. With no such row each is asked as its turn comes, as a match written one level deep asks.
             let defaulted = !binders.is_empty() && split.leaves_unnamed(context, tags.values())?;

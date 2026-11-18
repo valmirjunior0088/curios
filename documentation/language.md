@@ -868,7 +868,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     end;
 ```
 
-After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — it is written `_`: a final arm binding a name there is refused, since the scrutinee is in scope under the name it already has. A lone `_` with no other arm binds rather than matches.
+After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios lint`](usage.md#lint)). A lone `_` with no other arm binds rather than matches.
 
 ### A match with no head
 

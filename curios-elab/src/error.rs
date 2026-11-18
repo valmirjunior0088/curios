@@ -745,6 +745,11 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
+    /// The arms' default binds a name that is a constructor of the family they dispatch over: written without its payload list, it binds every value the arms before it leave, where the case was likely meant. `constructor` is that case as a pattern writes it.
+    MatrixDefaultNamesAConstructor {
+        binder: String,
+        constructor: String,
+    },
     /// The rows that take one column apart write shapes that disagree: a tuple or struct of another arity or other labels, a struct of another structure, a constructor beside a carrier's case.
     MatrixInconsistentShape,
     /// An arm no value reaches: every value it matches is taken by an arm written before it. A repeated arm is one, and so is a final `_` after arms that cover every case. `covered` is an arm before it that takes a value it matches, as that arm is written.

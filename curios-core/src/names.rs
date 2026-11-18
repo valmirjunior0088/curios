@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenSort},
+    crate::{Lint, UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenSort},
     curios_common::{
         Digest, Filed, InKeyOrder, InfixOp, Object, Plicity, Qualifier, Records, Sorted, Symbol,
         name,
@@ -183,6 +183,8 @@ pub struct Mints {
     pub qualities: Vec<Option<WrittenSort>>,
     /// Every written site of the declaration no written name reads, each by the definition it is written in ([`Unread`]): what elaboration decides the binder lints from where it files the declaration's record, beside what the proofs it wrote read. Held here, as `unbound` is, because a written binder's place means something within its declaration alone.
     pub unread: Vec<Unread>,
+    /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
+    pub lints: Vec<Lint>,
 }
 
 impl Mints {
@@ -226,6 +228,7 @@ impl Minted {
             universes: Vec::new(),
             qualities: Vec::new(),
             unread: Vec::new(),
+            lints: Vec::new(),
         };
 
         self.from.get(name).map_or(&NOTHING, Rc::as_ref)

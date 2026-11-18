@@ -391,3 +391,54 @@ fn a_character_and_its_code_point_are_one_case() {
         matches!(error, Error::MatrixDuplicateRow { .. })
     });
 }
+
+// A default named as a constructor of the family the arms take apart binds every value they leave under the constructor's name, where its writer meant the case: `| none =>` after `| some(x) =>` is refused, naming the case as a pattern writes it. Any other name binds the rest — under a head that is a name, which it renames, and under one that is an expression, whose value it alone names — a literal's dispatch names no constructor, so over one a constructor's name binds too, and a default over a tuple binds the whole, which no constructor of a field's family is. The control writes the case, `| none() =>`.
+#[test]
+fn a_default_named_as_a_constructor_is_refused() {
+    control(
+        r#"
+        use /std/{List, Nat, Option, Str};
+
+        let f(o: Option(Nat)) -> Nat =
+            match o
+            | some(x) => x
+            | none() => 0
+            end;
+
+        let g(o: Option(Nat)) -> Nat =
+            match o
+            | some(x) => x + 1
+            | other => 7
+            end;
+
+        let h(n: Nat) -> Nat =
+            match n + 1
+            | 1 => 0
+            | m => m * 2
+            end;
+
+        let k(n: Nat) -> Nat =
+            match n
+            | 0 => 5
+            | none => none + 1
+            end;
+
+        let both(o: Option(Nat), n: Nat) -> Nat =
+            match (o, n)
+            | (some(x), _) => x
+            | none => none.1
+            end;
+
+        /std/print(Str/join(" ", List/map([f(Option/some(1)), f(Option/none()), g(Option/some(1)), g(Option/none()), h(0), h(2), k(0), k(3), both(Option/some(8), 9), both(Option/none(), 9)], Nat/to_str)))
+        "#,
+        b"1 0 2 7 0 6 5 4 8 9",
+    )
+    .refused(&[("| none() => 0", "| none => 0")])
+    .by_elaborator_in("/f", |error| {
+        matches!(
+            error,
+            Error::MatrixDefaultNamesAConstructor { binder, constructor }
+                if binder == "none" && constructor == "none()"
+        )
+    });
+}
