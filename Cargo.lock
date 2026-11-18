@@ -1018,7 +1018,6 @@ dependencies = [
  "curios-surface",
  "curios-unit",
  "curios-verdict",
- "curios-wasm",
  "lsp-server",
  "lsp-types",
  "serde_json",

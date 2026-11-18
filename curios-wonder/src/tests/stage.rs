@@ -28,11 +28,7 @@ fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Ref
         &mut |_| {},
     );
 
-    match reached {
-        Ok(crate::Reached::Rendered(rendering)) => Ok((handed, rendering)),
-        Ok(crate::Reached::Wasm(_)) => panic!("asked for a driver rung, reached the module"),
-        Err(refusal) => Err(refusal),
-    }
+    reached.map(|rendering| (handed, rendering))
 }
 
 const REFUSED_LATER: &str = "use /std/{Nat};\nlet x : Nat = true;\n/std/print(\"ok\\n\")";

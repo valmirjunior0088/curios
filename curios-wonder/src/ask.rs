@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Reached,
-        Refusal, Severity, Subject, Uncosted, Written, checked, cost, declared_tests, described,
+        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Refusal,
+        Rendering, Severity, Subject, Uncosted, Written, checked, cost, declared_tests, described,
         diagnostics, exported, placed, stage, unit_stage, written,
     },
     curios_common::{
@@ -292,7 +292,7 @@ impl Asked {
         name: &str,
         shown: impl FnMut(&str),
         telling: &mut dyn Telling,
-    ) -> Result<Reached, Refusal> {
+    ) -> Result<Rendering, Refusal> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let reached = stage(
@@ -305,7 +305,7 @@ impl Asked {
             &mut |progress| telling.step(progress, cache),
         );
         telling.ended(match &reached {
-            Ok(Reached::Rendered(rendering)) => Ended::of(&rendering.diagnostics),
+            Ok(rendering) => Ended::of(&rendering.diagnostics),
             Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
             _ => Ended::Done,
         });
@@ -575,14 +575,11 @@ impl Scope {
     }
 }
 
-/// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted, to stdout.
-///
-/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted by the driver's own rendering, to stdout. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_stage(
     budget: u64,
     name: &str,
     staged: Staged,
-    finish: impl FnOnce(Box<curios_wasm::Module>),
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
@@ -601,16 +598,12 @@ pub fn wonder_stage(
     let shown = |text: &str| answer(format_args!("{text}\n"));
     let reached = asked.staged(budget, &overlay, name, shown, telling);
     match reached {
-        Ok(Reached::Rendered(rendering)) => {
+        Ok(rendering) => {
             // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
             let bystander = telling.bystander();
             for diagnostic in &rendering.diagnostics {
                 eprintln!("{}", diagnostic.rendered(&bystander));
             }
-            Ok(())
-        }
-        Ok(Reached::Wasm(module)) => {
-            finish(module);
             Ok(())
         }
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),

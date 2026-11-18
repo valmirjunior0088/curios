@@ -55,7 +55,7 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_dead() {
 fn answers(source: &str, expected: [&str; 4]) {
     let (module, foreigns) = compile_raw_program(source);
     let raw = to_bytes(&module);
-    for bytes in [raw.clone(), curios_binaryen::optimize(raw, false, |_| {})] {
+    for bytes in [raw.clone(), curios_binaryen::optimize(raw, false)] {
         let code = curios_cranelift::compile(&bytes).expect("the module validates and compiles");
         let compiled = Compiled::of(code, foreigns.clone());
         for (n, expected) in [0, 1, 4, 8].into_iter().zip(expected) {

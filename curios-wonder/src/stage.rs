@@ -1,6 +1,6 @@
 //! The `stage` query: the program's representation at one rung of the pipeline, reprinted, and a library's at the rungs a unit has.
 //!
-//! The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is emitted by the native product where Binaryen runs rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
+//! The rungs are [`Stage::NAMES`], each observed exactly where the driver emits it.
 
 use {
     crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
@@ -17,14 +17,6 @@ use {
 pub struct Rendering {
     /// What stopped the compilation *after* this rung was reached, if anything. A rung the driver already emitted is an answer, and a later failure does not unmake it — the transport prints these beside the rendering rather than in place of it.
     pub diagnostics: Vec<Diagnosis>,
-}
-
-/// What asking for a rung reached.
-pub enum Reached {
-    /// The rung, rendered by the driver's own `Display` for it and handed to the asker's `shown`.
-    Rendered(Rendering),
-    /// The rung past the driver: the emitted module, for the transport that owns Binaryen to optimize and render.
-    Wasm(Box<curios_wasm::Module>),
 }
 
 /// Why a rung could not be shown.
@@ -47,7 +39,7 @@ pub fn stage(
     name: &str,
     mut shown: impl FnMut(&str),
     progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Reached, Refusal> {
+) -> Result<Rendering, Refusal> {
     let Subject::Entry {
         units,
         origin,
@@ -84,13 +76,13 @@ pub fn stage(
 
     // A rung the driver emitted has been answered, whatever happens downstream of it. Asking for `core` on a program that fails to elaborate is asking what the lowering produced — which is most of why one asks — and discarding it because a later stage refused answers a question nobody put. What the transport's contract refuses is a program that stopped *before* the rung, which is exactly the case where nothing was observed.
     match (reached, compiled) {
-        (true, Ok(_)) => Ok(Reached::Rendered(Rendering {
+        (true, Ok(_)) => Ok(Rendering {
             diagnostics: Vec::new(),
-        })),
-        (true, Err(error)) => Ok(Reached::Rendered(Rendering {
+        }),
+        (true, Err(error)) => Ok(Rendering {
             diagnostics: of_error(error),
-        })),
-        (false, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
+        }),
+        (false, Ok(_)) => unreachable!("a compile that ends emits every rung"),
         (false, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
     }
 }

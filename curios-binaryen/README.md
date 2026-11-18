@@ -12,14 +12,6 @@ WebAssembly-level optimization for the Curios native product via a statically li
 
 **Rejected.** A hand-bumped `BUILD_SCHEMA` constant, correct and forgettable: nothing but memory connects a changed flag to the bump, so one commit could link a library built with old flags here and new flags on a cold machine. The library itself in `OUT_DIR`, built again by every configuration, after every `cargo clean` and in every worktree. The source, CMake's build tree and the archive kept in the entry, none of which a link reads.
 
-### The optimized module is observed through Binaryen's own text writer
-
-**Decision.** `optimize` hands its observer an `Optimized` view of the module it just rewrote, which renders with `BinaryenModuleAllocateAndWriteText` when the observer formats it, and that text is the `wonder --stage wasm-optm` dump. It is eyes-only: nothing parses it, and the folded s-expression dialect is Binaryen's to change.
-
-**Rationale.** The observation exists to show what the optimizer did, and its own printer is the one renderer that cannot misrepresent it; the module is alive between `BinaryenModuleOptimize` and `BinaryenModuleDispose`, so the capture is one C call, made only for an observer that looks.
-
-**Rejected.** A binary reader in `curios-wasm` printing the optimized bytes in the house rendering, whose bug would misrepresent the thing observed; reinstate for a consumer that must hold the optimized module as data, when the operand-less and memarg encodings can become paired tables beside `Instr` as the WAT `mnemonics!` table is. Parsing Binaryen's text, a second grammar with no other consumer. A `wasmprinter` dependency re-parsing bytes whose source module is still in memory.
-
 ### The last stage, over bytes
 
 **Decision.** Binaryen runs last, over the serialized module `curios_wasm::to_bytes` writes, and this crate knows nothing about any Curios IR. Semantic optimization belongs to `curios-anf`'s and `curios-cps`'s optimizers.

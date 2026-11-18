@@ -13,9 +13,8 @@ workspace = true
 test-support = []
 
 # Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
-# runs the compiler as far as it needs and reads the answer off the store through `curios-verdict`;
-# the one rung the driver cannot render, `wasm-optm`, is handed back for the product that owns
-# Binaryen to finish. The language server's protocol crates have this crate as their one owner.
+# runs the compiler as far as it needs and reads the answer off the store through `curios-verdict`.
+# The language server's protocol crates have this crate as their one owner.
 [dependencies]
 curios-common = { workspace = true }
 curios-document = { workspace = true }
@@ -24,7 +23,6 @@ curios-core = { workspace = true }
 curios-module = { workspace = true }
 curios-surface = { workspace = true }
 curios-unit = { workspace = true }
-curios-wasm = { workspace = true }
 # For the fate survey `cost` reads: the CPS graph is `curios-cps`'s to walk, so the walk lives there and this crate is one of its consumers. It carries no back end — `curios-pipeline` already depends on it to name `curios_cps::Module` in `Stage`.
 curios-cps = { workspace = true }
 curios-pipeline = { workspace = true }

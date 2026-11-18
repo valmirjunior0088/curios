@@ -113,7 +113,6 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
                 Stage::Cps(_) => 6,
                 Stage::CpsOptm(_) => 7,
                 Stage::Wasm(_) => 8,
-                Stage::WasmOptm(_) => return,
             };
             let (count, next) = mark
                 .take()
@@ -125,7 +124,7 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
         .expect("a growth compiles");
     let mark = mark.expect("the last stage left a mark");
 
-    let bytes = optimize(&module, false, |_| {});
+    let bytes = optimize(&module, false);
     let (count, mark) = mark.since(counters, 9);
     counts[9] = count;
 

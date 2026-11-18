@@ -109,7 +109,7 @@ pub fn payload_of(
         cache.as_ref(),
         |module| match target {
             Target::Native => to_cwasm(module).map_err(CompileError::from),
-            Target::Browser => Ok(optimize(module, false, |_| {})),
+            Target::Browser => Ok(optimize(module, false)),
         },
     );
 

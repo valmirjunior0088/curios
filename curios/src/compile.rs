@@ -35,25 +35,18 @@ fn validate(bytes: &[u8]) {
     }
 }
 
-/// Optimize `module` with Binaryen and return its bytes, emitting `Stage::WasmOptm` through `observe` where the optimized module exists — exactly as the driver emits every other stage at its production site. This is the one stage the pure pipeline cannot emit, emitted here because this crate is where Binaryen runs.
-///
-/// The stage renders only when the observer formats it, so a compilation that watches nothing pays nothing for it. `names` keeps the name section: a caller that means to read the dump asks for it, or the text reads as bare indices.
-pub fn optimize<O>(module: &curios_wasm::Module, names: bool, mut observe: O) -> Vec<u8>
-where
-    O: FnMut(curios_pipeline::Stage<'_>),
-{
+/// Optimize `module` with Binaryen and return its bytes, the name section kept where `names` asks for it.
+pub fn optimize(module: &curios_wasm::Module, names: bool) -> Vec<u8> {
     let raw = curios_wasm::to_bytes(module);
     validate(&raw);
 
-    curios_binaryen::optimize(raw, names, |optimized| {
-        observe(curios_pipeline::Stage::WasmOptm(optimized));
-    })
+    curios_binaryen::optimize(raw, names)
 }
 
 /// `module` optimized with Binaryen, as the bytes Cranelift is handed.
 pub fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
     // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-native` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
-    optimize(module, cfg!(feature = "profile"), |_| {})
+    optimize(module, cfg!(feature = "profile"))
 }
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.

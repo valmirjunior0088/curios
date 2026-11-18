@@ -10,12 +10,12 @@
 
 - **What a copy weighs.** Counted, at `6f2028e9b`, by the release compiler. A program reads `n` from standard input as `programs/lcg/lcg.crs` does and prints `pick(half(n), third(n), n)`, where `half(n)` is `Option/some(n)` at an even `n` and `Option/none()` otherwise, `third(n)` the same at a multiple of three, and `pick(a, b, n)` matches `a` and under each of its arms `b`: `x + y` at `some(x)` and `some(y)`, `y` at `none()` and `some(y)`, and one body at `none()` of `b` under both arms of `a`. In the copied spelling that body is written in both arms; in the shared one it is `let shared: () -> Nat = () => …;` above the match, called from both. The small body is `((n * 3 + 424243) % 1000003 * (n + 11) % 65537 + n * n % 9973) * 7 % 100003`. The large one is the sum, for `i` from 1 to 40, of `((n * 3 + 424243) % 1000003 * (n + 13 * i) % 65537)`, taken `% 100003`. Each program is reprinted by `wonder --stage <rung> -` and the bytes of its standard output counted.
 
-  | Body | Spelling | `cps-optm` | `wasm-optm` |
-  | --- | --- | --- | --- |
-  | small | copied | 130,037 | 558,714 |
-  | small | shared | 130,037 | 558,714 |
-  | large | copied | 160,521 | 991,516 |
-  | large | shared | 143,509 | 678,022 |
+  | Body | Spelling | `cps-optm` |
+  | --- | --- | --- |
+  | small | copied | 130,037 |
+  | small | shared | 130,037 |
+  | large | copied | 160,521 |
+  | large | shared | 143,509 |
 
   The two spellings print one answer, `64888` and `70407` at an input of `5`.
 - **The inliner already decides when sharing pays.** The small body bound once is copied into both callers and the two spellings come to one size; the large one stays one function. So what is missing is the other direction alone, from two copies to one.
@@ -25,7 +25,7 @@
 
 ## Refinement
 
-- **The count**, the next step: the instances `/std` writes at `Compiler::leaf` (`curios-elab/src/elaborate/matrix.rs`), by counters a scratch copy keeps there over `cargo xtask profile prelude`, and what the largest weigh at `cps-optm` and `wasm-optm` against their bodies written once; it ends naming a consumer in the library, or the table's program staying the case.
+- **The count**, the next step: the instances `/std` writes at `Compiler::leaf` (`curios-elab/src/elaborate/matrix.rs`), by counters a scratch copy keeps there over `cargo xtask profile prelude`, and what the largest weigh at `cps-optm` and `wasm` against their bodies written once; it ends naming a consumer in the library, or the table's program staying the case.
 - **What two bodies are held equal by**: structure up to the binders an instance renames, and at which rung — the erased term, where a match is still a tree, or the continuation graph, where a body is a continuation with parameters.
 - **Whether the inliner's rule decides the merge**, so that a body it would copy back is never merged first.
 - **Check.** The table above, the copied spelling coming to the shared one's size at both rungs for the large body, and unmoved for the small.

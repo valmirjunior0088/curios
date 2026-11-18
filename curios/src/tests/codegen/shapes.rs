@@ -3,12 +3,11 @@
 use {
     super::{run, *},
     crate::tests::test_support::*,
-    crate::*,
     curios_anf::{FieldShape, Module},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::Compiled,
-    curios_pipeline::{Stage, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::collections::BTreeMap,
 };
@@ -133,20 +132,14 @@ fn field_shapes(module: &Module) -> Vec<FieldShape> {
         .collect()
 }
 
-/// The Binaryen-optimized WAT of `source` — the module a user actually runs, which is what the static cast counts must be taken over (the raw module's counts include what Binaryen deletes).
-fn optimized_wat(source: &str) -> String {
+/// The emitted WAT of `source` — the last module the compiler controls, which the static counts are taken over.
+fn emitted_wat(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("the workload parses");
     let (module, _foreigns) =
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
             .expect("the workload compiles");
 
-    let mut printed = String::new();
-    optimize(&module, true, |stage| {
-        if let Stage::WasmOptm(text) = stage {
-            printed = text.to_string();
-        }
-    });
-    printed
+    module.to_string()
 }
 
 /// The typed-fields census: the recorded-shape population, the per-program static populations of the box/unbox and cast classes shaping deletes, and the type count nominal rows mint.
@@ -157,7 +150,7 @@ fn optimized_wat(source: &str) -> String {
 /// cargo test --release --package curios --lib -- --ignored --nocapture field_shape_census
 /// ```
 ///
-/// The schema half is taken over one program's module, which holds the schemas of what that program links, so the population is `spines`' own. The static half is per program over the *optimized* WAT.
+/// The schema half is taken over one program's module, which holds the schemas of what that program links, so the population is `spines`' own. The static half is per program over the emitted WAT.
 ///
 /// # What it last printed
 ///
@@ -166,16 +159,9 @@ fn optimized_wat(source: &str) -> String {
 /// ```text
 /// schema roster: 62 products, 63 families, 236 constructors
 /// recorded field shapes (whole prelude + program): {"bytes": 53, "closure": 18, "family": 60, "flt": 3, "immediate": 30, "list": 40, "number": 75, "opaque": 62, "product": 42}
-/// spines:       i31-cast 299, box 486, unbox 588, rope-cast 102, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
-/// chain:        i31-cast 245, box 411, unbox 463, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
-/// trees:        i31-cast 233, box 383, unbox 434, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
-/// churn:        i31-cast 248, box 410, unbox 464, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
-/// lcg:          i31-cast 227, box 377, unbox 429, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
-/// monad_io:     i31-cast 231, box 395, unbox 471, rope-cast 82, envr-cast 23, tuple-cast 3, tuple-test 2, tuple-types 2
-/// parse_digits: i31-cast 230, box 384, unbox 453, rope-cast 82, envr-cast 21, tuple-cast 3, tuple-test 2, tuple-types 2
 /// ```
 ///
-/// **290 of 361 recorded fields — 80% — are monomorphic at erasure**, so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 100–121 sites, and the roster's nominal row types — 114 of them, against 3 tuple types per program — are a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
+/// **290 of 361 recorded fields — 80% — are monomorphic at erasure**, so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
 #[ignore = "measurement, counted: reports the census rather than asserting"]
 fn field_shape_census() {
@@ -201,7 +187,7 @@ fn field_shape_census() {
         ("monad_io", MONAD_IO),
         ("parse_digits", PARSE_DIGITS),
     ] {
-        let wat = optimized_wat(source);
+        let wat = emitted_wat(source);
         let count = |needle: &str| wat.matches(needle).count();
         println!(
             "{label}: i31-cast {}, box {}, unbox {}, rope-cast {}, envr-cast {}, tuple-cast {}, tuple-test {}, tuple-types {}",

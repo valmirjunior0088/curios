@@ -9,7 +9,7 @@ use {
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder --stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///
-/// The enum is the vocabulary of observation points, not a promise that the pure pipeline emits each: [`Stage::WasmOptm`] observes what Binaryen did to the emitted module, and this crate must not depend on Binaryen, so that one variant is emitted downstream, by the native product where Binaryen runs, and its payload is a rendering Binaryen is asked for rather than a borrowed IR.
+/// The rungs end at the emitted module, the last representation the compiler controls: what Binaryen makes of it is the browser target's `.wasm`, inspected there by hand.
 pub enum Stage<'a> {
     Text(&'a Entrypoint),
     /// Core as `curios_module::into_core` produced it: syntax that nothing has checked. It carries term and universe metavariables — the universes' seeds travel beside it, in what the lowering hands elaboration — and unresolved `Transient` nodes (`Infix`, `NumLit`), and the entries its items hold are unelaborated. Useful for debugging the lowering; not a typed program.
@@ -23,8 +23,6 @@ pub enum Stage<'a> {
     Cps(&'a curios_cps::Module),
     CpsOptm(&'a curios_cps::Module),
     Wasm(&'a curios_wasm::Module),
-    /// The Binaryen-optimized module, rendered by Binaryen's own text writer when the observer formats it — ground truth from the session that optimized it, not a reader's reconstruction, and free for an observer that does not look. The native product's `optimize` emits it where Binaryen runs, as the driver emits every other stage at its production site; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
-    WasmOptm(&'a dyn fmt::Display),
 }
 
 /// What a dump of Core is written over: the registry the program was compiled with and the units before it, whose entries a test's and a foreign row's forms are made against ([`FormScope`]).
@@ -50,8 +48,8 @@ impl DumpScope<'_> {
 }
 
 impl<'a> Stage<'a> {
-    /// Every stage name, in pipeline order — the single source `wonder --stage`'s rung names are derived from. Nothing structural ties this list to [`Stage::name`]; the `every_stage_is_observed_once_in_names_order` test is what pins the two to each other and to the driver's emission order — including the last entry's absence from that order, per [`Stage::WasmOptm`]'s own note.
-    pub const NAMES: [&'static str; 9] = [
+    /// Every stage name, in pipeline order — the single source `wonder --stage`'s rung names are derived from. Nothing structural ties this list to [`Stage::name`]; the `every_stage_is_observed_once_in_names_order` test is what pins the two to each other and to the driver's emission order.
+    pub const NAMES: [&'static str; 8] = [
         "text",
         "core",
         "core-elab",
@@ -60,7 +58,6 @@ impl<'a> Stage<'a> {
         "cps",
         "cps-optm",
         "wasm",
-        "wasm-optm",
     ];
 
     /// Whether `name` is a rung a unit has: its text, its lowered module and its elaborated one, the three names [`Stage::NAMES`] opens with. From `anf` on a program's entry roots what is rendered, and a unit has none.
@@ -79,7 +76,6 @@ impl<'a> Stage<'a> {
             Stage::Cps(_) => "cps",
             Stage::CpsOptm(_) => "cps-optm",
             Stage::Wasm(_) => "wasm",
-            Stage::WasmOptm(_) => "wasm-optm",
         }
     }
 }
@@ -97,8 +93,6 @@ impl fmt::Display for Stage<'_> {
             Stage::CpsOptm(module) => write!(f, "{module}"),
             // The one stage dump rendered within a width: `wonder --stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
             Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
-            // Already laid out by Binaryen's writer; only its trailing newline is trimmed, so this dump ends like every house-rendered one.
-            Stage::WasmOptm(rendering) => write!(f, "{}", rendering.to_string().trim_end()),
         }
     }
 }

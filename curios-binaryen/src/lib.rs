@@ -1,18 +1,16 @@
 //! Wasm-level optimization via the statically linked Binaryen library.
 //!
 //! It is the pipeline's last stage: it consumes and produces serialized module bytes, after `curios_wasm::to_bytes`, and knows nothing about any Curios IR, as `README.md` decides.
-//!
-//! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder --stage wasm-optm` payload, eyes-only as `README.md` decides.
 
 mod sys;
 use sys::*;
 
-use std::{ffi::CStr, fmt, marker::PhantomData, ptr, slice, sync::Mutex};
+use std::{ptr, slice, sync::Mutex};
 
 /// Run Binaryen's whole-module optimizer over serialized module bytes (optimize level 2, shrink level 1, closed world) and return the re-encoded binary. The feature set is pinned to exactly what the emitter produces and Wasmtime's engine enables, so the optimizer can never introduce a post-GC proposal the runtime rejects. Safe to call concurrently — Binaryen's settings are process-global and its optimizer is not thread-safe, so calls serialize behind an internal lock — but `bytes` must be a well-formed module: Binaryen aborts the process on malformed input instead of returning an error, which is acceptable only because the input always comes from `curios_wasm::to_bytes`.
 ///
-/// `observe` is handed the optimized module between the optimizer and its disposal. A caller that wants to see what the optimizer did formats the [`Optimized`] it is given, and passes `names: true`, or the dump reads as bare indices.
-pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized<'_>)) -> Vec<u8> {
+/// `names` keeps the name section, which a profile of the optimized module reads its functions' names off.
+pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
@@ -41,8 +39,6 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
         BinaryenSetShrinkLevel(1);
         // Off by default, and deliberately: the name section is 22 KB on a program the size of `trees`, which a shipped binary should not carry. A runtime profile without it shows bare addresses, so the caller that is profiling asks for it.
         BinaryenSetDebugInfo(names);
-        // The buffered text writer never reaches a terminal, but colour is a process-global setting like every other one above, so it is pinned rather than left to a tty probe.
-        BinaryenSetColorsEnabled(false);
 
         BinaryenModuleOptimize(module);
 
@@ -50,11 +46,6 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
             BinaryenModuleValidate(module),
             "Binaryen produced an invalid module"
         );
-
-        observe(&Optimized {
-            module,
-            session: PhantomData,
-        });
 
         let result = BinaryenModuleAllocateAndWrite(module, ptr::null());
         let optimized = slice::from_raw_parts(result.binary.cast(), result.binary_bytes).to_vec();
@@ -68,25 +59,5 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool, observe: impl FnOnce(&Optimized
         BinaryenModuleDispose(module);
 
         optimized
-    }
-}
-
-/// The optimized module while its optimizer session is still open: what [`optimize`] hands its observer. Formatting it renders the module through Binaryen's own text writer, from the in-memory module the optimizer just rewrote, so an observer that does not look pays nothing.
-pub struct Optimized<'a> {
-    module: BinaryenModuleRef,
-    session: PhantomData<&'a ()>,
-}
-
-impl fmt::Display for Optimized<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // The module is alive for as long as this view is, and the session's lock is held around it.
-        unsafe {
-            let pointer = BinaryenModuleAllocateAndWriteText(self.module);
-            let written = formatter.write_str(&CStr::from_ptr(pointer).to_string_lossy());
-
-            free(pointer.cast());
-
-            written
-        }
     }
 }

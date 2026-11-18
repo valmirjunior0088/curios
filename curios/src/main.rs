@@ -29,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::{bindings_of, fault, optimize, unlinked},
+    curios::{bindings_of, fault, unlinked},
     curios_common::{Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
@@ -816,9 +816,6 @@ fn dispatch() -> Result<(), Failure> {
                         None,
                         &here()?,
                     )?),
-                },
-                |module| {
-                    optimize(&module, true, |stage| answer(format_args!("{stage}\n")));
                 },
                 &mut Asking::reading(answered.clone()),
             )?,

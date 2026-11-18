@@ -2,7 +2,7 @@ use {
     curios_binaryen::optimize,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_pipeline::{Stage, compile_with_prelude},
+    curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     curios_wasm::{Module, to_bytes},
 };
@@ -30,7 +30,7 @@ fn optimizes_to_a_smaller_valid_module() {
 
     let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
-    let optimized = optimize(bytes.clone(), false, |_| {});
+    let optimized = optimize(bytes.clone(), false);
 
     assert!(optimized.starts_with(b"\0asm"));
     assert!(
@@ -41,7 +41,7 @@ fn optimizes_to_a_smaller_valid_module() {
     );
 
     // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which leaves a runtime profile unreadable.
-    let named = optimize(bytes, true, |_| {});
+    let named = optimize(bytes, true);
 
     assert!(named.starts_with(b"\0asm"));
     assert!(
@@ -49,65 +49,6 @@ fn optimizes_to_a_smaller_valid_module() {
         "expected the named module ({} bytes) to retain the name section the unnamed one ({} bytes) drops",
         named.len(),
         optimized.len()
-    );
-}
-
-/// `optimize` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, asked for in the session that optimized. The `(module` head pins that the payload is the module's text and not a placeholder.
-///
-/// [`crate::to_cwasm`] is asserted beside it: it is the same optimization followed by the precompile, watched by nobody.
-#[test]
-fn dumping_emits_the_optimized_module_as_text() {
-    let source = r#"
-        let sum(n : /std/Nat) -> /std/Nat =
-            match n
-            | 0 => 0
-            | pred + 1 => /std/Nat/add(/std/Nat/succ(pred), sum(pred))
-            end;
-
-        /std/Fmt/print("%")(sum(10))
-    "#;
-
-    let entrypoint = source
-        .parse::<Entrypoint>()
-        .expect("failed to parse source");
-
-    let (module, _foreigns) =
-        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
-            .expect("expected wasm module");
-
-    let mut text = None;
-
-    crate::optimize(&module, true, |stage| match stage {
-        Stage::WasmOptm(dump) => text = Some(dump.to_string()),
-        other => panic!("expected only Stage::WasmOptm, got {:?}", other.name()),
-    });
-
-    let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
-
-    assert!(!cwasm.is_empty());
-
-    let text = text.expect("Stage::WasmOptm observed");
-
-    assert!(
-        text.starts_with("(module"),
-        "expected Binaryen's folded text form, got {:?}...",
-        &text[..text.len().min(40)]
-    );
-
-    let (export, _) = &module.exports()[0];
-
-    assert!(
-        text.contains(&format!("(export \"{export}\"")),
-        "expected the optimized module to keep the {export:?} export"
-    );
-    // A refusal is a call to the `sys.panic` import, and a call is a side effect no optimizer removes: the import and a call to it survive the closed-world pass, which is what makes the message mechanism independent of Binaryen.
-    assert!(
-        text.contains("(import \"sys\" \"panic\""),
-        "expected the optimized module to keep the panic import"
-    );
-    assert!(
-        text.contains("(call $panic"),
-        "expected a refusal site to survive as a call to the panic import"
     );
 }
 
@@ -187,7 +128,7 @@ fn passes_the_full_memory_and_table_surface_through() {
 
     for (construct, source) in sources {
         let module = source.parse::<Module>().expect("expected a module");
-        let optimized = optimize(to_bytes(&module), false, |_| {});
+        let optimized = optimize(to_bytes(&module), false);
 
         assert!(
             optimized.starts_with(b"\0asm"),

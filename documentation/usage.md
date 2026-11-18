@@ -564,7 +564,8 @@ The stages, in the order the compiler passes them:
 | `cps` | the program in continuation-passing style |
 | `cps-optm` | the program in continuation-passing style, after optimization |
 | `wasm` | the emitted WebAssembly module |
-| `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
+
+The rungs end at the module the compiler emits. What Binaryen makes of it is the module [`compile --target browser`](#compile) writes beside its page, to be read with a WebAssembly tool of one's own.
 
 ## `profile`
 
