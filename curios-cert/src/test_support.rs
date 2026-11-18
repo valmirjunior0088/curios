@@ -4,7 +4,7 @@
 
 use {
     crate::{
-        Baseline, Certifier, Error, Globals, Rechecked, Verdict, certify_definitions_over,
+        Certifier, Error, Filed, Globals, Rechecked, Verdict, certify_definitions_over,
         recheck::verdicts_from,
     },
     curios_common::{Candidates, SyntaxRegistry, fill, variants},
@@ -102,7 +102,7 @@ impl Put<'_> {
         store: Option<&dyn Candidates>,
     ) -> Rechecked<Definitions> {
         let (places, now) = (Places::of(baseline), Places::of(definitions));
-        let baseline = Baseline {
+        let baseline = Filed {
             definitions: baseline,
             places: &places,
             certification,

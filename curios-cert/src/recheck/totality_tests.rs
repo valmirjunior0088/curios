@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::{Erased, test_support::*},
     curios_common::{Qualifier, fill},
-    curios_core::{Certification, Certified, Definitions, Global, Item, Totality},
+    curios_core::{Certification, Certified, Definitions, Global, Totality},
 };
 
 /// `Vouched`, a proposition of one case holding a unit, which is not defined.
@@ -112,17 +112,6 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
     );
 }
 
-/// A unit mounted with an empty record — an environment built by hand, with no walk behind it — is classified by the walk that reads it, from its items: the library beneath the proof still has the proof refused.
-#[test]
-fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
-    let carried = carried_beneath(&carried_proof_definitions(), &Certification::default());
-
-    assert!(
-        refuses_the_proof_reaching_partiality(&carried),
-        "with an empty record, the reading walk must classify the library itself and refuse the proof: {carried:?}",
-    );
-}
-
 /// Obligation (V) fires at an argument position, where the corpus never reaches it.
 ///
 /// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
@@ -151,74 +140,7 @@ fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
     );
 }
 
-/// A record is read only where it covers its unit. One naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so the unit is classified afresh and the forged entry admits nothing; a reader taking a record one name at a time would believe it and certify the proof. Mutation-checked: reading a record whatever its coverage — `Globals::mount` taking every record as covering — fails this test and no other in this file.
-#[test]
-fn a_record_that_does_not_cover_its_unit_is_not_read() {
-    let forged = Certification::of(
-        [(
-            reaches(),
-            Certified {
-                totality: Totality::Total,
-                ..Certified::default()
-            },
-        )],
-        [],
-        [],
-        [],
-    );
-    assert!(!forged.covers(&reaching_library(false)));
-
-    let carried = carried_beneath(&carried_proof_definitions(), &forged);
-
-    assert!(
-        refuses_the_proof_reaching_partiality(&carried),
-        "a record not covering its unit must not be read, and the proof must be refused: {carried:?}",
-    );
-}
-
-/// `held : Vouched = ((g : (Nat) -> Nat) => ((n : Nat) => Vouched/qed(()))(g(0)))(reaches)`: a proof reaching `reaches` as [`HELD`]'s does, in other terms, so a walk over a baseline holding that one judges this.
-fn held_otherwise() -> Item {
-    declared_item(
-        &fill!(
-            r#"${VOUCHED}
-let /held: #{node = InductType} /Vouched() =
-    ((g: (n: #NatType) -> #NatType) =>
-        ((n: #NatType) => #{node = Variant} /Vouched/qed(()))(g(0)))(/reaches);
-"#,
-            VOUCHED
-        ),
-        "held",
-    )
-}
-
-/// A baseline is read as a mounted record is, only where its record covers its module: one naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so a walk over it judges the unit whole, and refuses the proof, rather than read `reaches` as the record leaves it wherever the walk does not visit it. Mutation-checked: with a baseline taken whatever its record covers, the proof is accepted and no other test in this file fails.
-#[test]
-fn a_baseline_whose_record_does_not_cover_its_module_is_no_baseline() {
-    let baseline = versioned(reaching_library(true));
-    let forged = Certification::of(
-        [(
-            reaches(),
-            Certified {
-                totality: Totality::Total,
-                ..Certified::default()
-            },
-        )],
-        [],
-        [],
-        [],
-    );
-    assert!(!forged.covers(&baseline));
-    let edited = replaced(&baseline, "held", held_otherwise());
-
-    let verdicts = walked_over(&edited, &baseline, &forged).into_verdicts();
-
-    assert!(
-        refuses_the_proof_reaching_partiality(&verdicts),
-        "a baseline whose record does not cover its module must not be read: {verdicts:?}",
-    );
-}
-
-/// A record covering its unit, with every name it holds classified `Total`, and `extra` beside them: `held`, which the unit does not declare and the judged module does.
+/// A record answering for every name the library holds, each classified `Total` though `sink` loops, and `extra` beside them: `held`, which the unit does not declare and the judged module does. Bytes no walk wrote, which a test mounts and nothing else does.
 fn covering_the_library(extra: bool) -> Certification {
     let believed = |name: Global| {
         (
@@ -257,18 +179,11 @@ fn carried_proof_and_its_reader() -> Definitions {
 
 /// A record answers for the unit it was filed with and for no name beside it: an entry under a name the unit does not declare classifies nothing.
 ///
-/// `Globals::partial` asks the record of each unit in scope for the name *and* asks that unit where it holds it, and `Certification::covers` ranges over the unit's names alone, so a record may carry an entry the unit answers for nowhere and still cover it. The record here covers the library and calls both its definitions total, so the proof beneath it and `again`, which reads the proof, are certified; the same record with `held` added as `Partial` — the judged module's own name, which the library does not declare — must certify them still. Read one name at a time, the entry would classify the judged module's `held` partial and refuse `again` for reaching it, a verdict nothing in scope has any standing to raise.
+/// `Globals::partial` asks the record of the unit in scope that holds the name, and no other, so a record may carry an entry its unit answers for nowhere and classify nothing by it. The record here answers for the library and calls both its definitions total, so the proof beneath it and `again`, which reads the proof, are certified; the same record with `held` added as `Partial` — the judged module's own name, which the library does not declare — must certify them still. Read off any record holding the name, the entry would classify the judged module's `held` partial and refuse `again` for reaching it, a verdict nothing in scope has any standing to raise.
 ///
-/// Mutation-checked: with `Globals::partial` not asking where the unit holds the name, `again` is refused as `NotTotal` reaching `held`, and no other test in this file fails.
+/// Mutation-checked: with `Globals::partial` not asking which unit holds the name, `again` is refused as `NotTotal` reaching `held`, and no other test in this file fails.
 #[test]
 fn a_record_answers_for_no_name_its_unit_does_not_declare() {
-    let library = reaching_library(false);
-    assert!(covering_the_library(false).covers(&library));
-    assert!(
-        covering_the_library(true).covers(&library),
-        "an entry beside the unit's own names leaves the record covering it",
-    );
-
     assert_eq!(
         carried_beneath(
             &carried_proof_and_its_reader(),

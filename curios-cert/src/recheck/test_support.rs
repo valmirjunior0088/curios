@@ -15,7 +15,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// A unit a test puts in scope by hand: a module no unit holds, with the places an environment reads it by and the record filed beside it.
+/// A unit a test puts in scope: a module no unit holds, with the places an environment reads it by and the record filed beside it.
 pub struct AlreadyJudged {
     definitions: Definitions,
     places: Places,
@@ -23,7 +23,7 @@ pub struct AlreadyJudged {
 }
 
 impl AlreadyJudged {
-    /// `module` in scope with `certification` as the record of a walk over it.
+    /// `module` in scope beside `certification`, whichever walk filed it: what a walk over it accepted beside the record it filed, as [`already_judged`] mounts, or bytes no walk wrote, which a test mounts to state the claim's edge as a forger would, and nothing else mounts.
     pub fn with(definitions: &Definitions, certification: &Certification) -> Self {
         Self {
             definitions: definitions.clone(),
@@ -35,15 +35,28 @@ impl AlreadyJudged {
     /// The environment a walk is handed: everything this unit puts in scope, and nothing else.
     pub fn globals(&self) -> Globals<'_> {
         let mut globals = Globals::default();
-        globals.mount(&self.definitions, &self.places, &self.certification);
+        globals.mount(Filed {
+            definitions: &self.definitions,
+            places: &self.places,
+            certification: &self.certification,
+        });
 
         globals
     }
 }
 
-/// Everything `module` puts in scope, with an empty record — so a walk classifies its items' totality for itself.
+/// Everything `module` puts in scope as a walk over it with nothing in scope files it: the module as the walk stated it, beside the record the walk filed, as a unit a build made of it holds them. A fixture the walk refuses is a fixture bug.
 pub fn already_judged(definitions: &Definitions) -> AlreadyJudged {
-    AlreadyJudged::with(definitions, &Certification::default())
+    let Rechecked::Accepted(accepted) = walked(definitions) else {
+        unreachable!("`walked` holds the walk to have accepted the module");
+    };
+    let (definitions, certification) = accepted.into_parts();
+
+    AlreadyJudged {
+        places: Places::of(&definitions),
+        definitions,
+        certification,
+    }
 }
 
 /// `induct Shadowed : Type 0 end` beside `let shadowed : Nat = 0` — the two entries an earlier walk is taken to have judged.

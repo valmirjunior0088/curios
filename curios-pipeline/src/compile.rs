@@ -390,7 +390,7 @@ pub fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
 pub fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Globals<'a> {
     let mut globals = Globals::default();
     for unit in predecessors.units() {
-        globals.mount(unit.core(), unit.places(), unit.certification());
+        globals.mount(unit.filed());
     }
     globals.standing(&predecessors.fixed(), moved);
 

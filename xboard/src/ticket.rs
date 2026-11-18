@@ -2,7 +2,6 @@
 
 use {
     crate::{Checker, Date, Expected},
-    curios_core::Global,
     curios_verdict::test_support::Written,
     serde::Deserialize,
     std::fmt,
@@ -73,17 +72,12 @@ pub enum Step {
         written: Written,
         text: String,
     },
-    /// What the record of the unit claiming `mount` states of `names`, or all of it where they are none, withheld from the store, so every later build mounts the unit without it.
-    Withhold {
-        mount: String,
-        names: Option<Vec<Global>>,
-    },
     /// The unit claiming `mount` mounted by no later build, as a dependency taken out of a manifest is: a unit standing in for an archived root unmounted gives the root its place back.
     Unmount { mount: String },
 }
 
 impl Step {
-    /// What the step is put to: the checkers of the text it compiles, the certifier for a record withheld, which is whose judgment a later build makes of it, and nothing for a unit unmounted, whose later builds compile what earlier steps wrote.
+    /// What the step is put to: the checkers of the text it compiles, and nothing for a unit unmounted, whose later builds compile what earlier steps wrote.
     fn asked(&self) -> &'static [Checker] {
         match self {
             Step::Unit {
@@ -94,7 +88,6 @@ impl Step {
                 written: Written::CoreText,
                 ..
             } => &[Checker::Certifier],
-            Step::Withhold { .. } => &[Checker::Certifier],
             Step::Unmount { .. } => &[],
         }
     }

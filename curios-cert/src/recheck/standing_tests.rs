@@ -1,4 +1,4 @@
-//! Whether what a walk read of a declaration still stands across an edit: a signature read past an edit to the body, a body read, a proof's body, a generated definition's, a stored verdict's parts, a moved value sort, and the classification a part digest reads.
+//! Whether what a walk read of a declaration still stands across an edit: a signature read past an edit to the body, a body read, a proof's body, a generated definition's, a stored verdict's parts and a moved value sort.
 
 use {
     super::test_support::*,
@@ -6,8 +6,8 @@ use {
     curios_common::fill,
     curios_common::{Candidates, Digest, Facet, Member, Object, candidate_prefix},
     curios_core::{
-        Applications, Certification, Certified, Definitions, Item, ItemRun, Places, ReadTable,
-        Reads, Term, Totality,
+        Certification, Certified, Definitions, Item, ItemRun, Places, ReadTable, Reads, Term,
+        Totality,
     },
     std::collections::BTreeSet,
 };
@@ -162,7 +162,11 @@ struct Shelf(Vec<Object>);
 impl Shelf {
     /// A store holding `certification`, a walk of `module`, its records completed as a filing completes them.
     fn filed(definitions: &Definitions, certification: &Certification) -> Self {
-        complete(definitions, &Places::of(definitions), certification);
+        complete(Filed {
+            definitions,
+            places: &Places::of(definitions),
+            certification,
+        });
         let records = certification.records().collect::<Vec<_>>();
         let run = ReadTable::run(
             records
@@ -423,53 +427,4 @@ fn a_later_walk_states_an_alias_the_sort_its_value_inhabits() {
 
     assert_eq!(later.verdicts(), Vec::new());
     assert_eq!(stated_value_sort(&later, "M"), Some(type_at(5)));
-}
-
-/// One question, one answer: the digest a stage outside the certifier asks a part by ([`part_digest`]) reads a unit's classification where the certifier's own ([`read_digest`]) reads one, off a record that covers its unit and nowhere else, as [`Globals::partial`] does.
-#[test]
-fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
-    use crate::*;
-
-    let definitions = written();
-    let places = Places::of(&definitions);
-    // A record naming one of the unit's four definitions: it covers nothing, so a walk classifies the unit's items from their terms.
-    let partial = Certification::of(
-        [(
-            global("five"),
-            Certified {
-                totality: Totality::Partial,
-                applications: Applications::default(),
-                reads: Reads::default(),
-            },
-        )],
-        [],
-        [],
-        [],
-    );
-    assert!(
-        !partial.covers(&definitions),
-        "a record naming fewer definitions than its unit holds covers it",
-    );
-    let mut globals = Globals::default();
-    globals.mount(&definitions, &places, &partial);
-
-    let digest = |verdict| {
-        held_digest(&definitions, &places, &global("five"), verdict, false)
-            .expect("the part digests")
-    };
-    assert_eq!(
-        read_digest(&globals, &global("five"), false).expect("the part digests"),
-        digest((false, None, None, None)),
-        "the certifier's own digest reads the name as classified by no record",
-    );
-    assert_eq!(
-        part_digest(
-            DigestedUnit::of(&definitions, &places, &partial),
-            &global("five"),
-            false
-        )
-        .expect("the part digests"),
-        digest((false, None, None, None)),
-        "and so does the digest a stage outside the certifier asks a part by",
-    );
 }

@@ -69,7 +69,7 @@ pub use whnf::*;
 mod test_support;
 
 use {
-    crate::{Baseline, entails},
+    crate::{Filed, entails},
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, retyped},
     curios_common::{Plicity, SyntaxRegistry},
     curios_core::{
@@ -78,11 +78,7 @@ use {
         UniverseConstraint, UniverseContext, UniverseError, Universes, Variance,
         instantiate_qualities,
     },
-    std::{
-        collections::{BTreeMap, HashMap},
-        fmt,
-        rc::Rc,
-    },
+    std::{collections::HashMap, fmt, rc::Rc},
 };
 
 /// Why the certifier refused a term.
@@ -624,7 +620,7 @@ impl<'s> Certifier<'s> {
     }
 
     /// Read the declarations this walk adopts ([`Certifier::adopt`]), and those of `unvisited` once it has passed them ([`Certifier::at`]), where `baseline` holds them.
-    pub(crate) fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
+    pub(crate) fn over(&mut self, baseline: Filed<'s>, unvisited: Unvisited<'s>) {
         self.globals.over(baseline, unvisited);
     }
 
@@ -766,11 +762,6 @@ impl<'s> Certifier<'s> {
         self.globals.variance(name, index)
     }
 
-    /// The registry entries of the scope this certifier was seeded with that no record files a variance vector for, which a walk computes before it judges anything.
-    pub(crate) fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        self.globals.unvaried()
-    }
-
     /// File the variance vector the walk computed, or adopted, for the registry entry under `name`: what every later comparison of two of the family's instances reads.
     pub(crate) fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
         self.globals.file_variances(name, vector);
@@ -886,13 +877,6 @@ impl<'s> Certifier<'s> {
     /// Register a `struct` declaration's registry entry, refused where one already stands under `name`.
     pub fn declare_struct(&mut self, name: &Global, declaration: &StructDecl) -> Result<(), Error> {
         self.globals.declare_struct(name, declaration)
-    }
-
-    /// The registry entries of the scope this certifier was seeded with that no record files a polarity vector for, which a walk computes before it judges anything.
-    pub(crate) fn unvectored(
-        &self,
-    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        self.globals.unvectored()
     }
 
     /// File the polarity vector the walk computed, or adopted, for the registry entry under `name`: what every later judgment that composes through the family reads.

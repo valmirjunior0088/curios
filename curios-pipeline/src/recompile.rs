@@ -9,7 +9,7 @@ use {
         Closing, CompileError, OnRefusal, certifier_refusal, compile_unit, erasure_refusal,
         globals_after, lowering_refusal, with_broken,
     },
-    curios_cert::{Baseline, Certifier, Globals, Rechecked, certify_definitions_over},
+    curios_cert::{Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
     curios_core::{Definitions, Entrypoint, Places},
     curios_elab::{
@@ -258,11 +258,7 @@ pub fn recheck_over<'s>(
         definitions,
         budget,
         globals,
-        Baseline {
-            definitions: baseline.core(),
-            places: baseline.places(),
-            certification: baseline.certification(),
-        },
+        baseline.filed(),
         (places, candidates),
         *syntax,
     )
@@ -270,5 +266,5 @@ pub fn recheck_over<'s>(
 
 /// Complete what the certifier recorded of `unit`'s judgments where no filing has (`curios_cert::complete`): what a store asks before it files the unit, so a later walk at its address finds each verdict by the item it judged, by what the certifier alone computed.
 pub fn complete_records(unit: &Unit) {
-    curios_cert::complete(unit.core(), unit.places(), unit.certification());
+    curios_cert::complete(unit.filed());
 }

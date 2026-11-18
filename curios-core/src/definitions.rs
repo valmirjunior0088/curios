@@ -52,7 +52,7 @@ impl Totality {
 ///
 /// **A version of its baseline's where its walk was over one.** Its tables are persistent and read back in the order of their names, so a walk over the unit as a baseline starts from the record it adopts verdicts from and changes it at the declarations it judges or drops alone ([`Certification::revised`]).
 ///
-/// Only the certifier's walk makes one — `curios_cert::certify_definitions` — and a later walk reads it as the verdicts on the definitions it covers: no [`Definition`] carries elaboration's. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
+/// Only the certifier's walk makes one — `curios_cert::certify_definitions` — and a later walk reads it as the verdicts on the definitions it covers: no [`Definition`] carries elaboration's. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It answers for every name its unit holds, a totality for each definition and both vectors for each family and record, as every walk's record does, and is read per name where its unit is in scope (`curios_cert::Filed`), a name it misses being a construction bug; no reading walk takes elaboration's word for a unit.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
@@ -473,7 +473,7 @@ impl Certification {
         self.variances.get(name).map(Vec::as_slice)
     }
 
-    /// The certifier's classification of `name`, when this record covers it.
+    /// The certifier's classification of `name`, where this record files one.
     pub fn totality(&self, name: &Global) -> Option<Totality> {
         self.totalities.get(name).copied()
     }
@@ -483,7 +483,7 @@ impl Certification {
         self.applications.get(name)
     }
 
-    /// What judging `name` read of other items, when this record covers it.
+    /// What judging `name` read of other items, where this record files it.
     pub fn reads(&self, name: &Global) -> Option<&Reads> {
         self.read().by.get(name).map(|held| &***held)
     }
@@ -501,19 +501,6 @@ impl Certification {
     /// The declarations of other units the walk recorded a read of.
     pub fn read_abroad(&self) -> impl Iterator<Item = &Global> {
         self.read().abroad.iter().map(|(name, _)| name)
-    }
-
-    /// Whether this record classifies every definition `module` holds.
-    pub fn covers(&self, definitions: &Definitions) -> bool {
-        let classified = |name: &Global| self.totalities.contains_key(name);
-
-        definitions.items.places().all(|place| {
-            definitions
-                .items
-                .names(place)
-                .into_iter()
-                .all(|name| classified(&name))
-        })
     }
 
     /// Every classification this record holds.

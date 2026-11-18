@@ -21,15 +21,59 @@ use {
     std::collections::{BTreeMap, HashMap},
 };
 
-/// An earlier walk over another text of the unit a walk judges: the module it judged, where that module holds each name, and the record it filed.
+/// A unit as its walk filed it: the module the walk accepted, where that module holds each name, and the record the walk filed of it. How the certifier reads a unit it does not judge again: a unit in scope (`Globals::mount`), a baseline a walk over another text of the unit adopts verdicts from, and a unit a stage outside the certifier digests a part of ([`part_digest`]).
+///
+/// **The record answers for every name the module holds**: a totality for each definition and both vectors for each family and record, as every walk's record does, and a unit is made of its walk's accepted answer whole (`curios_unit::Unit`). So each is read here per name, and a miss is a construction bug of the compiler's own, read as one; bytes no walk wrote, a store's damaged or a forger's, are outside the claim ([the soundness board](../../documentation/design/soundness/the-soundness-board.md)).
 #[derive(Clone, Copy)]
-pub struct Baseline<'a> {
+pub struct Filed<'a> {
     pub definitions: &'a Definitions,
     pub places: &'a Places,
     pub certification: &'a Certification,
 }
 
-impl<'a> Baseline<'a> {
+/// What a read of a filed record that misses a name the unit holds is.
+const ANSWERS: &str = "a filed record answers for every name its unit holds";
+
+impl<'a> Filed<'a> {
+    /// Whether the definition `name`, which this unit holds, is not known to terminate.
+    pub fn partial(&self, name: &Global) -> bool {
+        self.certification.totality(name).expect(ANSWERS) == Totality::Partial
+    }
+
+    /// The polarity vector of the family or record this unit holds under `name`: `None` where it holds none there.
+    pub fn polarities(&self, name: &Global) -> Option<&'a [Polarity]> {
+        self.vectored(name)
+            .then(|| self.certification.polarities(name).expect(ANSWERS))
+    }
+
+    /// The variance vector of the family or record this unit holds under `name`: `None` where it holds none there.
+    pub fn variances(&self, name: &Global) -> Option<&'a [Variance]> {
+        self.vectored(name)
+            .then(|| self.certification.variances(name).expect(ANSWERS))
+    }
+
+    /// How the definition `name`, which this unit holds, applies its parameters, where it applies one every use of which is seen.
+    pub fn applications(&self, name: &Global) -> Option<&'a Applications> {
+        self.certification.applications(name)
+    }
+
+    /// What a signature read of `name`, a definition this unit holds, reads beside its terms.
+    pub fn beside(&self, name: &Global) -> Beside<'a> {
+        (
+            self.partial(name),
+            self.polarities(name),
+            self.variances(name),
+            self.applications(name),
+        )
+    }
+
+    /// Whether this unit holds a family or a record under `name`, whose vectors its record files.
+    fn vectored(&self, name: &Global) -> bool {
+        self.definitions
+            .nominal(self.places, name)
+            .is_some_and(|nominal| nominal.inductive().is_some() || nominal.record().is_some())
+    }
+
     /// Whether the entry `item` holds under `name` is the one `held`, the baseline's item, holds under it: the same declaration, by everything the certifier reads of one, or none on both sides.
     fn entries_alike(name: &Global, item: &Item, held: &Item) -> bool {
         let (this, that) = (item.nominal(name), held.nominal(name));
@@ -104,7 +148,7 @@ fn authored(kind: &DefinitionKind) -> bool {
     matches!(kind, DefinitionKind::Authored)
 }
 
-/// Whether a nominal declaration is the baseline's by its names: the same names in the same order, each entry compared under its name by [`Baseline::entries_alike`], which is everything its made formers and constructors are read off.
+/// Whether a nominal declaration is the baseline's by its names: the same names in the same order, each entry compared under its name by [`Filed::entries_alike`], which is everything its made formers and constructors are read off.
 fn nominals_alike(this: &Nominals, that: &Nominals) -> bool {
     let names = |nominals: &Nominals| {
         nominals
@@ -199,55 +243,13 @@ pub type Beside<'a> = (
     Option<&'a Applications>,
 );
 
-/// A unit as a digest of a part of it reads it: its definitions, where it holds each name, the record its certification filed, and whether that record covers the definitions ([`Certification::covers`]). The last walks every definition, so it is decided once for every part read of the unit.
-#[derive(Clone, Copy)]
-pub struct DigestedUnit<'a> {
-    pub definitions: &'a Definitions,
-    pub places: &'a Places,
-    pub certification: &'a Certification,
-    pub covers: bool,
-}
-
-impl<'a> DigestedUnit<'a> {
-    /// The unit `definitions` holds where `places` says, under the record `certification`.
-    pub fn of(
-        definitions: &'a Definitions,
-        places: &'a Places,
-        certification: &'a Certification,
-    ) -> Self {
-        Self {
-            definitions,
-            places,
-            certification,
-            covers: certification.covers(definitions),
-        }
+/// The certifier's digest of what a read reads of `name`, a declaration `unit` holds, under the verdict and vectors its record files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the certifier records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
+pub fn part_digest(unit: Filed<'_>, name: &Global, body: bool) -> Result<Option<String>, String> {
+    if unit.places.place(name).is_none() {
+        return Ok(None);
     }
-}
 
-/// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the certifier records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
-pub fn part_digest(
-    unit: DigestedUnit<'_>,
-    name: &Global,
-    body: bool,
-) -> Result<Option<String>, String> {
-    let DigestedUnit {
-        definitions,
-        places,
-        certification,
-        covers,
-    } = unit;
-    // A vector is the entry's, filed for a name the unit holds one under, as a unit in scope answers it (`Globals`).
-    let nominal = definitions.nominal(places, name).is_some();
-    // The classification is read only where the record covers its unit, as `Globals::partial` reads one: a record naming fewer definitions than the unit holds was not made by a walk over it, so what it says of a name is nothing a reader may take, here as there.
-    let classified = covers;
-    let verdicts = (
-        classified && certification.totality(name) == Some(Totality::Partial),
-        certification.polarities(name).filter(|_| nominal),
-        certification.variances(name).filter(|_| nominal),
-        certification.applications(name).filter(|_| classified),
-    );
-
-    held_digest(definitions, places, name, verdicts, body)
+    held_digest(unit.definitions, unit.places, name, unit.beside(name), body)
 }
 
 /// What a read reads of a declaration: its terms, the registry entry it is the former of, and the certifier's verdict on it.
@@ -312,19 +314,17 @@ impl Readable<'_> {
 }
 
 /// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a store's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
-pub fn complete(definitions: &Definitions, places: &Places, certification: &Certification) {
+pub fn complete(unit: Filed<'_>) {
     curios_profile::profile!("judgments::complete");
     let mut globals = Globals::default();
-    globals.mount(definitions, places, certification);
+    globals.mount(unit);
     let mut completing = Completing {
-        definitions,
-        places,
-        certification,
+        unit,
         globals,
         digests: HashMap::new(),
         identities: HashMap::new(),
     };
-    for (name, record) in certification.records() {
+    for (name, record) in unit.certification.records() {
         if record.completed() {
             continue;
         }
@@ -332,11 +332,9 @@ pub fn complete(definitions: &Definitions, places: &Places, certification: &Cert
     }
 }
 
-/// What a filing completes a walk's records with: the unit, held where `places` says and mounted, and what the walk recorded, each part read digested and each item named once however many records ask.
+/// What a filing completes a walk's records with: the unit, as the walk filed it and mounted, and what the walk recorded, each part read digested and each item named once however many records ask.
 struct Completing<'a> {
-    definitions: &'a Definitions,
-    places: &'a Places,
-    certification: &'a Certification,
+    unit: Filed<'a>,
     globals: Globals<'a>,
     /// What each part of the unit read digests to, by its name and whether it is the body: `None` where it will not digest.
     digests: HashMap<(Global, bool), Option<Option<[u8; 32]>>>,
@@ -347,13 +345,20 @@ struct Completing<'a> {
 impl Completing<'_> {
     /// What judging `name`, which read `reads`, concluded and read: `None` where no record of it can be completed.
     fn concluded(&mut self, name: &Global, reads: &Reads) -> Option<Concluded> {
-        let place = self.places.place(name)?.item();
-        let input = *self.identities.entry(place).or_insert_with(|| {
-            match self.definitions.items.part(place) {
-                Some(stored) => Some(stored.digest),
-                None => ItemRun::identity(&self.definitions.items[place]).ok(),
-            }
-        });
+        let Filed {
+            definitions,
+            places,
+            certification,
+        } = self.unit;
+        let place = places.place(name)?.item();
+        let input =
+            *self
+                .identities
+                .entry(place)
+                .or_insert_with(|| match definitions.items.part(place) {
+                    Some(stored) => Some(stored.digest),
+                    None => ItemRun::identity(&definitions.items[place]).ok(),
+                });
         let signatures = reads
             .signatures
             .iter()
@@ -369,23 +374,19 @@ impl Completing<'_> {
             input: input?,
             signatures,
             bodies,
-            totality: self.certification.totality(name)?,
-            applications: self
-                .certification
-                .applications(name)
-                .cloned()
-                .unwrap_or_default(),
+            totality: certification.totality(name).expect(ANSWERS),
+            applications: self.unit.applications(name).cloned().unwrap_or_default(),
             vectors: self
-                .certification
+                .unit
                 .polarities(name)
-                .zip(self.certification.variances(name))
+                .zip(self.unit.variances(name))
                 .map(|(polarities, variances)| (polarities.to_vec(), variances.to_vec())),
         })
     }
 
     /// What a record holds of a read of `read`, its body where `body` and its signature otherwise: of a declaration of the unit, the certifier's digest of it now; of another unit's, the digest the walk recorded; of a fixed unit's, nothing. `None` where it will not digest.
     fn read(&mut self, read: &Global, body: bool) -> Option<Option<Option<[u8; 32]>>> {
-        if self.places.place(read).is_some() {
+        if self.unit.places.place(read).is_some() {
             let globals = &self.globals;
             let digest = *self.digests.entry((*read, body)).or_insert_with(|| {
                 read_digest(globals, read, body)
@@ -395,10 +396,14 @@ impl Completing<'_> {
 
             return digest.map(Some);
         }
-        let recorded = self.certification.abroad(read).and_then(|read| match body {
-            true => read.body.as_deref(),
-            false => read.signature.as_deref(),
-        });
+        let recorded = self
+            .unit
+            .certification
+            .abroad(read)
+            .and_then(|read| match body {
+                true => read.body.as_deref(),
+                false => read.signature.as_deref(),
+            });
 
         Some(recorded.map(bytes_of))
     }
@@ -418,13 +423,13 @@ struct Stood {
 
 /// What a walk over a baseline has settled so far, and so which of the baseline's verdicts it may still adopt.
 pub struct Adopting<'a> {
-    baseline: Baseline<'a>,
+    baseline: Filed<'a>,
     stood: HashMap<Global, Stood>,
 }
 
 impl<'a> Adopting<'a> {
     /// A walk over `baseline` that has settled nothing yet.
-    pub fn over(baseline: Baseline<'a>) -> Self {
+    pub fn over(baseline: Filed<'a>) -> Self {
         Self {
             baseline,
             stood: HashMap::new(),
@@ -432,13 +437,13 @@ impl<'a> Adopting<'a> {
     }
 
     /// The baseline being walked over.
-    pub fn baseline(&self) -> Baseline<'a> {
+    pub fn baseline(&self) -> Filed<'a> {
         self.baseline
     }
 
     /// The baseline's record of each name `item` declares, in the order the item declares them, where its verdict on `item` stands; `None` where it does not, and the walk judges the item.
     ///
-    /// `item`'s terms are the baseline's ([`Baseline::holds`]). The verdict stands where the record covers each name `item` declares and files a vector for each registry entry `module` holds under one, and every name that record read — of this unit, settled before it, or of a unit in scope, which `abroad` answers for, told whether the read was of the name's body — stands in the part read.
+    /// `item`'s terms are the baseline's ([`Filed::holds`]). The verdict stands where every name the baseline's record read of it — of this unit, settled before it, or of a unit in scope, which `abroad` answers for, told whether the read was of the name's body — stands in the part read.
     pub fn adopts(
         &self,
         item: &Item,
@@ -451,7 +456,7 @@ impl<'a> Adopting<'a> {
             // Another unit's, or no one's.
             None => abroad(read, body),
         };
-        let recorded = self.recorded(item)?;
+        let recorded = self.recorded(item);
 
         recorded
             .iter()
@@ -468,20 +473,17 @@ impl<'a> Adopting<'a> {
             .then_some(recorded)
     }
 
-    /// The baseline's record of each name `item` declares, in the order the item declares them, where it covers each and files a vector for each registry entry `module` holds under one; `None` where it does not, and the walk judges the item. What it read is not asked: [`Adopting::adopts`] asks it, and a declaration no edit can have reached takes its record as it stands.
-    pub fn recorded(&self, item: &Item) -> Option<Vec<(Totality, &'a Reads)>> {
+    /// The baseline's record of each name `item`, one of the baseline's items, declares, in the order the item declares them: the record answers for each ([`Filed`]). What it read is not asked: [`Adopting::adopts`] asks it, and a declaration no edit can have reached takes its record as it stands.
+    fn recorded(&self, item: &Item) -> Vec<(Totality, &'a Reads)> {
         let certification = self.baseline.certification;
 
         item.declared_names()
             .iter()
             .map(|name| {
-                let vectored = item.nominal(name).is_none()
-                    || (certification.polarities(name).is_some()
-                        && certification.variances(name).is_some());
-
-                vectored
-                    .then(|| Some((certification.totality(name)?, certification.reads(name)?)))
-                    .flatten()
+                (
+                    certification.totality(name).expect(ANSWERS),
+                    certification.reads(name).expect(ANSWERS),
+                )
             })
             .collect()
     }

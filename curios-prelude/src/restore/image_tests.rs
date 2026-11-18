@@ -117,7 +117,7 @@ fn each_record_digests_the_index_it_sits_ahead_of() {
 
 /// **What a compilation believes of the prelude is what the establishing walk concluded, asked of the restored bytes.** The build walks each root with the certifier and panics on the first refusal, then images the unit beside the record that walk filed (`curios-prelude/compile.rs`); every compilation mounts those bytes and never walks them again ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s second boundary), so the three things a mount reads off the record are asked here and nowhere else.
 ///
-/// The record must **cover** its unit: `Globals::partial` reads a classification only where it does, so a root whose record named fewer definitions than the root holds would have every proof in scope of it classified afresh from its terms, every group among them read as one no walk typed. It must file a **vector for every former**: positivity composes through the vector the certifier filed, an entry with none answers `Mixed`, and `file_scope_polarities` would recompute the library's on every compile. And the unit must carry no **positional identity**, the rule the build asserts on the value before it is imaged (`validate_stored_identities`), asked again over what was restored, since an index two compilations can both hand out aliases silently rather than failing.
+/// The record must **answer for every name** its unit holds: a mounted record is read per name (`curios_cert::Filed`), so a root whose record named fewer definitions than the root holds would fail the first compilation that reads one it misses. It must file a **vector for every former**: positivity composes through the vector the certifier filed, read per name the same way. And the unit must carry no **positional identity**, the rule the build asserts on the value before it is imaged (`validate_stored_identities`), asked again over what was restored, since an index two compilations can both hand out aliases silently rather than failing.
 #[test]
 fn every_root_restores_the_record_its_establishing_walk_filed() {
     with_prelude(|prelude| {
@@ -125,10 +125,15 @@ fn every_root_restores_the_record_its_establishing_walk_filed() {
             let (core, certification) = (root.core(), root.certification());
             curios_core::validate_stored_identities(core, root.mounts())
                 .unwrap_or_else(|found| panic!("a restored root carries {found}"));
-            assert!(
-                certification.covers(core),
-                "a restored root's record classifies fewer definitions than the root declares",
-            );
+            for place in core.items.places() {
+                for name in core.items.names(place) {
+                    assert!(
+                        certification.totality(&name).is_some(),
+                        "a restored root's record classifies no {}",
+                        name.faithful()
+                    );
+                }
+            }
             for (name, _) in core.formers() {
                 assert!(
                     certification.polarities(&name).is_some()

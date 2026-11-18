@@ -116,15 +116,14 @@ fn route() -> (String, String) {
     (text[..at].to_string(), text[at..].to_string())
 }
 
-/// The route of 2026-11-02 as a history: its carrier compiled as a unit of its own, then `withheld`, then the paradox read through the carrier as a later build mounts it.
-fn carrier_read(withheld: &[Step], expect: Vec<Expected>) -> Witness {
+/// The route of 2026-11-02 as a history: its carrier compiled as a unit of its own, then the paradox read through the carrier as a later build mounts it.
+fn carrier_read(expect: Vec<Expected>) -> Witness {
     let (carrier, paradox) = route();
-    let mut steps = vec![Step::Unit {
+    let steps = vec![Step::Unit {
         mount: "lib".to_string(),
         written: Written::CoreText,
         text: carrier,
     }];
-    steps.extend_from_slice(withheld);
 
     Witness {
         what: "the paradox read through a carrier compiled before it".to_string(),
@@ -146,13 +145,10 @@ fn by_certifier(error: &'static str, within: Within) -> Expected {
 /// The board's example of a history: the proof reads a unit an earlier step compiled and filed, and is refused where the ticket's fix refuses it, the carrier's totality granted from its record.
 #[test]
 fn a_history_puts_its_proof_over_the_units_its_steps_compiled() {
-    let witness = carrier_read(
-        &[],
-        vec![by_certifier(
-            "Mismatch",
-            Within::Declaration("/paradox".to_string()),
-        )],
-    );
+    let witness = carrier_read(vec![by_certifier(
+        "Mismatch",
+        Within::Declaration("/paradox".to_string()),
+    )]);
     let answer = witness.answer();
 
     assert_eq!(witness.unmet(&answer), None);
@@ -162,23 +158,6 @@ fn a_history_puts_its_proof_over_the_units_its_steps_compiled() {
             .iter()
             .any(|refusal| refusal.named().contains("NotTotal"))
     );
-}
-
-/// The board's example of withholding: the carrier's record withheld whole, the build that reads it mounts the carrier with no verdict the certifier can adopt, so the paradox is refused as before and the totality it leaned on the carrier for is no longer granted.
-#[test]
-fn a_record_withheld_is_believed_of_nothing_by_a_later_build() {
-    let witness = carrier_read(
-        &[Step::Withhold {
-            mount: "lib".to_string(),
-            names: None,
-        }],
-        vec![
-            by_certifier("Mismatch", Within::Declaration("/paradox".to_string())),
-            by_certifier("NotTotal", Within::Entry),
-        ],
-    );
-
-    assert_eq!(witness.unmet(&witness.answer()), None);
 }
 
 #[test]

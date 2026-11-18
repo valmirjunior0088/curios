@@ -10,7 +10,7 @@
 //!
 //! # What is already in scope
 //!
-//! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern. A unit mounted without a record covering it is classified here from its items, exactly as a judged item is. No [`Definition`](curios_core::Definition) carries elaboration's totality, judged or carried, so every verdict here is this crate's own.
+//! A compile judges only the unit's own items, so the classification of what is already in scope arrives rather than being recomputed — as the certifier's own record, filed with each unit by the walk that judged it ([`Certification`](curios_core::Certification)). Trusting it is trusting a verdict this crate already reached about those exact terms, the same structure as the rest of the archive-verdict pattern, and the record answers for every name its unit holds ([`Filed`](crate::Filed)). No [`Definition`](curios_core::Definition) carries elaboration's totality, judged or carried, so every verdict here is this crate's own.
 
 use {
     super::{ByValue, Certifier, Error, Globals, Position, declared_into_prop},
@@ -23,7 +23,7 @@ use {
 
 /// Whether `group`'s calls, as this walk typed them, close to a descent on every cycle — the verdict `check_group` recorded.
 ///
-/// A group this walk never checked has no verdict and does not descend: its calls were never typed here, and nothing else is a source of them. That is the case for the items of a unit mounted without a covering record, whose bodies this walk does not judge, and it is the refusing direction.
+/// A group this walk never checked has no verdict and does not descend: its calls were never typed here, and nothing else is a source of them, so the answer for one is the refusing direction.
 fn descends(certifier: &Certifier, group: &RecGroup) -> bool {
     certifier.group_verdict(group) == Some(Totality::Total)
 }
@@ -57,28 +57,20 @@ fn calls_a_diverging_row(term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
 pub struct Totals<'g> {
     /// The units in scope, whose records answer for their own definitions.
     scope: &'g Globals<'g>,
-    /// What this walk classified as not known to terminate: the items it judged, the verdicts it adopted, and the items of a unit in scope no record covers.
+    /// What this walk classified as not known to terminate: the items it judged and the verdicts it adopted.
     partial: BTreeSet<Global>,
     /// Which terms call a diverging host row, carried across every item the walk classifies: definitions share subterms heavily, and a node settled for one is settled for all.
     memo: HashMap<Term, bool>,
 }
 
 impl<'g> Totals<'g> {
-    /// What `globals` holds classified, read where it stands, and what it holds unclassified: the items of a unit mounted without a covering record, classified here from their terms, exactly as a judged item is, every group in them one this walk never typed. Those are closed over one another to a fixpoint, since nothing says in which order they were stored.
-    pub fn seeded(certifier: &Certifier, globals: &'g Globals<'g>) -> Self {
-        curios_profile::profile!("totals::seeded");
-        let mut totals = Self {
+    /// What `globals` holds classified, read where it stands, every unit's record answering for each name it holds, and nothing this walk has classified yet.
+    pub fn seeded(globals: &'g Globals<'g>) -> Self {
+        Self {
             scope: globals,
             partial: BTreeSet::new(),
             memo: HashMap::new(),
-        };
-        let mut mentions = BTreeMap::new();
-        for item in globals.unclassified() {
-            totals.locally(certifier, item, false, &mut mentions);
         }
-        totals.close(certifier, &mentions);
-
-        totals
     }
 
     /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, by the baseline's record where `certifier` reads `name` as a declaration it does not visit, or by the record of the unit in scope that defines it.
@@ -93,19 +85,18 @@ impl<'g> Totals<'g> {
 
     /// Classify a judged `item` into the set.
     ///
-    /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment is in the set since it was seeded. So one pass over the item settles it, its members closed over one another where it is a group.
+    /// Asked as the item's check ends, so what its check enclosed was noted as it went, and after every definition it mentions outside itself was classified: the walk judges an item after the items it reaches, and what a judged item mentions of the environment its unit's record answers for. So one pass over the item settles it, its members closed over one another where it is a group.
     pub fn classify(&mut self, certifier: &Certifier, item: &Item) {
         let mut mentions = BTreeMap::new();
-        self.locally(certifier, item, true, &mut mentions);
+        self.locally(certifier, item, &mut mentions);
         self.close(certifier, &mentions);
     }
 
-    /// Put each definition of `item` that is partial on its own account into the set, and record what each mentions. `typed` says this walk checked `item`, so what its check enclosed was noted as it went; an item it did not check is read from its terms instead, every group in them one with no verdict here.
+    /// Put each definition of `item`, which this walk checked, that is partial on its own account into the set, and record what each mentions: what its check enclosed was noted as it went.
     fn locally(
         &mut self,
         certifier: &Certifier,
         item: &Item,
-        typed: bool,
         mentions: &mut BTreeMap<Global, BTreeSet<Global>>,
     ) {
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
@@ -115,12 +106,10 @@ impl<'g> Totals<'g> {
         };
 
         for (index, definition) in item.definitions().into_iter().enumerate() {
-            let encloses = match (typed, item) {
-                (true, Item::Rec(rec)) => certifier.member_encloses_partial(rec.group(), index),
-                (true, Item::Let(_)) => certifier.definition_encloses_partial(&definition.name),
-                (true, Item::Nominal(_)) => unreachable!("a nominal declaration defines no name"),
-                // A group stands in a term as a `Rec` node, and `Term::has_group` is where that relation is stated: it is a group with no verdict here, and so one that does not descend.
-                (false, _) => definition.body.has_group() || definition.type_.has_group(),
+            let encloses = match item {
+                Item::Rec(rec) => certifier.member_encloses_partial(rec.group(), index),
+                Item::Let(_) => certifier.definition_encloses_partial(&definition.name),
+                Item::Nominal(_) => unreachable!("a nominal declaration defines no name"),
             };
             if rejected
                 || encloses
@@ -130,11 +119,9 @@ impl<'g> Totals<'g> {
                 self.partial.insert(definition.name);
             }
             let mentioned = definition.mentions();
-            if typed {
-                let own = item.declared_names();
-                for name in mentioned.iter().filter(|name| !own.contains(name)) {
-                    certifier.read_verdict(name);
-                }
+            let own = item.declared_names();
+            for name in mentioned.iter().filter(|name| !own.contains(name)) {
+                certifier.read_verdict(name);
             }
             mentions.insert(definition.name, mentioned);
         }

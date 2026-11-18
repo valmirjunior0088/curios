@@ -250,7 +250,7 @@ let /coerce: (
     ));
 }
 
-// `Held` reaches a family a unit in scope declares, which answers from the vector the certifier filed for it: its unit's record's, or the one this walk computes before it judges anything where the record files none, as here. So an irrelevance `Held` carries is granted over a scope's irrelevant `Wrap` and denied over its invariant `Box`, and over a scope whose `Box` carries a lie it is denied as well, what an entry carries being read by no judgment.
+// `Held` reaches a family a unit in scope declares, which answers from the vector the certifier filed for it, its unit's record's. So an irrelevance `Held` carries is granted over a scope's irrelevant `Wrap` and denied over its invariant `Box`, and over a `Box` whose entry carries a lie beside the record its honest walk filed it is denied as well, what an entry carries being read by no judgment.
 #[test]
 fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
     let held = |result_sort: &str, payload: &str| {
@@ -265,10 +265,10 @@ end
             payload
         )
     };
-    let judged = |text: &str, scope: &str| {
-        let scope = already_judged(&core_text_module(scope));
+    let judged = |text: &str, scope: &AlreadyJudged| {
         fixture_verdicts(&core_text_module(text), BUDGET, &scope.globals(), SYNTAX)
     };
+    let walked_scope = |scope: &str| already_judged(&core_text_module(scope));
     let over_wrap = held(
         "#{level = u} Type",
         "#{node = InductType, universes = {levels = [u]}} /Wrap(#NatType)",
@@ -278,17 +278,20 @@ end
         "#{node = InductType, universes = {levels = [u]}} /Box()",
     );
 
-    assert_eq!(judged(&over_wrap, &wrap(&["Irrelevant"])), Vec::new());
+    assert_eq!(
+        judged(&over_wrap, &walked_scope(&wrap(&["Irrelevant"]))),
+        Vec::new()
+    );
     assert!(denied(
-        &judged(&over_box, &holding(&["Invariant"])),
+        &judged(&over_box, &walked_scope(&holding(&["Invariant"]))),
         global("Held"),
         0
     ));
-    assert!(denied(
-        &judged(&over_box, &holding(&["Irrelevant"])),
-        global("Held"),
-        0
-    ));
+    let honest = walked(&core_text_module(&holding(&["Invariant"])))
+        .certification()
+        .clone();
+    let lying = AlreadyJudged::with(&core_text_module(&holding(&["Irrelevant"])), &honest);
+    assert!(denied(&judged(&over_box, &lying), global("Held"), 0));
 }
 
 // `Uses` mentions its level only on `Alias.{u}(A)`, which unfolds to `A`: the recomputation reads the reduct and grants the irrelevance the entry carries.

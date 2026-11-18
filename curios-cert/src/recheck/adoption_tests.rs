@@ -77,7 +77,7 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
         None,
         &globals,
         Some(super::Over {
-            baseline: Baseline {
+            baseline: Filed {
                 definitions: &baseline,
                 places: &places,
                 certification: &certification,
@@ -334,7 +334,7 @@ let /loop: #{node = InductType} /Absurd() =
 ///
 /// `loop : Absurd = loop` recurses without descending, so a walk refuses it as a proof that may not terminate ([`totality-of-the-erased-program`]). Filed `Total` and mounted, nothing re-judges it: `Globals::mount` stands a scope entry at its type with its body, unjudged, and the reader's totality obligation reads the forged verdict (`Globals::partial`). The control is the same record filing it `Partial`, which refuses.
 ///
-/// The input is forged — no walk of this crate produces this record — so this names what the boundary's ground, that a scope entry was judged by the walk that built it, does not itself check: the mounted `Certification`'s totality is believed, and nothing in the record (no digest, no checksum) is consulted to tell a forged verdict from one a walk filed. A stored unit's slot is guarded by the compiler digest and the verified read-set, which bind the record to this compiler over these inputs, not to a walk having concluded it.
+/// The input is forged — no walk of this crate produces this record, a walk over the unit refusing it — and answers for every name the unit holds, `Absurd`'s vectors among them, as a walk's record does, so this names what the boundary's ground, that a scope entry was judged by the walk that built it, does not itself check: the mounted `Certification`'s totality is believed, and nothing in the record (no digest, no checksum) is consulted to tell a forged verdict from one a walk filed. A stored unit's slot is guarded by the compiler digest and the verified read-set, which bind the record to this compiler over these inputs, not to a walk having concluded it.
 #[test]
 fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
     let mounted = core_text_module(LOOPING);
@@ -355,8 +355,8 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
                         },
                     )
                 }),
-            [],
-            [],
+            [(global("Absurd"), Vec::new())],
+            [(global("Absurd"), Vec::new())],
             [],
         )
     };
@@ -505,7 +505,7 @@ let /A: #{level = v} Type =
     #{level = u} Type;
 "#;
 
-/// A group's universe context dropped: the terms are the baseline's, the context is not, and `Baseline::holds` reads a group by its members' terms, names and marks alone.
+/// A group's universe context dropped: the terms are the baseline's, the context is not, and `Filed::holds` reads a group by its members' terms, names and marks alone.
 #[test]
 fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_it() {
     let grouped = |constraints: &str| fill!(GROUPED, constraints);
@@ -526,7 +526,7 @@ fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_i
 
 /// `carrier.{u, v, w, x} : <the record a one-member group computes> = <the four products>`, as a one-member top-level group whose context states `${constraints}`: Hurkens' paradox's `bottom`, `small_universe`, `over` and `pi`, as `xboard`'s formation ticket for a group read under its reader's constraints spells them.
 ///
-/// The declaration is that ticket's `carrier`, a `let` there and a group here: a group's context is what [`Baseline::holds`] does not read, and a `let`'s is. `u + 1 <= w`, `v <= w`, `v + 1 <= x` and `w + 1 <= x` are the cumulativity the four products need.
+/// The declaration is that ticket's `carrier`, a `let` there and a group here: a group's context is what [`Filed::holds`] does not read, and a `let`'s is. `u + 1 <= w`, `v <= w`, `v + 1 <= x` and `w + 1 <= x` are the cumulativity the four products need.
 const CARRIER: &str = r#"
 #{node = Rec, universe_context = {parameter_count = 4${constraints}}}
 let /carrier:
@@ -646,7 +646,7 @@ let /paradox: #{node = InductType} /False() =
 : #{node = InductType} /False()
 "#;
 
-/// Hurkens' paradox through a group whose cumulativity a recompile dropped, the route `Baseline::holds` once opened: the walk over the baseline refuses the group as a walk over every declaration refuses it, so no unit is filed carrying a context no walk assumed, and the paradox read through the carrier the baseline's walk judged is refused by the instance that cumulativity does not discharge.
+/// Hurkens' paradox through a group whose cumulativity a recompile dropped, the route `Filed::holds` once opened: the walk over the baseline refuses the group as a walk over every declaration refuses it, so no unit is filed carrying a context no walk assumed, and the paradox read through the carrier the baseline's walk judged is refused by the instance that cumulativity does not discharge.
 #[test]
 fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
     let carrier = |constraints: &str| fill!(CARRIER, constraints);

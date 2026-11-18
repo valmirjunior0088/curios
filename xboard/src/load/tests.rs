@@ -21,7 +21,7 @@ const RECORD: &str = r#"
     refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]
 "#;
 
-/// A ticket's record whose one witness is a history: a program mounted at `/lib`, its record of `/lib/one` withheld, and Core text read over it.
+/// A ticket's record whose one witness is a history: a program mounted at `/lib`, then unmounted, and Core text read over what is left.
 const HISTORY: &str = r#"
     title = "A forged proof"
     status = "open"
@@ -35,8 +35,7 @@ const HISTORY: &str = r#"
     source = "a_program.crs"
 
     [[witness.step]]
-    withhold = "/lib"
-    verdicts = ["/lib/one"]
+    unmount = "/lib"
 
     [[witness.step]]
     source = "a_module.crsc"
@@ -244,13 +243,12 @@ fn a_history_reads_its_steps_and_closes_with_its_proof() {
         panic!("the ticket carries its witness");
     };
 
-    let one = Global::Authored(Qualifier::from(["lib", "one"]));
     assert!(matches!(
         &history.steps[..],
         [
             Step::Unit { mount, written: Written::Program, text },
-            Step::Withhold { mount: withheld, names: Some(names) },
-        ] if mount == "lib" && text == "/std/Bool/True/qed()" && withheld == "lib" && names[..] == [one]
+            Step::Unmount { mount: unmounted },
+        ] if mount == "lib" && text == "/std/Bool/True/qed()" && unmounted == "lib"
     ));
     assert!(matches!(&history.proof, Proof::Module(text) if text == "0"));
     assert_eq!(history.asked(), [Checker::Elaborator, Checker::Certifier]);
@@ -295,39 +293,17 @@ fn a_history_closes_with_its_proof_and_holds_more_than_it() {
 }
 
 #[test]
-fn a_unit_is_withheld_once_a_step_mounts_it() {
+fn a_unit_is_unmounted_once_a_step_mounts_it() {
     assert!(
-        refusal(&HISTORY.replace("withhold = \"/lib\"", "withhold = \"/other\""))
-            .contains("`/other` is withheld before a step mounts it")
-    );
-}
-
-#[test]
-fn a_unit_is_unmounted_once_a_step_mounts_it_and_no_record_of_it_is_withheld_after() {
-    let unmounted = |path: &str| {
-        HISTORY.replace(
-            "    [[witness.step]]\n    withhold = \"/lib\"\n    verdicts = [\"/lib/one\"]",
-            &format!("    [[witness.step]]\n    unmount = \"{path}\""),
-        )
-    };
-    let ticket = read(
-        &unmounted("/lib"),
-        &[("a_program.crs", "0"), ("a_module.crsc", "0")],
-    )
-    .expect("a unit a step mounted is unmounted");
-    assert!(matches!(
-        &ticket.witnesses[0].steps[..],
-        [Step::Unit { .. }, Step::Unmount { mount }] if mount == "lib"
-    ));
-    assert!(
-        refusal(&unmounted("/other")).contains("`/other` is unmounted where no step mounts it")
+        refusal(&HISTORY.replace("unmount = \"/lib\"", "unmount = \"/other\""))
+            .contains("`/other` is unmounted where no step mounts it")
     );
 
-    let withheld_after = HISTORY.replace(
-        "    [[witness.step]]\n    withhold",
-        "    [[witness.step]]\n    unmount = \"/lib\"\n\n    [[witness.step]]\n    withhold",
+    let twice = HISTORY.replace(
+        "    [[witness.step]]\n    unmount = \"/lib\"",
+        "    [[witness.step]]\n    unmount = \"/lib\"\n\n    [[witness.step]]\n    unmount = \"/lib\"",
     );
-    assert!(refusal(&withheld_after).contains("`/lib` is withheld before a step mounts it"));
+    assert!(refusal(&twice).contains("`/lib` is unmounted where no step mounts it"));
 }
 
 #[test]

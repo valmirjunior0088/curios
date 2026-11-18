@@ -11,7 +11,7 @@ use {
     crate::Verdicts,
     curios_abi::ForeignStore,
     curios_common::{Qualifier, test_support::Temporary},
-    curios_core::{Certification, Definitions, Global},
+    curios_core::Definitions,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_pipeline::{
@@ -112,59 +112,6 @@ impl History {
         self.built(|_| ())
     }
 
-    /// Withhold what the record of the unit claiming `mount` states of `names`, or all of it where they are none, written into the store as the slot's record: every later build mounts the unit as the store now holds it, and every verdict the record still states is one a walk concluded.
-    pub fn withhold(&mut self, mount: &str, names: Option<&[Global]>) -> Result<(), Stopped> {
-        let stored = |why: String| Stopped {
-            mount: mount.to_string(),
-            why: Unbuilt::Stored(why),
-        };
-        let mut held = None;
-        let (_, stand_in) = self.walked(&self.verdicts(), None, |at, _, unit| {
-            if at == mount {
-                held = Some(unit.clone());
-            }
-        })?;
-        let held = held.ok_or_else(|| stored(format!("no step filed a unit at `/{mount}`")))?;
-        let certification = match names {
-            None => Certification::default(),
-            Some(names) => {
-                let mut revision = held.certification().revised();
-                for name in names {
-                    revision.dropped(name);
-                }
-                revision.filed()
-            }
-        };
-
-        // Filed through a cache that has taken the units before it and not the unit itself, so its record names what it was compiled after, as the filing that made it did.
-        let filing = self.verdicts();
-        self.walked(&filing, Some(mount), |_, _, _| ())?;
-        let (_, _, file) = self
-            .units
-            .iter()
-            .find(|(at, ..)| at == mount)
-            .expect("the unit was walked");
-        let text = fs::read_to_string(file).map_err(|error| stored(error.to_string()))?;
-        let root = RootSource::one_file(mount, file, &text);
-        let position = self
-            .units
-            .iter()
-            .position(|(at, ..)| at == mount)
-            .expect("the unit was walked");
-        // At the slot the walk filed it at: a stand-in's, and a unit's over one, are addressed apart from the archived root's.
-        with_prelude(|prelude| {
-            filing.put(
-                &source_of(prelude, &root, position, stand_in.as_ref()),
-                &held.with_certification(certification),
-            );
-        });
-
-        match filing.refused() {
-            Some(refused) => Err(stored(refused)),
-            None => Ok(()),
-        }
-    }
-
     /// Mount the unit claiming `mount` in no later build, as a dependency taken out of a manifest is, then build: what each unit after it filed stays in the store, and a unit standing in for an archived root unmounted gives the root its place back.
     pub fn unmounted(&mut self, mount: &str) -> Result<(), Stopped> {
         self.units.retain(|(at, ..)| at != mount);
@@ -175,7 +122,7 @@ impl History {
     /// Build every unit, and hand `then` the prelude and each unit as the build made it or the store held it: what the term a history closes with is put over.
     pub fn built<R>(&self, then: impl FnOnce(Predecessors<'_>) -> R) -> Result<R, Stopped> {
         let verdicts = self.verdicts();
-        let (units, stand_in) = self.walked(&verdicts, None, |_, _, _| ())?;
+        let (units, stand_in) = self.walked(&verdicts)?;
 
         Ok(with_prelude(|prelude| {
             let scope = roots(prelude, stand_in.as_ref().map(|(index, _)| *index))
@@ -185,19 +132,11 @@ impl History {
         }))
     }
 
-    /// Every unit in the order its first step came, up to the one claiming `until` where it is given, each compiled through `verdicts` over the prelude and the units before it, and handed to `each` with the source it was compiled from as it is made; with the index of the archived root the first unit stands in for, where it claims a prefix the last root mounts, as a package named `std` first in a fold does.
-    fn walked(
-        &self,
-        verdicts: &Verdicts,
-        until: Option<&str>,
-        mut each: impl FnMut(&str, &UnitSource<'_>, &Unit),
-    ) -> Result<(Vec<Unit>, Option<StandIn>), Stopped> {
+    /// Every unit in the order its first step came, each compiled through `verdicts` over the prelude and the units before it; with the index of the archived root the first unit stands in for, where it claims a prefix the last root mounts, as a package named `std` first in a fold does.
+    fn walked(&self, verdicts: &Verdicts) -> Result<(Vec<Unit>, Option<StandIn>), Stopped> {
         let mut units = Vec::new();
         let mut stand_in: Option<StandIn> = None;
         for (position, (mount, written, file)) in self.units.iter().enumerate() {
-            if until == Some(mount.as_str()) {
-                break;
-            }
             let stopped = |why: Unbuilt| Stopped {
                 mount: mount.clone(),
                 why,
@@ -205,7 +144,6 @@ impl History {
             let text = fs::read_to_string(file)
                 .map_err(|error| stopped(Unbuilt::Stored(error.to_string())))?;
             let root = RootSource::one_file(mount, file, &text);
-            let source = UnitSource::mounted(&root);
             let unit = with_prelude(|prelude| {
                 // The root a first unit stands in for is withheld, and the unit is compiled over the roots before it, seeing what the root could see and offered its archived unit as a baseline, as the standard fold compiles a package named `std`.
                 let standing = (position == 0)
@@ -238,7 +176,6 @@ impl History {
                 }
             })
             .map_err(stopped)?;
-            each(mount, &source, &unit);
             units.push(unit);
         }
 

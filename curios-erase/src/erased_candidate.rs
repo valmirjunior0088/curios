@@ -40,7 +40,11 @@ impl ErasedUnit {
         forms: &HashMap<usize, Digest>,
     ) {
         curios_profile::profile!("erasures::complete");
-        let unit = curios_cert::DigestedUnit::of(definitions, places, certification);
+        let unit = curios_cert::Filed {
+            definitions,
+            places,
+            certification,
+        };
         // What each part read digests to, made once however many items read it.
         let mut digests = HashMap::<(curios_core::Global, Part), Option<Read>>::new();
         for place in definitions.items.places() {
@@ -76,7 +80,7 @@ impl ErasedUnit {
     /// What an item read of `part` of `name`, as a completed record holds it ([`Read`]), off this unit, its module held where `places` says under `certification`, and what its erasure recorded of other units: `None` where it will not digest.
     fn read_then(
         &self,
-        unit: curios_cert::DigestedUnit<'_>,
+        unit: curios_cert::Filed<'_>,
         (name, part): (curios_core::Global, Part),
     ) -> Option<Read> {
         let digest = match (part, self.place(&name), unit.places.place(&name)) {

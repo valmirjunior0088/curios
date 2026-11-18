@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Certification, Definitions, Global, Places},
+    curios_core::{Definitions, Global, Places},
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
@@ -101,29 +101,11 @@ induct /Outer: pub Type
 end
 "#;
 
-/// What the walk says of [`STORED_IN_THE_WRAPPER`] over [`WRAPPER`] at `held`, a unit well formed on its own, each beside what it is in scope under: the record the walk over that unit left, and no record.
-fn stored_verdicts(held: &str) -> [(&'static str, Vec<Verdict>); 2] {
+/// What the walk says of [`STORED_IN_THE_WRAPPER`] over [`WRAPPER`] at `held`, a unit well formed on its own, in scope as the walk over it filed it.
+fn stored_verdicts(held: &str) -> Vec<Verdict> {
     let unit = core_text_module(&fill!(WRAPPER, held));
-    let certified = put().module(&unit, None);
-    assert_eq!(
-        certified.verdicts(),
-        Vec::new(),
-        "`Wrapper` is well formed on its own holding `{held}`",
-    );
 
-    [
-        (
-            "the record its walk left",
-            AlreadyJudged::with(&unit, certified.certification()),
-        ),
-        ("no record", already_judged(&unit)),
-    ]
-    .map(|(under, environment)| {
-        (
-            under,
-            text_verdicts_over(STORED_IN_THE_WRAPPER, &environment.globals()),
-        )
-    })
+    text_verdicts_over(STORED_IN_THE_WRAPPER, &already_judged(&unit).globals())
 }
 
 /// Whether `Outer` was refused as negative in itself.
@@ -135,30 +117,27 @@ fn outer_not_positive(verdicts: &[Verdict]) -> bool {
 
 /// The polarity vector a walk composes through is the one the certifier filed for the family, never the one its entry carries.
 ///
-/// `Wrapper(A)` holds a function out of `A`, and its entry is stamped `Strict` in `A`: elaboration's vector, and here a lie. `Outer` stores a `Wrapper(Outer)`, so it reaches itself to the left of an arrow and is refused. The walk over `Outer` is handed `Wrapper`'s unit twice: under the record the walk over that unit left, which files the vector that walk computed, and under no record, where the walk computes the vector for itself before it judges anything. Believing the stamp on either path accepts `Outer`, a family negative in itself.
+/// `Wrapper(A)` holds a function out of `A`, and its entry is stamped `Strict` in `A`: elaboration's vector, and here a lie. `Outer` stores a `Wrapper(Outer)`, so it reaches itself to the left of an arrow and is refused. The walk over `Outer` is handed `Wrapper`'s unit as the walk over it filed it, whose record files the vector that walk computed. Believing the stamp accepts `Outer`, a family negative in itself.
 ///
-/// The control is the same pair with `Wrapper` holding an `A`: the stamp is then the truth and `Outer` is accepted on both paths, so the refusal is the vector's and not that of every family storing itself in a mounted one.
+/// The control is the same with `Wrapper` holding an `A`: the stamp is then the truth and `Outer` is accepted, so the refusal is the vector's and not that of every family storing itself in a mounted one.
 ///
 /// Mutation-checked against the environment's construction: keeping the vector each entry carries accepts `Outer`.
 #[test]
 fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
-    for (under, verdicts) in stored_verdicts("(taken: A) -> #NatType") {
-        assert!(
-            outer_not_positive(&verdicts),
-            "`Outer` was accepted on a `Strict` its entry's stamp claims, under {under}: {verdicts:?}",
-        );
-    }
+    let verdicts = stored_verdicts("(taken: A) -> #NatType");
+    assert!(
+        outer_not_positive(&verdicts),
+        "`Outer` was accepted on a `Strict` its entry's stamp claims: {verdicts:?}",
+    );
 
-    for (under, verdicts) in stored_verdicts("A") {
-        assert_eq!(
-            verdicts,
-            Vec::new(),
-            "the control stopped holding: `Outer` stores itself strictly, under {under}",
-        );
-    }
+    assert_eq!(
+        stored_verdicts("A"),
+        Vec::new(),
+        "the control stopped holding: `Outer` stores itself strictly",
+    );
 }
 
-/// The same lie told of a carrier: `Wrapper(A)` holds its parameter in a cell or a channel, which are read and written and so invariant, or a function out of it in a list or a description, which are covariant and keep the arrow's left where it stands, and its entry is stamped `Strict` in `A` all the same. The walk reads an intrinsic carrier's parameter by its own rule and files that vector, so `Outer`, storing a `Wrapper(Outer)`, is refused under the record and under none.
+/// The same lie told of a carrier: `Wrapper(A)` holds its parameter in a cell or a channel, which are read and written and so invariant, or a function out of it in a list or a description, which are covariant and keep the arrow's left where it stands, and its entry is stamped `Strict` in `A` all the same. The walk reads an intrinsic carrier's parameter by its own rule and files that vector, so `Outer`, storing a `Wrapper(Outer)`, is refused.
 ///
 /// Mutation-checked at `curios-analysis`'s positivity walk: reading a cell's element at the polarity it stands at accepts `Outer`.
 #[test]
@@ -177,12 +156,11 @@ fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
     ];
 
     for (carrier, held) in carriers {
-        for (under, verdicts) in stored_verdicts(held) {
-            assert!(
-                outer_not_positive(&verdicts),
-                "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims, under {under}: {verdicts:?}",
-            );
-        }
+        let verdicts = stored_verdicts(held);
+        assert!(
+            outer_not_positive(&verdicts),
+            "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims: {verdicts:?}",
+        );
     }
 }
 
@@ -377,13 +355,17 @@ fn a_name_under_a_family_and_a_record_is_refused() {
 #[test]
 #[should_panic(expected = "a mounted unit redeclared a name already in scope")]
 fn a_registry_entry_mounted_twice_is_a_construction_bug() {
-    let unit = core_text_module(&fill!(SHADOWING_FAMILY, domain = "Type"));
+    let unit = core_text_module(&fill!(SHADOWING_FAMILY, domain = "#NatType"));
     let judged = already_judged(&unit);
-    let places = Places::of(&unit);
-    let certification = Certification::default();
+    let walked = walked(&unit);
+    let places = Places::of(walked.definitions());
     let mut globals = judged.globals();
 
-    globals.mount(&unit, &places, &certification);
+    globals.mount(Filed {
+        definitions: walked.definitions(),
+        places: &places,
+        certification: walked.certification(),
+    });
 }
 
 /// `alias : Type = Nat`, as a unit in scope holds it, with `${decorator}` stating its mark and the sort its value inhabits.
@@ -393,11 +375,14 @@ let /alias: Type =
     #NatType;
 "#;
 
-/// What the walk says of `text` over [`ALIAS`] at `decorator`, in scope as a unit no walk filed a record for.
+/// What the walk says of `text` over [`ALIAS`] at `decorator`, mounted beside the record a walk over the undecorated unit files: what `decorator` states of the alias is bytes no walk wrote, mounted as a forger would, so what the mount reads of a mark is seen.
 fn over_the_alias(text: &str, decorator: &str) -> Vec<Verdict> {
     let unit = core_text_module(&fill!(ALIAS, decorator));
+    let record = walked(&core_text_module(&fill!(ALIAS, decorator = "")))
+        .certification()
+        .clone();
 
-    text_verdicts_over(text, &already_judged(&unit).globals())
+    text_verdicts_over(text, &AlreadyJudged::with(&unit, &record).globals())
 }
 
 /// Whether `verdicts` is `symbol`'s refusal as a mismatch, and nothing else.

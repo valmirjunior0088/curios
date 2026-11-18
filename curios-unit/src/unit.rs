@@ -1,8 +1,5 @@
 //! What one unit provides to its successors: what each stage produced for it, and the certifier's record of it.
 
-#[cfg(any(test, feature = "test-support"))]
-mod test_support;
-
 use {
     crate::{
         Indexed, Kind, anchors_indexed, apart_parts, asked_indexed, digests, found, halved, halves,
@@ -10,7 +7,7 @@ use {
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
-    curios_cert::Accepted,
+    curios_cert::{Accepted, Filed},
     curios_common::{Digest, Mount, Object, Recorded},
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
@@ -434,6 +431,15 @@ impl Unit {
     /// What the certifier concluded about this unit's definitions. See the field.
     pub fn certification(&self) -> &Certification {
         &self.certification
+    }
+
+    /// This unit as its walk filed it, as the certifier reads a unit it does not judge again: its module, where the module holds each name, and its record.
+    pub fn filed(&self) -> Filed<'_> {
+        Filed {
+            definitions: self.core(),
+            places: self.places(),
+            certification: self.certification(),
+        }
     }
 
     /// The prefixes this unit claims, and whether each is a root only the compiler supplies.

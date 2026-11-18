@@ -90,12 +90,23 @@ fn read_by<'a>(unit: &'a Unit, symbol: &str) -> &'a Reads {
         .unwrap_or_else(|| panic!("the record does not cover `{symbol}`"))
 }
 
+/// Whether `unit`'s record answers for every name its module holds, as the certifier reads a mounted one per name.
+fn answers_for_every_name(unit: &Unit) -> bool {
+    let core = unit.core();
+    core.items.places().all(|place| {
+        core.items
+            .names(place)
+            .into_iter()
+            .all(|name| unit.certification().totality(&name).is_some())
+    })
+}
+
 /// A unit the pipeline compiled carries the certifier's record of every definition it holds, each classified as the certifier's own closure found it.
 #[test]
 fn a_compiled_unit_files_the_certifiers_record_of_every_definition() {
     let unit = unit_of(SOURCE);
 
-    assert!(unit.certification().covers(unit.core()));
+    assert!(answers_for_every_name(&unit));
     assert_eq!(classified(&unit, "double"), Some(Totality::Total));
     assert_eq!(classified(&unit, "spin"), Some(Totality::Partial));
     assert_eq!(classified(&unit, "twice"), Some(Totality::Total));
@@ -111,7 +122,7 @@ fn an_item_level_recompile_keeps_the_baselines_record_for_what_it_reuses() {
 
     assert!(reuses_body(&baseline, &recompiled, "double"));
     assert!(!reuses_body(&baseline, &recompiled, "twice"));
-    assert!(recompiled.certification().covers(recompiled.core()));
+    assert!(answers_for_every_name(&recompiled));
     assert_eq!(classified(&recompiled, "double"), Some(Totality::Total));
     assert_eq!(classified(&recompiled, "spin"), Some(Totality::Partial));
     assert_eq!(classified(&recompiled, "twice"), Some(Totality::Total));
@@ -225,12 +236,12 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
     });
 }
 
-/// The fixed prelude is lent with the record its build's certification filed, and that record covers each root whole — so a walk with the prelude in scope reads the certifier's verdict on every `/sys` and `/std` definition and classifies none of them for itself.
+/// The fixed prelude is lent with the record its build's certification filed, and that record answers for every name each root holds — so a walk with the prelude in scope reads the certifier's verdict on every `/sys` and `/std` definition.
 #[test]
 fn the_restored_prelude_carries_a_record_covering_every_definition() {
     with_prelude(|prelude| {
         for unit in prelude {
-            assert!(unit.certification().covers(unit.core()));
+            assert!(answers_for_every_name(unit));
         }
     });
 }

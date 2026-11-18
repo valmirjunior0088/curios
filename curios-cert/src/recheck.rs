@@ -85,7 +85,7 @@ mod variance_tests;
 
 use {
     super::{
-        Adopting, Baseline, Certifier, Error, Globals, PositionVerdicts, Stated, Totals, Unvisited,
+        Adopting, Certifier, Error, Filed, Globals, PositionVerdicts, Stated, Totals, Unvisited,
         bytes_of, carried_marks, check_case_counts, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
         held_digest, read_digest, state_definition, state_rec_group, stated_entrypoint,
@@ -299,14 +299,14 @@ pub fn certify_definitions<'s>(
     (rechecked, certifier)
 }
 
-/// [`certify_definitions`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Baseline`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
+/// [`certify_definitions`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Filed`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
 ///
 /// **`candidates` is what a store at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
 pub fn certify_definitions_over<'s>(
     definitions: &Definitions,
     budget: u64,
     globals: &'s Globals<'s>,
-    baseline: Baseline<'s>,
+    baseline: Filed<'s>,
     (places, candidates): (&'s Places, Option<&'s dyn Candidates>),
     syntax: SyntaxRegistry,
 ) -> (Rechecked<Definitions>, Certifier<'s>) {
@@ -584,12 +584,12 @@ pub fn verdicts_from<'s>(
 /// A walk over a baseline: the earlier walk, handed over whole, where the module being judged holds each name, and what a store holds of verdicts filed before.
 #[derive(Clone, Copy)]
 pub struct Over<'s> {
-    pub baseline: Baseline<'s>,
+    pub baseline: Filed<'s>,
     pub places: &'s Places,
     pub candidates: Option<&'s dyn Candidates>,
 }
 
-/// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a baseline, the walk visits the items whose terms or registry entries are not the baseline's and the declarations whose filed reads could reach them ([`Changed`]): it judges the first, and of the others adopts each verdict that stands in its turn and judges the rest ([`Baseline`]); every other declaration is the baseline's, read where the baseline holds it once the walk has passed it, as a walk that adopted it there would read it.
+/// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a baseline, the walk visits the items whose terms or registry entries are not the baseline's and the declarations whose filed reads could reach them ([`Changed`]): it judges the first, and of the others adopts each verdict that stands in its turn and judges the rest ([`Filed`]); every other declaration is the baseline's, read where the baseline holds it once the walk has passed it, as a walk that adopted it there would read it.
 fn verdicts_within<'s>(
     certifier: &mut Certifier<'s>,
     definitions: &Definitions,
@@ -598,12 +598,6 @@ fn verdicts_within<'s>(
     over: Option<Over<'s>>,
 ) -> Walk {
     curios_profile::profile!("recheck_definitions");
-    // A baseline is read only where its record covers the module it was filed with, as a mounted record is (`Globals::partial`) and a stored one (`part_digest`): a record naming fewer definitions than its module holds was not made by a walk over it, and a name it leaves out would read as total wherever this walk does not visit it, since nothing classifies the unvisited from their terms. Without one, the walk judges the unit whole.
-    let over = over.filter(|over| {
-        over.baseline
-            .certification
-            .covers(over.baseline.definitions)
-    });
     // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
     let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
     let mut changed = over.map(|over| Changed::of(definitions, globals, over, &abroad));
@@ -820,15 +814,11 @@ fn verdicts_within<'s>(
         }
     }
 
-    // A unit in scope whose record files no vector for an entry of its own: this walk's to compute, before any judgment composes through one.
-    file_scope_polarities(certifier, &mut verdicts);
-    file_scope_variances(certifier, &mut verdicts);
-
     // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
     let mut reads: BTreeMap<Global, Reads> = BTreeMap::new();
     certifier.take_reads();
     // The definitions not known to terminate, as the walk comes to know them: the environment's, then each item's as it is judged.
-    let mut totals = Totals::seeded(certifier, globals);
+    let mut totals = Totals::seeded(globals);
     let mut local_memo = PositionVerdicts::default();
     // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
@@ -879,7 +869,7 @@ fn verdicts_within<'s>(
                 variances.insert(name, vector);
             }
             for name in item.declared_names() {
-                if let Some(applied) = adopting.baseline().certification.applications(&name) {
+                if let Some(applied) = adopting.baseline().applications(&name) {
                     certifier.file_applications(&name, applied.clone());
                     applications.insert(name, applied.clone());
                 }
@@ -1277,7 +1267,7 @@ struct Judged<'w> {
 /// **What was read of other units, kept by its changes.** The baseline's record holds a digest of each part its walk read of a declaration of another unit, and what reads each changed only where a declaration was judged or dropped: a part a judged declaration reads is recorded, digested again where nothing was recorded of it or the unit declaring it moved; a part a declaration judged or dropped read, which no declaration reads now, is taken out. A part an adopted or unvisited declaration reads of a unit that moved digests to what it did, or the declaration would have been judged, so its record stands.
 fn revised(
     globals: &Globals,
-    baseline: Baseline<'_>,
+    baseline: Filed<'_>,
     changed: &Changed,
     judged: Judged<'_>,
 ) -> Certification {
@@ -1364,7 +1354,7 @@ fn revised(
     revision.filed().reading(read_by)
 }
 
-/// What a walk over a baseline finds changed of the module it judges, and what that could reach: by its own comparison of the two modules ([`Baseline::holds`]) and its own record read backwards ([`ReadBy`](curios_core::ReadBy)).
+/// What a walk over a baseline finds changed of the module it judges, and what that could reach: by its own comparison of the two modules ([`Filed::holds`]) and its own record read backwards ([`ReadBy`](curios_core::ReadBy)).
 ///
 /// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached, and so is one held where the baseline held another or none whose filed reads name a declaration of the module stored after it, which a walk in the module's order meets before what it read is settled. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
 struct Changed {
@@ -1509,7 +1499,7 @@ impl Changed {
 fn declares_a_held_name(
     definitions: &Definitions,
     globals: &Globals,
-    baseline: Baseline<'_>,
+    baseline: Filed<'_>,
     touched: &BTreeSet<usize>,
     changes: &Changes,
 ) -> bool {
@@ -1533,12 +1523,10 @@ fn declares_a_held_name(
     })
 }
 
-/// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or a record covers it and the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.
-///
-/// **A part of a unit no record covers does not stand.** Its digest holds no verdict or vector a walk concluded of it, the ones a walk reaches from its terms being this walk's own (`Totals::seeded`, `file_scope_polarities`), so it would digest alike under what the reading walk was given and under what this walk reaches.
+/// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.
 fn read_stands(
     globals: &Globals,
-    baseline: Baseline<'_>,
+    baseline: Filed<'_>,
     asked: &RefCell<HashMap<(Global, bool), bool>>,
     name: &Global,
     body: bool,
@@ -1548,9 +1536,6 @@ fn read_stands(
     }
     if globals.unmoved(name) {
         return true;
-    }
-    if !globals.classified(name) {
-        return false;
     }
     if let Some(stands) = asked.borrow().get(&(*name, body)) {
         return *stands;
@@ -1582,7 +1567,7 @@ struct Settled<'w> {
     /// The module as the walk has stated it so far, which a part of it is digested in.
     stated: &'w Definitions,
     places: &'w Places,
-    baseline: Baseline<'w>,
+    baseline: Filed<'w>,
     settled: &'w BTreeSet<Global>,
     totals: &'w Totals<'w>,
     polarities: &'w BTreeMap<Global, Vec<Polarity>>,
@@ -1592,7 +1577,7 @@ struct Settled<'w> {
 
 /// The records a store holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
 ///
-/// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, a fixed unit's is recorded nowhere, and no record that read a unit no record covers stands. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
+/// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, and a fixed unit's is recorded nowhere. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
 fn stored(
     candidates: &dyn Candidates,
     globals: &Globals,
@@ -1689,12 +1674,7 @@ fn stands(
                     now.variances.get(read).map(Vec::as_slice),
                     now.applications.get(read),
                 ),
-                (false, true) => (
-                    now.baseline.certification.totality(read) != Some(Totality::Total),
-                    now.baseline.certification.polarities(read),
-                    now.baseline.certification.variances(read),
-                    now.baseline.certification.applications(read),
-                ),
+                (false, true) => now.baseline.beside(read),
                 (false, false) => return None,
             };
             return held_digest(now.stated, now.places, read, verdict, body)
@@ -1703,10 +1683,6 @@ fn stands(
         }
         if globals.in_scope(read) && !globals.recorded(read) {
             return Some(None);
-        }
-        // A part of a unit no record covers holds no verdict or vector a walk concluded of it, as `read_stands` reads one.
-        if globals.in_scope(read) && !globals.classified(read) {
-            return None;
         }
 
         read_digest(globals, read, body)
@@ -1789,7 +1765,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
 }
 
 /// The item `baseline` holds where it holds the first name `item` declares: the one whose statements an item the walk does not judge takes.
-fn held_item<'b>(baseline: Baseline<'b>, item: &Item) -> Option<&'b Item> {
+fn held_item<'b>(baseline: Filed<'b>, item: &Item) -> Option<&'b Item> {
     let name = item.declared_names().into_iter().next()?;
     let place = baseline.places.place(&name)?;
 
@@ -1818,7 +1794,7 @@ struct Adopted {
 /// `certified` is the baseline's record of each name `item` declares, in the order it declares them ([`Adopting::adopts`]).
 fn adopt(
     certifier: &mut Certifier,
-    baseline: Baseline<'_>,
+    baseline: Filed<'_>,
     item: &Item,
     certified: &[(Totality, &Reads)],
 ) -> Adopted {
@@ -1903,50 +1879,6 @@ fn positivity_verdict(refusal: PositivityRefusal<Error>) -> Verdict {
             error,
         },
     }
-}
-
-/// Compute and file the polarity vector of every registry entry in scope that no record files one for: the entries of a unit mounted without a record a walk made of it. Analyzed together, since nothing says which of them mention which, and before anything is judged, since a judged family composes through them.
-fn file_scope_polarities(certifier: &mut Certifier, verdicts: &mut Vec<Verdict>) {
-    let (inducts, structs) = certifier.unvectored();
-    if inducts.is_empty() && structs.is_empty() {
-        return;
-    }
-
-    certifier.restore_budget();
-    match positivity_vectors(certifier, Declarations::of(&inducts, &structs)) {
-        Ok(vectors) => {
-            for (name, vector) in vectors {
-                certifier.file_polarities(&name, vector);
-            }
-        }
-        Err(refusal) => verdicts.push(positivity_verdict(refusal)),
-    }
-    // What this read is no judged item's.
-    certifier.take_reads();
-}
-
-/// Compute and file the variance vector of every registry entry in scope that no record files one for, as [`file_scope_polarities`] files their polarity vectors, and before anything is judged, since a comparison of two instances reads one. A walk the budget cuts short files nothing, and its entries answer invariant.
-fn file_scope_variances(certifier: &mut Certifier, verdicts: &mut Vec<Verdict>) {
-    let (inducts, structs) = certifier.unvaried();
-    if inducts.is_empty() && structs.is_empty() {
-        return;
-    }
-
-    certifier.restore_budget();
-    let found = variance_vectors(certifier, Declarations::of(&inducts, &structs));
-    match found.exhausted {
-        Some((walked, error)) => verdicts.push(Verdict {
-            name: Some(walked),
-            error,
-        }),
-        None => {
-            for (name, vector) in found.vectors {
-                certifier.file_variances(&name, vector);
-            }
-        }
-    }
-    // What this read is no judged item's.
-    certifier.take_reads();
 }
 
 /// Accept the registry entries one declaration declares: their strict positivity, their variance and their sizing, each a judgment of its own on a budget restored for it, so whether one fits is a fact about these entries and never about what the module's others cost.

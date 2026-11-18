@@ -1,5 +1,5 @@
 title = "A read of a unit with no covering record digests as a total one, so a verdict a store filed stands where the read is partial"
-status = "fixed"
+reason = "A unit in scope whose record does not answer for every name it holds is unrepresentable in the compiler: a unit is made of its walk's accepted answer whole, and the certifier reads a mounted record per name, so no walk classifies such a unit from its terms."
 
 [[witness]]
 what = "`d`'s verdict filed while `w` was total, taken once `w` loops and `/lib`'s record is withheld, then unpacked at `Q`, now `False`"

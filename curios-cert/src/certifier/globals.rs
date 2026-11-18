@@ -20,10 +20,10 @@
 
 use {
     super::Error,
-    crate::Baseline,
+    crate::Filed,
     curios_core::{
-        Applications, Certification, Definitions, Global, InductDecl, InductParts, Item, Place,
-        Places, Polarity, StructDecl, Term, Totality, UniverseContext, Universes, Variance,
+        Applications, Definitions, Global, InductDecl, InductParts, Item, Place, Places, Polarity,
+        StructDecl, Term, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -134,14 +134,10 @@ pub fn struct_alike(this: &StructDecl, that: &StructDecl) -> bool {
         && *variances == that.variances
 }
 
-/// One unit in scope, read where it stands: its module, the places its unit keeps for the module's names, and the record the certifier's walk over it filed.
+/// One unit in scope, read where it stands: as its walk filed it, read per name ([`Filed`]).
 #[derive(Clone, Copy)]
 struct Mounted<'s> {
-    definitions: &'s Definitions,
-    places: &'s Places,
-    certification: &'s Certification,
-    /// Whether `certification` covers `module`. Where it does, its classifications are the environment's; where it does not — one naming fewer definitions than the unit holds, an empty one included — a walk classifies the unit's items for itself, from their terms.
-    covered: bool,
+    unit: Filed<'s>,
     /// Whether the unit is the compiler's own, of which no read is recorded ([`Globals::standing`]).
     fixed: bool,
     /// Whether the unit is other than the one a baseline's walk read ([`Globals::standing`]).
@@ -150,17 +146,17 @@ struct Mounted<'s> {
 
 impl<'s> Mounted<'s> {
     fn held(&self, name: &Global) -> Option<Held<'s>> {
-        held(self.definitions, self.places, name)
+        held(self.unit.definitions, self.unit.places, name)
     }
 
     /// Whether this unit declares `name`. An entry is held by the item that declares it, so the names a unit declares are its items'.
     fn holds(&self, name: &Global) -> bool {
-        self.places.place(name).is_some()
+        self.unit.places.place(name).is_some()
     }
 
     /// How many items this unit holds: what says which of two units is the smaller to ask the other of.
     fn size(&self) -> usize {
-        self.definitions.items.len()
+        self.unit.definitions.items.len()
     }
 
     /// Whether this unit and `other` hold a name in common, asked of the smaller of the two.
@@ -169,27 +165,13 @@ impl<'s> Mounted<'s> {
             true => (self, other),
             false => (other, self),
         };
-        let items = &smaller.definitions.items;
+        let items = &smaller.unit.definitions.items;
         items.places().any(|place| {
             items
                 .names(place)
                 .into_iter()
                 .any(|name| larger.holds(&name))
         })
-    }
-
-    /// The polarity vector this unit's record files for the registry entry it holds under `name`.
-    fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
-        self.certification
-            .polarities(name)
-            .filter(|_| self.definitions.nominal(self.places, name).is_some())
-    }
-
-    /// The variance vector this unit's record files for the registry entry it holds under `name`.
-    fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
-        self.certification
-            .variances(name)
-            .filter(|_| self.definitions.nominal(self.places, name).is_some())
     }
 }
 
@@ -200,24 +182,14 @@ pub struct Globals<'s> {
 }
 
 impl<'s> Globals<'s> {
-    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and the entries its items hold — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
+    /// Put `unit` in scope as its walk filed it — its definitions at their declared types with their real bodies, a proof's withheld, and the entries its items hold — read by the places its unit keeps for it, its record answering for every name it holds: each definition's totality, and each family's and record's vectors, read per name ([`Filed`]).
     ///
-    /// Where `certification` covers `module`, its classifications are the environment's; where it does not, `module`'s items are a walk's to classify. Each registry entry answers its polarity from the vector the record files for it, and one it files none for is a walk's to compute. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
-    ///
-    /// A definition stands here exactly as a refused item stands in a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one.
+    /// A definition stands here exactly as a refused item stands in a walk's environment: at its declared type, with its real body, unjudged. That is deliberate and it is the whole meaning of this type — an environment records what is in scope, and whether the recording is warranted is the caller's question, answered before it ever built one: a unit is made of its walk's accepted answer whole, so what it holds is what that walk filed.
     ///
     /// Names are disjoint by mount, so no two units hold one — asserted rather than reported, where a walk's own write of a held name is reported to it: a collision here is a driver that mounted one name twice, which is a construction bug and not a program's fault.
-    pub fn mount(
-        &mut self,
-        definitions: &'s Definitions,
-        places: &'s Places,
-        certification: &'s Certification,
-    ) {
+    pub fn mount(&mut self, unit: Filed<'s>) {
         let mounted = Mounted {
-            definitions,
-            places,
-            certification,
-            covered: certification.covers(definitions),
+            unit,
             fixed: false,
             moved: false,
         };
@@ -233,7 +205,7 @@ impl<'s> Globals<'s> {
 
     /// Say of each unit mounted so far, in the order they were mounted, whether it is the compiler's own (`fixed`), and whether it is other than the unit the walk of a baseline read (`moved`): one whose contents changed since, or one that walk was never handed.
     ///
-    /// **What a walk over a baseline does with each.** A read of a unit that did not move stands as the baseline's record has it. A read of one that moved stands where the part read digests now to what that record holds of it, by the certifier's own digest of the terms in its scope and of its verdict on them (`Baseline`). Nothing is recorded of a fixed unit: a baseline is offered by the compiler that made it, so a constant of the compiler is the one every baseline's walk read.
+    /// **What a walk over a baseline does with each.** A read of a unit that did not move stands as the baseline's record has it. A read of one that moved stands where the part read digests now to what that record holds of it, by the certifier's own digest of the terms in its scope and of its verdict on them (`Filed`). Nothing is recorded of a fixed unit: a baseline is offered by the compiler that made it, so a constant of the compiler is the one every baseline's walk read.
     pub fn standing(&mut self, fixed: &[bool], moved: &[bool]) {
         assert!(
             fixed.len() == self.mounted.len() && moved.len() == self.mounted.len(),
@@ -266,73 +238,21 @@ impl<'s> Globals<'s> {
             .is_some_and(|mounted| !mounted.fixed)
     }
 
-    /// Whether a record covers the unit here that declares `name`, so what a walk concluded of the name is on record. Where none does, a walk classifies the unit for itself and [`Globals::partial`] answers nothing of it, so no verdict a record holds stands on a part of it read.
-    pub(crate) fn classified(&self, name: &Global) -> bool {
+    /// The unit here that declares `name`, read as its walk filed it.
+    fn holding(&self, name: &Global) -> Option<Filed<'s>> {
         self.mounted
             .iter()
             .find(|mounted| mounted.holds(name))
-            .is_some_and(|mounted| mounted.covered)
+            .map(|mounted| mounted.unit)
     }
 
     /// Whether `name` is a definition in scope here that is *not* known to terminate, closed transitively already, as the certifier's record of the unit that holds it classifies it.
     ///
     /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked.
     ///
-    /// It is read off [`Certification`], which only this crate's walk makes, and never off anything elaboration concluded, which no [`Definition`](curios_core::Definition) carries: a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with and for no name beside it, and only where it covers that unit.
+    /// It is read off [`Certification`](curios_core::Certification), which only this crate's walk makes, and never off anything elaboration concluded, which no [`Definition`](curios_core::Definition) carries: a verdict arriving here is one this crate reached about those exact terms. A record answers for the unit it was filed with, every name of it, and for no name beside it.
     pub(crate) fn partial(&self, name: &Global) -> bool {
-        self.mounted.iter().any(|mounted| {
-            mounted.covered
-                && mounted.certification.totality(name) == Some(Totality::Partial)
-                && mounted.places.place(name).is_some()
-        })
-    }
-
-    /// The items of every unit in scope here with a record that does not cover it — one naming fewer definitions than the unit holds, an empty one included. A walk classifies these for itself, from their terms.
-    pub(crate) fn unclassified(&self) -> impl Iterator<Item = &'s Item> + '_ {
-        self.mounted
-            .iter()
-            .filter(|mounted| !mounted.covered)
-            .flat_map(|mounted| &mounted.definitions.items)
-    }
-
-    /// The registry entries in scope here that no record files a polarity vector for, as the two maps strict positivity is handed: a walk computes these for itself before it judges anything.
-    fn unvectored(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        self.unfiled(|record, name| record.polarities(name).is_some())
-    }
-
-    /// The registry entries in scope here that no record files a variance vector for, which a walk computes as it computes [`Globals::unvectored`]'s.
-    fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        self.unfiled(|record, name| record.variances(name).is_some())
-    }
-
-    /// The registry entries in scope here whose unit's record does not answer `filed` for them.
-    fn unfiled(
-        &self,
-        filed: impl Fn(&Certification, &Global) -> bool,
-    ) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        let mut inducts = BTreeMap::new();
-        let mut structs = BTreeMap::new();
-        for mounted in &self.mounted {
-            // Which names declare a nominal is what each place of the unit says, so the record is asked of each with no entry read, and an entry is read where the record files no vector for it.
-            let unfiled = mounted
-                .definitions
-                .formers()
-                .into_iter()
-                .filter(|(name, _)| !filed(mounted.certification, name));
-            for (name, _) in unfiled {
-                let Some(nominal) = mounted.definitions.nominal(mounted.places, &name) else {
-                    continue;
-                };
-                if let Some(declaration) = nominal.inductive() {
-                    inducts.insert(name, declaration.clone());
-                }
-                if let Some(record) = nominal.record() {
-                    structs.insert(name, record.clone());
-                }
-            }
-        }
-
-        (inducts, structs)
+        self.holding(name).is_some_and(|unit| unit.partial(name))
     }
 
     /// Whether a unit here declares `name`.
@@ -348,38 +268,28 @@ impl<'s> Globals<'s> {
     }
 
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&'s InductDecl> {
-        self.mounted
-            .iter()
-            .find_map(|mounted| mounted.definitions.induct_decl(mounted.places, name))
+        self.holding(name)
+            .and_then(|unit| unit.definitions.induct_decl(unit.places, name))
     }
 
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&'s StructDecl> {
-        self.mounted
-            .iter()
-            .find_map(|mounted| mounted.definitions.struct_decl(mounted.places, name))
+        self.holding(name)
+            .and_then(|unit| unit.definitions.struct_decl(unit.places, name))
     }
 
     /// The polarity vector the record of the unit holding the registry entry `name` files for it.
     pub(crate) fn polarities(&self, name: &Global) -> Option<&'s [Polarity]> {
-        self.mounted
-            .iter()
-            .find_map(|mounted| mounted.polarities(name))
+        self.holding(name).and_then(|unit| unit.polarities(name))
     }
 
-    /// How the definition `name` applies its parameters, as the record of the unit holding it files it, read only where that record covers its unit, as [`Globals::partial`] reads a verdict.
+    /// How the definition `name` applies its parameters, as the record of the unit holding it files it.
     pub(crate) fn applications(&self, name: &Global) -> Option<&'s Applications> {
-        self.mounted.iter().find_map(|mounted| {
-            (mounted.covered && mounted.places.place(name).is_some())
-                .then(|| mounted.certification.applications(name))
-                .flatten()
-        })
+        self.holding(name).and_then(|unit| unit.applications(name))
     }
 
     /// The variance vector the record of the unit holding the registry entry `name` files for it.
     pub(crate) fn variances(&self, name: &Global) -> Option<&'s [Variance]> {
-        self.mounted
-            .iter()
-            .find_map(|mounted| mounted.variances(name))
+        self.holding(name).and_then(|unit| unit.variances(name))
     }
 }
 
@@ -432,7 +342,7 @@ pub struct Environment<'s> {
     /// The units in scope when the walk began, which it reads and never writes.
     scope: Option<&'s Globals<'s>>,
     /// The baseline whose verdicts the walk adopts, where it walks over one.
-    baseline: Option<Baseline<'s>>,
+    baseline: Option<Filed<'s>>,
     /// The declarations of the module the walk does not visit, where it walks over a baseline.
     unvisited: Option<Unvisited<'s>>,
     /// The names whose verdict the walk adopted: each is read where the baseline holds it, which is the declaration the walk was handed under that name, term for term.
@@ -440,9 +350,9 @@ pub struct Environment<'s> {
     definitions: HashMap<Global, Definition>,
     inducts: BTreeMap<Global, InductDecl>,
     structs: BTreeMap<Global, StructDecl>,
-    /// The polarity vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what strict positivity composes through where a family it analyzes mentions this one. The vector an entry carries is elaboration's, which nothing here reads; an entry with no vector filed answers `Mixed`.
+    /// The polarity vector the walk filed for each registry entry it accepted or adopted: what strict positivity composes through where a family it analyzes mentions this one. The vector an entry carries is elaboration's, which nothing here reads; an entry with no vector filed answers `Mixed`.
     vectors: BTreeMap<Global, Vec<Polarity>>,
-    /// The variance vector the walk filed for each registry entry it accepted or adopted, and for each entry of its scope no record files one for: what a comparison of two instances of the family reads. The vector an entry carries is elaboration's, which the walk holds to this one and reads nowhere else.
+    /// The variance vector the walk filed for each registry entry it accepted or adopted: what a comparison of two instances of the family reads. The vector an entry carries is elaboration's, which the walk holds to this one and reads nowhere else.
     variances: BTreeMap<Global, Vec<Variance>>,
     /// How each definition the walk judged or took applies its parameters, where it applies one every use of which is seen: what a later judgment grades a call in a callback the definition is handed by.
     applications: BTreeMap<Global, Applications>,
@@ -455,7 +365,7 @@ impl<'s> Environment<'s> {
     }
 
     /// Read the declarations this walk adopts, and the ones of `unvisited` once it has passed them, where `baseline` holds them.
-    pub fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
+    pub fn over(&mut self, baseline: Filed<'s>, unvisited: Unvisited<'s>) {
         self.baseline = Some(baseline);
         self.unvisited = Some(unvisited);
     }
@@ -475,7 +385,7 @@ impl<'s> Environment<'s> {
     }
 
     /// The baseline, where `name` is a declaration of the module the walk does not visit.
-    fn unvisited_holding(&self, name: &Global) -> Option<Baseline<'s>> {
+    fn unvisited_holding(&self, name: &Global) -> Option<Filed<'s>> {
         self.baseline.filter(|_| {
             self.unvisited
                 .as_ref()
@@ -485,10 +395,7 @@ impl<'s> Environment<'s> {
 
     /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed.
     pub fn passed_partial(&self, name: &Global) -> bool {
-        self.passed(name)
-            && self.baseline.is_some_and(|baseline| {
-                baseline.certification.totality(name) == Some(Totality::Partial)
-            })
+        self.passed(name) && self.baseline.is_some_and(|baseline| baseline.partial(name))
     }
 
     /// What `name` is held at: as the walk wrote it, as the baseline it adopted it from holds it, or as a unit in scope does.
@@ -581,24 +488,6 @@ impl<'s> Environment<'s> {
         Ok(())
     }
 
-    /// The registry entries of the scope this walk was seeded with that no record files a polarity vector for and the walk has filed none for either.
-    pub fn unvectored(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        let (mut inducts, mut structs) = self.scope.map(Globals::unvectored).unwrap_or_default();
-        inducts.retain(|name, _| !self.vectors.contains_key(name));
-        structs.retain(|name, _| !self.vectors.contains_key(name));
-
-        (inducts, structs)
-    }
-
-    /// The registry entries of the scope this walk was seeded with that no record files a variance vector for and the walk has filed none for either.
-    pub fn unvaried(&self) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
-        let (mut inducts, mut structs) = self.scope.map(Globals::unvaried).unwrap_or_default();
-        inducts.retain(|name, _| !self.variances.contains_key(name));
-        structs.retain(|name, _| !self.variances.contains_key(name));
-
-        (inducts, structs)
-    }
-
     /// File `vector` as the variance vector of the registry entry under `name`: what the walk in progress computed for it, or adopted, written as it accepts the entry and read from then on by every comparison of two of the family's instances.
     pub fn file_variances(&mut self, name: &Global, vector: Vec<Variance>) {
         self.variances.insert(*name, vector);
@@ -611,7 +500,7 @@ impl<'s> Environment<'s> {
             .map(Vec::as_slice)
             .or_else(|| {
                 self.passed_vectors(name)
-                    .and_then(|baseline| baseline.certification.variances(name))
+                    .and_then(|baseline| baseline.variances(name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.variances(name)))
             .and_then(|vector| vector.get(index).copied())
@@ -629,7 +518,7 @@ impl<'s> Environment<'s> {
             .get(name)
             .or_else(|| {
                 self.passed_vectors(name)
-                    .and_then(|baseline| baseline.certification.applications(name))
+                    .and_then(|baseline| baseline.applications(name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.applications(name)))
     }
@@ -658,13 +547,13 @@ impl<'s> Environment<'s> {
             .map(Vec::as_slice)
             .or_else(|| {
                 self.passed_vectors(name)
-                    .and_then(|baseline| baseline.certification.polarities(name))
+                    .and_then(|baseline| baseline.polarities(name))
             })
             .or_else(|| self.scope.and_then(|scope| scope.polarities(name)))
     }
 
     /// The baseline, where `name` is a declaration the walk does not visit and has passed: whose filed vectors are read from there on, as they are filed where a walk adopts the declaration.
-    fn passed_vectors(&self, name: &Global) -> Option<Baseline<'s>> {
+    fn passed_vectors(&self, name: &Global) -> Option<Filed<'s>> {
         self.baseline.filter(|_| self.passed(name))
     }
 

@@ -263,7 +263,7 @@ impl Records for AskedItems {
 
 /// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, that a constructor is one and of which family, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
 pub fn declared_digest(
-    unit: curios_cert::DigestedUnit<'_>,
+    unit: curios_cert::Filed<'_>,
     (name, part): (curios_core::Global, Part),
 ) -> Result<Option<String>, String> {
     match part {

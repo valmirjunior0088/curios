@@ -1,6 +1,10 @@
 //! What a history's builds file and mount.
 
-use {super::*, curios_common::Qualifier, curios_core::Totality};
+use {
+    super::*,
+    curios_common::Qualifier,
+    curios_core::{Global, Totality},
+};
 
 /// The name `/lib/<label>`.
 fn lib(label: &str) -> Global {
@@ -104,68 +108,4 @@ fn a_unit_stepped_from_a_program_to_core_text_is_read_from_its_core_text() {
         !lowered,
         "the program's unit was mounted for the Core text step"
     );
-}
-
-#[test]
-fn a_withheld_record_is_the_one_a_later_build_mounts() {
-    let mut history = History::new();
-    history
-        .step(
-            "lib",
-            Written::Program,
-            "pub let one: /std/Nat = 1;\npub let two: /std/Nat = 2;\n",
-        )
-        .expect("the step builds");
-
-    history
-        .withhold("lib", Some(&[lib("one")]))
-        .expect("the record is withheld in part");
-    assert!(mounted(&history, &lib("one")).is_none());
-    assert!(mounted(&history, &lib("two")).is_some());
-
-    history
-        .withhold("lib", None)
-        .expect("the record is withheld whole");
-    assert!(mounted(&history, &lib("two")).is_none());
-}
-
-/// A program's unit withheld whole is still compiled from its text: the record a withhold files names the unit's file, as the record of the step that filed it did, so a later step that rewrites the text finds the record disagreeing and compiles the text it now holds.
-#[test]
-fn a_withheld_program_is_compiled_again_once_its_text_moves() {
-    let mut history = History::new();
-    history
-        .step(
-            "lib",
-            Written::Program,
-            "pub let Q: Prop = /std/Bool/True;\npub let t: Q = /std/Bool/True/qed();\n",
-        )
-        .expect("the step builds");
-    history
-        .withhold("lib", None)
-        .expect("the record is withheld whole");
-
-    assert!(matches!(
-        history.step(
-            "lib",
-            Written::Program,
-            "pub let Q: Prop = /std/Bool/False;\npub let t: Q = /std/Bool/True/qed();\n",
-        ),
-        Err(Stopped {
-            why: Unbuilt::Compiled(_),
-            ..
-        })
-    ));
-}
-
-#[test]
-fn a_record_no_step_filed_is_not_withheld() {
-    let mut history = History::new();
-
-    assert!(matches!(
-        history.withhold("lib", None),
-        Err(Stopped {
-            why: Unbuilt::Stored(_),
-            ..
-        })
-    ));
 }

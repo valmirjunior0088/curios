@@ -23,7 +23,7 @@ use obligation::*;
 
 mod baseline;
 use baseline::*;
-pub use baseline::{Baseline, DigestedUnit, complete, part_digest};
+pub use baseline::{Filed, complete, part_digest};
 
 mod recheck;
 pub use recheck::{

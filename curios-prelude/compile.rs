@@ -217,7 +217,7 @@ fn certified(
     // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand.
     let mut globals = Globals::default();
     for earlier in predecessors {
-        globals.mount(earlier.core(), earlier.places(), earlier.certification());
+        globals.mount(earlier.filed());
     }
     // Each is the compiler's own, of which no read is recorded.
     globals.standing(

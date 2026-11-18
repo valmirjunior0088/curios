@@ -62,9 +62,9 @@ pub struct ErasedOver<'a> {
     /// The first names of the baseline's items the unit no longer declares, each one's record the baseline holds.
     lost: Vec<curios_core::Global>,
     /// The module being erased, under the record its certification filed, as a part of it digests.
-    now: curios_cert::DigestedUnit<'a>,
+    now: curios_cert::Filed<'a>,
     /// The baseline's module, under its record, as a part of it digests.
-    then: curios_cert::DigestedUnit<'a>,
+    then: curios_cert::Filed<'a>,
 }
 
 impl<'a> ErasedOver<'a> {
@@ -83,12 +83,16 @@ impl<'a> ErasedOver<'a> {
             read: HashMap::new(),
             visited: BTreeSet::new(),
             lost: Vec::new(),
-            now: curios_cert::DigestedUnit::of(definitions, baseline.now, baseline.recorded),
-            then: curios_cert::DigestedUnit::of(
-                baseline.core,
-                baseline.places,
-                baseline.certification,
-            ),
+            now: curios_cert::Filed {
+                definitions,
+                places: baseline.now,
+                certification: baseline.recorded,
+            },
+            then: curios_cert::Filed {
+                definitions: baseline.core,
+                places: baseline.places,
+                certification: baseline.certification,
+            },
         };
         over.reach();
 

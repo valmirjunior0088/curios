@@ -6,7 +6,7 @@ use {curios_cert::Globals, curios_core::Item, curios_unit::Unit};
 pub fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
     let mut globals = Globals::default();
     for root in predecessors {
-        globals.mount(root.core(), root.places(), root.certification());
+        globals.mount(root.filed());
     }
 
     globals

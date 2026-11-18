@@ -791,11 +791,11 @@ impl<'a> Erasures<'a> {
         match part {
             Part::Binding | Part::Forms => erased_digest(self.erased[unit], place, (name, part)),
             Part::Signature | Part::Body | Part::Kind => declared_digest(
-                curios_cert::DigestedUnit::of(
-                    self.cores[unit],
-                    self.places[unit],
-                    self.certifications[unit],
-                ),
+                curios_cert::Filed {
+                    definitions: self.cores[unit],
+                    places: self.places[unit],
+                    certification: self.certifications[unit],
+                },
                 (name, part),
             ),
         }

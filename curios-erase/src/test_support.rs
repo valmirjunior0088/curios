@@ -24,7 +24,11 @@ pub fn part_digests(
     certification: &curios_core::Certification,
     erased: &ErasedUnit,
 ) -> Vec<(NamedPart, Result<Option<String>, String>)> {
-    let unit = curios_cert::DigestedUnit::of(definitions, places, certification);
+    let unit = curios_cert::Filed {
+        definitions,
+        places,
+        certification,
+    };
     definitions
         .items
         .places()

@@ -1,6 +1,6 @@
 //! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts. The archive, `xboard/archive/`, holds a directory for a part the board has, and in it a directory per ticket filed there, whose record states the `reason` it is archived where a live one states its `status`, and of which the loader reads its title and its reason and nothing else.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness on the board states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds or unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness on the board states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
@@ -9,8 +9,6 @@ use {
     crate::{
         Archived, Checker, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness,
     },
-    curios_common::Qualifier,
-    curios_core::Global,
     curios_verdict::test_support::Written,
     serde::Deserialize,
     std::collections::{BTreeMap, BTreeSet},
@@ -54,14 +52,12 @@ struct ArchivedRecord {
     reason: String,
 }
 
-/// One step of a witness's history: a unit, by the path it is mounted at and its file; a record withheld, by the unit's path and the names withheld, all of them where none is listed; a unit unmounted, by its path; or the proof, its file alone.
+/// One step of a witness's history: a unit, by the path it is mounted at and its file; a unit unmounted, by its path; or the proof, its file alone.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StepRecord {
     mount: Option<String>,
     source: Option<String>,
-    withhold: Option<String>,
-    verdicts: Option<Vec<String>>,
     unmount: Option<String>,
 }
 
@@ -324,15 +320,13 @@ fn history<'f>(
     records: Vec<StepRecord>,
     text: &mut impl FnMut(&str) -> Result<(Written, &'f str), String>,
 ) -> Result<(Vec<Step>, Proof), String> {
-    let shape = "a step is a unit, `mount` and `source`; a record withheld, `withhold` and its `verdicts` where it withholds some; a unit unmounted, `unmount`; or the proof, `source` alone";
+    let shape = "a step is a unit, `mount` and `source`; a unit unmounted, `unmount`; or the proof, `source` alone";
     let mut records = records;
     let last = records.pop().expect("a history states a step");
     let proof = match last {
         StepRecord {
             mount: None,
             source: Some(source),
-            withhold: None,
-            verdicts: None,
             unmount: None,
         } => proof_of(text(&source)?),
         _ => {
@@ -353,8 +347,6 @@ fn history<'f>(
             StepRecord {
                 mount: Some(mount),
                 source: Some(source),
-                withhold: None,
-                verdicts: None,
                 unmount: None,
             } => {
                 let mount = mount_of(&mount)?;
@@ -369,33 +361,12 @@ fn history<'f>(
             }
             StepRecord {
                 mount: None,
-                source: None,
-                withhold: Some(withheld),
-                verdicts,
-                unmount: None,
-            } => {
-                let mount = mount_of(&withheld)?;
-                if !mounted.contains(&mount) {
-                    return Err(format!("`{withheld}` is withheld before a step mounts it"));
-                }
-                let names = verdicts
-                    .map(|verdicts| verdicts.iter().map(|path| name_of(path)).collect())
-                    .transpose()?;
-
-                Ok(Step::Withhold { mount, names })
-            }
-            StepRecord {
-                mount: None,
                 source: Some(_),
-                withhold: None,
-                verdicts: None,
                 unmount: None,
             } => Err("only a history's last step is its proof".to_string()),
             StepRecord {
                 mount: None,
                 source: None,
-                withhold: None,
-                verdicts: None,
                 unmount: Some(unmounted),
             } => {
                 let mount = mount_of(&unmounted)?;
@@ -421,16 +392,6 @@ fn mount_of(path: &str) -> Result<String, String> {
         _ => Err(format!(
             "`{path}` is no path of one name a unit is mounted at"
         )),
-    }
-}
-
-/// The declaration an absolute path names.
-fn name_of(path: &str) -> Result<Global, String> {
-    match path.strip_prefix('/') {
-        Some(rest) if !rest.is_empty() && rest.split('/').all(|part| !part.is_empty()) => {
-            Ok(Global::Authored(Qualifier::from(rest.split('/'))))
-        }
-        _ => Err(format!("`{path}` is no declaration's absolute path")),
     }
 }
 
