@@ -17,8 +17,8 @@ use {
         solve_indices,
     },
     curios_core::{
-        Advance, ArgumentSite, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global,
-        Metavar, MetavarId, MetavarOrigin, MetavarSpine, Names, Produced, Proj, Quality,
+        Advance, ArgumentSite, Atom, Bound, CalleeId, Enter, Extent, Field, Free, Func, FuncType,
+        Global, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Names, Produced, Proj, Quality,
         ReduceError, Sort, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
     },
     std::{
@@ -1051,10 +1051,19 @@ fn watched_blockers(
 /// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
 pub fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
     match origin {
-        Some(MetavarOrigin::Implicit(site)) => Watched::Implicit {
-            callee: callee(context, &site.callee),
-            binder: site.parameter.map(|name| name.as_str().to_string()),
-        },
+        Some(MetavarOrigin::Implicit(site)) => {
+            let bind = context.syntax().monad.bind;
+            let sequenced = matches!(
+                &site.callee,
+                CalleeId::Method { concept, field }
+                    if *concept == Global::Authored(bind.concept.qualifier()) && field == bind.field
+            );
+            Watched::Implicit {
+                callee: callee(context, &site.callee),
+                binder: site.parameter.map(|name| name.as_str().to_string()),
+                written: !sequenced,
+            }
+        }
         Some(MetavarOrigin::Witness(origin)) => Watched::Witness {
             callee: callee(context, &origin.func),
             role: origin.role.clone(),

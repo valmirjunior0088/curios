@@ -168,6 +168,7 @@ fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
     let implicit = shown(Watched::Implicit {
         callee: callee(),
         binder: None,
+        written: true,
     });
     let witness = shown(Watched::Witness {
         callee: callee(),

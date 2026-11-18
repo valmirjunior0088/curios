@@ -35,6 +35,27 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
 }
 
 #[test]
+fn a_conversion_left_undecided_by_a_written_calls_implicit_closes_on_writing_it() {
+    // `Proc/exit`'s result type is never pinned, and the `bind` the `!` is elaborated as waits on it: the report names both as never solved, and closes on the one argument a reader can write, in the call they wrote. The `bind` is no call to write into. Mutation-checked: closing on every implicit names `/std/Monad/bind` too, and closing on none names neither.
+    let source = r#"
+        use /std/{print, Proc};
+
+        let _ = Proc/exit(3)!;
+        print("x")
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("undecided conversion") && error.contains("never solved"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        error.contains("supply it explicitly, `Proc/exit(@...)`"),
+        "unexpected report: {error}"
+    );
+    assert!(!error.contains("bind(@...)"), "unexpected report: {error}");
+}
+
+#[test]
 fn a_candidate_over_a_lambdas_binder_commits_and_leaves_the_implicit_to_its_own_report() {
     // `f`'s implicit meets `(n: Nat) -> Option(?X)` with `?X` never pinned and minted under the lambda's own binder. The function type binds that binder itself, so the candidate commits with `?X` riding in it, and the honest residue is the implicit nothing inferred, reported at its call.
     let source = r#"

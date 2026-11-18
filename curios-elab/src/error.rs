@@ -321,10 +321,11 @@ impl ShapeDiagnosis {
 /// One still-unsolved metavariable a postponed conversion watched, by what it is: what a reader can act on.
 #[derive(Debug, Clone)]
 pub enum Watched {
-    /// An implicit argument of a callee, by the binder it was inserted for: the callee is its identity, spelled for the reader where the report is made, and `binder` the binder's name where it has one.
+    /// An implicit argument of a callee, by the binder it was inserted for: the callee is its identity, spelled for the reader where the report is made, and `binder` the binder's name where it has one. `written` where a call the program wrote holds the slot, so writing the argument there is a way out; the `bind` a `!` is elaborated as is no such call.
     Implicit {
         callee: Callee,
         binder: Option<String>,
+        written: bool,
     },
     /// A witness argument of a callee, by what its slot is to the callee where something states it, worded where the report is made: `its 2nd 'use' premise`.
     Witness {

@@ -529,7 +529,7 @@ impl Displayed<'_> {
         let anchors = self.2;
         // A watched metavariable by what it is.
         let named = |watched: &Watched| match watched {
-            Watched::Implicit { callee, binder } => {
+            Watched::Implicit { callee, binder, .. } => {
                 callee.slot("implicit argument", binder.as_deref(), spelling)
             }
             Watched::Witness { callee, role } => match role {
@@ -543,6 +543,35 @@ impl Displayed<'_> {
             Watched::Described(description) => description.clone(),
             // Where it was written is the report's note.
             Watched::Goal(_) => "a written goal `?`".to_string(),
+        };
+        // The way out of metavariables that never solved: writing an implicit argument a call the program wrote left open, as an uninferred one's report says.
+        let supplied = |f: &mut Said, watching: &[Watched]| {
+            let mut calls = Vec::new();
+            for watched in watching {
+                if let Watched::Implicit {
+                    callee: Callee::Function(func),
+                    written: true,
+                    ..
+                } = watched
+                {
+                    let call = format!("`{}(@...)`", spelled_mention(func, spelling));
+                    if !calls.contains(&call) {
+                        calls.push(call);
+                    }
+                }
+            }
+            match calls.as_slice() {
+                [] => {}
+                [call] => {
+                    f.stating(format_args!("supply it explicitly, {call}"));
+                }
+                calls => {
+                    f.stating(format_args!(
+                        "supply one explicitly, {}",
+                        calls.join(" or ")
+                    ));
+                }
+            }
         };
         // A term of one type where a carrier's was wanted is a type mismatch, said as one.
         let carried = |f: &mut Said, head_type: &Term, expected: &str| {
@@ -1434,8 +1463,9 @@ impl Displayed<'_> {
                     Code(expected.spelled(spelling))
                 ));
                 if !watching.is_empty() {
-                    let watching = watching.iter().map(named).collect::<Vec<_>>();
-                    f.stating(format_args!("never solved: {}", watching.join(", ")));
+                    let named = watching.iter().map(named).collect::<Vec<_>>();
+                    f.stating(format_args!("never solved: {}", named.join(", ")));
+                    supplied(f, watching);
                 }
             }
             Error::PostponedConversion {
@@ -1454,8 +1484,9 @@ impl Displayed<'_> {
                     f.stating(format_args!("and: {}", Code(&that)));
                 }
                 if !watching.is_empty() {
-                    let watching = watching.iter().map(named).collect::<Vec<_>>();
-                    f.stating(format_args!("never solved: {}", watching.join(", ")));
+                    let named = watching.iter().map(named).collect::<Vec<_>>();
+                    f.stating(format_args!("never solved: {}", named.join(", ")));
+                    supplied(f, watching);
                 }
                 if *under_refinements {
                     f.stating("the goal sits under match-arm refinements");
