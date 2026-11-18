@@ -27,11 +27,11 @@ use {
     curios_analysis::{definition_applications, group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
-        Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
-        Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Made,
-        Minted, Names, Nominal, Nominals, Order, Places, Quality, RecItem, Revised, Sort,
-        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext,
-        Universes, Visit, stamp_declaration_instance,
+        Advance, Bound, Declarations, Definition, DefinitionKind, Definitions, Entrypoint, Free,
+        FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Made, Minted, Names, Nominal,
+        Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
+        Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
+        stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -787,15 +787,6 @@ fn elaborate_module_nominal(context: &mut Context, nominals: &Nominals) -> Resul
                     arity,
                     result_sort,
                     ..record
-                },
-            );
-        }
-        if let Some(concept) = context.concept(name).cloned() {
-            context.update_concept(
-                name,
-                ConceptDecl {
-                    universe_context: universe_context.clone(),
-                    ..concept
                 },
             );
         }

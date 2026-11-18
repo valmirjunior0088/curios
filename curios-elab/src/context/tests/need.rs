@@ -87,14 +87,7 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
         )
         .expect("a name is registered once");
     context
-        .register_concept(
-            &concept,
-            ConceptDecl {
-                universe_context: UniverseContext::default(),
-                fields: Vec::new(),
-                supers: Vec::new(),
-            },
-        )
+        .register_concept(&concept, ConceptDecl { supers: Vec::new() })
         .expect("a name is registered once");
 
     names

@@ -13,7 +13,7 @@ use {
     curios_core::{
         Advance, ArgumentSite, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey,
         Infix, Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
-        Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole,
+        Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole, method_labels,
     },
     curios_num::{Floating, Integer, Rounding},
     std::collections::BTreeMap,
@@ -555,18 +555,18 @@ fn infix_method(
     operand_type: &Term,
     term: &Term,
 ) -> Result<Option<InfixMethod>, Error> {
-    let (Some(concept), Some(struct_decl)) = (
-        context.concept(concept_name).cloned(),
-        context.struct_decl(concept_name).cloned(),
-    ) else {
+    // A concept's labels and scheme are its record's.
+    if context.concept(concept_name).is_none() {
+        return Ok(None);
+    }
+    let Some(struct_decl) = context.struct_decl(concept_name).cloned() else {
         return Ok(None);
     };
 
     // Projection is positional over the *instantiated* field telescope (`Structure::fields_at` peels the leading parameter binders, exactly as `elaborate_proj` resolves a label), so the method's position among the concept's fields is the index — no parameter offset.
-    let index = concept
-        .fields
+    let index = method_labels(&struct_decl)
         .iter()
-        .position(|field| field == field_name)
+        .position(|field| *field == field_name)
         .expect("the operator concepts declare their table fields");
 
     // Mint the witness goal exactly like an omitted `use` argument.
@@ -575,7 +575,7 @@ fn infix_method(
         extent: term.extent(),
     };
     let (_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &(), occurrence)?;
+        context.instantiate_universe_bound(&struct_decl.universe_context, &(), occurrence)?;
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
@@ -669,7 +669,11 @@ fn sequencing_witness(
 ) -> Result<Option<Term>, Error> {
     let bind = context.syntax().monad.bind;
     let concept_name = Global::Authored(bind.concept.qualifier());
-    let Some(concept) = context.concept(&concept_name).cloned() else {
+    // A concept's scheme is its record's.
+    if context.concept(&concept_name).is_none() {
+        return Ok(None);
+    }
+    let Some(record) = context.struct_decl(&concept_name).cloned() else {
         return Ok(None);
     };
     let occurrence = Occurrence {
@@ -677,7 +681,7 @@ fn sequencing_witness(
         extent: term.extent(),
     };
     let (_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &(), occurrence)?;
+        context.instantiate_universe_bound(&record.universe_context, &(), occurrence)?;
     let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Method {

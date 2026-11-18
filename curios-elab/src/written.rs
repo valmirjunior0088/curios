@@ -17,7 +17,7 @@ use {
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
         Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Match, Mention,
         Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Transient,
-        TupleType, Two, Visit, WitnessOrigin,
+        TupleType, Two, Visit, WitnessOrigin, method_labels,
     },
     curios_num::Binary,
     std::{
@@ -398,9 +398,11 @@ impl Writing {
         let Global::Authored(path) = concept else {
             return None;
         };
-        let label = context.concept(&concept)?.fields.get(index)?.clone();
+        context.concept(&concept)?;
+        let record = context.struct_decl(&concept)?;
+        let label = method_labels(record).get(index)?.to_string();
         // A superclass edge is a dictionary, written where it stands as one.
-        let fields = context.struct_decl(&concept)?.fields().marks();
+        let fields = record.fields().marks();
         if fields.get(index) != Some(&Plicity::Explicit) {
             return None;
         }

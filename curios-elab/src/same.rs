@@ -464,9 +464,7 @@ pub fn structs_alike(this: &StructDecl, that: &StructDecl) -> bool {
 }
 
 pub fn concepts_alike(this: &ConceptDecl, that: &ConceptDecl) -> bool {
-    this.universe_context == that.universe_context
-        && this.fields == that.fields
-        && this.supers == that.supers
+    this.supers == that.supers
 }
 
 fn fields_alike(this: &Telescope<()>, that: &Telescope<()>) -> bool {

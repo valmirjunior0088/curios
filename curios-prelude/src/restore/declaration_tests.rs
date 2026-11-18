@@ -3,7 +3,9 @@
 use {
     super::{test_support::*, *},
     crate::test_support::*,
-    curios_core::{Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Visit},
+    curios_core::{
+        Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Visit, method_labels,
+    },
     curios_module::SYNTAX,
     curios_surface::TopItem,
     std::{
@@ -326,15 +328,17 @@ fn every_syntax_target_is_present_after_restore() {
 fn every_registered_concept_declares_its_method_after_restore() {
     with_prelude(|prelude| {
         for target in SYNTAX.concept_fields() {
-            let concept = prelude
+            let name = Global::Authored(target.concept.qualifier());
+            // A concept's methods are named by its record's fields.
+            let record = prelude
                 .iter()
                 .find_map(|root| {
-                    root.core()
-                        .concept(root.places(), &Global::Authored(target.concept.qualifier()))
+                    root.core().concept(root.places(), &name)?;
+                    root.core().struct_decl(root.places(), &name)
                 })
                 .unwrap_or_else(|| panic!("missing concept {}", target.concept.symbol()));
             assert!(
-                concept.fields.iter().any(|field| field == target.field),
+                method_labels(record).contains(&target.field),
                 "concept {} does not declare {}",
                 target.concept.symbol(),
                 target.field

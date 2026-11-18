@@ -706,7 +706,7 @@ impl Declared {
 
 /// A nominal declaration's registry entry, held by the item that declares it ([`Nominals`]), which makes its former of it.
 ///
-/// **One fact, held once.** A former among a module's items and its entry in a registry beside them are two facts under one name with nothing holding one to the other; held by the item, a former is what its entry makes, and a name declares at most one. A concept's record is held with it for the same reason: a concept is its resolution metadata and the record a witness is a value of, and neither is declared alone. Why is the crate `README.md`'s "A nominal declaration is held as its entries".
+/// **One fact, held once.** A former among a module's items and its entry in a registry beside them are two facts under one name with nothing holding one to the other; held by the item, a former is what its entry makes, and a name declares at most one. A concept's record is held with it for the same reason: a concept is the superclass edges its fields reach and the record a witness is a value of, whose scheme and labels it reads, and neither is declared alone. Why is the crate `README.md`'s "A nominal declaration is held as its entries".
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Nominal {
@@ -760,7 +760,7 @@ impl Nominal {
         }
     }
 
-    /// The concept's resolution metadata, where the declaration is one.
+    /// The concept's superclass edges, where the declaration is one.
     pub fn concept(&self) -> Option<&ConceptDecl> {
         match self {
             Nominal::Concept { concept, .. } => Some(concept),

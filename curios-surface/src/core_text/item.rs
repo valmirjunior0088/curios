@@ -385,7 +385,7 @@ fn group_scheme(
     Ok(context)
 }
 
-/// A concept's entry from its form: its record, and its own parts read off the record where its `concept` decorator states none.
+/// A concept's entry from its form: its record, and its superclass edges read off the record where its `concept` decorator states none.
 fn concept_read(
     concept: &TopConcept<CoreText>,
     name: &Global,
@@ -393,27 +393,16 @@ fn concept_read(
     fields: &mut Fields<'_>,
     reader: &mut Reader<'_>,
 ) -> Result<Nominal, ReadError> {
-    let (record, words) = concept_entry_read(concept, name, scheme, fields, reader)?;
+    let record = concept_entry_read(concept, name, scheme, fields, reader)?;
     let mut declaration = ConceptDecl {
-        universe_context: record.universe_context.clone(),
-        fields: words,
         supers: concept_supers_read_off(*name, &record),
     };
     if let Some(value) = fields.take("concept") {
         let mut own = super::value_fields(value)?;
-        if let Some(context) = own.take("universe_context") {
-            declaration.universe_context = universe_context_read(context)?;
-        }
         if let Some(supers) = own.take("supers") {
             declaration.supers = value_list(supers)?
                 .iter()
                 .map(value_global)
-                .collect::<Result<_, _>>()?;
-        }
-        if let Some(labels) = own.take("fields") {
-            declaration.fields = value_list(labels)?
-                .iter()
-                .map(value_string)
                 .collect::<Result<_, _>>()?;
         }
         own.finish()?;

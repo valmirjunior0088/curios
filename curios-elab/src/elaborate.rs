@@ -363,14 +363,13 @@ pub fn method_form(
     method: &Method,
     extent: Option<Extent>,
 ) -> Result<Option<(Term, Term)>, Error> {
-    let (Some(concept), Some(record)) = (
-        context.concept(&method.concept).cloned(),
-        context.struct_decl(&method.concept).cloned(),
-    ) else {
+    if context.concept(&method.concept).is_none() {
+        return Ok(None);
+    }
+    let Some(record) = context.struct_decl(&method.concept).cloned() else {
         return Ok(None);
     };
-    let Some((type_, form)) = method_spelling(method.concept, &concept, &record, &method.field)
-    else {
+    let Some((type_, form)) = method_spelling(method.concept, &record, &method.field) else {
         return Ok(None);
     };
     let occurrence = Occurrence {
@@ -378,8 +377,8 @@ pub fn method_form(
         extent,
     };
     let (type_, universes) =
-        context.instantiate_universe_bound(&concept.universe_context, &type_, occurrence)?;
-    let form = concept
+        context.instantiate_universe_bound(&record.universe_context, &type_, occurrence)?;
+    let form = record
         .universe_context
         .read_at(&form, &universes)
         .map_err(Error::from)?;
@@ -389,10 +388,10 @@ pub fn method_form(
 
 /// The type of the method `method` named by its path, at its concept's own levels: what a reader of a written head's type reads of it, as of a declaration's written type. `None` where the concept's entries are not in hand.
 pub fn method_type(context: &Context, method: &Method) -> Option<Term> {
-    let concept = context.concept(&method.concept)?;
+    context.concept(&method.concept)?;
     let record = context.struct_decl(&method.concept)?;
 
-    method_spelling(method.concept, concept, record, &method.field).map(|(type_, _)| type_)
+    method_spelling(method.concept, record, &method.field).map(|(type_, _)| type_)
 }
 
 /// A call of a method's η-form `form` at `arguments`, one to each parameter of its one group: the form opened at them, the projection off the witness among them. `None` where `form` is no function taking exactly those.

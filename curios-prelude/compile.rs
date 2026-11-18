@@ -7,7 +7,8 @@ use {
     curios_cert::{Globals, certify_definitions},
     curios_common::{Qualifier, Report, Source, digest},
     curios_core::{
-        Anchors, Certification, Definitions, Global, Item, Sharing, validate_stored_identities,
+        Anchors, Certification, Definitions, Global, Item, Sharing, method_labels,
+        validate_stored_identities,
     },
     curios_document::Documentation,
     curios_elab::{
@@ -383,23 +384,23 @@ fn validate_syntax_targets(modules: &[&curios_core::Definitions]) {
     for target in SYNTAX.concept_fields() {
         let symbol = target.concept.symbol();
         let field = target.field;
-        let concept = modules
+        let name = Global::Authored(target.concept.qualifier());
+        // A concept's methods are named by its record's fields.
+        let record = modules
             .iter()
             .find_map(|definitions| {
-                definitions
-                    .concepts()
-                    .get(&Global::Authored(target.concept.qualifier()))
-                    .copied()
+                definitions.concepts().get(&name)?;
+                definitions.struct_decls().get(&name).copied()
             })
             .unwrap_or_else(|| {
                 panic!(
                     "registered operator concept '{symbol}' is not a concept in the lowered prelude"
                 )
             });
+        let declared = method_labels(record);
         assert!(
-            concept.fields.iter().any(|declared| declared == field),
-            "registered operator concept '{symbol}' does not declare the method '{field}'; it declares: {:?}",
-            concept.fields
+            declared.contains(&field),
+            "registered operator concept '{symbol}' does not declare the method '{field}'; it declares: {declared:?}",
         );
     }
 }

@@ -217,13 +217,12 @@ fn case_written<D: Rendered>(
     }
 }
 
-/// A record's form: its parameters, its sort and its fields, each field under its mark and by the word it is written by where it has one, with the word each is written by in order — empty for a superclass edge and for a field nothing names.
+/// A record's form: its parameters, its sort and its fields, each field under its mark and by the word it is written by where it has one.
 pub struct RecordWritten<D: Rendered = Shown> {
     pub params: Vec<FuncTypeParam<D>>,
     pub rep_pub: bool,
     pub result_sort: crate::Term<D>,
     pub fields: Vec<crate::StructField<D>>,
-    pub words: Vec<String>,
 }
 
 impl<D: Rendered> RecordWritten<D> {
@@ -283,13 +282,6 @@ pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) ->
             param.written(read, frame)
         })
         .collect::<Vec<_>>();
-    let words = fields
-        .iter()
-        .map(|field| match (field.mark, field.named) {
-            (Plicity::Witness, _) | (_, false) => String::new(),
-            (_, true) => frame.spelling.label(&field.label),
-        })
-        .collect();
     // A superclass edge is a field a program never names, which resolution reaches: its word is written where a later field reads it, as a witness binder's is.
     let written = fields
         .iter()
@@ -316,7 +308,6 @@ pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) ->
         rep_pub: record.rep_public,
         result_sort: sub(record.result_sort.clone(), frame),
         fields: written,
-        words,
     }
 }
 
@@ -514,14 +505,14 @@ pub fn record_entry_read(
     Ok(entry)
 }
 
-/// A record's entry from a concept's form: its fields, each method by its label and each superclass edge under `use` with no word; and the words its methods are written by, an edge's empty.
+/// A record's entry from a concept's form: its fields, each method by its label and each superclass edge under `use` with no word.
 pub fn concept_entry_read(
     concept: &TopConcept<CoreText>,
     name: &Global,
     scheme: &UniverseContext,
     fields: &mut Fields<'_>,
     reader: &mut Reader<'_>,
-) -> Result<(StructDecl, Vec<String>), ReadError> {
+) -> Result<StructDecl, ReadError> {
     let members = concept
         .fields
         .iter()
@@ -537,19 +528,10 @@ pub fn concept_entry_read(
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    // A superclass edge is named by no field label of the concept's, whatever word a later field reads it by.
-    let words = concept
-        .fields
-        .iter()
-        .map(|field| match (field.plicity, &field.label) {
-            (Plicity::Explicit, Some(label)) => label.to_string(),
-            _ => String::new(),
-        })
-        .collect();
     let mut record = entry_with_fields(&concept.params, &concept.result_sort, &members, reader)?;
     entry_template(&mut record, concept.rep_pub, name, scheme, fields)?;
 
-    Ok((record, words))
+    Ok(record)
 }
 
 /// A record's entry at its template — its representation's visibility as the form writes it, its name's parent as its module, no polarities or variances, the scheme its form states — then each part its decorator sets.

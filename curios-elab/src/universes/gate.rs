@@ -6,9 +6,8 @@ mod tests;
 use {
     crate::{Error, universe_context_validate},
     curios_core::{
-        Bound, ConceptDecl, Definitions, Entrypoint, Global, InductDecl, Item, Minted, Place,
-        Places, StructDecl, Subterm, UniverseMetaId, Visit, rewrite_universe_levels,
-        universe_metas,
+        Bound, Definitions, Entrypoint, Global, InductDecl, Item, Minted, Place, Places,
+        StructDecl, Subterm, UniverseMetaId, Visit, rewrite_universe_levels, universe_metas,
     },
     curios_surface::Spellable,
     std::{
@@ -251,7 +250,7 @@ fn validate_definitions_instance_arities(
             )?;
         }
     }
-    let (inducts, structs, concepts) = entries_of(items);
+    let (inducts, structs) = entries_of(items);
     for (name, declaration) in &inducts {
         let shown = name.faithful();
         validate!(declaration.arity(), &format!("inductive {shown} arity"))?;
@@ -274,35 +273,15 @@ fn validate_definitions_instance_arities(
             &format!("structure {shown} result sort"),
         )?;
     }
-    // A concept is held with its record, so there is no concept without one to refuse.
-    for (name, concept) in &concepts {
-        let shown = name.faithful();
-        let record = structs
-            .get(name)
-            .copied()
-            .expect("a concept is held with its record");
-        if concept.universe_context != record.universe_context {
-            return Err(Error::UniverseInvariant(format!(
-                "concept {shown} and its structure registry have different universe contexts"
-            )));
-        }
-    }
     Ok(())
 }
 
-/// The registry entries `items` hold, each under the name of its former: the families, the records — a structure's or a concept's — and the concepts.
+/// The registry entries `items` hold that state a scheme, each under the name of its former: the families, and the records — a structure's or a concept's, a concept's scheme being its record's.
 type Entries<'a, T> = BTreeMap<Global, &'a T>;
 
 /// [`Entries`] of `items`.
-fn entries_of<'a>(
-    items: &[&'a Item],
-) -> (
-    Entries<'a, InductDecl>,
-    Entries<'a, StructDecl>,
-    Entries<'a, ConceptDecl>,
-) {
-    let (mut inducts, mut structs, mut concepts) =
-        (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
+fn entries_of<'a>(items: &[&'a Item]) -> (Entries<'a, InductDecl>, Entries<'a, StructDecl>) {
+    let (mut inducts, mut structs) = (BTreeMap::new(), BTreeMap::new());
     for item in items {
         for (name, nominal) in item.nominals() {
             if let Some(declaration) = nominal.inductive() {
@@ -311,13 +290,10 @@ fn entries_of<'a>(
             if let Some(record) = nominal.record() {
                 structs.insert(*name, record);
             }
-            if let Some(concept) = nominal.concept() {
-                concepts.insert(*name, concept);
-            }
         }
     }
 
-    (inducts, structs, concepts)
+    (inducts, structs)
 }
 
 /// Hold every universe `module` states to the scheme it is stated under: each definition's and registry entry's context, the levels its terms mention, and each instance's arity against the scheme of the name it instantiates.
@@ -361,7 +337,7 @@ pub fn validate_universes_in(
             )?;
         }
     }
-    let (inducts, structs, concepts) = entries_of(items);
+    let (inducts, structs) = entries_of(items);
     for (name, induct_decl) in &inducts {
         let shown = name.faithful();
         universe_context_validate(induct_decl.universe_context()).map_err(|error| {
@@ -408,22 +384,6 @@ pub fn validate_universes_in(
             parameter_count,
             &format!("structure {shown} result sort"),
         )?;
-        if let Some(concept) = concepts.get(name)
-            && concept.universe_context != struct_decl.universe_context
-        {
-            return Err(Error::UniverseInvariant(format!(
-                "concept and structure universe contexts differ for {shown}"
-            )));
-        }
-    }
-    for (name, concept) in &concepts {
-        let shown = name.faithful();
-        universe_context_validate(&concept.universe_context).map_err(|error| {
-            Error::UniverseInvariant(format!(
-                "concept {shown} has an invalid universe context: {}",
-                error.faithful()
-            ))
-        })?;
     }
     validate_definitions_instance_arities(definitions, places, items)?;
     Ok(())

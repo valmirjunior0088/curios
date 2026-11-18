@@ -2050,8 +2050,6 @@ fn process_items(
                     lowered.concepts.insert(
                         name,
                         curios_core::ConceptDecl {
-                            universe_context: curios_core::UniverseContext::empty(),
-                            fields: field_labels.clone(),
                             // What each `use` field reaches is read off its elaborated type, where the fields are elaborated.
                             supers: Vec::new(),
                         },

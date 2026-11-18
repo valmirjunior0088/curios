@@ -2383,20 +2383,15 @@ fn nominal_declared<D: Rendered>(
     scheme: Option<&UniverseContext>,
     frame: Frame<'_, D>,
 ) -> CoreNominals<D> {
-    let (mut form, words) = match nominal {
-        Nominal::Inductive(declaration) => (
-            CoreNominals::Induct(vec![family_declared(&name, declaration, frame)]),
-            Vec::new(),
-        ),
+    let mut form = match nominal {
+        Nominal::Inductive(declaration) => {
+            CoreNominals::Induct(vec![family_declared(&name, declaration, frame)])
+        }
         Nominal::Struct(record) => {
-            let written = record_declared(record, frame);
-            let words = written.words.clone();
-            (CoreNominals::Struct(vec![written.structure(&name)]), words)
+            CoreNominals::Struct(vec![record_declared(record, frame).structure(&name)])
         }
         Nominal::Concept { record, .. } => {
-            let written = record_declared(record, frame);
-            let words = written.words.clone();
-            (CoreNominals::Concept(vec![written.concept(&name)]), words)
+            CoreNominals::Concept(vec![record_declared(record, frame).concept(&name)])
         }
     };
 
@@ -2404,7 +2399,7 @@ fn nominal_declared<D: Rendered>(
     if let Some(context) = scheme.and_then(universe_context_written) {
         fields.push(("universe_context", context));
     }
-    fields.extend(entry_fields(name, nominal, &words, frame));
+    fields.extend(entry_fields(name, nominal, frame));
 
     let fields = decorated_fields(frame.spelling, fields);
     match &mut form {
@@ -2437,11 +2432,10 @@ fn declaration_terms(name: Global, island: Qualifier, nominal: &Nominal) -> Vec<
     terms
 }
 
-/// What a nominal declaration's entry holds beside what its form spells and its scheme: the module its representation belongs to where it is not its name's parent, and the polarities and the variances its elaboration filed; and a concept's own parts where they are not read off its record — its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
+/// What a nominal declaration's entry holds beside what its form spells and its scheme: the module its representation belongs to where it is not its name's parent, and the polarities and the variances its elaboration filed; and a concept's superclass edges where they are not read off its record.
 fn entry_fields<D: Rendered>(
     name: Global,
     nominal: &Nominal,
-    words: &[String],
     frame: Frame<'_, D>,
 ) -> Vec<Decoration<D>> {
     let (module, polarities, variances) = match nominal {
@@ -2485,11 +2479,6 @@ fn entry_fields<D: Rendered>(
     }
     if let Nominal::Concept { concept, record } = nominal {
         let mut own = Vec::<Decoration<D>>::new();
-        if concept.universe_context != record.universe_context {
-            let context = universe_context_written(&concept.universe_context)
-                .unwrap_or_else(|| nested(Vec::new()));
-            own.push(("universe_context", context));
-        }
         if concept.supers != concept_supers_read_off(name, record) {
             own.push((
                 "supers",
@@ -2498,18 +2487,6 @@ fn entry_fields<D: Rendered>(
                         .supers
                         .iter()
                         .map(|name| word_value(frame.spelling.symbol(name)))
-                        .collect(),
-                ),
-            ));
-        }
-        if concept.fields != words {
-            own.push((
-                "fields",
-                bracketed(
-                    concept
-                        .fields
-                        .iter()
-                        .map(|label| value(string(label.as_str())))
                         .collect(),
                 ),
             ));

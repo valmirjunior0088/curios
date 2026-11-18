@@ -1246,10 +1246,10 @@ pub fn record_superclasses(
     name: &Global,
     supers: Vec<Global>,
 ) -> Result<(), Error> {
-    let Some(concept) = context.concept(name).cloned() else {
+    if context.concept(name).is_none() {
         return Ok(());
-    };
-    context.update_concept(name, ConceptDecl { supers, ..concept });
+    }
+    context.update_concept(name, ConceptDecl { supers });
 
     check_concept_registry(context)
 }

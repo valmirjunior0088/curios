@@ -20,7 +20,7 @@ pub use scope::{
 };
 
 mod concept;
-pub use concept::{ArchivedConceptDecl, ConceptDecl, method_spelling};
+pub use concept::{ArchivedConceptDecl, ConceptDecl, method_labels, method_spelling};
 
 mod items;
 use items::*;
