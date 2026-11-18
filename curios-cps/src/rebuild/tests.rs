@@ -1490,6 +1490,155 @@ fn an_element_an_update_writes_over_is_held_by_nothing_else() {
     assert_eq!((beside.rows.len(), beside.lists.len()), (0, 1));
 }
 
+/// `main` reads a `Pair` out of a whole nothing else holds — the first element of a list of two, or the first slot of a product holding two — and switches on the `Pair`'s tag: at `1` it builds a `Pair` of its slot beside it dying, which nothing reads after, and otherwise hands the whole on, as a search that stops on a twig answers the twig and goes on with its list past an empty one. Where `between`, the arm that hands the whole on builds a `Pair` first.
+fn passed_over(element: bool, between: bool) -> Module {
+    module_with(|module| {
+        let pair = module.add_row(Row {
+            debug_name: Some("Pair".into()),
+            slots: vec![Slot::Tag, Slot::Opaque],
+        });
+        let holder = module.add_row(Row {
+            debug_name: Some("Holder".into()),
+            slots: vec![Slot::Opaque, Slot::Opaque],
+        });
+        let [v, p, q, whole, e, tag, f, n] = ["v", "p", "q", "whole", "e", "tag", "f", "n"]
+            .map(|name| module.add_value(Some(name.into())));
+
+        // The arm that takes the part: a `Pair` of its slot, built beside it dying.
+        let taken = module.add_node(halt(vec![Atom::Value(n)]));
+        let build = module.add_node(Node::LetValue {
+            result: n,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(f)]),
+            next: taken,
+        });
+        let read_slot = module.add_node(Node::LetIntrinsic {
+            result: f,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(e)],
+            next: build,
+        });
+        let take = module.reserve_continuation();
+        module.define_continuation(
+            take,
+            Continuation {
+                debug_name: None,
+                params: vec![],
+                body: read_slot,
+            },
+        );
+
+        // The arm that passes it over: the whole handed on.
+        let handed = module.add_node(halt(vec![Atom::Value(whole)]));
+        let pass_body = match between {
+            false => handed,
+            true => {
+                let w = module.add_value(Some("w".into()));
+                module.add_node(Node::LetValue {
+                    result: w,
+                    value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+                    next: handed,
+                })
+            }
+        };
+        let pass = module.reserve_continuation();
+        module.define_continuation(
+            pass,
+            Continuation {
+                debug_name: None,
+                params: vec![],
+                body: pass_body,
+            },
+        );
+
+        let switch = module.add_node(Node::Switch {
+            scrutinee: Atom::Value(tag),
+            cases: std::collections::BTreeMap::from([(
+                1,
+                Edge {
+                    target: take,
+                    args: vec![],
+                },
+            )]),
+            default: Some(Edge {
+                target: pass,
+                args: vec![],
+            }),
+        });
+        let arms = module.add_node(Node::LetCont {
+            continuations: vec![take, pass],
+            body: switch,
+        });
+        let read_tag = module.add_node(Node::LetIntrinsic {
+            result: tag,
+            op: Intrinsic::RowGet(pair, 0),
+            args: vec![Atom::Value(e)],
+            next: arms,
+        });
+        let read_part = module.add_node(Node::LetIntrinsic {
+            result: e,
+            op: match element {
+                true => Intrinsic::ListGet,
+                false => Intrinsic::RowGet(holder, 0),
+            },
+            args: match element {
+                true => vec![Atom::Value(whole), nat(0)],
+                false => vec![Atom::Value(whole)],
+            },
+            next: read_tag,
+        });
+        let build_whole = module.add_node(Node::LetValue {
+            result: whole,
+            value: match element {
+                true => ValueExpr::List(vec![Atom::Value(p), Atom::Value(q)]),
+                false => ValueExpr::Row(holder, vec![Atom::Value(p), Atom::Value(q)]),
+            },
+            next: read_part,
+        });
+        let second = module.add_node(Node::LetValue {
+            result: q,
+            value: ValueExpr::Row(pair, vec![nat(0), Atom::Value(v)]),
+            next: build_whole,
+        });
+        let first = module.add_node(Node::LetValue {
+            result: p,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+            next: second,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: v,
+            op: Intrinsic::NatAdd,
+            args: vec![nat(3), nat(4)],
+            next: first,
+        })
+    })
+}
+
+/// A part read out of a whole and passed over, the whole handed on only where the part is not taken, is held by nothing else where it is taken: on the path that hands the whole on, the part is named no more and nothing between its read and that hand-off writes it, so the arm that takes it rebuilds it, an element of a list or a field of a product alike. Where the path that hands the whole on builds first, a rebuild there could write the part before the whole goes on, so the part is the whole's and nothing is rebuilt. Mutation-checked: keeping a part wherever its whole is consumed after the read, as the rule once did, rebuilds neither.
+#[test]
+fn a_part_a_search_passes_over_is_held_by_nothing_else_where_it_is_taken() {
+    for element in [true, false] {
+        let kind = match element {
+            true => "an element",
+            false => "a field",
+        };
+        let taken = passed_over(element, false);
+        taken.verify().unwrap();
+        assert_eq!(
+            in_place(&taken).rows.len(),
+            1,
+            "{kind}, passed over\n{taken}"
+        );
+
+        let built_between = passed_over(element, true);
+        built_between.verify().unwrap();
+        assert_eq!(
+            in_place(&built_between).rows.len(),
+            0,
+            "{kind}, a construction between\n{built_between}"
+        );
+    }
+}
+
 /// `main` builds a `Fork` of a value nothing else holds and reads its second slot, then builds a `Fork` keeping that slot and, after it, a fresh one keeping nothing of it, and hands both on. The fresh construction is the first the arena holds.
 fn fresh_before_keeping() -> Module {
     module_with(|module| {

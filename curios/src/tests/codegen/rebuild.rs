@@ -919,9 +919,9 @@ fn a_constant_tree_a_map_holds_is_inserted_into_by_a_copy() {
     }
 }
 
-/// A search tree's insert that hands back the node it was handed where the key is found: the child it hands on is held by a node it may return, so what the insert of a child is handed is shared, as what it hands back then is, no unique value enters the loop and nothing is rebuilt.
+/// A search tree's insert that hands back the node it was handed where the key is found: the node it may return holds the child it hands on, but on another path, so where the insert of a child is handed that child, the node is rebuilt around what comes back and holds the child no more, and the child is the insert's alone. Each level that descends rebuilds its node, and two walks over the same keys, the second finding each, answer as the same program with nothing rebuilt does.
 #[test]
-fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
+fn an_insert_returning_the_node_it_was_handed_rebuilds_where_it_descends() {
     let tree = r#"
         induct Tree: Type
         | leaf()
@@ -941,11 +941,16 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
         let walk(n: Nat, x: Nat, t: Tree) -> Tree =
             match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     "#;
-    let (_, module) = modules(&program(
+    let (lowered, module) = modules(&program(
         tree,
-        "size(walk(n, (n + 1) % 65537, Tree/leaf()))",
+        "size(walk(n, (n + 1) % 65537, walk(n, (n + 1) % 65537, Tree/leaf())))",
     ));
-    assert_eq!(rebuilds_of(&module, "/Tree"), 0, "{module}");
+    assert!(rebuilds_of(&module, "/Tree") > 0, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "1", "7", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
 }
 
 /// A probe through an accessor before each replace: `get` hands back a field of the twigs it is handed, so a call of it reads them as a row read in the probe's own body would, its parameter borrowing them, and every level the replace takes apart is rebuilt as where the probe reads the twigs itself. Mutation-checked: with an accessor's returned field making its parameter own, the probe consumes the trie and nothing is rebuilt.

@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a part read out of a unique value — a field, an element, what an accessor hands back — is unique where every path from the read that consumes that value before a run binds it again consumes it with the part dead and untouched: named no more there, and written by nothing between, no consumption of the part or of a field read off it and no construction a rebuild may become ([`Shape::part_kept_after`]), which is Perceus's rule read as One-Shot Bufferize reads a write in place, in conflict only between a value's definition and a later read of what it was, and what lets a path copy qualify; and where no run comes back to the read with that value still bound, each round's read naming the one object. The converse holds of the value: one consumed while a field read out of it is still live, or handed on beside such a read, is shared, since what it is handed to may take that field apart and rebuild it in place under the read. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
 //! **Payloads by slot.** A construction holding what something else holds is shared with it, since a read of the construction hands that out; only a row, a tuple or a list counts, a number holding nothing a write lands in. A slot whose reads nothing takes apart, wherever what they hand out flows, is a payload's and carries the fact itself: a shared value stored in it shares the slot and leaves the construction one nothing else holds, and a read of a slot so shared is shared. So a leaf built over a payload read back out of another map is a leaf nothing else holds, and every fork over it is rebuilt; a child's slot stays shared with the construction that holds it, so one tree something else holds says nothing of another. Which slots are payloads decides what the facts prove and never whether they hold, a slot's fact covering every store into it.
 //!
@@ -162,10 +162,8 @@ pub fn routes(module: &Module) -> Routes {
                 match *def {
                     Def::Field(of) => {
                         let read = shape.binder[&value];
-                        let consumed_after = shape
-                            .consumed(of, &borrowed)
-                            .iter()
-                            .any(|point| shape.reaches_holding(of, read, point.node));
+                        let consumed_after =
+                            shape.part_kept_after(module, value, of, read, None, &borrowed);
                         let slot = slot_read(module, shape, of, read);
                         rules.add(move |solver| {
                             // A slot's fact is one for both versions: an object either builds may reach a read in either.
@@ -180,7 +178,10 @@ pub fn routes(module: &Module) -> Routes {
                         });
                     }
                     Def::Element(of) => {
-                        let kept = shape.element_kept_after(module, value, of, &borrowed);
+                        let read = shape.binder[&value];
+                        let index = element_index(module, read);
+                        let kept =
+                            shape.part_kept_after(module, value, of, read, Some(index), &borrowed);
                         rules.add(move |solver| {
                             if kept || shared(solver, world, &Atom::Value(of)) {
                                 solver.join((world, Key::Value(value)), Shared(true));
@@ -221,10 +222,8 @@ pub fn routes(module: &Module) -> Routes {
                         if let Some(access) = shape.accessed_under(value, &borrowed) =>
                     {
                         let of = access.of;
-                        let consumed_after = shape
-                            .consumed(of, &borrowed)
-                            .iter()
-                            .any(|point| shape.reaches_holding(of, access.call, point.node));
+                        let consumed_after =
+                            shape.part_kept_after(module, value, of, access.call, None, &borrowed);
                         let slots = access.slots.clone();
                         rules.add(move |solver| {
                             let marked = slots.iter().any(|slot| {
@@ -1177,6 +1176,8 @@ struct Shape {
     open: BTreeSet<FunctionId>,
     /// The values that may be constant data, each a global every use of it shares.
     constant: BTreeSet<ValueId>,
+    /// The constructions of a row in each function, any of which a rebuild may become, writing into a value of that row in place.
+    writes: BTreeMap<FunctionId, Vec<NodeId>>,
     /// The slots whose reads nothing takes apart, each carrying its own sharing.
     payload: BTreeSet<SlotKey>,
     /// The blocks reachable from each block's successors, as asked.
@@ -1211,6 +1212,7 @@ impl Shape {
             returns: BTreeMap::new(),
             open: escaping_in_bodies(module),
             constant: module.constant_data(),
+            writes: BTreeMap::new(),
             payload: BTreeSet::new(),
             reach: RefCell::new(BTreeMap::new()),
             reach_outside: RefCell::new(BTreeMap::new()),
@@ -1235,6 +1237,15 @@ impl Shape {
                     shape.place.insert(at, (block, chain.len()));
                     chain.push(at);
                     let node = module.node(at).unwrap();
+                    if matches!(
+                        node,
+                        Node::LetValue {
+                            value: ValueExpr::Row(..),
+                            ..
+                        }
+                    ) {
+                        shape.writes.entry(function).or_default().push(at);
+                    }
                     for (value, site, into) in node_sites(node, definition.return_cont) {
                         named.insert(value);
                         shape.uses.entry(value).or_default().push((at, site, into));
@@ -1768,22 +1779,40 @@ impl Shape {
             .collect()
     }
 
-    /// Whether the list `of` is consumed after the read binding its element `value`, while it is the list that read: anywhere but at an update of it at the index the read reads, which writes over the element where it writes in place, and copies a list something else holds otherwise, which the list's own sharing covers.
-    fn element_kept_after(
+    /// Whether `part`, read out of `of` at `read`, is still held by `of` where `of` is consumed after the read, while it is the value that read: where the consumption hands `of` on, whoever takes it may read `part` out of it again, so `part` is kept where it is still named past that consumption, or something between the read and it may write `part` or a field read off it — a consumption of one, an update of a list among them, or a construction a rebuild may become — since a write there changes what the later reader finds in `of`; an update of `of` itself writes the whole, not what was read out of it. Elsewhere `of` is consumed with `part` dead and untouched since the read, as One-Shot Bufferize finds a write in place in conflict only where it falls between a value's definition and a later read of what it was. `overwritten` is the index an element was read at, where an update of `of` there writes over the element, and copies a list something else holds, which the list's own sharing covers.
+    fn part_kept_after(
         &self,
         module: &Module,
-        value: ValueId,
+        part: ValueId,
         of: ValueId,
+        read: NodeId,
+        overwritten: Option<Option<&Atom>>,
         borrowed: &Borrowed,
     ) -> bool {
-        let read = self.binder[&value];
-        let index = match module.node(read) {
-            Some(Node::LetIntrinsic { args, .. }) => args.get(1),
-            _ => None,
-        };
+        let parts = self.with_fields(part);
+        let touched = parts
+            .iter()
+            .flat_map(|value| self.consumed(*value, borrowed))
+            .map(|point| point.node)
+            .chain(
+                self.home
+                    .get(&part)
+                    .and_then(|function| self.writes.get(function))
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            )
+            .collect::<Vec<_>>();
         self.consumed(of, borrowed).iter().any(|point| {
             self.reaches_holding(of, read, point.node)
-                && !self.overwrites(module, point.node, of, index, read)
+                && overwritten
+                    .is_none_or(|index| !self.overwrites(module, point.node, of, index, read))
+                && (self.live_after(module, *point, part)
+                    || touched.iter().any(|between| {
+                        *between != point.node
+                            && self.reaches(read, *between)
+                            && self.reaches(*between, point.node)
+                    }))
         })
     }
 
@@ -2319,10 +2348,8 @@ impl<'s> Facts<'s> {
                 match *def {
                     Def::Field(of) => {
                         let read = shape.binder[&value];
-                        let consumed_after = shape
-                            .consumed(of, borrowed)
-                            .iter()
-                            .any(|point| shape.reaches_holding(of, read, point.node));
+                        let consumed_after =
+                            shape.part_kept_after(module, value, of, read, None, borrowed);
                         let slot = slot_read(module, shape, of, read);
                         rules.add(move |solver| {
                             let marked = slot.is_some_and(|slot| {
@@ -2334,7 +2361,10 @@ impl<'s> Facts<'s> {
                         });
                     }
                     Def::Element(of) => {
-                        let kept = shape.element_kept_after(module, value, of, borrowed);
+                        let read = shape.binder[&value];
+                        let index = element_index(module, read);
+                        let kept =
+                            shape.part_kept_after(module, value, of, read, Some(index), borrowed);
                         rules.add(move |solver| {
                             if kept || shared(solver, &Atom::Value(of)) {
                                 solver.join(Key::Value(value), Shared(true));
@@ -2366,10 +2396,8 @@ impl<'s> Facts<'s> {
                         if let Some(access) = shape.accessed_under(value, borrowed) =>
                     {
                         let of = access.of;
-                        let consumed_after = shape
-                            .consumed(of, borrowed)
-                            .iter()
-                            .any(|point| shape.reaches_holding(of, access.call, point.node));
+                        let consumed_after =
+                            shape.part_kept_after(module, value, of, access.call, None, borrowed);
                         let slots = access.slots.clone();
                         rules.add(move |solver| {
                             let marked = slots.iter().any(|slot| {
@@ -2691,6 +2719,14 @@ fn sources(
         }
     }
     sources
+}
+
+/// The index an element read at `read` reads at.
+fn element_index(module: &Module, read: NodeId) -> Option<&Atom> {
+    match module.node(read) {
+        Some(Node::LetIntrinsic { args, .. }) => args.get(1),
+        _ => None,
+    }
 }
 
 /// Whether no constant may be `value` at `node`: none reaches it, or a test of its tag around `node` rules out every constant's tag.
