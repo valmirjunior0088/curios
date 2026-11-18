@@ -13,7 +13,7 @@ Measured at `997cec045` (counted, the protocol under *What is known*), per eleme
 | `Bytes/fold(b, 0, (b, n) => n + 1)` | 257 | 104 | 39 | 37 | 31 | 46 |
 | `Str/fold(s, 0, (c, n) => n)` | 248 | 110 | 45 | 49 | 28 | 16 |
 
-`/std/Fmt/parse` is such a walk with its own step on top: a `Fmt/render` call's least budget grows by about 390 units a character of its format (`fmt1_200` to `fmt1_400`), of which the frame peaks are a tenth, the memo entries and the step's `let` destructuring a sixth each, and the betas two fifths.
+`/std/Fmt/parse` is such a walk with its own step on top: a `Fmt/render` call's least budget grows by about 390 units a character of its format, from a format of 200 characters to one of 400, of which the frame peaks are a tenth, the memo entries and the step's `let` destructuring a sixth each, and the betas two fifths.
 
 The frame peaks are the gap. The betas are construction — a step opens its parameters, a lifted `go` carrying what it closes over — and the memo entries are kept on purpose, below.
 
