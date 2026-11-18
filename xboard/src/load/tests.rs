@@ -70,7 +70,7 @@ fn a_ticket_reads_from_its_record_and_its_witnesses_texts() {
 
     assert_eq!(ticket.title, "A forged proof");
     assert_eq!(ticket.found_on, Date::new(2026, 10, 2).expect("a day"));
-    assert_eq!(ticket.filed, Filed::Live(Status::Open));
+    assert_eq!(ticket.status, Status::Open);
 
     let [program, module] = &ticket.witnesses[..] else {
         panic!("the ticket carries its two witnesses");
@@ -338,56 +338,52 @@ fn a_unit_is_mounted_at_a_path_of_one_name() {
     );
 }
 
-/// An archived ticket's record, its witness stating no refusal.
+/// An archived ticket's record, its witness kept as it was filed: a history through a step no board takes, and a file no directory holds.
 const ARCHIVED: &str = r#"
     title = "A forged proof"
     reason = "its construct is gone"
 
     [[witness]]
-    what = "a program"
-    source = "a_program.crs"
+    what = "a history"
+    step = [
+        { mount = "/lib", source = "lib.crs" },
+        { retired = "/lib" },
+        { source = "proof.crsc" },
+    ]
+    refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]
 "#;
 
-/// The archived ticket `record` states, read with the text of its witness.
-fn archived(record: &str) -> Result<Ticket, String> {
-    let files = BTreeMap::from([
-        (METADATA, record),
-        ("a_program.crs", "/std/Bool/True/qed()"),
-    ]);
-
-    load_archived(DIRECTORY, &files)
+/// The archived ticket `record` states, read from its record alone.
+fn archived(record: &str) -> Result<Archived, String> {
+    load_archived(DIRECTORY, &BTreeMap::from([(METADATA, record)]))
 }
 
+/// The loader reads an archived record's title and reason and nothing else of it, so a witness kept as it was filed reads whatever words it was written in.
 #[test]
-fn an_archived_ticket_reads_its_reason_and_witnesses_expecting_nothing() {
-    let ticket = archived(ARCHIVED).expect("the archived ticket reads");
+fn an_archived_ticket_reads_its_title_and_reason_alone() {
+    let archived = archived(ARCHIVED).expect("the archived ticket reads");
 
-    assert_eq!(
-        ticket.filed,
-        Filed::Archived("its construct is gone".to_string())
-    );
-    assert!(matches!(&ticket.witnesses[..], [witness] if witness.expect.is_empty()));
+    assert_eq!(archived.title, "A forged proof");
+    assert_eq!(archived.found_on, Date::new(2026, 10, 2).expect("a day"));
+    assert_eq!(archived.reason, "its construct is gone");
 }
 
-/// Each root's record holds its own words: a live record states no reason, an archived one no status, and an archived witness no refusal.
+/// A live record holds its own words, and the reason an archived one states is none of them.
 #[test]
-fn a_record_states_only_the_words_of_its_root() {
+fn a_live_record_states_no_reason() {
     assert!(
         refusal(&RECORD.replace("status = ", "reason = \"gone\"\nstatus = "))
             .contains("unknown field `reason`")
     );
+}
+
+/// An archived ticket's directory is named for its day and its title, as a live one's is.
+#[test]
+fn an_archived_ticket_is_named_for_its_day_and_title() {
     assert!(
-        archived(&ARCHIVED.replace("reason = ", "status = \"fixed\"\nreason = "))
+        archived(&ARCHIVED.replace("A forged proof", "Another proof"))
             .expect_err("refused")
-            .contains("unknown field `status`")
-    );
-    assert!(
-        archived(&ARCHIVED.replace(
-            "source = \"a_program.crs\"",
-            "source = \"a_program.crs\"\nrefused = [{ by = \"elaborator\" }]"
-        ))
-        .expect_err("refused")
-        .contains("unknown field `refused`")
+            .contains("its title files the ticket as")
     );
 }
 
@@ -413,15 +409,16 @@ fn an_archived_ticket_is_filed_under_a_part_the_board_has() {
             ARCHIVED,
         ),
         (
-            "admission/2026_10_02_a_forged_proof/a_program.crs",
+            "admission/2026_10_02_a_forged_proof/lib.crs",
             "/std/Bool/True/qed()",
         ),
     ];
 
     let parts = load_board([part], ticket).expect("the board reads");
-    assert!(
-        matches!(&parts[..], [admission] if matches!(&admission.tickets[..], [ticket] if matches!(ticket.filed, Filed::Archived(_))))
-    );
+    assert!(matches!(
+        &parts[..],
+        [admission] if admission.tickets.is_empty() && matches!(&admission.archived[..], [_])
+    ));
     assert!(
         load_board([], ticket)
             .expect_err("a part the board does not have is refused")

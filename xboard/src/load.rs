@@ -1,12 +1,14 @@
-//! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts. The archive, `xboard/archive/`, holds a directory for a part the board has, and in it a directory per ticket filed there, whose record states the `reason` it is archived where a live one states its `status`, and whose witnesses state no refusal.
+//! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts. The archive, `xboard/archive/`, holds a directory for a part the board has, and in it a directory per ticket filed there, whose record states the `reason` it is archived where a live one states its `status`, and of which the loader reads its title and its reason and nothing else.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds or unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed` or, archived, its reason is stated, a witness on the board states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds or unmounts only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Checker, Date, Expected, Filed, Part, Proof, Status, Step, Ticket, Within, Witness},
+    crate::{
+        Archived, Checker, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness,
+    },
     curios_common::Qualifier,
     curios_core::Global,
     curios_verdict::test_support::Written,
@@ -45,34 +47,11 @@ struct WitnessRecord {
     refused: Vec<RefusedRecord>,
 }
 
-/// An archived ticket's record: its title, why it is archived, and its witnesses.
+/// An archived ticket's record as the loader reads it: its title and why it is archived. Every other field it holds, its witnesses among them, is kept as it was filed and read by nothing.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct ArchivedRecord {
     title: String,
     reason: String,
-    witness: Vec<ArchivedWitnessRecord>,
-}
-
-/// An archived witness's entry: what it puts, and its proof's file or its history's steps. It states no refusal, since no checker reads it.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ArchivedWitnessRecord {
-    what: String,
-    source: Option<String>,
-    #[serde(default)]
-    step: Vec<StepRecord>,
-}
-
-impl From<ArchivedWitnessRecord> for WitnessRecord {
-    fn from(ArchivedWitnessRecord { what, source, step }: ArchivedWitnessRecord) -> Self {
-        WitnessRecord {
-            what,
-            source,
-            step,
-            refused: Vec::new(),
-        }
-    }
 }
 
 /// One step of a witness's history: a unit, by the path it is mounted at and its file; a record withheld, by the unit's path and the names withheld, all of them where none is listed; a unit unmounted, by its path; or the proof, its file alone.
@@ -153,24 +132,26 @@ pub fn load_board<'f>(
             })?;
             let PartRecord { description } = toml::from_str(record)
                 .map_err(|error| format!("tickets/{name}/{METADATA}: {error}"))?;
-            let live = tickets.into_iter().map(|(directory, files)| {
-                load_ticket(directory, &files).map_err(|why| format!("tickets/{name}/{why}"))
-            });
-            let archived =
-                archive
-                    .remove(name)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(directory, files)| {
-                        load_archived(directory, &files)
-                            .map_err(|why| format!("archive/{name}/{why}"))
-                    });
-            let tickets = live.chain(archived).collect::<Result<Vec<_>, _>>()?;
+            let tickets = tickets
+                .into_iter()
+                .map(|(directory, files)| {
+                    load_ticket(directory, &files).map_err(|why| format!("tickets/{name}/{why}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let archived = archive
+                .remove(name)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(directory, files)| {
+                    load_archived(directory, &files).map_err(|why| format!("archive/{name}/{why}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Part {
                 name: name.to_string(),
                 description,
                 tickets,
+                archived,
             })
         })
         .collect()
@@ -184,19 +165,19 @@ pub fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Tick
         witness,
     } = record_of(directory, files)?;
 
-    filed_ticket(directory, files, title, Filed::Live(status), witness)
+    filed_ticket(directory, files, title, status, witness)
 }
 
-/// The ticket filed in the archive in the directory named `directory`, read as [`load_ticket`] reads one on the board.
-pub fn load_archived(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Ticket, String> {
-    let ArchivedRecord {
-        title,
-        reason,
-        witness,
-    } = record_of(directory, files)?;
-    let witness = witness.into_iter().map(WitnessRecord::from).collect();
+/// The ticket filed in the archive in the directory named `directory`: the title and the reason its record states, its directory named as a ticket's on the board is, and nothing else read of it.
+pub fn load_archived(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Archived, String> {
+    let ArchivedRecord { title, reason } = record_of(directory, files)?;
+    let found_on = found_on(directory, &title)?;
 
-    filed_ticket(directory, files, title, Filed::Archived(reason), witness)
+    Ok(Archived {
+        title,
+        found_on,
+        reason,
+    })
 }
 
 /// The record of the ticket filed in `directory`, read off its `metadata.toml`.
@@ -211,15 +192,8 @@ fn record_of<R: for<'de> Deserialize<'de>>(
     toml::from_str(record).map_err(|error| format!("{directory}/{METADATA}: {error}"))
 }
 
-/// The ticket titled `title`, filed as `filed` in `directory`, whose record states `witness`: its witnesses' texts read from `files`, each witness on the board read with the refusals it expects.
-fn filed_ticket(
-    directory: &str,
-    files: &BTreeMap<&str, &str>,
-    title: String,
-    filed: Filed,
-    witness: Vec<WitnessRecord>,
-) -> Result<Ticket, String> {
-    let in_record = |why: String| format!("{directory}/{METADATA}: {why}");
+/// The day the ticket filed in `directory` was found, where the directory is named for that day and then for `title`, the ticket's.
+fn found_on(directory: &str, title: &str) -> Result<Date, String> {
     let Some((day, named)) = directory.split_at_checked(DAY.len()) else {
         return Err(format!(
             "{directory}: a ticket's directory is named for the day it was found, `{DAY}`, then its title"
@@ -228,12 +202,26 @@ fn filed_ticket(
     let found_on = day_of(day).ok_or_else(|| {
         format!("{directory}: a ticket's directory is named for the day it was found, `{DAY}`, then its title, and `{day}` is no day the calendar has")
     })?;
-    let filed_name = filed_as(&title);
+    let filed_name = filed_as(title);
     if named.strip_prefix('_') != Some(filed_name.as_str()) {
-        return Err(in_record(format!(
-            "its title files the ticket as `{day}_{filed_name}`"
-        )));
+        return Err(format!(
+            "{directory}/{METADATA}: its title files the ticket as `{day}_{filed_name}`"
+        ));
     }
+
+    Ok(found_on)
+}
+
+/// The ticket titled `title`, at `status`, filed in `directory`, whose record states `witness`: its witnesses' texts read from `files`, each read with the refusals it expects.
+fn filed_ticket(
+    directory: &str,
+    files: &BTreeMap<&str, &str>,
+    title: String,
+    status: Status,
+    witness: Vec<WitnessRecord>,
+) -> Result<Ticket, String> {
+    let in_record = |why: String| format!("{directory}/{METADATA}: {why}");
+    let found_on = found_on(directory, &title)?;
     if witness.is_empty() {
         return Err(in_record("a ticket carries a witness".to_string()));
     }
@@ -274,9 +262,6 @@ fn filed_ticket(
                 proof,
                 expect: Vec::new(),
             };
-            if let Filed::Archived(_) = filed {
-                return Ok(witness);
-            }
             if record.refused.is_empty() {
                 return Err(format!(
                     "the witness `{}` states what refuses it",
@@ -304,7 +289,7 @@ fn filed_ticket(
     Ok(Ticket {
         title,
         found_on,
-        filed,
+        status,
         witnesses,
     })
 }

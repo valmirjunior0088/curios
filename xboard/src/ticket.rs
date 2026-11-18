@@ -15,6 +15,8 @@ pub struct Part {
     pub name: String,
     pub description: String,
     pub tickets: Vec<Ticket>,
+    /// The tickets the archive files under it.
+    pub archived: Vec<Archived>,
 }
 
 /// Where a ticket stands, by the word its record states it in.
@@ -27,15 +29,6 @@ pub enum Status {
     Fixed,
 }
 
-/// Where a ticket is filed, by the root its directory stands under.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Filed {
-    /// On the board, `xboard/tickets/`, at the status its record states.
-    Live(Status),
-    /// In the archive, `xboard/archive/`, for the reason its record states: the construct its witnesses are written in is gone from the language, so each fails before any checker reads it.
-    Archived(String),
-}
-
 /// One flaw: a closed term the checkers admitted at `/std/Bool/False`. Nothing else is a ticket — not a misjudgment no proof of `False` was built from, not a refusal of something sound, not a program compiled to do what its source does not say.
 ///
 /// A whole one, as its directory holds it and put through a run, is `EXAMPLE` in this crate's `report/tests.rs`.
@@ -44,9 +37,19 @@ pub struct Ticket {
     pub title: String,
     /// The day it was found.
     pub found_on: Date,
-    pub filed: Filed,
-    /// The proofs of `False` the flaw admitted: each is refused while the ticket is fixed, and fails before any checker once it is archived.
+    pub status: Status,
+    /// The proofs of `False` the flaw admitted: each is refused as it expects while the ticket is fixed.
     pub witnesses: Vec<Witness>,
+}
+
+/// A ticket in the archive, `xboard/archive/`: its title, the day it was found and the reason its record states, which is all the loader reads of it. Its witnesses stay in its directory as they were filed, and nothing puts them.
+#[derive(Debug)]
+pub struct Archived {
+    pub title: String,
+    /// The day it was found.
+    pub found_on: Date,
+    /// Why it is archived: the construct its witnesses are written in is gone from the language, or a construction no type of the trusted base can hold.
+    pub reason: String,
 }
 
 /// One term put to the checkers at `False` on every run, at the end of a history: the steps it states walked over a store of their own, then the proof put over the prelude and every unit they compiled. Admitted, it is the flaw; refused as it expects, it is what holds the flaw shut.
@@ -57,7 +60,7 @@ pub struct Witness {
     /// The steps walked before the proof is put: none where it is put over the prelude alone.
     pub steps: Vec<Step>,
     pub proof: Proof,
-    /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass. None for an archived witness, which no checker reads.
+    /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass.
     pub expect: Vec<Expected>,
 }
 

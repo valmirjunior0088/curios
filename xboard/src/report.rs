@@ -1,10 +1,10 @@
-//! A report: every ticket on a board put to the checkers, where each one stands for it, and what was found in each part.
+//! A report: every ticket on a board put to the checkers, where each one stands for it, the archive's listed beside them, and what was found in each part.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Answer, Filed, Part, Refusal, Status, Ticket, Witness},
+    crate::{Answer, Archived, Part, Refusal, Status, Ticket, Witness},
     std::fmt,
 };
 
@@ -21,10 +21,6 @@ pub enum Standing {
     Shut,
     /// Open, and a witness is refused by an error it does not expect: it no longer shows the flaw, or something closed the flaw another way, and the ticket says neither.
     Unshown(Vec<String>),
-    /// Archived, and every witness fails before any checker reads it.
-    Archived,
-    /// Archived, and a witness is read: what the archive says is gone from the language is back, and the ticket belongs on the board.
-    Revived(Vec<String>),
 }
 
 impl Standing {
@@ -32,7 +28,7 @@ impl Standing {
     pub fn fails(&self) -> bool {
         matches!(
             self,
-            Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_) | Standing::Revived(_)
+            Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_)
         )
     }
 
@@ -43,18 +39,12 @@ impl Standing {
             Standing::Open => "OPEN",
             Standing::Shut => "SHUT",
             Standing::Unshown(_) => "UNSHOWN",
-            Standing::Archived => "ARCHIVED",
-            Standing::Revived(_) => "REVIVED",
         }
     }
 }
 
-/// Where a ticket filed as `filed` stands for what its witnesses answered.
-pub fn standing(filed: &Filed, witnesses: &[Witness], answers: &[Answer]) -> Standing {
-    let status = match filed {
-        Filed::Live(status) => *status,
-        Filed::Archived(_) => return archived(witnesses, answers),
-    };
+/// Where a ticket at `status` stands for what its witnesses answered.
+pub fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> Standing {
     // Each witness not refused as it expects, with whether it was admitted.
     let unmet = witnesses
         .iter()
@@ -82,21 +72,6 @@ pub fn standing(filed: &Filed, witnesses: &[Witness], answers: &[Answer]) -> Sta
     }
 }
 
-/// Where an archived ticket stands for what its witnesses answered: each must fail before any checker reads it.
-fn archived(witnesses: &[Witness], answers: &[Answer]) -> Standing {
-    let read = witnesses
-        .iter()
-        .zip(answers)
-        .filter(|(_, answer)| !answer.unread())
-        .map(|(witness, answer)| format!("{}: read, and {}", witness.what, refusers(answer)))
-        .collect::<Vec<_>>();
-
-    match read.is_empty() {
-        true => Standing::Archived,
-        false => Standing::Revived(read),
-    }
-}
-
 /// One line of a report: a ticket, with what its witnesses answered and where it stands.
 #[derive(Debug)]
 pub struct Row<'b> {
@@ -115,7 +90,7 @@ impl<'b> Row<'b> {
             .iter()
             .map(Witness::answer)
             .collect::<Vec<_>>();
-        let standing = standing(&ticket.filed, &ticket.witnesses, &answers);
+        let standing = standing(ticket.status, &ticket.witnesses, &answers);
 
         Row {
             part,
@@ -147,22 +122,35 @@ impl fmt::Display for Row<'_> {
             self.ticket.title
         )?;
         writeln!(formatter, "             part     {}", self.part)?;
-        if let Filed::Archived(reason) = &self.ticket.filed {
-            writeln!(formatter, "             reason   {reason}")?;
-        }
         for (witness, answer) in self.ticket.witnesses.iter().zip(&self.answers) {
             writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
         }
-        if let Standing::Regressed(problems)
-        | Standing::Unshown(problems)
-        | Standing::Revived(problems) = &self.standing
-        {
+        if let Standing::Regressed(problems) | Standing::Unshown(problems) = &self.standing {
             for problem in problems {
                 writeln!(formatter, "             !        {problem}")?;
             }
         }
 
         Ok(())
+    }
+}
+
+/// One line of a report for a ticket of the archive: its title, the part it is filed under and why it is archived, with nothing put.
+struct ArchivedRow<'b> {
+    part: &'b str,
+    archived: &'b Archived,
+}
+
+impl fmt::Display for ArchivedRow<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Archived {
+            title,
+            found_on,
+            reason,
+        } = self.archived;
+        writeln!(formatter, "  {:<9}  {found_on}  {title}", "ARCHIVED")?;
+        writeln!(formatter, "             part     {}", self.part)?;
+        writeln!(formatter, "             reason   {reason}")
     }
 }
 
@@ -188,7 +176,7 @@ impl<'b> Report<'b> {
         Report { board, rows }
     }
 
-    /// Whether any ticket regressed, was closed without saying so, stands open on a witness refused by an error it does not expect, or is archived with a witness read.
+    /// Whether any ticket regressed, was closed without saying so, or stands open on a witness refused by an error it does not expect.
     pub fn fails(&self) -> bool {
         self.rows.iter().any(|row| row.standing.fails())
     }
@@ -219,55 +207,75 @@ impl fmt::Display for Report<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             formatter,
-            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so, {} open and refused otherwise; {} archived, {} of them read",
-            self.rows
-                .iter()
-                .filter(|row| matches!(row.ticket.filed, Filed::Live(_)))
-                .count(),
+            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so, {} open and refused otherwise; {} archived",
+            self.rows.len(),
             self.count(|standing| *standing == Standing::Holds),
             self.count(|standing| *standing == Standing::Open),
             self.count(|standing| matches!(standing, Standing::Regressed(_))),
             self.count(|standing| *standing == Standing::Shut),
             self.count(|standing| matches!(standing, Standing::Unshown(_))),
-            self.rows
+            self.board
                 .iter()
-                .filter(|row| matches!(row.ticket.filed, Filed::Archived(_)))
-                .count(),
-            self.count(|standing| matches!(standing, Standing::Revived(_))),
+                .map(|part| part.archived.len())
+                .sum::<usize>(),
         )?;
 
-        let mut rows = self.rows.iter().collect::<Vec<_>>();
-        rows.sort_by_key(|row| (!row.standing.fails(), row.ticket.found_on));
+        // Each part's tickets, then its archive's, failing first and then by the day each was found.
+        let mut rows = self.rows.iter();
+        let mut lines = Vec::new();
+        for part in self.board {
+            for row in rows.by_ref().take(part.tickets.len()) {
+                lines.push((
+                    (!row.standing.fails(), row.ticket.found_on),
+                    row.to_string(),
+                ));
+            }
+            for archived in &part.archived {
+                let row = ArchivedRow {
+                    part: &part.name,
+                    archived,
+                };
+                lines.push(((true, archived.found_on), row.to_string()));
+            }
+        }
+        lines.sort_by_key(|(order, _)| *order);
 
-        for row in rows {
-            write!(formatter, "\n{row}")?;
+        for (_, line) in lines {
+            write!(formatter, "\n{line}")?;
         }
 
         writeln!(formatter, "\nparts: {}", self.board.len())?;
 
-        for part in self.board.iter().filter(|part| !part.tickets.is_empty()) {
-            let live = part
-                .tickets
-                .iter()
-                .filter(|ticket| matches!(ticket.filed, Filed::Live(_)))
-                .count();
-            write!(formatter, "  {} — {live} ticket(s)", part.name)?;
-            if live < part.tickets.len() {
-                write!(formatter, " and {} archived", part.tickets.len() - live)?;
+        for part in self
+            .board
+            .iter()
+            .filter(|part| !part.tickets.is_empty() || !part.archived.is_empty())
+        {
+            write!(
+                formatter,
+                "  {} — {} ticket(s)",
+                part.name,
+                part.tickets.len()
+            )?;
+            if !part.archived.is_empty() {
+                write!(formatter, " and {} archived", part.archived.len())?;
             }
 
-            match part.tickets.iter().map(|ticket| ticket.found_on).max() {
+            let found = part.tickets.iter().map(|ticket| ticket.found_on);
+            match found
+                .chain(part.archived.iter().map(|archived| archived.found_on))
+                .max()
+            {
                 Some(last) => writeln!(formatter, ", the last found {last}")?,
                 None => writeln!(formatter)?,
             }
             writeln!(formatter, "    {}", part.description)?;
         }
 
-        // An archived ticket's witnesses are read by no checker, the certifier least of all.
         let unreached = self
             .rows
             .iter()
-            .filter(|row| matches!(row.ticket.filed, Filed::Live(_)) && !row.reaches_certifier())
+            .filter(|row| !row.reaches_certifier())
             .collect::<Vec<_>>();
         if !unreached.is_empty() {
             writeln!(formatter, "\nnot put to the certifier: {}", unreached.len())?;

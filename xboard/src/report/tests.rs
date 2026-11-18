@@ -41,7 +41,7 @@ fn by_elaborator(error: curios_elab::Error) -> Answer {
 fn a_fixed_ticket_holds_while_its_witness_is_refused_and_regresses_when_it_is_admitted() {
     assert_eq!(
         standing(
-            &Filed::Live(Status::Fixed),
+            Status::Fixed,
             &[forged()],
             &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
@@ -49,7 +49,7 @@ fn a_fixed_ticket_holds_while_its_witness_is_refused_and_regresses_when_it_is_ad
     );
 
     assert_eq!(
-        standing(&Filed::Live(Status::Fixed), &[forged()], &[admitted()]),
+        standing(Status::Fixed, &[forged()], &[admitted()]),
         Standing::Regressed(vec!["the forged proof: admitted".to_string()])
     );
 }
@@ -57,7 +57,7 @@ fn a_fixed_ticket_holds_while_its_witness_is_refused_and_regresses_when_it_is_ad
 #[test]
 fn a_refusal_holds_only_by_the_error_the_witness_names() {
     let Standing::Regressed(problems) = standing(
-        &Filed::Live(Status::Fixed),
+        Status::Fixed,
         &[forged()],
         &[by_certifier(curios_cert::Error::UnclosedUniverses)],
     ) else {
@@ -71,7 +71,7 @@ fn a_refusal_holds_only_by_the_error_the_witness_names() {
 #[test]
 fn a_refusal_expected_of_the_certifier_is_not_met_by_the_elaborators() {
     let Standing::Regressed(problems) = standing(
-        &Filed::Live(Status::Fixed),
+        Status::Fixed,
         &[forged()],
         &[by_elaborator(curios_elab::Error::Poisoned)],
     ) else {
@@ -93,11 +93,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
     let certifier = by_certifier(curios_cert::Error::UntypedEntry);
 
     assert!(matches!(
-        standing(
-            &Filed::Live(Status::Fixed),
-            slice::from_ref(&both),
-            &[certifier]
-        ),
+        standing(Status::Fixed, slice::from_ref(&both), &[certifier]),
         Standing::Regressed(_)
     ));
 
@@ -113,11 +109,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
     ]);
 
     assert_eq!(
-        standing(
-            &Filed::Live(Status::Fixed),
-            slice::from_ref(&both),
-            &[refused_by_both]
-        ),
+        standing(Status::Fixed, slice::from_ref(&both), &[refused_by_both]),
         Standing::Holds
     );
 }
@@ -134,11 +126,7 @@ fn an_elaborators_error_is_named_beneath_what_located_it() {
     };
 
     assert_eq!(
-        standing(
-            &Filed::Live(Status::Fixed),
-            &[named],
-            &[by_elaborator(located)]
-        ),
+        standing(Status::Fixed, &[named], &[by_elaborator(located)]),
         Standing::Holds
     );
 }
@@ -162,14 +150,14 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
 
     assert_eq!(
         standing(
-            &Filed::Live(Status::Fixed),
+            Status::Fixed,
             slice::from_ref(&placed),
             &[by_elaborator(in_declaration("f"))]
         ),
         Standing::Holds
     );
     let Standing::Regressed(problems) = standing(
-        &Filed::Live(Status::Fixed),
+        Status::Fixed,
         slice::from_ref(&placed),
         &[by_elaborator(in_declaration("g"))],
     ) else {
@@ -192,18 +180,14 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
 
     assert_eq!(
         standing(
-            &Filed::Live(Status::Fixed),
+            Status::Fixed,
             slice::from_ref(&at_entry),
             &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
         Standing::Holds
     );
     assert!(matches!(
-        standing(
-            &Filed::Live(Status::Fixed),
-            slice::from_ref(&at_entry),
-            &[in_g]
-        ),
+        standing(Status::Fixed, slice::from_ref(&at_entry), &[in_g]),
         Standing::Regressed(_)
     ));
 }
@@ -217,7 +201,7 @@ fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
 
     assert_eq!(
         standing(
-            &Filed::Live(Status::Fixed),
+            Status::Fixed,
             slice::from_ref(&unnamed),
             &[by_certifier(curios_cert::Error::UnclosedUniverses)]
         ),
@@ -225,7 +209,7 @@ fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
     );
     assert!(matches!(
         standing(
-            &Filed::Live(Status::Fixed),
+            Status::Fixed,
             slice::from_ref(&unnamed),
             &[by_elaborator(curios_elab::Error::Poisoned)]
         ),
@@ -236,12 +220,12 @@ fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
 #[test]
 fn an_open_ticket_whose_witnesses_are_refused_was_shut_without_saying_so() {
     assert_eq!(
-        standing(&Filed::Live(Status::Open), &[forged()], &[admitted()]),
+        standing(Status::Open, &[forged()], &[admitted()]),
         Standing::Open
     );
     assert_eq!(
         standing(
-            &Filed::Live(Status::Open),
+            Status::Open,
             &[forged()],
             &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
@@ -256,7 +240,7 @@ fn an_open_ticket_whose_witnesses_are_refused_was_shut_without_saying_so() {
 #[test]
 fn an_open_ticket_whose_witness_is_refused_otherwise_fails_the_run() {
     let Standing::Unshown(problems) = standing(
-        &Filed::Live(Status::Open),
+        Status::Open,
         &[forged()],
         &[by_certifier(curios_cert::Error::UnclosedUniverses)],
     ) else {
@@ -270,7 +254,7 @@ fn an_open_ticket_whose_witness_is_refused_otherwise_fails_the_run() {
 
     assert!(matches!(
         standing(
-            &Filed::Live(Status::Open),
+            Status::Open,
             &[forged(), forged()],
             &[admitted(), by_elaborator(curios_elab::Error::Poisoned)]
         ),
@@ -280,10 +264,7 @@ fn an_open_ticket_whose_witness_is_refused_otherwise_fails_the_run() {
 
 #[test]
 fn a_ticket_with_no_witness_holds() {
-    assert_eq!(
-        standing(&Filed::Live(Status::Fixed), &[], &[]),
-        Standing::Holds
-    );
+    assert_eq!(standing(Status::Fixed, &[], &[]), Standing::Holds);
 }
 
 #[test]
@@ -291,7 +272,7 @@ fn only_a_witness_the_certifier_judged_carries_a_ticket_to_it() {
     let ticket = Ticket {
         title: "A forged proof".to_string(),
         found_on: Date::new(2026, 1, 1).expect("a day the calendar has"),
-        filed: Filed::Live(Status::Open),
+        status: Status::Open,
         witnesses: vec![forged()],
     };
     let row = |forged: Answer| Row {
@@ -303,53 +284,6 @@ fn only_a_witness_the_certifier_judged_carries_a_ticket_to_it() {
 
     assert!(!row(by_elaborator(curios_elab::Error::Poisoned)).reaches_certifier());
     assert!(row(by_certifier(curios_cert::Error::UntypedEntry)).reaches_certifier());
-}
-
-/// A witness of an archived ticket.
-fn gone() -> Witness {
-    Witness {
-        what: "the gone construct".to_string(),
-        steps: Vec::new(),
-        proof: Proof::Program(String::new()),
-        expect: Vec::new(),
-    }
-}
-
-/// An archived ticket stands while each witness fails before any checker reads it, and is read again, failing the run, where one reaches a checker: what the archive says is gone from the language is back.
-#[test]
-fn an_archived_ticket_stands_until_a_checker_reads_its_witness() {
-    let archived = Filed::Archived("its construct is gone".to_string());
-    let unread = Answer::Unbuilt(Refusal::Text("a syntax error".to_string()));
-    let unparsed = Answer::Unbuilt(Refusal::Unread("a syntax error".to_string()));
-
-    assert_eq!(
-        standing(&archived, &[gone()], &[unread]),
-        Standing::Archived
-    );
-    assert_eq!(
-        standing(&archived, &[gone()], &[unparsed]),
-        Standing::Archived
-    );
-    assert_eq!(
-        standing(
-            &archived,
-            &[gone()],
-            &[Proof::Module("#Banana".to_string()).answer()]
-        ),
-        Standing::Archived,
-        "Core text the reader makes no module of is read by no checker"
-    );
-    for read in [
-        by_elaborator(curios_elab::Error::Poisoned),
-        by_certifier(curios_cert::Error::UntypedEntry),
-        admitted(),
-    ] {
-        let standing = standing(&archived, &[gone()], &[read]);
-        assert!(
-            matches!(&standing, Standing::Revived(_)) && standing.fails(),
-            "{standing:?}"
-        );
-    }
 }
 
 /// A whole ticket, as its directory holds it: a part's record, the ticket's, and its witness's text. Its term proves `True`, so the checkers refuse it at `False`, as they refuse the witness of a flaw that is fixed.
@@ -402,15 +336,17 @@ fn a_run_puts_every_witness_and_says_where_its_ticket_stands() {
     let report = Report::run(&parts);
 
     assert!(!report.fails());
-    assert_eq!(report.rows[0].standing, Standing::Holds);
-    assert_eq!(report.rows[1].standing, Standing::Archived);
+    assert!(matches!(&report.rows[..], [row] if row.standing == Standing::Holds));
 
     let printed = report.to_string();
     assert!(printed.contains("xboard: 1 ticket(s) — 1 holding"));
-    assert!(printed.contains("; 1 archived, 0 of them read"));
+    assert!(printed.contains("; 1 archived\n"));
     assert!(printed.contains("ARCHIVED   2026-10-01  A proof of `True` hid behind a word"));
     assert!(printed.contains("reason   the word is gone from the language"));
-    assert!(printed.contains("program  the hidden proof [text]"));
+    assert!(
+        !printed.contains("the hidden proof"),
+        "an archived witness is put: {printed}"
+    );
     assert!(printed.contains("HOLDS      2026-10-02  A proof of `True` passes for one of `False`"));
     assert!(printed.contains(
         "program  the proof of `True` — refused by the elaborator's `TypeMismatch` [elaborator `TypeMismatch` at the closing term]"

@@ -77,7 +77,7 @@ fn core_text_the_reader_cannot_build_is_read_by_no_checker() {
     };
     let answer = witness.proof.answer();
 
-    assert!(answer.unread() && !answer.certifier_asked());
+    assert!(matches!(answer, Answer::Unbuilt(Refusal::Unread(_))) && !answer.certifier_asked());
     assert!(witness.unmet(&answer).is_some());
 }
 

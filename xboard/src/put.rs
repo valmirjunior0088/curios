@@ -60,7 +60,7 @@ impl fmt::Display for Checker {
 pub enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
-    /// Core text no checker reads: one that does not parse, one the reader cannot make a module of, or one closing otherwise than with a term stating no type. On the board a text that has rotted, which no expectation meets, and in the archive a construct that left the language. Held as the reader reports it, at the place it stands where it names one.
+    /// Core text no checker reads: one that does not parse, one the reader cannot make a module of, or one closing otherwise than with a term stating no type. On the board a text that has rotted, which no expectation meets. Held as the reader reports it, at the place it stands where it names one.
     Unread(String),
     /// The elaborator's error, with the diagnostic a compilation prints for it.
     Elaborator {
@@ -169,11 +169,6 @@ impl Answer {
     /// Whether the certifier judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
     pub fn certifier_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
-    }
-
-    /// Whether the witness failed before any checker read it: its program's text did not parse or lower, or its Core text did not parse or make a module. What an archived witness answers.
-    pub fn unread(&self) -> bool {
-        matches!(self, Answer::Unbuilt(Refusal::Text(_) | Refusal::Unread(_)))
     }
 }
 
