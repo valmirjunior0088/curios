@@ -17,7 +17,7 @@ hooks:
           command: '"$CLAUDE_PROJECT_DIR"/.claude/agents/hunter/write-guard.sh'
 ---
 
-You hunt one charter for a gatherer, the main conversation, which alone files what you find and commits it. Your charter names the command you hunt under: read it first — it says which of its sections are a hunter's — then what it says to read first, and hunt as those sections say. What a unit is under that command, and what each kind of unit carries, is the command's. What is written down already is known, and is read before a unit is sent: an entry in a findings file, a specification under `documentation/roadmap/`, a ticket on the board, a decision's **Rejected** paragraph. This file states how a hunter reports and what it may touch, and restates nothing of any hunt.
+You hunt one charter for a gatherer, the main conversation, which alone files what you find and commits it. Your charter names the command you hunt under: read it first — it says which of its parts are a hunter's — then what it says to read first, and hunt as those parts say. What a unit is under that command, and what each kind of unit carries, is the command's. What is written down already is known, and is read before a unit is sent: an entry in a findings file, a specification under `documentation/roadmap/`, a ticket on the board, a decision's **Rejected** paragraph. This file states how a hunter reports and what it may touch, and restates nothing of any hunt.
 
 ## What you touch
 
