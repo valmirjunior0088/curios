@@ -7,7 +7,7 @@ use {
     super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
-    curios_cert::{Accepted, Globals, Verdict, certify_definitions, certify_program},
+    curios_cert::{Accepted, Globals, Rechecked, Verdict, certify_definitions, certify_program},
     curios_common::{
         About, Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
     },
@@ -244,20 +244,6 @@ pub fn with_broken<T>(
         Ok(_) => CompileError::Failure(reports),
         Err(error) => error.after_failures(reports),
     })
-}
-
-/// Put `program` to the independent certifier with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
-///
-/// The [`Globals`] environment is assembled here, beside the walk that reads it, rather than in `curios-unit`, which holds what the stages produced and judges nothing. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
-pub fn recheck(
-    program: &Program,
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-) -> Vec<Verdict> {
-    certify_program(program, budget, &globals(predecessors), *syntax)
-        .0
-        .verdicts
 }
 
 /// Where a report about the unit lowered as `text` is placed: the unit's own declarations first, then those of the units in its scope.
@@ -1199,24 +1185,25 @@ fn judged(
         curios_profile::profile!("recheck");
         certify_program(&program, budget, &globals, *syntax)
     };
-    if let Some(verdict) = rechecked.verdicts.first() {
-        let definitions = &program.definitions;
-        let refusal = verdict.rendered(
-            definitions,
-            &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
-        );
-        return Err(certifier_refused(
-            match &verdict.name {
-                Some(name) => format!("`{}`", name.faithful()),
-                None => "the entrypoint".to_string(),
-            },
-            refusal,
-        ));
-    }
     // The program as the certifier stated it, the one it is erased from: it refused nothing of it, so it accepted it.
-    let program = rechecked
-        .accepted_program()
-        .expect("a program's walk that refused nothing checks the term it closes with");
+    let program = match rechecked {
+        Rechecked::Accepted(accepted) => accepted,
+        Rechecked::Refused(verdicts) => {
+            let verdict = &verdicts[0];
+            let definitions = &program.definitions;
+            let refusal = verdict.rendered(
+                definitions,
+                &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
+            );
+            return Err(certifier_refused(
+                match &verdict.name {
+                    Some(name) => format!("`{}`", name.faithful()),
+                    None => "the entrypoint".to_string(),
+                },
+                refusal,
+            ));
+        }
+    };
 
     // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
     let erased = erasing.map(|text| {
@@ -1290,7 +1277,7 @@ pub fn examine_entrypoint(
 
     Ok(Examined {
         obligations,
-        verdicts: rechecked.verdicts,
+        verdicts: rechecked.into_verdicts(),
     })
 }
 
@@ -1420,14 +1407,14 @@ pub fn compile_lowered(
     // The unit is erased through the certifier that accepted it.
     let globals = globals(predecessors);
     let (rechecked, mut certifier) = certify_definitions(&core, budget, &globals, *syntax);
-    if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = certifier_refusal(verdict, &core, &predecessors.lexicons(), syntax);
-        return Err(refuse(&lowered, refusal));
-    }
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let core = rechecked
-        .accepted()
-        .expect("a walk that refused nothing accepted its module");
+    let core = match rechecked {
+        Rechecked::Accepted(accepted) => accepted,
+        Rechecked::Refused(verdicts) => {
+            let refusal = certifier_refusal(&verdicts[0], &core, &predecessors.lexicons(), syntax);
+            return Err(refuse(&lowered, refusal));
+        }
+    };
 
     let places = predecessors.places();
     let certifications = predecessors.certifications();
@@ -1446,19 +1433,7 @@ pub fn compile_lowered(
         refuse(&lowered, refusal)
     })?;
 
-    let core = core.into_definitions();
-
-    Ok((
-        Unit::new(
-            lowered,
-            core,
-            anf,
-            traces,
-            rechecked.certification,
-            &observed,
-        ),
-        entry,
-    ))
+    Ok((Unit::new(lowered, core, anf, traces, &observed), entry))
 }
 
 /// Where a judged unit is kept between compilations.

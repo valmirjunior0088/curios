@@ -2,6 +2,7 @@
 
 use {
     crate::{compile::test_support::*, *},
+    curios_cert::Rechecked,
     curios_common::{
         Candidates, Digest, Facet, Object, Report, RootKind, candidate_prefix, test_support::*,
     },
@@ -188,9 +189,12 @@ pub fn erase_to_anf(source: &str) -> curios_anf::Module {
         let globals = crate::globals(predecessors);
         let (rechecked, mut certifier) =
             curios_cert::certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
-        let program = rechecked
-            .accepted_program()
-            .expect("the elaborated program is certified");
+        let Rechecked::Accepted(program) = rechecked else {
+            panic!(
+                "the elaborated program is certified: {:?}",
+                rechecked.verdicts()
+            );
+        };
         erase_program(
             &mut certifier,
             Erasures::of(

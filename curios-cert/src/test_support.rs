@@ -46,7 +46,7 @@ impl Put<'_> {
     }
 
     /// What the walk says of `text` put as a proof of `False`: Core text closing with a term that states no type, put at the `False` the registry names.
-    pub fn core_text(&self, text: &str) -> Result<Rechecked, Unread> {
+    pub fn core_text(&self, text: &str) -> Result<Rechecked<Definitions>, Unread> {
         let file = text
             .parse::<CoreFile>()
             .map_err(|error| Unread::Text(error.format()))?;
@@ -75,8 +75,12 @@ impl Put<'_> {
         Ok(self.module(&definitions, Some(&entry)))
     }
 
-    /// What the walk says of `definitions`, and of `entry` where the module closes with one: the walk a compilation certifies a unit or a program by.
-    pub fn module(&self, definitions: &Definitions, entry: Option<&Entrypoint>) -> Rechecked {
+    /// What the walk says of `definitions`, and of `entry` where the module closes with one: the walk a compilation certifies a unit or a program by, answered as the module it accepted, its closing term checked among it.
+    pub fn module(
+        &self,
+        definitions: &Definitions,
+        entry: Option<&Entrypoint>,
+    ) -> Rechecked<Definitions> {
         self.under(|globals| {
             verdicts_from(
                 &mut Certifier::new(self.budget, self.syntax),
@@ -85,6 +89,7 @@ impl Put<'_> {
                 globals,
                 None,
             )
+            .module()
         })
     }
 
@@ -95,7 +100,7 @@ impl Put<'_> {
         baseline: &Definitions,
         certification: &Certification,
         store: Option<&dyn Candidates>,
-    ) -> Rechecked {
+    ) -> Rechecked<Definitions> {
         let (places, now) = (Places::of(baseline), Places::of(definitions));
         let baseline = Baseline {
             definitions: baseline,
@@ -343,5 +348,6 @@ pub fn recheck_definitions_verdicts_uncached(
         globals,
         None,
     )
-    .verdicts
+    .module()
+    .into_verdicts()
 }

@@ -61,7 +61,7 @@ fn certifier_disagreements() {
         for (index, root) in prelude.iter().enumerate() {
             let globals = certified(&prelude[..index]);
             let (rechecked, _) = certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
-            verdicts.extend(rechecked.verdicts);
+            verdicts.extend(rechecked.into_verdicts());
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -100,7 +100,7 @@ fn certifier_memo_parity() {
             assert_eq!(
                 certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
                     .0
-                    .verdicts,
+                    .into_verdicts(),
                 recheck_definitions_verdicts_uncached(
                     root.core(),
                     DEFAULT_BUDGET,
@@ -194,7 +194,11 @@ fn the_certifier_types_a_declared_type_at_each_value_of_a_parameter() {
             let globals = certified(&prelude[..index]);
             let (rechecked, mut certifier) =
                 certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
-            assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+            assert!(
+                rechecked.verdicts().is_empty(),
+                "{:?}",
+                rechecked.verdicts()
+            );
 
             for definition in root.core().items.iter().flat_map(Item::definitions) {
                 let Subterm::FuncType(FuncType { telescope }) = &*definition.type_ else {

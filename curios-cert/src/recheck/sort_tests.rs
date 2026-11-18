@@ -422,8 +422,8 @@ let /T: Type =
 "#,
     );
 
-    assert_eq!(rechecked.verdicts, Vec::new());
-    let Item::Let(definition) = &rechecked.definitions.items[0] else {
+    assert_eq!(rechecked.verdicts(), Vec::new());
+    let Item::Let(definition) = &rechecked.definitions().items[0] else {
         panic!("the module holds one definition");
     };
     assert_eq!(definition.value_sort, Some(term("Type")));

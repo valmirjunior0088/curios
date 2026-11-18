@@ -5,10 +5,10 @@
 use {
     crate::{
         Earlier, EntryTail, Examined, Obligation, Over, Refused, elaborate_entry,
-        examine_entrypoint, globals, globals_after, lower_entry, recheck, recheck_over,
+        examine_entrypoint, globals, globals_after, lower_entry, recheck_over,
     },
     curios_abi::ForeignStore,
-    curios_cert::{Certifier, Verdict, certify_definitions, certify_program},
+    curios_cert::{Certifier, Rechecked, Verdict, certify_definitions, certify_program},
     curios_common::{Mount, SyntaxRegistry},
     curios_core::{Consumption, Definitions, Places, Program},
     curios_elab::{Context, Established},
@@ -34,7 +34,19 @@ pub fn recheck_measured<T>(
     let globals = globals(predecessors);
     let (rechecked, certifier) = certify_program(program, budget, &globals, *syntax);
 
-    (rechecked.verdicts, read(&certifier))
+    (rechecked.into_verdicts(), read(&certifier))
+}
+
+/// Put `program` to the independent certifier with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built: the compile path's rechecking, in the environment [`globals`] assembles for it, for a suite that puts a program whole.
+pub fn recheck(
+    program: &Program,
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+) -> Vec<Verdict> {
+    certify_program(program, budget, &globals(predecessors), *syntax)
+        .0
+        .into_verdicts()
 }
 
 /// A program type-checked and not yet put to the certifier.
@@ -124,13 +136,15 @@ pub fn compile_read(
         None => certify_definitions(&core, budget, &globals, SYNTAX),
     };
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let Some(core) = rechecked.accepted() else {
-        let verdict = rechecked.verdicts.into_iter().next();
-        return Err(Unmade::Certifier(Box::new(
-            verdict.expect("a walk that accepted nothing refused something"),
-        )));
+    let core = match rechecked {
+        Rechecked::Accepted(accepted) => accepted,
+        Rechecked::Refused(verdicts) => {
+            let verdict = verdicts.into_iter().next();
+            return Err(Unmade::Certifier(Box::new(
+                verdict.expect("a walk that accepted nothing refused something"),
+            )));
+        }
     };
-    let certification = rechecked.certification;
 
     let cores = predecessors.cores();
     let scope_places = predecessors.places();
@@ -141,13 +155,7 @@ pub fn compile_read(
     let anf = erase_unit(&mut certifier, scope, &core)
         .map_err(|error| Unmade::Erased(format!("{error:?}")))?;
 
-    Ok(Unit::read(
-        mounts,
-        foreigns,
-        core.into_definitions(),
-        anf,
-        certification,
-    ))
+    Ok(Unit::read(mounts, foreigns, core, anf))
 }
 
 /// The scope Core text is read over with the fixed prelude in front of it: the entries the prelude's items hold and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.

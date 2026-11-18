@@ -5,6 +5,7 @@
 use {
     super::test_support::*,
     crate::{compile::test_support::*, *},
+    curios_cert::Rechecked,
     curios_common::fill,
     curios_erase::{Erasures, erase_program},
     curios_module::{RootSource, SYNTAX, UnitSource},
@@ -129,7 +130,7 @@ fn erases(source: &str, budget: u64) -> bool {
         let globals = crate::globals(predecessors);
         let (rechecked, mut certifier) =
             curios_cert::certify_program(&program, budget, &globals, SYNTAX);
-        let Some(program) = rechecked.accepted_program() else {
+        let Rechecked::Accepted(program) = rechecked else {
             return false;
         };
         erase_program(

@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{After, Earlier, recheck, test_support::*},
+    crate::{After, Earlier, test_support::*},
     curios_abi::ForeignStore,
     curios_cert::{Error, Verdict},
     curios_common::{Mount, Qualifier, RootKind},

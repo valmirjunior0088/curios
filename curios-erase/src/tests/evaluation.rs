@@ -13,9 +13,9 @@ use {
 fn certified(unit: &curios_core::Definitions) -> curios_core::Certification {
     let globals = Globals::default();
 
-    certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX)
-        .0
-        .certification
+    accepted(certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX).0)
+        .into_parts()
+        .1
 }
 
 /// [`erase_alone`] over `baseline`.
@@ -25,7 +25,7 @@ fn erase_over(
 ) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    let accepted = accepted(&rechecked);
+    let accepted = accepted(rechecked);
 
     erase_unit_over(&mut certifier, Erasures::nothing(), &accepted, baseline)
 }
@@ -90,10 +90,8 @@ fn identity_arena() -> ErasedProgram {
     let program = stating(&module(items, body), nat);
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
-    let program = rechecked
-        .accepted_program()
-        .expect("the program is certified");
-    erase_program(&mut certifier, Erasures::nothing(), &program).expect("the program erases")
+    erase_program(&mut certifier, Erasures::nothing(), &accepted(rechecked))
+        .expect("the program erases")
 }
 
 /// Every erased function's termination flag.

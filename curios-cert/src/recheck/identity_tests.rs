@@ -92,8 +92,8 @@ fn a_stated_value_sort_is_read_by_nothing() {
             "#{value_sort = ${stated}}\nlet /held: Type = #NatType;",
             stated
         ));
-        assert_eq!(rechecked.verdicts, Vec::new(), "{said}");
-        let Item::Let(definition) = &rechecked.definitions.items[0] else {
+        assert_eq!(rechecked.verdicts(), Vec::new(), "{said}");
+        let Item::Let(definition) = &rechecked.definitions().items[0] else {
             panic!("the module holds one definition");
         };
         assert_eq!(definition.value_sort, Some(term("Type")), "{said}");

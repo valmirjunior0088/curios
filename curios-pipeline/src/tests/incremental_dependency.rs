@@ -252,7 +252,7 @@ fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cer
 
         curios_cert::certify_definitions(definitions, DEFAULT_BUDGET, &globals, SYNTAX)
             .0
-            .verdicts
+            .into_verdicts()
     })
 }
 

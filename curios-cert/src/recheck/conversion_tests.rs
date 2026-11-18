@@ -58,7 +58,8 @@ let /second : (p: #NatType, q: #NatType, a: #NatType, b: #NatType, m: #NatType) 
             };
             let verdicts =
                 super::verdicts_from(&mut certifier, definitions, None, &Globals::default(), None)
-                    .verdicts;
+                    .module()
+                    .into_verdicts();
             assert!(
                 refused(&verdicts),
                 "the outer pair asked {asked}, with the memos off: {uncached}, holds: {verdicts:?}",

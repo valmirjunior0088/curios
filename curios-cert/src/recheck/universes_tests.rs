@@ -505,7 +505,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
             ),
             10_000_000,
         )
-        .verdicts;
+        .into_verdicts();
 
         assert!(
             refuses(&verdicts, Some("coerce"), |error| matches!(
@@ -535,7 +535,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
             ),
             10_000_000,
         )
-        .verdicts,
+        .verdicts(),
         Vec::new(),
         "a case equation stopped refining the occurrence it scrutinized",
     );
@@ -660,8 +660,8 @@ let /published: #{level = 7} Type =
             said
         ));
 
-        assert_eq!(rechecked.verdicts, Vec::new(), "{said:?}");
-        let Item::Let(definition) = &rechecked.definitions.items[1] else {
+        assert_eq!(rechecked.verdicts(), Vec::new(), "{said:?}");
+        let Item::Let(definition) = &rechecked.definitions().items[1] else {
             panic!("`published` is the module's second item");
         };
         assert_eq!(definition.name, global("published"));

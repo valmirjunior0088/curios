@@ -4,11 +4,10 @@
 
 use {
     crate::{std_source, sys_source},
-    curios_cert::{Globals, certify_definitions},
+    curios_cert::{Accepted, Globals, Rechecked, certify_definitions},
     curios_common::{Qualifier, Report, Source, digest},
     curios_core::{
-        Anchors, Certification, Definitions, Global, Item, Sharing, method_labels,
-        validate_stored_identities,
+        Anchors, Definitions, Global, Item, Sharing, method_labels, validate_stored_identities,
     },
     curios_document::Documentation,
     curios_elab::{
@@ -199,14 +198,14 @@ fn unit(
         sharing.structures()
     );
 
-    let (core, certification, anf) = certified(root, &core, predecessors, prepared.anchors());
+    let (accepted, anf) = certified(root, &core, predecessors, prepared.anchors());
     // What the certifier stated rebuilt the nodes whose marks it changed, which are consed with the rest: the table holds every node the module shared, so a node the certifier handed back as it was costs nothing.
-    let core = core.shared(&sharing);
+    let accepted = accepted.shared(&sharing);
 
-    Unit::new(prepared, core, anf, traces, certification, &observed)
+    Unit::new(prepared, accepted, anf, traces, &observed)
 }
 
-/// The certifier's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the certifier that walked it: the module as the certifier stated it, the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the certifier does not accept or erasure cannot erase is no prelude.
+/// The certifier's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the certifier that walked it: the module as the certifier stated it with the record of its definitions, and its items' erased forms, or a panic at the first refusal, since a prelude the certifier does not accept or erasure cannot erase is no prelude.
 ///
 /// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
 fn certified(
@@ -214,7 +213,7 @@ fn certified(
     core: &Definitions,
     predecessors: &[&Unit],
     anchors: &Anchors,
-) -> (Definitions, Certification, ErasedUnit) {
+) -> (Accepted<Definitions>, ErasedUnit) {
     // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand.
     let mut globals = Globals::default();
     for earlier in predecessors {
@@ -227,30 +226,31 @@ fn certified(
     );
     let (rechecked, mut certifier) = certify_definitions(core, DEFAULT_BUDGET, &globals, SYNTAX);
 
-    if let Some(verdict) = rechecked.verdicts.first() {
-        // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
-        let name = match &verdict.name {
-            Some(name) => name.faithful().to_string(),
-            None => "<entrypoint>".to_owned(),
-        };
+    // The root is the module the certifier stated, so every mark it carries is the walk's own.
+    let stated = match rechecked {
+        Rechecked::Accepted(stated) => stated,
+        Rechecked::Refused(verdicts) => {
+            let verdict = &verdicts[0];
+            // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
+            let name = match &verdict.name {
+                Some(name) => name.faithful().to_string(),
+                None => "<entrypoint>".to_owned(),
+            };
 
-        panic!(
-            // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
-            "/{root} failed the certifier: {} refusals over {} items, first: {name} — {}",
-            rechecked.verdicts.len(),
-            core.items.len(),
-            verdict.error.rendered(&Spelling::default()),
-        );
-    }
+            panic!(
+                // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
+                "/{root} failed the certifier: {} refusals over {} items, first: {name} — {}",
+                verdicts.len(),
+                core.items.len(),
+                verdict.error.rendered(&Spelling::default()),
+            );
+        }
+    };
     // Plain stdout rather than `cargo:warning=`, as for the hash-consing metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has certified. What this adds is the count, which changes only when the prelude does.
     println!(
         "/{root} certified: {} items accepted by the certifier",
         core.items.len()
     );
-    // The root is the module the certifier stated, so every mark it carries is the walk's own.
-    let stated = rechecked
-        .accepted()
-        .expect("a walk that refused nothing accepted its module");
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
     let cores = predecessors
@@ -287,7 +287,7 @@ fn certified(
         )
     });
 
-    (stated.into_definitions(), rechecked.certification, anf)
+    (stated, anf)
 }
 
 /// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.

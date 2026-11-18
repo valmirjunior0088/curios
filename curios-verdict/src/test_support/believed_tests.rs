@@ -6,7 +6,7 @@ use {
     curios_cert::{Error, Verdict},
     curios_common::{Qualifier, RootKind, fill},
     curios_core::{Entrypoint, Program, Term, Universes},
-    curios_pipeline::{Earlier, recheck},
+    curios_pipeline::{Earlier, test_support::*},
 };
 
 /// The declaration `/<path>`.

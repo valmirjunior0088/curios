@@ -187,15 +187,14 @@ pub fn compile_lowered_over(
         },
         syntax,
     );
-    if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = certifier_refusal(verdict, &core, &predecessors.lexicons(), syntax);
-        return Err(refuse(&lowered, refusal));
-    }
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let core = rechecked
-        .accepted()
-        .expect("a walk that refused nothing accepted its module");
-    let certification = rechecked.certification;
+    let core = match rechecked {
+        Rechecked::Accepted(accepted) => accepted,
+        Rechecked::Refused(verdicts) => {
+            let refusal = certifier_refusal(&verdicts[0], &core, &predecessors.lexicons(), syntax);
+            return Err(refuse(&lowered, refusal));
+        }
+    };
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and everything its erasure read digests as it did.
     let scope_places = predecessors.places();
@@ -215,7 +214,7 @@ pub fn compile_lowered_over(
             made: &made,
             dropped: &dropped,
             now: &places,
-            recorded: &certification,
+            recorded: core.certification(),
             candidates,
         },
     )
@@ -233,21 +232,14 @@ pub fn compile_lowered_over(
     })?;
 
     Ok((
-        Unit::new(
-            lowered,
-            core.into_definitions(),
-            anf,
-            traces,
-            certification,
-            &observed,
-        )
-        .reading(readers)
-        .placing(Some(places)),
+        Unit::new(lowered, core, anf, traces, &observed)
+            .reading(readers)
+            .placing(Some(places)),
         entry,
     ))
 }
 
-/// [`recheck`](crate::recheck) for a unit compiled over `baseline`, with the walk's own certifier: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
+/// The walk a unit compiled over `baseline` is put to, with the walk's own certifier: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the certifier's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub fn recheck_over<'s>(
@@ -261,7 +253,7 @@ pub fn recheck_over<'s>(
         ..
     }: Over<'s>,
     syntax: &SyntaxRegistry,
-) -> (Rechecked, Certifier<'s>) {
+) -> (Rechecked<Definitions>, Certifier<'s>) {
     certify_definitions_over(
         definitions,
         budget,

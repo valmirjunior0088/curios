@@ -83,7 +83,7 @@ pub fn fixture_verdicts(
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    fixture_certified(fixture, budget, globals, syntax).verdicts
+    fixture_certified(fixture, budget, globals, syntax).into_verdicts()
 }
 
 /// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
@@ -92,7 +92,7 @@ pub fn fixture_certified(
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> Rechecked {
+) -> Rechecked<Definitions> {
     let (definitions, entry) = fixture.parts();
 
     Put {
@@ -185,12 +185,12 @@ let /held: #{goal = Type} match #{node = Variant} /F/mk(3) | ${arm} => #NatType 
 "#;
 
 /// What the walk says of `text`, Core text read with nothing in scope and walked as it closes: a module, or a program at the type it states.
-pub fn text_certified(text: &str) -> Rechecked {
+pub fn text_certified(text: &str) -> Rechecked<Definitions> {
     text_certified_over(text, &Globals::default())
 }
 
 /// [`text_certified`] over the units `globals` holds.
-pub fn text_certified_over(text: &str, globals: &Globals) -> Rechecked {
+pub fn text_certified_over(text: &str, globals: &Globals) -> Rechecked<Definitions> {
     let (definitions, entry) = core_text_read(text);
 
     Put {
@@ -202,16 +202,16 @@ pub fn text_certified_over(text: &str, globals: &Globals) -> Rechecked {
 
 /// The verdicts of [`text_certified`].
 pub fn text_verdicts(text: &str) -> Vec<Verdict> {
-    text_certified(text).verdicts
+    text_certified(text).into_verdicts()
 }
 
 /// The verdicts of [`text_certified_over`].
 pub fn text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
-    text_certified_over(text, globals).verdicts
+    text_certified_over(text, globals).into_verdicts()
 }
 
 /// [`text_certified`] with each judgment restored to `budget`.
-pub fn text_certified_within(text: &str, budget: u64) -> Rechecked {
+pub fn text_certified_within(text: &str, budget: u64) -> Rechecked<Definitions> {
     let (definitions, entry) = core_text_read(text);
 
     Put { budget, ..put() }.module(&definitions, entry.as_ref())
@@ -248,7 +248,7 @@ pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
     }
     .core_text(text)
     .unwrap_or_else(|unread| panic!("{unread:?}"))
-    .verdicts
+    .into_verdicts()
 }
 
 /// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
@@ -257,11 +257,34 @@ pub fn core_text_verdicts(text: &str) -> Vec<Verdict> {
 }
 
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
-pub fn walked(definitions: &Definitions) -> Rechecked {
+pub fn walked(definitions: &Definitions) -> Rechecked<Definitions> {
     let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
 
     rechecked
+}
+
+/// What a suite reads of a walk it holds to have accepted its module, each a refusal where the walk refused it.
+pub trait Answered {
+    /// What the walk concluded about the module it accepted.
+    fn certification(&self) -> &Certification;
+
+    /// The module the walk accepted, as it stated it.
+    fn definitions(&self) -> &Definitions;
+}
+
+impl Answered for Rechecked<Definitions> {
+    fn certification(&self) -> &Certification {
+        self.accepted()
+            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.verdicts()))
+            .certification()
+    }
+
+    fn definitions(&self) -> &Definitions {
+        self.accepted()
+            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.verdicts()))
+            .as_definitions()
+    }
 }
 
 /// `module` walked over `baseline` as `certification` records it.
@@ -269,7 +292,7 @@ pub fn walked_over(
     definitions: &Definitions,
     baseline: &Definitions,
     certification: &Certification,
-) -> Rechecked {
+) -> Rechecked<Definitions> {
     walked_among(definitions, baseline, certification, None)
 }
 
@@ -279,7 +302,7 @@ pub fn walked_among(
     baseline: &Definitions,
     certification: &Certification,
     store: Option<&dyn Candidates>,
-) -> Rechecked {
+) -> Rechecked<Definitions> {
     put().over(definitions, baseline, certification, store)
 }
 
@@ -316,7 +339,7 @@ pub fn doctored(
 
 /// A record of `written` in which `five` is marked: its reads hold `alias`'s signature, which no judgment of `five` reads. A walk that hands the mark back adopted the entry, and one that judged `five` filed its own reads in its place.
 pub fn marked() -> Certification {
-    doctored(&walked(&written()).certification, "five", |certified| {
+    doctored(walked(&written()).certification(), "five", |certified| {
         Certified {
             reads: Reads {
                 signatures: BTreeSet::from([global("identity"), global("alias")]),

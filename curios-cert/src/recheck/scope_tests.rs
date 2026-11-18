@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Certification, Global, Places},
+    curios_core::{Certification, Definitions, Global, Places},
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
@@ -18,7 +18,7 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
 }
 
 /// What the walk says of `text` over [`JUDGED_ENVIRONMENT`], in scope as a unit no walk filed a record for.
-fn over_the_environment(text: &str) -> Rechecked {
+fn over_the_environment(text: &str) -> Rechecked<Definitions> {
     text_certified_over(text, &already_judged(&judged_environment()).globals())
 }
 
@@ -47,7 +47,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
         "the control stopped refusing: `reader : Nat` must not accept a `Bool`-typed `shadowed`: {alone:?}",
     );
 
-    let verdicts = over_the_environment(SHADOWING).verdicts;
+    let verdicts = over_the_environment(SHADOWING).into_verdicts();
     assert!(
         redeclares(&verdicts, &global("shadowed")),
         "a definition differing from the environment's under its name was not refused for the name: {verdicts:?}",
@@ -79,7 +79,7 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
         "the control stopped refusing: a `Type 5` payload exceeds a family declared at `Type 0`: {alone:?}",
     );
 
-    let verdicts = over_the_environment(&oversized).verdicts;
+    let verdicts = over_the_environment(&oversized).into_verdicts();
     assert!(
         redeclares(&verdicts, &global("Shadowed")),
         "a registry entry differing from the environment's under its name was not refused for the name: {verdicts:?}",
@@ -106,7 +106,7 @@ fn stored_verdicts(held: &str) -> [(&'static str, Vec<Verdict>); 2] {
     let unit = core_text_module(&fill!(WRAPPER, held));
     let certified = put().module(&unit, None);
     assert_eq!(
-        certified.verdicts,
+        certified.verdicts(),
         Vec::new(),
         "`Wrapper` is well formed on its own holding `{held}`",
     );
@@ -114,7 +114,7 @@ fn stored_verdicts(held: &str) -> [(&'static str, Vec<Verdict>); 2] {
     [
         (
             "the record its walk left",
-            AlreadyJudged::with(&unit, &certified.certification),
+            AlreadyJudged::with(&unit, certified.certification()),
         ),
         ("no record", already_judged(&unit)),
     ]
@@ -194,7 +194,7 @@ let /reader: #NatType =
 
 /// A declaration under a name the environment holds is refused for the name though it is the environment's, term for term: what an environment holds is read where it stands, and no comparison decides that two declarations under one name are one.
 ///
-/// The module carries the environment's `shadowed` and `Shadowed`, read again so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.
+/// The module carries the environment's `shadowed` and `Shadowed`, read again so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the refusals are all the walk answers.
 ///
 /// Mutation-checked against the environment's question: with a held name never asked after, the module is judged, and each name is refused where the walk writes it, once for each write.
 #[test]
@@ -206,7 +206,7 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
     ));
 
     let refused = rechecked
-        .verdicts
+        .verdicts()
         .iter()
         .map(|verdict| match &verdict.error {
             Error::Redeclared(redeclared) => (verdict.name, Some(*redeclared)),
@@ -217,11 +217,6 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
         refused,
         ["Shadowed", "shadowed"].map(|symbol| (Some(global(symbol)), Some(global(symbol)))),
         "a module carrying its environment's own declarations was not refused once for each name",
-    );
-    assert_eq!(
-        rechecked.certification.totality(&global("reader")),
-        None,
-        "a module refused for a name was judged all the same",
     );
 }
 
@@ -244,7 +239,7 @@ fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
         "the control stopped certifying: the definition is well typed standing alone",
     );
 
-    let verdicts = over_the_environment(DEFINITION_UNDER_THE_FAMILY).verdicts;
+    let verdicts = over_the_environment(DEFINITION_UNDER_THE_FAMILY).into_verdicts();
     assert!(
         redeclares(&verdicts, &global("Shadowed")),
         "a definition under a family's name was not refused for the name: {verdicts:?}",
@@ -270,7 +265,7 @@ fn a_group_the_environment_holds_in_part_is_refused() {
         "the control stopped certifying: the group is well formed standing alone",
     );
 
-    let verdicts = over_the_environment(GROUP_HELD_IN_PART).verdicts;
+    let verdicts = over_the_environment(GROUP_HELD_IN_PART).into_verdicts();
     assert!(
         redeclares(&verdicts, &global("shadowed")),
         "a group held in part was not refused for the name the environment holds: {verdicts:?}",

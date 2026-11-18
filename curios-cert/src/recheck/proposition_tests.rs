@@ -88,7 +88,7 @@ fn carried_verdicts(carried: &str) -> Vec<Verdict> {
         .read(&fill!(A_PROOF_CARRYING, carried))
         .unwrap_or_else(|unread| panic!("{unread:?}"));
 
-    put.module(&definitions, entry.as_ref()).verdicts
+    put.module(&definitions, entry.as_ref()).into_verdicts()
 }
 
 /// Whether `bad` was refused as a proof not known to terminate that reaches no definition.
@@ -256,12 +256,12 @@ let /lemma: #NatType =
 #[test]
 fn a_groups_member_is_stated_a_proof_where_its_type_is_a_proposition() {
     let stated = text_certified(A_PROOF_GROUP);
-    assert_eq!(stated.verdicts, Vec::new());
-    assert_eq!(member_proofs(&stated.definitions, "lemma"), [true]);
+    assert_eq!(stated.verdicts(), Vec::new());
+    assert_eq!(member_proofs(stated.definitions(), "lemma"), [true]);
 
     let stated = text_certified(A_GROUP_MARKED_A_PROOF_AT_NAT);
-    assert_eq!(stated.verdicts, Vec::new());
-    assert_eq!(member_proofs(&stated.definitions, "lemma"), [false]);
+    assert_eq!(stated.verdicts(), Vec::new());
+    assert_eq!(member_proofs(stated.definitions(), "lemma"), [false]);
 }
 
 /// Whether each member of the group `definitions` holds `symbol` in is a proof, as its walk stated it.
@@ -813,7 +813,8 @@ fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
             &Globals::default(),
             None,
         )
-        .verdicts;
+        .module()
+        .into_verdicts();
         assert!(
             verdicts.iter().any(|verdict| {
                 verdict.name == Some(global("d"))

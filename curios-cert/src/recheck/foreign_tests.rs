@@ -30,7 +30,7 @@ fn forged_verdicts(claimed: &str) -> Vec<Verdict> {
         .read(&fill!(FORGED_ROW, claimed))
         .unwrap_or_else(|unread| panic!("{unread:?}"));
 
-    put.module(&definitions, entry.as_ref()).verdicts
+    put.module(&definitions, entry.as_ref()).into_verdicts()
 }
 
 /// Whether `held` was refused as a mismatch: a call's type is the one its row builds, whatever is claimed of it.

@@ -83,19 +83,19 @@ pub fn fresh(hint: Option<&str>) -> curios_core::Free {
 pub fn erase_alone(unit: &curios_core::Definitions) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    let accepted = accepted(&rechecked);
 
-    erase_unit(&mut certifier, Erasures::nothing(), &accepted)
+    erase_unit(&mut certifier, Erasures::nothing(), &accepted(rechecked))
 }
 
 /// The module `rechecked` accepted, which a fixture is: it is erased only as the walk stated it.
 #[cfg(test)]
-pub fn accepted(
-    rechecked: &curios_cert::Rechecked,
-) -> curios_cert::Accepted<curios_core::Definitions> {
-    rechecked
-        .accepted()
-        .unwrap_or_else(|| panic!("the fixture is certified: {:?}", rechecked.verdicts))
+pub fn accepted<T>(rechecked: curios_cert::Rechecked<T>) -> curios_cert::Accepted<T> {
+    match rechecked {
+        curios_cert::Rechecked::Accepted(accepted) => accepted,
+        curios_cert::Rechecked::Refused(verdicts) => {
+            panic!("the fixture is certified: {verdicts:?}")
+        }
+    }
 }
 
 /// A reference to the top-level definition `path` names, at no levels: what elaboration leaves for one generalized over none. Fixture-only.
@@ -158,11 +158,9 @@ pub fn try_erase(
     let program = stating(program, type_);
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
-    let program = rechecked
-        .accepted_program()
-        .unwrap_or_else(|| panic!("the fixture is certified: {:?}", rechecked.verdicts));
 
-    erase_program(&mut certifier, Erasures::nothing(), &program).map(ErasedProgram::into_module)
+    erase_program(&mut certifier, Erasures::nothing(), &accepted(rechecked))
+        .map(ErasedProgram::into_module)
 }
 
 #[cfg(test)]

@@ -65,7 +65,7 @@ fn spent() -> Global {
 /// Mutation-checked against the restore: with the analysis run on what the judgment before it left, `Good` is refused for the budget.
 #[test]
 fn positivity_is_judged_on_its_own_budget() {
-    let verdicts = text_certified_within(SPENT_BESIDE_AN_ALIASED_PAYLOAD, 100_000).verdicts;
+    let verdicts = text_certified_within(SPENT_BESIDE_AN_ALIASED_PAYLOAD, 100_000).into_verdicts();
 
     assert!(
         verdicts.iter().any(|verdict| verdict.name == Some(spent())
@@ -86,7 +86,7 @@ fn held() -> Global {
 const COSTLY: usize = 142;
 const BETWEEN: u64 = 4 * Cost::FRAME.get();
 
-/// A variance walk the budget cuts short is refused for the budget and files no vector: a reduction the budget refuses reads its term as holding every level it carries, so what the walk computed past it may be the budget's and not the declaration's.
+/// A variance walk the budget cuts short is refused for the budget, so it files no vector, a refused walk filing no record: a reduction the budget refuses reads its term as holding every level it carries, so what the walk computed past it may be the budget's and not the declaration's.
 ///
 /// Two controls hold the budget to the walk alone. The same module with a count that unfolds in a step is accepted on the short budget, so typing fits it, and the costly one is accepted on a budget that runs the folds; each files `Held` irrelevant in its level, which its constructor's target does not hold once `Count` is unfolded.
 ///
@@ -105,28 +105,27 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 
     let cheap = certified(1, BETWEEN);
     assert_eq!(
-        cheap.verdicts,
+        cheap.verdicts(),
         Vec::new(),
         "the control stopped holding: the short budget must type the module"
     );
-    assert_eq!(cheap.certification.variances(&held()), irrelevant);
+    assert_eq!(cheap.certification().variances(&held()), irrelevant);
 
     let cut = certified(COSTLY, BETWEEN);
     assert!(
-        cut.verdicts.len() == 1
-            && cut.verdicts[0].name == Some(held())
+        cut.verdicts().len() == 1
+            && cut.verdicts()[0].name == Some(held())
             && matches!(
-                cut.verdicts[0].error,
+                cut.verdicts()[0].error,
                 Error::Reduce(ReduceError::Exhausted { .. })
             ),
         "the walk must run out, and nothing else: {:?}",
-        cut.verdicts,
+        cut.verdicts(),
     );
-    assert_eq!(cut.certification.variances(&held()), None);
 
     let whole = certified(COSTLY, 1_000_000);
-    assert_eq!(whole.verdicts, Vec::new());
-    assert_eq!(whole.certification.variances(&held()), irrelevant);
+    assert_eq!(whole.verdicts(), Vec::new());
+    assert_eq!(whole.certification().variances(&held()), irrelevant);
 }
 
 /// No budget opens a window on a group that does not descend. Acceptance is upward closed in the budget ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s third boundary), so what has to be held is the other direction: a budget too small for the walk to file a verdict at all reads the group as not descending and refuses, rather than finding nothing to refuse.
@@ -136,7 +135,7 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 fn no_budget_accepts_a_proof_typed_group_that_does_not_descend() {
     let mut by_the_rule = 0;
     for budget in [1, 2, 10, 100, 1_000, 10_000, 1_000_000] {
-        let verdicts = text_certified_within(PROOF_TYPED_NULLARY_GROUP, budget).verdicts;
+        let verdicts = text_certified_within(PROOF_TYPED_NULLARY_GROUP, budget).into_verdicts();
         assert!(
             !verdicts.is_empty(),
             "at a budget of {budget} the walk found nothing to refuse: {verdicts:?}",

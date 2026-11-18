@@ -43,7 +43,7 @@ fn a_module_is_admitted_at_a_type_its_term_has() {
         })
         .expect("a history of no step builds");
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
 }
 
 #[test]

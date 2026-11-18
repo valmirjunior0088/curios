@@ -99,8 +99,8 @@ use {
     curios_core::{
         Abroad, Applications, Bound, Certification, Certified, Changes, Concluded, Definition,
         Definitions, Entrypoint, Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId,
-        Notation, Places, Polarity, Program, ReadRecord, ReadTable, Reads, StructDecl, Term,
-        Totality, Variance, free_locals_of, open_positions_of, open_quality,
+        Notation, Places, Polarity, Program, ReadRecord, ReadTable, Reads, Sharing, StructDecl,
+        Term, Totality, Variance, free_locals_of, open_positions_of, open_quality,
         rewrite_universe_levels, universe_metas,
     },
     std::{
@@ -138,67 +138,127 @@ impl Verdict {
     }
 }
 
-/// What one whole-module walk reached: every refusal, the record of what it concluded about the definitions it judged, and the module as it stated it.
+/// What one whole-module walk answered: the module it accepted, with the record of what it concluded, or every refusal it reached and nothing else.
 #[derive(Debug)]
-pub struct Rechecked {
-    /// Every refusal the walk reached; empty exactly when the certifier accepted the module.
-    pub verdicts: Vec<Verdict>,
-    /// Each judged definition's totality, closed over everything it mentions, and each accepted registry entry's polarity vector — what a later walk reads once the unit is in its scope. A definition the walk refused is classified all the same, since the walk defines it anyway; a unit carrying a refusal is never filed, so no record of one is ever read.
-    pub certification: Certification,
-    /// The module handed in, with what this walk stated of each item it judged or took in place of what the module said (`certifier::stating`): which binders and payloads bind a proof, which names are proofs, and the sort a type-valued definition's value inhabits. An item it did not judge again, adopted or never visited, states what the walk that filed the baseline stated of the baseline's item in its place, under its own binders' names (`certifier::stating::carried_marks`), and every other part of every item is the module's. What a unit stores and erases, so the walk over a later unit reads this one by what this walk stated.
-    pub definitions: Definitions,
-    /// The term a program closes with, as the walk stated its binders where it checked it, and `None` for a unit: what a program is erased from.
-    pub entrypoint: Option<Entrypoint>,
+pub enum Rechecked<T> {
+    /// The walk refused nothing of the module.
+    Accepted(Accepted<T>),
+    /// Every refusal the walk reached, never none. A refused walk leaves no record: a unit carrying a refusal is never filed, so nothing could read one.
+    Refused(Vec<Verdict>),
 }
 
-impl Rechecked {
-    /// The module as the walk stated it, where the walk refused nothing of it: the evidence erasure reads.
-    pub fn accepted(&self) -> Option<Accepted<Definitions>> {
-        self.verdicts
-            .is_empty()
-            .then(|| Accepted(self.definitions.clone()))
+impl<T> Rechecked<T> {
+    /// Every refusal the walk reached: none where it accepted the module.
+    pub fn verdicts(&self) -> &[Verdict] {
+        match self {
+            Rechecked::Accepted(_) => &[],
+            Rechecked::Refused(verdicts) => verdicts,
+        }
     }
 
-    /// The program as the walk stated it, where the walk refused nothing of it and checked the term it closes with against the type it states.
-    pub fn accepted_program(&self) -> Option<Accepted<Program>> {
-        let entrypoint = self.entrypoint.clone()?;
-        self.verdicts.is_empty().then(|| {
-            Accepted(Program {
-                definitions: self.definitions.clone(),
-                entrypoint,
-            })
-        })
+    /// [`Rechecked::verdicts`], kept.
+    pub fn into_verdicts(self) -> Vec<Verdict> {
+        match self {
+            Rechecked::Accepted(_) => Vec::new(),
+            Rechecked::Refused(verdicts) => verdicts,
+        }
+    }
+
+    /// The module the walk accepted, where it refused nothing of it.
+    pub fn accepted(&self) -> Option<&Accepted<T>> {
+        match self {
+            Rechecked::Accepted(accepted) => Some(accepted),
+            Rechecked::Refused(_) => None,
+        }
     }
 }
 
-/// A module the walk accepted, as the walk stated it: made by [`Rechecked::accepted`] alone, so what reads it — erasure — reads only what the certifier refused nothing of, which holds no metavariable, no node only elaboration builds, no unsolved level and no bound variable a scope does not bind, and carries every mark the walk stated. The clone is cheap: items share their terms by `Rc`.
+/// A module the walk accepted, as the walk stated it, with the record of what the walk concluded about it: made by the walk alone, so what reads it — erasure, and a unit made of it — reads only what the certifier refused nothing of, which holds no metavariable, no node only elaboration builds, no unsolved level and no bound variable a scope does not bind, carries every mark the walk stated, and stands beside the record that walk filed of it and no other. The clone is cheap: items share their terms by `Rc`, and the record's tables are persistent.
 #[derive(Debug, Clone)]
-pub struct Accepted<T>(T);
+pub struct Accepted<T> {
+    /// The module handed in, with what the walk stated of each item it judged or took in place of what the module said (`certifier::stating`): which binders and payloads bind a proof, which names are proofs, and the sort a type-valued definition's value inhabits. An item it did not judge again, adopted or never visited, states what the walk that filed the baseline stated of the baseline's item in its place, under its own binders' names (`certifier::stating::carried_marks`), and every other part of every item is the module's. What a unit stores and erases, so the walk over a later unit reads this one by what this walk stated. For a program, the term it closes with as well, as the walk stated its binders where it checked it.
+    module: T,
+    /// Each judged definition's totality, closed over everything it mentions, and each accepted registry entry's polarity and variance vectors — what a later walk reads once the unit is in its scope.
+    certification: Certification,
+}
+
+impl<T> Accepted<T> {
+    /// What the walk concluded about the module's definitions. See the field.
+    pub fn certification(&self) -> &Certification {
+        &self.certification
+    }
+}
 
 impl Accepted<Definitions> {
     pub fn as_definitions(&self) -> &Definitions {
-        &self.0
+        &self.module
     }
 
-    pub fn into_definitions(self) -> Definitions {
-        self.0
+    /// The module and the record, as a unit holds them apart.
+    pub fn into_parts(self) -> (Definitions, Certification) {
+        (self.module, self.certification)
+    }
+
+    /// The same module, its nodes consed through `sharing` with whatever else the table holds: one module to every judgment, so the record stays its own.
+    pub fn shared(self, sharing: &Sharing) -> Self {
+        Self {
+            module: self.module.shared(sharing),
+            ..self
+        }
     }
 }
 
 impl Accepted<Program> {
     pub fn as_program(&self) -> &Program {
-        &self.0
+        &self.module
     }
 
     /// The term the program closes with and the type the walk checked it at.
     pub fn entry(&self) -> (&Term, &Term) {
-        let entry = &self.0.entrypoint;
+        let entry = &self.module.entrypoint;
         let type_ = entry
             .type_
             .as_ref()
             .expect("the walk refuses a closing term that states no type");
 
         (&entry.body, type_)
+    }
+}
+
+/// What a walk reached, before it answers: every refusal, the record of what it concluded, and the module and closing term as it stated them. Answered as the module it accepted where it refused nothing, and as its refusals alone otherwise.
+pub struct Walk {
+    verdicts: Vec<Verdict>,
+    certification: Certification,
+    definitions: Definitions,
+    entrypoint: Option<Entrypoint>,
+}
+
+impl Walk {
+    /// The walk's answer of its module.
+    pub fn module(self) -> Rechecked<Definitions> {
+        match self.verdicts.is_empty() {
+            true => Rechecked::Accepted(Accepted {
+                module: self.definitions,
+                certification: self.certification,
+            }),
+            false => Rechecked::Refused(self.verdicts),
+        }
+    }
+
+    /// The walk's answer of its program, which closes with the term it checked.
+    fn program(self) -> Rechecked<Program> {
+        match self.verdicts.is_empty() {
+            true => Rechecked::Accepted(Accepted {
+                module: Program {
+                    definitions: self.definitions,
+                    entrypoint: self
+                        .entrypoint
+                        .expect("a program's walk checks the term it closes with"),
+                },
+                certification: self.certification,
+            }),
+            false => Rechecked::Refused(self.verdicts),
+        }
     }
 }
 
@@ -232,9 +292,9 @@ pub fn certify_definitions<'s>(
     budget: u64,
     globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
-) -> (Rechecked, Certifier<'s>) {
+) -> (Rechecked<Definitions>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
-    let rechecked = verdicts_from(&mut certifier, definitions, None, globals, None);
+    let rechecked = verdicts_from(&mut certifier, definitions, None, globals, None).module();
 
     (rechecked, certifier)
 }
@@ -249,7 +309,7 @@ pub fn certify_definitions_over<'s>(
     baseline: Baseline<'s>,
     (places, candidates): (&'s Places, Option<&'s dyn Candidates>),
     syntax: SyntaxRegistry,
-) -> (Rechecked, Certifier<'s>) {
+) -> (Rechecked<Definitions>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
     let rechecked = verdicts_from(
         &mut certifier,
@@ -261,7 +321,8 @@ pub fn certify_definitions_over<'s>(
             places,
             candidates,
         }),
-    );
+    )
+    .module();
 
     (rechecked, certifier)
 }
@@ -272,7 +333,7 @@ pub fn certify_program<'s>(
     budget: u64,
     globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
-) -> (Rechecked, Certifier<'s>) {
+) -> (Rechecked<Program>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
     let rechecked = verdicts_from(
         &mut certifier,
@@ -280,7 +341,8 @@ pub fn certify_program<'s>(
         Some(&program.entrypoint),
         globals,
         None,
-    );
+    )
+    .program();
 
     (rechecked, certifier)
 }
@@ -515,7 +577,7 @@ pub fn verdicts_from<'s>(
     entry: Option<&Entrypoint>,
     globals: &'s Globals<'s>,
     over: Option<Over<'s>>,
-) -> Rechecked {
+) -> Walk {
     grown(|| verdicts_within(certifier, definitions, entry, globals, over))
 }
 
@@ -534,7 +596,7 @@ fn verdicts_within<'s>(
     entry: Option<&Entrypoint>,
     globals: &'s Globals<'s>,
     over: Option<Over<'s>>,
-) -> Rechecked {
+) -> Walk {
     curios_profile::profile!("recheck_definitions");
     // A baseline is read only where its record covers the module it was filed with, as a mounted record is (`Globals::partial`) and a stored one (`part_digest`): a record naming fewer definitions than its module holds was not made by a walk over it, and a name it leaves out would read as total wherever this walk does not visit it, since nothing classifies the unvisited from their terms. Without one, the walk judges the unit whole.
     let over = over.filter(|over| {
@@ -549,7 +611,7 @@ fn verdicts_within<'s>(
     if changed.as_ref().is_none_or(|changed| changed.redeclares) {
         let redeclared = redeclarations(definitions, globals);
         if !redeclared.is_empty() {
-            return Rechecked {
+            return Walk {
                 verdicts: redeclared,
                 certification: Certification::default(),
                 definitions: definitions.clone(),
@@ -606,7 +668,7 @@ fn verdicts_within<'s>(
         })
         .collect::<Vec<_>>();
     if !miscounted.is_empty() {
-        return Rechecked {
+        return Walk {
             verdicts: miscounted,
             certification: Certification::default(),
             definitions: definitions.clone(),
@@ -1190,7 +1252,7 @@ fn verdicts_within<'s>(
         }
     };
 
-    Rechecked {
+    Walk {
         verdicts,
         certification,
         definitions: stated,

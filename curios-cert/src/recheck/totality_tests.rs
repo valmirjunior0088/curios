@@ -93,13 +93,13 @@ fn carried_beneath(judged: &Definitions, certification: &Certification) -> Vec<V
 #[test]
 fn a_carried_units_totality_is_read_from_the_certifiers_record() {
     let library = text_certified(LIBRARY);
-    assert_eq!(library.verdicts, Vec::new(), "the library is certified");
+    assert_eq!(library.verdicts(), Vec::new(), "the library is certified");
     assert_eq!(
-        library.certification.totality(&reaches()),
+        library.certification().totality(&reaches()),
         Some(Totality::Partial)
     );
 
-    let carried = carried_beneath(&carried_proof_definitions(), &library.certification);
+    let carried = carried_beneath(&carried_proof_definitions(), library.certification());
     assert!(
         refuses_the_proof_reaching_partiality(&carried),
         "carried beneath its record, the proof reaching a partial definition must be refused: {carried:?}",
@@ -210,7 +210,7 @@ fn a_baseline_whose_record_does_not_cover_its_module_is_no_baseline() {
     assert!(!forged.covers(&baseline));
     let edited = replaced(&baseline, "held", held_otherwise());
 
-    let verdicts = walked_over(&edited, &baseline, &forged).verdicts;
+    let verdicts = walked_over(&edited, &baseline, &forged).into_verdicts();
 
     assert!(
         refuses_the_proof_reaching_partiality(&verdicts),

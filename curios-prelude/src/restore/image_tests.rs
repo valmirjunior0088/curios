@@ -249,7 +249,7 @@ fn stored_prelude_measurements() {
             erase_unit(
                 &mut certifier,
                 Erasures::of(&cores, &places, &records, &units),
-                &accepted,
+                accepted,
             )
             .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();
@@ -269,7 +269,7 @@ fn stored_prelude_measurements() {
             println!(
                 "  certifying the unit          {:>10.1?}  ({} refusals)",
                 certification,
-                rechecked.verdicts.len()
+                rechecked.verdicts().len()
             );
             println!(
                 "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",

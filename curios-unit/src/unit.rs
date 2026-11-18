@@ -10,6 +10,7 @@ use {
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
+    curios_cert::Accepted,
     curios_common::{Digest, Mount, Object, Recorded},
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
@@ -353,7 +354,7 @@ impl Produced {
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
 ///
-/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the certifier's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`], which takes the record, and cloned as a handle is: each stage's artifact is held by pointer.
+/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the certifier's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`] and [`Unit::read`], which take the module the walk accepted with its record as one value, or restored from the bytes a store or the prelude's image holds, and cloned as a handle is: each stage's artifact is held by pointer.
 ///
 /// The serialized form of this is what a store files under an address covering its mounts, its predecessors and the compiler that judged them, beside a [`Record`](crate::Record) of the files it was compiled from.
 #[derive(Clone)]
@@ -365,15 +366,15 @@ pub struct Unit {
 }
 
 impl Unit {
-    /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — with [`Unit::read`], the only way a unit is made, so none is without one. `observed` is the binder lints the elaboration that ran holds: its declarations' records' and the program's final term's.
+    /// Assemble a unit from what each stage produced for it, its module the one the certifier's walk accepted beside the record that walk filed of it — with [`Unit::read`], the only way a unit is made, so none is without one and none holds a record of another module. `observed` is the binder lints the elaboration that ran holds: its declarations' records' and the program's final term's.
     pub fn new(
         text: PreparedText,
-        core: Definitions,
+        accepted: Accepted<Definitions>,
         erased: ErasedUnit,
         traces: Traces,
-        certification: Certification,
         observed: &Observed,
     ) -> Self {
+        let (core, certification) = accepted.into_parts();
         // Gathered once, here, where every unit written as a program is made, from what each stage decided: the lowering's lints, and the binder lints elaboration filed with each declaration's record — elaborated now, kept from a baseline or taken from a store — and decided of the program's final term.
         let lints = Lint::ordered(
             text.lints()
@@ -397,14 +398,14 @@ impl Unit {
         }
     }
 
-    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module `core` as the certifier stated it, erased to `erased`, and the record the certifier's walk over it left. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
+    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module the one the certifier's walk accepted beside the record that walk filed of it, erased to `erased`. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
     pub fn read(
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
-        core: Definitions,
+        accepted: Accepted<Definitions>,
         erased: ErasedUnit,
-        certification: Certification,
     ) -> Self {
+        let (core, certification) = accepted.into_parts();
         Self {
             unit: Produced::new(
                 Written::CoreText { mounts, foreigns },

@@ -24,6 +24,7 @@ curios-abi = { workspace = true }
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
 curios-core = { workspace = true }
+curios-cert = { workspace = true }
 curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-anf = { workspace = true }

@@ -966,6 +966,7 @@ dependencies = [
  "curios-abi",
  "curios-anf",
  "curios-archive",
+ "curios-cert",
  "curios-common",
  "curios-core",
  "curios-elab",

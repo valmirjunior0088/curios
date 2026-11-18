@@ -24,10 +24,10 @@ let /four: #NatType =
 #[test]
 fn a_definition_reads_the_signature_it_types_and_the_body_it_unfolds() {
     let rechecked = text_certified(READING);
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     let reads = |symbol: &str| {
         rechecked
-            .certification
+            .certification()
             .reads(&global(symbol))
             .cloned()
             .expect("the record covers every judged definition")

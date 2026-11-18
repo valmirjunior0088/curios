@@ -237,7 +237,7 @@ fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
         Err(Unread::Read(error)) => Answer::Unbuilt(Refusal::Unread(located(&error))),
         Ok(rechecked) => Answer::Judged(
             rechecked
-                .verdicts
+                .into_verdicts()
                 .into_iter()
                 .map(Refusal::Certifier)
                 .collect(),

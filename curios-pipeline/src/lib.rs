@@ -2,7 +2,7 @@
 //!
 //! **A compilation is units folded over a dependency order, and this crate is the fold.** [`compile_units`] takes a [`Predecessors`](curios_unit::Predecessors) — every unit already compiled, borrowed in order — and a slice of [`UnitSource`](curios_module::UnitSource)s, and runs each through *lower → elaborate → judge → erase* against the base and everything before it. `compile_entrypoint` is that fold's last step, for the one unit that carries an entrypoint and owns the empty prefix.
 //!
-//! Judgment sits *between* elaboration and erasure rather than after both, so a module the certifier refuses never reaches erasure's budget. That ordering is a property of the sequence, which is why it lives here: [`recheck`] assembles the [`Globals`](curios_cert::Globals) environment from the predecessors, because a `curios_unit::Unit` is defined to stay below the certifier and cannot name it.
+//! Judgment sits *between* elaboration and erasure rather than after both, so a module the certifier refuses never reaches erasure's budget. That ordering is a property of the sequence, which is why it lives here: [`globals`] assembles the [`Globals`](curios_cert::Globals) environment from the predecessors beside the walk that reads it, since a `curios_unit::Unit` holds what the stages produced, the module the certifier accepted with its record among it, and judges nothing.
 //!
 //! A unit the cache holds is a baseline as well as a hit: where none agrees with the record, `compile_unit_over` compiles the edited unit over the one the [`Cache`] offers, as `README.md`'s "A baseline crosses the cache seam as a unit, and the cache decides" states, and [a stored unit is a baseline for an item-level recompile](../../documentation/design/compilation/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) argues that the two are one unit.
 //!
@@ -19,7 +19,7 @@ use compile::*;
 pub use compile::{
     After, Cache, Checked, CheckedProgram, CompileError, Earlier, EntryTail, Examined, Findings,
     Listeners, Obligation, Progress, Refused, TestModule, TestProgram, compile_units,
-    declared_test_paths, examine_entrypoint, globals, recheck, spelling_at,
+    declared_test_paths, examine_entrypoint, globals, spelling_at,
 };
 
 mod recompile;

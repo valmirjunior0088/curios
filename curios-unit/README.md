@@ -20,11 +20,11 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 ### A unit is certified by construction
 
-**Decision.** A `Unit` carries the certifier's record of its declarations, and `Unit::new` takes it: a compilation assembles a unit from what each stage produced and the record the certifier's walk over it left, and no unit is kept, stored or handed over without one.
+**Decision.** A `Unit` carries the module the certifier's walk accepted beside the record that walk filed of it, and `Unit::new` and `Unit::read` take the two as one value, the walk's accepted answer (`curios_cert::Accepted`), which the walk alone makes: a compilation assembles a unit from what each stage produced and that answer, and no unit is kept, stored or handed over without a record, or with the record of another module.
 
-**Rationale.** A later walk reads a unit in scope for its definitions' totality and its families' polarity vectors, so a unit without a record would be a case every reader handles. Taking the record where the unit is made removes the case from every consumer, and every producer can: the fixed prelude's build certifies each root before it images it.
+**Rationale.** A later walk reads a unit in scope for its definitions' totality and its families' polarity vectors, so a unit without a record would be a case every reader handles, and a record beside a module no walk filed it of would be read as that module's verdicts. Taking the walk's answer whole where the unit is made removes both from every consumer, and every producer can: the fixed prelude's build certifies each root before it images it. Beside the walk, the bytes a store or the image restores are the one way a unit arises, and [the soundness board](../documentation/design/soundness/the-soundness-board.md)'s claim leaves bytes no walk wrote outside it.
 
-**Rejected.** An optional record, a special case every reader carries; a unit generic over its record, or a second type for a unit not yet certified, which only a unit stored before its certification needed, and the fixed prelude's images, once made below the certifier, were the one such; the record outside the unit, which turns the predecessors into a slice of pairs.
+**Rejected.** An optional record, a special case every reader carries; a unit generic over its record, or a second type for a unit not yet certified, which only a unit stored before its certification needed, and the fixed prelude's images, once made below the certifier, were the one such; the record outside the unit, which turns the predecessors into a slice of pairs; the module and its record taken apart, which lets a unit hold any record beside any module, so what a later walk believes rests on every caller pairing the two.
 
 ### A unit read from Core text holds no lowering
 

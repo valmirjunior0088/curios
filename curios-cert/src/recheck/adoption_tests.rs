@@ -7,7 +7,7 @@ use {
     curios_common::fill,
     curios_core::{
         Applications, Certification, Certified, Definitions, Func, Item, Places, Reads, Subterm,
-        Totality, Variance,
+        Totality,
     },
 };
 
@@ -15,14 +15,14 @@ use {
 #[test]
 fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_changed() {
     let baseline = written();
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = reading_definitions("#BoolType", "x");
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
     assert_eq!(
         rechecked
-            .verdicts
+            .verdicts()
             .iter()
             .map(|verdict| verdict.name)
             .collect::<Vec<_>>(),
@@ -34,7 +34,7 @@ fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_chan
 #[test]
 fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
     let baseline = versioned(written());
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let identity = declared_item(
         "let /identity: (x: #NatType) -> #NatType = (x: #NatType) => 7;",
         "identity",
@@ -46,10 +46,10 @@ fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
         &certification,
     );
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     assert_eq!(
-        rechecked.certification,
-        walked(&reading_definitions("#NatType", "7")).certification
+        rechecked.certification(),
+        walked(&reading_definitions("#NatType", "7")).certification()
     );
 }
 
@@ -61,7 +61,9 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
     let environment = already_judged(&judged_environment());
     let globals = environment.globals();
     let baseline = versioned(written());
-    let certification = fixture_certified(&baseline, BUDGET, &globals, SYNTAX).certification;
+    let certification = fixture_certified(&baseline, BUDGET, &globals, SYNTAX)
+        .certification()
+        .clone();
     let edited = replaced(
         &baseline,
         "three",
@@ -83,15 +85,16 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
             places: &now,
             candidates: None,
         }),
-    );
+    )
+    .module();
 
     assert!(
         matches!(
-            rechecked.verdicts.as_slice(),
+            rechecked.verdicts(),
             [Verdict { name: Some(name), error: Error::Redeclared(_) }] if *name == global("shadowed")
         ),
         "a name the environment declares was written over a baseline: {:?}",
-        rechecked.verdicts
+        rechecked.verdicts()
     );
 }
 
@@ -120,7 +123,7 @@ fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_i
         scheme = scheme(1),
         USER
     )));
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = replaced(&baseline, "A", declared_item(&scheme(2), "A"));
 
     let whole = walked_whole(&edited);
@@ -128,14 +131,14 @@ fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_i
 
     assert!(
         whole
-            .verdicts
+            .verdicts()
             .iter()
             .any(|verdict| verdict.name == Some(global("user"))
                 && matches!(verdict.error, Error::UniverseInstance { .. })),
         "the control stopped refusing: `user`'s instance does not discharge `u + 2 <= v`: {:?}",
-        whole.verdicts
+        whole.verdicts()
     );
-    assert_eq!(over.verdicts, whole.verdicts);
+    assert_eq!(over.verdicts(), whole.verdicts());
 }
 
 /// A declaration the walk does not visit is read once the walk has passed its place: `alias` respelled to name `five`, stored after it, finds it unbound, as a walk over every declaration does, though nothing `five` read moved and the walk adopts `five` without visiting it.
@@ -144,7 +147,7 @@ fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_i
 #[test]
 fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
     let baseline = versioned(written());
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = replaced(
         &baseline,
         "alias",
@@ -156,13 +159,13 @@ fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
 
     assert!(
         whole
-            .verdicts
+            .verdicts()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Undeclared(_))),
         "a walk over every declaration finds `five` undeclared at `alias`: {:?}",
-        whole.verdicts
+        whole.verdicts()
     );
-    assert_eq!(over.verdicts, whole.verdicts);
+    assert_eq!(over.verdicts(), whole.verdicts());
 }
 
 /// A module that is the baseline's is adopted whole: every entry comes back as the baseline's record holds it, the mark with it.
@@ -173,8 +176,8 @@ fn a_declaration_whose_terms_and_reads_stand_takes_the_baselines_verdict() {
 
     let rechecked = walked_over(&baseline, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts, Vec::new());
-    assert_eq!(rechecked.certification, certification);
+    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.certification(), &certification);
 }
 
 /// `base : (Nat) -> Nat`, total as `(n) => n` or partial as a group that calls itself without descending, then `middle : Nat = base(1)`, `top : Nat = middle` and `apart : Nat = 7`: `top` reads `middle` and nothing of `base`.
@@ -208,21 +211,21 @@ fn chained_definitions(partial: bool) -> Definitions {
 #[test]
 fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_stand() {
     let baseline = chained_definitions(false);
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = chained_definitions(true);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     for name in ["base", "middle", "top"] {
         assert_eq!(
-            rechecked.certification.totality(&global(name)),
+            rechecked.certification().totality(&global(name)),
             Some(Totality::Partial),
             "{name}",
         );
     }
     assert_eq!(
-        rechecked.certification.totality(&global("apart")),
+        rechecked.certification().totality(&global("apart")),
         Some(Totality::Total),
     );
 }
@@ -231,7 +234,7 @@ fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_s
 #[test]
 fn an_adopted_verdict_is_the_baselines_partiality_included() {
     let baseline = written();
-    let certification = doctored(&walked(&baseline).certification, "five", |certified| {
+    let certification = doctored(walked(&baseline).certification(), "five", |certified| {
         Certified {
             totality: Totality::Partial,
             ..certified
@@ -240,9 +243,9 @@ fn an_adopted_verdict_is_the_baselines_partiality_included() {
 
     let rechecked = walked_over(&baseline, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     assert_eq!(
-        rechecked.certification.totality(&global("five")),
+        rechecked.certification().totality(&global("five")),
         Some(Totality::Partial),
     );
 }
@@ -380,7 +383,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
 }
 
 /// [`walked`] without its assertion, for a module a whole walk refuses.
-fn walked_whole(definitions: &Definitions) -> Rechecked {
+fn walked_whole(definitions: &Definitions) -> Rechecked<Definitions> {
     put().module(definitions, None)
 }
 
@@ -411,7 +414,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
         "#{level = 5} Type",
         "#{level = 5} Type",
     );
-    let record = walked(&honest).certification;
+    let record = walked(&honest).certification().clone();
     let scope = AlreadyJudged::with(&honest, &record);
     let verdicts = |text: &str| text_verdicts_over(text, &scope.globals());
 
@@ -468,35 +471,30 @@ induct /Levelled: pub #{level = u + 1} Type
 end
 "#;
 
-/// `accept` refuses a carried variance vector claiming an irrelevance the walk denies, and `induct_alike` reads the carried vector, so an item whose terms are the baseline's and whose vector is not is judged again, and refused, as a walk over every declaration refuses it: whole and baseline walks agree, and no unit is stored carrying a vector its walk denies, which a later unit's elaborator would compare instances by.
+/// `accept` refuses a carried variance vector claiming an irrelevance the walk denies, and `induct_alike` reads the carried vector, so an item whose terms are the baseline's and whose vector is not is judged again, and refused, as a walk over every declaration refuses it: whole and baseline walks agree, and a refused walk files no record, so no unit is stored carrying a vector its walk denies, which a later unit's elaborator would compare instances by.
 #[test]
 fn a_carried_variance_the_walk_denies_is_refused_over_its_baseline_as_over_none() {
     let truthful = versioned(core_text_module(&fill!(LEVELLED, variance = "Invariant")));
-    let certification = walked(&truthful).certification;
+    let certification = walked(&truthful).certification().clone();
     let claimed = versioned(core_text_module(&fill!(LEVELLED, variance = "Irrelevant")));
 
     let whole = walked_whole(&claimed);
     assert!(
         whole
-            .verdicts
+            .verdicts()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
         "a whole walk refuses the carried irrelevance: {:?}",
-        whole.verdicts,
+        whole.verdicts(),
     );
 
     let over = walked_over(&claimed, &truthful, &certification);
     assert!(
-        over.verdicts
+        over.verdicts()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
         "and the walk over the baseline adopts the carried irrelevance: {:?}",
-        over.verdicts,
-    );
-    assert_eq!(
-        over.certification.variances(&global("Levelled")),
-        Some([Variance::Invariant].as_slice()),
-        "while the vector it files, which every judgment reads, is the one the baseline's walk computed",
+        over.verdicts(),
     );
 }
 
@@ -512,18 +510,18 @@ let /A: #{level = v} Type =
 fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_it() {
     let grouped = |constraints: &str| fill!(GROUPED, constraints);
     let baseline = versioned(core_text_module(&grouped(", constraints = [u + 1 <= v]")));
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = replaced(&baseline, "A", declared_item(&grouped(""), "A"));
 
     let whole = walked_whole(&edited);
     assert!(
-        !whole.verdicts.is_empty(),
+        !whole.verdicts().is_empty(),
         "a whole walk refuses the group whose declaration assumes nothing: {:?}",
-        whole.verdicts,
+        whole.verdicts(),
     );
 
     let over = walked_over(&edited, &baseline, &certification);
-    assert_eq!(over.verdicts, whole.verdicts);
+    assert_eq!(over.verdicts(), whole.verdicts());
 }
 
 /// `carrier.{u, v, w, x} : <the record a one-member group computes> = <the four products>`, as a one-member top-level group whose context states `${constraints}`: Hurkens' paradox's `bottom`, `small_universe`, `over` and `pi`, as `xboard`'s formation ticket for a group read under its reader's constraints spells them.
@@ -655,15 +653,15 @@ fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
     let baseline = versioned(core_text_module(&carrier(
         ", constraints = [u + 1 <= w, v <= w, v + 1 <= x, w + 1 <= x]",
     )));
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let offered = replaced(&baseline, "carrier", declared_item(&carrier(""), "carrier"));
 
     let over = walked_over(&offered, &baseline, &certification);
     assert!(
-        !over.verdicts.is_empty(),
+        !over.verdicts().is_empty(),
         "the walk adopted a group its context no longer licenses",
     );
-    assert_eq!(over.verdicts, walked_whole(&offered).verdicts);
+    assert_eq!(over.verdicts(), walked_whole(&offered).verdicts());
 
     let judged = AlreadyJudged::with(&baseline, &certification);
     let refused = text_verdicts_over(PARADOX, &judged.globals());
@@ -685,7 +683,7 @@ const DATUM: &str = "let /datum: (A: Type, a: A) -> A = (A: Type, a: A) => a;";
 #[test]
 fn an_item_made_again_is_handed_back_with_the_baselines_statements_under_its_own_names() {
     let stated = walked(&core_text_module(LEMMA));
-    let baseline = versioned(stated.definitions);
+    let baseline = versioned(stated.definitions().clone());
     let edited = replaced(
         &baseline,
         "lemma",
@@ -695,11 +693,11 @@ fn an_item_made_again_is_handed_back_with_the_baselines_statements_under_its_own
         ),
     );
 
-    let rechecked = walked_over(&edited, &baseline, &stated.certification);
+    let rechecked = walked_over(&edited, &baseline, stated.certification());
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     let handed = rechecked
-        .definitions
+        .definitions()
         .items
         .iter()
         .find_map(|item| match item {
@@ -723,7 +721,7 @@ fn an_item_made_again_is_handed_back_with_the_baselines_statements_under_its_own
 #[should_panic(expected = "a module declares one name twice")]
 fn a_module_that_declares_a_name_twice_reaches_no_walk_over_a_baseline() {
     let baseline = versioned(written());
-    let certification = walked(&baseline).certification;
+    let certification = walked(&baseline).certification().clone();
     let edited = replaced(
         &baseline,
         "three",
@@ -746,7 +744,7 @@ fn items_made_again_in_each_others_places_take_the_statements_of_their_own_names
         LEMMA,
         DATUM
     )));
-    let baseline = versioned(stated.definitions);
+    let baseline = versioned(stated.definitions().clone());
     let places = Places::of(&baseline);
     let at = |name: &str| {
         places
@@ -770,12 +768,12 @@ fn items_made_again_in_each_others_places_take_the_statements_of_their_own_names
         ),
     );
 
-    let rechecked = walked_over(&Definitions { items }, &baseline, &stated.certification);
+    let rechecked = walked_over(&Definitions { items }, &baseline, stated.certification());
 
-    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.verdicts(), Vec::new());
     let statements = |name: &str| {
         let body = rechecked
-            .definitions
+            .definitions()
             .items
             .iter()
             .find_map(|item| match item {

@@ -52,7 +52,11 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
 
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+    assert!(
+        rechecked.verdicts().is_empty(),
+        "{:?}",
+        rechecked.verdicts()
+    );
     certifier.read(|reader| {
         assert_eq!(reader.head(&reference("lemma")), Ok(reference("lemma")));
         assert_eq!(reader.head(&reference("two")), Ok(nat_lit(2)));
@@ -139,7 +143,7 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
     );
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    let accepted = accepted(&rechecked);
+    let accepted = accepted(rechecked);
 
     erase_unit(&mut certifier, Erasures::nothing(), &accepted).expect("the unit erases");
     // `head` is the last item erased, on a budget restored for it.
