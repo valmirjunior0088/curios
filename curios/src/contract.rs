@@ -262,9 +262,9 @@ pub const EXPORTS: Contract = Contract {
     product: Product::Nothing,
 };
 
-/// A question about a declaration by its path, as [`NAME`] is.
+/// A question about the witnesses a declaration takes part in, by its path, as [`NAME`] is about the declaration.
 pub const WITNESSES: Contract = Contract {
-    command: "wonder --witnesses",
+    command: "wonder --name --witnesses",
     accepts: Accepts::Scope,
     own_file_only: false,
     access: Access::Write,
@@ -303,7 +303,7 @@ impl Mode {
                 Query::At(_) => &AT,
                 Query::Name(_, None) => &NAME,
                 Query::Name(_, Some(View::Exports)) => &EXPORTS,
-                Query::Witnesses(_) => &WITNESSES,
+                Query::Name(_, Some(View::Witnesses)) => &WITNESSES,
                 Query::Server => &SERVER,
             },
             #[cfg(feature = "profile")]
@@ -318,8 +318,13 @@ impl Mode {
             | Mode::Compile { subject, .. }
             | Mode::Document { subject, .. }
             | Mode::Test { subject, .. }
-            | Mode::Lint { subject, .. }
-            | Mode::Wonder { subject, .. } => subject.as_deref(),
+            | Mode::Lint { subject, .. } => subject.as_deref(),
+            // A place names its file, which is the question's subject.
+            Mode::Wonder {
+                query: Query::At(place),
+                ..
+            } => Some(place.subject()),
+            Mode::Wonder { subject, .. } => subject.as_deref(),
             Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
             // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,

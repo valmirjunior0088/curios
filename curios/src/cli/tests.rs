@@ -296,8 +296,8 @@ fn a_line_that_does_not_parse_is_refused_as_a_report() {
             "missing argument\n│  `--output` takes a value\n├─ try; curios compile --help\n└─ [error] --output",
         ),
         (
-            vec!["curios", "wonder", "--at", "12"],
-            "invalid value\n│  written: `12`\n│  a place is a line and a column, each from one, as in `12:5`\n├─ try; curios wonder --help\n└─ [error] --at",
+            vec!["curios", "wonder", "--at", "12:5"],
+            "invalid value\n│  written: `12:5`\n│  a place is a file, a line and a column, each from one, as a report closes on one, as in `app.crs:12:5`\n├─ try; curios wonder --help\n└─ [error] --at",
         ),
         (
             vec!["curios", "wonder", "--name", "std/Bool"],

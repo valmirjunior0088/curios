@@ -339,7 +339,7 @@ impl Asked {
         budget: u64,
         overlay: &Overlay,
         file: &Path,
-        place: Place,
+        place: &Place,
         telling: &mut dyn Telling,
     ) -> Result<Option<Described>, Vec<Diagnosis>> {
         let (subject, store) = self.taken(telling);
@@ -536,7 +536,7 @@ pub enum Staged {
     Library(Library),
 }
 
-/// What `wonder --name`, `--witnesses` and `--name --exports` ask in: a program's scope, a library's, or the prelude's alone, which a question with no subject asks in outside every package.
+/// What `wonder --name` and its views ask in: a program's scope, a library's, or the prelude's alone, which a question with no subject asks in outside every package.
 pub enum Scope {
     Program(Program),
     Library(Library),
@@ -641,39 +641,53 @@ fn asked_through(library: &Library) -> Result<PathBuf, CompileError> {
     }
 }
 
-/// A place in a file as a diagnostic prints one and a question is asked of one: a line and a column, each counted from one, the column in scalar values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A place as a report closes on one and a question is asked of one: the file, spelled from where the reader stands, or [`STDIN_NAME`] for the text on standard input; then a line and a column, each counted from one, the column in scalar values.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Place {
+    pub file: String,
     pub line: usize,
     pub column: usize,
 }
 
+impl Place {
+    /// The subject the place's file is, as a command line writes one: `-` for standard input.
+    pub fn subject(&self) -> &str {
+        match self.file == STDIN_NAME {
+            true => "-",
+            false => &self.file,
+        }
+    }
+}
+
+/// Read from the right, so a file whose path holds a colon reads too.
 impl FromStr for Place {
     type Err = String;
 
     fn from_str(written: &str) -> Result<Self, String> {
         let counted = |number: &str| number.parse::<usize>().ok().filter(|number| *number > 0);
+        let mut parts = written.rsplitn(3, ':');
+        let (column, line, file) = (parts.next(), parts.next(), parts.next());
 
-        written
-            .split_once(':')
-            .and_then(|(line, column)| {
+        line.zip(column)
+            .zip(file.filter(|file| !file.is_empty()))
+            .and_then(|((line, column), file)| {
                 Some(Place {
+                    file: file.to_string(),
                     line: counted(line)?,
                     column: counted(column)?,
                 })
             })
             .ok_or_else(|| {
-                "a place is a line and a column, each from one, as in `12:5`".to_string()
+                "a place is a file, a line and a column, each from one, as a report closes on one, as in `app.crs:12:5`".to_string()
             })
     }
 }
 
-/// `wonder --at LINE:COLUMN [SUBJECT]`: the declaration the name written at a place of the file `staged` is asked through names, to stdout — the block `--name` answers with but for the type and the totality, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at FILE:LINE:COLUMN`: the declaration the name written at `place` names, `staged` being what its file is admitted as, to stdout — the block `--name` answers with but for the type and the totality, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
-    place: Place,
-    subject: Option<&str>,
+    place: &Place,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
@@ -691,8 +705,11 @@ pub fn wonder_at(
     if let Some(described) = described {
         answer(format_args!(
             "{}\n",
-            block(&described, Some(listing(&described.path, subject)))
-                .rendered(Kind::Declaration, &reader)
+            block(
+                &described,
+                Some(listing(&described.path, Some(place.subject())))
+            )
+            .rendered(Kind::Declaration, &reader)
         ));
         if let Some(heading) = described
             .declaration
@@ -735,7 +752,7 @@ pub fn wonder_name(
     Ok(())
 }
 
-/// `wonder --witnesses PATH [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, then a row for each, its place, an arrow, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, then a row for each, its place, a tab, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_witnesses(
     budget: u64,
     scope: Scope,
@@ -759,7 +776,7 @@ pub fn wonder_witnesses(
             None => witnessed.module.clone(),
         };
 
-        answer(format_args!("{place} → {}\n", witnessed.keyed));
+        answer(format_args!("{place}\t{}\n", witnessed.keyed));
     }
 
     Ok(())
@@ -850,8 +867,8 @@ fn exports_listing(path: &str, subject: Option<&str>) -> String {
 /// The command that lists the witnesses of the declaration at `path`, asked in the scope of `subject` as the command line wrote it.
 fn listing(path: &str, subject: Option<&str>) -> String {
     match subject {
-        Some(subject) => format!("curios wonder --witnesses {path} {subject}"),
-        None => format!("curios wonder --witnesses {path}"),
+        Some(subject) => format!("curios wonder --name {path} --witnesses {subject}"),
+        None => format!("curios wonder --name {path} --witnesses"),
     }
 }
 
@@ -878,7 +895,7 @@ fn declaration(
     }
 }
 
-/// What `wonder --name` and `wonder --witnesses` say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its totality, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
+/// What `wonder --name` and its `--witnesses` view say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its totality, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
 fn block(described: &Described, listing: Option<String>) -> Report {
     let declared = declared_as(described.declared);
     let mut kind = match described.public {

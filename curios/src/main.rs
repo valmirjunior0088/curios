@@ -822,8 +822,7 @@ fn dispatch() -> Result<(), Failure> {
             Query::At(place) => wonder_at(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
-                place,
-                subject,
+                &place,
                 &mut Asking::reading(answered.clone()),
             )?,
             Query::Name(path, None) => wonder_name(
@@ -840,7 +839,7 @@ fn dispatch() -> Result<(), Failure> {
                 subject,
                 &mut Asking::reading(answered.clone()),
             )?,
-            Query::Witnesses(path) => wonder_witnesses(
+            Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
                 elaboration.budget,
                 contract.admit_scope(subject, manifest, &here()?)?,
                 &path,

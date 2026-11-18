@@ -257,7 +257,7 @@ fn a_place_answers_the_name_written_there() {
         "--- The word a run prints.\npub let word : /std/Str = \"placed\";\n",
     );
 
-    let answered = curios(&root, &["wonder", "--at", "1:20", "app.crs"], "");
+    let answered = curios(&root, &["wonder", "--at", "app.crs:1:20"], "");
 
     assert!(
         answered.status.success(),
@@ -278,7 +278,7 @@ fn a_place_answers_the_name_written_there() {
     );
 
     // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
-    let again = curios(&root, &["wonder", "--at", "1:20", "app.crs"], "");
+    let again = curios(&root, &["wonder", "--at", "app.crs:1:20"], "");
     assert_eq!(stdout(&again), answer);
 }
 
@@ -293,7 +293,7 @@ fn a_place_answers_over_a_library_a_check_filed() {
         String::from_utf8_lossy(&checked.stderr)
     );
 
-    let answered = curios(&root, &["wonder", "--at", "1:9", "util.crs"], "");
+    let answered = curios(&root, &["wonder", "--at", "util.crs:1:9"], "");
 
     assert!(
         answered.status.success(),
@@ -337,7 +337,7 @@ fn a_place_in_the_standard_librarys_package_answers() {
 
     let answered = curios(
         &root,
-        &["wonder", "--at", &format!("{line}:9"), "Bool.crs"],
+        &["wonder", "--at", &format!("Bool.crs:{line}:9")],
         "",
     );
 
@@ -350,13 +350,86 @@ fn a_place_in_the_standard_librarys_package_answers() {
     assert!(answer.starts_with("/std/Bool/not\n"), "{answer:?}");
 }
 
+/// The place a refusal closes on is asked of `--at` as it was printed, from where it was printed: here a nested module's file, its path spelled from the package's root.
+#[test]
+fn a_refusals_place_is_asked_as_it_was_printed() {
+    let root = temporary("pasted");
+    write(
+        &root,
+        "curios.toml",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
+    write(&root, "lib.crs", "pub mod a;\n");
+    write(&root, "a.crs", "pub mod b;\n");
+    write(
+        &root,
+        "a/b.crs",
+        "use /std/{Nat, Str};\n\npub let count: Nat = 1;\n\npub let shown: Str = count;\n",
+    );
+
+    let checked = stdout(&curios(&root, &["wonder"], ""));
+    let place = checked
+        .lines()
+        .find_map(|line| line.strip_prefix("└─ [error] "))
+        .unwrap_or_else(|| panic!("a refusal closes on its place: {checked}"));
+    assert_eq!(place, "a/b.crs:5:22");
+
+    let answered = curios(&root, &["wonder", "--at", place], "");
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let answer = stdout(&answered);
+    assert!(answer.starts_with("/app/a/b/count\n"), "{answer:?}");
+}
+
+/// A block about a type with witnesses in scope points to the view that lists them, asked of the subject the block was asked of: through `--name`, and through `--at` of its place's file.
+#[test]
+fn a_block_points_to_the_view_listing_its_witnesses() {
+    let root = project("pointer");
+
+    let named = stdout(&curios(
+        &root,
+        &["wonder", "--name", "/std/Show", "app.crs"],
+        "",
+    ));
+    assert!(
+        named.contains("├─ try; curios wonder --name /std/Show --witnesses app.crs\n"),
+        "{named}"
+    );
+
+    let placed = stdout(&curios(&root, &["wonder", "--at", "util.crs:1:20"], ""));
+    assert!(placed.contains(" --witnesses util.crs\n"), "{placed}");
+
+    let listed = stdout(&curios(
+        &root,
+        &["wonder", "--name", "/std/Show", "--witnesses", "app.crs"],
+        "",
+    ));
+    let rows = listed
+        .split_once("\n\n")
+        .map(|(_, rows)| rows)
+        .unwrap_or_default();
+    assert!(!rows.is_empty(), "{listed}");
+    assert!(
+        rows.lines().all(|row| row.split('\t').count() == 2),
+        "{rows}"
+    );
+}
+
 /// A place where nothing is named is an answer of nothing, and exits 0.
 #[test]
 fn a_place_naming_nothing_answers_nothing() {
     let root = project("nothing-named");
 
     // The `pub` a declaration opens with names nothing.
-    let nothing = curios(&root, &["wonder", "--at", "1:1", "util.crs"], "");
+    let nothing = curios(&root, &["wonder", "--at", "util.crs:1:1"], "");
     assert!(nothing.status.success());
     assert_eq!(stdout(&nothing), "");
 }
@@ -369,7 +442,7 @@ fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
 
     let answered = curios(
         &root,
-        &["wonder", "--at", "2:21", "-"],
+        &["wonder", "--at", "<stdin>:2:21"],
         "let one: /std/Nat = true;\nlet two: /std/Nat = one;\n/std/print(\"\")\n",
     );
 

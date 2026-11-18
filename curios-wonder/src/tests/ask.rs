@@ -73,21 +73,37 @@ fn a_file_subject_the_disk_does_not_hold_is_refused_before_it_is_placed() {
     );
 }
 
-/// A place is written as a diagnostic prints one, and anything else is refused in words that show the form.
+/// A place is written as a report closes on one, read from the right so a file's path may hold a colon, and anything else is refused in words that show the form.
 #[test]
-fn a_place_is_a_line_and_a_column_each_from_one() {
+fn a_place_is_a_file_a_line_and_a_column_each_from_one() {
+    let place = |file: &str, line, column| crate::Place {
+        file: file.to_string(),
+        line,
+        column,
+    };
+
+    assert_eq!("app.crs:12:5".parse(), Ok(place("app.crs", 12, 5)));
+    assert_eq!("a/b.crs:3:20".parse(), Ok(place("a/b.crs", 3, 20)));
+    assert_eq!("C:/a.crs:1:2".parse(), Ok(place("C:/a.crs", 1, 2)));
     assert_eq!(
-        "12:5".parse::<crate::Place>(),
-        Ok(crate::Place {
-            line: 12,
-            column: 5
-        })
+        "<stdin>:5:18"
+            .parse::<crate::Place>()
+            .map(|place| place.subject().to_string()),
+        Ok("-".to_string())
     );
 
-    for written in ["12", "0:1", "1:0", "a:b", "1:2:3", ""] {
+    for written in [
+        "12",
+        "12:5",
+        ":12:5",
+        "app.crs:0:1",
+        "app.crs:1:0",
+        "app.crs:a:b",
+        "",
+    ] {
         let refusal = written
             .parse::<crate::Place>()
-            .expect_err("no line and column, each from one");
-        assert!(refusal.contains("as in `12:5`"), "{refusal}");
+            .expect_err("no file, line and column, each from one");
+        assert!(refusal.contains("as in `app.crs:12:5`"), "{refusal}");
     }
 }

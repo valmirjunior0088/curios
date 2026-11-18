@@ -4,7 +4,7 @@ use {
     super::*,
     crate::*,
     clap::CommandFactory,
-    curios_common::{About, Report, Style, test_support::*},
+    curios_common::{About, Report, STDIN_NAME, Style, test_support::*},
     std::{collections::BTreeSet, fmt::Write, fs, iter},
 };
 
@@ -83,9 +83,9 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "--cost", SUBJECT],
         &["wonder", "--stage", "core", SUBJECT],
         &["wonder", "--stage", "anf", SUBJECT],
-        &["wonder", "--at", "1:1", SUBJECT],
+        &["wonder", "--at", "SUBJECT:1:1"],
         &["wonder", "--name", "/std/Bool/not", SUBJECT],
-        &["wonder", "--witnesses", "/std/Show", SUBJECT],
+        &["wonder", "--name", "/std/Show", "--witnesses", SUBJECT],
         &["wonder", "--name", "/std/Map", "--exports", SUBJECT],
         &["wonder", "--server"],
     ];
@@ -163,11 +163,20 @@ fn tree() -> Temporary {
     root
 }
 
-/// `line` as the parser receives it, `SUBJECT` replaced by `argument` or dropped when there is none.
+/// `line` as the parser receives it, `SUBJECT` replaced by `argument` or dropped when there is none; standing in a word, as a place's file does, it is the file a report would spell, standard input's as `<stdin>`.
 fn parsed(line: &[&str], argument: Option<&str>) -> Mode {
-    let words = iter::once("curios").chain(line.iter().filter_map(|word| match *word == SUBJECT {
-        true => argument,
-        false => Some(*word),
+    let words = iter::once("curios".to_string()).chain(line.iter().filter_map(|word| {
+        match (*word == SUBJECT, word.contains(SUBJECT)) {
+            (true, _) => argument.map(str::to_string),
+            (false, true) => Some(word.replace(
+                SUBJECT,
+                match argument {
+                    Some("-") => STDIN_NAME,
+                    written => written.unwrap_or_default(),
+                },
+            )),
+            (false, false) => Some(word.to_string()),
+        }
     }));
 
     Cli::try_parse_from(words)
@@ -339,7 +348,11 @@ fn table(root: &Path) -> String {
     let mut table = String::new();
 
     for line in commands() {
-        let contract = parsed(line, None).contract();
+        // A place names a file, so a line whose subject stands in a word has a row only where one is written.
+        let placed = line
+            .iter()
+            .any(|word| *word != SUBJECT && word.contains(SUBJECT));
+        let contract = parsed(line, placed.then_some("lib.crs")).contract();
         let own = match contract.own_file_only {
             true => " (its own file)",
             false => "",
@@ -361,10 +374,10 @@ fn table(root: &Path) -> String {
             continue;
         }
 
-        let takes_subject = line.contains(&SUBJECT);
+        let takes_subject = line.iter().any(|word| word.contains(SUBJECT));
         for &(standpoint, written) in ROWS {
             // A command taking no subject reads no argument, so only the rows spelling none are its.
-            if !takes_subject && written.is_some() {
+            if (!takes_subject && written.is_some()) || (placed && written.is_none()) {
                 continue;
             }
 
@@ -668,8 +681,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --name --witnesses --exports --server --budget --manifest
-  work/app: (none) → program serve
+wonder --at SUBJECT:1:1 — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --name --witnesses --exports --server --budget --manifest
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
   work/app: - → loose -
@@ -682,12 +694,8 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
-  work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
-  work/app/helper: (none) → program serve
   work/app/helper: bench → program bench
-  work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
-  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
 wonder --name /std/Bool/not SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
@@ -708,7 +716,7 @@ wonder --name /std/Bool/not SUBJECT — Scope, store Write, leaves Nothing, opti
   work/app/helper: bench → program bench
   work/app/nested: (none) → library nested
   .: (none) → the prelude
-wonder --witnesses /std/Show SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --name --witnesses --exports --server --budget --manifest
+wonder --name /std/Show --witnesses SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -799,10 +807,44 @@ fn a_subject_for_the_server_and_a_second_query_do_not_parse() {
             &["wonder", "--tests", "--cost"],
             clap::error::ErrorKind::ArgumentConflict,
         ),
+        (
+            &["wonder", "--at", "app.crs:1:1", "app.crs"],
+            clap::error::ErrorKind::ArgumentConflict,
+        ),
     ] {
         let refused = parsed(words).expect_err("no such line parses");
         assert_eq!(refused.kind(), kind, "{}", words.join(" "));
     }
+}
+
+/// A view stands beside `--name` alone, one at most: beside any other query, or beside a second view, the line does not parse, where clap would otherwise waive the view's requirement of `--name` for the query that conflicts with it, and drop the view.
+#[test]
+fn a_view_beside_another_query_or_another_view_does_not_parse() {
+    let parsed =
+        |words: &[&str]| Cli::try_parse_from(iter::once("curios").chain(words.iter().copied()));
+
+    for view in ["--witnesses", "--exports"] {
+        for query in [
+            &["--tests"][..],
+            &["--cost"],
+            &["--stage", "core"],
+            &["--at", "app.crs:1:1"],
+            &["--server"],
+        ] {
+            let words = [&["wonder"][..], query, &[view]].concat();
+            let refused = parsed(&words).expect_err("a view beside another query does not parse");
+            assert_eq!(
+                refused.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{}",
+                words.join(" ")
+            );
+        }
+    }
+
+    let words = ["wonder", "--name", "/std/Map", "--exports", "--witnesses"];
+    let refused = parsed(&words).expect_err("a second view does not parse");
+    assert_eq!(refused.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
 
 /// Every command the parser knows has a line in the table, so a command added without one fails here rather than going unexamined.
