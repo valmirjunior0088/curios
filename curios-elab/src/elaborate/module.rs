@@ -17,12 +17,12 @@ use {
         Readers, RecordKeyword, Traces, Turns, Vectors, Zonked, body_levels, check,
         check_concept_registry, check_is_sort, check_proof_totality, check_type_totality,
         check_written_type_totality, classify_totality, compared_levels, decide_polarities,
-        definition_variances, field_variances, finalize_definition, goal_sites, hold_prop,
-        hold_variances, parameter_field, record_definition_totality, record_superclasses,
-        record_variances, reduce_with, register_witness, report_goals, result_sort_only_metas,
-        sort_family_levels, state_proof_binders, superclass_targets, test_program_tail,
-        validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
-        zonk_solved_term_metas,
+        definition_variances, field_variances, finalize_definition, goal_sites, group_levels,
+        hold_prop, hold_variances, member_variances, parameter_field, record_definition_totality,
+        record_superclasses, record_variances, reduce_with, register_witness, report_goals,
+        result_sort_only_metas, sort_family_levels, state_proof_binders, superclass_targets,
+        test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
+        zonk_entry, zonk_published, zonk_solved_term_metas,
     },
     curios_analysis::{definition_applications, group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
@@ -573,7 +573,7 @@ fn elaborate_module_let(
         }
         record_applications(context, &rec);
 
-        let vectors = member_vectors(context, &rec)?;
+        let vectors = member_vectors(context, &rec, verdict)?;
         return Ok((Item::Rec(rec), vectors));
     }
 
@@ -980,13 +980,18 @@ fn elaborate_module_rec(
     }
     record_applications(context, &rec);
 
-    let vectors = member_vectors(context, &rec)?;
+    let vectors = member_vectors(context, &rec, group)?;
     Ok((rec, vectors))
 }
 
-/// Each member's vectors, read off its value as a `let`'s are off its body: the member is its group's projection, which the variance walk reads by the least fixpoint of the group's unfolding where the group terminates. Two instances of a member apart in a level only its parameters' types state are then one before either unfolds, as the certifier finds the two projections they unfold to.
-fn member_vectors(context: &mut Context, rec: &RecItem) -> Result<Vec<(Global, Vectors)>, Error> {
+/// Each member's vectors, read off its value as a `let`'s are off its body: the member is its group's projection, which the variance walk reads by the least fixpoint of the group's unfolding where the group terminates, read once for the group with nothing reduced ([`group_levels`]) for a member that answers no type; a group not known to terminate is read as written. Two instances of a member apart in a level only its parameters' types state are then one before either unfolds, as the certifier finds the two projections they unfold to.
+fn member_vectors(
+    context: &mut Context,
+    rec: &RecItem,
+    totality: Totality,
+) -> Result<Vec<(Global, Vectors)>, Error> {
     let universe_context = rec.universe_context().clone();
+    let group = group_levels(rec.group(), totality);
     rec.exports()
         .iter()
         .enumerate()
@@ -994,7 +999,13 @@ fn member_vectors(context: &mut Context, rec: &RecItem) -> Result<Vec<(Global, V
             let type_ = rec.group().member_type(index);
             let value = Term::rec_proj(rec.group().clone(), index);
             let vectors = Vectors {
-                variances: definition_variances(context, &universe_context, &type_, &value)?,
+                variances: member_variances(
+                    context,
+                    &universe_context,
+                    &type_,
+                    &value,
+                    group.as_ref(),
+                )?,
                 field_variances: field_variances(&universe_context, &type_, &value),
                 parameter_field: parameter_field(&type_, &value),
             };

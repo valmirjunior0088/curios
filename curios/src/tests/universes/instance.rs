@@ -76,17 +76,17 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     }
 }
 
-// `use_call`'s two spellings of `zip` are two instances of one recursive group, related only by `u ≤ x1`, `v ≤ z1` if left apart, which the certifier would refuse. The elaborator identifies the two instances where they meet, so the declared type's `zip` is spelled at the levels the body already carries and the certifier accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, and the two of the instance of `zip` its result names, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Two calls of a recursive definition are compared at every level, so that instance's levels stand where conversion compares them and are the signature's callers' to choose. Every other level is an occurrence's at a position its family is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is four.
+// `use_call`'s two spellings of `zip` are two instances of one recursive group, and both checkers accept the program. A member of a group known to terminate is compared, as its group's projection is, at the levels its unfolding holds, and `zip`'s holds none of its own: what it answers is pairs of what it is handed. So the instance of `zip` the result names leaves its callers no level to choose, and the signature keeps the two levels its writer chose, `A`'s and `B`'s, which is what the count pins. Every other level is an occurrence's at a position its family or member is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, and `zip`'s at its floors.
 #[test]
-fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
+fn a_signature_instantiating_one_recursive_definition_twice_keeps_only_its_writers_levels() {
     typecheck_within(DEFAULT_BUDGET, TWO_INSTANCES_OF_ZIP)
         .expect("both checkers accept the program");
 
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
-        Some(&4),
-        "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
+        Some(&2),
+        "the signature kept a level of a member that holds none, or lost one its writer chose: {parameters:?}",
     );
 }
 

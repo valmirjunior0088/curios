@@ -808,3 +808,33 @@ fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
         );
     }
 }
+
+// **A recursive member that answers no type holds no level of its group in what it answers.** `every` is `/std/List/all`'s shape: a recursion over a list answering a `Bool`, so its projection mentions its group's levels and its answer holds none. Read off its group's body as written beneath its own binders, where its call to itself is the group's own local and carries no level — the least fixpoint of the group's unfolding conversion reads two projections by, with nothing reduced — its vector claims each level irrelevant, so `every_cons`, which names `every` at two levels, settles them at their least values and declares no more parameters than `every` does. Read as written, the projection held every level of its group, and `every_cons` kept both.
+#[test]
+fn a_recursive_member_answering_no_type_holds_no_level_of_its_group() {
+    let source = r#"
+        use /std/{Bool, List};
+        pub let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+            match l
+            | [] => true
+            | [h, ..t] => match pred(h) | true => every(t, pred) | false => false end
+            end;
+        pub let every_cons(
+            @T: Type,
+            pred: (T) -> Bool,
+            h: T,
+            t: List(T),
+            first: Bool/Holds(pred(h)),
+            rest: Bool/Holds(every(t, pred)),
+        ) -> Bool/Holds(every([h, ..t], pred)) =
+            match pred(h) | true => rest | false => match first end end;
+        /std/print("every")
+        "#;
+
+    let parameters = universe_parameters(source);
+    assert_eq!(
+        parameters.get("/every_cons"),
+        parameters.get("/every"),
+        "a declaration naming a recursive member at two levels kept a level the member's answer holds none of: {parameters:?}",
+    );
+}

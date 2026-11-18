@@ -9,8 +9,8 @@ use {
     curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
         Bound, Families, Func, FuncType, Global, InductDecl, Level, LevelHead, ParameterField,
-        Proj, Struct, StructDecl, Subterm, Term, Tuple, UniverseContext, UniverseMetaId,
-        UniverseParam, Variance, rewrite_universe_levels, universe_params,
+        Proj, RecGroup, Struct, StructDecl, Subterm, Term, Totality, Tuple, UniverseContext,
+        UniverseMetaId, UniverseParam, Variance, rewrite_universe_levels, universe_params,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -223,6 +223,46 @@ pub fn definition_variances(
             false => Variance::Irrelevant,
         })
         .collect())
+}
+
+/// The levels the members of `group` hold, read once for the group where it is known to terminate (`totality`): every level a member's body mentions as written beneath its own leading binders, joined over the members. A member's body names the group's members by its own bound locals, which carry no level, so two instances of the group unfold to terms apart only where a body mentions a level, and again only there one round further in — the least fixpoint `curios-analysis`'s `group_held` reads by forcing, read here with nothing reduced, so a body's closed computations, a formatter run on what an arm binds among them, are not run to read it. A mention counts wherever it stands, so it claims no more than the forced reading. `None` for a group not known to terminate, whose unfolding neither checker makes, and which is read as written.
+pub fn group_levels(group: &RecGroup, totality: Totality) -> Option<BTreeSet<UniverseParam>> {
+    totality.is_total().then(|| {
+        group
+            .iter()
+            .flat_map(|member| {
+                let outer = match &**member.type_.body() {
+                    Subterm::FuncType(FuncType { telescope, .. }) => Some(telescope.len()),
+                    _ => None,
+                };
+                match &**member.body.body() {
+                    Subterm::Func(Func { telescope, .. }) if Some(telescope.len()) == outer => {
+                        universe_params(telescope.terminal())
+                    }
+                    _ => universe_params(member.body.body()),
+                }
+            })
+            .collect()
+    })
+}
+
+/// Which of a group member's universe parameters its value holds: for a member that answers no type, what its group's members hold ([`group_levels`]); a member that answers a type, or one of a group read as written, as [`definition_variances`] reads any definition. Read as written, the member's projection holds every level its group's types mention, so a declaration naming the member at two levels would keep both, where conversion holds the two instances one.
+pub fn member_variances(
+    context: &mut Context,
+    universe_context: &UniverseContext,
+    type_: &Term,
+    value: &Term,
+    group: Option<&BTreeSet<UniverseParam>>,
+) -> Result<Vec<Variance>, Error> {
+    match group {
+        Some(held) if !answers_a_type(type_) => Ok((0..universe_context.parameter_count)
+            .map(|index| match held.contains(&UniverseParam(index)) {
+                true => Variance::Invariant,
+                false => Variance::Irrelevant,
+            })
+            .collect()),
+        _ => definition_variances(context, universe_context, type_, value),
+    }
 }
 
 /// Which of a record-valued definition's universe parameters each field of its value holds, read where its levels have closed: one vector per field of the struct or tuple literal its body is beneath its own binders, each one entry per parameter of `universe_context`, and none for any other definition or one that takes no parameter.
