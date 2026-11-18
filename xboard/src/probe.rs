@@ -13,7 +13,7 @@ use {
 pub struct Probe {
     answer: Answer,
     /// What the proof's form put it to.
-    asked: [Checker; 2],
+    asked: &'static [Checker],
 }
 
 impl Probe {
@@ -54,7 +54,7 @@ impl fmt::Display for Probe {
             false => writeln!(formatter, "REFUSED    by {}", refusers(&self.answer))?,
         }
 
-        for checker in self.asked {
+        for &checker in self.asked {
             writeln!(
                 formatter,
                 "           {:<10}  {}",

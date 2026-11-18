@@ -330,6 +330,15 @@ fn an_archived_ticket_stands_until_a_checker_reads_its_witness() {
         standing(&archived, &[gone()], &[unparsed]),
         Standing::Archived
     );
+    assert_eq!(
+        standing(
+            &archived,
+            &[gone()],
+            &[Proof::Module("#Banana".to_string()).answer()]
+        ),
+        Standing::Archived,
+        "Core text the reader makes no module of is read by no checker"
+    );
     for read in [
         by_elaborator(curios_elab::Error::Poisoned),
         by_certifier(curios_cert::Error::UntypedEntry),

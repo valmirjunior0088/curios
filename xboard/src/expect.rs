@@ -49,7 +49,6 @@ impl Expected {
                     named(member.raised().variant_name()) && stands(member.declared_in())
                 })
             }
-            (Checker::Reader, Refusal::Read { error, .. }) => named(error.refusal.variant_name()),
             (Checker::Certifier, Refusal::Certifier(verdict)) => {
                 named(verdict.error.variant_name()) && stands(verdict.name.as_ref())
             }

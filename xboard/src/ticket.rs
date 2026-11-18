@@ -90,7 +90,7 @@ impl Step {
             Step::Unit {
                 written: Written::CoreText,
                 ..
-            } => &[Checker::Reader, Checker::Certifier],
+            } => &[Checker::Certifier],
             Step::Withhold { .. } => &[Checker::Certifier],
             Step::Unmount { .. } => &[],
         }
@@ -112,10 +112,10 @@ impl Witness {
             .steps
             .iter()
             .flat_map(|step| step.asked().iter().copied())
-            .chain(self.proof.asked())
+            .chain(self.proof.asked().iter().copied())
             .collect::<Vec<_>>();
 
-        [Checker::Elaborator, Checker::Reader, Checker::Certifier]
+        [Checker::Elaborator, Checker::Certifier]
             .into_iter()
             .filter(|checker| asked.contains(checker))
             .collect()
@@ -139,11 +139,11 @@ impl Proof {
         }
     }
 
-    /// What the proof is put to, in the order it meets them: the step that builds its module, then the certifier.
-    pub fn asked(&self) -> [Checker; 2] {
+    /// What the proof is put to, in the order it meets them: for a program the elaborator that builds its module, then the certifier; for a module the certifier alone.
+    pub fn asked(&self) -> &'static [Checker] {
         match self {
-            Proof::Program(_) => [Checker::Elaborator, Checker::Certifier],
-            Proof::Module(_) => [Checker::Reader, Checker::Certifier],
+            Proof::Program(_) => &[Checker::Elaborator, Checker::Certifier],
+            Proof::Module(_) => &[Checker::Certifier],
         }
     }
 }

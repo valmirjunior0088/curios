@@ -26,14 +26,12 @@ pub fn false_name() -> Global {
     Global::Authored(SYNTAX.proof.false_type.qualifier())
 }
 
-/// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place. A record names one by the word it is displayed as.
+/// What judges a witness: the two checkers. A record names one by the word it is displayed as. Core text the reader cannot make a module of is judged by neither: its construction is one no type of the trusted base can hold, read by no checker as a construct the grammar no longer has is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Checker {
     /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the certifier either way.
     Elaborator,
-    /// `curios-surface`'s reader, which builds the module Core text writes. Text that does not parse is counted here, as a program the grammar refuses is the elaborator's.
-    Reader,
     /// `curios-cert` and the layer it judges through: the trusted base.
     Certifier,
 }
@@ -43,7 +41,6 @@ impl Checker {
     pub fn errors(self) -> &'static [&'static str] {
         match self {
             Checker::Elaborator => <curios_elab::Error as Variants>::NAMES,
-            Checker::Reader => <curios_surface::Refusal as Variants>::NAMES,
             Checker::Certifier => <curios_cert::Error as Variants>::NAMES,
         }
     }
@@ -53,7 +50,6 @@ impl fmt::Display for Checker {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Checker::Elaborator => "elaborator",
-            Checker::Reader => "reader",
             Checker::Certifier => "certifier",
         })
     }
@@ -64,10 +60,8 @@ impl fmt::Display for Checker {
 pub enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
-    /// Core text that does not parse, or closes otherwise than with a term stating no type: a text that has rotted, which no expectation meets. Held as the reader reports it.
+    /// Core text no checker reads: one that does not parse, one the reader cannot make a module of, or one closing otherwise than with a term stating no type. On the board a text that has rotted, which no expectation meets, and in the archive a construct that left the language. Held as the reader reports it, at the place it stands where it names one.
     Unread(String),
-    /// The reader's refusal of a text that parses, with where it stands in the text.
-    Read { error: ReadError, reported: String },
     /// The elaborator's error, with the diagnostic a compilation prints for it.
     Elaborator {
         error: curios_elab::Error,
@@ -95,9 +89,8 @@ impl Refusal {
     pub fn by(&self) -> Option<Checker> {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
-            Refusal::Unread(_) | Refusal::Read { .. } => Some(Checker::Reader),
             Refusal::Certifier(_) => Some(Checker::Certifier),
-            Refusal::Stopped { .. } => None,
+            Refusal::Unread(_) | Refusal::Stopped { .. } => None,
         }
     }
 
@@ -105,8 +98,7 @@ impl Refusal {
     pub fn named(&self) -> String {
         match self {
             Refusal::Text(_) => "text".to_string(),
-            Refusal::Unread(_) => "reader".to_string(),
-            Refusal::Read { error, .. } => format!("reader `{}`", error.refusal.variant_name()),
+            Refusal::Unread(_) => "text".to_string(),
             Refusal::Elaborator { error, .. } => {
                 let mut variants = error
                     .each()
@@ -138,7 +130,6 @@ impl fmt::Display for Refusal {
         match self {
             Refusal::Text(reported)
             | Refusal::Unread(reported)
-            | Refusal::Read { reported, .. }
             | Refusal::Elaborator { reported, .. }
             | Refusal::Stopped { reported, .. } => formatter.write_str(reported),
             Refusal::Certifier(verdict) => {
@@ -155,7 +146,7 @@ impl fmt::Display for Refusal {
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
 pub enum Answer {
-    /// Refused before a module existed for the certifier to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text; or a history stopped by what names no checker, which says nothing of whether the certifier was asked.
+    /// Refused before a module existed for the certifier to judge: by the program's text, by the elaborator while it was building one, or by Core text no checker reads; or a history stopped by what names no checker, which says nothing of whether the certifier was asked.
     Unbuilt(Refusal),
     /// Judged by the certifier, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
     Judged(Vec<Refusal>),
@@ -180,7 +171,7 @@ impl Answer {
         matches!(self, Answer::Judged(_))
     }
 
-    /// Whether the witness failed before any checker read it: its program's text, or its Core text, did not parse or lower. What an archived witness answers.
+    /// Whether the witness failed before any checker read it: its program's text did not parse or lower, or its Core text did not parse or make a module. What an archived witness answers.
     pub fn unread(&self) -> bool {
         matches!(self, Answer::Unbuilt(Refusal::Text(_) | Refusal::Unread(_)))
     }
@@ -243,10 +234,7 @@ fn put_over<R>(predecessors: Predecessors<'_>, put: impl FnOnce(&Put) -> R) -> R
 fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
     match put_over(predecessors, |put| put.core_text(text)) {
         Err(Unread::Text(reported)) => Answer::Unbuilt(Refusal::Unread(reported)),
-        Err(Unread::Read(error)) => Answer::Unbuilt(Refusal::Read {
-            reported: located(&error),
-            error,
-        }),
+        Err(Unread::Read(error)) => Answer::Unbuilt(Refusal::Unread(located(&error))),
         Ok(rechecked) => Answer::Judged(
             rechecked
                 .verdicts
@@ -296,10 +284,7 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
     let at = |reported: String| format!("in the step of `/{mount}`: {reported}");
     match why {
         Unbuilt::Unparsed(reported) => Answer::Unbuilt(Refusal::Unread(at(reported))),
-        Unbuilt::Read(error) => Answer::Unbuilt(Refusal::Read {
-            reported: at(located(&error)),
-            error: *error,
-        }),
+        Unbuilt::Read(error) => Answer::Unbuilt(Refusal::Unread(at(located(&error)))),
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Judged(vec![Refusal::Certifier(*verdict)])
         }

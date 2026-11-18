@@ -62,32 +62,32 @@ fn a_module_whose_term_proves_nothing_is_refused_at_false() {
     assert_eq!(witness.unmet(&witness.proof.answer()), None);
 }
 
-/// A construction no type of the trusted base can hold still parses, and the reader refuses it by name, which a witness expects as it expects a checker's refusal.
+/// A construction no type of the trusted base can hold still parses, but the reader makes no module of it, so no checker reads it: a live witness written so has rotted, as one that does not parse has, and no expectation meets it.
 #[test]
-fn core_text_the_reader_refuses_is_refused_by_the_name_of_its_refusal() {
+fn core_text_the_reader_cannot_build_is_read_by_no_checker() {
     let witness = Witness {
         what: "an intrinsic Core has no variant for".to_string(),
         steps: Vec::new(),
         proof: Proof::Module("#Banana".to_string()),
         expect: vec![Expected {
-            by: Checker::Reader,
-            error: Some("UnknownIntrinsic"),
+            by: Checker::Certifier,
+            error: None,
             within: None,
         }],
     };
     let answer = witness.proof.answer();
 
-    assert!(!answer.certifier_asked());
-    assert_eq!(witness.unmet(&answer), None);
+    assert!(answer.unread() && !answer.certifier_asked());
+    assert!(witness.unmet(&answer).is_some());
 }
 
 /// A text that does not parse has rotted, and no expectation meets it, so it fails whatever its witness expects.
 #[test]
-fn core_text_that_does_not_parse_is_refused_by_the_reader_with_the_certifier_not_asked() {
+fn core_text_that_does_not_parse_is_read_by_no_checker() {
     let answer = Proof::Module("let".to_string()).answer();
 
     assert!(!answer.certifier_asked());
-    assert!(matches!(answer.refusals(), [refusal] if refusal.by() == Some(Checker::Reader)));
+    assert!(matches!(answer.refusals(), [refusal] if refusal.by().is_none()));
 }
 
 #[test]

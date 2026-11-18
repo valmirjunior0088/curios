@@ -466,9 +466,6 @@ fn expected(record: RefusedRecord, witness: &Witness) -> Result<Expected, String
         .transpose()?;
     let within = match within.as_deref() {
         None => None,
-        Some(_) if by == Checker::Reader => {
-            return Err("a reader's refusal stands in no declaration".to_string());
-        }
         Some("entry") => Some(Within::Entry),
         Some(path) if path.starts_with('/') => Some(Within::Declaration(path.to_string())),
         Some(other) => {

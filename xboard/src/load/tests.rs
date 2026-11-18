@@ -18,7 +18,7 @@ const RECORD: &str = r#"
     [[witness]]
     what = "a module"
     source = "a_module.crsc"
-    refused = [{ by = "certifier", error = "Mismatch", within = "entry" }, { by = "reader" }]
+    refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]
 "#;
 
 /// A ticket's record whose one witness is a history: a program mounted at `/lib`, its record of `/lib/one` withheld, and Core text read over it.
@@ -28,7 +28,7 @@ const HISTORY: &str = r#"
 
     [[witness]]
     what = "a history"
-    refused = [{ by = "elaborator" }, { by = "reader" }, { by = "certifier" }]
+    refused = [{ by = "elaborator" }, { by = "certifier" }]
 
     [[witness.step]]
     mount = "/lib"
@@ -88,10 +88,6 @@ fn a_ticket_reads_from_its_record_and_its_witnesses_texts() {
             &module.expect[0].within
         ),
         (Checker::Certifier, Some("Mismatch"), &Some(Within::Entry))
-    );
-    assert_eq!(
-        (module.expect[1].by, module.expect[1].error),
-        (Checker::Reader, None)
     );
 }
 
@@ -181,7 +177,10 @@ fn an_error_its_checker_does_not_raise_is_refused() {
 
 #[test]
 fn a_refusal_names_a_checker_its_witness_is_put_to() {
-    let record = RECORD.replace(r#"{ by = "reader" }"#, r#"{ by = "elaborator" }"#);
+    let record = RECORD.replace(
+        r#"{ by = "certifier", error = "Mismatch", within = "entry" }"#,
+        r#"{ by = "elaborator" }"#,
+    );
 
     assert!(refusal(&record).contains("a module is not put to the elaborator"));
 }
@@ -189,13 +188,17 @@ fn a_refusal_names_a_checker_its_witness_is_put_to() {
 #[test]
 fn a_refusal_stands_at_the_entry_or_in_a_declaration_by_its_absolute_path() {
     assert!(refusal(&RECORD.replace(r#""/f""#, r#""f""#)).contains("`f` is neither `entry`"));
-    assert!(
-        refusal(&RECORD.replace(
-            r#"{ by = "reader" }"#,
-            r#"{ by = "reader", within = "/f" }"#
-        ))
-        .contains("stands in no declaration")
+}
+
+/// The board judges by the two checkers, so a refusal by the reader of Core text is a word the loader does not know, refused as any unknown word is.
+#[test]
+fn a_refusal_is_by_the_elaborator_or_the_certifier() {
+    let record = RECORD.replace(
+        r#"within = "entry" }"#,
+        r#"within = "entry" }, { by = "reader" }"#,
     );
+
+    assert!(refusal(&record).contains("reader"), "{}", refusal(&record));
 }
 
 #[test]
@@ -250,10 +253,7 @@ fn a_history_reads_its_steps_and_closes_with_its_proof() {
         ] if mount == "lib" && text == "/std/Bool/True/qed()" && withheld == "lib" && names[..] == [one]
     ));
     assert!(matches!(&history.proof, Proof::Module(text) if text == "0"));
-    assert_eq!(
-        history.asked(),
-        [Checker::Elaborator, Checker::Reader, Checker::Certifier]
-    );
+    assert_eq!(history.asked(), [Checker::Elaborator, Checker::Certifier]);
 }
 
 #[test]
