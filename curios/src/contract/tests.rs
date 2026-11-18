@@ -87,6 +87,7 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "--declarations", SUBJECT],
         &["wonder", "--name", "/std/Bool/not", SUBJECT],
         &["wonder", "--witnesses", "/std/Show", SUBJECT],
+        &["wonder", "--name", "/std/Map", "--exports", SUBJECT],
         &["wonder", "--server"],
     ];
 
@@ -559,7 +560,7 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --line-w
   work/app/helper: bench → files <root>/work/app/bench.crs within 100
   work/app/nested: (none) → files lib.crs within 100
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -579,7 +580,7 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -599,7 +600,7 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -619,7 +620,7 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -639,7 +640,7 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -659,7 +660,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -679,7 +680,7 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -699,7 +700,7 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -719,7 +720,7 @@ wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves No
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -739,7 +740,27 @@ wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves N
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --server — Nothing, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --server --budget --manifest
+wonder --name /std/Map --exports SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
+  work/app: (none) → program serve
+  work/app: serve → program serve
+  work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
+  work/app: - → loose -
+  work/app: serve.crs → program serve
+  work/app: helper.crs → program serve through helper.crs
+  work/app: bench.crs → program bench
+  work/app: lib.crs → library app through lib.crs
+  work/app: util.crs → library app through util.crs
+  work/app: stray.crs → loose stray.crs
+  work/app: nested/lib.crs → library nested through nested/lib.crs
+  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
+  work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
+  work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
+  work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
+  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
+wonder --server — Nothing, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   takes no subject
 "#;
 

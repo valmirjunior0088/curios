@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
+    crate::{Elaboration, ManifestFlag, Mode, Pinned, Query, View},
     curios_common::{OsError, Report, STDIN_NAME},
     curios_module::Overlay,
     curios_package::{
@@ -258,6 +258,15 @@ pub const NAME: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// A question about what a module exposes, by its path, as [`NAME`] is about a declaration.
+pub const EXPORTS: Contract = Contract {
+    command: "wonder --name --exports",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 /// A question about a declaration by its path, as [`NAME`] is.
 pub const WITNESSES: Contract = Contract {
     command: "wonder --witnesses",
@@ -298,7 +307,8 @@ impl Mode {
                 Query::Stage(_) => &STAGE,
                 Query::At(_) => &AT,
                 Query::Declarations => &DECLARATIONS,
-                Query::Name(_) => &NAME,
+                Query::Name(_, None) => &NAME,
+                Query::Name(_, Some(View::Exports)) => &EXPORTS,
                 Query::Witnesses(_) => &WITNESSES,
                 Query::Server => &SERVER,
             },

@@ -42,8 +42,8 @@ use {
     curios_surface::{Format, Formatted},
     curios_wonder::{
         Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_cost,
-        wonder_declarations, wonder_diagnostics, wonder_name, wonder_stage, wonder_tests,
-        wonder_witnesses,
+        wonder_declarations, wonder_diagnostics, wonder_exports, wonder_name, wonder_stage,
+        wonder_tests, wonder_witnesses,
     },
     std::{
         collections::BTreeSet,
@@ -834,7 +834,14 @@ fn dispatch() -> Result<(), Failure> {
                 contract.admit_staged(subject, manifest, &here()?)?,
                 &mut Asking::reading(answered.clone()),
             )?,
-            Query::Name(path) => wonder_name(
+            Query::Name(path, None) => wonder_name(
+                elaboration.budget,
+                contract.admit_staged(subject, manifest, &here()?)?,
+                &path,
+                subject,
+                &mut Asking::reading(answered.clone()),
+            )?,
+            Query::Name(path, Some(View::Exports)) => wonder_exports(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 &path,

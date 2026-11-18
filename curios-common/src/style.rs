@@ -18,6 +18,8 @@ pub enum Kind {
     Format,
     /// A declaration asked about by its path, its whole text following the block.
     Declaration,
+    /// A module asked about by its path, the names it exposes following the block.
+    Module,
 }
 
 impl Kind {
@@ -29,12 +31,13 @@ impl Kind {
             Kind::Lint => "lint",
             Kind::Format => "format",
             Kind::Declaration => "declaration",
+            Kind::Module => "module",
         }
     }
 
-    /// Whether a report of this kind shows the code at its own place: every kind but a declaration's, whose whole text follows the block.
+    /// Whether a report of this kind shows the code at its own place: every kind but a declaration's, whose whole text follows the block, and a module's, whose names do.
     pub fn quotes_its_place(self) -> bool {
-        self != Kind::Declaration
+        !matches!(self, Kind::Declaration | Kind::Module)
     }
 
     /// Whether the kind says something went wrong, which is what is painted as trouble.

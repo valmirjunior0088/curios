@@ -4,8 +4,10 @@ use {
     crate::*,
     curios_common::{Qualifier, Source, Span},
     curios_core::{Declared, Totality},
+    curios_document::ModuleDocumentation,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
+    std::collections::BTreeSet,
     std::path::Path,
 };
 
@@ -398,4 +400,70 @@ fn a_place_answers_the_declaration_its_name_names() {
         ),
         ("/std/Bool/not", Declared::Function, Some(true), None, None),
     );
+}
+
+/// What a consumer reaches through the module `path` names, asked with nothing in scope but the prelude, as standard input with no text asks.
+fn exported(path: &str) -> Option<ModuleDocumentation> {
+    crate::exported(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                text: String::new(),
+            },
+            declares: None,
+            package: None,
+        },
+        &Qualifier::from(path.trim_start_matches('/').split('/')),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .expect("the prelude documents itself")
+}
+
+/// Every module of the standard library a consumer reaches is reached from its root by `--exports` alone, each child row's module answered in turn, and the modules so reached are the ones its documentation pages are: the listing and the pages are one reading of one record.
+#[test]
+fn every_module_of_the_standard_library_is_reached_from_its_root() {
+    let std = Qualifier::from(["std"]);
+    let record = curios_pipeline::prelude_documentation()
+        .into_iter()
+        .find(|record| record.prefix == std)
+        .expect("the prelude documents /std");
+    let mut reached = BTreeSet::new();
+    let mut pending = vec![std];
+    while let Some(path) = pending.pop() {
+        let module = exported(&path.join()).unwrap_or_else(|| panic!("{} answers", path.join()));
+        pending.extend(module.children.iter().copied());
+        reached.insert(path);
+    }
+
+    let paged = record
+        .modules
+        .iter()
+        .map(|module| module.path)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(reached, paged);
+}
+
+/// A facade's path names a declaration and a module: `--name` answers the declaration, the `Map` structure, and `--exports` the module, among whose names is `insert`; a private module answers nothing, as a consumer reaches none.
+#[test]
+fn a_facade_answers_its_declaration_and_its_module_and_a_private_module_nothing() {
+    let declaration = described("/std/print(\"x\")", "/std/Map").expect("the library declares it");
+    assert_eq!(declaration.declared, Declared::Struct);
+
+    let module = exported("/std/Map").expect("the library exposes the module");
+    assert!(
+        module
+            .declarations
+            .iter()
+            .any(|declaration| declaration.name == "insert"),
+        "{:?}",
+        module
+            .declarations
+            .iter()
+            .map(|declaration| &declaration.name)
+            .collect::<Vec<_>>()
+    );
+    assert!(exported("/std/Map/internal").is_none());
 }

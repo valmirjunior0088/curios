@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, NAME, PORT, RUN,
-        STAGE, TEST, TESTS, WITNESSES,
+        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, EXPORTS, FORMAT, LINT, NAME, PORT,
+        RUN, STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -435,8 +435,8 @@ pub enum Query {
     /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
     At(Place),
     Declarations,
-    /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it.
-    Name(Qualifier),
+    /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
+    Name(Qualifier, Option<View>),
     /// The witnesses in scope a declaration by its path takes part in, found as [`Query::Name`] finds it.
     Witnesses(Qualifier),
     /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
@@ -446,6 +446,13 @@ pub enum Query {
 impl Query {
     /// The group the query options form, which holds them to one.
     const GROUP: &str = "query";
+}
+
+/// What `--name` is asked beside its path, in place of the declaration's own block and text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum View {
+    /// What the module the path names exposes to a consumer.
+    Exports,
 }
 
 /// A declaration's path as `--name` takes it: absolute, each segment written.
@@ -532,6 +539,16 @@ impl Args for Query {
                         "The witnesses in scope the declaration an absolute path names takes part in, one row each: where it is written, and what it is keyed on or the concept it satisfies",
                     )),
             )
+            // A view stands beside `--name` and in no query's group, which would refuse it there.
+            .arg(
+                flag(
+                    "exports",
+                    EXPORTS.query_help(
+                        "What the module `--name` names exposes to a consumer, one row each: a name, what it is declared as and its head, then each public child module with the command that lists its own",
+                    ),
+                )
+                .requires("name"),
+            )
             .arg(
                 flag(
                     "server",
@@ -575,7 +592,7 @@ impl FromArgMatches for Query {
         } else if matches.get_flag("declarations") {
             Query::Declarations
         } else if let Some(path) = matches.get_one::<Qualifier>("name") {
-            Query::Name(*path)
+            Query::Name(*path, matches.get_flag("exports").then_some(View::Exports))
         } else if let Some(path) = matches.get_one::<Qualifier>("witnesses") {
             Query::Witnesses(*path)
         } else if matches.get_flag("server") {

@@ -17,8 +17,11 @@ use {
         Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
         Intrinsic, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths, WitnessKey,
     },
+    curios_document::{Documentation, ModuleDocumentation},
     curios_module::{Heading, Overlay, PreparedText, SYNTAX, heading, identity},
-    curios_pipeline::{Cache, EntryTail, Fold, Progress, spelling_at},
+    curios_pipeline::{
+        Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
+    },
     curios_surface::{IntrinsicForm, Spellable, intrinsic_form, intrinsic_global, spell},
     curios_unit::Unit,
     curios_verdict::Verdicts,
@@ -494,6 +497,44 @@ pub fn described(
             )))
         }
     }
+}
+
+/// What a consumer reaches through the module `asked` names, as the documentation record of the unit holding it states it ([`ModuleDocumentation`]): a unit in scope whose mount is the module's root, its record made over the units before it as `curios document` makes one ([`Fold::documentation`]), and otherwise the prelude's, which the image carries. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where no module a consumer reaches stands at the path. `overlay` and `cache` behave as they do for `diagnostics`.
+pub fn exported(
+    budget: u64,
+    subject: Subject,
+    asked: &Qualifier,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<ModuleDocumentation>, CompileError> {
+    let root = Qualifier::from([asked.head()]);
+    let module = |record: Documentation| {
+        record
+            .modules
+            .into_iter()
+            .find(|module| module.path == *asked)
+    };
+    let units = match subject {
+        Subject::Entry { units, .. } | Subject::Unit { units } => units,
+    };
+    let Some(holding) = units
+        .iter()
+        .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
+    else {
+        return Ok(prelude_documentation()
+            .into_iter()
+            .find(|record| record.prefix == root)
+            .and_then(module));
+    };
+    let store = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = store.as_ref().map(|store| store as &dyn Cache);
+    let mut units = overlaid(units, overlay);
+    units.truncate(holding + 1);
+
+    Ok(module(
+        Fold::new(budget, &units, through).documentation(progress)?,
+    ))
 }
 
 /// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering `own`, then the units in `scope` — beside the unit in scope that declares it, none for the subject's own. `None` for a name no lowered item declares.

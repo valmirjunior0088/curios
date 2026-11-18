@@ -8,7 +8,7 @@ use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Reached,
         Refusal, Severity, Subject, Uncosted, Written, checked, cost, declared_tests, described,
-        diagnostics, placed, stage, unit_stage, written,
+        diagnostics, exported, placed, stage, unit_stage, written,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -389,6 +389,27 @@ impl Asked {
 
         described
     }
+
+    /// What a consumer reaches through the module `path` names ([`exported`]), `telling` told of the compile as it goes.
+    pub fn exported(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        path: &Qualifier,
+        telling: &mut dyn Telling,
+    ) -> Result<Option<curios_document::ModuleDocumentation>, CompileError> {
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let exported = exported(budget, subject, path, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &exported {
+            Err(_) => Ended::Refused,
+            Ok(_) => Ended::Done,
+        });
+
+        exported
+    }
 }
 
 /// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, and after them each text of it the formatter would write otherwise, `files` and standard input read within `width`, a blank line between each, `telling` told of each subject's compile as it goes.
@@ -756,6 +777,89 @@ pub fn wonder_witnesses(
     }
 
     Ok(())
+}
+
+/// `wonder --name PATH --exports [SUBJECT]`: what a consumer reaches through the module `path` names, to stdout — a block naming the module, then a row for each name it exposes, its own declarations and each a `pub use` exposes in the order it writes them, the name, what it is declared as and its head on one line, as its documentation page lists them, then a row for each public child module, with the command that lists its own. Read off the documentation record ([`curios_document::ModuleDocumentation`]), so a page and the listing are one reading. A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_exports(
+    budget: u64,
+    staged: Staged,
+    path: &Qualifier,
+    subject: Option<&str>,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let reader = telling.reader();
+    let asked = match staged {
+        Staged::Program(program) => Asked::about_program(program)?,
+        Staged::Library(library) => Asked::about_library(library),
+    };
+    let Some(module) = asked.exported(budget, &Overlay::default(), path, telling)? else {
+        return Err(Refused::of("unknown module")
+            .stating("nothing in scope is a module at this path")
+            .about_named(path.join())
+            .into());
+    };
+    telling.answering();
+
+    let report =
+        Report::about(About::Named(path.join()), Said::line(path.join())).stating(format!(
+            "module, exposing {} and {}",
+            counted(module.declarations.len(), "name"),
+            counted(module.children.len(), "module")
+        ));
+    answer(format_args!("{}\n", report.rendered(Kind::Module, &reader)));
+    if !module.declarations.is_empty() || !module.children.is_empty() {
+        answer("\n");
+    }
+    for declaration in &module.declarations {
+        let head = declaration
+            .signature
+            .text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        answer(format_args!(
+            "{}\t{}\t{head}\n",
+            declaration.name,
+            exposed_as(declaration.kind)
+        ));
+    }
+    for child in &module.children {
+        answer(format_args!(
+            "{}\tmodule\t{}\n",
+            child.join(),
+            exports_listing(&child.join(), subject)
+        ));
+    }
+
+    Ok(())
+}
+
+/// `count` of what `noun` names, the noun plural past one.
+fn counted(count: usize, noun: &str) -> String {
+    match count {
+        1 => format!("1 {noun}"),
+        count => format!("{count} {noun}s"),
+    }
+}
+
+/// The word a name a module exposes is said to be declared as by, as its documentation page tallies it.
+fn exposed_as(kind: curios_document::Kind) -> &'static str {
+    match kind {
+        curios_document::Kind::Definition => "definition",
+        curios_document::Kind::Inductive => "inductive",
+        curios_document::Kind::Structure => "structure",
+        curios_document::Kind::Concept => "concept",
+        curios_document::Kind::Witness => "witness",
+        curios_document::Kind::Foreign => "foreign",
+    }
+}
+
+/// The command that lists what the module at `path` exposes, asked in the scope of `subject` as the command line wrote it.
+fn exports_listing(path: &str, subject: Option<&str>) -> String {
+    match subject {
+        Some(subject) => format!("curios wonder --name {path} --exports {subject}"),
+        None => format!("curios wonder --name {path} --exports"),
+    }
 }
 
 /// The command that lists the witnesses of the declaration at `path`, asked in the scope of `subject` as the command line wrote it.
