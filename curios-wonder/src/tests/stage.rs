@@ -91,3 +91,33 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
     }
     assert!(matches!(rung("anf"), Err(crate::Refusal::Unit)));
 }
+
+/// A library's `core` rung is its lowering, made over the units before it: the library is lowered and compiled nowhere, and what is printed is the lowering, its marks of what nothing has checked yet among it.
+#[test]
+fn a_librarys_core_rung_lowers_it_and_compiles_nothing() {
+    const LIBRARY: &str = "use /std/{Nat};\npub let answer: Nat = 40 + 2;\n";
+    let file = Path::new("answers.crs");
+    let overlay = Overlay::of([(file.to_path_buf(), LIBRARY.to_string())]);
+    let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
+        .expect("the text is written as a module");
+    let mut compiled = Vec::new();
+
+    let printed = crate::unit_stage(
+        DEFAULT_BUDGET,
+        vec![library],
+        file,
+        &overlay,
+        None,
+        "core",
+        &mut |progress| {
+            if let curios_pipeline::Progress::Compiling(prefix) = progress {
+                compiled.push(prefix.join());
+            }
+        },
+    )
+    .unwrap_or_else(|_| panic!("core is a unit's rung"));
+
+    assert!(compiled.is_empty(), "{compiled:?}");
+    assert!(printed.contains("answer"), "{printed}");
+    assert!(printed.contains("#{node = Infix}"), "{printed}");
+}

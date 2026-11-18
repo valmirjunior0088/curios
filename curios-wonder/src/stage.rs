@@ -4,6 +4,7 @@
 
 use {
     crate::{Diagnosis, Overlaid, Severity, Subject, of_error, open, overlaid},
+    curios_core::Definitions,
     curios_module::{Overlay, RootSource, SYNTAX, read_module},
     curios_pipeline::{Cache, Fold, Progress, Stage},
     curios_surface::{FormScope, Module, Spellable, Spelling},
@@ -89,7 +90,7 @@ pub fn stage(
 
 /// The rung `name` of a library — the last of `units`, compiled against the ones before it and the prelude — asked through `file`, as its rendering. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `anf` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
 ///
-/// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the file asked through, since a unit is several files and the rung's printer reprints one. `core` is the unit's lowered module, which a unit restored from a store holds without its items, so the unit is lowered again in this process with no store. `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
+/// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the file asked through, since a unit is several files and the rung's printer reprints one. `core` is the unit's lowering, made over the units before it as a question about a place makes one, and the unit checked nowhere (`Fold::lowered_unit`). `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
 pub fn unit_stage(
     budget: u64,
     units: Vec<RootSource>,
@@ -110,6 +111,7 @@ pub fn unit_stage(
 
     let units = overlaid(units, overlay);
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = reached.as_ref().map(|cache| cache as &dyn Cache);
     let rendered = match name {
         "text" => {
             let parsed = match overlay.get(file) {
@@ -124,19 +126,17 @@ pub fn unit_stage(
                 }]
             })
         }
-        // A question's unit is a program's, so it holds the lowering this rung prints.
-        "core" => last_unit(budget, &units, None, progress, |unit, spelling| {
-            unit.text()
-                .map(|lowered| lowered.core().spelled(spelling).to_string())
-                .unwrap_or_default()
+        "core" => Fold::new(budget, &units, through)
+            .lowered_unit(&mut *progress, |scope, lowered| {
+                lowered
+                    .core()
+                    .spelled(&dumped_over(scope.iter().map(|unit| unit.core())))
+                    .to_string()
+            })
+            .map_err(of_error),
+        _ => last_unit(budget, &units, through, progress, |unit, spelling| {
+            unit.core().spelled(spelling).to_string()
         }),
-        _ => last_unit(
-            budget,
-            &units,
-            reached.as_ref().map(|cache| cache as &dyn Cache),
-            progress,
-            |unit, spelling| unit.core().spelled(spelling).to_string(),
-        ),
     };
 
     rendered.map_err(Refusal::Diagnostics)
@@ -155,20 +155,25 @@ fn last_unit(
             Ok(produced
                 .split_last()
                 .map(|(last, before)| {
-                    let scope = FormScope::over(
-                        SYNTAX,
-                        prelude
-                            .iter()
-                            .map(|unit| unit.core())
-                            .chain(before.iter().map(Unit::core)),
-                    );
-                    let spelling = Spelling::core_text()
-                        .with_form_scope(Rc::new(scope))
-                        .written_as_text();
+                    let before = prelude
+                        .iter()
+                        .map(|unit| unit.core())
+                        .chain(before.iter().map(Unit::core));
 
-                    read(last, &Rc::new(spelling))
+                    read(last, &dumped_over(before))
                 })
                 .unwrap_or_default())
         })
         .map_err(of_error)
+}
+
+/// The spelling a dump of a unit's Core is written in: Core text proper, a test's and a foreign row's forms made against `before`, the elaborated modules of the units before it, the prelude's roots first.
+fn dumped_over<'a>(before: impl IntoIterator<Item = &'a Definitions>) -> Rc<Spelling> {
+    let scope = FormScope::over(SYNTAX, before);
+
+    Rc::new(
+        Spelling::core_text()
+            .with_form_scope(Rc::new(scope))
+            .written_as_text(),
+    )
 }
