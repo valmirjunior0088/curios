@@ -14,8 +14,8 @@ fn an_entry_that_describes_nothing_closes_no_program() {
 }
 
 #[test]
-fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
-    // Each `Option/none()` leaves its payload type open, and `same` holds the two to one type: a pair of unsolved metavariables, which conversion solves neither of to the other. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched.
+fn two_holes_held_to_one_type_report_the_implicit_a_reader_can_write() {
+    // Each `Option/none()` leaves its payload type open, and `same` holds the two to one type: a pair of unsolved metavariables, which the completing term solves one as the other, the one left being the other call's. Nothing pins it, so the report names that implicit, never a rigid mismatch or an elaboration counter, and closes on writing it.
     let source = r#"
         use /std/{Nat, Option, Io};
 
@@ -27,16 +27,20 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("undecided conversion"),
+        error.contains("the implicit argument `A` of `Option/none` was not inferred")
+            && error.contains("supply it explicitly, `Option/none(@...)`"),
         "unexpected report: {error}"
     );
-    assert!(error.contains("never solved"), "unexpected report: {error}");
+    assert!(
+        !error.contains("type mismatch"),
+        "unexpected report: {error}"
+    );
     assert!(!mentions_metavar_id(&error), "id leaked: {error}");
 }
 
 #[test]
-fn a_conversion_left_undecided_by_a_written_calls_implicit_closes_on_writing_it() {
-    // `Proc/exit`'s result type is never pinned, and the `bind` the `!` is elaborated as waits on it: the report names both as never solved, and closes on the one argument a reader can write, in the call they wrote. The `bind` is no call to write into. Mutation-checked: closing on every implicit names `/std/Monad/bind` too, and closing on none names neither.
+fn an_implicit_a_bang_waits_on_is_reported_at_the_call_the_reader_wrote() {
+    // `Proc/exit`'s result type is never pinned, and the `bind` the `!` is elaborated as waits on it: the completing term solves one of the two holes as the other, and leaves the one a report can name with a call the reader wrote, so the report closes on writing it there. The `bind` is no call to write into. Mutation-checked: leaving the younger hole whatever names it, the report names `/std/Monad/bind`.
     let source = r#"
         use /std/{print, Proc};
 
@@ -45,14 +49,11 @@ fn a_conversion_left_undecided_by_a_written_calls_implicit_closes_on_writing_it(
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("undecided conversion") && error.contains("never solved"),
+        error.contains("the implicit argument `A` of `Proc/exit` was not inferred")
+            && error.contains("supply it explicitly, `Proc/exit(@...)`"),
         "unexpected report: {error}"
     );
-    assert!(
-        error.contains("supply it explicitly, `Proc/exit(@...)`"),
-        "unexpected report: {error}"
-    );
-    assert!(!error.contains("bind(@...)"), "unexpected report: {error}");
+    assert!(!error.contains("bind"), "unexpected report: {error}");
 }
 
 #[test]
@@ -227,6 +228,11 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
     );
     assert!(
         error.contains("Eq(@?)(?(k), ?(7))"),
+        "unexpected error: {error}"
+    );
+    // Each call the reader wrote that leaves an implicit open is a place to write it, and the report closes on them.
+    assert!(
+        error.contains("supply one explicitly, `f(@...)` or `Eq/cong(@...)`"),
         "unexpected error: {error}"
     );
     // The goal is named in the sentence and shown as the report's second place.

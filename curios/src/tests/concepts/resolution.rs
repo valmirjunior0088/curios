@@ -118,7 +118,7 @@ fn multi_param_witnesses_share_a_first_head() {
     assert_eq!(run(source), b"false");
 }
 
-// Every concept parameter participates in the witness key, so a goal whose second parameter is never pinned parks and surfaces as an error at the end of the module — no accidental inference from the witness.
+// Every concept parameter participates in the witness key, so a goal whose second parameter is never pinned parks and surfaces as an error at the end of the module — no accidental inference from the witness: the key it wanted still holds the parameter open.
 #[test]
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
@@ -135,8 +135,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
 
     let message = error(source).to_lowercase();
     assert!(
-        message.contains("never solved")
-            && message.contains("implicit argument `b` of `into/into`"),
+        message.contains("wanted: `into(nat, ?)`"),
         "unexpected report:\n{message}"
     );
 }

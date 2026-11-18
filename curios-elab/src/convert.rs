@@ -38,12 +38,12 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_common::{Keyed, Plicity, recurse},
     curios_core::{
-        Advance, Apply, ArgumentSite, Atom, Bound, Carrier, Cases, Cost, Cursor, Exhaustion,
-        Extent, Families, Free, Func, FuncType, Global, InductInstance, InductType, Instance,
-        Intrinsic, Level, Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin, Paired,
-        Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError, Universes,
-        Variance, Variant, paired,
+        Advance, Apply, ArgumentSite, Atom, Bound, CalleeId, Carrier, Cases, Cost, Cursor,
+        Exhaustion, Extent, Families, Free, Func, FuncType, Global, InductInstance, InductType,
+        Instance, Intrinsic, Level, Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin,
+        Paired, Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError,
+        Universes, Variance, Variant, paired,
     },
     std::{
         collections::{HashMap, HashSet, VecDeque},
@@ -2880,6 +2880,41 @@ impl Convert {
                         }
                     }
 
+                    // Two distinct holes are one where a completing term holds the spines it awaits, the last resort imitation takes too ([`Context::holds_spines`]): the one a report names less well solved as the other ([`named_by`]), and otherwise the younger as the older, restricted where its context reaches past the other's. The one left is what an unsolved report names. Anywhere earlier the pair stays open, since solving it equates the two holes' types, levels included, before the constraints that would pin each apart; a hole its owner fills stays open always.
+                    if this_m.id != that_m.id
+                        && context.holds_spines()
+                        && !context.owner_fills(this_m.id)
+                        && !context.owner_fills(that_m.id)
+                    {
+                        let (this_named, that_named) =
+                            (named_by(context, &this_m), named_by(context, &that_m));
+                        let solve_this = match this_named.cmp(&that_named) {
+                            std::cmp::Ordering::Less => true,
+                            std::cmp::Ordering::Greater => false,
+                            std::cmp::Ordering::Equal => this_m.id > that_m.id,
+                        };
+                        let solved = match solve_this {
+                            true => {
+                                let standing =
+                                    (relation == Relation::Below).then_some(Standing::Under);
+                                self.solve_at_birth(context, &this_m, &that, &that_raw, standing)?
+                            }
+                            false => {
+                                let standing =
+                                    (relation == Relation::Below).then_some(Standing::Over);
+                                self.solve_at_birth(context, &that_m, &this, &this_raw, standing)?
+                            }
+                        };
+                        match solved {
+                            Solved::Done => continue,
+                            Solved::Postponed => {
+                                self.blocked.push(raw_problem(&type_));
+                                continue;
+                            }
+                            Solved::Failed => return Ok(false),
+                        }
+                    }
+
                     // Holes their owner fills, and distinct heads (or an undecided probe): flex–flex does no intersection — postpone.
                     self.blocked.push(raw_problem(&type_));
                     continue;
@@ -3568,4 +3603,23 @@ fn level_question(
         Some(_) => LevelQuestion::Blocked,
         None => LevelQuestion::Distinct,
     })
+}
+
+/// How well a report names `metavar` left unsolved: a silent hole not at all, the `bind` a `!` is elaborated as by a call no reader wrote, a witness by the witness it wants, which reads as missing where an argument of its key is what nothing pinned, and any other origin by what the reader wrote or can write. Of two holes one is solved as the other, the better named is the one left.
+fn named_by(context: &Context, metavar: &Metavar) -> u8 {
+    let bind = context.syntax().monad.bind;
+    match &metavar.origin {
+        MetavarOrigin::Hole => 0,
+        MetavarOrigin::Implicit(site)
+            if matches!(
+                &site.callee,
+                CalleeId::Method { concept, field }
+                    if *concept == Global::Authored(bind.concept.qualifier()) && *field == bind.field
+            ) =>
+        {
+            1
+        }
+        MetavarOrigin::Witness(_) => 2,
+        _ => 3,
+    }
 }

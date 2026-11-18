@@ -76,9 +76,9 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     );
 }
 
-// A conversion parked between two metavariables that never solve reports the metavariables and nothing else: `between: ?` and `and: ?` name nothing a reader can act on, so the report leads with the implicit that was never inferred, as the `List/len([])` report does.
+// Two metavariables a conversion holds to one another and nothing else pins are solved one as the other where the completing term holds them, and the one left reports as what it is, the implicit never inferred, as the `List/len([])` report does: never `between: ?` and `and: ?`, which name nothing a reader can act on.
 #[test]
-fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
+fn two_holes_held_to_one_another_report_only_the_implicit_left() {
     let report = error(
         r#"
         use /std/{Nat, Eq, Result};
@@ -88,7 +88,7 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     );
     assert!(
         !report.contains("between: ?")
-            && report.contains("never solved: the implicit argument `E`"),
+            && report.contains("the implicit argument `E` of `Result/map` was not inferred"),
         "unexpected report:\n{report}"
     );
 }
@@ -177,12 +177,13 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
         entry()
         "#,
     );
-    assert!(
-        report.contains("never solved: ")
-            && report.contains("the implicit argument `A` of `Proc/exit`"),
+    assert_eq!(
+        report
+            .matches("the implicit argument `A` of `Proc/exit` was not inferred")
+            .count(),
+        1,
         "{report}"
     );
-    assert!(!report.contains("was not inferred"), "{report}");
 }
 
 // A written argument is checked as written, and then held to its call's type. A tuple at a slot whose type is still a metavariable waits behind a placeholder, as a numeral does in a list read where it stands, and the call's expected type states the slot's value before the argument is checked. Conversion waits on the placeholder as it waits on a recursive group's slot, so nothing but the argument's own check fills it, and the value the type states meets the argument that was written. Mutation-checked: letting conversion solve a placeholder accepts both, with the type's value standing where the argument was written.

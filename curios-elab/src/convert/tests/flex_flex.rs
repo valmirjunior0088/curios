@@ -60,7 +60,7 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
 
 #[test]
 fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
-    // Pinned: two *distinct* unsolved metavariables over compatible telescopes, met through the same live name. Flex–flex assignment (`?0 := ?1` through the renaming) would discharge this; flex–flex does no intersection, so the pair parks and — with nothing else to pin either head — stays undecided.
+    // Two *distinct* unsolved metavariables over compatible telescopes, met through the same live name, asked by conversion alone: solving one as the other would equate their types, levels included, before the constraints that would pin each apart, so the pair parks and stays undecided. Where a completing term holds the spines it awaits, the pair is solved ([`a_completing_term_solves_two_distinct_heads_the_younger_as_the_older`]).
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
@@ -75,6 +75,66 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
     assert_eq!(context.metavar_solution(MetavarId(1)), None);
+}
+
+/// Two distinct heads met where a completing term holds the spines it awaits, the last resort imitation takes: the younger is solved as the older through the renaming, the older restricted to a stand-in where its birth reaches binders the younger's does not, and the pair converts, asked again with nothing more to solve. Mutation-checked: with the pair postponed there as anywhere, it stays blocked.
+#[test]
+fn a_completing_term_solves_two_distinct_heads_the_younger_as_the_older() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let x = context.fresh(Some("x"));
+    context.birth_metavar(MetavarId(0), vec![(a, nat_type())], nat_type());
+    context.birth_metavar(MetavarId(1), vec![(b, nat_type())], nat_type());
+
+    let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+    let that = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+
+    let outcome = context
+        .holding_spines(|context| convert_outcome(context, &Term::type_ground(), &this, &that));
+    assert!(matches!(outcome, Ok(Outcome::Converts)), "{outcome:?}");
+    assert!(
+        context.metavar_solution(MetavarId(1)).is_some(),
+        "the younger is solved as the older"
+    );
+    // Asked again, the two are one with nothing further to solve.
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+}
+
+/// Two distinct heads whose spines share only one variable, where a completing term holds them: the younger, over the variable alone, is solved as the older, which reads a second variable the younger's context does not hold, so the older is restricted to what both reach before the younger is solved as it. Both end solved through that restriction, and the pair converts.
+#[test]
+fn a_completing_term_solves_two_heads_sharing_some_variables_through_a_restriction() {
+    let mut context = context();
+    let a = context.fresh(Some("a"));
+    let a2 = context.fresh(Some("a2"));
+    let b = context.fresh(Some("b"));
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    context.birth_metavar(
+        MetavarId(0),
+        vec![(a, nat_type()), (a2, nat_type())],
+        nat_type(),
+    );
+    context.birth_metavar(MetavarId(1), vec![(b, nat_type())], nat_type());
+
+    let this = Term::metavar_birthed(
+        0,
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&x), Term::free_var(&y)],
+    );
+    let that = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+
+    let outcome = context
+        .holding_spines(|context| convert_outcome(context, &Term::type_ground(), &this, &that));
+    assert!(matches!(outcome, Ok(Outcome::Converts)), "{outcome:?}");
+    assert!(
+        context.metavar_solution(MetavarId(0)).is_some(),
+        "the older is restricted"
+    );
+    assert!(
+        context.metavar_solution(MetavarId(1)).is_some(),
+        "the younger is solved"
+    );
 }
 
 /// `flat(?0)` against `flat(1)`, where `flat` forgets its argument: the two are equal whatever `?0` is, and their spines agree at `?0 := 1`.

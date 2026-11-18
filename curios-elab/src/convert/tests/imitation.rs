@@ -488,29 +488,30 @@ fn a_held_application_offers_its_imitation_and_takes_it_only_when_asked() {
     assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
 }
 
-// `?0(?1) ≟ List(?2)` held: the imitation solves `?0`, and its argument pair `?1 ≟ ?2` stands between two metavariables, which conversion solves neither of. The imitation is kept and the pair is what is left of the conversion, so a solution of either decides the other.
+// `?f(?a) ≟ List(?b)` held, `?a` and `?b` placeholders of parked checks: the imitation solves `?f`, and its argument pair `?a ≟ ?b` stands between two holes their owners fill, which conversion solves neither of, held or not. The imitation is kept and the pair is what is left of the conversion, so a fill of either decides the other.
 #[test]
 fn an_imitation_is_kept_where_its_arguments_still_wait() {
     let mut context = context();
     register_list(&mut context);
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetavarId(0), Vec::new(), kind);
-    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
-    context.birth_metavar(MetavarId(2), Vec::new(), Term::type_ground());
+    let (a, a_term) = context.fresh_placeholder(Term::type_ground(), None);
+    let (_, b_term) = context.fresh_placeholder(Term::type_ground(), None);
+    let imitated = context.mint_metavar();
+    context.birth_metavar(imitated, Vec::new(), kind);
 
-    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
-    let rigid = Term::induct_type(nominal("List"), [Term::hole(2)], Vec::<Term>::new());
+    let flex = Term::apply(Term::hole(imitated.0), [a_term.clone()]);
+    let rigid = Term::induct_type(nominal("List"), [b_term.clone()], Vec::<Term>::new());
     let held = hold_spines(&mut context, &awaited(&flex, &rigid), Spines::Held)
         .unwrap()
         .expect("an imitation");
 
     assert_eq!(
         held.solved.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
-        [MetavarId(0)]
+        [imitated]
     );
-    assert_eq!(held.left, [awaited(&Term::hole(1), &Term::hole(2))]);
-    assert!(context.metavar_solution(MetavarId(0)).is_some());
-    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+    assert_eq!(held.left, [awaited(&a_term, &b_term)]);
+    assert!(context.metavar_solution(imitated).is_some());
+    assert_eq!(context.metavar_solution(a), None);
 
     // Held again, the pair that is left solves nothing, and so is no further decided.
     assert_eq!(
