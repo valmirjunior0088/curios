@@ -2,11 +2,10 @@
 
 Adopted: a census holds every declaration's lowering to its record and to its answers, so that what a recompile keeps is what a whole compile would make. [A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md) keeps a declaration's lowering over a baseline where its text stands and every name it resolved is answered as it was, resting on the claim `curios-module/src/into_core/lowered.rs` opens with: a declaration reads its scope through two doors alone, what they answer is everything its lowering reads of a name, and what they read is what its record names. The claim is held by reading alone, and a read past it goes unseen until a recompile keeps a stale lowering, as a concept's method read past the answer did: nothing lowers a declaration with no more than its record, or its answers, in scope. Settled with the user on 2026-11-18.
 
-The next step is stage 4, a delivery.
+The next step is stage 5, a delivery.
 
 ## What is wrong today, and where
 
-- **What a step reads is stated twice.** A door reads a module's label through `visible_child` or `visible_binding`, each paired by hand with the `consult` recording it, eight times in `context.rs`, and a ninth reads the namespace a name resolved into (`Context::found`); what an edit compares of the label is `moved_between`'s own reading of its entry. The comparison holds everything a door reads today, and nothing keeps it so.
 - **Nothing lowers one declaration alone.** `process_items` (`curios-module/src/into_core.rs`) lowers a declaration in its arms over `TopItem`, inline in the walk, beside a struct, `Lowering`, whose documentation opens with a line about a test's list that describes nothing it holds.
 
 ## What is known
@@ -17,7 +16,6 @@ The next step is stage 4, a delivery.
 
 ## Decided
 
-- **A label is read through one reading**, which records the entry it reads and returns it, and which `moved_between` compares; a door's step, a body's label and a glob are each read through it, so what an edit compares is what a door read.
 - **The census holds both halves of the keep**, behind `curios-module`'s `test_support`, from production's pieces, over every declaration of `/std`:
   - **The record names everything the doors read**, which holds a declaration kept unasked: each lookup of a declaration's trace, asked again through `Context::answers` in a scope holding only what its record names — the unit's entries for those labels, and its body's scope at its place — answers as recorded.
   - **The lowering reads nothing of its scope but the doors' answers**, which holds a declaration kept by asking: the declaration, lowered alone in a scope made of its trace's answers and nothing more — each lookup reaching its answer through export entries alone, a method through its namespace's entry — lowers to the items and mints the unit holds, a witness's minted name read as the item's own.
@@ -34,8 +32,7 @@ The next step is stage 4, a delivery.
 
 ## Stages
 
-4. **One reading of a label.** `Context` reads a module's label, a body's label and a glob each through one reading that records what it reads, and `moved_between` compares the entry that reading returns. Check: `/std`'s image digest unchanged; `curios-module`'s suites. One commit.
-5. **A declaration's lowering is a function of its own.** `process_items`' arms over `TopItem`, from a `let` to a `satisfy`, move into one function the walk calls with the context and the lowering state, and `Lowering`'s documentation is its own. Check: as stage 4. One commit.
+5. **A declaration's lowering is a function of its own.** `process_items`' arms over `TopItem`, from a `let` to a `satisfy`, move into one function the walk calls with the context and the lowering state, and `Lowering`'s documentation is its own. Check: `/std`'s image digest unchanged; `curios-module`'s suites. One commit.
 6. **The census.** Behind `curios-module`'s `test_support`, a scope of given entries — a record's, valued from its unit and its body's scope at its place, or a trace's answers alone — and the two checks over every declaration of `/std`, beside `std_replay_census`; fixtures where an entry taken from a record answers otherwise and a changed answer lowers otherwise, so each check refuses what it is for. Its time over `/std`, timed at its commit, settles the open question. One commit.
 
 ## Verification

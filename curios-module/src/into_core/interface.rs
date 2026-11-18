@@ -1,5 +1,7 @@
 use {
-    super::{Consulted, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
+    super::{
+        Consulted, Declares, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table,
+    },
     crate::{Error, OrderedMap},
     curios_common::{Mount, Persistent, Qualifier, RootKind, nearest},
     curios_surface::{GroupItem, Name, UseGroup},
@@ -621,6 +623,40 @@ fn widen(
     true
 }
 
+/// What a module holds under one label in one namespace, a child module where `binding` is false: what its export view shows of it and how its direct interface declares it. Everything a step of a path reads of the label, and what an edit compares of it ([`moved_between`]), so what an edit moves is what a step read.
+#[derive(Clone, Copy, PartialEq)]
+pub struct Held<'a> {
+    pub exported: Option<&'a Entry>,
+    pub declared: Option<Declares>,
+}
+
+impl<'a> Held<'a> {
+    /// What a module whose direct interface is `table` and whose export view is `public` holds under `label`.
+    pub fn of(
+        table: Option<&'a ModuleInfo>,
+        public: Option<&'a PublicInterface>,
+        label: &str,
+        binding: bool,
+    ) -> Self {
+        Self {
+            exported: public.and_then(|interface| match binding {
+                true => interface.bindings.get(label),
+                false => interface.children.get(label),
+            }),
+            declared: table.and_then(|info| info.declares(label, binding)),
+        }
+    }
+
+    /// The target `consumer` reaches through the label `parent` holds this under: an export's wherever the consumer stands, and the declaration's own where it lies within `parent`.
+    pub fn seen(&self, consumer: &Qualifier, parent: &Qualifier, label: &str) -> Option<Qualifier> {
+        if let Some(entry) = self.exported {
+            return Some(entry.target);
+        }
+
+        (consumer.is_within(parent) && self.declared.is_some()).then(|| parent.with(label))
+    }
+}
+
 /// The target of `parent`'s child module `label` as seen from `consumer`, or `None` when it is absent or out of view.
 pub fn visible_child(
     public: &Scoped<'_, PublicInterface>,
@@ -629,17 +665,7 @@ pub fn visible_child(
     parent: &Qualifier,
     label: &str,
 ) -> Option<Qualifier> {
-    if let Some(entry) = public.get(parent).and_then(|i| i.children.get(label)) {
-        return Some(entry.target);
-    }
-
-    let within = consumer.is_within(parent);
-    let declared = table
-        .get(parent)
-        .and_then(|info| info.get_child(label))
-        .is_some();
-
-    (within && declared).then(|| parent.with(label))
+    Held::of(table.get(parent), public.get(parent), label, false).seen(consumer, parent, label)
 }
 
 /// The target of `parent`'s binding `label` as seen from `consumer`, or `None` when it is absent or out of view.
@@ -650,17 +676,7 @@ pub fn visible_binding(
     parent: &Qualifier,
     label: &str,
 ) -> Option<Qualifier> {
-    if let Some(entry) = public.get(parent).and_then(|i| i.bindings.get(label)) {
-        return Some(entry.target);
-    }
-
-    let within = consumer.is_within(parent);
-    let declared = table
-        .get(parent)
-        .and_then(|info| info.get_binding(label))
-        .is_some();
-
-    (within && declared).then(|| parent.with(label))
+    Held::of(table.get(parent), public.get(parent), label, true).seen(consumer, parent, label)
 }
 
 /// The declaration `segments` reach from the module `start` as seen from `consumer`: each but the last a child module of the one before, and the last a binding of the module they reach — the walk a written path takes. `None` where a step is absent or out of view.
@@ -970,7 +986,7 @@ fn heads_of<'h>(
 
 /// The bindings whose entries in `table` and `public`, the unit's own halves, are not `baseline`'s, among `modules`, beside the modules whose entries are not: what a resolution reads of a module, read off the labels each declares or exports, and the labels a glob reads.
 ///
-/// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time.
+/// **A binding moved where its entry did.** A step of a path reads what one module holds under one label ([`Held`]), which is what is compared here; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time.
 pub fn moved_between<'m>(
     baseline: &PreparedText,
     table: &Table<ModuleInfo>,
@@ -1012,15 +1028,9 @@ pub fn moved_between<'m>(
         let mut all = labels(table_now, public_now);
         all.extend(labels(table_then, public_then));
         for (label, binding) in all {
-            let entry = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
-                let exported = public.and_then(|interface| match binding {
-                    true => interface.bindings.get(&label),
-                    false => interface.children.get(&label),
-                });
-                let declared = table.and_then(|info| info.declares(&label, binding));
-                (exported.cloned(), declared)
-            };
-            if entry(table_now, public_now) != entry(table_then, public_then) {
+            if Held::of(table_now, public_now, &label, binding)
+                != Held::of(table_then, public_then, &label, binding)
+            {
                 moved.insert(Consulted::Member {
                     at: module.with(&label),
                     binding,

@@ -1,7 +1,7 @@
 use {
     super::{
-        Consulted, Found, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named,
-        out_of_reach, unresolved, visible_binding, visible_child,
+        Consulted, Found, Held, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named,
+        out_of_reach, unresolved,
     },
     crate::{Error, OrderedMap},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
@@ -453,6 +453,13 @@ pub enum Declares {
     Binding(bool),
 }
 
+impl Declares {
+    /// Whether this is a concept's namespace, whose bindings are its methods.
+    pub(super) fn is_concept_methods(self) -> bool {
+        matches!(self, Declares::Child(ChildInfo::ConceptMethods { .. }))
+    }
+}
+
 impl ModuleInfo {
     /// How this module declares `label`: a binding where `binding`, and a child module otherwise.
     pub(super) fn declares(&self, label: &str, binding: bool) -> Option<Declares> {
@@ -537,10 +544,8 @@ impl ModuleInfo {
 
     /// Whether the child `label` is a concept's namespace, whose bindings are its methods.
     pub(super) fn is_concept_child(&self, label: &str) -> bool {
-        matches!(
-            self.children.get(label),
-            Some(ChildInfo::ConceptMethods { .. })
-        )
+        self.declares(label, false)
+            .is_some_and(Declares::is_concept_methods)
     }
 
     pub(crate) fn get_child(&self, label: &str) -> Option<bool> {
@@ -852,6 +857,48 @@ impl<'a> Context<'a> {
         self.shared.anchoring.quiet.set(quiet);
 
         resolved
+    }
+
+    // What `parent` holds under `label`, a binding where `binding` and a child module otherwise, read as an edit compares it ([`Held`]), the read recorded: the one way resolution reads a module's label.
+    fn held(&self, parent: &Qualifier, label: &str, binding: bool) -> Held<'a> {
+        self.consult(|| Consulted::Member {
+            at: parent.with(label),
+            binding,
+        });
+
+        Held::of(
+            self.table.get(parent),
+            self.public.get(parent),
+            label,
+            binding,
+        )
+    }
+
+    // The target this module reaches through what `parent` holds under `label`, read through [`Context::held`].
+    fn step(&self, parent: &Qualifier, label: &str, binding: bool) -> Option<Qualifier> {
+        self.held(parent, label, binding)
+            .seen(&self.prefix, parent, label)
+    }
+
+    // What this body's scope binds `label` to, a binding where `binding` and a module otherwise, the read recorded: the one way resolution reads its body's scope.
+    fn bound(&self, label: &str, binding: bool) -> Option<Qualifier> {
+        self.consult(|| Consulted::Scope {
+            at: self.prefix.with(label),
+            binding,
+        });
+
+        match binding {
+            true => self.bindings.get(label),
+            false => self.qualifiers.get(label),
+        }
+        .copied()
+    }
+
+    // What `module` exports, as a glob reads it, the read recorded.
+    fn exports(&self, module: &Qualifier) -> Option<&'a PublicInterface> {
+        self.consult(|| Consulted::Members(*module));
+
+        self.public.get(module)
     }
 
     /// The `use` site of this scope that brought in the binding `label`, where one did: a binding where `binding`, and a module otherwise.
@@ -1252,11 +1299,7 @@ impl<'a> Context<'a> {
         let mut current = start;
 
         for segment in segments {
-            self.consult(|| Consulted::Member {
-                at: current.with(segment),
-                binding: false,
-            });
-            match visible_child(self.public, self.table, &self.prefix, &current, segment) {
+            match self.step(&current, segment, false) {
                 Some(target) => current = target,
                 None => {
                     return Err(self.unresolved_step(
@@ -1286,13 +1329,8 @@ impl<'a> Context<'a> {
             self.walk_children(root, &segments[first..upto])?
         } else {
             let head = name.head();
-            self.consult(|| Consulted::Scope {
-                at: self.prefix.with(head),
-                binding: false,
-            });
-            let start = *self
-                .qualifiers
-                .get(head)
+            let start = self
+                .bound(head, false)
                 .ok_or_else(|| Error::unresolved(self.unresolved_head(head), false))?;
             self.note_qualifier_use(head);
 
@@ -1350,11 +1388,7 @@ impl<'a> Context<'a> {
 
     // Import the module child `label` out of `parent`, registering it as a qualifier in the current lexical scope.
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
-        self.consult(|| Consulted::Member {
-            at: parent.with(label),
-            binding: false,
-        });
-        match visible_child(self.public, self.table, &self.prefix, parent, label) {
+        match self.step(parent, label, false) {
             Some(target) => {
                 self.insert_scope(label.to_string(), self.site_span().as_ref(), target)?;
                 if let Some(site) = self.current_site {
@@ -1373,11 +1407,7 @@ impl<'a> Context<'a> {
         parent: &Qualifier,
         label: &str,
     ) -> Result<Qualifier, Error> {
-        self.consult(|| Consulted::Member {
-            at: parent.with(label),
-            binding: true,
-        });
-        match visible_binding(self.public, self.table, &self.prefix, parent, label) {
+        match self.step(parent, label, true) {
             Some(target) => {
                 self.insert_binding(label.to_string(), self.site_span().as_ref(), target)?;
                 if let Some(site) = self.current_site {
@@ -1392,15 +1422,8 @@ impl<'a> Context<'a> {
 
     // Import both the module and binding slots of `label` — used by glob and the `Both` group item. Either or both may be absent.
     fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
-        for binding in [false, true] {
-            self.consult(|| Consulted::Member {
-                at: parent.with(label),
-                binding,
-            });
-        }
-        let module = visible_child(self.public, self.table, &self.prefix, parent, label);
-
-        let binding = visible_binding(self.public, self.table, &self.prefix, parent, label);
+        let module = self.step(parent, label, false);
+        let binding = self.step(parent, label, true);
 
         let mut result = UseResolved {
             module: None,
@@ -1504,17 +1527,8 @@ impl<'a> Context<'a> {
     pub fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
-            for binding in [false, true] {
-                self.consult(|| Consulted::Member {
-                    at: parent.with(&label),
-                    binding,
-                });
-            }
-
-            let has_module =
-                visible_child(self.public, self.table, &self.prefix, &parent, &label).is_some();
-            let has_binding =
-                visible_binding(self.public, self.table, &self.prefix, &parent, &label).is_some();
+            let has_module = self.step(&parent, &label, false).is_some();
+            let has_binding = self.step(&parent, &label, true).is_some();
 
             if !has_module && !has_binding {
                 return Err(self.unresolved_step(
@@ -1536,14 +1550,9 @@ impl<'a> Context<'a> {
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
             let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
-            self.consult(|| Consulted::Members(module));
-
-            let interface = self
-                .public
-                .get(&module)
-                .ok_or_else(|| Error::ModuleNotFound {
-                    path: module.join(),
-                })?;
+            let interface = self.exports(&module).ok_or_else(|| Error::ModuleNotFound {
+                path: module.join(),
+            })?;
 
             let mut labels = interface
                 .children
@@ -1570,20 +1579,18 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    // What the lowering reads of a name resolved to `target`: a concept's method where `target` is a binding of the namespace a concept declares ([`concept_method`]), and the declaration it is otherwise. Read off the namespace's entry in the module holding it, which is recorded as every step's is, so an edit making the namespace another kind's reaches the declaration, and asking it again compares the answer.
+    // What the lowering reads of a name resolved to `target`: a concept's method where `target` is a binding of the namespace a concept declares ([`concept_method`]), and the declaration it is otherwise. Read off what the module holding the namespace holds under its label, through the reading every step takes, so an edit making the namespace another kind's reaches the declaration, and asking it again compares the answer.
     fn found(&self, target: Qualifier) -> Found {
         // A name of the root's own stands in no namespace.
         if target.is_single() {
             return Found::Declaration(target);
         }
-        self.consult(|| Consulted::Member {
-            at: target.without_last(),
-            binding: false,
-        });
+        let namespace = target.without_last();
+        let held = self.held(&namespace.without_last(), namespace.last(), false);
 
-        match concept_method(&target, |module| self.table.get(module)) {
-            Some(_) => Found::Method(target),
-            None => Found::Declaration(target),
+        match held.declared.is_some_and(Declares::is_concept_methods) {
+            true => Found::Method(target),
+            false => Found::Declaration(target),
         }
     }
 
@@ -1591,12 +1598,7 @@ impl<'a> Context<'a> {
     pub fn resolve_term_name(&self, name: &Name) -> Result<Found, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
-            self.consult(|| Consulted::Member {
-                at: parent.with(&label),
-                binding: true,
-            });
-
-            match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
+            match self.step(&parent, &label, true) {
                 Some(target) => {
                     self.note_written(name);
                     let found = self.found(target);
@@ -1613,11 +1615,7 @@ impl<'a> Context<'a> {
 
     /// What the bare name `name` is bound to in this module's scope, where it is — a declaration of the module or a label a `use` brought in, whose `use` is then used — as the lowering reads it ([`Found`]). A binder of the declaration itself is the lowerer's to find first.
     pub fn resolve_bare(&self, name: &Name) -> Option<Found> {
-        self.consult(|| Consulted::Scope {
-            at: self.prefix.with(name.head()),
-            binding: true,
-        });
-        let target = *self.bindings.get(name.head())?;
+        let target = self.bound(name.head(), true)?;
         self.note_binding_use(name.head());
         let found = self.found(target);
         self.asked(name, found);
