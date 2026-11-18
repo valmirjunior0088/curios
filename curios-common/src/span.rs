@@ -14,7 +14,7 @@ use {
 };
 
 /// The widest a line of Curios is written within, in scalar values, and the width the formatter writes a file within where nothing states a narrower one: the formatter breaks no line past the width it is given, and a report quotes a longer one as a window this wide around its marks, so a line the formatter wrote is quoted whole.
-pub const LINE_WIDTH: usize = 100;
+pub const MAX_LINE_WIDTH: usize = 100;
 
 /// The columns `cluster` takes on a terminal, which is what a caret under it is padded and drawn by: two where it holds a scalar East Asian Width calls wide or fullwidth, one that presents as an emoji, or the selector that asks for emoji presentation; none where it opens with a mark, a joiner or a control, which a terminal draws over its neighbour or not at all; one otherwise. A tab is the caller's, since it pads as a tab.
 fn columns(cluster: &str) -> usize {
@@ -170,7 +170,7 @@ impl Span {
 
     /// The pane of the reader's code a report shows for the span: the line it starts on, as written, and the marks beneath what it covers of that line, each column counted as a terminal draws it.
     ///
-    /// **A line past [`LINE_WIDTH`] is quoted as a window around the span's start**, [`LINE_WIDTH`] scalars of it with `…` where it is cut, so a report costs what it shows rather than its line, and a line the formatter wrote is quoted whole.
+    /// **A line past [`MAX_LINE_WIDTH`] is quoted as a window around the span's start**, [`MAX_LINE_WIDTH`] scalars of it with `…` where it is cut, so a report costs what it shows rather than its line, and a line the formatter wrote is quoted whole.
     pub fn pane(&self) -> Pane {
         let source = &self.source.text;
         let start = self.start;
@@ -230,10 +230,10 @@ pub struct Pane {
     pub marks: String,
 }
 
-/// The part of the line from `line_start` to `line_end` a report quotes around `at`, as byte offsets: the whole line where it holds no more than [`LINE_WIDTH`] scalars, and otherwise [`LINE_WIDTH`] of them with a third before `at`, moved back from the line's end where fewer stand after it. Each bound is found by walking at most [`LINE_WIDTH`] scalars from `at`, so quoting a long line costs the window and not the line.
+/// The part of the line from `line_start` to `line_end` a report quotes around `at`, as byte offsets: the whole line where it holds no more than [`MAX_LINE_WIDTH`] scalars, and otherwise [`MAX_LINE_WIDTH`] of them with a third before `at`, moved back from the line's end where fewer stand after it. Each bound is found by walking at most [`MAX_LINE_WIDTH`] scalars from `at`, so quoting a long line costs the window and not the line.
 fn window(text: &str, line_start: usize, line_end: usize, at: usize) -> (usize, usize) {
     let line = &text[line_start..line_end];
-    if line.len() <= LINE_WIDTH || line.chars().count() <= LINE_WIDTH {
+    if line.len() <= MAX_LINE_WIDTH || line.chars().count() <= MAX_LINE_WIDTH {
         return (line_start, line_end);
     }
     let back = |from: usize, scalars: usize| {
@@ -243,10 +243,10 @@ fn window(text: &str, line_start: usize, line_end: usize, at: usize) -> (usize, 
             .nth(scalars - 1)
             .map_or(line_start, |(offset, _)| line_start + offset)
     };
-    let left = back(at, LINE_WIDTH / 3);
-    match text[left..line_end].char_indices().nth(LINE_WIDTH) {
+    let left = back(at, MAX_LINE_WIDTH / 3);
+    match text[left..line_end].char_indices().nth(MAX_LINE_WIDTH) {
         Some((offset, _)) => (left, left + offset),
-        None => (back(line_end, LINE_WIDTH), line_end),
+        None => (back(line_end, MAX_LINE_WIDTH), line_end),
     }
 }
 

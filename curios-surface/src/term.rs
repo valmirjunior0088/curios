@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Dialect, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix, parse_whole_term,
-        print_match_pattern, print_term,
+        Dialect, FlatMatch, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix,
+        parse_whole_term, print_match_pattern, print_term,
     },
     curios_common::{InfixOp, Plicity, Sign, Source, Span, recurse},
     curios_num::{Floating, Natural},
@@ -110,7 +110,7 @@ impl FromStr for Term {
 
 impl fmt::Display for Term {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_term(self.clone()), formatter, 4)
+        run_printer(print_term(self.clone(), FlatMatch::DEFAULT), formatter, 4)
     }
 }
 

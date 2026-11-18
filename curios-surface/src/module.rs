@@ -1,9 +1,9 @@
 use {
     super::{
-        Argument, Dialect, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS, Intrinsic, Label,
-        LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
-        clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
-        parse_top_item, print_module_items, print_term, signature_type, take_comments,
+        Argument, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS,
+        Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
+        TupleTypeParam, clear_comments, parse_file_head, parse_optional_term, parse_program_end,
+        parse_term, parse_top_item, print_module_items, print_term, signature_type, take_comments,
     },
     curios_abi::WireSignature,
     curios_common::{Keyword, Plicity, Report, Source, Span},
@@ -494,7 +494,11 @@ impl FromStr for Module {
 
 impl fmt::Display for Module {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        run_printer(print_module_items(self.clone().items), formatter, 4)
+        run_printer(
+            print_module_items(self.clone().items, FlatMatch::DEFAULT),
+            formatter,
+            4,
+        )
     }
 }
 
@@ -632,12 +636,12 @@ impl fmt::Display for Entrypoint {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entrypoint = self.clone();
         let printer = if entrypoint.module.items.is_empty() {
-            print_term(entrypoint.tail)
+            print_term(entrypoint.tail, FlatMatch::DEFAULT)
         } else {
             flat([
-                print_module_items(entrypoint.module.items),
+                print_module_items(entrypoint.module.items, FlatMatch::DEFAULT),
                 pure("\n"),
-                print_term(entrypoint.tail),
+                print_term(entrypoint.tail, FlatMatch::DEFAULT),
             ])
         };
         run_printer(printer, formatter, 4)

@@ -15,7 +15,7 @@ use {
         Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
     },
     curios_pipeline::Stage,
-    curios_surface::Width,
+    curios_surface::Format,
     curios_verdict::Verdicts,
     curios_wonder::{Staged, file_subject},
     std::{
@@ -377,12 +377,12 @@ impl Mode {
     }
 }
 
-/// What `format` rewrites for one subject, and the width it is formatted within.
+/// What `format` rewrites for one subject, and the format it is formatted within.
 pub enum Rewritten {
-    /// Files on disk, rewritten in place: the files of one subject, which one package governs or none does, so one width serves them all.
-    Files(Vec<PathBuf>, Width),
-    /// Standard input, written back to standard output, at the width the command line states, since no manifest governs it.
-    Stdin(Width),
+    /// Files on disk, rewritten in place: the files of one subject, which one package governs or none does, so one format serves them all.
+    Files(Vec<PathBuf>, Format),
+    /// Standard input, written back to standard output, in the format the command line states, since no manifest governs it.
+    Stdin(Format),
 }
 
 impl Contract {
@@ -573,7 +573,7 @@ impl Contract {
         }
     }
 
-    /// What `subject` rewrites, and within which width: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input. A file takes the width of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::width_under`]).
+    /// What `subject` rewrites, and within which format: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input. A file takes the format of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::format_under`]).
     pub fn admit_files(
         &self,
         subject: Option<&str>,
@@ -607,27 +607,27 @@ impl Contract {
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
                 let path = file_subject(path)?;
-                let width = settings.width_of_file(&path, manifest)?;
-                Rewritten::Files(vec![path], width)
+                let format = settings.format_of_file(&path, manifest)?;
+                Rewritten::Files(vec![path], format)
             }
             spelling => match Self::selection(subject, manifest, directory)? {
                 Selection::Program(_) if spelling == Spelling::Stdin => {
-                    Rewritten::Stdin(settings.width_under(None)?)
+                    Rewritten::Stdin(settings.format_under(None)?)
                 }
                 Selection::Entire(entire) => {
-                    let width = settings.width_under(Some(&entire.governing))?;
-                    Rewritten::Files(entire.declared_files()?, width)
+                    let format = settings.format_under(Some(&entire.governing))?;
+                    Rewritten::Files(entire.declared_files()?, format)
                 }
                 // Selected through the package `selection` found, which a program and a library do not keep.
                 Selection::Library(library) => {
                     let governing = Governing::found(manifest, directory)?;
-                    let width = settings.width_under(Some(&governing))?;
-                    Rewritten::Files(library.declared_files()?, width)
+                    let format = settings.format_under(Some(&governing))?;
+                    Rewritten::Files(library.declared_files()?, format)
                 }
                 Selection::Program(program) => {
                     let governing = Governing::found(manifest, directory)?;
-                    let width = settings.width_under(Some(&governing))?;
-                    Rewritten::Files(program.declared_files()?, width)
+                    let format = settings.format_under(Some(&governing))?;
+                    Rewritten::Files(program.declared_files()?, format)
                 }
             },
         })

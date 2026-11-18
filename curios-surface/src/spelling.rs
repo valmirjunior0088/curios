@@ -3,14 +3,14 @@
 use {
     crate::{
         CoreEntry, CoreFile, CoreHead, CoreItem, CoreNominals, CoreText, CoreValue, Decoration,
-        DecoratorField, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign, TopLet,
-        TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
+        DecoratorField, FlatMatch, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign,
+        TopLet, TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
         level_spelled, nested, print_core_entry, print_core_item, print_core_term, print_shown,
         print_shown_entry, print_shown_item, print_term, record_declared, spellings_reaching,
         string, tree, universe_context_written, value, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
-    curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
+    curios_common::{InfixOp, MAX_LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
         Global, HeadKey, InductArm, Instance, Intrinsic, Item, Label, Level, Lexicon, Made, Marks,
@@ -453,7 +453,7 @@ impl Spelling {
 
     /// The width a render under this spelling lays its groups out against: a text's is the workspace's line width, and a term a sentence quotes has none unless its caller sets one ([`Spelled::within`]).
     fn width(&self) -> Option<usize> {
-        self.as_text.then_some(LINE_WIDTH)
+        self.as_text.then_some(MAX_LINE_WIDTH)
     }
 
     /// The spelling Core text proper is written in: every global by its absolute path and every field a node holds stated, so what it writes reads back as the term. A spelling a reader is handed writes a term in that reader's spelling instead: no decorator, an intrinsic by its surface name, a level metavariable as `?u1`.
@@ -505,7 +505,7 @@ impl Spelling {
         self.keys.set(0);
     }
 
-    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`LINE_WIDTH`], which decides what fits.
+    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`MAX_LINE_WIDTH`], which decides what fits.
     pub fn written_as_text(mut self) -> Self {
         self.as_text = true;
         self
@@ -1853,7 +1853,9 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
     // The translation is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been untranslated.
     if spelling.translated {
         let attempt = mint.attempt(&term);
-        if let Some(printed) = from_core(&term, spelling, &attempt).map(print_term) {
+        if let Some(printed) =
+            from_core(&term, spelling, &attempt).map(|term| print_term(term, FlatMatch::DEFAULT))
+        {
             mint.adopt(attempt);
             return printed;
         }
@@ -2018,7 +2020,7 @@ impl fmt::Display for Spelled<'_, Program> {
             formatter.write_str("\n\n")?;
         }
         let printer = match spelling.writes_whole() {
-            true => print_core_entry(entry_written(program, spelling)),
+            true => print_core_entry(entry_written(program, spelling), FlatMatch::DEFAULT),
             false => print_shown_entry(entry_written(program, spelling), shown_options(spelling)),
         };
 
@@ -2092,7 +2094,7 @@ fn print_items(
     };
     match spelling.writes_whole() {
         true => items_written::<CoreText>(definitions, spelling, |item| {
-            write(formatter, print_core_item(item))
+            write(formatter, print_core_item(item, FlatMatch::DEFAULT))
         })?,
         false => items_written::<Shown>(definitions, spelling, |item| {
             write(formatter, print_shown_item(item, shown_options(spelling)))

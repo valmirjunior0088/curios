@@ -22,6 +22,7 @@ fn width(columns: usize) -> Width {
 fn flags(columns: usize) -> FormatSettings {
     FormatSettings {
         line_width: Some(width(columns)),
+        ..FormatSettings::default()
     }
 }
 
@@ -79,6 +80,67 @@ fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() 
     }
 }
 
+/// A flat match is stated beside the line width, and refused where it says what no line could show or keeps a match off every line by its arms, which the span alone says: where the manifest is read, at the key, and as a flag, by the flag.
+#[test]
+fn a_flat_match_past_its_lines_or_of_no_arms_is_refused() {
+    for (stated, refused) in [
+        (
+            "line-width = 60\nflat-match-width = 70\n",
+            "a flat match's width is at most the line width, and `70` is past `60`",
+        ),
+        ("flat-match-width = 101\n", "`101` is past `100`"),
+        ("flat-match-arms = 0\n", "a flat match keeps at least 1 arm"),
+        (
+            "flat-match-arms = -1\n",
+            "`flat-match-arms` is a whole number",
+        ),
+    ] {
+        let refusal = format!("name = \"app\"\n\n[format]\n{stated}")
+            .parse::<Manifest>()
+            .unwrap_err()
+            .said
+            .to_string();
+        assert!(refusal.contains(refused), "{stated}: {refusal}");
+    }
+
+    let past = FormatSettings {
+        line_width: Some(width(60)),
+        flat_match_width: Some(70),
+        ..FormatSettings::default()
+    };
+    let refusal = past.format_under(None).unwrap_err().render();
+    assert!(refusal.contains("--flat-match-width"), "{refusal}");
+    let none = FormatSettings {
+        flat_match_arms: Some(0),
+        ..FormatSettings::default()
+    };
+    let refusal = none.format_under(None).unwrap_err().render();
+    assert!(refusal.contains("--flat-match-arms"), "{refusal}");
+}
+
+/// A flat match unstated keeps the defaults, narrowed to the line where the line is narrower, and one stated is kept as stated, from no span up to the line and any count of arms.
+#[test]
+fn a_flat_match_is_its_defaults_where_nothing_states_it() {
+    let flat_match = |settings: FormatSettings| {
+        settings
+            .format_under(None)
+            .map(|format| (format.flat_match.width(), format.flat_match.arms()))
+    };
+    assert_eq!(
+        flat_match(FormatSettings::default()),
+        Ok((DEFAULT_FLAT_MATCH_WIDTH, DEFAULT_FLAT_MATCH_ARMS))
+    );
+    assert_eq!(flat_match(flags(60)), Ok((60, DEFAULT_FLAT_MATCH_ARMS)));
+    assert_eq!(
+        flat_match(FormatSettings {
+            line_width: Some(width(60)),
+            flat_match_width: Some(0),
+            flat_match_arms: Some(usize::MAX),
+        }),
+        Ok((0, usize::MAX))
+    );
+}
+
 #[test]
 fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_states_none() {
     let root = Temporary::new("format", "standalone");
@@ -105,8 +167,16 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
     let silent = Governing::of(&root.join("silent")).expect("a package");
 
     let none = FormatSettings::default();
-    assert_eq!(none.width_under(Some(&stated)), Ok(width(72)));
-    assert_eq!(none.width_under(Some(&silent)), Ok(Width::default()));
+    assert_eq!(
+        none.format_under(Some(&stated))
+            .map(|format| format.line_width),
+        Ok(width(72))
+    );
+    assert_eq!(
+        none.format_under(Some(&silent))
+            .map(|format| format.line_width),
+        Ok(Width::default())
+    );
 }
 
 #[test]
@@ -130,7 +200,9 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
 
     let member = Governing::of(&root.join("app")).expect("a member");
     assert_eq!(
-        FormatSettings::default().width_under(Some(&member)),
+        FormatSettings::default()
+            .format_under(Some(&member))
+            .map(|format| format.line_width),
         Ok(width(60))
     );
 
@@ -174,19 +246,26 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
     write(&root, "loose.crs", "");
 
     let narrow = flags(60);
-    assert_eq!(narrow.width_under(None), Ok(width(60)));
     assert_eq!(
-        narrow.width_of_file(&root.join("loose.crs"), None),
+        narrow.format_under(None).map(|format| format.line_width),
+        Ok(width(60))
+    );
+    assert_eq!(
+        narrow
+            .format_of_file(&root.join("loose.crs"), None)
+            .map(|format| format.line_width),
         Ok(width(60))
     );
     // An umbrella governs only the packages it enumerates, so a file in its tree and in none of them is no package's.
     assert_eq!(
-        narrow.width_of_file(&root.join("work/scratch.crs"), None),
+        narrow
+            .format_of_file(&root.join("work/scratch.crs"), None)
+            .map(|format| format.line_width),
         Ok(width(60))
     );
 
     let refusal = narrow
-        .width_of_file(&root.join("app/lib.crs"), None)
+        .format_of_file(&root.join("app/lib.crs"), None)
         .unwrap_err()
         .render();
     assert!(
@@ -198,7 +277,9 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
         "{refusal}"
     );
     assert_eq!(
-        FormatSettings::default().width_of_file(&root.join("app/lib.crs"), None),
+        FormatSettings::default()
+            .format_of_file(&root.join("app/lib.crs"), None)
+            .map(|format| format.line_width),
         Ok(Width::default())
     );
 }
@@ -218,7 +299,7 @@ fn a_file_outside_the_package_manifest_names_is_refused() {
     write(&root, "loose.crs", "");
 
     let refusal = FormatSettings::default()
-        .width_of_file(&root.join("loose.crs"), Some(&root.join("app/curios.toml")))
+        .format_of_file(&root.join("loose.crs"), Some(&root.join("app/curios.toml")))
         .unwrap_err()
         .render();
     assert!(

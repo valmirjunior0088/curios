@@ -36,7 +36,7 @@ fn a_leading_byte_order_mark_is_not_written_back() {
 /// A program whose tail is garbled is refused where the tail's own parse stopped, naming what it expected there — as the compiler refuses it — and not at the top of the file expecting its end, which is what the optional tail reported while the term's failure was discarded.
 #[test]
 fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
-    let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Width::default())
+    let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Format::default())
         .expect_err("garbled tail")
         .render();
     assert!(
@@ -181,7 +181,7 @@ fn every_source_in_the_tree_formats_without_refusal() {
     let refused = sources_of_the_tree()
         .into_iter()
         .filter_map(|(path, text)| {
-            Formatted::from_source(&Source::held(path.clone(), text), Width::default())
+            Formatted::from_source(&Source::held(path.clone(), text), Format::default())
                 .err()
                 .map(|refusal| format!("{}: {refusal}", path.display(), refusal = refusal.render()))
         })
@@ -198,7 +198,7 @@ fn every_source_in_the_tree_is_already_canonical() {
             matches!(
                 Formatted::from_source(
                     &Source::held(path.clone(), text.as_str()),
-                    Width::default()
+                    Format::default()
                 ),
                 Ok(Formatted::Changed(_))
             )

@@ -20,7 +20,7 @@ fn a_field_no_table_takes_is_refused_at_its_key() {
 
     assert_eq!(
         said,
-        "unknown field\n  `line-widht` is no field of `[format]`\n  it takes: `line-width`\n  the nearest: `line-width`"
+        "unknown field\n  `line-widht` is no field of `[format]`\n  it takes: `line-width`, `flat-match-width`, `flat-match-arms`\n  the nearest: `line-width`"
     );
     assert_eq!(at, "line-widht");
 }

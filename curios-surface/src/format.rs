@@ -8,33 +8,33 @@
 //!
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
 //!
-//! **The width is the one setting**, and every law holds at each width it admits: [`NARROWEST`] through [`LINE_WIDTH`], which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree at the narrowest. Where a file's width comes from is `curios-package`'s `FormatSettings`.
+//! **A file is formatted within a [`Format`]**: the width of its lines, and how much of a match one line keeps ([`FlatMatch`]). Every law holds at each line width it admits, [`MIN_LINE_WIDTH`] through [`MAX_LINE_WIDTH`], and under the narrowest and the widest flat match, which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree at the narrowest. Where a file's format comes from is `curios-package`'s `FormatSettings`.
 
 use {
     super::{
         CoreFormatInput, FormatInput, TopItem, between_items, parse_core_for_format,
         parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
     },
-    curios_common::{About, LINE_WIDTH, OsError, Report, Said, Source, Span},
+    curios_common::{About, MAX_LINE_WIDTH, OsError, Report, Said, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
 };
 
 /// The narrowest width a file may be formatted within. The formatter's laws are held over the sources of the tree at it, and below it a line nothing can break — a long name, a deep nesting's indentation — is most of what a narrower width would change.
-pub const NARROWEST: usize = 50;
+pub const MIN_LINE_WIDTH: usize = 50;
 
-/// The columns a formatted line is written within, counted in scalar values: one of [`NARROWEST`] through [`LINE_WIDTH`], which is the default. No wider, since a report quotes a line as a window [`LINE_WIDTH`] wide, and a line the formatter wrote is quoted whole.
+/// The columns a formatted line is written within, counted in scalar values: one of [`MIN_LINE_WIDTH`] through [`MAX_LINE_WIDTH`], which is the default. No wider, since a report quotes a line as a window [`MAX_LINE_WIDTH`] wide, and a line the formatter wrote is quoted whole.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Width(usize);
 
 impl Width {
     /// `columns` as a width, refused outside the widths the formatter admits.
     pub fn new(columns: usize) -> Result<Self, String> {
-        match (NARROWEST..=LINE_WIDTH).contains(&columns) {
+        match (MIN_LINE_WIDTH..=MAX_LINE_WIDTH).contains(&columns) {
             true => Ok(Self(columns)),
             false => Err(format!(
-                "a line width is {NARROWEST} through {LINE_WIDTH} columns, and `{columns}` is not"
+                "a line width is {MIN_LINE_WIDTH} through {MAX_LINE_WIDTH} columns, and `{columns}` is not"
             )),
         }
     }
@@ -47,7 +47,7 @@ impl Width {
 
 impl Default for Width {
     fn default() -> Self {
-        Self(LINE_WIDTH)
+        Self(MAX_LINE_WIDTH)
     }
 }
 
@@ -57,11 +57,101 @@ impl FromStr for Width {
     fn from_str(spelling: &str) -> Result<Self, String> {
         let columns = spelling.parse().map_err(|_| {
             format!(
-                "a line width is a number of columns, {NARROWEST} through {LINE_WIDTH}, not `{spelling}`"
+                "a line width is a number of columns, {MIN_LINE_WIDTH} through {MAX_LINE_WIDTH}, not `{spelling}`"
             )
         })?;
         Self::new(columns)
     }
+}
+
+/// The most a match keeps on one line, from `match` to `end`: its span in columns and its arms. A decision on one line is read as one thing, and past some span or some count of arms the eye loses which arm a body belongs to, and a dispatch table is read as rows: a property of the reader, not of the page, so it is the same at every line width, and a page narrower than the span decides by what fits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FlatMatch {
+    width: usize,
+    arms: usize,
+}
+
+/// The columns a match keeps on one line where nothing states another.
+pub const DEFAULT_FLAT_MATCH_WIDTH: usize = 70;
+
+/// The arms a match keeps on one line where nothing states another.
+pub const DEFAULT_FLAT_MATCH_ARMS: usize = 3;
+
+/// The fewest arms a match may be told it keeps on one line: a match kept off every line is the span's to say, `0` columns, and one way to say it is enough.
+pub const MIN_FLAT_MATCH_ARMS: usize = 1;
+
+/// The setting of a [`FlatMatch`] a stated value was refused for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlatMatchSetting {
+    Width,
+    Arms,
+}
+
+impl FlatMatch {
+    /// What reports, Core text dumps and documentation pages keep of a match on one line, whatever a package states, and what a file is formatted with where nothing states another.
+    pub const DEFAULT: Self = Self {
+        width: DEFAULT_FLAT_MATCH_WIDTH,
+        arms: DEFAULT_FLAT_MATCH_ARMS,
+    };
+
+    /// A match kept on one line within `width` columns and `arms` arms, each its default where it is `None`, on lines `line` wide: a stated width past the line is refused, since no line could show it, and the default is the line's where the line is narrower; arms fewer than [`MIN_FLAT_MATCH_ARMS`] are refused, and any count past it is admitted, the span bounding what a line holds.
+    pub fn within(
+        line: Width,
+        width: Option<usize>,
+        arms: Option<usize>,
+    ) -> Result<Self, (FlatMatchSetting, String)> {
+        let width = match width {
+            Some(width) if width > line.columns() => {
+                return Err((
+                    FlatMatchSetting::Width,
+                    format!(
+                        "a flat match's width is at most the line width, and `{width}` is past `{}`",
+                        line.columns()
+                    ),
+                ));
+            }
+            Some(width) => width,
+            None => DEFAULT_FLAT_MATCH_WIDTH.min(line.columns()),
+        };
+
+        let arms = match arms {
+            Some(arms) if arms < MIN_FLAT_MATCH_ARMS => {
+                return Err((
+                    FlatMatchSetting::Arms,
+                    format!(
+                        "a flat match keeps at least {MIN_FLAT_MATCH_ARMS} arm, and `{arms}` is fewer; a match kept off every line is `flat-match-width = 0`"
+                    ),
+                ));
+            }
+            Some(arms) => arms,
+            None => DEFAULT_FLAT_MATCH_ARMS,
+        };
+
+        Ok(Self { width, arms })
+    }
+
+    /// The most columns a match spans on one line.
+    pub fn width(self) -> usize {
+        self.width
+    }
+
+    /// The most arms a match keeps on one line.
+    pub fn arms(self) -> usize {
+        self.arms
+    }
+}
+
+impl Default for FlatMatch {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// What a file is formatted within: the width of its lines, and how much of a match one line keeps.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Format {
+    pub line_width: Width,
+    pub flat_match: FlatMatch,
 }
 
 /// The formatter's verdict on one source: the canonical text, tagged by whether it differs from what was read. The formatter itself is pure — whether a `Changed` result fails a check or rewrites a file is the caller's policy.
@@ -72,11 +162,11 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source` canonically within `width`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
-    pub fn from_source(source: &Arc<Source>, width: Width) -> Result<Self, Box<Report>> {
+    /// Format `source` canonically within `format`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
+    pub fn from_source(source: &Arc<Source>, format: Format) -> Result<Self, Box<Report>> {
         let output = match written_as_core_text(source) {
-            true => core_text_formatted(source, width)?,
-            false => program_formatted(source, width)?,
+            true => core_text_formatted(source, format)?,
+            false => program_formatted(source, format)?,
         };
 
         Ok(match output == source.text() {
@@ -86,7 +176,7 @@ impl Formatted {
     }
 
     /// [`Formatted::from_source`] for the file at `path`, which a refusal is about. Writing a `Changed` result back is the caller's policy.
-    pub fn from_path(path: &Path, width: Width) -> Result<Self, Box<Report>> {
+    pub fn from_path(path: &Path, format: Format) -> Result<Self, Box<Report>> {
         let source = Source::read(path).map_err(|error| {
             let mut said = Said::line("unreadable file");
             said.stating(OsError(&error));
@@ -94,7 +184,7 @@ impl Formatted {
             Report::about(About::Path(path.to_path_buf()), said)
         })?;
 
-        Self::from_source(&source, width)
+        Self::from_source(&source, format)
     }
 }
 
@@ -120,24 +210,24 @@ fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
     }
 }
 
-/// A program or a module, formatted within `width` and verified.
-fn program_formatted(source: &Arc<Source>, width: Width) -> Result<String, Box<Report>> {
+/// A program or a module, formatted within `format` and verified.
+fn program_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box<Report>> {
     let input = parse_for_format(source).map_err(|error| error.report())?;
     // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit(&input, &original, width);
+    let output = emit(&input, &original, format);
 
     verify(&input, expected_comments, &output).map_err(|words| unverified(source, &words))?;
     Ok(output)
 }
 
-/// A file of Core text, formatted within `width` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
-fn core_text_formatted(source: &Arc<Source>, width: Width) -> Result<String, Box<Report>> {
+/// A file of Core text, formatted within `format` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
+fn core_text_formatted(source: &Arc<Source>, format: Format) -> Result<String, Box<Report>> {
     let input = parse_core_for_format(source).map_err(|error| error.report())?;
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit_core_text(&input, &original, width);
+    let output = emit_core_text(&input, &original, format);
 
     verify_core_text(&input, expected_comments, &output)
         .map_err(|words| unverified(source, &words))?;
@@ -208,7 +298,7 @@ fn render(printer: Printer, original: &Original<'_>, width: Width) -> String {
 /// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
 ///
 /// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
-pub fn emit(input: &FormatInput, original: &Original<'_>, width: Width) -> String {
+pub fn emit(input: &FormatInput, original: &Original<'_>, format: Format) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 
@@ -218,7 +308,7 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, width: Width) -> Strin
 
         // Marked at both ends, as a term is — see `print_term`.
         parts.push(reached(span.start));
-        parts.push(print_top_item(item.clone()));
+        parts.push(print_top_item(item.clone(), format.flat_match));
         parts.push(reached(span.end));
         previous = Some(item);
     }
@@ -227,14 +317,14 @@ pub fn emit(input: &FormatInput, original: &Original<'_>, width: Width) -> Strin
         if previous.is_some() {
             parts.extend([hard_line(), hard_line()]);
         }
-        parts.push(print_term(tail.clone()));
+        parts.push(print_term(tail.clone(), format.flat_match));
     }
 
-    format!("{}\n", render(flat(parts), original, width))
+    format!("{}\n", render(flat(parts), original, format.line_width))
 }
 
 /// A file of Core text as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
-fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, width: Width) -> String {
+fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, format: Format) -> String {
     let mut parts: Vec<Printer> = Vec::new();
 
     for (item, span) in input.file.items.iter().zip(&input.item_spans) {
@@ -242,7 +332,7 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, width: Width
             parts.extend([hard_line(), hard_line()]);
         }
         parts.push(reached(span.start));
-        parts.push(print_core_item(item.clone()));
+        parts.push(print_core_item(item.clone(), format.flat_match));
         parts.push(reached(span.end));
     }
 
@@ -250,10 +340,10 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, width: Width
         if !parts.is_empty() {
             parts.extend([hard_line(), hard_line()]);
         }
-        parts.push(print_core_entry(entry.clone()));
+        parts.push(print_core_entry(entry.clone(), format.flat_match));
     }
 
-    format!("{}\n", render(flat(parts), original, width))
+    format!("{}\n", render(flat(parts), original, format.line_width))
 }
 
 /// Whether a blank line stands between the item that starts at `start` and the code before it, read back over the comment lines between them: a comment is no blank line, and an item sharing its line with the one before is not apart from it. Read from the item's start, since an item's span runs on over the blank lines and comments the parse consumed after it.

@@ -262,16 +262,18 @@ impl Standing<'_> {
 
     fn rewritten(&self, rewritten: &Rewritten) -> String {
         match rewritten {
-            Rewritten::Files(paths, width) => format!(
+            Rewritten::Files(paths, within) => format!(
                 "files {} within {}",
                 paths
                     .iter()
                     .map(|path| self.path(path))
                     .collect::<Vec<_>>()
                     .join(" "),
-                width.columns()
+                within.line_width.columns()
             ),
-            Rewritten::Stdin(width) => format!("standard input within {}", width.columns()),
+            Rewritten::Stdin(within) => {
+                format!("standard input within {}", within.line_width.columns())
+            }
         }
     }
 
@@ -537,7 +539,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-format SUBJECT — Files, store None, leaves Rewritten, options --check --line-width --manifest
+format SUBJECT — Files, store None, leaves Rewritten, options --check --line-width --flat-match-width --flat-match-arms --manifest
   work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs within 100
   work/app: serve → files serve.crs helper.crs helper/deep.crs within 100
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml

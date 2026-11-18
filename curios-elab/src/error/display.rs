@@ -12,7 +12,7 @@ use {
     },
     crate::{Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
-    curios_common::{Code, Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
+    curios_common::{Code, Kind, MAX_LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
         Anchors, ArgumentSite, CalleeId, Free, Global, HeadKey, Level, Mention, Quality,
         ReduceError, Sort, Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
@@ -121,7 +121,7 @@ pub fn goal_said(report: &GoalReport, spelling: &Rc<Spelling>) -> Said {
     );
     let clause = |term: &Term| {
         term.spelled(&spelling)
-            .within(LINE_WIDTH)
+            .within(MAX_LINE_WIDTH)
             .to_string()
             .replace('\n', "\n  ")
     };

@@ -17,5 +17,9 @@ pub fn render(source: &str, width: usize) -> String {
             run_printer_within(printer, formatter, 4, width)
         }
     }
-    Within(Cell::new(Some((print_term(term), width)))).to_string()
+    Within(Cell::new(Some((
+        print_term(term, FlatMatch::DEFAULT),
+        width,
+    ))))
+    .to_string()
 }

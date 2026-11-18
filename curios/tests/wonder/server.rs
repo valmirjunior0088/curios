@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     curios_common::fill,
     curios_prelude::test_support::*,
-    curios_surface::NARROWEST,
+    curios_surface::MIN_LINE_WIDTH,
     curios_wonder::SETTLE,
     std::{
         fs,
@@ -616,7 +616,7 @@ fn formatting_answers_within_the_width_the_documents_package_states() {
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {NARROWEST}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {MIN_LINE_WIDTH}\n",
             compiler = env!("CARGO_PKG_VERSION")
         ),
     );
@@ -626,7 +626,7 @@ fn formatting_answers_within_the_width_the_documents_package_states() {
     let uri = format!("file://{}", root.join("lib.crs").display());
 
     // What `curios format` writes within the same width, read off standard input, which no manifest governs.
-    let width = NARROWEST.to_string();
+    let width = MIN_LINE_WIDTH.to_string();
     let expected = stdout(&curios(
         &root,
         &["format", "--line-width", &width, "-"],

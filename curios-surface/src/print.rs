@@ -24,7 +24,7 @@ use {
         Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField,
         intrinsic_form, intrinsic_path,
     },
-    crate::{ELIDED, Writer, op_precedence, written_intrinsic},
+    crate::{ELIDED, FlatMatch, Writer, op_precedence, written_intrinsic},
     curios_abi::{NEVER, ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Keyword, Plicity, recurse},
     curios_num::Natural,
@@ -293,12 +293,6 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
         pure(close),
     ])
 }
-
-/// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
-const MAX_FLAT_ARMS: usize = 3;
-
-/// The most columns a match keeps on one line, from `match` to `end`. A decision on one line is read as one thing, and past this span the eye loses which arm a body belongs to: a property of the reader, not of the page, so it is the same at every width, and a page narrower than it decides by what fits.
-const FLAT_MATCH_COLUMNS: usize = 70;
 
 /// Whether a term is itself an arm ladder — the arm body that forces its enclosing ladder to break.
 ///
@@ -751,6 +745,8 @@ impl Layout for Program {
 /// The printer of a tree of the dialect `D`, the one every text of the surface grammar is laid out by: a program's, which the formatter writes a file in and a report's term is translated to, Core text's, and a shown term's. It holds what a render of `D` is told beside the tree, and learns nothing while printing.
 struct TreePrinter<D: Layout> {
     options: D::Options,
+    /// How much of a match one line keeps: a file's format's, where the formatter prints, and the default everywhere else.
+    flat_match: FlatMatch,
 }
 
 impl<D: Layout> Clone for TreePrinter<D> {
@@ -762,7 +758,18 @@ impl<D: Layout> Clone for TreePrinter<D> {
 impl<D: Layout> Copy for TreePrinter<D> {}
 
 /// The printer of a program.
-const PROGRAM: TreePrinter<Program> = TreePrinter { options: () };
+const PROGRAM: TreePrinter<Program> = TreePrinter {
+    options: (),
+    flat_match: FlatMatch::DEFAULT,
+};
+
+/// The printer of a program a file is formatted as, keeping what `flat_match` says of a match on one line.
+fn program(flat_match: FlatMatch) -> TreePrinter<Program> {
+    TreePrinter {
+        options: (),
+        flat_match,
+    }
+}
 
 impl<D: Layout> TreePrinter<D> {
     /// Simple entries pack together; spreads and structured expressions stand apart in a broken layout. Packed literals always retain their outer group as a break opportunity for enclosing expressions; a plain list of atoms packs directly from its opener.
@@ -1223,10 +1230,10 @@ impl<D: Layout> TreePrinter<D> {
             ]),
             // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
-            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_COLUMNS`], and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within its printer's [`FlatMatch`], its span and its arms, and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
             Subterm::Match(Match { head, arms }) => {
-                let forced =
-                    arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
+                let forced = arms.len() > self.flat_match.arms()
+                    || arms.iter().map(|arm| &arm.body).any(is_ladder);
                 let separator = match forced {
                     true => hard_line,
                     false => line,
@@ -1234,7 +1241,7 @@ impl<D: Layout> TreePrinter<D> {
                 let crowded = arms.iter().any(|arm| !arm.guards.is_empty());
                 let within = match crowded {
                     true => 0,
-                    false => FLAT_MATCH_COLUMNS,
+                    false => self.flat_match.width(),
                 };
                 return group_within(
                     within,
@@ -1264,7 +1271,7 @@ impl<D: Layout> TreePrinter<D> {
             }
             // A match with no head lays its arms out as a headed one does, its first guard where a headed arm's patterns stand.
             Subterm::HeadlessMatch(HeadlessMatch { arms, default }) => {
-                let forced = arms.len() + 1 > MAX_FLAT_ARMS
+                let forced = arms.len() + 1 > self.flat_match.arms()
                     || std::iter::once(&default)
                         .chain(arms.iter().map(|arm| &arm.body))
                         .any(is_ladder);
@@ -1273,7 +1280,7 @@ impl<D: Layout> TreePrinter<D> {
                     false => line,
                 };
                 return group_within(
-                    FLAT_MATCH_COLUMNS,
+                    self.flat_match.width(),
                     flat([
                         keyword(Keyword::Match),
                         flat(
@@ -2096,16 +2103,27 @@ impl<D: CoreWritten> TreePrinter<D> {
 }
 
 /// The printer of Core text.
-const CORE_TEXT: TreePrinter<CoreText> = TreePrinter { options: () };
+const CORE_TEXT: TreePrinter<CoreText> = TreePrinter {
+    options: (),
+    flat_match: FlatMatch::DEFAULT,
+};
 
-/// One item of a `.crsc`, as the formatter writes it.
-pub fn print_core_item(item: CoreItem) -> Printer {
-    CORE_TEXT.core_item(item)
+/// One item of a `.crsc`, as the formatter writes it, keeping what `flat_match` says of a match on one line.
+pub fn print_core_item(item: CoreItem, flat_match: FlatMatch) -> Printer {
+    TreePrinter::<CoreText> {
+        options: (),
+        flat_match,
+    }
+    .core_item(item)
 }
 
-/// The entry a `.crsc` closes with, as the formatter writes it.
-pub fn print_core_entry(entry: CoreEntry) -> Printer {
-    CORE_TEXT.core_entry(entry)
+/// The entry a `.crsc` closes with, as the formatter writes it, keeping what `flat_match` says of a match on one line.
+pub fn print_core_entry(entry: CoreEntry, flat_match: FlatMatch) -> Printer {
+    TreePrinter::<CoreText> {
+        options: (),
+        flat_match,
+    }
+    .core_entry(entry)
 }
 
 /// A term of Core text, as the formatter writes one.
@@ -2113,8 +2131,9 @@ pub fn print_core_term(term: Term<CoreText>) -> Printer {
     CORE_TEXT.term(term)
 }
 
-pub fn print_term(term: Term) -> Printer {
-    PROGRAM.term(term)
+/// A program's term, keeping what `flat_match` says of a match on one line.
+pub fn print_term(term: Term, flat_match: FlatMatch) -> Printer {
+    program(flat_match).term(term)
 }
 
 /// A program's match-arm pattern alone, as a report names a row by it.
@@ -2124,17 +2143,29 @@ pub fn print_match_pattern(pattern: MatchPattern) -> Printer {
 
 /// A shown term, laid out as `options` say.
 pub fn print_shown(term: Term<Shown>, options: ShownOptions) -> Printer {
-    TreePrinter::<Shown> { options }.term(term)
+    TreePrinter::<Shown> {
+        options,
+        flat_match: FlatMatch::DEFAULT,
+    }
+    .term(term)
 }
 
 /// One item of a shown module, laid out as `options` say.
 pub fn print_shown_item(item: CoreItem<Shown>, options: ShownOptions) -> Printer {
-    TreePrinter::<Shown> { options }.core_item(item)
+    TreePrinter::<Shown> {
+        options,
+        flat_match: FlatMatch::DEFAULT,
+    }
+    .core_item(item)
 }
 
 /// The entry a shown program closes with, laid out as `options` say.
 pub fn print_shown_entry(entry: CoreEntry<Shown>, options: ShownOptions) -> Printer {
-    TreePrinter::<Shown> { options }.core_entry(entry)
+    TreePrinter::<Shown> {
+        options,
+        flat_match: FlatMatch::DEFAULT,
+    }
+    .core_entry(entry)
 }
 
 fn print_top_use(item: TopUse) -> Printer {
@@ -2153,7 +2184,7 @@ fn print_top_use(item: TopUse) -> Printer {
     ])
 }
 
-fn print_top_mod(item: TopMod) -> Printer {
+fn print_top_mod(item: TopMod, flat_match: FlatMatch) -> Printer {
     match item.module {
         None => flat([
             print_doc(item.doc),
@@ -2168,7 +2199,7 @@ fn print_top_mod(item: TopMod) -> Printer {
             lead(&[Keyword::Mod]),
             pure(item.label),
             hard_line(),
-            indent(flat([print_module_items(module.items), ends()])),
+            indent(flat([print_module_items(module.items, flat_match), ends()])),
             hard_line(),
             keyword(Keyword::End),
         ]),
@@ -2200,20 +2231,21 @@ pub fn between_items(
     }
 }
 
-pub fn print_module_items(items: Vec<TopItem>) -> Printer {
+/// A module's items, each apart from the one before as [`between_items`] says, keeping what `flat_match` says of a match on one line.
+pub fn print_module_items(items: Vec<TopItem>, flat_match: FlatMatch) -> Printer {
     let mut parts = Vec::with_capacity(items.len() * 2);
     let mut previous: Option<&TopItem> = None;
 
     for item in &items {
         parts.push(between_items(previous, item, None));
-        parts.push(print_top_item(item.clone()));
+        parts.push(print_top_item(item.clone(), flat_match));
         previous = Some(item);
     }
 
     flat(parts)
 }
 
-fn print_top_witness(items: Vec<TopWitness>) -> Printer {
+fn print_top_witness(printer: TreePrinter<Program>, items: Vec<TopWitness>) -> Printer {
     let mut iter = items.into_iter();
     let mut first = iter.next().expect("a `satisfy` item has a member");
     let rest = iter
@@ -2221,14 +2253,14 @@ fn print_top_witness(items: Vec<TopWitness>) -> Printer {
             flat([
                 hard_line(),
                 print_doc(item.doc.take()),
-                print_witness_member(item, &[Keyword::And]),
+                print_witness_member(printer, item, &[Keyword::And]),
             ])
         })
         .collect::<Vec<_>>();
 
     flat([
         print_doc(first.doc.take()),
-        print_witness_member(first, &[Keyword::Satisfy]),
+        print_witness_member(printer, first, &[Keyword::Satisfy]),
         flat(rest),
     ])
 }
@@ -2242,7 +2274,11 @@ fn witness_signature(params: Vec<Printer>, app: Printer) -> Printer {
 }
 
 /// The concept application a witness concludes: the concept's name, then its argument list where one was written.
-fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
+fn witnessed(
+    printer: TreePrinter<Program>,
+    concept: &Name,
+    args: Option<Vec<Argument>>,
+) -> Printer {
     // A name as a term's is, so a page links the concept a witness satisfies by what the lowering resolved it to.
     let concept = match concept.span() {
         Some(span) => named_at(concept.join(), span.start..span.end),
@@ -2255,7 +2291,7 @@ fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
             listed(
                 "(",
                 args.into_iter()
-                    .map(|argument| PROGRAM.argument(argument))
+                    .map(|argument| printer.argument(argument))
                     .collect(),
                 ")",
             ),
@@ -2263,13 +2299,17 @@ fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
     }
 }
 
-fn print_witness_member(item: TopWitness, words: &[Keyword]) -> Printer {
+fn print_witness_member(
+    printer: TreePrinter<Program>,
+    item: TopWitness,
+    words: &[Keyword],
+) -> Printer {
     let params = item
         .params
         .into_iter()
-        .map(|param| PROGRAM.func_sugar_param(param))
+        .map(|param| printer.func_sugar_param(param))
         .collect();
-    let app = witnessed(&item.concept, item.args);
+    let app = witnessed(printer, &item.concept, item.args);
 
     // A derived witness's block holds `..` alone, on a line of its own as a lone entry is, and with no comma since it is none.
     let body = match item.body {
@@ -2277,7 +2317,10 @@ fn print_witness_member(item: TopWitness, words: &[Keyword]) -> Printer {
             pure(" "),
             listed_hard(
                 "{",
-                entries.into_iter().map(print_witness_entry).collect(),
+                entries
+                    .into_iter()
+                    .map(|entry| print_witness_entry(printer, entry))
+                    .collect(),
                 "}",
             ),
         ]),
@@ -2293,7 +2336,7 @@ fn print_witness_member(item: TopWitness, words: &[Keyword]) -> Printer {
 }
 
 /// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
-fn print_witness_entry(field: WitnessField) -> Printer {
+fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Printer {
     match field.func_params {
         Some(params) => flat([
             pure(field.label),
@@ -2301,27 +2344,29 @@ fn print_witness_entry(field: WitnessField) -> Printer {
                 "(",
                 params
                     .into_iter()
-                    .map(|param| PROGRAM.func_pattern_param(param))
+                    .map(|param| printer.func_pattern_param(param))
                     .collect(),
                 ")",
             ),
-            PROGRAM.attached_body(" =", field.value),
+            printer.attached_body(" =", field.value),
         ]),
-        None => flat([pure(field.label), PROGRAM.attached_body(" =", field.value)]),
+        None => flat([pure(field.label), printer.attached_body(" =", field.value)]),
     }
 }
 
-pub fn print_top_item(item: TopItem) -> Printer {
+/// A module's item, keeping what `flat_match` says of a match on one line.
+pub fn print_top_item(item: TopItem, flat_match: FlatMatch) -> Printer {
+    let printer = program(flat_match);
     match item {
-        TopItem::Mod(m) => print_top_mod(m),
+        TopItem::Mod(m) => print_top_mod(m, flat_match),
         TopItem::Use(u) => print_top_use(u),
-        TopItem::Let(l) => PROGRAM.top_let(l),
-        TopItem::Induct(group) => PROGRAM.top_induct(group),
-        TopItem::Struct(s) => PROGRAM.top_struct(s),
-        TopItem::Concept(c) => PROGRAM.top_concept(c),
-        TopItem::Witness(w) => print_top_witness(w),
-        TopItem::Foreign(f) => PROGRAM.top_foreign(f),
-        TopItem::Test(t) => PROGRAM.top_test(t),
+        TopItem::Let(l) => printer.top_let(l),
+        TopItem::Induct(group) => printer.top_induct(group),
+        TopItem::Struct(s) => printer.top_struct(s),
+        TopItem::Concept(c) => printer.top_concept(c),
+        TopItem::Witness(w) => print_top_witness(printer, w),
+        TopItem::Foreign(f) => printer.top_foreign(f),
+        TopItem::Test(t) => printer.top_test(t),
         // Verbatim: there is no tree to print, and the formatter never reaches here, since it refuses a module it could not read whole.
         TopItem::Broken(b) => pure(b.text().to_string()),
     }
@@ -2336,7 +2381,7 @@ pub fn print_let_head(item: &TopLet) -> Printer {
     let signature = match &item.signature {
         LetSignature::Name {
             type_: Some(type_), ..
-        } => flat([pure(": "), print_term(type_.clone())]),
+        } => flat([pure(": "), PROGRAM.term(type_.clone())]),
         LetSignature::Name { type_: None, .. } => pure(""),
         LetSignature::Func { params, output, .. } => {
             PROGRAM.signature(params.clone(), output.clone())
@@ -2385,7 +2430,11 @@ pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
         family = flat([family, listed("(", explicit, ")")]);
     }
     if let Some(target) = &case.target {
-        let indices = target.iter().cloned().map(print_term).collect();
+        let indices = target
+            .iter()
+            .cloned()
+            .map(|index| PROGRAM.term(index))
+            .collect();
         family = flat([family, listed("(", indices, ")")]);
     }
 
@@ -2406,7 +2455,7 @@ pub fn print_struct_head(item: &TopStruct) -> Printer {
         PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
-        print_term(item.result_sort.clone()),
+        PROGRAM.term(item.result_sort.clone()),
     ])
 }
 
@@ -2427,7 +2476,7 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
         PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
         print_pub(item.rep_pub),
-        print_term(item.result_sort.clone()),
+        PROGRAM.term(item.result_sort.clone()),
     ])
 }
 
@@ -2444,7 +2493,7 @@ pub fn print_witness_head(item: &TopWitness) -> Printer {
         .cloned()
         .map(|param| PROGRAM.func_sugar_param(param))
         .collect();
-    let app = witnessed(&item.concept, item.args.clone());
+    let app = witnessed(PROGRAM, &item.concept, item.args.clone());
     flat([lead(&[Keyword::Satisfy]), witness_signature(params, app)])
 }
 

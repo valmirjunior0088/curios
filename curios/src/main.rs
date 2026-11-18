@@ -39,7 +39,7 @@ use {
         scaffold,
     },
     curios_pipeline::CompileError,
-    curios_surface::{Formatted, Width},
+    curios_surface::{Format, Formatted},
     curios_wonder::{
         Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_cost,
         wonder_declarations, wonder_diagnostics, wonder_name, wonder_stage, wonder_tests,
@@ -701,11 +701,11 @@ fn dispatch() -> Result<(), Failure> {
             for admitted in admitted {
                 match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
-                    Rewritten::Stdin(width) => {
+                    Rewritten::Stdin(format) => {
                         let text = drained()?;
                         let formatted = Formatted::from_source(
                             &Source::named(SourceName::stdin(), text.as_str()),
-                            width,
+                            format,
                         )?;
 
                         match (check, formatted) {
@@ -725,7 +725,7 @@ fn dispatch() -> Result<(), Failure> {
                             }
                         }
                     }
-                    Rewritten::Files(paths, width) => {
+                    Rewritten::Files(paths, format) => {
                         counted = true;
                         // Two subjects naming one file rewrite it once.
                         for path in paths
@@ -734,7 +734,7 @@ fn dispatch() -> Result<(), Failure> {
                         {
                             let subject = Subject::File(PathBuf::from(from_here(&path)));
                             let formatted =
-                                Formatted::from_path(&path, width).inspect_err(|_| {
+                                Formatted::from_path(&path, format).inspect_err(|_| {
                                     // A file that cannot be formatted is refused, its tree said ahead of why.
                                     let mut tree = Tree::of(&subject, None);
                                     tree.open("format", true);
@@ -777,17 +777,17 @@ fn dispatch() -> Result<(), Failure> {
             Query::Check => {
                 let directory = here()?;
                 // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
-                let (files, width) = match contract.written_in(subject, manifest, &directory) {
-                    Ok(Rewritten::Files(files, width)) => (files, width),
-                    Ok(Rewritten::Stdin(width)) => (Vec::new(), width),
-                    Err(_) => (Vec::new(), Width::default()),
+                let (files, format) = match contract.written_in(subject, manifest, &directory) {
+                    Ok(Rewritten::Files(files, format)) => (files, format),
+                    Ok(Rewritten::Stdin(format)) => (Vec::new(), format),
+                    Err(_) => (Vec::new(), Format::default()),
                 };
 
                 wonder_diagnostics(
                     elaboration.budget,
                     contract.admit_any(subject, manifest, &directory)?,
                     &files,
-                    width,
+                    format,
                     &mut Asking::checking(answered.clone()),
                 )?
             }

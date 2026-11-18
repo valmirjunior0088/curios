@@ -8,16 +8,45 @@ use {
     std::path::{Path, PathBuf},
 };
 
-/// The canonical text at the default width, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
+/// The canonical text in the default format, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
 pub fn formatted(source: &str) -> String {
-    formatted_within(source, Width::default())
+    formatted_within(source, Format::default())
 }
 
-/// [`formatted`] within `width`.
-pub fn formatted_within(source: &str, width: Width) -> String {
-    match Formatted::from_source(&Source::inline(source), width).expect("fixture formats") {
+/// [`formatted`] within `format`.
+pub fn formatted_within(source: &str, format: Format) -> String {
+    match Formatted::from_source(&Source::inline(source), format).expect("fixture formats") {
         Formatted::Unchanged(text) | Formatted::Changed(text) => text,
     }
+}
+
+/// The format of lines `columns` wide, a match kept on one line as the defaults keep it there.
+pub fn at(columns: usize) -> Format {
+    let line_width = Width::new(columns).expect("the line width is admitted");
+    Format {
+        line_width,
+        flat_match: FlatMatch::within(line_width, None, None).expect("the defaults fit every line"),
+    }
+}
+
+/// The formats of the narrowest lines a file may be formatted within, a match kept on one line by the defaults and at each extreme the settings admit: kept off every line, as wide as the line with the fewest arms, and as wide as the line with no count of arms its own bound.
+pub fn narrowest_formats() -> Vec<Format> {
+    let line_width = Width::new(MIN_LINE_WIDTH).expect("the narrowest line width is admitted");
+    let within = |width, arms| {
+        FlatMatch::within(line_width, Some(width), Some(arms)).expect("the extreme is admitted")
+    };
+    [
+        FlatMatch::within(line_width, None, None).expect("the defaults fit every line"),
+        within(0, DEFAULT_FLAT_MATCH_ARMS),
+        within(MIN_LINE_WIDTH, MIN_FLAT_MATCH_ARMS),
+        within(MIN_LINE_WIDTH, usize::MAX),
+    ]
+    .into_iter()
+    .map(|flat_match| Format {
+        line_width,
+        flat_match,
+    })
+    .collect()
 }
 
 /// Every `.crs` of the tree, by its path, with the text it holds.

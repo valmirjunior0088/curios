@@ -11,7 +11,7 @@ use {
         diagnostics, placed, stage, unit_stage, written,
     },
     curios_common::{
-        About, Code, Kind, LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
+        About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
         SourceName, Style,
     },
     curios_core::{Declared, Totality},
@@ -19,7 +19,7 @@ use {
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress},
-    curios_surface::{Formatted, Width},
+    curios_surface::{Format, Formatted},
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -396,14 +396,14 @@ pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
     files: &[PathBuf],
-    width: Width,
+    format: Format,
     telling: &mut dyn Telling,
 ) -> Result<(), Box<Report>> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
     let reader = telling.reader();
-    let unformatted = uncanonical(&answers, files, width, &reader);
+    let unformatted = uncanonical(&answers, files, format, &reader);
 
     let mut reports = rendered(answers, budget, &overlay, telling);
     reports.extend(
@@ -450,7 +450,12 @@ pub fn wonder_tests(
 /// Each text of a subject the formatter would write otherwise, a report a text: each of `files`, once, and the text a subject of `answers` was read from standard input as. A text the formatter refuses is none of them, since why it refuses is the compilation's to say.
 ///
 /// **One report a text, never one a place**: what would move is the formatter's to show, by writing it, and the way out is one command however much moves.
-fn uncanonical(answers: &[Asked], files: &[PathBuf], width: Width, reader: &Style) -> Vec<Report> {
+fn uncanonical(
+    answers: &[Asked],
+    files: &[PathBuf],
+    format: Format,
+    reader: &Style,
+) -> Vec<Report> {
     let moved = |formatted| matches!(formatted, Ok(Formatted::Changed(_)));
     let report = |about, what: &str, subject: &str| {
         let mut said = Said::line("not canonical");
@@ -462,7 +467,7 @@ fn uncanonical(answers: &[Asked], files: &[PathBuf], width: Width, reader: &Styl
     let written = files
         .iter()
         .filter(|path| seen.insert(*path))
-        .filter(|path| moved(Formatted::from_path(path, width)))
+        .filter(|path| moved(Formatted::from_path(path, format)))
         .map(|path| report(About::Path(path.clone()), "file", &reader.spelled(path)));
     let read = answers
         .iter()
@@ -476,7 +481,7 @@ fn uncanonical(answers: &[Asked], files: &[PathBuf], width: Width, reader: &Styl
         .filter(|text| {
             moved(Formatted::from_source(
                 &Source::named(SourceName::stdin(), text.as_str()),
-                width,
+                format,
             ))
         })
         .map(|_| {
@@ -847,7 +852,7 @@ fn block(described: &Described, listing: Option<String>) -> Report {
 
 /// `items` after `lead`, a comma between each, run over as many lines as keep each within what a fact's line holds beside the trunk, each line after the first indented under the first.
 fn listed(lead: &str, items: &[String]) -> String {
-    let width = LINE_WIDTH - "│  ".chars().count();
+    let width = MAX_LINE_WIDTH - "│  ".chars().count();
     let mut lines = Vec::new();
     let mut line = lead.to_string();
     for (position, item) in items.iter().enumerate() {

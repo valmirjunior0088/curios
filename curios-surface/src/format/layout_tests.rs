@@ -1,13 +1,13 @@
 //! Structural layouts keep their surrounding expressions breakable and use structural indentation.
 
-use {super::test_support::*, curios_common::LINE_WIDTH};
+use {super::test_support::*, curios_common::MAX_LINE_WIDTH};
 
 fn canonical_within_width(source: &str) -> String {
     let output = formatted(source);
     assert!(
         output
             .lines()
-            .all(|line| line.chars().count() <= LINE_WIDTH),
+            .all(|line| line.chars().count() <= MAX_LINE_WIDTH),
         "{output}"
     );
     assert_eq!(formatted(&output), output);

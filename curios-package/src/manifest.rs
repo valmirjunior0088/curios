@@ -304,7 +304,7 @@ impl Document {
         Ok(Package {
             name,
             compiler: self.compiler.map(|version| version.parse()).transpose()?,
-            format: self.format,
+            format: self.format.map(FormatSettings::checked).transpose()?,
             description: self.description,
             default: self.default,
             dependencies: table(self.dependencies.unwrap_or_default(), "dependencies")?,
@@ -343,7 +343,7 @@ impl Document {
                         ))
                 })?
                 .parse()?,
-            format: self.format,
+            format: self.format.map(FormatSettings::checked).transpose()?,
             members: self
                 .members
                 .unwrap_or_default()

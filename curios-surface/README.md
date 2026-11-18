@@ -86,11 +86,11 @@ The Curios surface language as a tree: the scannerless parser that reads a `.crs
 
 ### A ladder on one line is short
 
-**Decision.** Laid out at a width, a `match` stays flat only where its postfix chain also takes at most seven tenths of that width, and a headed one with an arm only where no arm writes a guard. Anything holding a match it lays out flat is held to the same, so a call around a long match breaks too. With no width every ladder stays flat, as every group does, so a term a report prints keeps its one line.
+**Decision.** A `match` of more arms than its format's `flat-match-arms` — three where nothing states another — is broken at every width. Laid out at a width, one stays flat only where its postfix chain also spans at most the format's `flat-match-width` columns — 70 where nothing states another, or the width where that is narrower — and a headed one with an arm only where no arm writes a guard. Anything holding a match it lays out flat is held to the same, so a call around a long match breaks too. With no width every ladder within its arms stays flat, as every group does, so a term a report prints keeps its one line. Reports and pages keep the defaults; a file is held to its package's ([A file is formatted as one place states](../documentation/design/tools/a-file-is-formatted-as-one-place-states.md)).
 
-**Rationale.** A ladder on one line is read as one decision. Past a share of the line the eye no longer pairs a body with its pattern, and a guard puts a second thing between them, whatever room is left: `match o | some(n), n > 9 => 2 | _ => 0 end` reads as three. The share follows the width a package sets, so a narrower one holds its ladders to as short a line in proportion.
+**Rationale.** A ladder on one line is read as one decision. Past some span or some count of arms the eye no longer pairs a body with its pattern, and a dispatch table reads as rows; a guard puts a second thing between them, whatever room is left: `match o | some(n), n > 9 => 2 | _ => 0 end` reads as three. Where that falls is the reader's and not the page's, so the span is columns, the same at every width, and a page narrower than it decides by what fits; and it is the readers' a package is written for, so the package states it beside its width.
 
-**Rejected.** A budget in columns, which a narrower width would leave wider than the line; a setting of its own, a second number to choose where the width is the one setting; and breaking a match with a guard in every printing, which would spread a report's one-line term over several.
+**Rejected.** A share of the width, which moves the span with the page, a narrower one holding its ladders to a shorter line than its readers take in; a span stated past the width, which no line could show, so it is refused where it is stated; and breaking a match with a guard in every printing, which would spread a report's one-line term over several.
 
 ### The tree keeps sugar as written
 

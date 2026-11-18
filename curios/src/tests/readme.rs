@@ -5,7 +5,7 @@ use {
     curios_common::{Source, Style},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_surface::{Formatted, Width},
+    curios_surface::{Format, Formatted},
     curios_wonder::{Origin, Subject, diagnostics},
     std::{
         fs,
@@ -28,7 +28,7 @@ fn every_crs_block_is_written_as_format_writes_it() {
 
     let mut unformatted = Vec::new();
     for (line, example) in examples {
-        match Formatted::from_source(&Source::inline(example), Width::default()) {
+        match Formatted::from_source(&Source::inline(example), Format::default()) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(text)) => {
                 unformatted.push(format!("README.md:{line} is formatted as\n\n{text}"));

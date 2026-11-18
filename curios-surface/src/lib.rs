@@ -50,7 +50,10 @@ use core_text::*;
 pub use core_text::{ReadError, Refusal, to_core};
 
 mod format;
-pub use format::{Formatted, NARROWEST, Width};
+pub use format::{
+    DEFAULT_FLAT_MATCH_ARMS, DEFAULT_FLAT_MATCH_WIDTH, FlatMatch, FlatMatchSetting, Format,
+    Formatted, MIN_FLAT_MATCH_ARMS, MIN_LINE_WIDTH, Width,
+};
 
 mod print;
 use print::*;

@@ -1,9 +1,6 @@
 //! How a call prints: flat where it fits, an argument a line where it overflows, a trailing literal or lambda hugging it, and a curried call or a ladder breaking at its seams.
 
-use {
-    super::{FLAT_MATCH_COLUMNS, test_support::*},
-    crate::*,
-};
+use {super::test_support::*, crate::*};
 
 #[test]
 fn a_fitting_application_stays_flat() {
@@ -68,9 +65,9 @@ fn a_ladders_call_participates_in_its_flat_layout() {
     ] {
         // The columns a ladder keeps whole hold the whole chain, its call included: at that span the chain keeps its line, and one column past it the ladder breaks where the ladder alone would still be held.
         let call = |length: usize| "p".repeat(length - ladder.len() - 2);
-        let held = format!("{ladder}({})", call(FLAT_MATCH_COLUMNS));
+        let held = format!("{ladder}({})", call(DEFAULT_FLAT_MATCH_WIDTH));
         assert_eq!(render(&held, 100), held);
-        let past = call(FLAT_MATCH_COLUMNS + 1);
+        let past = call(DEFAULT_FLAT_MATCH_WIDTH + 1);
         assert_eq!(
             render(&format!("{ladder}({past})"), 100),
             format!("{broken}({past})")

@@ -254,7 +254,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
 
 #[test]
 fn a_line_within_the_width_is_quoted_whole() {
-    let line = "x".repeat(LINE_WIDTH);
+    let line = "x".repeat(MAX_LINE_WIDTH);
     let source = Source::inline(format!("{line}\n"));
     let span = Span::new(Arc::clone(&source), 50, 51);
 
@@ -270,11 +270,11 @@ fn a_line_past_the_width_is_quoted_as_a_window_around_its_mark() {
     let span = Span::new(Arc::clone(&source), offset, offset + 4);
 
     // A third of the window stands before the mark, the rest after it, and each cut end is marked; the caret stands under the mark as the window draws it.
-    let before = LINE_WIDTH / 3;
+    let before = MAX_LINE_WIDTH / 3;
     let shown = format!(
         "…{}mark{}…",
         "a".repeat(before),
-        "b".repeat(LINE_WIDTH - before - 4)
+        "b".repeat(MAX_LINE_WIDTH - before - 4)
     );
     assert_eq!(
         paned(&span),
@@ -290,10 +290,10 @@ fn a_mark_near_a_long_line_s_end_is_quoted_with_the_end() {
     let span = Span::new(Arc::clone(&source), 500, 503);
 
     // Fewer scalars stand after the mark than the window holds, so the window ends where the line does, cut at its start alone.
-    let shown = format!("…{}end", "a".repeat(LINE_WIDTH - 3));
+    let shown = format!("…{}end", "a".repeat(MAX_LINE_WIDTH - 3));
     assert_eq!(
         paned(&span),
-        (shown, format!("{}^^^", " ".repeat(1 + LINE_WIDTH - 3)))
+        (shown, format!("{}^^^", " ".repeat(1 + MAX_LINE_WIDTH - 3)))
     );
 }
 
@@ -304,7 +304,7 @@ fn a_span_wider_than_the_window_is_underlined_to_its_edge() {
     let span = Span::new(Arc::clone(&source), 0, 1_000);
 
     let (_, marks) = paned(&span);
-    assert_eq!(marks, "^".repeat(LINE_WIDTH));
+    assert_eq!(marks, "^".repeat(MAX_LINE_WIDTH));
 }
 
 #[test]

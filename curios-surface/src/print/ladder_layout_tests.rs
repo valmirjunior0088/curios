@@ -1,9 +1,6 @@
 //! How a ladder keeps one line: within the columns a decision is read in, as part of whatever holds it, and never with a headed arm's guards where a width lays it out.
 
-use {
-    super::{FLAT_MATCH_COLUMNS, test_support::*},
-    crate::*,
-};
+use {super::test_support::*, crate::*};
 
 /// A ladder past the columns a decision is read in and short of a line of 100.
 const LONG: &str =
@@ -12,7 +9,7 @@ const LONG: &str =
 // A ladder on one line is read as one decision, so it keeps one only within the columns a reader takes in at once, however much room the line has, and within them wherever it fits: the span is the reader's, so a page narrower than it decides by what fits, as the site's code panel does.
 #[test]
 fn a_ladder_stays_on_one_line_only_within_the_columns_a_decision_is_read_in() {
-    assert!(FLAT_MATCH_COLUMNS < LONG.len() && LONG.len() < 100);
+    assert!(DEFAULT_FLAT_MATCH_WIDTH < LONG.len() && LONG.len() < 100);
     assert_eq!(
         render(LONG, 100),
         "match value\n| some(inner) => combine(inner, other)\n| none() => fallback(value)\nend"

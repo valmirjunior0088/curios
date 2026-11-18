@@ -2,7 +2,7 @@
 
 use {
     curios_common::test_support::*,
-    curios_surface::NARROWEST,
+    curios_surface::MIN_LINE_WIDTH,
     std::{
         fs,
         io::Write,
@@ -120,12 +120,13 @@ const WIDE: &str =
 
 /// The narrowest width a file may be formatted within, as the flag spells it.
 fn narrowest() -> String {
-    NARROWEST.to_string()
+    MIN_LINE_WIDTH.to_string()
 }
 
 /// Whether every line of `text` is within the narrowest width.
 fn narrow(text: &str) -> bool {
-    text.lines().all(|line| line.chars().count() <= NARROWEST)
+    text.lines()
+        .all(|line| line.chars().count() <= MIN_LINE_WIDTH)
 }
 
 /// `--line-width` formats standard input and a file no package governs within it, the two alike, where the default leaves the text as it is.
@@ -173,7 +174,7 @@ fn a_package_formats_within_the_width_its_manifest_states() {
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {NARROWEST}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = {MIN_LINE_WIDTH}\n",
             compiler = env!("CARGO_PKG_VERSION")
         ),
     );
@@ -286,4 +287,76 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
         "{painted:?}"
     );
     assert_eq!(stripped(&painted), plain);
+}
+
+/// A match the default keeps on one line, of two arms.
+const DECIDED: &str = "let f(n: Nat) -> Nat =\n    match n | 0 => 1 | p + 1 => p end;\n";
+
+/// `--flat-match-arms` and `--flat-match-width` hold a match on standard input to what they state, and a manifest's `[format]` holds a package's file to the same: a match of more arms than stated, or wider than the span, is broken. A flat match wider than its lines is refused, by the flag on the command line and by the key in the manifest.
+#[test]
+fn a_flat_match_is_stated_by_a_flag_and_by_a_manifest_alike() {
+    let root = temporary("flat-match");
+    write(&root, "loose.crs", DECIDED);
+    let kept = |text: &str| {
+        text.lines()
+            .any(|line| line.trim_start().starts_with("match n |"))
+    };
+
+    let unchanged = curios(&root, &["format", "-"], DECIDED);
+    assert!(kept(&String::from_utf8_lossy(&unchanged.stdout)));
+    for flags in [["--flat-match-arms", "1"], ["--flat-match-width", "0"]] {
+        let piped = curios(&root, &["format", flags[0], flags[1], "-"], DECIDED);
+        let text = String::from_utf8_lossy(&piped.stdout);
+        assert!(
+            piped.status.success(),
+            "{}",
+            String::from_utf8_lossy(&piped.stderr)
+        );
+        assert!(!kept(&text), "{flags:?}: {text}");
+    }
+
+    let past = curios(
+        &root,
+        &[
+            "format",
+            "--line-width",
+            &narrowest(),
+            "--flat-match-width",
+            "70",
+            "-",
+        ],
+        DECIDED,
+    );
+    let stderr = String::from_utf8_lossy(&past.stderr);
+    assert!(!past.status.success(), "{stderr}");
+    assert!(stderr.contains("--flat-match-width"), "{stderr}");
+
+    let compiler = env!("CARGO_PKG_VERSION");
+    write(
+        &root,
+        "app/curios.toml",
+        &format!("compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nflat-match-arms = 1\n"),
+    );
+    write(&root, "app/lib.crs", DECIDED);
+    let rewritten = curios(&root.join("app"), &["format", "lib.crs"], "");
+    assert!(
+        rewritten.status.success(),
+        "{}",
+        String::from_utf8_lossy(&rewritten.stderr)
+    );
+    assert!(!kept(
+        &fs::read_to_string(root.join("app/lib.crs")).unwrap()
+    ));
+
+    write(
+        &root,
+        "app/curios.toml",
+        &format!(
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nline-width = 60\nflat-match-width = 70\n"
+        ),
+    );
+    let refused = curios(&root.join("app"), &["format", "--check"], "");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success(), "{stderr}");
+    assert!(stderr.contains("`70` is past `60`"), "{stderr}");
 }

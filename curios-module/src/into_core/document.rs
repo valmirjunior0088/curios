@@ -13,7 +13,7 @@ use {
     super::{ModuleInfo, PreparedText, PublicInterface, Scoped, visible_path},
     curios_abi::{NEVER, WireType},
     curios_common::{
-        Class, Keyword, LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
+        Class, Keyword, MAX_LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
     },
     curios_document::{
         Declaration, Documentation, Kind, Mark, Marked, Member, ModuleDocumentation, Signature,
@@ -640,7 +640,7 @@ impl Reader<'_> {
                 referent.map(|referent| (self.public_name(&referent), self.class_of(&referent))),
             );
         });
-        let (text, annotations) = render_annotated(head, INDENT, LINE_WIDTH);
+        let (text, annotations) = render_annotated(head, INDENT, MAX_LINE_WIDTH);
 
         let mut referents = referents.into_iter();
         let marks = annotations
@@ -918,7 +918,7 @@ pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
             false => stated.members.into_iter().find(|member| named(member)),
         })
         .map(|stated| Heading {
-            head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, LINE_WIDTH).0,
+            head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, MAX_LINE_WIDTH).0,
             prose: stated.prose.unwrap_or_default(),
         })
 }
