@@ -42,53 +42,64 @@ const PARSE_DIGITS: &str = include_str!(concat!(
     "/../programs/parse_digits.crs"
 ));
 
-/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/internal/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_anf::test_support`'s convention.
-#[test]
-fn a_recorded_shape_survives_to_the_program_schema() {
-    let module = anf_optm(SPINES);
+/// The shapes erasure records on the constructors of the family named `name` that a compiled module carries, by constructor.
+fn constructor_shapes(module: &Module, name: &str) -> BTreeMap<String, Vec<FieldShape>> {
     let family = module
         .families()
         .iter()
-        .find(|family| family.debug_name.as_deref() == Some("/std/Map/internal/Node/Node"))
-        .expect("the program module carries the prelude's Node family");
-
-    let shapes: BTreeMap<&str, Vec<FieldShape>> = family
+        .find(|family| family.debug_name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("the program module carries the family `{name}`"));
+    family
         .constructors
         .iter()
         .map(|&id| {
             let constructor = module.constructor(id).expect("live constructor");
             (
-                constructor.debug_name.as_deref().expect("named"),
+                constructor.debug_name.clone().expect("named"),
                 constructor.fields.iter().map(|field| field.shape).collect(),
             )
         })
-        .collect();
+        .collect()
+}
 
+/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/internal/Node/Node` survive to the schema a compiled program's module carries, and a family's own identity is recorded through its self-reference. `leaf(key: K, value: V)` reads polymorphic-opaque twice, and `branch(at: Nat, twigs: Vec(Node(K, V), 16))` reads a number and a list; `trees`' `node(Nat, Tree, Tree)` reads a number and its own family twice. The names are the schema's qualified debug names, per `curios_anf::test_support`'s convention.
+#[test]
+fn a_recorded_shape_survives_to_the_program_schema() {
+    let module = anf_optm(SPINES);
+    let shapes = constructor_shapes(&module, "/std/Map/internal/Node/Node");
     assert_eq!(
         shapes["leaf"],
         vec![FieldShape::Opaque, FieldShape::Opaque],
         "leaf: a polymorphic key and a polymorphic value",
     );
-    let [crit, zero, one] = shapes["fork"].as_slice() else {
+    assert_eq!(
+        shapes["branch"],
+        vec![FieldShape::Number, FieldShape::List],
+        "branch: a Nat position and the list of its twigs",
+    );
+
+    let module = anf_optm(TREES);
+    let shapes = constructor_shapes(&module, "/Tree");
+    let [value, left, right] = shapes["node"].as_slice() else {
         panic!(
-            "fork carries three relevant fields, got {:?}",
-            shapes["fork"]
+            "node carries three relevant fields, got {:?}",
+            shapes["node"]
         )
     };
-    assert_eq!(*crit, FieldShape::Number, "fork: a Nat crit");
+    assert_eq!(*value, FieldShape::Number, "node: a Nat value");
     // The children are the family's *own* identity, which is the case the recorder exists to reach: a shape that named only "some family" could not be spent on a declared field type, and a self-reference is where that matters most.
-    let (FieldShape::Family(zero), FieldShape::Family(one)) = (zero, one) else {
-        panic!("fork's children record their family, got {zero:?} and {one:?}")
+    let (FieldShape::Family(left), FieldShape::Family(right)) = (left, right) else {
+        panic!("node's children record their family, got {left:?} and {right:?}")
     };
-    assert_eq!(zero, one, "both children are the same family");
+    assert_eq!(left, right, "both children are the same family");
     assert_eq!(
         module
-            .family(*zero)
+            .family(*left)
             .expect("live family")
             .debug_name
             .as_deref(),
-        Some("/std/Map/internal/Node/Node"),
-        "and it is Node's own, recorded through the self-reference",
+        Some("/Tree"),
+        "and it is Tree's own, recorded through the self-reference",
     );
 }
 

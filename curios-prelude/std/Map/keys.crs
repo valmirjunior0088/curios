@@ -1,40 +1,25 @@
-use /std/{List, Option, Eq, Ord, Bool};
+use /std/{List, Eq, Ord, Bool};
 use /std/List/{Pairwise};
-use /std/Map/{Map, Key, Grounded};
+use /std/Map/{Map, Key};
 use /std/Map/internal/{Node};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
 pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =
-    match m.root | none() => [] | some(n) => Node/collect(n, []) end;
-
--- The keys under a sound root are in strict order.
-let of_root(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    root: Option(Node(K, V)),
-    ground: Grounded(root),
-) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(
-    match root | none() => [] | some(n) => Node/collect(n, []) end) =
-    match root
-    | none() => Pairwise/empty()
-    | some(n) =>
-        Eq/subst(
-            (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
-            Eq/sym(Node/collected(n, [])),
-            Node/ascending(n, ground))
-    end;
+    Node/collect(m.root, []);
 
 --- The keys of a map are in strict order by their type's own order, each before every one after it.
 ---
---- A map's trie is sound, so a key under a fork's zero side is before every key under its one side as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
+--- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Key/monotone` makes that the keys' own order. It asks nothing beyond the map's `Key(K)`.
 pub let pairwise(
     @K: Type,
     use Key(K),
     @V: Type,
     m: Map(K, V),
 ) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
-    of_root(m.root, m.sound);
+    Eq/subst(
+        (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
+        Eq/sym(Node/collected(m.root, [])),
+        Node/ascending(m.root, m.sound));
 
 --- The keys of a map are in strict order at adjacent elements, as a decision.
 pub let ordered(

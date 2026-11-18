@@ -347,6 +347,45 @@ fn copies_keeping_a_slot(module: &Module, name: &str) -> usize {
         .count()
 }
 
+/// The updates the function named `name` makes of a list it reads out of the node it takes, as the copies and the writes in place among them.
+fn twig_updates(module: &Module, name: &str) -> (usize, usize) {
+    let taken = module
+        .live_functions()
+        .find(|(_, function)| {
+            function
+                .debug_name
+                .as_deref()
+                .is_some_and(|debug| debug.ends_with(name))
+        })
+        .map(|(_, function)| function.params[0])
+        .unwrap_or_else(|| panic!("`{name}` is a function of its own"));
+    let lists = module
+        .live_nodes()
+        .filter_map(|(_, node)| match node {
+            Node::LetIntrinsic {
+                result,
+                op: Intrinsic::RowGet(..),
+                args,
+                ..
+            } if args.as_slice() == [Atom::Value(taken)] => Some(*result),
+            _ => None,
+        })
+        .collect::<BTreeSet<ValueId>>();
+    let updates = |wanted: Intrinsic| {
+        module
+            .live_nodes()
+            .filter(|(_, node)| {
+                matches!(node, Node::LetIntrinsic { op, args, .. }
+                    if *op == wanted && matches!(args.first(), Some(Atom::Value(list)) if lists.contains(list)))
+            })
+            .count()
+    };
+    (
+        updates(Intrinsic::ListSet),
+        updates(Intrinsic::ListOverwrite),
+    )
+}
+
 /// Every construction `/std/Map/internal/Node/insert` makes keeping a slot of the node it took apart rebuilds that node, at every level of the descent.
 #[test]
 fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
@@ -487,6 +526,28 @@ fn map_remove_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
         "{module}"
     );
     assert!(rebuilds_of(&module, NODE) >= 4, "{module}");
+}
+
+/// A map nothing else holds has each level's twigs written in place by an insert and by a remove: the descent reads the twig at its digit, hands it down and sets what comes back at the same index, so the list is the node's alone and nothing else reads it, and no update of it copies. Mutation-checked: with no list written in place, both copy at every level.
+#[test]
+fn a_maps_descent_writes_each_levels_twigs_in_place() {
+    for (definitions, result, function) in [
+        (
+            SPINES,
+            "Map/len(walk(n, (n + 1) % 65537, Map/empty()))",
+            "/std/Map/internal/Node/insert",
+        ),
+        (
+            REMOVALS,
+            "Map/len(drain(n, fill(n, Map/empty())))",
+            "/std/Map/internal/Node/remove",
+        ),
+    ] {
+        let (_, module) = modules(&program(definitions, result));
+        let (copies, writes) = twig_updates(&module, function);
+        assert_eq!(copies, 0, "{function}:\n{module}");
+        assert!(writes >= 2, "{function}:\n{module}");
+    }
 }
 
 /// What looks fresh and is shared: a map read after its insert, a map whose successor's predecessor is read again, a map a list holds, a map a closure captures, and a map that is constant data. Each program answers as it does when every insert copies, a rebuild of what another map still holds showing in what it prints.

@@ -52,3 +52,19 @@ pub let other(
             end
         end
     end;
+
+--- An update writing back what the list holds at the index leaves the list as it was.
+pub let itself(
+    @T: Type,
+    l: List(T),
+    i: Nat,
+    @ok: Bool/Holds(i < List/len(l)),
+) -> Eq()(List/set(l, i, List/get(l, i)), l) =
+    match l
+    | [] => match ok end
+    | [h, ..r] =>
+        match i
+        | 0 => Eq/refl()
+        | j + 1 => Eq/cong((t: List(T)) => [h, ..t], itself(r, j, @proved()))
+        end
+    end;

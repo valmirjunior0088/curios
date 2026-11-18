@@ -1,15 +1,12 @@
 use /std/{List, Option, Eq, Ord, Bool};
 use /std/List/{Member};
-use /std/Map/{Map, Key, keys, Grounded};
+use /std/Map/{Map, Key, keys};
 use /std/Map/internal/{Node};
 use /std/Map/least/{Among};
 
---- The entry of the greatest key, or `none` of the empty map: the one a walk down the trie's one sides ends at.
+--- The entry of the greatest key, or `none` of the empty map: the one of the last twig that holds any, at every branch down.
 pub let greatest(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
-    match m.root
-    | none() => Option/none()
-    | some(n) => Option/some(Node/greatest(n))
-    end;
+    Node/greatest(m.root);
 
 --- That `found` is an entry whose key is at or above `x` in the keys' order.
 pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
@@ -18,55 +15,12 @@ pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Pr
     | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
     end;
 
--- The keys under a root hold the key of the root's greatest entry.
-let among_root(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    root: Option(Node(K, V)),
-) -> Among(
-    match root
-    | none() => Option/none()
-    | some(n) => Option/some(Node/greatest(n))
-    end,
-    match root | none() => [] | some(n) => Node/collect(n, []) end) =
-    match root
-    | none() => Bool/True/qed()
-    | some(n) =>
-        Eq/subst(
-            (l: List(K)) => Member()(Node/greatest(n).0, l),
-            Eq/sym(Node/collected(n, [])),
-            Node/greatest_among(n))
-    end;
-
--- A key under a sound root is at or below the key of the root's greatest entry.
-let above_root(
-    @K: Type,
-    use Key(K),
-    @V: Type,
-    root: Option(Node(K, V)),
-    ground: Grounded(root),
-    x: K,
-    i: Member()(x, match root | none() => [] | some(n) => Node/collect(n, []) end),
-) -> Above(
-    match root
-    | none() => Option/none()
-    | some(n) => Option/some(Node/greatest(n))
-    end,
-    x) =
-    match root
-    | none() => Member/absent(i)
-    | some(n) =>
-        Node/greatest_above(
-            n,
-            ground,
-            x,
-            Eq/subst((l: List(K)) => Member()(x, l), Node/collected(n, []), i))
-    end;
-
 --- A map's greatest key is one of its keys.
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(greatest(m), keys(m)) =
-    among_root(m.root);
+    Eq/subst(
+        (l: List(K)) => Among(Node/greatest(m.root), l),
+        Eq/sym(Node/collected(m.root, [])),
+        Node/greatest_among(m.root));
 
 --- No key of a map is above its greatest: a map that has a key has a greatest entry, whose key is at or above it.
 pub let above(
@@ -77,4 +31,8 @@ pub let above(
     x: K,
     i: Member()(x, keys(m)),
 ) -> Above(greatest(m), x) =
-    above_root(m.root, m.sound, x, i);
+    Node/greatest_above(
+        m.root,
+        m.sound,
+        x,
+        Eq/subst((l: List(K)) => Member()(x, l), Node/collected(m.root, []), i));

@@ -4,8 +4,8 @@ mod tests;
 pub mod Key;
 pub use Key/{let Key};
 
---- A key's encoding read a bit at a time, nine to a byte, and where two encodings first differ.
-mod bits;
+--- A key's encoding read four positions to a byte, and where two encodings first differ.
+mod digits;
 
 --- What `Map`'s own modules share and no program sees: a `pub` inside it reaches all of `Map` and no further.
 mod internal;
@@ -30,23 +30,19 @@ pub use greatest/{let greatest};
 use /std/{Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
--- A root is sound where its trie is.
-let Grounded(@K: Type, use Key(K), @V: Type, root: Option(Node(K, V))) -> Prop =
-    match root | none() => Bool/True | some(n) => Node/Sound(n) end;
-
 --- A map from keys of type `K` to values, built and read under one `Key(K)` dictionary, which its type names.
 ---
---- A map holds, hidden, the proof that its trie is sound: at every fork, the fork's bit is the first at which the keys of its two sides differ, clear in those of the zero side and set in those of the one side. Every operation that builds a map builds the proof, and it erases.
+--- A map holds, hidden, the proof that its trie is sound: at every branch, the branch's position is the first at which its keys differ, and each of its sixteen twigs holds the keys with that twig's digit there. Every operation that builds a map builds the proof, and it erases.
 ---
 --- A leaf holds the key itself and its encoding is derived where a comparison needs it, so the keys come back as they went in. The shape of the trie is a function of the encoding, which is why the dictionary is a parameter: a map built under another is a value of another type, and every operation walks under the dictionary its map's type names.
 pub struct Map(K: Type, use Key(K), V: Type): Type {
-    root: Option(Node(K, V)),
-    @sound: Grounded(root),
+    root: Node(K, V),
+    @sound: Node/Sound(root),
 }
 
 --- The empty map.
 pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
-    Map { root = Option/none(), @sound = Bool/True/qed() };
+    Map { root = Node/empty(), @sound = Bool/True/qed() };
 
 --- How many entries, counted: the trie holds its entries and nothing beside them, so the count is a walk over every one.
 pub let len(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
@@ -72,38 +68,52 @@ pub let get(
 
 --- `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
-    let k = Hash/hash(key);
+    -- An empty map is constant data, which only a copying descent may be handed: answered here, a loop filling one from empty hands the descent maps nothing else holds.
     match m.root
-    | none() => Map { root = Option/some(Node/leaf(key, v)), @sound = Bool/True/qed() }
-    | some(n) =>
-        match Node/insert(n, key, k, v, @Eq/refl(), @m.sound)
-        | replaced(n2, @stands) => Map { root = Option/some(n2), @sound = stands.sound }
-        | parted(n2, c, @back, @apart, @past) =>
-            Map {
-                root = Option/some(Node/wedge(c, bits/bit(k, c), key, v, n2)),
-                @sound =
-                    Eq/subst(
-                        (t: Node(K, V)) => Node/Sound(Node/wedge(c, bits/bit(k, c), key, v, t)),
-                        Eq/sym(back),
-                        Node/wedged(c, key, k, v, n, Eq/refl(), m.sound, apart, past)) }
-        | added(n2, @stands) => Map { root = Option/some(n2), @sound = stands.sound }
-        end
+    | empty() => Map { root = Node/leaf(key, v), @sound = Bool/True/qed() }
+    | leaf(_, _) => put(m, key, v)
+    | branch(_, _) => put(m, key, v)
+    end;
+
+-- `insert` into a map that holds something: one descent from its root.
+let put(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
+    let k = Hash/hash(key);
+    match Node/insert(m.root, key, k, v, @Eq/refl(), @m.sound)
+    | vacant(_) => Map { root = Node/leaf(key, v), @sound = Bool/True/qed() }
+    | added(n2, @stands, @_, @_) | replaced(n2, @stands, @_, @_) =>
+        Map { root = n2, @sound = stands.sound }
+    | parted(n2, c, d, @back, @full, @apart, @past, @at_d, @small_d) =>
+        Map {
+            root = Node/wedge(c, d, n2, key, k, v, @small_d),
+            @sound =
+                Eq/subst(
+                    (t: Node(K, V)) => Node/Sound(Node/wedge(c, d, t, key, k, v, @small_d)),
+                    Eq/sym(back),
+                    Node/wedged(
+                        c,
+                        d,
+                        m.root,
+                        key,
+                        k,
+                        v,
+                        @small_d,
+                        Eq/refl(),
+                        m.sound,
+                        full,
+                        apart,
+                        past,
+                        at_d)) }
     end;
 
 --- `m` without `key`; unchanged when absent.
 pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V) =
-    let k = Hash/hash(key);
-    match m.root
-    | none() => m
-    | some(n) =>
-        match Node/remove(n, k, @m.sound)
-        | gone(_) => Map { root = Option/none(), @sound = Bool/True/qed() }
-        | kept(n2, @stands) => Map { root = Option/some(n2), @sound = stands.sound }
-        | absent(n2, @back, _) =>
-            Map {
-                root = Option/some(n2),
-                @sound = Eq/subst((t: Node(K, V)) => Node/Sound(t), Eq/sym(back), m.sound) }
-        end
+    match Node/remove(m.root, Hash/hash(key), @m.sound)
+    | gone(_) => Map { root = Node/empty(), @sound = Bool/True/qed() }
+    | kept(n2, @stands, @_, @_) => Map { root = n2, @sound = stands.sound }
+    | absent(n2, @back, _) =>
+        Map {
+            root = n2,
+            @sound = Eq/subst((t: Node(K, V)) => Node/Sound(t), Eq/sym(back), m.sound) }
     end;
 
 --- Over the entries in the order of their keys, with `f(key, value, acc)`.
@@ -116,7 +126,7 @@ pub let fold(
     init: A,
     f: (K, V, A) -> A,
 ) -> A =
-    match m.root | none() => init | some(n) => Node/fold(n, init, f) end;
+    Node/fold(m.root, init, f);
 
 --- The entries, in the order of their keys.
 pub let to_list(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
@@ -150,13 +160,7 @@ pub let update(
 
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
 pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =
-    Map {
-        root = Option/map(m.root, (n: Node(K, V)) => Node/map(n, f)),
-        @sound =
-            match m.root
-            | none() => Bool/True/qed()
-            | some(n) => Node/mapped(n, f, m.sound)
-            end };
+    Map { root = Node/map(m.root, f), @sound = Node/mapped(m.root, f, m.sound) };
 
 --- The entries `pred` accepts.
 pub let filter(@K: Type, use Key(K), @V: Type, m: Map(K, V), pred: (K, V) -> Bool) -> Map(K, V) =
