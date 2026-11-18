@@ -1451,3 +1451,62 @@ fn an_element_an_update_writes_over_is_held_by_nothing_else() {
     let beside = in_place(&element_written_back(1));
     assert_eq!((beside.rows.len(), beside.lists.len()), (0, 1));
 }
+
+/// `main` builds a `Fork` of a value nothing else holds and reads its second slot, then builds a `Fork` keeping that slot and, after it, a fresh one keeping nothing of it, and hands both on. The fresh construction is the first the arena holds.
+fn fresh_before_keeping() -> Module {
+    module_with(|module| {
+        let fork = module.add_row(Row {
+            debug_name: Some("Fork".into()),
+            slots: vec![Slot::Tag, Slot::Opaque, Slot::Opaque],
+        });
+        let [v, t, x, y, fresh, kept] =
+            ["v", "t", "x", "y", "fresh", "kept"].map(|name| module.add_value(Some(name.into())));
+        let exit = module.add_node(halt(vec![Atom::Value(kept), Atom::Value(fresh)]));
+        let build_fresh = module.add_node(Node::LetValue {
+            result: fresh,
+            value: ValueExpr::Row(fork, vec![nat(1), Atom::Value(v), Atom::Value(v)]),
+            next: exit,
+        });
+        let build_kept = module.add_node(Node::LetValue {
+            result: kept,
+            value: ValueExpr::Row(fork, vec![nat(2), Atom::Value(x), Atom::Value(y)]),
+            next: build_fresh,
+        });
+        let read_second = module.add_node(Node::LetIntrinsic {
+            result: y,
+            op: Intrinsic::RowGet(fork, 2),
+            args: vec![Atom::Value(t)],
+            next: build_kept,
+        });
+        let other = module.add_node(Node::LetIntrinsic {
+            result: x,
+            op: Intrinsic::NatAdd,
+            args: vec![Atom::Value(v), nat(1)],
+            next: read_second,
+        });
+        let built = module.add_node(Node::LetValue {
+            result: t,
+            value: ValueExpr::Row(fork, vec![nat(2), Atom::Value(v), Atom::Value(v)]),
+            next: other,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: v,
+            op: Intrinsic::NatAdd,
+            args: vec![nat(3), nat(4)],
+            next: built,
+        })
+    })
+}
+
+/// A construction keeping a slot of the value dying beside it is rebuilt into it before one keeping none is, whichever the arena holds first: the first saves the copy of what it keeps, the second only its allocation, so the fresh `Fork` is built anew and the one keeping a slot writes only what it changes. Mutation-checked: admitted in arena order, the fresh `Fork` takes the value and the other is copied.
+#[test]
+fn a_construction_keeping_a_slot_is_rebuilt_before_one_keeping_none() {
+    let module = fresh_before_keeping();
+    let rows = in_place(&module).rows;
+    assert_eq!(rows.len(), 1, "{module}");
+    assert!(
+        rows[0].slots.iter().all(|(index, _)| *index != 2),
+        "the rebuild keeps the slot it reads back: {:?}\n{module}",
+        rows[0].slots,
+    );
+}

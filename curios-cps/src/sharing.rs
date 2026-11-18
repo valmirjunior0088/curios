@@ -2487,55 +2487,64 @@ impl<'s> Facts<'s> {
         }
         let mut chosen = BTreeMap::<ValueId, Vec<NodeId>>::new();
         let mut rebuilds = Vec::new();
-        for (node_id, (block, _)) in &shape.place {
-            let Some(Node::LetValue {
-                result,
-                value: ValueExpr::Row(row, atoms),
-                ..
-            }) = module.node(*node_id)
-            else {
-                continue;
-            };
-            if shape.constant.contains(result) {
-                continue;
-            }
-            let function = shape.owner[block];
-            // Of the values that qualify, the one the construction keeps most of, so the rebuild writes the fewest slots.
-            let found = by_row
-                .get(&(function, *row))
-                .into_iter()
-                .flatten()
-                .copied()
-                .filter(|value| {
-                    shape
-                        .consumed(*value, self.borrowed)
+        // A construction keeping a slot of a dying value saves the copy of that slot as well as the allocation, where one keeping none saves the allocation alone, so the first are admitted first: a fresh leaf beside a branch rebuilt around it leaves the branch the value it takes apart.
+        for keeping in [true, false] {
+            for (node_id, (block, _)) in &shape.place {
+                let Some(Node::LetValue {
+                    result,
+                    value: ValueExpr::Row(row, atoms),
+                    ..
+                }) = module.node(*node_id)
+                else {
+                    continue;
+                };
+                if shape.constant.contains(result)
+                    || rebuilds
                         .iter()
-                        .all(|point| !shape.point_reaches(*point, *node_id))
-                        && !shape.live_at(*node_id, *value)
-                        && shape.in_scope(*value, *node_id)
-                        && shape.read_as_row_before(*value, *row, *node_id)
-                        && !shape.returns_without_rebinding(*value, *node_id)
-                        && clear_of_constants(module, shape, tags, *value, *node_id)
-                        && chosen.get(value).into_iter().flatten().all(|other| {
-                            !shape.reaches_as_one(*value, *other, *node_id)
-                                && !shape.reaches_as_one(*value, *node_id, *other)
-                        })
-                })
-                .map(|of| {
-                    let tag = guard(module, shape, of, *node_id);
-                    (of, written(module, shape, of, *row, atoms, tag))
-                })
-                .min_by_key(|(_, slots)| slots.len());
-            if let Some((of, slots)) = found {
-                chosen.entry(of).or_default().push(*node_id);
-                rebuilds.push(Rebuild {
-                    node: *node_id,
-                    of,
-                    row: *row,
-                    slots,
-                });
+                        .any(|rebuild: &Rebuild| rebuild.node == *node_id)
+                {
+                    continue;
+                }
+                let function = shape.owner[block];
+                // Of the values that qualify, the one the construction keeps most of, so the rebuild writes the fewest slots.
+                let found = by_row
+                    .get(&(function, *row))
+                    .into_iter()
+                    .flatten()
+                    .copied()
+                    .filter(|value| {
+                        shape
+                            .consumed(*value, self.borrowed)
+                            .iter()
+                            .all(|point| !shape.point_reaches(*point, *node_id))
+                            && !shape.live_at(*node_id, *value)
+                            && shape.in_scope(*value, *node_id)
+                            && shape.read_as_row_before(*value, *row, *node_id)
+                            && !shape.returns_without_rebinding(*value, *node_id)
+                            && clear_of_constants(module, shape, tags, *value, *node_id)
+                            && chosen.get(value).into_iter().flatten().all(|other| {
+                                !shape.reaches_as_one(*value, *other, *node_id)
+                                    && !shape.reaches_as_one(*value, *node_id, *other)
+                            })
+                    })
+                    .map(|of| {
+                        let tag = guard(module, shape, of, *node_id);
+                        (of, written(module, shape, of, *row, atoms, tag))
+                    })
+                    .filter(|(_, slots)| !keeping || slots.len() < atoms.len())
+                    .min_by_key(|(_, slots)| slots.len());
+                if let Some((of, slots)) = found {
+                    chosen.entry(of).or_default().push(*node_id);
+                    rebuilds.push(Rebuild {
+                        node: *node_id,
+                        of,
+                        row: *row,
+                        slots,
+                    });
+                }
             }
         }
+        rebuilds.sort_by_key(|rebuild| rebuild.node);
         rebuilds
     }
 
