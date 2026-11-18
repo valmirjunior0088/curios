@@ -1,3 +1,5 @@
+mod tests;
+
 --- Whether a key is an element, with the theorems of what each operation leaves there and that two sets alike at every key are one.
 pub mod has;
 pub use has/{let has};

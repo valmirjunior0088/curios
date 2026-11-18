@@ -49,6 +49,7 @@ claims! {
     html => ["Html"],
     parse => ["Parse"],
     map => ["Map"],
+    set => ["Set"],
     path => ["Path"],
     fmt => ["Fmt"],
     time => ["time"],
