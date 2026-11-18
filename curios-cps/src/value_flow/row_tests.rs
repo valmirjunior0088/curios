@@ -29,6 +29,7 @@ fn resumed_with(
             return_cont: producer_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -50,6 +51,7 @@ fn resumed_with(
                     return_cont: middle_ret,
                     body: call,
                     droppable: Droppable::Never,
+                    terminates: false,
                 },
             );
             middle
@@ -67,6 +69,7 @@ fn resumed_with(
             debug_name: Some("resume".into()),
             params: vec![received],
             body: exit,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -86,6 +89,7 @@ fn resumed_with(
             return_cont: entry_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -195,6 +199,7 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
         debug_name: Some("resume".into()),
         params: vec![received],
         body: exit,
+        terminates: false,
     });
     let call = module.add_node(Node::Intrinsic {
         op: IntrinsicCall::HeapApply,
@@ -213,6 +218,7 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
             return_cont: entry_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

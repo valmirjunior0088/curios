@@ -27,6 +27,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             debug_name: None,
             params: vec![local_param],
             body: local_body,
+            terminates: false,
         },
     );
     let enter_local = module.add_node(Node::ApplyCont(Edge {
@@ -45,6 +46,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -64,6 +66,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -138,6 +141,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -158,6 +162,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -217,6 +222,7 @@ fn calls_handing_a_function(
             return_cont: callee_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     pad(&mut module, callee, nodes);
@@ -236,6 +242,7 @@ fn calls_handing_a_function(
                 return_cont: function_return,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         function
@@ -257,6 +264,7 @@ fn calls_handing_a_function(
                 debug_name: None,
                 params: vec![],
                 body: call,
+                terminates: false,
             },
         );
         calls.push(call);
@@ -290,6 +298,7 @@ fn calls_handing_a_function(
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -394,6 +403,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
             return_cont: callee_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     pad(&mut module, callee, nodes);
@@ -413,6 +423,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
                 debug_name: None,
                 params: vec![],
                 body: call,
+                terminates: false,
             },
         );
         calls.push(call);
@@ -454,6 +465,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -523,6 +535,7 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
             return_cont: helper_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     pad(&mut module, helper, MULTI_SITE_INLINE_LIMIT + 1);

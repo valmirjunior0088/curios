@@ -28,6 +28,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             return_cont: helper_return,
             body: helper_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -49,6 +50,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -77,6 +79,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             return_cont: loop_return,
             body: loop_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -100,6 +103,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -360,6 +364,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             debug_name: Some("leaf".into()),
             params: vec![],
             body: leaf_body,
+            terminates: false,
         },
     );
     let node_body = module.add_node(Node::ApplyFun {
@@ -373,6 +378,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             debug_name: Some("node".into()),
             params: vec![],
             body: node_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -413,6 +419,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             return_cont: consume_return,
             body: project_tag,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -445,6 +452,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

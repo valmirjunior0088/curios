@@ -106,6 +106,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
             debug_name: Some("reached".into()),
             params: vec![],
             body: reached_body,
+            terminates: false,
         },
     );
 
@@ -127,6 +128,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
             debug_name: Some("other".into()),
             params: vec![],
             body: other_body,
+            terminates: false,
         },
     );
 
@@ -163,6 +165,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
             return_cont,
             body: bind,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

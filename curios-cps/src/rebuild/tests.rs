@@ -46,6 +46,7 @@ fn called_both_ways(tested: bool) -> Module {
                     debug_name: None,
                     params: vec![],
                     body: read_x,
+                    terminates: false,
                 },
             );
             let switch = module.add_node(Node::Switch {
@@ -82,6 +83,7 @@ fn called_both_ways(tested: bool) -> Module {
             return_cont: bump_return,
             body: read_tag,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let exit = module.add_node(halt_zero());
@@ -92,6 +94,7 @@ fn called_both_ways(tested: bool) -> Module {
             debug_name: None,
             params: vec![b],
             body: exit,
+            terminates: false,
         },
     );
     let second = module.add_node(Node::ApplyFun {
@@ -110,6 +113,7 @@ fn called_both_ways(tested: bool) -> Module {
             debug_name: None,
             params: vec![a],
             body: second_scope,
+            terminates: false,
         },
     );
     let first = module.add_node(Node::ApplyFun {
@@ -138,6 +142,7 @@ fn called_both_ways(tested: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -203,6 +208,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
             return_cont: pick_return,
             body: read_tag,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -231,6 +237,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
             debug_name: None,
             params: vec![r],
             body: read,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -274,6 +281,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -302,6 +310,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
             debug_name: None,
             params: vec![d],
             body: exit,
+            terminates: false,
         },
     );
     let onward = |target| Edge {
@@ -339,6 +348,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
             debug_name: None,
             params: vec![k],
             body: read_inner,
+            terminates: false,
         },
     );
 
@@ -374,6 +384,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -443,6 +454,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
             return_cont: bump_return,
             body: read_tag,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -460,6 +472,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
             debug_name: None,
             params: vec![a],
             body: read_again,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -499,6 +512,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -595,6 +609,7 @@ fn arms_of_a_round(back: bool) -> Module {
                 debug_name: None,
                 params: vec![],
                 body,
+                terminates: false,
             },
         );
     }
@@ -623,6 +638,7 @@ fn arms_of_a_round(back: bool) -> Module {
             debug_name: None,
             params: vec![p],
             body: read_tag,
+            terminates: false,
         },
     );
     let again = module.add_node(Node::ApplyCont(to(round, vec![Atom::Value(w)])));
@@ -632,6 +648,7 @@ fn arms_of_a_round(back: bool) -> Module {
             debug_name: None,
             params: vec![w],
             body: again,
+            terminates: false,
         },
     );
     let exit = module.add_node(halt(vec![Atom::Value(d)]));
@@ -641,6 +658,7 @@ fn arms_of_a_round(back: bool) -> Module {
             debug_name: None,
             params: vec![d],
             body: exit,
+            terminates: false,
         },
     );
 
@@ -673,6 +691,7 @@ fn arms_of_a_round(back: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -727,6 +746,7 @@ fn built_over_a_number_handed_twice() -> Module {
             debug_name: None,
             params: vec![r],
             body: read,
+            terminates: false,
         },
     );
     let again = module.add_node(Node::ApplyCont(to(
@@ -750,6 +770,7 @@ fn built_over_a_number_handed_twice() -> Module {
             debug_name: None,
             params: vec![],
             body: count,
+            terminates: false,
         },
     );
     let pick = module.add_node(Node::Switch {
@@ -767,6 +788,7 @@ fn built_over_a_number_handed_twice() -> Module {
             debug_name: None,
             params: vec![n, acc],
             body: round,
+            terminates: false,
         },
     );
 
@@ -792,6 +814,7 @@ fn built_over_a_number_handed_twice() -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -863,6 +886,7 @@ fn child_beside_its_holder(apart: bool) -> Module {
             debug_name: Some("k".into()),
             params: vec![a, b],
             body: read_b,
+            terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge {
@@ -913,6 +937,7 @@ fn child_beside_its_holder(apart: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -972,6 +997,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
             return_cont: deep_return,
             body: deep_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -1000,6 +1026,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
             debug_name: None,
             params: vec![deeper],
             body: read_held,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -1055,6 +1082,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -1115,6 +1143,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
             return_cont: peek_return,
             body: peek_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -1135,6 +1164,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
             debug_name: None,
             params: vec![peeked],
             body: exit,
+            terminates: false,
         },
     );
     let call_peek = module.add_node(Node::ApplyFun {
@@ -1182,6 +1212,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
                     debug_name: Some("j".into()),
                     params: vec![o],
                     body: j_body,
+                    terminates: false,
                 },
             );
             let jump = module.add_node(Node::ApplyCont(Edge {
@@ -1211,6 +1242,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
             debug_name: Some("k".into()),
             params,
             body: k_body,
+            terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge { target: k, args }));
@@ -1285,6 +1317,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -1524,6 +1557,7 @@ fn passed_over(element: bool, between: bool) -> Module {
                 debug_name: None,
                 params: vec![],
                 body: read_slot,
+                terminates: false,
             },
         );
 
@@ -1547,6 +1581,7 @@ fn passed_over(element: bool, between: bool) -> Module {
                 debug_name: None,
                 params: vec![],
                 body: pass_body,
+                terminates: false,
             },
         );
 

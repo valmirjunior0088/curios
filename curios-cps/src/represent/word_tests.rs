@@ -29,6 +29,7 @@ fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
+            terminates: false,
         },
     );
 
@@ -71,6 +72,7 @@ fn a_parameter_a_bounded_sum_reaches_is_held_in_a_word() {
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
+            terminates: false,
         },
     );
 
@@ -112,6 +114,7 @@ fn counting_loop(module: &mut Module, seed: Atom, op: Intrinsic) -> (ValueId, Va
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
+            terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge {
@@ -177,6 +180,7 @@ fn a_length_counted_down_and_read_at_rides_a_word_read_unsigned() {
             debug_name: Some("head".into()),
             params: vec![param],
             body: read,
+            terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge {

@@ -21,6 +21,7 @@ fn a_construction_reaches_its_parameter_exactly() {
                 debug_name: Some("target".into()),
                 params: vec![param],
                 body: exit,
+                terminates: false,
             },
         );
         let jump = module.add_node(Node::ApplyCont(Edge {
@@ -75,6 +76,7 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
                 debug_name: Some("header".into()),
                 params: vec![param],
                 body: spin,
+                terminates: false,
             },
         );
         let enter = module.add_node(Node::ApplyCont(Edge {
@@ -116,6 +118,7 @@ fn merged_arities_travel_as_a_variant() {
                 debug_name: Some("target".into()),
                 params: vec![param],
                 body: exit,
+                terminates: false,
             },
         );
         let split = module.add_node(Node::Switch {
@@ -187,6 +190,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             return_cont: callee_ret,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -204,6 +208,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             debug_name: Some("join".into()),
             params: vec![landed],
             body: exit,
+            terminates: false,
         },
     );
     let forward = module.add_node(Node::ApplyCont(Edge {
@@ -216,6 +221,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -235,6 +241,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             return_cont: caller_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);
@@ -261,6 +268,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
                 return_cont: callee_ret,
                 body: callee_exit,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
 
@@ -279,6 +287,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
                 debug_name: Some("resume".into()),
                 params: vec![received],
                 body: resume_exit,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -306,6 +315,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
                 return_cont: caller_ret,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         module.set_entry(caller);
@@ -343,6 +353,7 @@ fn a_variant_construction_carries_its_family() {
                 debug_name: None,
                 params: vec![param],
                 body: exit,
+                terminates: false,
             },
         );
         let jump = module.add_node(Node::ApplyCont(Edge {
@@ -398,6 +409,7 @@ fn two_constructors_of_a_family_merge_to_the_family() {
                 debug_name: None,
                 params: vec![param],
                 body: exit,
+                terminates: false,
             },
         );
         // One switch, one edge per constructor, so both constructions flow into the single join.

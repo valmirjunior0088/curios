@@ -42,6 +42,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             return_cont: step_sentinel,
             body: step_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -64,6 +65,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             return_cont: leader_sentinel,
             body: leader_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -84,6 +86,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             return_cont: forwarder_sentinel,
             body: forwarder_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -104,6 +107,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                     debug_name: None,
                     params: vec![ignored],
                     body: next,
+                    terminates: false,
                 });
                 bound.push(after);
                 module.add_node(Node::ApplyFun {
@@ -130,6 +134,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                         return_cont: nested_sentinel,
                         body: nested_body,
                         droppable: Droppable::Never,
+                        terminates: false,
                     },
                 );
                 let kept = module.add_value(Some("kept".into()));
@@ -147,6 +152,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                     debug_name: None,
                     params: vec![ignored],
                     body: define,
+                    terminates: false,
                 });
                 let apply = module.add_node(Node::ApplyFun {
                     callee: Callee::Closure(received),
@@ -170,6 +176,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                     debug_name: None,
                     params: vec![ignored],
                     body: keep,
+                    terminates: false,
                 });
                 let apply = module.add_node(Node::ApplyFun {
                     callee: Callee::Closure(received),
@@ -198,6 +205,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                 debug_name: None,
                 params: vec![received],
                 body,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -241,6 +249,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             return_cont: entry_sentinel,
             body: entry_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -454,6 +463,7 @@ fn a_forwarded_application_declines_uncurrying() {
             return_cont: inner_ret,
             body: inner_exit,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -472,6 +482,7 @@ fn a_forwarded_application_declines_uncurrying() {
             return_cont: producer_ret,
             body: producer_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -494,6 +505,7 @@ fn a_forwarded_application_declines_uncurrying() {
             debug_name: Some("join".into()),
             params: vec![forwarded],
             body: apply,
+            terminates: false,
         },
     );
     let forward = module.add_node(Node::ApplyCont(Edge {
@@ -506,6 +518,7 @@ fn a_forwarded_application_declines_uncurrying() {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -525,6 +538,7 @@ fn a_forwarded_application_declines_uncurrying() {
             return_cont: caller_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);
@@ -563,6 +577,7 @@ fn unary(module: &mut Module, name: &str) -> FunctionId {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -585,6 +600,7 @@ fn returning(module: &mut Module, name: &str, returned: FunctionId) -> FunctionI
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -612,6 +628,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
             debug_name: Some("spare".into()),
             params: vec![],
             body: spare_body,
+            terminates: false,
         },
     );
     let apply = module.add_node(Node::ApplyFun {
@@ -629,6 +646,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: resume_body,
+            terminates: false,
         },
     );
 
@@ -645,6 +663,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
                 debug_name: Some(name.into()),
                 params: vec![],
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -699,6 +718,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
             return_cont: caller_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);
@@ -804,6 +824,7 @@ fn a_new_tail_edge_defers_a_class_until_its_new_members_can_agree() {
         debug_name: None,
         params: vec![held],
         body: apply,
+        terminates: false,
     });
     let Node::ApplyFun { return_to, .. } = module.node_mut(body).unwrap() else {
         unreachable!()
@@ -853,6 +874,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             debug_name: Some("first".into()),
             params: vec![],
             body: first_body,
+            terminates: false,
         },
     );
     let second = module.reserve_continuation();
@@ -873,6 +895,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             debug_name: Some("second".into()),
             params: vec![],
             body: second_body,
+            terminates: false,
         },
     );
     let dispatch = module.add_node(Node::Switch {
@@ -902,6 +925,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             return_cont: producer_ret,
             body: producer_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -921,6 +945,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: apply,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -945,6 +970,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             return_cont: caller_ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);

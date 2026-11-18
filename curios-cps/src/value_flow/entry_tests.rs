@@ -32,6 +32,7 @@ fn entry_with(
             return_cont: ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -54,6 +55,7 @@ fn define(
             return_cont: ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -156,6 +158,7 @@ fn a_suspension_consumed_by_an_internal_resume_does_not_escape() {
                 debug_name: None,
                 params: vec![received],
                 body,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -199,6 +202,7 @@ fn split_results_keep_their_return_positions_distinct() {
                     debug_name: None,
                     params,
                     body,
+                    terminates: false,
                 },
             );
             let call = module.add_node(Node::ApplyFun {
@@ -237,6 +241,7 @@ fn a_recursive_component_propagates_its_returned_row() {
                 debug_name: None,
                 params: vec![],
                 body: tail,
+                terminates: false,
             },
         );
         let result = module.add_value(None);
@@ -271,6 +276,7 @@ fn a_recursive_component_propagates_its_returned_row() {
                 return_cont: first_ret,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         let body = module.add_node(Node::ApplyFun {
@@ -286,6 +292,7 @@ fn a_recursive_component_propagates_its_returned_row() {
                 return_cont: second_ret,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -317,6 +324,7 @@ fn a_recursive_component_that_never_returns_contributes_no_row() {
                 return_cont: sentinel,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -399,6 +407,7 @@ fn stored_suspension(
         debug_name: None,
         params: vec![outcome],
         body: next,
+        terminates: false,
     });
     let args = vec![Atom::Value(into), Atom::Value(suspension)];
     let store = match channel {
@@ -472,6 +481,7 @@ fn read_handed(
             debug_name: None,
             params: params_of_resume,
             body,
+            terminates: false,
         },
     );
     let target = if tail && boundary < 2 { ret } else { resume };
@@ -533,6 +543,7 @@ fn an_escaping_functions_parameters_take_what_every_call_hands() {
                     return_cont: sentinel,
                     body,
                     droppable: Droppable::Never,
+                    terminates: false,
                 },
             );
             let escaped = module.add_value(None);
@@ -551,6 +562,7 @@ fn an_escaping_functions_parameters_take_what_every_call_hands() {
                         debug_name: None,
                         params: vec![answer],
                         body: call,
+                        terminates: false,
                     });
                     let applied = module.add_node(Node::ApplyFun {
                         callee: Callee::Closure(element),
@@ -643,6 +655,7 @@ fn poll_or_take(
             debug_name: None,
             params: vec![status, payload],
             body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -671,6 +684,7 @@ fn foreign_wire_results_cannot_fabricate_a_nominal_suspension() {
                 debug_name: None,
                 params: vec![value, lane],
                 body,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::Foreign {

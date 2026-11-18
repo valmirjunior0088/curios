@@ -28,6 +28,7 @@ fn returning_callee(module: &mut Module, name: &str) -> FunctionId {
             return_cont: sentinel,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -59,6 +60,7 @@ fn projecting_resume(module: &mut Module, name: &str) -> ContinuationId {
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,
+            terminates: false,
         },
     );
     resume
@@ -82,6 +84,7 @@ fn opaque_resume(module: &mut Module, name: &str) -> ContinuationId {
             debug_name: Some(name.into()),
             params: vec![result],
             body: hold,
+            terminates: false,
         },
     );
     resume
@@ -118,6 +121,7 @@ fn calling_function(
             return_cont: sentinel,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -156,6 +160,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
             debug_name: Some("resume".into()),
             params: vec![result],
             body: forward,
+            terminates: false,
         },
     );
 
@@ -179,6 +184,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
             return_cont: sentinel,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);
@@ -252,6 +258,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
             debug_name: Some("entry/resume".into()),
             params: vec![result],
             body: tail,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -271,6 +278,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
             return_cont: sentinel,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -315,6 +323,7 @@ fn an_escaping_callee_stays_a_tuple() {
             return_cont: sentinel,
             body: capture,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -361,6 +370,7 @@ fn row_returning_callee(module: &mut Module, name: &str, row: RowId) -> Function
             return_cont: sentinel,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -392,6 +402,7 @@ fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> Continu
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,
+            terminates: false,
         },
     );
     resume

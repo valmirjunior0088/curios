@@ -315,6 +315,8 @@ pub struct Function {
     ///
     /// [`Droppable::Never`] is the safe reading: a function this could not be filled from is kept.
     pub droppable: Droppable,
+    /// Whether every call of this function returns: the checkers' termination verdict, carried down from the source as [`Droppable`]'s half is, and handed to the loop contification makes of it ([`Continuation::terminates`]). `false` is the safe reading, and a pass that cannot keep it may drop it, since only its presence is ever relied on, as LLVM's `mustprogress` is.
+    pub terminates: bool,
 }
 
 /// What a call of a function must hand it for the call, its result unread, to go: the conclusion [`Function::droppable`] carries.
@@ -364,6 +366,8 @@ pub struct Continuation {
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub body: NodeId,
+    /// Whether every run entering this continuation leaves it: set on the loop contification makes of a function the checkers proved total ([`Function::terminates`]), and `false` on every other, the safe reading. A loop so marked whose result nothing reads goes where its body does nothing a run observes (`eliminate_dead_loops`), which no claim stated at the function could say once its calls are jumps.
+    pub terminates: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

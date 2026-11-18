@@ -31,6 +31,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             return_cont: a_return,
             body: a_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -51,6 +52,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             return_cont: b_return,
             body: b_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -72,6 +74,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -133,6 +136,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             return_cont: f_return,
             body: f_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -158,6 +162,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             debug_name: None,
             params: vec![r],
             body: again,
+            terminates: false,
         },
     );
     let apply_p = module.add_node(Node::ApplyFun {
@@ -177,6 +182,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             return_cont: g_return,
             body: g_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -203,6 +209,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             return_cont: h_return,
             body: h_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -231,6 +238,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -307,6 +315,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             return_cont: f_return,
             body: f_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -324,6 +333,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             debug_name: None,
             params: vec![r],
             body: again,
+            terminates: false,
         },
     );
     let apply = module.add_node(Node::ApplyFun {
@@ -341,6 +351,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             debug_name: Some("loop".into()),
             params: vec![p],
             body: loop_body,
+            terminates: false,
         },
     );
 
@@ -375,6 +386,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -442,6 +454,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
             debug_name: Some("target".into()),
             params: vec![target_param],
             body: target_body,
+            terminates: false,
         },
     );
     let forwarding_body = module.add_node(Node::ApplyCont(Edge {
@@ -454,6 +467,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyCont(Edge {
@@ -472,6 +486,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -507,6 +522,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
             debug_name: None,
             params: vec![parameter],
             body: continuation_body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyCont(Edge {
@@ -525,6 +541,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -562,6 +579,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let join = module.reserve_continuation();
@@ -576,6 +594,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             debug_name: None,
             params: vec![received],
             body: join_body,
+            terminates: false,
         },
     );
     let chooser = module.add_value(Some("chooser".into()));
@@ -596,6 +615,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             debug_name: None,
             params: vec![],
             body: call,
+            terminates: false,
         },
     );
     module.define_continuation(
@@ -604,6 +624,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             debug_name: None,
             params: vec![],
             body: jump,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -640,6 +661,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -669,6 +691,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             debug_name: None,
             params: vec![],
             body: taken_body,
+            terminates: false,
         },
     );
     let untaken_body = module.add_node(Node::ApplyCont(Edge {
@@ -681,6 +704,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             debug_name: None,
             params: vec![],
             body: untaken_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -713,6 +737,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             debug_name: None,
             params: vec![tag, payload],
             body: join_body,
+            terminates: false,
         },
     );
     let chooser = module.add_value(Some("chooser".into()));
@@ -748,6 +773,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -788,6 +814,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             return_cont: h_return,
             body: h_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let return_h = module.add_node(Node::ApplyCont(Edge {
@@ -806,6 +833,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             return_cont: g_return,
             body: g_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let f_body = module.add_node(Node::ApplyFun {
@@ -821,6 +849,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             return_cont: f_return,
             body: f_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let entry = module.reserve_function();
@@ -842,6 +871,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             return_cont: entry_return,
             body: entry_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -879,6 +909,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
             return_cont: inner_return,
             body: inner_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     // `outer() = inner`, defining it.
@@ -898,6 +929,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
             return_cont: outer_return,
             body: outer_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let call_outer = module.add_node(Node::ApplyFun {
@@ -917,6 +949,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

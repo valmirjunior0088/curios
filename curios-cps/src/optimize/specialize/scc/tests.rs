@@ -33,6 +33,7 @@ fn independent_components_specialize_together_and_charge_their_complete_extents(
         debug_name: None,
         params: vec![result],
         body: run_copy,
+        terminates: false,
     });
     let Node::ApplyFun { return_to, .. } = module.node_mut(fixture.call2).unwrap() else {
         unreachable!()
@@ -84,6 +85,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
         debug_name: None,
         params: vec![],
         body: first,
+        terminates: false,
     });
     let mut definitions = vec![original];
     let mut cases = BTreeMap::from([(
@@ -111,6 +113,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
                 return_cont: helper_ret,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         helpers.push(helper);
@@ -127,6 +130,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
             debug_name: None,
             params: vec![],
             body: call,
+            terminates: false,
         });
         definitions.push(before);
         cases.insert(
@@ -345,6 +349,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
                 return_cont: function_return,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         function
@@ -372,6 +377,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             return_cont: again_return,
             body: again_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let apply = module.add_node(Node::ApplyFun {
@@ -391,6 +397,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             return_cont: g_return,
             body: g_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -410,6 +417,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             debug_name: Some("k1".into()),
             params: vec![x1],
             body: call2,
+            terminates: false,
         },
     );
     let call1 = module.add_node(Node::ApplyFun {
@@ -436,6 +444,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -504,6 +513,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             debug_name: Some("turn".into()),
             params: vec![],
             body: step,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -532,6 +542,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             return_cont: walk_return,
             body: walk_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -551,6 +562,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             debug_name: Some("k1".into()),
             params: vec![first_result],
             body: call2,
+            terminates: false,
         },
     );
     let call1 = module.add_node(Node::ApplyFun {
@@ -577,6 +589,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

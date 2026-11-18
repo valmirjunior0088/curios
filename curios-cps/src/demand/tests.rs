@@ -36,6 +36,7 @@ fn module() -> (Module, ValueId, ValueId, ValueId) {
             return_cont,
             body: project,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -94,6 +95,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
             return_cont: callee_ret,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -107,6 +109,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: resume_exit,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -126,6 +129,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
             return_cont: caller_ret,
             body: caller_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(caller);
@@ -162,6 +166,7 @@ fn deferral_reaches_unused_through_a_chain() {
             debug_name: Some("inner".into()),
             params: vec![second],
             body: inner_exit,
+            terminates: false,
         },
     );
     let forward = module.add_node(Node::ApplyCont(Edge {
@@ -174,6 +179,7 @@ fn deferral_reaches_unused_through_a_chain() {
             debug_name: Some("outer".into()),
             params: vec![first],
             body: forward,
+            terminates: false,
         },
     );
     let enter = module.add_node(Node::ApplyCont(Edge {
@@ -192,6 +198,7 @@ fn deferral_reaches_unused_through_a_chain() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -222,6 +229,7 @@ fn a_returned_value_stays_opaque() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -252,6 +260,7 @@ fn a_closure_call_consumes_its_arguments_whole() {
             return_cont,
             body: call,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -288,6 +297,7 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_unused() {
                 debug_name: Some("loop".into()),
                 params: vec![seen],
                 body: append,
+                terminates: false,
             },
         );
         let start = module.add_node(Node::ApplyCont(Edge {
@@ -308,6 +318,7 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_unused() {
                 return_cont,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         module.set_entry(function);

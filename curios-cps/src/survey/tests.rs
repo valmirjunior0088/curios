@@ -26,6 +26,7 @@ fn module_naming(names: &[Option<&str>]) -> Module {
                 return_cont,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
     }

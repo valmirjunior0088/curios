@@ -9,6 +9,7 @@ fn continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> Cont
         debug_name: None,
         params,
         body,
+        terminates: false,
     })
 }
 
@@ -34,6 +35,7 @@ fn nest(module: &mut Module, depth: usize) -> FunctionId {
                 return_cont,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         if level > 0 {
@@ -124,6 +126,7 @@ fn called_twice(depth: usize, first: usize, second: usize, named: bool) -> (Modu
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

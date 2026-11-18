@@ -46,6 +46,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
                 debug_name: Some("inner".into()),
                 params: vec![],
                 body: suffix,
+                terminates: false,
             });
             let enter = module.add_node(Node::ApplyCont(Edge {
                 target: inner,
@@ -61,6 +62,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
         debug_name: Some("arm".into()),
         params: vec![],
         body: arm_body,
+        terminates: false,
     });
 
     let to = |target: ContinuationId| Edge {
@@ -77,6 +79,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
             debug_name: Some("exit".into()),
             params: vec![],
             body,
+            terminates: false,
         });
         continuations.push(exit);
         exit
@@ -104,6 +107,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
                 debug_name: Some("around".into()),
                 params: vec![],
                 body: switch,
+                terminates: false,
             });
             continuations.push(around);
             let jump = module.add_node(Node::ApplyCont(to(arm)));
@@ -111,6 +115,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
                 debug_name: Some("pick".into()),
                 params: vec![],
                 body: jump,
+                terminates: false,
             });
             continuations.push(pick);
             module.add_node(Node::Switch {
@@ -133,6 +138,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

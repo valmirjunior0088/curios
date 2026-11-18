@@ -27,6 +27,7 @@ fn define(
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     function
@@ -109,6 +110,7 @@ fn resumed(
         debug_name: None,
         params,
         body,
+        terminates: false,
     });
     let transfer = transfer(module, continuation);
     module.add_node(Node::LetCont {

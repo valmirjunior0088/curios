@@ -20,6 +20,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             return_cont: inner_sentinel,
             body: inner_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -46,6 +47,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             return_cont: outer_sentinel,
             body: outer_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(outer);
@@ -115,6 +117,7 @@ fn planning_closes_nested_definitions_transitively_without_minting() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let binding = module.add_node(Node::LetFun {
@@ -162,6 +165,7 @@ fn function_recursion_follows_the_copy_and_external_callees_stay_shared() {
             return_cont: external_return,
             body: external_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let inner_body = module.function(inner).unwrap().body;
@@ -228,6 +232,7 @@ fn a_peeled_continuation_keeps_its_backedge_and_renames_nested_captures() {
             debug_name: None,
             params: vec![param],
             body,
+            terminates: false,
         },
     );
     let inner_body = module.function(inner).unwrap().body;

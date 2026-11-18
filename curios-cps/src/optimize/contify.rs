@@ -282,6 +282,7 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
             debug_name: function.debug_name,
             params: function.params,
             body: function.body,
+            terminates: function.terminates,
         },
     );
     module.set_node(

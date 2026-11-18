@@ -15,6 +15,7 @@ pub fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -31,6 +32,7 @@ pub fn through_continuation(module: &mut Module, params: Vec<ValueId>, body: Nod
             debug_name: Some("head".into()),
             params,
             body,
+            terminates: false,
         },
     );
 
@@ -55,6 +57,7 @@ pub fn define(
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 }
@@ -72,6 +75,7 @@ pub fn resume(
             debug_name: Some("resume".into()),
             params,
             body,
+            terminates: false,
         },
     );
 }

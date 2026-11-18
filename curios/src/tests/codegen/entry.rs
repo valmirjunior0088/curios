@@ -79,6 +79,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
             return_cont: producer_ret,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     let entry = module.reserve_function();
@@ -95,6 +96,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
             debug_name: None,
             params: vec![ignored],
             body,
+            terminates: false,
         },
     );
     let call = module.add_node(curios_cps::Node::ApplyFun {
@@ -118,6 +120,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
             return_cont: ret,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

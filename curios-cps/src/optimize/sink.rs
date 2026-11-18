@@ -885,6 +885,7 @@ impl<'m> Sink<'m> {
                     debug_name: Some("join".into()),
                     params: vec![result],
                     body: next,
+                    terminates: false,
                 });
                 self.parent.insert(next, Holder::Continuation(join));
                 self.binder.insert(result, Holder::Continuation(join));
@@ -900,6 +901,7 @@ impl<'m> Sink<'m> {
             debug_name: Some("arm".into()),
             params: Vec::new(),
             body: handed,
+            terminates: false,
         });
         self.parent.insert(handed, Holder::Continuation(arm));
         self.carved(arm, from);
@@ -960,6 +962,7 @@ impl<'m> Sink<'m> {
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body: handed,
+                terminates: false,
             },
         );
         self.parent.insert(handed, Holder::Continuation(landing));
@@ -1062,6 +1065,7 @@ impl<'m> Sink<'m> {
                     debug_name,
                     params: results.clone(),
                     body,
+                    terminates: false,
                 });
                 self.parent.insert(body, Holder::Continuation(landed));
                 for result in &results {

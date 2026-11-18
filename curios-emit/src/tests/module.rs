@@ -99,6 +99,7 @@ fn a_panic_node_reports_its_class() {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -127,6 +128,7 @@ fn a_cycles_panic_names_the_member_it_was_seated_for() {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

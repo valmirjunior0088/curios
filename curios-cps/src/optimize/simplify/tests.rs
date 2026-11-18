@@ -25,6 +25,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
             debug_name: Some("target".into()),
             params: vec![target_left, target_right],
             body: target_body,
+            terminates: false,
         },
     );
     let forwarding = module.reserve_continuation();
@@ -42,6 +43,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyCont(Edge {
@@ -60,6 +62,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -95,6 +98,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             debug_name: Some("target".into()),
             params: vec![received],
             body: target_body,
+            terminates: false,
         },
     );
     let forwarding = module.reserve_continuation();
@@ -109,6 +113,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
+            terminates: false,
         },
     );
     let nan = Atom::Literal(Literal::Flt(Floating::from(f64::NAN)));
@@ -128,6 +133,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -205,6 +211,7 @@ fn a_closure_call_of_a_function_of_another_arity_is_unreachable() {
             return_cont: target_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let forced = module.add_node(Node::ApplyFun {
@@ -244,6 +251,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
             return_cont: arm_return,
             body: arm_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -261,6 +269,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
             debug_name: Some("join".into()),
             params: vec![join_callee, join_argument],
             body: join_body,
+            terminates: false,
         },
     );
 
@@ -292,6 +301,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -348,6 +358,7 @@ fn returning_call(
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::ALWAYS,
+            terminates: false,
         },
     );
     let main_return = module.reserve_continuation();
@@ -366,6 +377,7 @@ fn returning_call(
             debug_name: Some("resume".into()),
             params,
             body: resume_body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -389,6 +401,7 @@ fn returning_call(
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -503,6 +516,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
             return_cont: stepping_return,
             body: stepping_body,
             droppable: stepper,
+            terminates: false,
         },
     );
 
@@ -526,6 +540,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
             return_cont: fold_return,
             body: fold_body,
             droppable: Droppable::Given(BTreeSet::from([named])),
+            terminates: false,
         },
     );
 
@@ -543,6 +558,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
             debug_name: Some("resume".into()),
             params: vec![unread],
             body: resume_body,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -566,6 +582,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -600,4 +617,148 @@ fn a_claim_follows_what_the_round_knows_of_what_it_names() {
     rewrite_atoms(&mut module, &BTreeMap::from([(named, Atom::Fun(stepping))]));
     assert!(eliminate_dead_calls(&mut module));
     assert!(matches!(module.node(call), Some(Node::ApplyCont(_))));
+}
+
+/// A loop `main` enters once, its answer unread: each round tests its count and goes out to `exit`, which reads nothing it is handed, or round again, first calling the closure `main` was handed where `calling`; the loop is marked terminating where `terminates`. The entry's jump into the loop and the exit are what each test reads.
+fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
+    let mut module = Module::new();
+    let zero = || Atom::Literal(Literal::Nat(Natural::from(0u32)));
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let handed = module.add_value(None);
+    let exit = module.reserve_continuation();
+    let looped = module.reserve_continuation();
+    let round = module.reserve_continuation();
+    let count = module.add_value(None);
+    let answer = module.add_value(None);
+
+    let exit_body = module.add_node(Node::ApplyCont(Edge {
+        target: main_return,
+        args: vec![zero()],
+    }));
+    module.define_continuation(
+        exit,
+        Continuation {
+            debug_name: Some("exit".into()),
+            params: vec![answer],
+            body: exit_body,
+            terminates: false,
+        },
+    );
+    let round_body = match calling {
+        true => {
+            let back = module.reserve_continuation();
+            let result = module.add_value(None);
+            let back_body = module.add_node(Node::ApplyCont(Edge {
+                target: looped,
+                args: vec![Atom::Value(result)],
+            }));
+            module.define_continuation(
+                back,
+                Continuation {
+                    debug_name: Some("back".into()),
+                    params: vec![result],
+                    body: back_body,
+                    terminates: false,
+                },
+            );
+            let call = module.add_node(Node::ApplyFun {
+                callee: Callee::Closure(handed),
+                args: vec![Atom::Value(count)],
+                return_to: back,
+            });
+            module.add_node(Node::LetCont {
+                continuations: vec![back],
+                body: call,
+            })
+        }
+        false => module.add_node(Node::ApplyCont(Edge {
+            target: looped,
+            args: vec![zero()],
+        })),
+    };
+    module.define_continuation(
+        round,
+        Continuation {
+            debug_name: Some("round".into()),
+            params: vec![],
+            body: round_body,
+            terminates: false,
+        },
+    );
+    let test = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(count),
+        cases: BTreeMap::from([(
+            0,
+            Edge {
+                target: exit,
+                args: vec![Atom::Value(count)],
+            },
+        )]),
+        default: Some(Edge {
+            target: round,
+            args: vec![],
+        }),
+    });
+    let loop_body = module.add_node(Node::LetCont {
+        continuations: vec![round],
+        body: test,
+    });
+    module.define_continuation(
+        looped,
+        Continuation {
+            debug_name: Some("walk".into()),
+            params: vec![count],
+            body: loop_body,
+            terminates,
+        },
+    );
+    let entering = module.add_node(Node::ApplyCont(Edge {
+        target: looped,
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(3u32)))],
+    }));
+    let body = module.add_node(Node::LetCont {
+        continuations: vec![exit, looped],
+        body: entering,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![handed],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    (module, entering, exit)
+}
+
+/// A loop marked terminating whose answer nothing reads and whose body observes nothing is entered no more: the jump into it goes to its exit, padded to the exit's arity, and the module still verifies.
+#[test]
+fn a_dead_loop_marked_terminating_is_entered_no_more() {
+    let (mut module, entering, exit) = a_loop(true, false);
+    assert!(eliminate_dead_loops(&mut module));
+    assert!(matches!(
+        module.node(entering),
+        Some(Node::ApplyCont(Edge { target, args })) if *target == exit && args == &vec![Atom::Filler]
+    ));
+    module.verify().unwrap();
+}
+
+/// A loop no termination marks stays, its answer unread: only the checkers' verdict says it ends.
+#[test]
+fn a_dead_loop_no_termination_marks_stays() {
+    let (mut module, _, _) = a_loop(false, false);
+    assert!(!eliminate_dead_loops(&mut module));
+}
+
+/// A loop marked terminating that calls a closure stays, its answer unread: the closure may be any function, so the round may observe what it does.
+#[test]
+fn a_dead_loop_calling_a_closure_stays() {
+    let (mut module, _, _) = a_loop(true, true);
+    assert!(!eliminate_dead_loops(&mut module));
 }

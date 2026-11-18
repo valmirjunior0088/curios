@@ -97,6 +97,7 @@ pub fn intrinsic_main(
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -132,6 +133,7 @@ pub fn tuple_project() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -165,6 +167,7 @@ pub fn list_len() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -201,6 +204,7 @@ pub fn bytes_len() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -221,6 +225,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
         debug_name: Some("got".into()),
         params: vec![present, value],
         body: exit,
+        terminates: false,
     });
     let get = module.add_node(curios_cps::Node::Cell {
         op: curios_cps::CellOp::Poll,
@@ -231,6 +236,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
         debug_name: Some("filled".into()),
         params: vec![filled],
         body: get,
+        terminates: false,
     });
     let fill = module.add_node(curios_cps::Node::Cell {
         op: curios_cps::CellOp::Fill,
@@ -245,6 +251,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
         debug_name: Some("made".into()),
         params: vec![cell],
         body: operations,
+        terminates: false,
     });
     let new = module.add_node(curios_cps::Node::Cell {
         op: curios_cps::CellOp::Reserve,
@@ -263,6 +270,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -282,6 +290,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
         debug_name: None,
         params: vec![taken, payload],
         body: exit,
+        terminates: false,
     });
     let take = module.add_node(curios_cps::Node::Channel {
         op: curios_cps::ChannelOp::Take,
@@ -292,6 +301,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
         debug_name: None,
         params: vec![pushed],
         body: take,
+        terminates: false,
     });
     let push = module.add_node(curios_cps::Node::Channel {
         op: curios_cps::ChannelOp::Push,
@@ -306,6 +316,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
         debug_name: None,
         params: vec![channel],
         body,
+        terminates: false,
     });
     let new = module.add_node(curios_cps::Node::Channel {
         op: curios_cps::ChannelOp::New,
@@ -324,6 +335,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -351,6 +363,7 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
         debug_name: Some("resume".into()),
         params: bound,
         body: exit,
+        terminates: false,
     });
     let none = module.add_value(Some("none".into()));
     let args = params
@@ -382,6 +395,7 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -441,6 +455,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
             return_cont: target_return,
             body: target_body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -459,6 +474,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
             return_cont: apply_return,
             body: apply_body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -476,6 +492,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
                 debug_name: None,
                 params: vec![ignored],
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -504,6 +521,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
             return_cont: main_return,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -543,6 +561,7 @@ pub fn list_read() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -583,6 +602,7 @@ pub fn list_settle() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -609,6 +629,7 @@ pub fn list_map() -> curios_cps::Module {
             return_cont: mapper_return,
             body: mapper_body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -619,6 +640,7 @@ pub fn list_map() -> curios_cps::Module {
         debug_name: Some("mapped".into()),
         params: vec![mapped],
         body: exit,
+        terminates: false,
     });
     let map = module.add_node(curios_cps::Node::Intrinsic {
         op: curios_cps::IntrinsicCall::ListMap,
@@ -647,6 +669,7 @@ pub fn list_map() -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -683,6 +706,7 @@ pub fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
             return_cont,
             body: next,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -708,6 +732,7 @@ pub fn reducible_loop() -> curios_cps::Module {
             debug_name: Some("loop".into()),
             params: vec![counter],
             body: again,
+            terminates: false,
         },
     );
     let enter = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
@@ -726,6 +751,7 @@ pub fn reducible_loop() -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -750,6 +776,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
             debug_name: Some("k1".into()),
             params: vec![],
             body: to_k2,
+            terminates: false,
         },
     );
     let to_k1 = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
@@ -762,6 +789,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
             debug_name: Some("k2".into()),
             params: vec![],
             body: to_k1,
+            terminates: false,
         },
     );
 
@@ -797,6 +825,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
             return_cont,
             body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -836,6 +865,7 @@ pub fn constant_tuple_pair() -> curios_cps::Module {
             return_cont,
             body: build_first,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -863,6 +893,7 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
             debug_name: Some("after".into()),
             params: vec![],
             body: project,
+            terminates: false,
         },
     );
     let jump = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
@@ -886,6 +917,7 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -916,6 +948,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
             return_cont: answer_return,
             body: answer_body,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -943,6 +976,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
             return_cont: reader_return,
             body: read_held,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -983,6 +1017,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
             return_cont: main_return,
             body: compute,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -1023,6 +1058,7 @@ pub fn runtime_tuple() -> curios_cps::Module {
             return_cont,
             body: compute,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -1056,6 +1092,7 @@ pub fn big_tuple() -> curios_cps::Module {
             return_cont,
             body: build,
             droppable: curios_cps::Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

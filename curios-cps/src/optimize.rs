@@ -133,7 +133,8 @@ pub fn optimize(module: &mut Module) {
                 "cps::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
-            | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module));
+            | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module))
+            | pass!("cps::eliminate_dead_loops", eliminate_dead_loops(module));
         let inlined = pass!(
             "cps::inline_known_calls",
             inline_known_calls(module, &mut known_function_budget)

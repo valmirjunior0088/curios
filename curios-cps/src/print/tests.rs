@@ -23,6 +23,7 @@ fn module_with(body_of: impl FnOnce(&mut Module, ContinuationId) -> NodeId) -> M
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -54,6 +55,7 @@ fn representative() -> Module {
                 return_cont: helper_return,
                 body: helper_body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
 
@@ -66,6 +68,7 @@ fn representative() -> Module {
                 debug_name: Some("join".into()),
                 params: vec![total],
                 body: join_body,
+                terminates: false,
             },
         );
 
@@ -120,6 +123,7 @@ fn a_stated_register_prints_at_its_binder() {
                 debug_name: Some("join".into()),
                 params: vec![total],
                 body: exit,
+                terminates: false,
             },
         );
         let enter = module.add_node(Node::ApplyCont(Edge {
@@ -181,6 +185,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
                 debug_name: Some("inner".into()),
                 params: Vec::new(),
                 body: inner_body,
+                terminates: false,
             },
         );
         let enter_inner = module.add_node(Node::ApplyCont(Edge {
@@ -197,6 +202,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
                 debug_name: Some("outer".into()),
                 params: vec![x],
                 body: outer_body,
+                terminates: false,
             },
         );
         let enter_outer = module.add_node(Node::ApplyCont(Edge {
@@ -235,6 +241,7 @@ fn a_join_is_defined_once_and_named_at_every_predecessor() {
                 debug_name: Some("join".into()),
                 params: vec![answer],
                 body: join_body,
+                terminates: false,
             },
         );
         let switch = module.add_node(Node::Switch {
@@ -297,6 +304,7 @@ fn a_call_returning_to_the_sentinel_prints_as_a_tail_call() {
                 return_cont: callee_return,
                 body: callee_body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -333,6 +341,7 @@ fn a_continuation_prints_the_role_its_hint_names() {
                 debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: arm_body,
+                terminates: false,
             },
         );
         let jump = module.add_node(Node::ApplyCont(Edge {
@@ -453,6 +462,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
                 debug_name: Some("first".into()),
                 params: Vec::new(),
                 body: shared,
+                terminates: false,
             },
         );
         let second = module.reserve_continuation();
@@ -462,6 +472,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
                 debug_name: Some("second".into()),
                 params: Vec::new(),
                 body: shared,
+                terminates: false,
             },
         );
         let jump = module.add_node(Node::ApplyCont(Edge {
@@ -502,6 +513,7 @@ fn a_split_parameter_run_prints_as_one_bracketed_group() {
                 debug_name: None,
                 params: vec![head, left, right],
                 body,
+                terminates: false,
             },
         );
         module.record_split(target, 1, 2);
@@ -540,6 +552,7 @@ fn a_function_the_walk_never_reaches_still_prints() {
             return_cont: orphan_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -570,6 +583,7 @@ fn an_operand_names_its_kind_by_its_sigil() {
                 debug_name: Some("resume".into()),
                 params: vec![result],
                 body: exit,
+                terminates: false,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -705,6 +719,7 @@ fn a_function_group_prints_as_one_and_chain() {
                     return_cont: function_return,
                     body,
                     droppable: Droppable::Never,
+                    terminates: false,
                 },
             );
             members.push(function);
@@ -816,6 +831,7 @@ fn a_switch_arm_to_the_sentinel_spells_the_return() {
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body: other_body,
+                terminates: false,
             },
         );
         let switch = module.add_node(Node::Switch {

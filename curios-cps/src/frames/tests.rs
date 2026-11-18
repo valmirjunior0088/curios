@@ -21,6 +21,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
         debug_name: None,
         params: vec![],
         body: zero_body,
+        terminates: false,
     });
     let again = match tail {
         true => module.add_node(Node::ApplyFun {
@@ -38,6 +39,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
                 debug_name: None,
                 params: vec![answer],
                 body: after_body,
+                terminates: false,
             });
             let call = module.add_node(Node::ApplyFun {
                 callee: Callee::Known(count),
@@ -54,6 +56,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
         debug_name: None,
         params: vec![],
         body: again,
+        terminates: false,
     });
     let switch = module.add_node(Node::Switch {
         scrutinee: Atom::Value(n),
@@ -81,6 +84,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
             return_cont: count_return,
             body: count_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -101,6 +105,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
             return_cont: main_return,
             body: main_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -131,6 +136,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
         debug_name: None,
         params: vec![answer],
         body: after_body,
+        terminates: false,
     });
     let call = module.add_node(Node::ApplyFun {
         callee: Callee::Closure(closure),
@@ -149,6 +155,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
             return_cont: apply_return,
             body: apply_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -164,6 +171,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
             return_cont: leaf_return,
             body: leaf_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -195,6 +203,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
             return_cont: again_return,
             body: again_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -215,6 +224,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
             return_cont: main_return,
             body: main_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

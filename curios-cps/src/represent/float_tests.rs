@@ -29,6 +29,7 @@ fn float_join(module: &mut Module, params: Vec<ValueId>, flag: ValueId, other: A
             debug_name: Some("join".into()),
             params: vec![joined],
             body: join_body,
+            terminates: false,
         },
     );
 

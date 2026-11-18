@@ -437,6 +437,7 @@ fn guard(
         debug_name: None,
         params: Vec::new(),
         body: resume,
+        terminates: false,
     });
     let leave_call = module.add_node(Node::Intrinsic {
         op: IntrinsicCall::FrameLeave { weight },
@@ -451,12 +452,14 @@ fn guard(
         debug_name: None,
         params: answers,
         body: leave_body,
+        terminates: false,
     });
     let native_call = module.add_node(resuming(call.clone(), leave));
     let native = module.add_continuation(Continuation {
         debug_name: None,
         params: Vec::new(),
         body: native_call,
+        terminates: false,
     });
 
     // Heap: handed a continuation that answers what the call would have.
@@ -478,6 +481,7 @@ fn guard(
         debug_name: None,
         params: Vec::new(),
         body: heap_body,
+        terminates: false,
     });
 
     // The choice between them, read off the budget.
@@ -500,6 +504,7 @@ fn guard(
         debug_name: None,
         params: vec![admitted],
         body: choose,
+        terminates: false,
     });
     let enter = module.add_node(Node::Intrinsic {
         op: IntrinsicCall::FrameEnter { weight },
@@ -620,6 +625,7 @@ impl Twin<'_> {
                                 return_cont,
                                 body: continuation.body,
                                 droppable: Droppable::Never,
+                                terminates: false,
                             });
                             lifted.insert(id, function);
                             work.push((continuation.body, return_cont));
@@ -761,6 +767,7 @@ impl Twin<'_> {
                         debug_name: None,
                         params,
                         body,
+                        terminates: false,
                     });
                     thins.push(thin);
                     Edge {
@@ -874,6 +881,7 @@ impl Twin<'_> {
             debug_name: None,
             params,
             body,
+            terminates: false,
         });
         let body = self.module.add_node(resuming(node, thin));
         self.moved.push((id, body));
@@ -1000,6 +1008,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         debug_name: None,
         params: Vec::new(),
         body: done_body,
+        terminates: false,
     });
 
     // At an element: its image, to a closure that appends it and loops on.
@@ -1033,6 +1042,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         return_cont: resumed,
         body: append,
         droppable: Droppable::Never,
+        terminates: false,
     });
     let element = module.add_value(None);
     let apply = module.add_node(Node::Intrinsic {
@@ -1054,6 +1064,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         debug_name: None,
         params: Vec::new(),
         body: read,
+        terminates: false,
     });
 
     let length = module.add_value(None);
@@ -1096,6 +1107,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
             return_cont: returned,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -1152,6 +1164,7 @@ fn handing_back(
         return_cont,
         body,
         droppable: Droppable::Never,
+        terminates: false,
     });
     if returns == 1 {
         return (handed, return_to);
@@ -1175,6 +1188,7 @@ fn handing_back(
         debug_name: None,
         params: vec![packed],
         body: next,
+        terminates: false,
     });
     (handed, unpacked)
 }

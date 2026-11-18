@@ -763,6 +763,220 @@ pub fn eliminate_dead_calls(module: &mut Module) -> bool {
     changed
 }
 
+/// Drop a loop nothing reads the answer of: a continuation marked terminating — the loop contification made of a recursion the checkers proved total ([`Continuation::terminates`](crate::Continuation::terminates)) — entered from outside only by jumps, where every way out of the loop is one continuation none of whose parameters is read and the loop's body, as the optimizer has left it, does nothing a run observes ([`DeadLoop`]). Each jump in goes to that exit instead, its arity kept with fillers as [`eliminate_dead_calls`] keeps a dropped call's, and what the loop no longer reaches is pruned. Termination is the checkers' verdict, carried with the code, and what the body does is judged here, on the code that would run, as LLVM's loop deletion reads a loop `mustprogress` marks; the body is admitted under the rule a dead call's claim is (`droppable_functions`), a trap among what it may do.
+pub fn eliminate_dead_loops(module: &mut Module) -> bool {
+    let demands = demands(module);
+    let mut replacements = Vec::new();
+    for (id, continuation) in module.live_continuations() {
+        if !continuation.terminates {
+            continue;
+        }
+        let Some(dead) = DeadLoop::of(module, id) else {
+            continue;
+        };
+        let Some(resume) = module.continuation(dead.exit) else {
+            continue;
+        };
+        if !resume
+            .params
+            .iter()
+            .all(|result| demand_of(&demands, *result) == Demand::Unused)
+        {
+            continue;
+        }
+        let mut entries = Vec::new();
+        let mut entered_otherwise = false;
+        for (node, entering) in module.live_nodes() {
+            if dead.region.contains(&node) {
+                continue;
+            }
+            match entering {
+                Node::ApplyCont(edge) if edge.target == id => entries.push(node),
+                Node::Switch { cases, default, .. } => {
+                    entered_otherwise |=
+                        cases.values().chain(default).any(|edge| edge.target == id);
+                }
+                Node::ApplyFun { return_to, .. }
+                | Node::Foreign { return_to, .. }
+                | Node::Cell { return_to, .. }
+                | Node::Channel { return_to, .. }
+                | Node::Intrinsic { return_to, .. } => entered_otherwise |= *return_to == id,
+                _ => {}
+            }
+        }
+        if entered_otherwise {
+            continue;
+        }
+        let fillers = vec![Atom::Filler; resume.params.len()];
+        replacements.extend(entries.into_iter().map(|node| {
+            let edge = Edge {
+                target: dead.exit,
+                args: fillers.clone(),
+            };
+            (node, edge)
+        }));
+    }
+    let changed = !replacements.is_empty();
+    for (id, edge) in replacements {
+        module.set_node(id, Node::ApplyCont(edge));
+    }
+    changed
+}
+
+/// A loop whose body observes nothing, as [`eliminate_dead_loops`] reads one: the one continuation every way out of it goes to, and the nodes of its body.
+///
+/// The body is read node by node: a construction, any operation bound by a `let` — one partial in the language among them, its trap ruled out by the proof a total program holds for it and owed to no program that never runs it — a known call [`Module::may_drop_call`] admits, a jump within the loop or out to its exit, a switch, and nested definitions. A call through a closure, a foreign or host row, a cell, a channel, an effectful intrinsic call and a halt each observe. Every cycle the body's continuations make passes through one marked terminating: a loop inside it that is no total recursion's — a partial callee contification put there — may never end, and its absence is what dropping the loop would observe.
+struct DeadLoop {
+    exit: ContinuationId,
+    region: BTreeSet<NodeId>,
+}
+
+impl DeadLoop {
+    /// The loop entering at `entry`, where its body observes nothing and leaves one way: `None` where it observes something, goes out two ways, or leaves to a function's return.
+    fn of(module: &Module, entry: ContinuationId) -> Option<Self> {
+        let mut walk = LoopWalk {
+            module,
+            inside: BTreeSet::from([entry]),
+            entered: BTreeSet::from([entry]),
+            pending: vec![(module.continuation(entry)?.body, entry)],
+            region: BTreeSet::new(),
+            exit: None,
+            edges: BTreeMap::new(),
+            at: entry,
+        };
+        while let Some((at, owner)) = walk.pending.pop() {
+            walk.at = owner;
+            if !walk.region.insert(at) {
+                continue;
+            }
+            match module.node(at)? {
+                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
+                    walk.pending.push((*next, owner))
+                }
+                Node::LetFun { body, .. } => walk.pending.push((*body, owner)),
+                Node::LetCont {
+                    continuations,
+                    body,
+                } => {
+                    walk.inside.extend(continuations.iter().copied());
+                    walk.pending.push((*body, owner));
+                }
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
+                    args,
+                    return_to,
+                } => {
+                    if !module.may_drop_call(*callee, args) {
+                        return None;
+                    }
+                    walk.enter(*return_to)?;
+                }
+                Node::ApplyCont(edge) => walk.enter(edge.target)?,
+                Node::Switch { cases, default, .. } => {
+                    for edge in cases.values().chain(default) {
+                        walk.enter(edge.target)?;
+                    }
+                }
+                Node::Panic(_) | Node::Unreachable => {}
+                Node::ApplyFun {
+                    callee: Callee::Closure(_),
+                    ..
+                }
+                | Node::Foreign { .. }
+                | Node::Cell { .. }
+                | Node::Channel { .. }
+                | Node::Intrinsic { .. }
+                | Node::Halt { .. } => return None,
+            }
+        }
+        let exit = walk.exit?;
+        module.continuation(exit)?;
+        if walk.cycles_past_a_terminating_loop() {
+            return None;
+        }
+        Some(DeadLoop {
+            exit,
+            region: walk.region,
+        })
+    }
+}
+
+/// The walk [`DeadLoop::of`] makes: the continuations the loop's body defines, the ones it has entered, the nodes still to read, each with the continuation whose body it stands in, and read, the one continuation outside it a way out has reached, and the transfers between the loop's own continuations, from the one whose body is being read.
+struct LoopWalk<'m> {
+    module: &'m Module,
+    inside: BTreeSet<ContinuationId>,
+    entered: BTreeSet<ContinuationId>,
+    pending: Vec<(NodeId, ContinuationId)>,
+    region: BTreeSet<NodeId>,
+    exit: Option<ContinuationId>,
+    edges: BTreeMap<ContinuationId, BTreeSet<ContinuationId>>,
+    at: ContinuationId,
+}
+
+impl LoopWalk<'_> {
+    /// A transfer to `target`: into the loop's own continuations, read once each, or out to the one exit; `None` at a second.
+    fn enter(&mut self, target: ContinuationId) -> Option<()> {
+        if self.inside.contains(&target) {
+            self.edges.entry(self.at).or_default().insert(target);
+            if self.entered.insert(target) {
+                self.pending
+                    .push((self.module.continuation(target)?.body, target));
+            }
+            return Some(());
+        }
+        match self.exit {
+            None => {
+                self.exit = Some(target);
+                Some(())
+            }
+            Some(only) if only == target => Some(()),
+            Some(_) => None,
+        }
+    }
+
+    /// Whether the loop's continuations make a cycle through none marked terminating: one standing beside the marked ones once they are taken out, found by a depth-first walk over the rest.
+    fn cycles_past_a_terminating_loop(&self) -> bool {
+        let kept = |continuation: &ContinuationId| {
+            !self
+                .module
+                .continuation(*continuation)
+                .is_some_and(|definition| definition.terminates)
+        };
+        let mut finished = BTreeSet::new();
+        let mut open = BTreeSet::new();
+        for start in self.entered.iter().filter(|c| kept(c)) {
+            if finished.contains(start) {
+                continue;
+            }
+            let mut stack = vec![(*start, false)];
+            while let Some((continuation, left)) = stack.pop() {
+                if left {
+                    open.remove(&continuation);
+                    finished.insert(continuation);
+                    continue;
+                }
+                if finished.contains(&continuation) {
+                    continue;
+                }
+                if !open.insert(continuation) {
+                    return true;
+                }
+                stack.push((continuation, true));
+                for next in self.edges.get(&continuation).into_iter().flatten() {
+                    if !kept(next) || finished.contains(next) {
+                        continue;
+                    }
+                    if open.contains(next) {
+                        return true;
+                    }
+                    stack.push((*next, false));
+                }
+            }
+        }
+        false
+    }
+}
+
 /// Redirect every control edge that targets a spliced-out node to the first surviving node in its chain. `redirect` maps each removed node to its immediate successor; following the chain skips runs of consecutive removed nodes, so the result is the same as rewiring one node at a time.
 fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
     for (_, function) in module.live_functions_mut() {

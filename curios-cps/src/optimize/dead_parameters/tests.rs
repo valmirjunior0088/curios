@@ -22,6 +22,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let main_return = module.reserve_continuation();
@@ -45,6 +46,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             return_cont: main_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -103,6 +105,7 @@ impl Program {
                 return_cont: returned,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         function
@@ -117,6 +120,7 @@ impl Program {
                 debug_name: None,
                 params,
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -143,6 +147,7 @@ impl Program {
                 return_cont: self.returned,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         self.module.set_entry(self.entry);
@@ -234,6 +239,7 @@ fn inert_arguments_into_a_retained_signature_become_fillers() {
             return_cont: returned,
             body: inside,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let call = p.module.add_node(Node::ApplyFun {
@@ -279,6 +285,7 @@ fn an_indirect_callee_keeps_its_binding_and_arguments() {
             return_cont: returned,
             body: inside,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let call = p.module.add_node(Node::ApplyFun {
@@ -325,6 +332,7 @@ fn recursive_jumps_keep_the_order_of_surviving_arguments() {
             debug_name: None,
             params: params.clone(),
             body,
+            terminates: false,
         },
     );
     let enter = p.module.add_node(Node::ApplyCont(Edge {
@@ -515,6 +523,7 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
             debug_name: None,
             params: result,
             body: hand_back,
+            terminates: false,
         },
     );
     let inside = p.module.add_node(Node::ApplyFun {
@@ -539,6 +548,7 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
             return_cont: returned,
             body: nested_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let end = p.module.add_node(Node::ApplyCont(Edge {
@@ -677,6 +687,7 @@ fn a_self_call_filters_its_original_argument_positions() {
             debug_name: None,
             params: vec![],
             body: call,
+            terminates: false,
         },
     );
     let branch = p.module.add_node(Node::Switch {
@@ -706,6 +717,7 @@ fn a_self_call_filters_its_original_argument_positions() {
             return_cont: returned,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let enter = p.module.add_node(Node::ApplyFun {
@@ -753,6 +765,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
             return_cont: fr,
             body: fg,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let gf = p.module.add_node(Node::ApplyFun {
@@ -767,6 +780,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
             debug_name: None,
             params: vec![],
             body: gf,
+            terminates: false,
         },
     );
     let branch = p.module.add_node(Node::Switch {
@@ -796,6 +810,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
             return_cont: gr,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let enter = p.module.add_node(Node::ApplyFun {
@@ -865,6 +880,7 @@ fn every_returning_operation_retains_its_result_receiver() {
                 debug_name: None,
                 params: results.clone(),
                 body: end,
+                terminates: false,
             },
         );
         let operation = match kind {
@@ -913,6 +929,7 @@ fn every_returning_operation_retains_its_result_receiver() {
                 return_cont: returned,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         let enter = p.module.add_node(Node::ApplyFun {

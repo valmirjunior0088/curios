@@ -41,6 +41,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
                 debug_name: None,
                 params: vec![param],
                 body,
+                terminates: false,
             },
         );
         for (offset, value) in [some, none].into_iter().enumerate() {
@@ -58,6 +59,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
                     debug_name: None,
                     params: vec![],
                     body,
+                    terminates: false,
                 },
             );
             definitions.push(before);
@@ -97,6 +99,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
             return_cont: ret,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -239,6 +242,7 @@ fn more_matching_sites_win_a_budget_that_fits_only_one_copy() {
         debug_name: None,
         params: vec![],
         body,
+        terminates: false,
     });
     let Node::LetCont {
         continuations,

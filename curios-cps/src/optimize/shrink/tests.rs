@@ -18,6 +18,7 @@ fn continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> Cont
         debug_name: None,
         params,
         body,
+        terminates: false,
     })
 }
 
@@ -44,6 +45,7 @@ fn entry(
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);
@@ -289,6 +291,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
             return_cont: nested_return,
             body: nested_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let return_nested = jump(&mut module, return_cont, vec![Atom::Fun(nested)]);
@@ -471,6 +474,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
             return_cont: innermost_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     for level in (0..levels - 1).rev() {
@@ -489,6 +493,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
                 return_cont: lambda_return,
                 body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
     }
@@ -607,6 +612,7 @@ fn a_loop_whose_entrance_is_dropped_is_dropped_with_it() {
             debug_name: Some("loop".into()),
             params: vec![counter],
             body: test,
+            terminates: false,
         },
     );
 
@@ -682,6 +688,7 @@ fn a_function_whose_one_call_is_its_own_stays_where_it_is() {
             return_cont: f_return,
             body: step,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let deliver = jump(&mut module, main_return, vec![Atom::Value(a)]);
@@ -728,6 +735,7 @@ fn a_claim_follows_the_substitution_of_what_it_names() {
                 return_cont: stepping_return,
                 body: stepping_body,
                 droppable: stepper,
+                terminates: false,
             },
         );
 
@@ -747,6 +755,7 @@ fn a_claim_follows_the_substitution_of_what_it_names() {
                 return_cont: go_return,
                 body: go_body,
                 droppable: Droppable::Given(BTreeSet::from([f])),
+                terminates: false,
             },
         );
         let return_go = jump(&mut module, return_cont, vec![Atom::Fun(go)]);

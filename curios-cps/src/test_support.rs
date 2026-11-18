@@ -47,6 +47,7 @@ pub fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(function);
@@ -94,6 +95,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
                 return_cont: function_return,
                 body: function_body,
                 droppable: Droppable::Never,
+                terminates: false,
             },
         );
         function
@@ -118,6 +120,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             debug_name: Some("after".into()),
             params: vec![after_r],
             body: after_body,
+            terminates: false,
         },
     );
     let recur = module.reserve_continuation();
@@ -133,6 +136,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             debug_name: Some("recur".into()),
             params: vec![recur_m],
             body: recur_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -174,6 +178,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             return_cont: loop_return,
             body: loop_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -194,6 +199,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             debug_name: Some("k1".into()),
             params: vec![x1],
             body: call2,
+            terminates: false,
         },
     );
     let call1 = module.add_node(Node::ApplyFun {
@@ -220,6 +226,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -262,6 +269,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             return_cont: helper_return,
             body: helper_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -279,6 +287,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
                 debug_name: None,
                 params: vec![param],
                 body: call2,
+                terminates: false,
             },
         );
         let call1 = module.add_node(Node::ApplyFun {
@@ -309,6 +318,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -340,6 +350,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             return_cont: helper_return,
             body: helper_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -357,6 +368,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             return_cont: owner_return,
             body: owner_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -382,6 +394,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -464,6 +477,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
             return_cont: consume_return,
             body: consume_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -521,6 +535,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
                 debug_name: Some(format!("k{i}")),
                 params: vec![results[i]],
                 body: next,
+                terminates: false,
             },
         );
     }
@@ -537,6 +552,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -575,6 +591,7 @@ pub fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module, NodeId
             return_cont,
             body: intrinsic,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -630,6 +647,7 @@ pub fn duplicate_pair_module(
             return_cont,
             body: first_node,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -667,6 +685,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             debug_name: Some("some arm".into()),
             params: vec![],
             body: some_body,
+            terminates: false,
         },
     );
     let none_body = module.add_node(Node::ApplyCont(Edge {
@@ -679,6 +698,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             debug_name: Some("none arm".into()),
             params: vec![],
             body: none_body,
+            terminates: false,
         },
     );
     let dispatch = module.add_node(Node::Switch {
@@ -717,6 +737,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             debug_name: Some("join".into()),
             params: vec![p],
             body: join_body,
+            terminates: false,
         },
     );
 
@@ -746,6 +767,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             debug_name: Some("to some".into()),
             params: vec![],
             body: build_some,
+            terminates: false,
         },
     );
     let none_jump = module.add_node(Node::ApplyCont(Edge {
@@ -770,6 +792,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             debug_name: Some("to none".into()),
             params: vec![],
             body: build_none,
+            terminates: false,
         },
     );
 
@@ -799,6 +822,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -822,6 +846,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
             return_cont: inner_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let outer = module.reserve_function();
@@ -842,6 +867,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
             return_cont: outer_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let body = module.add_node(Node::LetFun {

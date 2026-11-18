@@ -42,6 +42,7 @@ fn minimal_module() -> Module {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(fun);
@@ -221,6 +222,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
             debug_name: None,
             params: vec![],
             body: dead_read,
+            terminates: false,
         },
     );
     module.define_continuation(
@@ -229,6 +231,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
             debug_name: None,
             params: vec![],
             body: live_body,
+            terminates: false,
         },
     );
 
@@ -341,6 +344,7 @@ fn verifier_rejects_shared_return_continuations() {
             return_cont: shared_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     assert!(
@@ -369,6 +373,7 @@ fn verifier_rejects_another_functions_return_target() {
             return_cont: second_return,
             body: second_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let entry = module.entry().unwrap();
@@ -423,6 +428,7 @@ fn verifier_rejects_local_body_at_return_id() {
             debug_name: Some("invalid-return-body".into()),
             params: vec![],
             body: local_body,
+            terminates: false,
         },
     );
     assert!(
@@ -447,11 +453,13 @@ fn a_node_reached_from_two_places_is_refused() {
         debug_name: Some("first".into()),
         params: Vec::new(),
         body: shared,
+        terminates: false,
     });
     let second = module.add_continuation(Continuation {
         debug_name: Some("second".into()),
         params: Vec::new(),
         body: shared,
+        terminates: false,
     });
     let jump = module.add_node(Node::ApplyCont(Edge {
         target: first,
@@ -494,6 +502,7 @@ fn a_cycle_naming_a_member_the_module_does_not_hold_is_refused() {
             return_cont,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(main);

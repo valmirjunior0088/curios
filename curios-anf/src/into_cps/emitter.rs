@@ -286,6 +286,7 @@ impl<'a> Emitter<'a> {
                 debug_name: None,
                 params: Vec::new(),
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -459,6 +460,7 @@ impl<'a> Emitter<'a> {
                 debug_name: Some("knot/filled".into()),
                 params: vec![accepted],
                 body: returning,
+                terminates: false,
             },
         );
         let fill = self.module.add_node(curios_cps::Node::Cell {
@@ -480,6 +482,7 @@ impl<'a> Emitter<'a> {
                 debug_name: Some("knot/produced".into()),
                 params: vec![produced],
                 body: fill,
+                terminates: false,
             },
         );
         let thunk = self.module.add_value(None);
@@ -515,6 +518,7 @@ impl<'a> Emitter<'a> {
                 debug_name: Some("knot/taken".into()),
                 params: vec![status, thunk],
                 body: taken,
+                terminates: false,
             },
         );
         let take = self.module.add_node(curios_cps::Node::Channel {
@@ -547,6 +551,7 @@ impl<'a> Emitter<'a> {
                 debug_name: Some("knot/polled".into()),
                 params: vec![present, cached],
                 body: polled,
+                terminates: false,
             },
         );
         let poll = self.module.add_node(curios_cps::Node::Cell {
@@ -567,6 +572,7 @@ impl<'a> Emitter<'a> {
                 body,
                 // The private memoization effects must survive even when this particular read's result is unused.
                 droppable: curios_cps::Droppable::Never,
+                terminates: false,
             },
         );
     }

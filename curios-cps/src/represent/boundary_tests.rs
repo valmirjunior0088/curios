@@ -248,6 +248,7 @@ fn edge_to(module: &mut Module, body: NodeId) -> Edge {
             debug_name: Some("arm".into()),
             params: vec![],
             body,
+            terminates: false,
         },
     );
     Edge {

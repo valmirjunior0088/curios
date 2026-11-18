@@ -43,6 +43,7 @@ fn construction(
         return_cont,
         body,
         droppable: curios_cps::Droppable::Never,
+        terminates: false,
     });
     module.set_entry(main);
     wat(&module)

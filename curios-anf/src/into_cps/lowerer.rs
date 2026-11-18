@@ -89,6 +89,7 @@ impl<'a> Lowerer<'a> {
                 body,
                 // The entry is the program; nothing calls it, so whether it could be dropped is not a question.
                 droppable: curios_cps::Droppable::Never,
+                terminates: false,
             },
         );
         self.emitter.set_entry(main);
@@ -235,6 +236,7 @@ impl Lowerer<'_> {
                 return_cont,
                 body,
                 droppable: self.droppable(arena),
+                terminates: function.total,
             },
         );
     }
@@ -322,6 +324,7 @@ impl Lowerer<'_> {
                     debug_name: Some("knot/stored".into()),
                     params: vec![status],
                     body,
+                    terminates: false,
                 },
             );
             let store = self.emitter.add_node(curios_cps::Node::Channel {
@@ -360,6 +363,7 @@ impl Lowerer<'_> {
                     debug_name: Some("knot/channel".into()),
                     params: vec![knot.initializer],
                     body,
+                    terminates: false,
                 },
             );
             let channel = self.emitter.add_node(curios_cps::Node::Channel {
@@ -380,6 +384,7 @@ impl Lowerer<'_> {
                     debug_name: Some("knot/cell".into()),
                     params: vec![knot.result],
                     body,
+                    terminates: false,
                 },
             );
             let reserve = self.emitter.add_node(curios_cps::Node::Cell {
@@ -412,6 +417,7 @@ impl Lowerer<'_> {
                 body,
                 // Forcing owns whether initialization is needed; dropping this call independently would leave the result empty after its initializer was consumed.
                 droppable: curios_cps::Droppable::Never,
+                terminates: false,
             },
         );
         thunk
@@ -456,6 +462,7 @@ impl Lowerer<'_> {
                     debug_name: Some("force/resume".into()),
                     params: vec![local],
                     body,
+                    terminates: false,
                 },
             );
             let forcing = self.emitter.add_node(curios_cps::Node::ApplyFun {
@@ -821,6 +828,7 @@ impl Lowerer<'_> {
                 body,
                 // It reads and builds, and nothing else: a carry nothing reads may simply not happen.
                 droppable: curios_cps::Droppable::ALWAYS,
+                terminates: true,
             },
         );
         self.emitter.keep_out_of_line(carry);
@@ -873,6 +881,7 @@ impl Lowerer<'_> {
                     debug_name: Some("io/later/made".into()),
                     params: vec![made],
                     body,
+                    terminates: false,
                 },
             );
             let apply = self.emitter.add_node(curios_cps::Node::ApplyFun {
@@ -897,6 +906,7 @@ impl Lowerer<'_> {
                 body,
                 // It applies a closure, whose totality is nothing this lowering states.
                 droppable: curios_cps::Droppable::Never,
+                terminates: false,
             },
         );
         self.emitter.keep_out_of_line(later);
@@ -1040,6 +1050,7 @@ impl Lowerer<'_> {
                 debug_name: Some("join".into()),
                 params: vec![parameter],
                 body,
+                terminates: false,
             },
         );
         (join, true)
@@ -1059,6 +1070,7 @@ impl Lowerer<'_> {
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -1157,6 +1169,7 @@ impl Lowerer<'_> {
                 debug_name: Some("key".into()),
                 params: Vec::new(),
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -1276,6 +1289,7 @@ impl Lowerer<'_> {
                         debug_name: Some("arm/immediate".into()),
                         params: Vec::new(),
                         body,
+                        terminates: false,
                     },
                 );
                 continuations.push(continuation);
@@ -1341,6 +1355,7 @@ impl Lowerer<'_> {
                         debug_name: Some("arm/boxed".into()),
                         params: Vec::new(),
                         body,
+                        terminates: false,
                     },
                 );
                 continuations.push(continuation);
@@ -1465,6 +1480,7 @@ impl Lowerer<'_> {
                 debug_name: Some(hint),
                 params: Vec::new(),
                 body,
+                terminates: false,
             },
         );
         continuation
@@ -1507,6 +1523,7 @@ impl Lowerer<'_> {
                 debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: cons_body,
+                terminates: false,
             },
         );
         continuations.push(cons_arm);
@@ -1582,6 +1599,7 @@ impl Lowerer<'_> {
                 debug_name: Some(role.into()),
                 params,
                 body,
+                terminates: false,
             },
         );
         self.emitter.add_node(curios_cps::Node::LetCont {
@@ -1664,6 +1682,7 @@ impl Lowerer<'_> {
                 debug_name: Some("outcome/resume".into()),
                 params,
                 body,
+                terminates: false,
             },
         );
         let node = self.emitter.add_node(make(resume));
@@ -1721,6 +1740,7 @@ impl Lowerer<'_> {
                 debug_name: Some("foreign/resume".into()),
                 params: results,
                 body: pack,
+                terminates: false,
             },
         );
         let call = self.emitter.add_node(curios_cps::Node::Foreign {

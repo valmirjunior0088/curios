@@ -29,6 +29,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -57,6 +58,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
             return_cont: loop_return,
             body: loop_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -76,6 +78,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -136,6 +139,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             return_cont: inner_return,
             body: inner_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -158,6 +162,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             return_cont: outer_return,
             body: outer_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -179,6 +184,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -367,6 +373,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
+            terminates: false,
         },
     );
     let switch = module.add_node(Node::Switch {
@@ -395,6 +402,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             return_cont: loop_return,
             body: loop_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -411,6 +419,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             debug_name: Some("next".into()),
             params: vec![answered],
             body: rest,
+            terminates: false,
         });
         let call = module.add_node(Node::ApplyFun {
             callee: Callee::Known(loop_function),
@@ -435,6 +444,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);
@@ -539,6 +549,7 @@ fn a_nontail_recursive_call_does_not_mint_a_copy() {
             debug_name: None,
             params: vec![result],
             body,
+            terminates: false,
         },
     );
     for node in function_nodes(&module, loop_fn) {
@@ -584,6 +595,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             debug_name: Some("again".into()),
             params: vec![r],
             body: recur,
+            terminates: false,
         },
     );
     let call_owner = module.add_node(Node::ApplyFun {
@@ -603,6 +615,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             return_cont: walker_return,
             body: walker_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -627,6 +640,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             return_cont: owner_return,
             body: owner_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 
@@ -651,6 +665,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             return_cont: entry_return,
             body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     module.set_entry(entry);

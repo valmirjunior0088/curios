@@ -118,6 +118,7 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
+            terminates: false,
         },
     );
 
@@ -231,6 +232,7 @@ fn a_value_free_in_another_function_is_held_at_its_own_carrier() {
             return_cont: callee_return,
             body: callee_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
 

@@ -298,6 +298,7 @@ pub fn inline_call(
                     .map(|id| map_value(*id))
                     .collect(),
                 body: node_map[&continuation.body],
+                terminates: continuation.terminates,
             },
         );
     }
@@ -315,6 +316,7 @@ pub fn inline_call(
                 return_cont: returns[&definition.return_cont],
                 body: node_map[&definition.body],
                 droppable,
+                terminates: definition.terminates,
             },
         );
     }

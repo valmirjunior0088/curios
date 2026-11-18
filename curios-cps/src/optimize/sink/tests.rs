@@ -22,6 +22,7 @@ fn continuation(
         debug_name: Some(name.into()),
         params,
         body,
+        terminates: false,
     })
 }
 
@@ -58,6 +59,7 @@ fn identity(module: &mut Module, name: &str, droppable: Droppable) -> FunctionId
             return_cont,
             body,
             droppable,
+            terminates: false,
         },
     );
     function
@@ -81,6 +83,7 @@ fn main(
         return_cont,
         body,
         droppable: Droppable::Never,
+        terminates: false,
     });
     module.set_entry(main);
     main
@@ -292,6 +295,7 @@ fn work_stays_out_of_a_loop_it_ran_before() {
             debug_name: Some("loop".into()),
             params: vec![i],
             body: lap_body,
+            terminates: false,
         },
     );
     let enter = jump(&mut module, lap, vec![Atom::Value(a)]);
@@ -326,6 +330,7 @@ fn a_closure_and_what_it_captures_move_into_the_arm_that_calls_it() {
             return_cont: f_return,
             body: f_body,
             droppable: Droppable::Never,
+            terminates: false,
         },
     );
     let zero = jump(&mut module, return_cont, vec![nat(0)]);
