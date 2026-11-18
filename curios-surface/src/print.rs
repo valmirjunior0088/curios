@@ -13,9 +13,9 @@ mod list_layout_tests;
 use {
     super::{
         Alternative, Apply, Argument, Binder, BytesSegment, CasePayloadParam, CharLit,
-        ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
-        CoreValue, Decorated, DecoratorField, Dialect, Doc, Elements, Field, FltLit, Func,
-        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
+        ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreNominals,
+        CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Elements, Field, FltLit,
+        Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
         HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
         ListEntry, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
         NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm,
@@ -2011,54 +2011,74 @@ impl<D: CoreWritten> TreePrinter<D> {
         }
     }
 
-    /// One member of a group: the first under its own word, a later one after `and`, a nominal one keeping its word there, and a family closed by its own `end`.
-    fn core_member(self, member: CoreMember<D>, first: bool) -> Printer {
-        let words = |own: Keyword| match first {
-            true => vec![own],
-            false => vec![Keyword::And, own],
-        };
-        let let_words = match first {
-            true => [Keyword::Let],
-            false => [Keyword::And],
-        };
-        match member {
-            CoreMember::Let(item) => self.let_member(item, &let_words),
-            CoreMember::Induct(item) => flat([
-                self.induct_member(item, &words(Keyword::Induct)),
-                hard_line(),
-                keyword(Keyword::End),
-            ]),
-            CoreMember::Struct(mut item) => flat([
-                print_doc(item.doc.take()),
-                self.struct_member(item, &words(Keyword::Struct)),
-            ]),
-            CoreMember::Concept(mut item) => flat([
-                print_doc(item.doc.take()),
-                self.concept_member(item, &words(Keyword::Concept)),
-            ]),
-        }
-    }
-
-    /// One item of Core text: a group, its members a line apart and closed by the `;` a `let` owes where it is the last, a foreign row, or a test.
+    /// One item of Core text: a group of definitions, the first under `let` and a later one after `and`, closed by the `;` the last owes; a nominal group, each form under its own word and a later one after `and` too, a family closed by its own `end`; a foreign row; or a test. A group's members stand a line apart.
     fn core_item(self, item: CoreItem<D>) -> Printer {
-        match item {
-            CoreItem::Group(members) => {
-                let owes = matches!(members.last(), Some(CoreMember::Let(_)));
-                let mut parts = Vec::new();
-                for (index, member) in members.into_iter().enumerate() {
-                    if index > 0 {
-                        parts.push(hard_line());
-                    }
-                    parts.push(self.core_member(member, index == 0));
-                }
-                if owes {
-                    parts.extend([indent(ends()), pure(";")]);
-                }
-                flat(parts)
+        let words = |own: Keyword, index: usize| match index {
+            0 => vec![own],
+            _ => vec![Keyword::And, own],
+        };
+        let members: Vec<Printer> = match item {
+            CoreItem::Lets(members) => {
+                let last = members.len() - 1;
+                members
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, member)| {
+                        let words = match index {
+                            0 => [Keyword::Let],
+                            _ => [Keyword::And],
+                        };
+                        let member = self.let_member(member, &words);
+                        match index == last {
+                            true => flat([member, indent(ends()), pure(";")]),
+                            false => member,
+                        }
+                    })
+                    .collect()
             }
-            CoreItem::Foreign(item) => self.top_foreign(item),
-            CoreItem::Test(item) => self.top_test(item),
+            CoreItem::Nominals(CoreNominals::Induct(forms)) => forms
+                .into_iter()
+                .enumerate()
+                .map(|(index, form)| {
+                    flat([
+                        self.induct_member(form, &words(Keyword::Induct, index)),
+                        hard_line(),
+                        keyword(Keyword::End),
+                    ])
+                })
+                .collect(),
+            CoreItem::Nominals(CoreNominals::Struct(forms)) => forms
+                .into_iter()
+                .enumerate()
+                .map(|(index, mut form)| {
+                    flat([
+                        print_doc(form.doc.take()),
+                        self.struct_member(form, &words(Keyword::Struct, index)),
+                    ])
+                })
+                .collect(),
+            CoreItem::Nominals(CoreNominals::Concept(forms)) => forms
+                .into_iter()
+                .enumerate()
+                .map(|(index, mut form)| {
+                    flat([
+                        print_doc(form.doc.take()),
+                        self.concept_member(form, &words(Keyword::Concept, index)),
+                    ])
+                })
+                .collect(),
+            CoreItem::Foreign(item) => return self.top_foreign(item),
+            CoreItem::Test(item) => return self.top_test(item),
+        };
+
+        let mut parts = Vec::new();
+        for (index, member) in members.into_iter().enumerate() {
+            if index > 0 {
+                parts.push(hard_line());
+            }
+            parts.push(member);
         }
+        flat(parts)
     }
 
     /// The term a program closes with, and the type it states on the line beneath it.

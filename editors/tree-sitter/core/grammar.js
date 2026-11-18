@@ -1,12 +1,20 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// Core text, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Core text writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, items joined into groups whatever their kinds, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
+// Core text, the `.crsc` language: Core in the program's grammar with nothing left to an elaborator (`curios-surface`'s README), mirrored from `curios-surface/src/parse/core_text.rs`. It is the program's grammar with what only Core text writes — a decorator, an intrinsic, a witness by its identity, a declaration by its absolute name, nominal declarations each under its own word in a group, and the type the entry states — as the compiler reads both by one grammar under a dialect. Looser than the compiler where a highlighter would not notice, as the program's grammar is.
 
 const curios = require("../base/grammar");
 const { IDENTIFIER, commaList } = require("../common");
 
 // A witness's name is one token: its module's path, `witness~`, and its identity — the concept and the key's heads, with its place where it is not the first at them, `/m/witness~/C(K)#1`, or its place alone, `/m/witness~3`.
 const SEGMENT = IDENTIFIER.source;
+
+// Nominal declarations of one kind joined by `and`, each written as `form` writes it, under the decorator before it and before the `and` that opens it.
+const nominals = ($, form) =>
+  seq(
+    optional($.decorator),
+    form,
+    repeat(seq(optional($.decorator), "and", form)),
+  );
 const WITNESS = new RegExp(
   `/(${SEGMENT}/)*witness~([0-9]+|/${SEGMENT}(/${SEGMENT})*\\([^)]*\\)(#[0-9]+)?)`,
   "u",
@@ -20,7 +28,7 @@ module.exports = grammar(curios, {
       [$.decorator_struct, $.tuple_type],
       // `test` or `concept` before a name is a form, and before a path's next segment the path's head: the token after the name decides.
       [$.test_item, $._path_head],
-      [$._former, $._path_head],
+      [$._concept_form, $._path_head],
       // A head's `(…)` is its indices where an arrow follows, and otherwise the sort it lands in.
       [$.index, $.parenthesized],
       // A decorator after a member opens the group's next one where `and` follows it, and the next item or the entry where anything else does; an `and` there is the group's, never a path the entry begins with.
@@ -45,25 +53,26 @@ module.exports = grammar(curios, {
         $.satisfy_item,
       ),
 
-    // Declarations of any kinds joined by `and`, each written as its own keyword writes it — a `let` member after `and` by its name alone — closed by the `;` a `let` owes where its last member is one. A decorator stands before a member, and before the `and` that opens one.
+    // Definitions joined by `and`, a later one by its name alone, closed by the `;` the last owes; or nominal declarations of one kind joined by `and`, each under its own word. A decorator stands before a member, and before the `and` that opens one.
     group: ($) =>
-      seq(
-        optional($.decorator),
-        $._group_head,
-        repeat(seq(optional($.decorator), "and", $._group_member)),
-        optional(";"),
-      ),
-
-    _group_head: ($) => choice(seq("let", $.let_member), $._former),
-
-    _group_member: ($) => choice($.let_member, $._former),
-
-    _former: ($) =>
       choice(
-        seq("induct", $.induct_body, "end"),
-        seq("struct", $.struct_member),
-        seq("concept", $.concept_member),
+        seq(
+          optional($.decorator),
+          "let",
+          $.let_member,
+          repeat(seq(optional($.decorator), "and", $.let_member)),
+          ";",
+        ),
+        nominals($, $._induct_form),
+        nominals($, $._struct_form),
+        nominals($, $._concept_form),
       ),
+
+    _induct_form: ($) => seq("induct", $.induct_body, "end"),
+
+    _struct_form: ($) => seq("struct", $.struct_member),
+
+    _concept_form: ($) => seq("concept", $.concept_member),
 
     test_item: ($, original) => seq(optional($.decorator), original),
 

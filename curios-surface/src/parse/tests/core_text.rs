@@ -229,24 +229,34 @@ fn a_program_reads_no_form_of_core_text() {
     assert!("a % b".parse::<Term>().is_ok());
 }
 
-/// A file's items: a group of declarations of any kinds joined by `and`, each under its decorator, a `let` member after `and` by its name alone and the `;` owed after a last `let`; a test and a foreign row; then the entry and the type it states.
+/// A file's items: a group of definitions joined by `and`, each under its decorator, a later one by its name alone and the `;` owed after the last; a group of nominal declarations of one kind, each under its word; a test and a foreign row; then the entry and the type it states.
 #[test]
 fn a_file_reads_its_items_and_its_entry() {
-    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| box()\nend\nand struct /Pair: (/T) { x: Nat }\nand /f : Nat = 1;\ntest /t = x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
+    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| box()\nend\nand induct /Crate: Type\n| crate()\nend\nstruct /Pair: (/T) { x: Nat }\ntest /t = x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
         .parse::<CoreFile>()
         .unwrap();
     let kinds = file
         .items
         .iter()
         .map(|item| match item {
-            CoreItem::Group(members) => members
+            CoreItem::Lets(members) => members
                 .iter()
-                .map(|member| match member {
-                    CoreMember::Let(member) => format!("let {}", member.label),
-                    CoreMember::Induct(member) => format!("induct {}", member.label),
-                    CoreMember::Struct(member) => format!("struct {}", member.label),
-                    CoreMember::Concept(member) => format!("concept {}", member.label),
-                })
+                .map(|member| format!("let {}", member.label))
+                .collect::<Vec<_>>()
+                .join(" and "),
+            CoreItem::Nominals(CoreNominals::Induct(forms)) => forms
+                .iter()
+                .map(|form| format!("induct {}", form.label))
+                .collect::<Vec<_>>()
+                .join(" and "),
+            CoreItem::Nominals(CoreNominals::Struct(forms)) => forms
+                .iter()
+                .map(|form| format!("struct {}", form.label))
+                .collect::<Vec<_>>()
+                .join(" and "),
+            CoreItem::Nominals(CoreNominals::Concept(forms)) => forms
+                .iter()
+                .map(|form| format!("concept {}", form.label))
                 .collect::<Vec<_>>()
                 .join(" and "),
             CoreItem::Test(test) => format!("test {}", test.label),
@@ -257,18 +267,16 @@ fn a_file_reads_its_items_and_its_entry() {
         kinds,
         [
             "let double and let Read",
-            "induct Box and struct Pair and let f",
+            "induct Box and induct Crate",
+            "struct Pair",
             "test t",
             "foreign host_echo",
         ]
     );
-    let CoreItem::Group(members) = &file.items[0] else {
-        panic!("expected a group")
+    let CoreItem::Lets(members) = &file.items[0] else {
+        panic!("expected a group of definitions")
     };
-    let CoreMember::Let(second) = &members[1] else {
-        panic!("expected a let")
-    };
-    assert_eq!(second.core.fields[0].label.to_string(), "proof");
+    assert_eq!(members[1].core.fields[0].label.to_string(), "proof");
     let entry = file.entry.expect("a program's entry");
     assert_eq!(entry.body, core_name("main"));
     assert!(entry.type_.is_some());
@@ -281,11 +289,20 @@ fn a_declaration_of_core_text_is_named_absolutely() {
     let file = "#{kind = Witness}\nlet /witness~/Show(Nat) : /Show(Nat) = x;\n"
         .parse::<CoreFile>()
         .unwrap();
-    let CoreItem::Group(members) = &file.items[0] else {
-        panic!("expected a group")
+    let CoreItem::Lets(members) = &file.items[0] else {
+        panic!("expected a group of definitions")
     };
-    let CoreMember::Let(witness) = &members[0] else {
-        panic!("expected a let")
-    };
-    assert!(matches!(witness.core.name, Global::Witness(_)));
+    assert!(matches!(members[0].core.name, Global::Witness(_)));
+}
+
+/// A group holds definitions or nominal declarations of one kind, so a group joining two kinds is no production: a definition after a family's `and`, a family after a definition's, and a record after a family's are each refused where the second kind begins.
+#[test]
+fn a_group_of_two_kinds_is_no_production() {
+    for text in [
+        "induct /Box: Type\n| box()\nend\nand /f : Nat = 1;\n",
+        "let /f : Nat = 1\nand induct /Box: Type\n| box()\nend\n",
+        "induct /Box: Type\n| box()\nend\nand struct /Pair: Type { x: Nat }\n",
+    ] {
+        assert!(text.parse::<CoreFile>().is_err(), "{text}");
+    }
 }

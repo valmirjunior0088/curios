@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        CoreEntry, CoreFile, CoreHead, CoreItem, CoreMember, CoreText, CoreValue, Decoration,
+        CoreEntry, CoreFile, CoreHead, CoreItem, CoreNominals, CoreText, CoreValue, Decoration,
         DecoratorField, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign, TopLet,
         TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
         level_spelled, nested, print_core_entry, print_core_item, print_core_term, print_shown,
@@ -2129,7 +2129,7 @@ fn items_written<D: Rendered>(
                     universe_context: Some(&definition.universe_context),
                     group: None,
                 };
-                each(CoreItem::Group(vec![member.written(spelling)]))?;
+                each(CoreItem::Lets(vec![member.written(spelling)]))?;
             }
             Item::Rec(rec) => {
                 let mut context = Some(rec.universe_context());
@@ -2161,20 +2161,21 @@ fn items_written<D: Rendered>(
                         .written(spelling)
                     })
                     .collect();
-                each(CoreItem::Group(members))?;
+                each(CoreItem::Lets(members))?;
             }
             Item::Nominal(nominals) => {
                 let island = nominals.island();
                 // The scheme its entries share, stated by its first form as a group's first member states the group's.
                 let mut scheme = Some(nominals.universe_context());
-                let members = nominals
+                let forms = nominals
                     .entries()
                     .iter()
                     .map(|(name, entry)| {
                         nominal_written(*name, island, entry, scheme.take(), spelling)
                     })
-                    .collect();
-                each(CoreItem::Group(members))?;
+                    .reduce(joined)
+                    .expect("a declaration declares a name");
+                each(CoreItem::Nominals(forms))?;
             }
         }
     }
@@ -2305,7 +2306,7 @@ struct Member<'a> {
 
 impl Member<'_> {
     /// This member under its decorator, as a `let`.
-    fn written<D: Rendered>(self, spelling: &Rc<Spelling>) -> CoreMember<D> {
+    fn written<D: Rendered>(self, spelling: &Rc<Spelling>) -> TopLet<D> {
         let definition = self.definition;
         let mut fields = definition_fields(
             &definition.name,
@@ -2322,7 +2323,7 @@ impl Member<'_> {
         }
         let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
 
-        CoreMember::Let(TopLet {
+        TopLet {
             doc: None,
             core: CoreHead {
                 fields: decorated_fields(spelling, fields),
@@ -2334,7 +2335,26 @@ impl Member<'_> {
                 type_: Some(written(&definition.type_)),
                 body: written(&definition.body),
             },
-        })
+        }
+    }
+}
+
+/// `nominals`' forms followed by `more`'s, which are of their kind, as a declaration's entries are.
+fn joined<D: Rendered>(nominals: CoreNominals<D>, more: CoreNominals<D>) -> CoreNominals<D> {
+    match (nominals, more) {
+        (CoreNominals::Induct(mut forms), CoreNominals::Induct(more)) => {
+            forms.extend(more);
+            CoreNominals::Induct(forms)
+        }
+        (CoreNominals::Struct(mut forms), CoreNominals::Struct(more)) => {
+            forms.extend(more);
+            CoreNominals::Struct(forms)
+        }
+        (CoreNominals::Concept(mut forms), CoreNominals::Concept(more)) => {
+            forms.extend(more);
+            CoreNominals::Concept(forms)
+        }
+        _ => unreachable!("a declaration's entries are of one kind"),
     }
 }
 
@@ -2345,7 +2365,7 @@ fn nominal_written<D: Rendered>(
     nominal: &Nominal,
     scheme: Option<&UniverseContext>,
     spelling: &Rc<Spelling>,
-) -> CoreMember<D> {
+) -> CoreNominals<D> {
     let terms = declaration_terms(name, island, nominal);
     let words = spelling.with_words_of(&terms, |frame| {
         nominal_declared::<Shown>(name, nominal, scheme, frame)
@@ -2362,21 +2382,21 @@ fn nominal_declared<D: Rendered>(
     nominal: &Nominal,
     scheme: Option<&UniverseContext>,
     frame: Frame<'_, D>,
-) -> CoreMember<D> {
-    let (member, words) = match nominal {
+) -> CoreNominals<D> {
+    let (mut form, words) = match nominal {
         Nominal::Inductive(declaration) => (
-            CoreMember::Induct(family_declared(&name, declaration, frame)),
+            CoreNominals::Induct(vec![family_declared(&name, declaration, frame)]),
             Vec::new(),
         ),
         Nominal::Struct(record) => {
             let written = record_declared(record, frame);
             let words = written.words.clone();
-            (CoreMember::Struct(written.structure(&name)), words)
+            (CoreNominals::Struct(vec![written.structure(&name)]), words)
         }
         Nominal::Concept { record, .. } => {
             let written = record_declared(record, frame);
             let words = written.words.clone();
-            (CoreMember::Concept(written.concept(&name)), words)
+            (CoreNominals::Concept(vec![written.concept(&name)]), words)
         }
     };
 
@@ -2387,21 +2407,13 @@ fn nominal_declared<D: Rendered>(
     fields.extend(entry_fields(name, nominal, &words, frame));
 
     let fields = decorated_fields(frame.spelling, fields);
-    match member {
-        CoreMember::Induct(mut family) => {
-            family.core.fields = fields;
-            CoreMember::Induct(family)
-        }
-        CoreMember::Struct(mut record) => {
-            record.core.fields = fields;
-            CoreMember::Struct(record)
-        }
-        CoreMember::Concept(mut concept) => {
-            concept.core.fields = fields;
-            CoreMember::Concept(concept)
-        }
-        CoreMember::Let(_) => unreachable!("a nominal declaration is written in its form"),
+    match &mut form {
+        CoreNominals::Induct(forms) => forms[0].core.fields = fields,
+        CoreNominals::Struct(forms) => forms[0].core.fields = fields,
+        CoreNominals::Concept(forms) => forms[0].core.fields = fields,
     }
+
+    form
 }
 
 /// The terms a nominal declaration's form writes, whose names its binders' words must not read like and which bound what its render may build: its former's, and a family's constructors'.

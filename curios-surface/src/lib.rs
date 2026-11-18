@@ -14,7 +14,7 @@ pub use intrinsic::{BytesSegment, Intrinsic, ListEntry, Literal};
 mod dialect;
 use dialect::*;
 pub use dialect::{
-    CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
+    CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreNominals, CoreText,
     CoreValue, Decorated, DecoratorField, Dialect, Program, Rendered, Unwritable,
 };
 

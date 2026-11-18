@@ -1326,9 +1326,15 @@ pub struct Nominals {
 }
 
 impl Nominals {
-    /// The declaration whose names and entries are `entries`, in declaration order: at least one, all under one scheme.
+    /// The declaration whose names and entries are `entries`, in declaration order: at least one, all of one kind and under one scheme.
     pub fn new(entries: Vec<(Global, Nominal)>) -> Self {
         assert!(!entries.is_empty(), "a declaration declares a name");
+        assert!(
+            entries
+                .iter()
+                .all(|(_, entry)| entry.declared() == entries[0].1.declared()),
+            "a declaration's entries are of one kind"
+        );
         assert!(
             entries
                 .iter()

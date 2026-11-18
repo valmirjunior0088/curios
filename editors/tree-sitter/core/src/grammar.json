@@ -5243,72 +5243,23 @@
       ]
     },
     "group": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "decorator"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_group_head"
-        },
-        {
-          "type": "REPEAT",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "SYMBOL",
-                    "name": "decorator"
-                  },
-                  {
-                    "type": "BLANK"
-                  }
-                ]
-              },
-              {
-                "type": "STRING",
-                "value": "and"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "_group_member"
-              }
-            ]
-          }
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": ";"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        }
-      ]
-    },
-    "_group_head": {
       "type": "CHOICE",
       "members": [
         {
           "type": "SEQ",
           "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "decorator"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
             {
               "type": "STRING",
               "value": "let"
@@ -5316,73 +5267,230 @@
             {
               "type": "SYMBOL",
               "name": "let_member"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "decorator"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "and"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "let_member"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "STRING",
+              "value": ";"
             }
           ]
         },
         {
-          "type": "SYMBOL",
-          "name": "_former"
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "decorator"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_induct_form"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "decorator"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "and"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_induct_form"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "decorator"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_struct_form"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "decorator"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "and"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_struct_form"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "decorator"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_concept_form"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "decorator"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "and"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_concept_form"
+                  }
+                ]
+              }
+            }
+          ]
         }
       ]
     },
-    "_group_member": {
-      "type": "CHOICE",
+    "_induct_form": {
+      "type": "SEQ",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "let_member"
+          "type": "STRING",
+          "value": "induct"
         },
         {
           "type": "SYMBOL",
-          "name": "_former"
+          "name": "induct_body"
+        },
+        {
+          "type": "STRING",
+          "value": "end"
         }
       ]
     },
-    "_former": {
-      "type": "CHOICE",
+    "_struct_form": {
+      "type": "SEQ",
       "members": [
         {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "induct"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "induct_body"
-            },
-            {
-              "type": "STRING",
-              "value": "end"
-            }
-          ]
+          "type": "STRING",
+          "value": "struct"
         },
         {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "struct"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "struct_member"
-            }
-          ]
+          "type": "SYMBOL",
+          "name": "struct_member"
+        }
+      ]
+    },
+    "_concept_form": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "concept"
         },
         {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "concept"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "concept_member"
-            }
-          ]
+          "type": "SYMBOL",
+          "name": "concept_member"
         }
       ]
     },
@@ -5688,7 +5796,7 @@
       "_path_head"
     ],
     [
-      "_former",
+      "_concept_form",
       "_path_head"
     ],
     [

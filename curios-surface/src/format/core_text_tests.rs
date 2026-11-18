@@ -22,9 +22,13 @@ fn every_form_of_core_text_is_laid_out_by_the_programs_printer() {
 induct /Box(A: Type): pub Type
 | mk(x: A)
 end
-#{node = Rec}
-and struct /Pair(A: Type): pub Type { fst: A, snd: A }
-and /f : (n: #NatType) -> #NatType = (n: #NatType) => #NatAdd(n, 1);
+#{module = /}
+and induct /Crate(A: Type): pub Type
+| crate(x: A)
+end
+struct /Pair(A: Type): pub Type { fst: A, snd: A }
+let /f : (n: #NatType) -> #NatType = (n: #NatType) => #NatAdd(n, 1)
+and /g : #NatType = /f(0);
 #{module = /, universe_context = {parameter_count = 1, constraints = [u + 1 <= w]}}
 let /p : #{level = u} Type = (#{node = Name} /f)(#{node = NumLit} 2);
 test /held = 1;

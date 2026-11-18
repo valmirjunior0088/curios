@@ -11,11 +11,11 @@ use {
         value_module, value_string, value_term, value_variant, value_word,
     },
     crate::{
-        CoreFile, CoreItem, CoreMember, CoreText, CoreValue, FormScope, LetSignature, TopForeign,
-        TopLet, TopTest, concept_supers_read_off,
+        CoreFile, CoreHead, CoreItem, CoreNominals, CoreText, CoreValue, FormScope, LetSignature,
+        TopConcept, TopForeign, TopLet, TopTest, concept_supers_read_off,
     },
     curios_abi::ForeignFunction,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, Span},
     curios_core::{
         ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item, Nominal,
         Nominals, RecItem, Term, UniverseContext,
@@ -39,7 +39,10 @@ pub fn to_core(
     let mut items = file.items.iter().peekable();
     while let Some(item) = items.next() {
         match item {
-            CoreItem::Group(members) => written.push(group_read(members, &mut reader)?),
+            CoreItem::Lets(members) => written.push(group_read(members, &mut reader)?),
+            CoreItem::Nominals(nominals) => {
+                written.push(Item::Nominal(nominals_read(nominals, &mut reader)?))
+            }
             CoreItem::Test(test) => {
                 written.push(Item::Let(Box::new(test_read(test, &mut reader)?)))
             }
@@ -47,8 +50,8 @@ pub fn to_core(
                 // The definition the row implies stands in its place, where the text writes no other under its name beside it.
                 let stated = matches!(
                     items.peek(),
-                    Some(CoreItem::Group(members))
-                        if matches!(members.as_slice(), [CoreMember::Let(member)] if member.core.name == row.core.name)
+                    Some(CoreItem::Lets(members))
+                        if matches!(members.as_slice(), [member] if member.core.name == row.core.name)
                 );
                 if let Some(definition) = foreign_definition_read(row, stated, &mut reader)? {
                     written.push(Item::Let(Box::new(definition)));
@@ -170,33 +173,11 @@ struct Member {
     node: Option<String>,
 }
 
-/// A group of members as the item it writes: nominal forms the declaration whose entries they state, a lone definition a `let` unless its decorator's `node` says it is a group, and several definitions a group.
-fn group_read(members: &[CoreMember], reader: &mut Reader<'_>) -> Result<Item, ReadError> {
-    let definitions = members
-        .iter()
-        .filter_map(|member| match member {
-            CoreMember::Let(definition) => Some(definition),
-            CoreMember::Induct(_) | CoreMember::Struct(_) | CoreMember::Concept(_) => None,
-        })
-        .collect::<Vec<_>>();
-    if definitions.is_empty() {
-        let mut scheme = None;
-        let entries = members
-            .iter()
-            .enumerate()
-            .map(|(index, member)| entry_read(member, index, &mut scheme, reader))
-            .collect::<Result<Vec<_>, _>>()?;
-        return Ok(Item::Nominal(Nominals::new(entries)));
-    }
-    if definitions.len() != members.len() {
-        return Err(ReadError::at(
-            Refusal::Malformed("a group of definitions, or of nominal declarations"),
-            members.first().and_then(member_span),
-        ));
-    }
+/// A group of definitions as the item it writes: a lone one a `let` unless its decorator's `node` says it is a group, and several a group.
+fn group_read(members: &[TopLet<CoreText>], reader: &mut Reader<'_>) -> Result<Item, ReadError> {
     let mut scheme = None;
     let (mut read, held) = reader.grouped(|reader| {
-        definitions
+        members
             .iter()
             .enumerate()
             .map(|(index, member)| member_read(member, index, &mut scheme, reader))
@@ -252,39 +233,77 @@ fn group_read(members: &[CoreMember], reader: &mut Reader<'_>) -> Result<Item, R
     let item = RecItem::try_new(grouped).map_err(|_| {
         ReadError::at(
             Refusal::Malformed("one scheme over a group, stated by its first member"),
-            members.first().and_then(member_span),
+            members.first().and_then(|member| member.label.span()),
         )
     })?;
 
     Ok(Item::Rec(item))
 }
 
-/// Where a member's name is written.
-fn member_span(member: &CoreMember) -> Option<&curios_common::Span> {
-    match member {
-        CoreMember::Let(member) => member.label.span(),
-        CoreMember::Induct(member) => member.label.span(),
-        CoreMember::Struct(member) => member.label.span(),
-        CoreMember::Concept(member) => member.label.span(),
-    }
+/// A nominal declaration's forms as the item holding their entries, each form's read under the scheme its group's first form states.
+fn nominals_read(nominals: &CoreNominals, reader: &mut Reader<'_>) -> Result<Nominals, ReadError> {
+    let mut scheme = None;
+    let entries = match nominals {
+        CoreNominals::Induct(forms) => forms
+            .iter()
+            .enumerate()
+            .map(|(index, form)| {
+                entry_read(
+                    &form.core,
+                    form.label.span(),
+                    index,
+                    &mut scheme,
+                    |name, scheme, fields| {
+                        family_entry_read(form, name, scheme, fields, reader)
+                            .map(Nominal::Inductive)
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        CoreNominals::Struct(forms) => forms
+            .iter()
+            .enumerate()
+            .map(|(index, form)| {
+                entry_read(
+                    &form.core,
+                    form.label.span(),
+                    index,
+                    &mut scheme,
+                    |name, scheme, fields| {
+                        record_entry_read(form, name, scheme, fields, reader).map(Nominal::Struct)
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        CoreNominals::Concept(forms) => forms
+            .iter()
+            .enumerate()
+            .map(|(index, form)| {
+                entry_read(
+                    &form.core,
+                    form.label.span(),
+                    index,
+                    &mut scheme,
+                    |name, scheme, fields| concept_read(form, name, scheme, fields, reader),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+
+    Ok(Nominals::new(entries))
 }
 
-/// A nominal declaration's form as the name it declares and its entry: its entry's parts under the scheme `scheme` its group shares, which its first member states. A former is made of its entry, so its decorator states nothing of one.
+/// A nominal declaration's form, headed by `core` and written at `span`, as the name it declares and its entry, which `read` reads of it: under the scheme `scheme` its group shares, which its first member states. A former is made of its entry, so its decorator states nothing of one.
 fn entry_read(
-    member: &CoreMember,
+    core: &CoreHead,
+    span: Option<&Span>,
     index: usize,
     scheme: &mut Option<UniverseContext>,
-    reader: &mut Reader<'_>,
+    read: impl FnOnce(&Global, &UniverseContext, &mut Fields<'_>) -> Result<Nominal, ReadError>,
 ) -> Result<(Global, Nominal), ReadError> {
-    let (core, span) = match member {
-        CoreMember::Induct(member) => (&member.core, member.label.span()),
-        CoreMember::Struct(member) => (&member.core, member.label.span()),
-        CoreMember::Concept(member) => (&member.core, member.label.span()),
-        CoreMember::Let(_) => unreachable!("a definition is read by its name, type and body"),
-    };
     let mut fields = Fields::of(&core.fields, span)?;
     let scheme = group_scheme(&mut fields, index, scheme)?;
-    let entry = nominal_read(member, &core.name, &scheme, &mut fields, reader)?;
+    let entry = read(&core.name, &scheme, &mut fields)?;
     fields.finish()?;
 
     Ok((core.name, entry))
@@ -366,54 +385,44 @@ fn group_scheme(
     Ok(context)
 }
 
-/// A nominal declaration's entry from its form.
-fn nominal_read(
-    member: &CoreMember,
+/// A concept's entry from its form: its record, and its own parts read off the record where its `concept` decorator states none.
+fn concept_read(
+    concept: &TopConcept<CoreText>,
     name: &Global,
     scheme: &UniverseContext,
     fields: &mut Fields<'_>,
     reader: &mut Reader<'_>,
 ) -> Result<Nominal, ReadError> {
-    match member {
-        CoreMember::Induct(family) => Ok(Nominal::Inductive(family_entry_read(
-            family, name, scheme, fields, reader,
-        )?)),
-        CoreMember::Struct(record) => Ok(Nominal::Struct(record_entry_read(
-            record, name, scheme, fields, reader,
-        )?)),
-        CoreMember::Concept(concept) => {
-            let (record, words) = concept_entry_read(concept, name, scheme, fields, reader)?;
-            let mut declaration = ConceptDecl {
-                universe_context: record.universe_context.clone(),
-                fields: words,
-                supers: concept_supers_read_off(*name, &record),
-            };
-            if let Some(value) = fields.take("concept") {
-                let mut own = super::value_fields(value)?;
-                if let Some(context) = own.take("universe_context") {
-                    declaration.universe_context = universe_context_read(context)?;
-                }
-                if let Some(supers) = own.take("supers") {
-                    declaration.supers = value_list(supers)?
-                        .iter()
-                        .map(value_global)
-                        .collect::<Result<_, _>>()?;
-                }
-                if let Some(labels) = own.take("fields") {
-                    declaration.fields = value_list(labels)?
-                        .iter()
-                        .map(value_string)
-                        .collect::<Result<_, _>>()?;
-                }
-                own.finish()?;
-            }
-            Ok(Nominal::Concept {
-                concept: declaration,
-                record,
-            })
+    let (record, words) = concept_entry_read(concept, name, scheme, fields, reader)?;
+    let mut declaration = ConceptDecl {
+        universe_context: record.universe_context.clone(),
+        fields: words,
+        supers: concept_supers_read_off(*name, &record),
+    };
+    if let Some(value) = fields.take("concept") {
+        let mut own = super::value_fields(value)?;
+        if let Some(context) = own.take("universe_context") {
+            declaration.universe_context = universe_context_read(context)?;
         }
-        CoreMember::Let(_) => unreachable!("a definition is read by its name, type and body"),
+        if let Some(supers) = own.take("supers") {
+            declaration.supers = value_list(supers)?
+                .iter()
+                .map(value_global)
+                .collect::<Result<_, _>>()?;
+        }
+        if let Some(labels) = own.take("fields") {
+            declaration.fields = value_list(labels)?
+                .iter()
+                .map(value_string)
+                .collect::<Result<_, _>>()?;
+        }
+        own.finish()?;
     }
+
+    Ok(Nominal::Concept {
+        concept: declaration,
+        record,
+    })
 }
 
 /// What a definition is declared as, where it is not what its keyword declares: `Witness` or `Test`. A constructor is no kind a definition states: it is its family's, which the family's form declares, so a definition stating itself one is refused here.

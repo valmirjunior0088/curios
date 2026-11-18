@@ -238,20 +238,21 @@ pub struct CoreEntry<D: Dialect = CoreText> {
     pub type_: Option<Term<D>>,
 }
 
-/// One item of Core text.
+/// One item of Core text. A group holds definitions or nominal declarations of one kind, so a group of two kinds is no item.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreItem<D: Dialect = CoreText> {
-    /// One declaration, or a group of them joined by `and`, of any kinds.
-    Group(Vec<CoreMember<D>>),
+    /// One definition, or a group of them joined by `and`.
+    Lets(Vec<TopLet<D>>),
+    /// One nominal declaration, or a group of them joined by `and`.
+    Nominals(CoreNominals<D>),
     Foreign(TopForeign<D>),
     Test(TopTest<D>),
 }
 
-/// One member of a group.
+/// The forms of a nominal declaration, in the order they are written: families, records or concepts, never two kinds at once.
 #[derive(Debug, Clone, PartialEq)]
-pub enum CoreMember<D: Dialect = CoreText> {
-    Let(TopLet<D>),
-    Induct(TopInduct<D>),
-    Struct(TopStruct<D>),
-    Concept(TopConcept<D>),
+pub enum CoreNominals<D: Dialect = CoreText> {
+    Induct(Vec<TopInduct<D>>),
+    Struct(Vec<TopStruct<D>>),
+    Concept(Vec<TopConcept<D>>),
 }
