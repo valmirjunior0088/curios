@@ -1,7 +1,7 @@
 use {
     super::{
-        Consulted, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named, out_of_reach,
-        unresolved, visible_binding, visible_child,
+        Consulted, Found, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named,
+        out_of_reach, unresolved, visible_binding, visible_child,
     },
     crate::{Error, OrderedMap},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
@@ -117,8 +117,8 @@ impl WrittenSorts {
 /// What a declaration's lowering asked of its scope and wrote beside its items, since [`Context::begin_declaration`]: what is recorded of it beside its items.
 #[derive(Default)]
 pub struct Journal {
-    /// Every name it resolved through its scope, with what each resolved to, in the order it asked.
-    pub trace: curios_core::Trace<Lookup, Qualifier>,
+    /// Every name it resolved through its scope, with what its door answered of each, in the order it asked.
+    pub trace: curios_core::Trace<Lookup, Found>,
     /// Every binding resolving those names read, as each was read — see [`Consulted`]. What a `use` declaration's resolution read too, where it is the one being resolved.
     pub consulted: Vec<Consulted>,
     /// The names it recorded an import scope for.
@@ -1123,8 +1123,21 @@ impl<'a> Context<'a> {
         self.shared.declaring.unbound.borrow().contains_key(binder)
     }
 
-    /// Why the bare name `label`, sought as `sought`, resolved to nothing in this module's scope: the nearest name among `locals`, the binders in scope where it was written, and the scope's own bindings, and every public binding elsewhere that carries the label ([`carriers`]).
-    pub fn unresolved_bare<'l>(
+    /// Mint the binder the bare name `label`, written as `written`, lowers to where it names nothing it is sought as, `locals` being the binders in scope where it was written, and file why beside it, as [`Context::unbound`] does. One call, because what the refusal reads of the scope for what the name could have meant is read nowhere a lowering is kept from: the declaration it unbinds is one no later lowering keeps.
+    pub fn unbound_bare<'l>(
+        &'l self,
+        written: &str,
+        label: &str,
+        sought: curios_core::Sought,
+        locals: impl Iterator<Item = &'l str>,
+    ) -> curios_core::Free {
+        let failure = self.unresolved_bare(label, sought, locals);
+
+        self.unbound(written, failure)
+    }
+
+    // Why the bare name `label`, sought as `sought`, resolved to nothing in this module's scope: the nearest name among `locals`, the binders in scope where it was written, and the scope's own bindings, and every public binding elsewhere that carries the label ([`carriers`]).
+    fn unresolved_bare<'l>(
         &'l self,
         label: &str,
         sought: curios_core::Sought,
@@ -1557,13 +1570,25 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    /// The concept and the field `target` names, where it is one of a concept's methods: a binding of the namespace the concept's module declares for it ([`ChildInfo::ConceptMethods`]), which a name resolves into wherever it was spelled from, a re-export's included.
-    pub fn method_of(&self, target: &Qualifier) -> Option<(curios_core::Global, String)> {
-        concept_method(target, |module| self.table.get(module))
+    // What the lowering reads of a name resolved to `target`: a concept's method where `target` is a binding of the namespace a concept declares ([`concept_method`]), and the declaration it is otherwise. Read off the namespace's entry in the module holding it, which is recorded as every step's is, so an edit making the namespace another kind's reaches the declaration, and asking it again compares the answer.
+    fn found(&self, target: Qualifier) -> Found {
+        // A name of the root's own stands in no namespace.
+        if target.is_single() {
+            return Found::Declaration(target);
+        }
+        self.consult(|| Consulted::Member {
+            at: target.without_last(),
+            binding: false,
+        });
+
+        match concept_method(&target, |module| self.table.get(module)) {
+            Some(_) => Found::Method(target),
+            None => Found::Declaration(target),
+        }
     }
 
-    // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces.
-    pub fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
+    // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces, and answer what the lowering reads of it.
+    pub fn resolve_term_name(&self, name: &Name) -> Result<Found, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
             self.consult(|| Consulted::Member {
@@ -1574,8 +1599,9 @@ impl<'a> Context<'a> {
             match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
                 Some(target) => {
                     self.note_written(name);
-                    self.asked(name, target);
-                    Ok(target)
+                    let found = self.found(target);
+                    self.asked(name, found);
+                    Ok(found)
                 }
                 None => {
                     Err(self.unresolved_step(&parent, &label, curios_core::Sought::Binding, true))
@@ -1585,21 +1611,22 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
-    /// What the bare name `name` is bound to in this module's scope, where it is: a declaration of the module or a label a `use` brought in, whose `use` is then used. A binder of the declaration itself is the lowerer's to find first.
-    pub fn resolve_bare(&self, name: &Name) -> Option<Qualifier> {
+    /// What the bare name `name` is bound to in this module's scope, where it is — a declaration of the module or a label a `use` brought in, whose `use` is then used — as the lowering reads it ([`Found`]). A binder of the declaration itself is the lowerer's to find first.
+    pub fn resolve_bare(&self, name: &Name) -> Option<Found> {
         self.consult(|| Consulted::Scope {
             at: self.prefix.with(name.head()),
             binding: true,
         });
         let target = *self.bindings.get(name.head())?;
         self.note_binding_use(name.head());
-        self.asked(name, target);
+        let found = self.found(target);
+        self.asked(name, found);
 
-        Some(target)
+        Some(found)
     }
 
-    /// Record that the declaration being lowered resolved `name`, as written, to `found`.
-    fn asked(&self, name: &Name, found: Qualifier) {
+    /// Record that the declaration being lowered resolved `name`, as written, and was answered `found`.
+    fn asked(&self, name: &Name, found: Found) {
         let lookup = Lookup {
             absolute: name.is_abs(),
             path: *name.qualifier(),
@@ -1612,8 +1639,8 @@ impl<'a> Context<'a> {
             .record(lookup, found);
     }
 
-    /// Whether `lookup` resolves to `found` where this context stands, asked through the door the lowerer asked it through: a bare name of this module's scope, any other of the modules it may see. A resolution the scope now refuses answers no.
-    pub fn answers(&self, lookup: &Lookup, found: &Qualifier) -> bool {
+    /// Whether `lookup` is answered `found` where this context stands, asked through the door the lowerer asked it through: a bare name of this module's scope, any other of the modules it may see. A resolution the scope now refuses answers no, and so does one reaching the same path where it is now a method and was not, or the reverse.
+    pub fn answers(&self, lookup: &Lookup, found: &Found) -> bool {
         let name = Name::new(lookup.absolute, lookup.path);
         let answer = self.quietly(|| match name.is_abs() || !name.is_single() {
             true => self.resolve_term_name(&name).ok(),

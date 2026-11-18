@@ -1,6 +1,6 @@
 //! What one source declaration lowered to beside its items, and what it asked of its scope to get there: the record a later lowering of the same sources keeps the declaration's lowering by.
 //!
-//! **A lowering is a function of its declaration's text and the names it resolved.** Every counter a lowering mints from starts at zero for each declaration, and a declaration reads its scope through two doors alone: `Context::resolve_term_name` for a name written as a path, `Context::resolve_bare` for a bare one no binder of its own binds. So a declaration whose text is the one a baseline lowered, and whose every resolution answers as it did, lowers to what it lowered to, and is not lowered: its items, its registry entries, what it minted — the sites no written name reads among it — and its import scopes are taken from the baseline ([`Baseline::kept`]).
+//! **A lowering is a function of its declaration's text and the names it resolved.** Every counter a lowering mints from starts at zero for each declaration, and a declaration reads its scope through two doors alone: `Context::resolve_term_name` for a name written as a path, `Context::resolve_bare` for a bare one no binder of its own binds, and what a door answers is everything the lowering reads of a name ([`Found`]); what a refusal reads of the scope for what a name could have meant unbinds its declaration in the same call (`Context::unbound_bare`), so no later lowering keeps it. So a declaration whose text is the one a baseline lowered, and whose every resolution answers as it did, lowers to what it lowered to, and is not lowered: its items, its registry entries, what it minted — the sites no written name reads among it — and its import scopes are taken from the baseline ([`Baseline::kept`]).
 //!
 //! **Asked only where an edit could have reached** ([`Moved`]): a declaration of a file the edit did not touch, none of whose lookups read a binding that moved, is kept with nothing compared or asked, and what asking its lookups would have marked is marked from the bindings its record says they read ([`Consulted`]).
 //!
@@ -228,6 +228,23 @@ pub struct Lookup {
     pub path: Qualifier,
 }
 
+/// What a door answered of a name a declaration's lowering resolved through its scope, which is everything the lowering reads of the name: the declaration it names, or a concept's method — a binding of the namespace a concept declares, which lowers to the method and names no declaration of its own ([`curios_core::Term::method`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Found {
+    Declaration(Qualifier),
+    Method(Qualifier),
+}
+
+impl Found {
+    /// The path the name resolved to, a method's included.
+    pub fn target(&self) -> Qualifier {
+        match *self {
+            Found::Declaration(target) | Found::Method(target) => target,
+        }
+    }
+}
+
 /// A binding the lowering read to resolve a name, found or not: what an answer to a lookup can move with. Each is a label of one table, named by the path the label extends.
 ///
 /// **Read where the resolution reads it.** A bare name and the head of a relative path are read off the lexical scope of the module body they are written in, a binding or a module; every further step, and a path's last segment, off the table and the interface of the module the step stands in; a glob off the whole of a module's interface. So a lookup answers as it did wherever every binding it read is the entry it was, and a declaration whose lookups all do lowers to what it lowered to.
@@ -260,8 +277,8 @@ pub struct LoweredDeclaration {
     items: Vec<LoweredItem>,
     /// The definitions it recorded an import scope for, each by its place among the declaration's.
     scoped: Vec<u32>,
-    /// Every name it resolved through its scope, with what each resolved to.
-    trace: curios_core::Trace<Lookup, Qualifier>,
+    /// Every name it resolved through its scope, with what its door answered of each ([`Found`]).
+    trace: curios_core::Trace<Lookup, Found>,
     /// Every binding resolving those names read, each once, in order: what an answer can move with ([`Consulted`]).
     consulted: Vec<Consulted>,
 }

@@ -29,14 +29,15 @@ mod into_core;
 pub use into_core::{
     AliasEdge, Aliases, ArchivedAliasEdge, ArchivedBaselineHalf, ArchivedBrokenItem,
     ArchivedChildInfo, ArchivedConsulted, ArchivedDeclared, ArchivedEntry, ArchivedFamily,
-    ArchivedHalfEntry, ArchivedHead, ArchivedHeaded, ArchivedInterface, ArchivedLabelled,
-    ArchivedLookup, ArchivedLoweredDeclaration, ArchivedLoweredItem, ArchivedModuleInfo,
-    ArchivedNominal, ArchivedPreparedText, ArchivedPublicInterface, ArchivedScan, Audiences,
-    BaselineHalf, Bodies, BrokenItem, ChildInfo, Consulted, Declared, Entry, EntryNames, Family,
-    HalfEntry, Head, Headed, Heading, Interface, Labelled, Lookup, LookupReaders,
-    LoweredDeclaration, LoweredEntry, LoweredItem, Mention, ModuleInfo, Nominal, PreparedText,
-    PublicInterface, Reachability, Revision, Scan, Text, UnitSource, document_unit, heading,
-    into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude, prepare_prelude,
+    ArchivedFound, ArchivedHalfEntry, ArchivedHead, ArchivedHeaded, ArchivedInterface,
+    ArchivedLabelled, ArchivedLookup, ArchivedLoweredDeclaration, ArchivedLoweredItem,
+    ArchivedModuleInfo, ArchivedNominal, ArchivedPreparedText, ArchivedPublicInterface,
+    ArchivedScan, Audiences, BaselineHalf, Bodies, BrokenItem, ChildInfo, Consulted, Declared,
+    Entry, EntryNames, Family, Found, HalfEntry, Head, Headed, Heading, Interface, Labelled,
+    Lookup, LookupReaders, LoweredDeclaration, LoweredEntry, LoweredItem, Mention, ModuleInfo,
+    Nominal, PreparedText, PublicInterface, Reachability, Revision, Scan, Text, UnitSource,
+    document_unit, heading, into_core_entry, into_core_unit, into_core_unit_over,
+    into_core_with_prelude, prepare_prelude,
 };
 
 mod registry;

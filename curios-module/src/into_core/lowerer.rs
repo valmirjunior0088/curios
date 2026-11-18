@@ -2,7 +2,7 @@ mod match_compile;
 use match_compile::*;
 
 use {
-    super::{Context, SortSite},
+    super::{Context, Found, SortSite},
     crate::Error,
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Span, recurse},
@@ -555,18 +555,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(curios_core::Term::func_marked(params, body))
     }
 
-    /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses, through [`reference()`].
-    pub fn resolve_name(&self, name: &Name) -> Result<curios_core::Mention, Error> {
+    /// What a surface name resolves to where this lowerer stands — the same rule the `Subterm::Name` term-reference arm uses: what a door of its scope answers of it ([`Found`]), or a binder, one of the declaration's own or the one a name that resolved to nothing lowers to.
+    pub fn resolve_name(&self, name: &Name) -> Result<Result<Found, curios_core::Free>, Error> {
         if name.is_abs() || !name.is_single() {
             // A path that names nothing refuses the declaration it is written in and no other, as a bare name does below: it lowers to the same binder nothing binds, and what failed is filed under it.
             return match self.context.resolve_term_name(name) {
-                Ok(target) => Ok(curios_core::Mention::Declaration(
-                    curios_core::Global::Authored(target),
-                )),
+                Ok(found) => Ok(Ok(found)),
                 Err(error) => match error.into_unresolved() {
-                    Ok(failure) => Ok(curios_core::Mention::Local(
-                        self.context.unbound(&name.join(), failure),
-                    )),
+                    Ok(failure) => Ok(Err(self.context.unbound(&name.join(), failure))),
                     Err(error) => Err(error),
                 },
             };
@@ -574,35 +570,33 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // A local binder shadows any like-named module binding, and the innermost one wins. Resolving here — rather than emitting the spelling for a later stage to re-resolve — is what makes shadowing exact: two binders written `go` are two identities from the start.
         if let Some(id) = self.scope.borrow().innermost(name.head()).copied() {
             self.used.borrow_mut().insert(id);
-            return Ok(curios_core::Mention::Local(id));
+            return Ok(Err(id));
         }
         match self.context.resolve_bare(name) {
-            Some(full) => Ok(curios_core::Mention::Declaration(
-                curios_core::Global::Authored(full),
-            )),
+            Some(found) => Ok(Ok(found)),
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
             // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it.
-            None => {
-                let failure = self.unbound_here(name.head(), curios_core::Sought::Binding);
-
-                Ok(curios_core::Mention::Local(
-                    self.context.unbound(name.head(), failure),
-                ))
-            }
+            None => Ok(Err(self.unbound_here(
+                name.head(),
+                name.head(),
+                curios_core::Sought::Binding,
+            ))),
         }
     }
 
-    /// The term a written name lowers to: the method it names where it resolves into a concept's namespace ([`Context::method_of`]), and the declaration or binder it resolves to otherwise ([`reference()`]).
+    /// The term a written name lowers to: the method a door answers it names, and the declaration or binder it resolves to otherwise ([`reference()`]).
     fn term_reference(&self, name: &Name) -> Result<curios_core::Term, Error> {
-        let resolved = self.resolve_name(name)?;
-        if let curios_core::Mention::Declaration(curios_core::Global::Authored(target)) = &resolved
-            && let Some((concept, field)) = self.context.method_of(target)
-        {
-            return Ok(curios_core::Term::method(concept, field));
-        }
-
-        Ok(reference(resolved))
+        Ok(match self.resolve_name(name)? {
+            Ok(Found::Method(target)) => curios_core::Term::method(
+                curios_core::Global::Authored(target.without_last()),
+                target.last(),
+            ),
+            Ok(Found::Declaration(target)) => reference(curios_core::Mention::Declaration(
+                curios_core::Global::Authored(target),
+            )),
+            Err(binder) => reference(curios_core::Mention::Local(binder)),
+        })
     }
 
     // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, @valid = True/qed() }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
@@ -1237,15 +1231,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         name: &Name,
     ) -> Result<Result<curios_core::Global, curios_core::Free>, Error> {
         let resolved = match self.resolve_name(name)? {
-            curios_core::Mention::Declaration(global) => return Ok(Ok(global)),
-            curios_core::Mention::Local(local) => local,
+            // A method names no structure, and its path is the head the elaborator refuses as one.
+            Ok(found) => return Ok(Ok(curios_core::Global::Authored(found.target()))),
+            Err(binder) => binder,
         };
         if self.context.is_unbound(&resolved) {
             return Ok(Err(resolved));
         }
 
-        let failure = self.unbound_here(name.head(), curios_core::Sought::Structure);
-        Ok(Err(self.context.unbound(&name.join(), failure)))
+        Ok(Err(self.unbound_here(
+            &name.join(),
+            name.head(),
+            curios_core::Sought::Structure,
+        )))
     }
 
     /// The struct literal `lit` under the head it was written with, over its lowered `entries`. A head that names no structure refuses the declaration it is written in and no other, as any name that resolves to nothing does: the literal lowers to the binder its head does, its entries lowered for what they report and left out.
@@ -1264,12 +1262,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Why the bare name `label` resolved to nothing where this lowerer stands, sought as `sought`: the binders in scope here and the bindings of the module's scope are what the nearest name is chosen among.
-    fn unbound_here(&self, label: &str, sought: curios_core::Sought) -> curios_core::Unresolved {
+    /// The binder the bare name `label`, written as `written`, lowers to where it resolved to nothing this lowerer may read it as, sought as `sought`, filed with why ([`Context::unbound_bare`]): the binders in scope here and the bindings of the module's scope are what the nearest name is chosen among.
+    fn unbound_here(
+        &self,
+        written: &str,
+        label: &str,
+        sought: curios_core::Sought,
+    ) -> curios_core::Free {
         let scope = self.scope.borrow();
         let locals = scope.names();
 
-        self.context.unresolved_bare(label, sought, locals)
+        self.context.unbound_bare(written, label, sought, locals)
     }
 
     /// Resolves a pattern's nominal checks while its source scope still stands, and records the bindings its projections introduce in evaluation order.

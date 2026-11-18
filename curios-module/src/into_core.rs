@@ -16,8 +16,8 @@ use audit::*;
 mod lowered;
 use lowered::*;
 pub use lowered::{
-    ArchivedBaselineHalf, ArchivedConsulted, ArchivedHalfEntry, ArchivedLookup,
-    ArchivedLoweredDeclaration, BaselineHalf, Consulted, HalfEntry, Lookup, LookupReaders,
+    ArchivedBaselineHalf, ArchivedConsulted, ArchivedFound, ArchivedHalfEntry, ArchivedLookup,
+    ArchivedLoweredDeclaration, BaselineHalf, Consulted, Found, HalfEntry, Lookup, LookupReaders,
     LoweredDeclaration,
 };
 

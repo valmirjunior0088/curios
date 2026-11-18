@@ -239,6 +239,41 @@ fn a_family_taken_away_takes_its_namespace() {
     same_unit(&over, &whole);
 }
 
+/// A concept made an inductive of its name, with a constructor named as its method, and back: each module reading the namespace — through a `use`, through a re-export and by its absolute path — lowers as a whole lowering gives it, a method where the namespace is a concept's and a declaration where it is not.
+#[test]
+fn a_namespace_that_stops_or_starts_being_a_concepts_is_read_again_by_its_readers() {
+    let concept = "pub concept C(A: Type): pub Type {\n    meth: A,\n}\n";
+    let family = "pub induct C(A: Type): pub Type\n| meth()\nend\n";
+    for (name, first, then) in [("concept", concept, family), ("family", family, concept)] {
+        let root = files(
+            name,
+            &[
+                (
+                    "lib.crs",
+                    "pub mod m;\npub mod n;\npub mod p;\npub mod q;\npub mod r;\n",
+                ),
+                ("m.crs", first),
+                (
+                    "n.crs",
+                    "use /lib/m/{C};\n\npub let through_use : Type = C/meth(@Type);\n",
+                ),
+                ("p.crs", "pub use /lib/m/{C};\n"),
+                (
+                    "q.crs",
+                    "use /lib/p/{C};\n\npub let through_reexport : Type = C/meth(@Type);\n",
+                ),
+                ("r.crs", "pub let absolute : Type = /lib/m/C/meth(@Type);\n"),
+            ],
+        );
+        let baseline =
+            into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+        let (over, whole) = rewritten(&root, "m.crs", then, &baseline);
+
+        same_unit(&over, &whole);
+    }
+}
+
 /// A binding made private is seen by its module alone, and a binding added is seen as a whole lowering decides.
 #[test]
 fn a_binding_made_private_is_seen_by_its_module_alone() {
