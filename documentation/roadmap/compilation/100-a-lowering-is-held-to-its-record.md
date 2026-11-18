@@ -2,11 +2,11 @@
 
 Adopted: a census holds every declaration's lowering to its record and to its answers, so that what a recompile keeps is what a whole compile would make. [A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md) keeps a declaration's lowering over a baseline where its text stands and every name it resolved is answered as it was, resting on the claim `curios-module/src/into_core/lowered.rs` opens with: a declaration reads its scope through two doors alone, what they answer is everything its lowering reads of a name, and what they read is what its record names. The claim is held by reading alone, and a read past it goes unseen until a recompile keeps a stale lowering, as a concept's method read past the answer did: nothing lowers a declaration with no more than its record, or its answers, in scope. Settled with the user on 2026-11-18.
 
-The next step is stage 5, a delivery.
+The next step is stage 6, a delivery.
 
-## What is wrong today, and where
+## What is missing
 
-- **Nothing lowers one declaration alone.** `process_items` (`curios-module/src/into_core.rs`) lowers a declaration in its arms over `TopItem`, inline in the walk, beside a struct, `Lowering`, whose documentation opens with a line about a test's list that describes nothing it holds.
+- **A scope made of a record or of its answers.** A declaration is lowered by `lower_declaration` (`curios-module/src/into_core/declaration.rs`) in the context the walk builds over the whole of its unit and the units in scope; nothing builds one holding only the entries a record names, or only what its trace answered, and so nothing lowers or asks a declaration in one.
 
 ## What is known
 
@@ -32,7 +32,6 @@ The next step is stage 5, a delivery.
 
 ## Stages
 
-5. **A declaration's lowering is a function of its own.** `process_items`' arms over `TopItem`, from a `let` to a `satisfy`, move into one function the walk calls with the context and the lowering state, and `Lowering`'s documentation is its own. Check: `/std`'s image digest unchanged; `curios-module`'s suites. One commit.
 6. **The census.** Behind `curios-module`'s `test_support`, a scope of given entries — a record's, valued from its unit and its body's scope at its place, or a trace's answers alone — and the two checks over every declaration of `/std`, beside `std_replay_census`; fixtures where an entry taken from a record answers otherwise and a changed answer lowers otherwise, so each check refuses what it is for. Its time over `/std`, timed at its commit, settles the open question. One commit.
 
 ## Verification
