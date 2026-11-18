@@ -7,6 +7,7 @@ mod tests;
 
 use {
     crate::{Context, EveryPosition, Structural, reduce},
+    curios_analysis::held_pairs,
     curios_core::{
         Argument, Families, Field, Free, FuncType, Instance, Level, Match, Proj, Quality,
         ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintOrigin,
@@ -33,9 +34,18 @@ pub fn identify_universe_levels(
     that: &Term,
     curried: Curried,
 ) -> Result<Identification, ReduceError> {
+    // Two projections of one member of a recursive group are told apart only at the positions the least fixpoint of its unfolding holds ([`held_pairs`]), as the certifier's `rec_instances` compares them.
+    let held = match (this.as_rec_proj(), that.as_rec_proj()) {
+        (Some(_), Some(_)) if this != that => held_pairs(context, this, that),
+        _ => None,
+    };
     let alignment = match curried {
-        Curried::Declined => align_universe_levels(context, this, that, &*context)?,
-        Curried::Compared => align_universe_levels(context, this, that, &Structural(context))?,
+        Curried::Declined => {
+            align_universe_levels(context, this, that, &*context, held.as_deref())?
+        }
+        Curried::Compared => {
+            align_universe_levels(context, this, that, &Structural(context), held.as_deref())?
+        }
     };
     let (compared, irrelevant) = match alignment {
         Alignment::Pending {
@@ -92,7 +102,7 @@ pub fn hold_at_one_instance(
 ) -> Result<bool, ReduceError> {
     let Alignment::Pending {
         compared, sorts, ..
-    } = align_universe_levels(context, this, that, &EveryPosition)?
+    } = align_universe_levels(context, this, that, &EveryPosition, None)?
     else {
         return Ok(false);
     };
@@ -131,7 +141,7 @@ pub fn levels_clash_to_conversion(
     that: &Term,
 ) -> Result<bool, ReduceError> {
     Ok(matches!(
-        align_universe_levels(context, this, that, context)?,
+        align_universe_levels(context, this, that, context, None)?,
         Alignment::GroundUnequal | Alignment::Curried { decided: true, .. }
     ))
 }
@@ -145,19 +155,27 @@ pub fn levels_clash_to_conversion(
 /// `families` is the caller's reading of the vectors: conversion's, under which the pair at an irrelevant position is set apart, the structural arms', under which a curried head keeps every level, or `()`, under which every level is compared. Every pair the walk hands back is the ambient declaration's to decide, a group binding no universe for a level to be read under.
 ///
 /// A curried pair that still differs once zonked outranks a pending commitment, never a refusal: nothing can be committed for a pair whose question is still open, while two unequal ground levels at a compared position decide against the fast path whatever a curried head turns out to be.
+///
+/// `held`, where the caller has it, is the pairs two projections of one group are told apart at ([`held_pairs`]): a compared pair outside it is set apart with the irrelevant ones, two instances apart there alone being one.
 fn align_universe_levels(
     context: &Context,
     this: &Term,
     that: &Term,
     families: &impl Families,
+    held: Option<&[(Level, Level)]>,
 ) -> Result<Alignment, ReduceError> {
     let Some(differences) = this.level_differences(that, |_| false, families) else {
         return Ok(Alignment::Distinct);
     };
 
-    let irrelevant = differences.irrelevant;
+    let mut irrelevant = differences.irrelevant;
     let mut compared = Vec::new();
     for (this_level, that_level) in differences.compared {
+        let unheld = held.is_some_and(|held| {
+            !held
+                .iter()
+                .any(|pair| pair.0 == this_level && pair.1 == that_level)
+        });
         let this_level = context
             .universes()
             .zonk(&this_level)
@@ -167,6 +185,10 @@ fn align_universe_levels(
             .zonk(&that_level)
             .map_err(ReduceError::Universe)?;
         if this_level == that_level {
+            continue;
+        }
+        if unheld {
+            irrelevant.push((this_level, that_level));
             continue;
         }
         if this_level.atoms.is_empty() && that_level.atoms.is_empty() {

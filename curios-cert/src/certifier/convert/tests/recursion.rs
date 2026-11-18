@@ -283,8 +283,8 @@ fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
     );
 }
 
-/// `rec f : (t: Type⟨${level}⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is its level, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding.
-const POLYMORPHIC_FOLD: &str = "#{node = Rec} (let f: (t: #{level = ${level}} Type, x: #NatType, y: #NatType) -> #NatType = (t: #{level = ${level}} Type, x: #NatType, y: #NatType) => #{goal = #NatType} match y | 0 => 0 | pred + 1 => f(t, 0, pred) end; f)";
+/// `rec f : (t: Type⟨${level}⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, Type⟨${level}⟩, p); f` — the projection of a one-member group whose only universe data is its level, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding; it hands `x` the type at its level, so every unfolding holds the level where conversion compares it, two instances apart in a level no unfolding held being one term (`curios_analysis::held_pairs`).
+const POLYMORPHIC_FOLD: &str = "#{node = Rec} (let f: (t: #{level = ${level}} Type, x: #NatType, y: #NatType) -> #NatType = (t: #{level = ${level}} Type, x: #NatType, y: #NatType) => #{goal = #NatType} match y | 0 => 0 | pred + 1 => f(t, #{level = ${level}} Type, pred) end; f)";
 
 /// [`POLYMORPHIC_FOLD`] at `level` applied to `Nat`, a discarded argument and a symbolic count, each a word over the hypotheses the caller opens.
 fn fold_call(level: &str, discarded: &str) -> String {

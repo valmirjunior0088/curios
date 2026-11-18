@@ -54,7 +54,9 @@ pub use positivity::{
 };
 
 mod variance;
-pub use variance::{HeldLevels, VarianceVectors, held_by, held_levels, variance_vectors};
+pub use variance::{
+    HeldLevels, VarianceVectors, held_by, held_levels, held_pairs, variance_vectors,
+};
 
 mod totality;
 use totality::*;

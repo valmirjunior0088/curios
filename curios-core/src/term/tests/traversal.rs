@@ -406,6 +406,67 @@ fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
     );
 }
 
+/// A pair generalized over where it differs: each differing position takes a level of its own, a ground `Type 0` among them, two positions holding one pair of levels in two pairs of nodes take two, and a position the two agree at keeps its level. Terms apart in anything but levels generalize to nothing.
+#[test]
+fn generalized_levels_give_each_differing_position_a_level_of_its_own() {
+    let u_level = Level::param(UniverseParam(0));
+    let u = Term::type_at(u_level.clone());
+    let ground = Term::type_at(Level::zero());
+    let mut next = 10;
+    let mut placeholder = || {
+        let level = Level::param(UniverseParam(next));
+        next += 1;
+        level
+    };
+
+    let generalized = Term::tuple([
+        ground.clone(),
+        u.clone(),
+        Term::type_at(Level::zero()),
+        u.clone(),
+    ])
+    .generalized_levels(
+        &Term::tuple([
+            u.clone(),
+            u.clone(),
+            Term::type_at(u_level.clone()),
+            ground.clone(),
+        ]),
+        &mut placeholder,
+    )
+    .expect("apart in levels alone");
+    let (p, q, r) = (
+        Level::param(UniverseParam(10)),
+        Level::param(UniverseParam(11)),
+        Level::param(UniverseParam(12)),
+    );
+    assert_eq!(
+        generalized.term,
+        Term::tuple([
+            Term::type_at(p.clone()),
+            u.clone(),
+            Term::type_at(q.clone()),
+            Term::type_at(r.clone())
+        ])
+    );
+    assert_eq!(
+        generalized.positions,
+        vec![
+            (p, Level::zero(), u_level.clone()),
+            (q, Level::zero(), u_level.clone()),
+            (r, u_level, Level::zero()),
+        ]
+    );
+    assert!(
+        Term::tuple([u.clone(), Term::intrinsic(Intrinsic::NatType)])
+            .generalized_levels(
+                &Term::tuple([u, Term::intrinsic(Intrinsic::BoolType)]),
+                &mut placeholder
+            )
+            .is_none()
+    );
+}
+
 /// The walk costs the graph, not the tree it unfolds to. Each side pairs a shared node with itself sixty times over, so it has sixty-one nodes and two to the sixtieth paths — the shape a reduct takes when a position built a character at a time mentions the one before it more than once. A walk per path never answers; this one reports the single differing pair once.
 #[test]
 fn level_differences_walk_the_graph_not_the_tree() {

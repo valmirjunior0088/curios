@@ -492,7 +492,7 @@ fn rec_is_alpha_equivalent() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-/// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => zero_arm | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is `level`. The recursive call keeps the body restuck, and it discards `x`. `zero_arm` is where a term-level difference between two such groups is planted.
+/// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => zero_arm | p + 1 => f(t, Type⟨level⟩, p); f` — the projection of a one-member group whose only universe data is `level`. The recursive call keeps the body restuck, and it discards `x`, handed `Type⟨level⟩` there so that every unfolding holds the level where conversion compares it: two instances apart in a level no unfolding held would be one term ([`curios_analysis::held_pairs`]), and these fixtures are about the ones that are two. `zero_arm` is where a term-level difference between two such groups is planted.
 fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term {
     let f = context.fresh(Some("f"));
     let t = context.fresh(Some("t"));
@@ -510,7 +510,7 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
             &pred,
             Term::apply(
                 Term::free_var(&f),
-                [Term::free_var(&t), nat(0), Term::free_var(&pred)],
+                [Term::free_var(&t), sort.clone(), Term::free_var(&pred)],
             ),
         ),
     );

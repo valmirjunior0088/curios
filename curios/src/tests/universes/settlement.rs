@@ -762,3 +762,41 @@ fn a_stuck_match_holds_the_levels_its_arms_reduce_to() {
         "a level an arm answers at: {definitions:?}"
     );
 }
+
+// **A recursive group holds the levels its unfolding holds.** `Held` holds a proposition `Ok` and `All` compute together, each meeting the other on its path: read by the least fixpoint of the group's unfolding, the list `match`'s element type `Rose(V)` is an annotation that holds no level, so `Held` keeps the one level a family stating the same would, irrelevant; `B` over the recursive `Balanced` alike. Read with every level the group mentions held, each took a second level, invariant.
+#[test]
+fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
+    let source = r#"
+        use /std/{List, Bool};
+        pub induct Rose(V: Type): pub Type
+        | leaf(v: V)
+        | node(kids: List(Rose(V)))
+        end
+        pub let Ok(@V: Type, t: Rose(V)) -> Prop =
+            match t | leaf(_) => Bool/True | node(kids) => All(kids) end
+        and All(@V: Type, l: List(Rose(V))) -> Prop =
+            match l | [] => Bool/True | [x, ..rest] => {Ok(x), All(rest)} end;
+        pub struct Held(V: Type): pub Type { t: Rose(V), @ok: Ok(t) }
+        pub induct Tree(V: Type): pub Type
+        | tip(v: V)
+        | fork(l: Tree(V), r: Tree(V))
+        end
+        pub let Balanced(@V: Type, t: Tree(V)) -> Prop =
+            match t | tip(_) => Bool/True | fork(l, r) => {Balanced(l), Balanced(r)} end;
+        pub struct B(V: Type): pub Type { t: Tree(V), @ok: Balanced(t) }
+        /std/print("held")
+        "#;
+
+    // Run whole, the program is certified too, which recomputes each vector and refuses an irrelevance it would deny.
+    assert_eq!(run(source), b"held");
+    let parameters = universe_parameters(source);
+    let families = family_variances(source);
+    for family in ["/Held", "/B"] {
+        assert_eq!(parameters.get(family), Some(&1), "{family}: {parameters:?}");
+        assert_eq!(
+            families.get(family).map(String::as_str),
+            Some("*"),
+            "{family}: {families:?}"
+        );
+    }
+}

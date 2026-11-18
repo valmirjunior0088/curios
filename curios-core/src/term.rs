@@ -1828,6 +1828,93 @@ pub struct LevelDifferences {
     pub sorts: Vec<(Quality, Quality)>,
 }
 
+/// Two terms apart in nothing but universe levels, one generalized over where they differ: what [`Term::generalized_levels`] answers.
+#[derive(Debug, Clone)]
+pub struct GeneralizedLevels {
+    /// The first term, a level of its own at each position the two differ at.
+    pub term: Term,
+    /// Each such level, beside the pair of levels the two terms hold at its position.
+    pub positions: Vec<(Level, Level, Level)>,
+}
+
+impl Term {
+    /// Where `self` and `other` differ in nothing but universe levels, `self` rebuilt with a level `placeholder` mints at each position the two differ at, beside each position's pair; `None` where they differ in anything else.
+    ///
+    /// The pair is aligned node by node, as [`Term::level_differences`] aligns it under a reading that sets nothing apart, a ground `Type 0` counted as a level, and a pair of nodes is generalized once however many paths reach it, so the result keeps `self`'s sharing and the walk costs what the two graphs are. Two positions holding the same pair of levels are two levels of their own: what a reader of the result asks about is a position, which a level's value does not name, a ground level having no head to tell its positions apart by. A pair of nodes met again through sharing is one position, and keeps the level it took first.
+    pub fn generalized_levels(
+        &self,
+        other: &Term,
+        mut placeholder: impl FnMut() -> Level,
+    ) -> Option<GeneralizedLevels> {
+        let mut positions = Vec::new();
+        let mut generalized = HashMap::new();
+        let term = generalize(
+            self,
+            other,
+            &mut placeholder,
+            &mut generalized,
+            &mut positions,
+        )?;
+
+        Some(GeneralizedLevels { term, positions })
+    }
+}
+
+/// One pair of nodes of [`Term::generalized_levels`]: each node masked of its children and its levels, the two masks held equal, each pair of children generalized, and `this` filled back with them and a level of its own wherever the two levels differ.
+fn generalize(
+    this: &Term,
+    that: &Term,
+    placeholder: &mut impl FnMut() -> Level,
+    generalized: &mut HashMap<(*const Node, *const Node), Term>,
+    positions: &mut Vec<(Level, Level, Level)>,
+) -> Option<Term> {
+    if Rc::ptr_eq(&this.inner, &that.inner) {
+        return Some(this.clone());
+    }
+    let key = (Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner));
+    if let Some(done) = generalized.get(&key) {
+        return Some(done.clone());
+    }
+
+    let mut visit = Visit::masking_levels(|_, _| None, Term::prop(), false);
+    let this_masked = this.look().traverse(&mut visit);
+    let this_parts = visit.take_masked_levels();
+    let that_masked = that.look().traverse(&mut visit);
+    let that_parts = visit.take_masked_levels();
+    if this_masked != that_masked
+        || this_parts.children.len() != that_parts.children.len()
+        || this_parts.levels.len() != that_parts.levels.len()
+    {
+        return None;
+    }
+
+    let mut children = Vec::with_capacity(this_parts.children.len());
+    for (this_child, that_child) in this_parts.children.iter().zip(&that_parts.children) {
+        children.push(recurse(|| {
+            generalize(this_child, that_child, placeholder, generalized, positions)
+        })?);
+    }
+    let levels = this_parts
+        .levels
+        .into_iter()
+        .zip(that_parts.levels)
+        .map(|(this_level, that_level)| match this_level == that_level {
+            true => this_level,
+            false => {
+                let level = placeholder();
+                positions.push((level.clone(), this_level, that_level));
+                level
+            }
+        })
+        .collect();
+
+    let mut filling = Visit::filling(|_, _| None, children, levels);
+    let rebuilt = this.rebuilt(this.look().traverse(&mut filling));
+    generalized.insert(key, rebuilt.clone());
+
+    Some(rebuilt)
+}
+
 /// A family's name or a definition applied in full, as conversion's raw spellings hold it: the name, the instance, and the arguments, a family's parameters then its indices.
 ///
 /// One spine supplies the parameters of a family with no index, or the indices of one with no parameter; a family with both is applied in two, `Fam.{u,v,w}(F)(N(F))`. A bare name is in full only for a family that takes neither. A definition is in full at the one spine its type's outer telescope asks for, and bare where it asks for none. Anything short of that, a former or a function passed as an argument or one waiting for an index, is not this.

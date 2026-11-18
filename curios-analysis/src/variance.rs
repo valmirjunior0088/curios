@@ -2,7 +2,7 @@
 //!
 //! A level is **irrelevant** when no constructor payload, index target, field or index type mentions it except through a position that is itself irrelevant: another family's irrelevant level, or an instance reduction removes. Every other level is **invariant**, and none is covariant. A parameter's type and the result sort go unread: they bound a level from below and say nothing of what an instance holds. An irrelevant level leaves two instances' constructor telescopes identical, targets included, so the two have the same inhabitants and every elimination reads the same telescopes.
 //!
-//! The walk reads each type's reduct, as [`positivity_vectors`](crate::positivity_vectors) does and for its reason: a type-level `let` has to be opened to see the former it names, and a `/sys` former unfolds to an intrinsic one that carries no level. A `match` the reduct is stuck on is read as conversion compares two of it ([`crate::opened`]): its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, so an instance an arm holds marks only what it reduces to. What the walk cannot see through marks every level it carries. That is the refusing direction, an invariant level being compared for equality as every level was before a vector existed.
+//! The walk reads each type's reduct, as [`positivity_vectors`](crate::positivity_vectors) does and for its reason: a type-level `let` has to be opened to see the former it names, and a `/sys` former unfolds to an intrinsic one that carries no level. A `match` the reduct is stuck on is read as conversion compares two of it ([`crate::opened`]): its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, so an instance an arm holds marks only what it reduces to. A member of a recursive group met again on its own path, or a call reduction leaves folded, holds the levels the least fixpoint of its group's unfolding holds ([`group_held`]), where the group terminates ([`crate::read_by_unfolding`]). What the walk cannot see through marks every level it carries. That is the refusing direction, an invariant level being compared for equality as every level was before a vector existed.
 //!
 //! The same walk over terms its caller chose answers which levels they hold ([`held_levels`], [`held_by`]): a definition's body where its levels have closed, a group's telescopes while they are open. What a held level means there is the caller's to say.
 //!
@@ -11,7 +11,10 @@
 //! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The certifier reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
 
 use {
-    crate::{Declarations, Env, binders, forceable, labelled, opened, rec_member},
+    crate::{
+        Declarations, Env, Segment, binders, call_path, forceable, labelled, least_fixpoint,
+        opened, peel, read_by_unfolding, rec_member,
+    },
     curios_common::recurse,
     curios_core::{
         Advance, Bound, Func, FuncType, Global, InductType, Instance, Level, LevelHead, RecGroup,
@@ -19,7 +22,7 @@ use {
         Variance, Variant, universe_metas, universe_params,
     },
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         hash::{Hash, Hasher},
     },
 };
@@ -173,6 +176,8 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, parts: &[Term]) -> (Marked, Opt
         entered: HashSet::new(),
         marked: Marked::default(),
         refused: None,
+        estimate: None,
+        groups: HashMap::new(),
     };
     for part in parts {
         walk.walk(part);
@@ -182,7 +187,7 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, parts: &[Term]) -> (Marked, Opt
 }
 
 /// The levels a walk found mentioned, a parameter of the declaration or a level its elaboration has not closed: the ones it met, or every one, where it met a term that may mention any.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq)]
 struct Marked {
     heads: BTreeSet<LevelHead>,
     every: bool,
@@ -231,6 +236,41 @@ pub fn held_levels<E: Env>(env: &mut E, parts: &[Term]) -> HeldLevels<E::Error> 
     }
 }
 
+/// The level pairs two projections of one member of a recursive group, apart in levels alone, are told apart at: those at the positions the least fixpoint of the group's unfolding holds (`group_held`), the group generalized over the positions the two differ at, a parameter above every one either names standing at each (`Term::generalized_levels`). `None` where the two are not two projections of one member apart in levels alone. A reduction the driver refuses holds every position, and so does a group not read by its unfolding (`read_by_unfolding`).
+///
+/// Two instances apart only at positions no unfolding holds unfold to terms apart only there, again and again, so they are one; what conversion compares of them is the rest.
+pub fn held_pairs<E: Env>(env: &mut E, this: &Term, that: &Term) -> Option<Vec<(Level, Level)>> {
+    let base = universe_params(this)
+        .into_iter()
+        .chain(universe_params(that))
+        .map(|UniverseParam(index)| index + 1)
+        .max()
+        .unwrap_or(0);
+    let mut next = base;
+    let generalized = this.generalized_levels(that, || {
+        let level = Level::param(UniverseParam(next));
+        next += 1;
+        level
+    })?;
+    let (group, _) = generalized.term.as_rec_proj()?;
+    let held = group_held(env, group);
+
+    Some(
+        generalized
+            .positions
+            .into_iter()
+            .filter(|(placeholder, _, _)| match &held {
+                Some(held) => {
+                    held.exhausted.is_some()
+                        || placeholder.atoms().any(|(head, _)| held.holds(head))
+                }
+                None => true,
+            })
+            .map(|(_, this_level, that_level)| (this_level, that_level))
+            .collect(),
+    )
+}
+
 /// The levels `declarations` hold while their own are still open: what [`variance_vectors`] reads of each, its index types, payloads, fields and targets, reported by head as [`held_levels`] reports a term's, where a vector has no parameter yet to report an open level under.
 ///
 /// One sweep, since nothing iterates: a family whose levels are open takes no parameter, and an occurrence of it inside its own group carries no instance. Every other family answers from the driver's registry.
@@ -266,6 +306,61 @@ struct Walk<'a, E: Env> {
     entered: HashSet<Entered>,
     marked: Marked,
     refused: Option<E::Error>,
+    /// The group whose held levels this walk is a step of computing, with the estimate so far, which a member of it met again reads ([`group_held`]).
+    estimate: Option<(RecGroup, Marked)>,
+    /// The held levels of each other group this walk met a member of again, computed once a walk; `None` for a group not read by its unfolding ([`read_by_unfolding`]).
+    groups: HashMap<RecGroup, Option<Marked>>,
+}
+
+/// The levels two instances of `group` are told apart by: what its members' unfoldings hold where conversion compares them, the least fixpoint over its members from none, a member met again contributing what the fixpoint holds so far. Each member's body is read under its leading lambdas, opened at fresh binders ([`peel`]), and its type is not read, as no parameter's type is. A reduction the driver refuses is kept, and the caller reads it as every level held. `None` for a group not read by its unfolding ([`read_by_unfolding`]), which the caller reads as written.
+pub fn group_held<E: Env>(env: &mut E, group: &RecGroup) -> Option<HeldLevels<E::Error>> {
+    curios_profile::profile!("group_held");
+    match read_by_unfolding(env, group) {
+        Ok(true) => {}
+        Ok(false) => return None,
+        Err(error) => {
+            return Some(HeldLevels {
+                heads: BTreeSet::new(),
+                every: true,
+                exhausted: Some(error),
+            });
+        }
+    }
+    let bodies = (0..group.length())
+        .map(|index| peel(env, group.member_body(index)).2)
+        .collect::<Vec<_>>();
+    let vectors = Vectors {
+        computed: BTreeMap::new(),
+    };
+
+    let mut exhausted = None;
+    let held = least_fixpoint(Marked::default(), |estimate| {
+        let mut walk = Walk {
+            env: &mut *env,
+            vectors: &vectors,
+            forcing: (0..group.length())
+                .map(|member| (group.clone(), member))
+                .collect(),
+            entered: HashSet::new(),
+            marked: estimate.clone(),
+            refused: None,
+            estimate: Some((group.clone(), estimate.clone())),
+            groups: HashMap::new(),
+        };
+        for body in &bodies {
+            walk.walk(body);
+        }
+        if exhausted.is_none() {
+            exhausted = walk.refused;
+        }
+        walk.marked
+    });
+
+    Some(HeldLevels {
+        heads: held.heads,
+        every: held.every,
+        exhausted,
+    })
 }
 
 /// A node as a walk entered it, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
@@ -305,6 +400,44 @@ impl<E: Env> Walk<'_, E> {
         self.marked
             .heads
             .extend(universe_metas(term).into_iter().map(LevelHead::Meta));
+    }
+
+    /// A call of a member of `group`, read by the levels its group's unfolding holds ([`group_held`]), and its arguments as every term is: the call's path is totality's ([`call_path`]). A group not read by its unfolding is read as written, the call with it.
+    fn call(&mut self, term: &Term, group: &RecGroup) {
+        let Some(held) = self.group_marks(group) else {
+            self.everything(term);
+            return;
+        };
+        self.marked.heads.extend(held.heads);
+        self.marked.every |= held.every;
+        let (_, steps) = call_path(term);
+        for argument in steps.iter().flat_map(Segment::arguments) {
+            self.walk(argument);
+        }
+    }
+
+    /// The levels `group`'s unfolding holds: the estimate where this walk is a step of computing them, and otherwise the fixpoint, computed once a walk, a reduction it refused holding every level. `None` for a group not read by its unfolding.
+    fn group_marks(&mut self, group: &RecGroup) -> Option<Marked> {
+        if let Some((estimating, estimate)) = &self.estimate
+            && estimating == group
+        {
+            return Some(estimate.clone());
+        }
+        if let Some(held) = self.groups.get(group) {
+            return held.clone();
+        }
+        let held = group_held(self.env, group).map(|found| {
+            let every = found.every || found.exhausted.is_some();
+            if self.refused.is_none() {
+                self.refused = found.exhausted;
+            }
+            Marked {
+                heads: found.heads,
+                every,
+            }
+        });
+        self.groups.insert(group.clone(), held.clone());
+        held
     }
 
     /// A nominal occurrence's instance: its levels at the family's invariant positions, and nothing at an irrelevant one.
@@ -366,25 +499,30 @@ impl<E: Env> Walk<'_, E> {
         }) {
             return;
         }
-        // A `rec` member this path is already inside is left folded, as positivity leaves it: forcing it again exposes the same node one level deeper.
+        // A `rec` member this path is already inside is not forced again, its unfolding reproducing itself one level deeper; and a call reduction leaves folded is stuck, no unfolding of it getting anywhere. Either holds the levels the least fixpoint of its group's unfolding holds ([`group_held`]), and its arguments are read as every term is.
         let member = rec_member(term);
-        let cyclic = member
+        if let Some((group, _)) = member
             .as_ref()
-            .is_some_and(|member| self.forcing.contains(member));
-        let (term, refused) = match cyclic {
-            true => (term.clone(), false),
-            false => self.forced(term),
-        };
+            .filter(|member| self.forcing.contains(member))
+        {
+            self.call(term, group);
+            return;
+        }
+        let (term, refused) = self.forced(term);
         if refused {
             self.everything(&term);
             return;
         }
-        let entered = match (cyclic, member) {
-            (false, Some(member)) => {
+        if let Some((group, _)) = rec_member(&term) {
+            self.call(&term, &group);
+            return;
+        }
+        let entered = match member {
+            Some(member) => {
                 self.forcing.push(member);
                 true
             }
-            _ => false,
+            None => false,
         };
 
         match &*term {
@@ -454,7 +592,7 @@ impl<E: Env> Walk<'_, E> {
                     self.level(level);
                 }
             }
-            // A group forcing left standing — a member this path is already inside, or one a refused reduction stopped at — is read as written rather than walked into: every level it mentions is the enclosing declaration's, and marking all of them is the refusing direction.
+            // A group forcing left standing — one a refused reduction stopped at, a member met again and a folded call being read by their group's fixpoint above — is read as written rather than walked into: every level it mentions is the enclosing declaration's, and marking all of them is the refusing direction.
             Subterm::Rec(_) => self.everything(&term),
             // A metavariable's solution may mention any level.
             Subterm::Metavar(_) => self.marked.every = true,

@@ -510,3 +510,49 @@ fn a_level_a_group_in_a_payload_holds_is_invariant() {
         );
     }
 }
+
+/// `f.{u, v}(A : Type v, n : Nat) : Type (u + 1)` is a group's member applied, a recursion stuck on `n` whose zero arm answers `Type u` and which states `v` only in its parameter's type, which no unfolding holds; `same` checks a value of one instance at another apart in `v` alone, and `held` at one apart in `u`, at two ground levels.
+const A_GROUP_AT_TWO_INSTANCES: &str = r#"
+#{universe_context = {parameter_count = 2}}
+let /f : (A: #{level = v} Type, n: #NatType) -> #{level = u + 1} Type =
+    (A: #{level = v} Type, n: #NatType) =>
+        (#{node = Rec}
+        (let m: (B: #{level = v} Type, k: #NatType) -> #{level = u + 1} Type =
+            (B: #{level = v} Type, k: #NatType) =>
+                #{goal = #{level = u + 1} Type}
+                match k
+                | 0 =>
+                    #{level = u}
+                    Type
+                | j + 1 =>
+                    m(B, j)
+                end;
+        m))(A, n);
+let /same : (n: #NatType, x: (#{universes = {levels = [0, 0]}} /f)(#NatType, n)) -> (#{universes = {levels = [0, 1]}} /f)(#NatType, n) =
+    (n: #NatType, x: (#{universes = {levels = [0, 0]}} /f)(#NatType, n)) =>
+        x;
+let /held : (n: #NatType, x: (#{universes = {levels = [0, 0]}} /f)(#NatType, n)) -> (#{universes = {levels = [1, 0]}} /f)(#NatType, n) =
+    (n: #NatType, x: (#{universes = {levels = [0, 0]}} /f)(#NatType, n)) =>
+        x;
+/std/Bool/True/qed()
+"#;
+
+// Two instances of one group apart only at a position no unfolding holds unfold to terms apart only there, again and again, so they are one: `same` stands, its two calls stuck on `n` and apart in `v` alone. Apart where the zero arm answers a `Type`, two unequal ground levels are two terms, and `held` is refused.
+#[test]
+fn a_group_compares_at_the_levels_its_unfolding_holds() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GROUP_AT_TWO_INSTANCES}",
+        PROPOSITIONS,
+        A_GROUP_AT_TWO_INSTANCES
+    ));
+
+    assert!(mismatched(&verdicts, global("held")), "{verdicts:?}");
+    for symbol in ["f", "same"] {
+        assert!(
+            verdicts
+                .iter()
+                .all(|verdict| verdict.name != Some(global(symbol))),
+            "{symbol}: {verdicts:?}"
+        );
+    }
+}

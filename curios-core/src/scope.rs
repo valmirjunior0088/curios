@@ -10,7 +10,7 @@ use {
     curios_common::{Keyed, Symbol},
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
         convert::Infallible,
         fmt,
         hash::Hash,
@@ -1031,6 +1031,11 @@ enum Mode {
         levels: Vec<Level>,
         qualities: Option<Vec<Quality>>,
     },
+    /// [`Mode::MaskingLevels`] run backwards, its sorts left in the node: each child and each level of the node, in the order that mode stands them down in, takes the next of `children` and of `levels`, so a node masked once is rebuilt over parts of the caller's choosing ([`Term::generalized_levels`]).
+    Filling {
+        children: VecDeque<Term>,
+        levels: VecDeque<Level>,
+    },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
     /// Hash-consing: every term comes back as the canonical node of its spelling. `crossed` holds, for each node being rebuilt, the labels of the scopes crossed so far beneath it and above its children. The table remembers each input node it has met ([`Sharing`]), which is what keeps the input's sharing as well as the output's, so the visit keeps no memo of its own.
@@ -1173,6 +1178,21 @@ where
         }
     }
 
+    /// A visit that rebuilds one node over `children` and `levels`, in the order [`Visit::masking_levels`] takes them out of it — see [`Mode::Filling`].
+    pub(crate) fn filling(visit: F, children: Vec<Term>, levels: Vec<Level>) -> Self {
+        Self {
+            term_depth: 0,
+            visit,
+            mode: Mode::Filling {
+                children: children.into(),
+                levels: levels.into(),
+            },
+            // Filling never descends past one level, as masking does not.
+            memo: Memo::None,
+            spines: HashMap::new(),
+        }
+    }
+
     fn erasing_universes(visit: F) -> Self {
         Self {
             term_depth: 0,
@@ -1230,6 +1250,9 @@ where
                 levels.push(level.clone());
                 Level::constant(1)
             }
+            Mode::Filling { levels, .. } => levels
+                .pop_front()
+                .expect("a level for each one the mask stood down"),
             _ => level.clone(),
         }
     }
@@ -1294,6 +1317,11 @@ where
                 children.push(term.clone());
                 Some(placeholder.clone())
             }
+            Mode::Filling { children, .. } => Some(
+                children
+                    .pop_front()
+                    .expect("a child for each one the mask stood down"),
+            ),
             Mode::Pruning
             | Mode::Capturing { .. }
             | Mode::RewritingLevels(..)

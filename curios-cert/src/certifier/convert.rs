@@ -31,8 +31,8 @@ mod tests;
 use {
     super::{ByValue, Certifier, Converted, Error, InductAt, unfold_spelling},
     curios_analysis::{
-        Classes, Within, case_target_indices, holds_no_type, one_up_to_instances, pinned_instance,
-        struct_reaches_itself,
+        Classes, Within, case_target_indices, held_pairs, holds_no_type, one_up_to_instances,
+        pinned_instance, struct_reaches_itself,
     },
     curios_common::recurse,
     curios_core::{
@@ -1188,7 +1188,9 @@ fn unfolded_retry(
 /// `Some(verdict)` when `this` and `that` are projections of one recursive group at the same member, differing in nothing but universe levels — the verdict is whether those levels are equal under the item's hypotheses. `None` for any other pair, which the structural rules judge.
 ///
 /// This is the equation the `Instance` arm applies to its head, reaching one more head kind; a nominal node's levels compare by its family's variance instead (`Certifier::instances_eq`), and a projection keeps every one here, a family's former included: [`compare`] is what leaves a refusal of one to the nodes it builds. Terms that differ in nothing but levels — [`Term::level_differences`], which counts a ground `Type 0` as a level and walks the pair's graph rather than its tree — denote one term in every instance satisfying the assumed constraints when each differing pair sits at depth zero and is mutually entailed under them. Nothing is erased: `wrap(Type 1)` against `wrap(Type 2)` refuses on the levels, `wrap(Type 0)` against `wrap(Type 1)` on the skeletons. What it does not decide is refused, the safe direction: `Type 0` against a `Type u` the hypotheses force to zero has two skeletons.
-fn rec_instances(certifier: &Certifier, this: &Term, that: &Term) -> Option<bool> {
+///
+/// **Only the positions the group's unfolding holds tell two instances apart.** Two instances apart at a position no unfolding of the group holds — the least fixpoint of what its members' unfoldings hold ([`held_pairs`]) — unfold to terms apart only there, again and again, so they are one, and only the pairs at held positions are compared. That fixpoint is read only where a pair is apart under the hypotheses: equal pairs need no reading.
+fn rec_instances(certifier: &mut ByValue, this: &Term, that: &Term) -> Option<bool> {
     let (Some((_, left)), Some((_, right))) = (this.as_rec_proj(), that.as_rec_proj()) else {
         return None;
     };
@@ -1201,13 +1203,20 @@ fn rec_instances(certifier: &Certifier, this: &Term, that: &Term) -> Option<bool
         return Some(true);
     }
 
-    this.level_differences(that, |_| false, &())
-        .map(|differences| {
-            differences
-                .compared
-                .iter()
-                .all(|(this_level, that_level)| certifier.level_eq(this_level, that_level))
-        })
+    let differences = this.level_differences(that, |_| false, &())?;
+    if differences
+        .compared
+        .iter()
+        .all(|(this_level, that_level)| certifier.level_eq(this_level, that_level))
+    {
+        return Some(true);
+    }
+
+    let held = held_pairs(certifier, this, that)?;
+    Some(
+        held.iter()
+            .all(|(this_level, that_level)| certifier.level_eq(this_level, that_level)),
+    )
 }
 
 /// Whether `term` is a projection of a group at a family's former: a member whose body is lambdas over the nominal node it builds.
