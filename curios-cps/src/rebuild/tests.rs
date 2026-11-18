@@ -121,7 +121,7 @@ fn a_function_called_both_ways_is_copied_for_its_unique_call_within_the_allowanc
         copy_reuse_versions(&mut module, CopyBudget::new(allowance));
         module.verify().unwrap();
         assert_eq!(module.live_functions().count(), functions, "{module}");
-        assert_eq!(rebuilds(&module).len(), rebuilt, "{module}");
+        assert_eq!(in_place(&module).rows.len(), rebuilt, "{module}");
     }
 }
 
@@ -346,8 +346,8 @@ fn read_beside_a_construction(looped: bool) -> Module {
 /// A read a run comes back to with its value still bound names one object on every round, so what a round read is written into by no rebuild: the next round reads it again. Read once, it is rebuilt.
 #[test]
 fn a_read_a_loop_comes_back_to_names_one_object_on_every_round() {
-    assert_eq!(rebuilds(&read_beside_a_construction(false)).len(), 1);
-    assert_eq!(rebuilds(&read_beside_a_construction(true)).len(), 0);
+    assert_eq!(in_place(&read_beside_a_construction(false)).rows.len(), 1);
+    assert_eq!(in_place(&read_beside_a_construction(true)).rows.len(), 0);
 }
 
 /// `main` builds a `Pair` nothing else holds over a `Pair` it reads again afterwards, and hands the first to `bump`, which reads its slot and builds a `Pair` of what it read beside its parameter dying. Where `taken_apart`, `bump` also reads a slot of what it read.
@@ -471,8 +471,11 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
 /// A value something else holds, stored in a slot whose reads nothing takes apart, shares that slot and leaves the construction over it one nothing else holds, which is rebuilt where it dies. Stored in a slot some reader takes apart, it is a child, and the construction is shared with it.
 #[test]
 fn a_shared_payload_shares_its_slot_and_a_shared_child_its_construction() {
-    assert_eq!(rebuilds(&built_over_a_value_read_again(false)).len(), 1);
-    assert_eq!(rebuilds(&built_over_a_value_read_again(true)).len(), 0);
+    assert_eq!(
+        in_place(&built_over_a_value_read_again(false)).rows.len(),
+        1
+    );
+    assert_eq!(in_place(&built_over_a_value_read_again(true)).rows.len(), 0);
 }
 
 /// What a switch's edge hands a function's return is handed back as what a jump hands is: a constant a function returns that way is no value to write into where it is answered, and a value nothing else holds is rebuilt there by either route.
@@ -480,12 +483,12 @@ fn a_shared_payload_shares_its_slot_and_a_shared_child_its_construction() {
 fn a_switchs_edge_to_a_return_hands_back_what_a_jump_does() {
     for switch in [false, true] {
         assert_eq!(
-            rebuilds(&handed_back_by(switch, false)).len(),
+            in_place(&handed_back_by(switch, false)).rows.len(),
             0,
             "a constant handed back, by a switch's edge: {switch}"
         );
         assert_eq!(
-            rebuilds(&handed_back_by(switch, true)).len(),
+            in_place(&handed_back_by(switch, true)).rows.len(),
             1,
             "a value nothing else holds handed back, by a switch's edge: {switch}"
         );
@@ -643,12 +646,12 @@ fn arms_of_a_round(back: bool) -> Module {
 #[test]
 fn each_arm_of_a_round_rebuilds_what_it_takes_apart_where_the_round_binds_another_object() {
     assert_eq!(
-        rebuilds(&arms_of_a_round(false)).len(),
+        in_place(&arms_of_a_round(false)).rows.len(),
         4,
         "each arm rebuilds the inner `Pair` it read, and the loop's parameter"
     );
     assert_eq!(
-        rebuilds(&arms_of_a_round(true)).len(),
+        in_place(&arms_of_a_round(true)).rows.len(),
         0,
         "a loop handing its parameter back by a join writes into nothing a round read"
     );
@@ -761,7 +764,7 @@ fn built_over_a_number_handed_twice() -> Module {
 /// A number handed at two parameters of one entry holds nothing a rebuild writes, so it shares neither: the accumulator each round builds over is a value nothing else holds, and the continuation the loop hands it to rebuilds it.
 #[test]
 fn a_number_handed_at_two_parameters_shares_nothing_built_over_it() {
-    assert_eq!(rebuilds(&built_over_a_number_handed_twice()).len(), 1);
+    assert_eq!(in_place(&built_over_a_number_handed_twice()).rows.len(), 1);
 }
 
 /// `main` builds `p`, a `Pair` over a `Pair` `inner`, reads `p`'s second slot into `held`, and enters `k` with `held` at `a` and `p` at `b`, or, where `apart`, with the same read of another such `Pair`, `q`, at `a`. `k` reads `b`'s second slot, reads that one's slot, builds a `Pair` of it beside what it read dying, then reads `a`'s slot and halts on it.
@@ -884,7 +887,7 @@ fn child_beside_its_holder(apart: bool) -> Module {
 fn a_child_handed_beside_its_holder_is_written_into_by_nothing_the_other_reads() {
     for (apart, rebuilt) in [(false, 0), (true, 1)] {
         let module = child_beside_its_holder(apart);
-        let found = rebuilds(&module);
+        let found = in_place(&module).rows;
         assert_eq!(found.len(), rebuilt, "apart: {apart}: {found:?}\n{module}");
     }
 }
@@ -1026,7 +1029,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
 fn a_child_read_before_its_holder_is_handed_on_is_written_into_by_nothing_the_callee_reads() {
     for (apart, rebuilt) in [(false, 0), (true, 1)] {
         let module = child_read_before_its_holder_is_handed_on(apart);
-        let found = rebuilds(&module);
+        let found = in_place(&module).rows;
         assert_eq!(found.len(), rebuilt, "apart: {apart}: {found:?}\n{module}");
     }
 }
@@ -1258,10 +1261,193 @@ fn what_a_borrowed_continuation_parameter_reads_is_written_into_by_nothing_while
         for (apart, rebuilt) in [(false, 0), (true, 1)] {
             let module = written_while_read(write, apart);
             assert_eq!(
-                rebuilds(&module).len(),
+                in_place(&module).rows.len(),
                 rebuilt,
                 "{write:?}, apart: {apart}\n{module}"
             );
         }
     }
+}
+
+/// What `main` makes of the list it builds before an update of it at index 0, and reads after the update: nothing, or a second holder of the list's storage.
+#[derive(Debug, Clone, Copy)]
+enum Beside {
+    Nothing,
+    Window,
+    Append,
+    Concatenation,
+    Settle,
+}
+
+/// `main` builds a list of a value nothing else holds, or of literals, makes `beside` of it, updates it at index 0 and reads the update's length, and the length of what it made.
+fn updated_beside(beside: Beside, constant: bool) -> Module {
+    module_with(|module| {
+        let [v, l, m, h, u, a, b] =
+            ["v", "l", "m", "h", "u", "a", "b"].map(|name| module.add_value(Some(name.into())));
+        let exit = module.add_node(halt(vec![Atom::Value(a)]));
+        let after = match beside {
+            Beside::Nothing => exit,
+            _ => module.add_node(Node::LetIntrinsic {
+                result: b,
+                op: Intrinsic::ListLen,
+                args: vec![Atom::Value(h)],
+                next: exit,
+            }),
+        };
+        let measure = module.add_node(Node::LetIntrinsic {
+            result: a,
+            op: Intrinsic::ListLen,
+            args: vec![Atom::Value(u)],
+            next: after,
+        });
+        let update = module.add_node(Node::LetIntrinsic {
+            result: u,
+            op: Intrinsic::ListSet,
+            args: vec![Atom::Value(l), nat(0), Atom::Value(v)],
+            next: measure,
+        });
+        let (op, args) = match beside {
+            Beside::Nothing => (None, Vec::new()),
+            Beside::Window => (
+                Some(Intrinsic::ListSlice),
+                vec![Atom::Value(l), nat(0), nat(1)],
+            ),
+            Beside::Append => (
+                Some(Intrinsic::ListAppend),
+                vec![Atom::Value(l), Atom::Value(v)],
+            ),
+            Beside::Concatenation => (
+                Some(Intrinsic::ListConcat(2)),
+                vec![Atom::Value(m), Atom::Value(l)],
+            ),
+            Beside::Settle => (Some(Intrinsic::ListSettle), vec![Atom::Value(l)]),
+        };
+        let held = match op {
+            Some(op) => module.add_node(Node::LetIntrinsic {
+                result: h,
+                op,
+                args,
+                next: update,
+            }),
+            None => update,
+        };
+        let other = module.add_node(Node::LetValue {
+            result: m,
+            value: ValueExpr::List(vec![Atom::Value(v)]),
+            next: held,
+        });
+        let elements = match constant {
+            true => vec![nat(1), nat(2)],
+            false => vec![Atom::Value(v), Atom::Value(v)],
+        };
+        let built = module.add_node(Node::LetValue {
+            result: l,
+            value: ValueExpr::List(elements),
+            next: other,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: v,
+            op: Intrinsic::NatAdd,
+            args: vec![nat(3), nat(4)],
+            next: built,
+        })
+    })
+}
+
+/// An update writes into a list nothing else holds, and copies one whose storage something else may still read: a window of it, an append to it, a concatenation over it and a settled leaf of it each read it after the update, and a constant is every use's.
+#[test]
+fn an_update_writes_into_a_list_only_where_nothing_else_holds_it() {
+    assert_eq!(
+        in_place(&updated_beside(Beside::Nothing, false))
+            .lists
+            .len(),
+        1
+    );
+    assert_eq!(
+        in_place(&updated_beside(Beside::Nothing, true)).lists.len(),
+        0,
+        "a constant list is every use's"
+    );
+    for beside in [
+        Beside::Window,
+        Beside::Append,
+        Beside::Concatenation,
+        Beside::Settle,
+    ] {
+        let module = updated_beside(beside, false);
+        assert!(in_place(&module).lists.is_empty(), "{beside:?}\n{module}");
+    }
+}
+
+/// `main` builds a list of two `Pair`s nothing else holds, reads the first, builds a `Pair` of its slot beside it dying, and updates the list at `at` with what it built.
+fn element_written_back(at: u32) -> Module {
+    module_with(|module| {
+        let pair = module.add_row(Row {
+            debug_name: Some("Pair".into()),
+            slots: vec![Slot::Tag, Slot::Opaque],
+        });
+        let [v, p, q, l, e, f, n, u, a] = ["v", "p", "q", "l", "e", "f", "n", "u", "a"]
+            .map(|name| module.add_value(Some(name.into())));
+        let exit = module.add_node(halt(vec![Atom::Value(a)]));
+        let measure = module.add_node(Node::LetIntrinsic {
+            result: a,
+            op: Intrinsic::ListLen,
+            args: vec![Atom::Value(u)],
+            next: exit,
+        });
+        let update = module.add_node(Node::LetIntrinsic {
+            result: u,
+            op: Intrinsic::ListSet,
+            args: vec![Atom::Value(l), nat(at), Atom::Value(n)],
+            next: measure,
+        });
+        let build = module.add_node(Node::LetValue {
+            result: n,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(f)]),
+            next: update,
+        });
+        let read_slot = module.add_node(Node::LetIntrinsic {
+            result: f,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(e)],
+            next: build,
+        });
+        let read_element = module.add_node(Node::LetIntrinsic {
+            result: e,
+            op: Intrinsic::ListGet,
+            args: vec![Atom::Value(l), nat(0)],
+            next: read_slot,
+        });
+        let list = module.add_node(Node::LetValue {
+            result: l,
+            value: ValueExpr::List(vec![Atom::Value(p), Atom::Value(q)]),
+            next: read_element,
+        });
+        let second = module.add_node(Node::LetValue {
+            result: q,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+            next: list,
+        });
+        let first = module.add_node(Node::LetValue {
+            result: p,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+            next: second,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: v,
+            op: Intrinsic::NatAdd,
+            args: vec![nat(3), nat(4)],
+            next: first,
+        })
+    })
+}
+
+/// An element read at the index an update then writes over is held by nothing else once its list is unique, so what is built of it is rebuilt into it; read at another index than the one written, the list still holds it after the update, and it is copied.
+#[test]
+fn an_element_an_update_writes_over_is_held_by_nothing_else() {
+    let over = in_place(&element_written_back(0));
+    assert_eq!((over.rows.len(), over.lists.len()), (1, 1));
+
+    let beside = in_place(&element_written_back(1));
+    assert_eq!((beside.rows.len(), beside.lists.len()), (0, 1));
 }

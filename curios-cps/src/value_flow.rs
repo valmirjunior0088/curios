@@ -621,7 +621,7 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                                 flow(solver, source(&args[1]), FlowKey::Element)
                             });
                         }
-                        Intrinsic::ListSet => {
+                        Intrinsic::ListSet | Intrinsic::ListOverwrite => {
                             rules.add(move |solver| {
                                 flow(solver, source(&args[2]), FlowKey::Element)
                             });

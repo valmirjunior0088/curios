@@ -99,11 +99,13 @@ pub enum Intrinsic {
     ListSlice,
     /// `(list, index, element) -> list`: `list` with `element` at `index`, a copy of its run with the one slot written.
     ListSet,
+    /// `(list, index, element) -> list`: [`Intrinsic::ListSet`] of a list nothing else holds and nothing reads after it, written into the list itself where it is a leaf and copied otherwise. Minted only by the rebuild in place, never by the door.
+    ListOverwrite,
     /// The `List` mirror of [`Intrinsic::BytesRest`].
     ListRest,
     ListAppend,
     ListConcat(usize),
-    /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the ANF census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
+    /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since a payload is written once below its run, save by an overwrite of a leaf nothing else holds, and the leaf holds what it settles: `sharing.rs` keeps an overwrite from either while the other is read). Semantically the identity; representationally the settle the door inserts on stores into fields the ANF census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
     /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`Intrinsic::BytesChunk`].
     ListFlat(usize),
@@ -163,12 +165,17 @@ impl Intrinsic {
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` carrier as an append's does.
             (Self::BytesReplicate, _) => Repr::Nat,
             (
-                Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend | Self::ListSet,
+                Self::ListGet
+                | Self::ListSlice
+                | Self::ListRest
+                | Self::ListAppend
+                | Self::ListSet
+                | Self::ListOverwrite,
                 0,
             ) => Repr::List,
-            (Self::ListSet, 1) => Repr::Length,
+            (Self::ListSet | Self::ListOverwrite, 1) => Repr::Length,
             // The element an update writes is carried, as an appended one is.
-            (Self::ListSet, _) => Repr::Ref,
+            (Self::ListSet | Self::ListOverwrite, _) => Repr::Ref,
             (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Length,
             // A chunk element is one packed byte, carried at the `Nat` carrier like an append's.
             (Self::BytesChunk(_), _) => Repr::Nat,
@@ -432,6 +439,7 @@ impl Intrinsic {
             Self::FltToLeBytes => Repr::Bytes,
             Self::ListSlice
             | Self::ListSet
+            | Self::ListOverwrite
             | Self::ListRest
             | Self::ListAppend
             | Self::ListConcat(_)
@@ -543,6 +551,7 @@ impl Intrinsic {
             Self::BytesSlice
             | Self::ListSlice
             | Self::ListSet
+            | Self::ListOverwrite
             | Self::WindowExtent
             | Self::FltFma(_) => 3,
             Self::BytesConcat(arity)
@@ -575,6 +584,7 @@ impl Intrinsic {
             | Self::ListGet
             | Self::ListSlice
             | Self::ListSet
+            | Self::ListOverwrite
             | Self::ListRest
             | Self::TupleGet(_)
             | Self::RowGet(..)
@@ -746,6 +756,7 @@ impl Intrinsic {
             | Self::ListLen
             | Self::ListSlice
             | Self::ListSet
+            | Self::ListOverwrite
             | Self::ListRest
             | Self::ListAppend
             | Self::ListConcat(_)

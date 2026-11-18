@@ -413,11 +413,31 @@ impl Module {
         Ok(())
     }
 
-    /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, or one no flow reaches, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
+    /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, or one no flow reaches, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on, and so does an overwrite of a list. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
     fn verify_rebuilds(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
         let mut rows = None;
         for (function, _) in self.live_functions() {
             for node_id in function_nodes(self, function) {
+                // An overwrite writes into the list it is handed, which goes by its result from there on.
+                if let Some(Node::LetIntrinsic {
+                    op: Intrinsic::ListOverwrite,
+                    args,
+                    next,
+                    ..
+                }) = self.node(node_id)
+                {
+                    let Some(Atom::Value(list)) = args.first() else {
+                        return Err(VerifyError(format!(
+                            "{function} node {node_id} overwrites an operand that is no value"
+                        )));
+                    };
+                    if self.read_after(*list, *next) {
+                        return Err(VerifyError(format!(
+                            "{function} node {node_id} overwrites {list}, which a run reads after it"
+                        )));
+                    }
+                    continue;
+                }
                 let Some(Node::LetValue {
                     value: ValueExpr::Rebuilt { of, row, slots },
                     next,

@@ -747,6 +747,7 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::ListGet => "List/get",
         Intrinsic::ListSlice => "List/slice",
         Intrinsic::ListSet => "List/set",
+        Intrinsic::ListOverwrite => "List/overwrite",
         Intrinsic::ListRest => "List/rest",
         Intrinsic::ListAppend => "List/append",
         Intrinsic::ListConcat(_) => "List/concat",

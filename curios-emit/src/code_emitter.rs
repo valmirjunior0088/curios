@@ -1319,7 +1319,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Lower an element read inside a natural loop: the site keeps, in locals of its own, the rope it last resolved, that rope's flat payload, its run's length and where the run starts in the payload, and a read of the same rope compares the index with the length and loads the element. Another rope is resolved by the shared `resolve` helper, which answers where its run already lies flat, without forcing — a leaf's payload, a flattened node's cache, a view's base payload at its offset — and the site keeps that and reads; a node never flattened takes `slow`, the shared `read` helper, which reads it as [A read of a run answers from a part already flat](../README.md#a-read-of-a-run-answers-from-a-part-already-flat) states, and the site forgets what it kept. `immediate` is the arm a value that is not a rope takes, behind the comparison: a `Bytes` read's i31 split.
     ///
-    /// The kept payload is safe to read for as long as the rope lives: a leaf's payload is exactly its run, the slots below a run's length are written once and never again, and a view's base is flat ([`curios-emit`'s README](../README.md#a-flattening-extends-the-payload-its-first-piece-wrote-last)). The bound is the run's `len`, never the payload's, which may hold room past it, and an index past it refuses as the helper does. What the site keeps is reset in the preheader of the innermost loop around it, so it lives through that loop alone: kept from the function's start instead, its default would ride through every loop before the site's, a register those loops pay for.
+    /// The kept payload is safe to read for as long as the rope lives: a leaf's payload is exactly its run, the slots below a run's length are written once and never again save by an overwrite of a leaf nothing else holds, which writes into the payload kept and hands on the same rope, and a view's base is flat ([`curios-emit`'s README](../README.md#a-flattening-extends-the-payload-its-first-piece-wrote-last)). The bound is the run's `len`, never the payload's, which may hold room past it, and an index past it refuses as the helper does. What the site keeps is reset in the preheader of the innermost loop around it, so it lives through that loop alone: kept from the function's start instead, its default would ride through every loop before the site's, a register those loops pay for.
     fn memoized_read(
         &mut self,
         carrier: &'a EmissionValueName,
@@ -2647,8 +2647,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cps::Intrinsic::ListSet => {
-                let set = self.context.table().list_set_func();
+            curios_cps::Intrinsic::ListSet | curios_cps::Intrinsic::ListOverwrite => {
+                let set = match op {
+                    curios_cps::Intrinsic::ListOverwrite => {
+                        self.context.table().list_overwrite_func()
+                    }
+                    _ => self.context.table().list_set_func(),
+                };
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
                 self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
                 self.emit_instrs(self.context.load_value_instrs(&args[2], LoadAs::Null));
@@ -2675,7 +2680,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
                 self.emit_instr(Self::is_leaf(&rope));
-                // A leaf answers itself; anything else answers a fresh leaf over its exact payload — an O(1) wrap where the forced payload is the run, since a run's slots are written once and never rewritten.
+                // A leaf answers itself; anything else answers a fresh leaf over its exact payload — an O(1) wrap where the forced payload is the run, since a run's slots are written once, save by an overwrite of a leaf nothing else holds, which the rebuild in place admits of neither while the other is read.
                 let leaf_arm = self.context.load_value_instrs(&args[0], LoadAs::List);
                 let mut build_arm = vec![curios_wasm::Instr::I32Const { value: 0 }];
                 build_arm.extend(self.context.load_value_instrs(&args[0], LoadAs::List));

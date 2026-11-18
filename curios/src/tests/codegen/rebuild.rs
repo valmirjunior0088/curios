@@ -233,6 +233,87 @@ const ACCESSED_TRIE: &str = r#"
 /// What the trie of [`ACCESSED_TRIE`] holds after a walk of `n` puts, summed.
 const ACCESSED_TRIE_SUM: &str = "fold(walk(n, build(2, n)), 0)";
 
+/// A list of four counters, each round of a loop adding to the one its round names: read at an index, then updated there.
+const BUMPS: &str = r#"
+let bump(k: Nat, l: List(Nat)) -> List(Nat) =
+    match k
+    | 0 => l
+    | j + 1 =>
+        let i = j % 4;
+        bump(j, match i < List/len(l) | true => List/set(l, i, List/get(l, i) + j) | false => l end)
+    end;
+"#;
+
+/// What the counters of [`BUMPS`] hold after `n` rounds, summed.
+const BUMPS_SUM: &str = "List/fold(bump(n, [n, n, n, n]), 0, (x, acc) => (acc + x) % 1000003)";
+
+/// A list updated while a window of it, an append to it and the list itself are still read, and a constant list updated while it is read.
+const KEPT_LISTS: &str = r#"
+let kept(n: Nat) -> Nat =
+    let l = [n, n + 1, n + 2, n + 3];
+    let w = List/slice(l, 1, 2);
+    let c = [..l, n];
+    let u = List/set(l, 1, 0);
+    let k = [1, 2, 3];
+    let v = List/set(k, 0, n);
+    List/get(l, 1) + List/get(w, 0) + List/get(c, 1) + List/get(u, 1) + List/get(k, 0) + List/get(v, 0);
+"#;
+
+/// A trie whose nodes hold their twigs in a list, an insert reading the twig at its key and updating the list there with what replaces it.
+const LIST_TRIE: &str = r#"
+induct N: Type
+| empty()
+| leaf(key: Nat, value: Nat)
+| branch(twigs: List(N))
+end
+let fresh(k: Nat, v: Nat, d: Nat) -> N =
+    match d
+    | 0 => N/leaf(k, v)
+    | e + 1 => N/branch([fresh(k, v, e), N/empty(), N/empty(), N/empty()])
+    end;
+let put(t: N, k: Nat, v: Nat) -> N =
+    match t
+    | empty() => t
+    | leaf(k0, _) => N/leaf(k0, v)
+    | branch(tw) =>
+        let d = k % 4;
+        match d < List/len(tw)
+        | true => N/branch(List/set(tw, d, put(List/get(tw, d), k / 4, v)))
+        | false => N/branch(tw)
+        end
+    end;
+let sum(t: N) -> Nat =
+    match t
+    | empty() => 0
+    | leaf(_, v) => v
+    | branch(tw) => List/fold(tw, 0, (c, acc) => (acc + sum(c)) % 1000003)
+    end;
+let walk(n: Nat, t: N) -> N =
+    match n
+    | 0 => t
+    | m + 1 => walk(m, put(t, m, m + 1))
+    end;
+"#;
+
+/// What the trie of [`LIST_TRIE`] holds after a walk of `n` puts, summed.
+const LIST_TRIE_SUM: &str = "sum(walk(n, fresh(0, n, 6)))";
+
+/// The updates of a list `module` writes into the list it is handed.
+fn overwrites(module: &Module) -> usize {
+    module
+        .live_nodes()
+        .filter(|(_, node)| {
+            matches!(
+                node,
+                Node::LetIntrinsic {
+                    op: Intrinsic::ListOverwrite,
+                    ..
+                }
+            )
+        })
+        .count()
+}
+
 /// The constructions keeping a slot of the node the function named `name` takes, which a rebuild in place leaves none of: each reads a field of it.
 fn copies_keeping_a_slot(module: &Module, name: &str) -> usize {
     let taken = module
@@ -825,6 +906,28 @@ fn a_probe_through_an_accessor_leaves_what_it_reads_to_be_rebuilt() {
     }
 }
 
+/// A loop that reads a list nothing else holds at an index and updates it there writes every update into the list it is handed, and answers as copying each does. Mutation-checked: with a list's read a consumption, the read and the update consume it twice and nothing is written in place.
+#[test]
+fn a_loop_updating_a_list_nothing_else_holds_writes_into_it() {
+    let (lowered, module) = modules(&program(BUMPS, BUMPS_SUM));
+    assert!(overwrites(&module) > 0, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(overwrites(&kept), 0);
+    assert_eq!(run(&module, "300"), run(&kept, "300"));
+}
+
+/// An insert into a trie holding its twigs in a list rebuilds every level it takes apart and writes the list at each into itself: the twig read at the key is held by nothing else once the list is updated there, and what a constant list stores elsewhere in the program says nothing of what this list holds. Mutation-checked: with every list's elements followed as one, the constants the library's lists hold reach the twig read and nothing is rebuilt.
+#[test]
+fn an_insert_into_a_trie_of_listed_twigs_writes_every_level_in_place() {
+    let (lowered, module) = modules(&program(LIST_TRIE, LIST_TRIE_SUM));
+    assert!(rebuilds_of(&module, "/N") > 0, "{module}");
+    assert!(overwrites(&module) > 0, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "300"), run(&kept, "300"));
+}
+
 /// A node holding its twigs in a structure the program takes apart and puts back but never builds: every construction of the structure is rewritten into a rebuild, which leaves the flow none to start from, and the program compiles and answers as the same program building one twig structure does.
 #[test]
 fn a_structure_the_program_only_rebuilds_compiles_and_answers() {
@@ -1039,8 +1142,14 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
     let filtered = program(TWO_WALKS, WALK_FILTERED);
     let pairs = program(TWO_WALKS, PAIRS_AS_A_MAP);
     let accessed = program(ACCESSED_TRIE, ACCESSED_TRIE_SUM);
+    let bumps = program(BUMPS, BUMPS_SUM);
+    let kept_lists = program(KEPT_LISTS, "kept(n)");
+    let list_trie = program(LIST_TRIE, LIST_TRIE_SUM);
     for (source, n) in corpus.into_iter().chain([
         (accessed, "300"),
+        (bumps, "300"),
+        (kept_lists, "300"),
+        (list_trie, "300"),
         (heap, "300"),
         (spines, "300"),
         (removals, "300"),

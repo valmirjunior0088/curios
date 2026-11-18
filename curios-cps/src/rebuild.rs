@@ -1,10 +1,10 @@
-//! The rebuild in place: each function some calls hand a unique value at every parameter it takes apart, and others a shared one, copied for the first as its reuse version; then each construction of a row the module proves may write into a value of that row dying beside it becomes a [`ValueExpr::Rebuilt`] of that value, writing the slots it changes.
+//! The rebuild in place: each function some calls hand a unique value at every parameter it takes apart, and others a shared one, copied for the first as its reuse version; then each construction of a row the module proves may write into a value of that row dying beside it becomes a [`ValueExpr::Rebuilt`] of that value, writing the slots it changes, and each update of a list nothing else holds an [`Intrinsic::ListOverwrite`] of it.
 
 use {
     super::{
-        Atom, Callee, CopyBudget, CopyPlan, FunctionId, Module, Node, NodeId,
+        Atom, Callee, CopyBudget, CopyPlan, FunctionId, Intrinsic, Module, Node, NodeId,
         REBUILD_CLONE_NODE_LIMIT, REBUILD_COPY_NODE_LIMIT, ValueExpr, World, copy_bodies,
-        function_nodes, rebuilds, routes, rows_reaching,
+        function_nodes, in_place, routes, rows_reaching,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -15,7 +15,8 @@ pub fn rebuild_in_place(module: &mut Module) {
     copy_reuse_versions(module, CopyBudget::new(REBUILD_COPY_NODE_LIMIT));
     // A rebuild writes its value as a row some flow reaching the value builds, which is what the verifier holds it to; one that no flow builds the row for stands in an arm no run takes, behind a row test that flow rules out.
     let rows = rows_reaching(module);
-    for rebuild in rebuilds(module) {
+    let written = in_place(module);
+    for rebuild in written.rows {
         if !rows
             .get(&rebuild.of)
             .is_some_and(|rows| rows.may_be(rebuild.row))
@@ -28,6 +29,11 @@ pub fn rebuild_in_place(module: &mut Module) {
                 row: rebuild.row,
                 slots: rebuild.slots,
             };
+        }
+    }
+    for node in written.lists {
+        if let Some(Node::LetIntrinsic { op, .. }) = module.node_mut(node) {
+            *op = Intrinsic::ListOverwrite;
         }
     }
 }

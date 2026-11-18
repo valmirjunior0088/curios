@@ -979,6 +979,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
+        // Before `set`, which it falls back to.
+        if self.table.list_overwrite_used() {
+            ropes.emit_overwrite_func(
+                &self.table.list_rope(),
+                self.table.list_overwrite_func(),
+                self.table.list_set_func(),
+            );
+        }
+
         if self.table.list_set_used() {
             ropes.emit_set_func(
                 &self.table.list_rope(),
