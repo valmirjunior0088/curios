@@ -259,6 +259,7 @@ impl<'a> Zonk<'a> {
                                 origin.role.clone(),
                                 None,
                                 None,
+                                None,
                             )
                         }
                         MetavarOrigin::Hole => Error::CannotInfer,

@@ -118,7 +118,7 @@ fn multi_param_witnesses_share_a_first_head() {
     assert_eq!(run(source), b"false");
 }
 
-// Every concept parameter participates in the witness key, so a goal whose second parameter is never pinned parks and surfaces as an error at the end of the module — no accidental inference from the witness: the key it wanted still holds the parameter open.
+// Every concept parameter participates in the witness key, so a goal whose second parameter is never pinned parks and surfaces as an error at the end of the module — no accidental inference from the witness. A witness stands where the parameter would key it, so the report names the parameter as the argument owed and closes on writing it.
 #[test]
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
@@ -135,7 +135,34 @@ fn open_parameter_does_not_infer_from_the_witness() {
 
     let message = error(source).to_lowercase();
     assert!(
-        message.contains("wanted: `into(nat, ?)`"),
+        message.contains("uninferred argument")
+            && message.contains(
+                "the 2nd argument of the witness wanted, `into(nat, ?)`, was not inferred"
+            )
+            && message.contains("a witness stands for `into(nat, str)`")
+            && message.contains("supply it explicitly, `into/into(@...)`"),
+        "unexpected report:\n{message}"
+    );
+}
+
+// A key an open argument holds, where no witness agrees with what is known of it, misses for the ordinary reason: no witness stands for `Bool`, whatever the second argument would be. Mutation-checked: naming the argument for any open key reports this one as an uninferred argument too.
+#[test]
+fn an_open_key_no_witness_agrees_with_reports_no_witness() {
+    let source = r#"
+        use /std/{Bool, Nat, Str};
+        pub concept Into(A : Type, B : Type) : pub Type {
+            into(A) -> B
+        }
+        satisfy Into(Nat, Str) {
+            into(n) = Nat/to_str(n)
+        }
+        pub let discard(@A : Type, x : A) -> Nat = 0;
+        /std/print(Nat/to_str(discard(Into/into(true))))
+        "#;
+
+    let message = error(source).to_lowercase();
+    assert!(
+        message.contains("no witness") && !message.contains("uninferred argument"),
         "unexpected report:\n{message}"
     );
 }

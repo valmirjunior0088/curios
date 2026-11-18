@@ -13,9 +13,9 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, Outcome,
-        ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
-        declared, pending, reduce_with, resolved_for_display,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, OpenKey,
+        Outcome, ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge,
+        convert_outcome, declared, pending, reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, stuck_on_metavar},
     curios_common::{Mount, Plicity, Qualifier, Symbol, SyntaxName},
@@ -92,12 +92,14 @@ pub fn no_witness_error(
     pending(context, [goal], move |reporting, [goal]| {
         let need = diagnose_need(reporting, &goal, site.as_ref());
         let shape = diagnose_shape(reporting, &goal);
+        let open = diagnose_open(reporting, &goal);
         Error::no_witness(
             resolved_for_display(reporting, &goal),
             callee,
             role,
             need,
             shape,
+            open,
         )
     })
 }
@@ -135,6 +137,41 @@ fn diagnose_shape(context: &mut Reporting, goal: &Term) -> Option<Box<ShapeDiagn
         WitnessKey::from(wanted),
         bare,
     )))
+}
+
+/// When `goal`'s key holds an argument nothing inferred and a witness of its concept agrees with the key at every argument that is known, the half of its report that names the argument: the reader owes the argument, which would key the witness, and not a witness, which stands already. A key no witness agrees with misses for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
+fn diagnose_open(context: &mut Reporting, goal: &Term) -> Option<Box<OpenKey>> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+
+    let mut known = Vec::with_capacity(params.len());
+    for param in &params {
+        let head = reduce_with(context, param).ok()?;
+        known.push(match &*head {
+            Subterm::Metavar(_) => None,
+            _ => Some(HeadKey::of_whnf(&head)?),
+        });
+    }
+    let position = known.iter().position(Option::is_none)?;
+
+    let answered = context
+        .witness_keys(&concept_name)
+        .into_iter()
+        .map(|(key, _)| key)
+        .find(|key| {
+            key.heads().len() == known.len()
+                && key
+                    .heads()
+                    .iter()
+                    .zip(&known)
+                    .all(|(head, wanted)| wanted.as_ref().is_none_or(|wanted| wanted == head))
+        })?;
+
+    Some(Box::new(OpenKey {
+        concept: concept_name,
+        position,
+        answered,
+    }))
 }
 
 /// What the missing witness of `goal` was needed for, where its concept is one the compiler resolves for a form of its own ([`Need`]): an embedding, or what closes a program. `site` is where the goal was inserted, which an embedding's report reads what was written from.

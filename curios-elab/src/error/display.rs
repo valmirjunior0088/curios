@@ -14,8 +14,8 @@ use {
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{Code, Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
-        Anchors, ArgumentSite, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort,
-        Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
+        Anchors, ArgumentSite, CalleeId, Free, Global, HeadKey, Level, Mention, Quality,
+        ReduceError, Sort, Subterm, Term, UniverseMetaId, WitnessKey, WitnessRole,
     },
     curios_surface::{Spellable, Spelling},
     std::{collections::HashMap, fmt, rc::Rc},
@@ -1841,12 +1841,57 @@ impl Displayed<'_> {
                 ));
                 f.stating("a family's parameters and indices, and a record's parameters, name only declarations outside their group");
             }
+            // A key an open argument holds, a witness standing where the argument would key it: the argument is what is owed, said as an uninferred one is.
+            Error::NoWitness {
+                goal,
+                callee,
+                role,
+                open: Some(open),
+                ..
+            } => {
+                let needed = match role {
+                    Some(role) => format!(
+                        "needed by {} for {}",
+                        callee.phrase(spelling),
+                        role_said(role, callee, spelling)
+                    ),
+                    None => format!("needed by {}", callee.phrase(spelling)),
+                };
+                f.text("uninferred argument");
+                f.stating(format_args!(
+                    "the {} argument of the witness wanted, {}, was not inferred",
+                    ordinal(open.position),
+                    Code(goal.spelled(spelling))
+                ));
+                let heads = open
+                    .answered
+                    .heads()
+                    .iter()
+                    .map(|head| match head {
+                        HeadKey::Nominal(name) => spelling.symbol(name),
+                        head => head.to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                f.stating(format_args!(
+                    "a witness stands for `{}({heads})`",
+                    spelling.symbol(&open.concept)
+                ));
+                f.stating(needed);
+                if let Callee::Function(func) = &**callee {
+                    f.stating(format_args!(
+                        "supply it explicitly, `{}(@...)`",
+                        spelled_mention(func, spelling)
+                    ));
+                }
+            }
             Error::NoWitness {
                 goal,
                 callee,
                 role,
                 need,
                 shape,
+                open: None,
             } => {
                 let needed = match role {
                     Some(role) => format!(

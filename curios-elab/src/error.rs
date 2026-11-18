@@ -305,6 +305,17 @@ pub enum Need {
     Joining(Box<Joining>),
 }
 
+/// The half of a missing-witness report that names an argument its key holds open, computed when nothing inferred that argument and a witness of the concept agrees with the key at every argument that is known: what the reader owes is the argument, not a witness.
+#[derive(Debug)]
+pub struct OpenKey {
+    /// The concept the goal wants a witness of.
+    pub concept: Global,
+    /// Where the first argument nothing inferred stands in the key, from zero.
+    pub position: usize,
+    /// A key a witness stands under that agrees with the wanted one at every argument it knows.
+    pub answered: WitnessKey,
+}
+
 /// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
 #[derive(Debug)]
 pub struct ShapeDiagnosis {
@@ -1016,6 +1027,8 @@ pub enum Error {
         need: Option<Need>,
         /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
         shape: Option<Box<ShapeDiagnosis>>,
+        /// Present when the goal's key holds an argument nothing inferred and a witness answers the key where it is known: the report names the argument. Boxed for the reason `shape` is.
+        open: Option<Box<OpenKey>>,
     },
     /// Declarations that need one another: each reads another of them before it can finish — by a name it writes, or by the witness a goal of its resolves to. A definition may name itself and a witness may recurse through its *own* table entry, each bound by the group it becomes, but a cycle through two has no order to elaborate them in. Refused at its first member in source order, naming every member, so the refusal is stated in the language's own terms with the way out named.
     DeclarationCycle {
@@ -1678,6 +1691,7 @@ impl Error {
         role: Option<WitnessRole>,
         need: Option<Need>,
         shape: Option<Box<ShapeDiagnosis>>,
+        open: Option<Box<OpenKey>>,
     ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
@@ -1685,6 +1699,7 @@ impl Error {
             role: role.map(Box::new),
             need,
             shape,
+            open,
         }
     }
 
