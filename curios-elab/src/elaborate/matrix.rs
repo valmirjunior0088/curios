@@ -470,7 +470,7 @@ impl<'m> Compiler<'m> {
         recurse(|| self.columns(context, columns, lines, false, mode)).map(|(arm, _)| arm)
     }
 
-    /// The rows of a column a dispatch is about to split, with the column read by each row that writes a binder there: its name is bound to the column, and the row is under whichever case of the column the compiler puts it, none of which it states.
+    /// The rows of a column a dispatch is about to split, with the column read by each row that writes a binder there: its name is bound to the column, and the row is under whichever case of the column the compiler puts it, none of which it states. Which of them are strays is the column's to say once it knows its cases ([`Compiler::strayed`]).
     fn joined(&mut self, context: &mut Context, lines: &mut [Line<'m>], column: &Column) {
         for line in lines {
             match line.cells[0] {
@@ -481,8 +481,44 @@ impl<'m> Compiler<'m> {
                 Some((Shape::Pattern(Pattern::Wildcard(_)), _)) => line.cells[0] = None,
                 _ => {}
             }
-            if line.cells[0].is_none() {
-                self.strays[line.row] = true;
+        }
+    }
+
+    /// How many of the `places` a column puts a joined row under each such row is still reached at: every place but the ones a row before it closes, a row closing the case its pattern takes whole (`closes`) where it has no guard and nothing else it writes can fail. A row a binder of its own puts under one case alone is that case's arm, typed under its facts as a row writing the case's pattern is; one put under several stands on none of them ([An arm is taken by its patterns, then its guards](../../../documentation/design/surface/an-arm-is-taken-by-its-patterns-then-its-guards.md)).
+    fn reached<K: Ord>(
+        &self,
+        lines: &[Line<'m>],
+        closes: impl Fn(&Pattern) -> Option<K>,
+        places: usize,
+    ) -> Vec<(usize, usize)> {
+        let mut closed = BTreeSet::new();
+        let mut reached = Vec::new();
+        for line in lines {
+            match line.cells[0] {
+                None => reached.push((line.row, places.saturating_sub(closed.len()))),
+                Some((Shape::Pattern(pattern), _)) => {
+                    let unfailing = self.row(line.row).guards.is_empty()
+                        && line.cells[1..].iter().all(|cell| match cell {
+                            None => true,
+                            Some((Shape::Pattern(pattern), _)) => refutations(pattern) == 0,
+                            Some(_) => false,
+                        });
+                    if unfailing && let Some(case) = closes(pattern) {
+                        closed.insert(case);
+                    }
+                }
+                Some(_) => {}
+            }
+        }
+
+        reached
+    }
+
+    /// Mark each joined row of [`Compiler::reached`]'s count a stray where it is reached at more than one place.
+    fn strayed(&mut self, reached: &[(usize, usize)]) {
+        for &(row, places) in reached {
+            if places > 1 {
+                self.strays[row] = true;
             }
         }
     }
@@ -668,7 +704,15 @@ impl<'m> Compiler<'m> {
             .as_ref()
             .is_some_and(|fallthrough| fallthrough.row == line.row)
         {
-            return self.fallen(context, mode);
+            if self.strays[line.row] {
+                return self.fallen(context, mode);
+            }
+            // Reached at one case alone, it is that case's arm, read here under the case's facts.
+            let row = line.row;
+            let body = self.unfailing(context, row);
+
+            return elaborate(context, &body, mode)
+                .map_err(|error| self.in_alternative(row, error));
         }
         if !self.strays[line.row] {
             let row = line.row;
@@ -920,6 +964,18 @@ impl<'m> Compiler<'m> {
                 tags.entry(tag.as_string()).or_insert_with(|| tag.clone());
             }
         }
+        let named = self.reached(
+            &lines,
+            |pattern| match pattern {
+                Pattern::Variant { tag, args }
+                    if args.iter().all(|(_, arg)| refutations(arg) == 0) =>
+                {
+                    Some(tag.as_string())
+                }
+                _ => None,
+            },
+            tags.len(),
+        );
         // Each group in the order its rows are written, which is the order a leaf reads its candidates in.
         let mut groups: BTreeMap<String, Vec<Line<'m>>> =
             tags.keys().map(|tag| (tag.clone(), Vec::new())).collect();
@@ -966,6 +1022,11 @@ impl<'m> Compiler<'m> {
 
             // Whether a constructor no row names is left possible, which the rows that write a binder are the one arm of. With no such row each is asked as its turn comes, as a match written one level deep asks.
             let defaulted = !binders.is_empty() && split.leaves_unnamed(context, tags.values())?;
+            let reached = named
+                .iter()
+                .map(|&(row, places)| (row, places + usize::from(defaulted)))
+                .collect::<Vec<_>>();
+            self.strayed(&reached);
             let undecided = split.admit(context, groups.is_empty(), defaulted)?;
             split.declared(context, tags.values())?;
 
@@ -1192,6 +1253,15 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         let rest = columns;
         self.joined(context, &mut lines, &column);
+        let reached = self.reached(
+            &lines,
+            |pattern| match pattern {
+                Pattern::Bool(value) => Some(*value),
+                _ => None,
+            },
+            2,
+        );
+        self.strayed(&reached);
 
         let mut falses = Vec::new();
         let mut trues = Vec::new();
@@ -1342,6 +1412,17 @@ impl<'m> Compiler<'m> {
                         });
                 }
             }
+            let reached = self.reached(
+                &lines,
+                |pattern| match pattern {
+                    Pattern::Zero => Some(Natural::zero()),
+                    Pattern::Literal(value) => Some(value.clone()),
+                    Pattern::Character(character) => Some(Natural::from(*character as u32)),
+                    _ => None,
+                },
+                groups.len() + 1,
+            );
+            self.strayed(&reached);
             let mut others = Vec::new();
             for mut line in lines {
                 match line.cells.remove(0) {
@@ -1410,6 +1491,16 @@ impl<'m> Compiler<'m> {
             });
         }
 
+        let reached = self.reached(
+            &lines,
+            |pattern| match pattern {
+                Pattern::Zero => Some(false),
+                Pattern::Succ { .. } => Some(true),
+                _ => None,
+            },
+            2,
+        );
+        self.strayed(&reached);
         let mut zeros = Vec::new();
         let mut successors = Vec::new();
         for mut line in lines {
@@ -1478,6 +1569,9 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         let rest = columns;
         self.joined(context, &mut lines, &column);
+        // A run's cases are its lengths, which no row closes one at a time here.
+        let reached = self.reached(&lines, |_| None::<()>, usize::MAX);
+        self.strayed(&reached);
 
         // A string pattern takes a `Str` apart by its bytes, and a column a row writes one at holds strings alone: the row that writes the first, where one does.
         let whole =

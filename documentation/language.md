@@ -795,7 +795,7 @@ pub let inner_or(value: Option(Option(Nat))) -> Nat =
     end;
 ```
 
-Arms have no priority: the order they are written in never changes what a match means. Two arms may match one value only where the first written is a case of the other, so a general arm stands after its exceptions, as `some(_)` stands after `some(some(inner))`. Three refusals hold the rule, each naming a value as the pattern that matches it, with `_` wherever no case was read:
+Arms have no priority: the order they are written in never changes what a match means. Two arms may match one value only where the first written is a case of the other, so a general arm stands after its exceptions, as `some(_)` stands after `some(some(inner))`. A binder the arms before it leave one case to be reached at is that case's arm and rests on what the case states, as a pattern written there would: beside `| true =>`, `| c =>` knows `c` is `false`, and beside `| 0 =>` a binder is the successor's. One still reached at several cases rests on none of them. Three refusals hold the rule, each naming a value as the pattern that matches it, with `_` wherever no case was read:
 
 - two arms that match one value, neither a case of the other: `(true, _)` and `(_, true)` meet at `(true, true)`;
 - an arm no value reaches: one written after an arm it is a case of, and a final `_` after arms that cover every case already;

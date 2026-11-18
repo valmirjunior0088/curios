@@ -185,6 +185,44 @@ fn a_row_rests_on_its_own_case_under_cases_it_does_not_state() {
     }
 }
 
+// A row a binder of its own puts under one case alone is that case's arm, resting on it as a row that writes the case does: beside `0` a binder is the successor's, at the top and nested under a successor, and beside `true` it is `false`, so each bound asked there is met.
+#[test]
+fn a_binder_the_arms_before_it_leave_one_case_rests_on_that_case() {
+    let function = r#"
+        use /std/Bool/{Holds};
+        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat = n;
+        let past_one(n: Nat, @ok: Holds(1 < n)) -> Nat = n;
+        let off(b: Bool, @ok: Holds(Bool/not(b))) -> Nat = 7;
+        let f(n: Nat) -> Nat = match n | 0 => 0 | m => positive(m) end;
+        let g(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => match p | 0 => 1 | _ => past_one(n) end end;
+        let h(b: Bool) -> Nat = match b | true => 0 | c => off(c) end;
+        "#;
+
+    for answer in answers(function, &["f(3 + z)", "g(4 + z)", "h(z == 1)"]) {
+        assert_eq!(answer, b"743");
+    }
+}
+
+// A row a binder of its own puts under several cases is typed once, resting on none of them: `(_, _)` is reached at `0` beside `false` and at every successor, and `h(n)`, true at each by its own case, holds at neither as `n` stands; reached at the successor alone, the same call is met.
+#[test]
+fn a_binder_reached_at_several_cases_rests_on_none_of_them() {
+    let source = |arms: &str| {
+        fill!(
+            "use /std/{Bool, Nat};\n\nlet h(n: Nat) -> Bool = match n | 0 => true | _ + 1 => true end;\nlet pin(n: Nat, @ok: Bool/Holds(h(n))) -> Nat = n;\nlet f(n: Nat) -> Nat = ${arms};\n\n/std/print(Nat/to_str(f(5)))\n",
+            arms
+        )
+    };
+
+    let error = error(&source(
+        "match (n, n == 3) | (0, true) => 0 | (_, _) => pin(n) end",
+    ));
+    assert!(
+        error.contains("nothing discharged `Bool/Holds(h(n))`"),
+        "{error}"
+    );
+    assert_eq!(run(&source("match n | 0 => 0 | _ => pin(n) end")), b"5");
+}
+
 // A value no arm matches is reported as the pattern that matches it: the cases read on the way to it, and `_` wherever none was.
 #[test]
 fn a_value_no_arm_matches_is_reported_as_its_pattern() {
