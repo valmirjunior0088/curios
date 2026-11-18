@@ -13,7 +13,7 @@ path = "editors/tree-sitter/base"
 
 [grammars.curios_core]
 repository = "https://github.com/valmirjunior0088/curios"
-rev = "ce1f0e0f54c67123545d04ab59a57cd5b3a8cfb5"
+rev = "1d05bfa719e187932e6cee1da1adc3ee96cf511c"
 path = "editors/tree-sitter/core"
 
 [language_servers.curios]
