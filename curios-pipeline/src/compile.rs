@@ -36,7 +36,7 @@ use {
     },
 };
 
-/// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
+/// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it was written under — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
 #[derive(Debug, Clone, Default)]
 pub struct Findings {
     pub lints: Vec<Lint>,

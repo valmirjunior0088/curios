@@ -640,7 +640,7 @@ pub struct PreparedText {
     /// Every lint resolution alone decides — an import nothing resolved through, a declaration nothing reaches — worded here: what the unit's lints are gathered from where the unit is made, beside the binder lints elaboration decides from the sites each declaration's mints hold ([`curios_core::Mints::unread`]). Held by a unit lowered in this process alone: a unit stores the lints gathered of it, and a lowering over it reads its baseline half's.
     #[archived_with(curios_archive::Skip)]
     lints: Vec<curios_core::Lint>,
-    /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
+    /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_written`.
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
     broken: Vec<BrokenItem>,
@@ -2473,7 +2473,7 @@ struct Shared {
     imports: RefCell<curios_core::Imports>,
     // Every `use` selector and glob of the unit, in the order resolution met them.
     sites: RefCell<Vec<UseSite>>,
-    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
+    // The prefix of every mount some reference of this unit was written under — what decides whether a declared dependency is used. Recorded by the path as written, never by what it resolved into, so an absolute path and an import count alike and a re-export reaches the unit offering it.
     reached: RefCell<BTreeSet<Qualifier>>,
     // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
     anchoring: Anchoring,

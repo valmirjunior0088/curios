@@ -180,6 +180,60 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     assert!(one.stdout.is_empty());
 }
 
+/// A dependency is reached by the path a reference writes, never by the package it resolves into: `use /shape/m/{x}`, where `shape` re-exports `json`'s module, reaches `shape`, whose row the package needs, and leaves `json` unused, whose row it does not, `json` staying mounted through `shape`.
+#[test]
+fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into() {
+    let root = temporary("re-exported");
+    write(
+        &root,
+        "json/curios.toml",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
+    );
+    write(
+        &root,
+        "json/lib.crs",
+        "pub mod m\n    pub let x : /std/Nat = 1;\nend\n",
+    );
+    write(
+        &root,
+        "shape/curios.toml",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"shape\"\n\n[dependencies]\njson = { source = \"path\", path = \"../json\" }\n"
+        ),
+    );
+    write(&root, "shape/lib.crs", "pub use /json/{mod m};\n");
+    write(
+        &root,
+        "app/curios.toml",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n"
+        ),
+    );
+    write(
+        &root,
+        "app/lib.crs",
+        "use /shape/m/{x};\n\npub let count : /std/Nat = x;\n",
+    );
+    write(&root, "app/exe.crs", "/std/print(\"\")\n");
+    let app = root.join("app");
+
+    let entire = curios(&app, &["lint"], "");
+    let text = stdout(&entire);
+    assert!(
+        text.contains("unused dependency\n│  `json` is never used\n│  delete its row"),
+        "{text}"
+    );
+    assert!(!text.contains("`shape`"), "{text}");
+}
+
 /// A store that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's `store` node says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
 #[test]
 fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {

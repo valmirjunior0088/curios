@@ -813,11 +813,15 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// A reference was *written* under `spelled`: the mount owning that path is reached. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
+    /// A reference was *written* as `name`: the mount its written path lies in is reached — the one its head names for an absolute path, and for a relative one the one its head lies in where this body binds it, since every mount is one segment and owns what lies under it. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
     ///
-    /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/std/Nat` is `pub use /sys/{Nat}`, so resolving `use /std/{Nat}` lands on `/sys/Nat` and a record of the *target* would say every program reached `/sys`. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
-    fn note_spelled(&self, spelled: &Qualifier) {
-        if let Some(mount) = Mount::owning(self.reach.mounts(), spelled) {
+    /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/b/m` may be `pub use /c/{mod m}`, so resolving `use /b/m/{x}` lands in `/c`, and a record of the *target* would say the program never reached `/b`, the one dependency it names. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
+    fn note_written(&self, name: &Name) {
+        let root = match name.is_abs() {
+            true => Qualifier::from([name.head()]),
+            false => self.prefix.with(name.head()),
+        };
+        if let Some(mount) = Mount::owning(self.reach.mounts(), &root) {
             self.consult(|| Consulted::Mount(mount.prefix));
             self.shared.reached.borrow_mut().insert(mount.prefix);
         }
@@ -1343,7 +1347,6 @@ impl<'a> Context<'a> {
                 if let Some(site) = self.current_site {
                     self.qualifier_sites.insert(label.to_string(), site);
                 }
-                self.note_spelled(parent);
                 self.record_module_import(&target, label);
                 Ok(target)
             }
@@ -1367,7 +1370,6 @@ impl<'a> Context<'a> {
                 if let Some(site) = self.current_site {
                     self.binding_sites.insert(label.to_string(), site);
                 }
-                self.note_spelled(parent);
                 self.record_import(&target, label.to_string());
                 Ok(target)
             }
@@ -1397,7 +1399,6 @@ impl<'a> Context<'a> {
             if let Some(site) = self.current_site {
                 self.qualifier_sites.insert(label.to_string(), site);
             }
-            self.note_spelled(parent);
             self.record_module_import(&target, label);
             result.module = Some(target);
         }
@@ -1407,7 +1408,6 @@ impl<'a> Context<'a> {
             if let Some(site) = self.current_site {
                 self.binding_sites.insert(label.to_string(), site);
             }
-            self.note_spelled(parent);
             self.record_import(&target, label.to_string());
             result.binding = Some(target);
         }
@@ -1471,7 +1471,9 @@ impl<'a> Context<'a> {
     pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
-            self.import_module_label(&parent, &label)
+            let target = self.import_module_label(&parent, &label)?;
+            self.note_written(name);
+            Ok(target)
         })();
         result.map_err(|e| attach(e, name))
     }
@@ -1479,7 +1481,9 @@ impl<'a> Context<'a> {
     pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
-            self.import_binding_label(&parent, &label)
+            let target = self.import_binding_label(&parent, &label)?;
+            self.note_written(name);
+            Ok(target)
         })();
         result.map_err(|e| attach(e, name))
     }
@@ -1508,7 +1512,9 @@ impl<'a> Context<'a> {
                 ));
             }
 
-            self.import_dual_label(&parent, &label)
+            let resolved = self.import_dual_label(&parent, &label)?;
+            self.note_written(name);
+            Ok(resolved)
         })();
         result.map_err(|e| attach(e, name))
     }
@@ -1535,13 +1541,18 @@ impl<'a> Context<'a> {
             labels.sort();
             labels.dedup();
 
-            labels
+            let imported = labels
                 .into_iter()
                 .map(|label| {
                     let resolved = self.import_dual_label(&module, &label)?;
                     Ok((label, resolved))
                 })
-                .collect::<Result<Vec<_>, Error>>()
+                .collect::<Result<Vec<_>, Error>>()?;
+            // A glob that brings nothing in refers to nothing, so it reaches no mount.
+            if !imported.is_empty() {
+                self.note_written(name);
+            }
+            Ok(imported)
         })();
         result.map_err(|e| attach(e, name))
     }
@@ -1562,7 +1573,7 @@ impl<'a> Context<'a> {
 
             match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
                 Some(target) => {
-                    self.note_spelled(&parent);
+                    self.note_written(name);
                     self.asked(name, target);
                     Ok(target)
                 }
