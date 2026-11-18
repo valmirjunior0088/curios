@@ -14,6 +14,6 @@ WebAssembly-level optimization for the Curios native product via a statically li
 
 ### The last stage, over bytes
 
-**Decision.** Binaryen runs last, over the serialized module `curios_wasm::to_bytes` writes, and this crate knows nothing about any Curios IR. Semantic optimization belongs to `curios-anf`'s and `curios-cps`'s optimizers.
+**Decision.** Binaryen runs last, over the serialized module `curios_wasm::to_bytes` writes, and this crate knows nothing about any Curios IR. Semantic optimization belongs to `curios-anf`'s and `curios-cps`'s optimizers. What Binaryen makes of the module is good to have and no more: nothing the compiler guarantees rests on it, and a measurement of the pipeline is taken over the module it is handed. It stays a target of measurements of its own, since the module the compiler emits is written to be friendly to it.
 
-**Rationale.** What a program means is held in the IRs above, so a rewrite that needs it is written where it is known; Binaryen's passes need only the module, and taking it as bytes keeps the library behind one seam that names no Curios type.
+**Rationale.** What a program means is held in the IRs above, so a rewrite that needs it is written where it is known; Binaryen's passes need only the module, and taking it as bytes keeps the library behind one seam that names no Curios type. The module it is handed is the last one the compiler controls, so a guarantee or a figure resting on Binaryen's output would move with Binaryen's version rather than with the compiler.

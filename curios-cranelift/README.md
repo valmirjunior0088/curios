@@ -12,6 +12,12 @@ The compiling half of the Curios engine: Cranelift behind Wasmtime, on the engin
 
 **Rejected.** The feature, for the reason above. Bytes as what crosses, a declared module precompiled here and read back there: every module would then pass the one operation whose safety rests on its caller, where a `MachineCode` made here passes none.
 
+### What Cranelift makes is good to have
+
+**Decision.** The machine code Cranelift makes of a module is good to have and no more, as what Binaryen makes of it is ([`curios-binaryen`](../curios-binaryen/README.md#the-last-stage-over-bytes)): nothing the compiler guarantees rests on it, and a measurement of what the compiler makes is taken over the module it emits. It stays a target of measurements of its own, since the module the compiler emits is written to be friendly to it.
+
+**Rationale.** The emitted module is the last representation the compiler controls, so a guarantee or a figure resting on the machine code an engine makes of it would move with the engine's version rather than with the compiler.
+
 ### Compilation runs across threads, and only where compilation exists
 
 **Decision.** This crate takes Wasmtime's `parallel-compilation` beside the backend, so the native product compiles a module's functions across a thread pool, while the launcher, which never links this crate, links no pool: `cargo tree -p curios-native -e normal` names no `rayon`, as it names no `cranelift-codegen`.
