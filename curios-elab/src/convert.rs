@@ -2513,7 +2513,7 @@ impl Convert {
         }
     }
 
-    /// `term` at an occurrence of the family's own ([`Self::occurrence_of`]) where it is a family, and `None` where it is anything else or stands at such an occurrence already. A family arrives in three spellings: its name with no argument, the bare projection of its group, which is the name as reduction spells it, and a lambda over a nominal type, each family among that type's parameters taken the same way.
+    /// `term` at an occurrence of the family's own ([`Self::occurrence_of`]) where it is a family, and `None` where it is anything else or stands at such an occurrence already. A family arrives in two spellings: its name with no argument, and a lambda over a nominal type, which is the name as reduction spells it, each family among that type's parameters taken the same way.
     ///
     /// A type's instance is the one the two sides of its problem are compared at. A family is a function, and what stands at its irrelevant levels is each application's to choose: committed at the instance it was read off, the metavariable is a family of the one occurrence it was solved from. `?M` against the `Option` of an action at `Try(Option, Str, Type)` made the base monad one of payloads at that action's level alone, and a region binding a larger one through `Try/bind` or `Monad/bind` written out was refused where `!`, which is handed its monad, accepted it. At an occurrence of its own the family is what `Option` or `(A) => Try(Option, Str, A)` written there elaborates to, held to the instance it was read off by an equation where the family is invariant and by a weak one where it is not.
     fn family_at_its_own_occurrence(
@@ -2570,11 +2570,8 @@ impl Convert {
         Ok(family.map(|body| Term::func_marked(binders, body)))
     }
 
-    /// The family `term` is the bare name of, with the instance it stands at: a name of a family that takes a parameter, written with no argument or spelled by reduction as the bare projection of its group. A family that takes none is a type under its bare name, and its instance is compared.
+    /// The family `term` is the bare name of, with the instance it stands at: a name of a family that takes a parameter, written with no argument. A family that takes none is a type under its bare name, and its instance is compared.
     fn bare_family(context: &Context, term: &Term) -> Option<(Global, Universes)> {
-        if let Some((name, universes)) = term.bare_former() {
-            return Some((*name, universes.clone()));
-        }
         let Subterm::Instance(Instance { name, universes }) = &**term else {
             return None;
         };
@@ -2970,14 +2967,6 @@ impl Convert {
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
             ) && connectives_convert(context, &posed_pairs, &this, &that)?
             {
-                continue;
-            }
-
-            // A family's former applied in full on both sides is the two nodes it builds. Compared as nodes, their levels go by the family's variance; as two projections of one group they would be a level question over every level the instantiation touched, a binder's annotation included.
-            if let (Some(this_node), Some(that_node)) =
-                (this.applied_former(), that.applied_former())
-            {
-                self.enqueue(type_, this_node, that_node);
                 continue;
             }
 

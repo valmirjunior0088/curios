@@ -330,16 +330,6 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                 .is_some_and(|found| found.compared.is_empty()),
         ),
         (
-            "level differences over applied formers",
-            doubled(former_applied("Wrap", 0), 60)
-                .level_differences(
-                    &doubled(former_applied("Wrap", 1), 60),
-                    |_| false,
-                    &families,
-                )
-                .is_some_and(|found| found.compared.is_empty()),
-        ),
-        (
             "level differences pairing sorts",
             doubled(
                 Term::sort_at(Quality::Meta(QualityMetaId(0)), Level::meta(meta)),

@@ -52,11 +52,6 @@ pub trait Families {
             })
     }
 
-    /// Whether the walk reads an `induct`'s former applied in full by its group's projection as the node it builds. A reading that does not keeps the two groups aligned level by level, which is what a caller that must refuse on any level asks for.
-    fn reads_formers(&self) -> bool {
-        true
-    }
-
     /// Whether the walk sets apart, as curried, a former or a definition short of its full application whose two instances are apart in a level its vector calls irrelevant. Two such are one term where they meet at their function type, eta applying both to the same binders, and are compared level by level where they meet at any other; so a reading that sets them apart leaves the pair to a caller that goes on to the type it stands at, and one that does not aligns every level of them.
     fn sets_curried_apart(&self) -> bool {
         true
@@ -75,10 +70,6 @@ impl Families for () {
 
     fn struct_(&self, _: &Global) -> Option<&StructDecl> {
         None
-    }
-
-    fn reads_formers(&self) -> bool {
-        false
     }
 
     fn sets_curried_apart(&self) -> bool {

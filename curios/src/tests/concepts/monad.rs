@@ -214,7 +214,7 @@ const TRY_LAMBDA: Region = Region {
     bind: "Try/bind",
 };
 
-// `Try` over a bare nominal former: two instances of `Option` meet as `Try`'s parameter, each a projection of its group.
+// `Try` over a bare nominal former: two instances of `Option` meet as `Try`'s parameter, each unfolding to the lambda its entry makes.
 const TRY_OPTION: Region = Region {
     uses: "Str, Nat, Bool, Option, Try, Monad",
     small: "Try(Option, Str, Nat)",

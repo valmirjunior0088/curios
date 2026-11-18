@@ -1492,9 +1492,9 @@ impl Term {
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
     ///
-    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, at a projection of such a definition, by the vector of the field it reads ([`Families::field`]), at a definition applied in full whose value is a field of one of its binders, as that field of the argument the binder takes ([`Families::parameter_field`]), and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
+    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, at a projection of such a definition, by the vector of the field it reads ([`Families::field`]), and at a definition applied in full whose value is a field of one of its binders, as that field of the argument the binder takes ([`Families::parameter_field`]): two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart.
     ///
-    /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, two projections of one former that are not, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
+    /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
     ///
     /// **A sort is a difference only where the reading pairs it.** Two nodes apart in a sort are apart in more than a level, and the walk answers `None` for them, unless the reading pairs sorts ([`Families::pairs_sorts`]): then each node's sorts are stood down beside its levels, and the pairs two nodes differ in are handed back in [`LevelDifferences::sorts`], for a caller that carries one spelling to the other.
     pub fn level_differences(
@@ -1560,21 +1560,6 @@ impl Term {
                         .rev()
                         .map(|(this, that)| (true, this, that)),
                 );
-                continue;
-            }
-
-            // A former applied in full by its group's projection is read as the node it builds: the two instantiated groups differ in their binders' annotations as well, which no instance holds.
-            if families.reads_formers()
-                && let (Some(this_node), Some(that_node)) =
-                    (this.applied_former(), that.applied_former())
-            {
-                work.push((false, this_node, that_node));
-                continue;
-            }
-
-            // Two projections of a former short of its full application: read level by level they differ in their binders' annotations too, which eta never compares, so the whole pair is the caller's.
-            if families.sets_curried_apart() && this.curried_former() && that.curried_former() {
-                work.push((true, this, that));
                 continue;
             }
 
@@ -1723,96 +1708,6 @@ impl Term {
     pub fn applied_in_full(&self, families: &impl Families) -> Option<(&Global, &Universes)> {
         Applied::of(self, families).map(|applied| (applied.name, applied.universes))
     }
-
-    /// The nominal node this application is, where it applies an `induct`'s former in full by its group's projection: the spelling an instance of the family's name reduces to.
-    ///
-    /// Reduction hands an instance of a name whose value is a projection the group with its levels substituted in, so two such heads differ in the group's binder annotations as well as in the node its member's body builds. That body is lambdas over the node, `(E, A) => Result(E, A)` or `(F) => (D) => Fam(F)(D)`, so opening each telescope at the spine it was applied to is the node, with no reduction to run. The closed body is read for that shape first: opening a member substitutes the whole group into it, which is not worth paying for a recursive function.
-    pub fn applied_former(&self) -> Option<Term> {
-        let mut spines = Vec::new();
-        let mut head = self;
-        while let Subterm::Apply(apply) = head.look() {
-            spines.push(apply.params().collect::<Vec<_>>());
-            head = &apply.head;
-        }
-        let (group, index) = head.look().as_rec_proj()?;
-        if spines.is_empty() {
-            return None;
-        }
-        spines.reverse();
-
-        let mut peeked = group.iter().nth(index)?.body.body();
-        for spine in &spines {
-            let Subterm::Func(Func { telescope, .. }) = peeked.look() else {
-                return None;
-            };
-            if telescope.len() != spine.len() {
-                return None;
-            }
-            peeked = telescope.terminal();
-        }
-        if !matches!(peeked.look(), Subterm::InductType(_)) {
-            return None;
-        }
-
-        let mut opened = group.member_body(index);
-        for spine in &spines {
-            let Subterm::Func(Func { telescope, .. }) = opened.look() else {
-                return None;
-            };
-            opened = telescope.open(spine);
-        }
-
-        Some(opened)
-    }
-
-    /// The family this term is the bare former of, with the instance it stands at: a projection of an `induct`'s group applied to nothing, which is how reduction spells the family's name, the group's levels substituted in. `None` for every other term.
-    ///
-    /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
-    pub fn bare_former(&self) -> Option<(&Global, &Universes)> {
-        let (group, index) = self.as_rec_proj()?;
-
-        let mut binds = 0;
-        let mut peeked = group.iter().nth(index)?.body.body();
-        while let Subterm::Func(Func { telescope, .. }) = peeked.look() {
-            binds += 1;
-            peeked = telescope.terminal();
-        }
-        let Subterm::InductType(InductType {
-            name, universes, ..
-        }) = peeked.look()
-        else {
-            return None;
-        };
-
-        (binds > 0).then_some((name, universes))
-    }
-
-    /// Whether this is a projection of a former short of its full application: bare, or applied to fewer spines than its member's body binds, which eta would supply before either side is read.
-    ///
-    /// The closed body is read for the shape, as [`applied_former`](Self::applied_former) reads it and for its reason.
-    pub fn curried_former(&self) -> bool {
-        let mut spines = 0;
-        let mut head = self;
-        while let Subterm::Apply(apply) = head.look() {
-            spines += 1;
-            head = &apply.head;
-        }
-        let Some((group, index)) = head.look().as_rec_proj() else {
-            return false;
-        };
-        let Some(member) = group.iter().nth(index) else {
-            return false;
-        };
-
-        let mut binds = 0;
-        let mut peeked = member.body.body();
-        while let Subterm::Func(Func { telescope, .. }) = peeked.look() {
-            binds += 1;
-            peeked = telescope.terminal();
-        }
-
-        matches!(peeked.look(), Subterm::InductType(_)) && spines < binds
-    }
 }
 
 /// The level pairs two terms that differ in nothing else differ in, in traversal order, and the sort pairs where the reading pairs them: what [`Term::level_differences`] answers.
@@ -1822,7 +1717,7 @@ pub struct LevelDifferences {
     pub compared: Vec<(Level, Level)>,
     /// The pairs at positions a vector calls irrelevant, a family's, a definition's applied in full or a field's of one, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
     pub irrelevant: Vec<(Level, Level)>,
-    /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, every pair of two curried projections of one former, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
+    /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
     pub curried: Vec<(Level, Level)>,
     /// The sort pairs two nodes differ in, where the reading pairs sorts ([`Families::pairs_sorts`]); empty under every other reading, which finds two nodes apart in a sort apart.
     pub sorts: Vec<(Quality, Quality)>,

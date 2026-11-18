@@ -324,46 +324,6 @@ fn a_lambdas_binder_annotation_is_left_to_its_type() {
     );
 }
 
-// Two bare projections of one former differ in the level of the node the member builds and in its binders' annotations, which eta never compares: every pair is left to the type, whatever the family's vector says of the node. Under `()` the two groups are aligned level by level.
-#[test]
-fn two_bare_projections_of_a_former_are_left_to_their_type_whole() {
-    for variance in [STAR, EQUAL] {
-        let families = registry(&[("Wrap", shaped(1, 0, &[variance]))]);
-        let differences = former("Wrap", 0)
-            .level_differences(&former("Wrap", 1), |_| false, &families)
-            .unwrap();
-
-        assert!(differences.compared.is_empty() && differences.irrelevant.is_empty());
-        assert!(
-            !differences.curried.is_empty()
-                && differences.curried.iter().all(|found| *found == pair(0, 1))
-        );
-    }
-
-    assert!(
-        former("Wrap", 0)
-            .level_differences(&former("Wrap", 1), |_| false, &())
-            .is_some_and(|found| !found.compared.is_empty() && found.curried.is_empty())
-    );
-}
-
-// An `induct`'s former is a projection of its group, and reduction hands it over with the levels substituted into the whole group, binder annotations included. Applied in full it is read as the node its member builds; under `()` the two groups are aligned level by level.
-#[test]
-fn an_applied_former_is_read_as_the_node_it_builds() {
-    let families = registry(&[("Wrap", shaped(1, 0, &[STAR]))]);
-    let former = |level| former_applied("Wrap", level);
-
-    assert_eq!(
-        former(0).level_differences(&former(1), |_| false, &families),
-        found(Vec::new(), vec![pair(0, 1)])
-    );
-    assert!(
-        former(0)
-            .level_differences(&former(1), |_| false, &())
-            .is_some_and(|found| !found.compared.is_empty() && found.irrelevant.is_empty())
-    );
-}
-
 // Two different families applied in full differ in more than levels.
 #[test]
 fn two_families_are_not_one_term_up_to_levels() {

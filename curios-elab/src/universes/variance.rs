@@ -58,7 +58,7 @@ impl Families for Structural<'_> {
     }
 }
 
-/// The reading of a caller that holds two spellings of one term to one instance, or carries one to the other — a refinement key's hit and the reduction table's second door: no family and no definition, so every level is compared where it stands, no former is read as its node, nothing is set apart as curried, and sorts are paired beside levels, a sort being as much a part of an instance as a level is.
+/// The reading of a caller that holds two spellings of one term to one instance, or carries one to the other — a refinement key's hit and the reduction table's second door: no family and no definition, so every level is compared where it stands, nothing is set apart as curried, and sorts are paired beside levels, a sort being as much a part of an instance as a level is.
 pub struct EveryPosition;
 
 impl Families for EveryPosition {
@@ -68,10 +68,6 @@ impl Families for EveryPosition {
 
     fn struct_(&self, _: &Global) -> Option<&StructDecl> {
         None
-    }
-
-    fn reads_formers(&self) -> bool {
-        false
     }
 
     fn sets_curried_apart(&self) -> bool {

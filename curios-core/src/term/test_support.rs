@@ -57,10 +57,6 @@ impl Families for PairingSorts {
         None
     }
 
-    fn reads_formers(&self) -> bool {
-        false
-    }
-
     fn sets_curried_apart(&self) -> bool {
         false
     }
@@ -136,36 +132,6 @@ pub fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDe
         true,
     )
     .with_variances(variances.to_vec())
-}
-
-/// `path`'s former at `level` as its group's projection, applied in full to `Nat`.
-pub fn former_applied(path: &str, level: u32) -> Term {
-    Term::apply(former(path, level), [Term::intrinsic(Intrinsic::NatType)])
-}
-
-/// `path`'s former at `level` as its group's projection: `rec W : (A: Type l) -> Type l = (A) => W.{l}(A); W`, the spelling reduction hands over for an instance of an `induct`'s name.
-pub fn former(path: &str, level: u32) -> Term {
-    let member = Free::local(970, Some("W"));
-    let carrier = Free::local(971, Some("A"));
-    let sort = Term::type_at(Level::constant(level));
-    let body = Term::func(
-        [(carrier, sort.clone())],
-        Term::induct_type_at(
-            nominal(path),
-            [Level::constant(level)],
-            [Term::free_var(&carrier)],
-            Vec::<Term>::new(),
-        ),
-    );
-
-    Term::rec(
-        [(
-            member,
-            Term::func_type([(carrier, sort.clone())], sort),
-            body,
-        )],
-        Term::free_var(&member),
-    )
 }
 
 /// A left-nested application spine `((x a) a) …`, `DEEP` links tall.
