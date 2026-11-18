@@ -494,7 +494,10 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 }
 
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
-fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item, Vectors), Error> {
+fn elaborate_module_let(
+    context: &mut Context,
+    def: &Definition,
+) -> Result<(Item, Vec<(Global, Vectors)>), Error> {
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
@@ -600,8 +603,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
         }
         record_applications(context, &rec);
 
-        // A group's member files no vector.
-        return Ok((Item::Rec(rec), Vectors::default()));
+        let vectors = member_vectors(context, &rec)?;
+        return Ok((Item::Rec(rec), vectors));
     }
 
     context.redeclare(&name, &type_);
@@ -639,11 +642,14 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
     if let Ok(Some(applications)) = definition_applications(context, &definition.body) {
         context.record_definition_applications(&definition.name, applications);
     }
-    Ok((Item::Let(Box::new(definition)), vectors))
+    Ok((Item::Let(Box::new(definition)), vec![(def.name, vectors)]))
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
-fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem, Error> {
+fn elaborate_module_rec(
+    context: &mut Context,
+    rec: &RecItem,
+) -> Result<(RecItem, Vec<(Global, Vectors)>), Error> {
     // Where what the group records begins, so what it names of the group can be restated once it has an instance.
     let solved_from = context.solutions_committed();
     let checked_from = context.checked_mark();
@@ -860,7 +866,27 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
     record_applications(context, &rec);
 
-    Ok(rec)
+    let vectors = member_vectors(context, &rec)?;
+    Ok((rec, vectors))
+}
+
+/// Each member's vectors, read off its value as a `let`'s are off its body: the member is its group's projection, which the variance walk reads by the least fixpoint of the group's unfolding where the group terminates. Two instances of a member apart in a level only its parameters' types state are then one before either unfolds, as the certifier finds the two projections they unfold to.
+fn member_vectors(context: &mut Context, rec: &RecItem) -> Result<Vec<(Global, Vectors)>, Error> {
+    let universe_context = rec.universe_context().clone();
+    rec.exports()
+        .iter()
+        .enumerate()
+        .map(|(index, definition)| {
+            let type_ = rec.group().member_type(index);
+            let value = Term::rec_proj(rec.group().clone(), index);
+            let vectors = Vectors {
+                variances: definition_variances(context, &universe_context, &type_, &value)?,
+                field_variances: field_variances(&universe_context, &type_, &value),
+                parameter_field: parameter_field(&type_, &value),
+            };
+            Ok((definition.name, vectors))
+        })
+        .collect()
 }
 
 /// Record how each member of `rec` applies its parameters, as the certifier files it of the group it certifies. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
@@ -1204,9 +1230,8 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
 
     let (elaborated, vectors) = match item {
         Item::Let(definition) => elaborate_module_let(context, definition),
-        // A group's member files no vector.
         Item::Rec(rec) => {
-            elaborate_module_rec(context, rec).map(|rec| (Item::Rec(rec), Vectors::default()))
+            elaborate_module_rec(context, rec).map(|(rec, vectors)| (Item::Rec(rec), vectors))
         }
     }
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
@@ -1246,8 +1271,10 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     state_proof_binders(context, &mut published)
         .map_err(|error| error.in_declaration(declared.iter().copied()))?;
     context.publish(&published);
-    if let Item::Let(definition) = &published.item {
-        context.record_vectors(&definition.name, &definition.type_, &vectors);
+    for definition in published.item.definitions() {
+        if let Some((_, vectors)) = vectors.iter().find(|(name, _)| *name == definition.name) {
+            context.record_vectors(&definition.name, &definition.type_, vectors);
+        }
     }
     context
         .settle_checked(recorded)

@@ -107,7 +107,7 @@ pub fn signatures(source: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// Every non-recursive definition's variance vector as its unit files it ([`curios_elab::Vectors`]), keyed as [`universe_parameters`] keys it: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none. A vector holding no irrelevant level is filed as none, and spelled as every level invariant.
+/// Every definition's variance vector as its unit files it ([`curios_elab::Vectors`]), a recursive group's members each its own, keyed by the definition as [`universe_parameters`] keys a `let`: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none. A vector holding no irrelevant level is filed as none, and spelled as every level invariant.
 ///
 /// The program's declarations are lowered and elaborated as the unit a compilation takes them as, over the prelude's roots, since the vectors are the unit's and no program carries them.
 pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
@@ -145,11 +145,9 @@ pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
         definitions
             .items
             .iter()
-            .filter_map(|item| match item {
-                Item::Let(definition) => Some((item.describe(), definition)),
-                Item::Rec(_) => None,
-            })
-            .map(|(described, definition)| {
+            .flat_map(Item::definitions)
+            .map(|definition| {
+                let described = Item::Let(Box::new(definition.clone())).describe();
                 let spelled = match traces.classified(&definition.name) {
                     Some(classified) if !classified.vectors.variances.is_empty() => classified
                         .vectors

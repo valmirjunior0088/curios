@@ -763,7 +763,7 @@ fn a_stuck_match_holds_the_levels_its_arms_reduce_to() {
     );
 }
 
-// **A recursive group holds the levels its unfolding holds.** `Held` holds a proposition `Ok` and `All` compute together, each meeting the other on its path: read by the least fixpoint of the group's unfolding, the list `match`'s element type `Rose(V)` is an annotation that holds no level, so `Held` keeps the one level a family stating the same would, irrelevant; `B` over the recursive `Balanced` alike. Read with every level the group mentions held, each took a second level, invariant.
+// **A recursive group holds the levels its unfolding holds.** `Held` holds a proposition `Ok` and `All` compute together, each meeting the other on its path: read by the least fixpoint of the group's unfolding, the list `match`'s element type `Rose(V)` is an annotation that holds no level, so `Held` keeps the one level a family stating the same would, irrelevant; `B` over the recursive `Balanced` alike. Read with every level the group mentions held, each took a second level, invariant. `Ok`, `All` and `Balanced` file their one level irrelevant, read off each member's projection, so the elaborator compares two instances of one as the certifier compares the projections they unfold to.
 #[test]
 fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
     let source = r#"
@@ -797,6 +797,14 @@ fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
             families.get(family).map(String::as_str),
             Some("*"),
             "{family}: {families:?}"
+        );
+    }
+    let definitions = definition_variances(source);
+    for definition in ["/Ok", "/All", "/Balanced"] {
+        assert_eq!(
+            definitions.get(definition).map(String::as_str),
+            Some("*"),
+            "{definition}: {definitions:?}"
         );
     }
 }
