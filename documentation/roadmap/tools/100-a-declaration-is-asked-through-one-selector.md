@@ -4,7 +4,7 @@ Adopted: `curios wonder` asks about one declaration through one selector, `--nam
 
 `--name <PATH>` answers a declaration's block, and `--witnesses <PATH>` that block and the witnesses it takes part in ([`wonder`](../../usage.md#wonder)). `--cost` counts the functions bearing each declaration's name either side of the optimizer (`curios-cps/src/survey.rs`) and states one outcome a row, `survived`, `specialized <n>` or `absorbed`, the last both inlining and pruning; `--stage <STAGE>` prints its rung's module whole (`Stage`'s `Display`, `curios-pipeline/src/stage.rs`), rooted at the program's entry from `anf` on.
 
-`--at <LINE>:<COLUMN>` stays the hover's question, answered with the record [The editor is answered at a position](101-the-editor-is-answered-at-a-position.md) makes of a place, and takes no view. A view of a module, `--name <PATH> --exports`, is a finding of its own in the tools findings, which lands first and brings the parse of a view beside `--name` that stage 1 extends.
+`--at <LINE>:<COLUMN>` stays the hover's question, answered with the record [The editor is answered at a position](101-the-editor-is-answered-at-a-position.md) makes of a place, and takes no view. A view of a module, `--name <PATH> --exports`, has landed, with the parse of a view beside `--name` that stage 1 extends (`View`, `curios/src/cli.rs`).
 
 The next step is stage 1, a delivery.
 
