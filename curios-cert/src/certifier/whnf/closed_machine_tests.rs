@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{test_support::*, *},
     curios_common::{Qualifier, fill},
-    curios_core::{Global, Reducer, Term, UniverseContext},
+    curios_core::{Global, Reducer, Subterm, Term, UniverseContext},
 };
 
 /// `g`, which adds one, at `${universes}`, and `twice`, which applies a function twice.
@@ -305,6 +305,41 @@ fn the_closed_machine_folds_a_call_under_an_opaque_head_as_the_strategy_does() {
         strategy.reduce_forced(call.clone()),
         "the machine and the strategy disagreed on {call:?}",
     );
+}
+
+/// A dispatch over a successor of an opaque call: `g(0) + 2` is no `0` and no `1` whatever `g(0)` is, so a dispatch on those keys takes its catch-all, and one that also writes `2` stays stuck, under the machine as under the strategy.
+#[test]
+fn the_closed_machine_takes_a_dispatch_past_its_keys_as_the_strategy_does() {
+    for (keys, expected) in [
+        ("| 0 => 10 | 1 => 20", Some(term("99"))),
+        ("| 0 => 10 | 2 => 20", None),
+    ] {
+        let dispatch = term(&fill!(
+            "#{goal = #NatType} match #NatAdd(/g(0), 2) ${keys} | _ => 99 end",
+            keys
+        ));
+
+        let mut machined = certifier();
+        declare_g(&mut machined);
+        let mut strategy = strategy_certifier();
+        declare_g(&mut strategy);
+
+        let reduct = machined
+            .reduce_forced(dispatch.clone())
+            .expect("the machine reduces");
+        assert_eq!(
+            Some(reduct.clone()),
+            strategy.reduce_forced(dispatch.clone()).ok(),
+            "{keys}: the machine and the strategy disagreed on {dispatch:?}",
+        );
+        match expected {
+            Some(expected) => assert_eq!(reduct, expected, "{keys}"),
+            None => assert!(
+                matches!(&*reduct, Subterm::Match(_)),
+                "{keys}: a key the successor may be leaves the dispatch stuck: {reduct:?}"
+            ),
+        }
+    }
 }
 
 /// The restuck call under heads the opaque one is reached through: a transparent `wrap(x) = g(x)` the machine opens to the opaque `g`, an intrinsic over the stuck call, `g(member(pred)) + 1`, and the stuck call as an argument of a second, `g(g(member(pred)))`. Each is one value however it is spelled, so the machine and the strategy hand back one forced form.

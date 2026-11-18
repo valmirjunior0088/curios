@@ -118,7 +118,7 @@ use reduce::*;
 pub use reduce::{
     Exhaustion, Probe, ProbeSpellings, ReduceError, Reducer, align_comparisons, bool_value,
     decide_bool, eta_head, is_bool_connective, normalize_bool, probe_spellings, project_literal,
-    reduce_intrinsic,
+    reduce_intrinsic, switch_arm,
 };
 
 mod machine;

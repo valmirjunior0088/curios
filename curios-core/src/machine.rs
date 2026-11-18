@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Global, Intrinsic, Layer, LetBinding, Many, Match, Mention, Nat, Proj, Rec, RecGroup,
+        Func, Global, Intrinsic, Layer, LetBinding, Many, Match, Mention, Proj, Rec, RecGroup,
         ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes, eta_head,
-        instantiate_universes, project_literal, reduce_intrinsic,
+        instantiate_universes, project_literal, reduce_intrinsic, switch_arm,
     },
     crate::Foreign,
     curios_common::Plicity,
@@ -1157,26 +1157,14 @@ impl Machine {
                 })))),
             },
 
-            Cases::Switch { cases, default } => {
-                let (value, inner) = Nat::decompose(&scrutinee);
-
-                match Nat::is_zero(&inner) {
-                    true => Ok(Step::Eval(
-                        cases
-                            .iter()
-                            .find(|(key, _)| key == &value)
-                            .map(|(_, body)| body)
-                            .unwrap_or(&default)
-                            .clone(),
-                        demand,
-                    )),
-                    false => Ok(Step::Value(Term::from(Subterm::Match(Match {
-                        head: scrutinee,
-                        goal,
-                        cases: Cases::Switch { cases, default },
-                    })))),
-                }
-            }
+            Cases::Switch { cases, default } => match switch_arm(&cases, &default, &scrutinee) {
+                Some(arm) => Ok(Step::Eval(arm.clone(), demand)),
+                None => Ok(Step::Value(Term::from(Subterm::Match(Match {
+                    head: scrutinee,
+                    goal,
+                    cases: Cases::Switch { cases, default },
+                })))),
+            },
 
             Cases::Induct {
                 cases,

@@ -3,6 +3,7 @@
 mod alternative;
 mod binder;
 mod byte;
+mod dispatch;
 mod goal;
 mod guard;
 mod headless;

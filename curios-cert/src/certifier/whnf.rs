@@ -679,20 +679,24 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
             }))),
         },
 
-        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`". A literal takes its case, or the default when no case names it; anything symbolic rebuilds the neutral switch.
+        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`": it takes its case, or the default when no case names it. A symbolic inner over a floor past every key is no key whatever it stands for, so it takes the default too; anything else rebuilds the neutral switch. Stated apart from `curios_core::switch_arm`, which the closed machine and the elaborator read.
         Cases::Switch { cases, default } => {
-            let (value, inner) = Nat::decompose(&forced);
+            let (floor, inner) = Nat::decompose(&forced);
 
-            match Nat::is_zero(&inner) {
-                true => Step::Continue(
+            match (
+                Nat::is_zero(&inner),
+                cases.iter().all(|(key, _)| *key < floor),
+            ) {
+                (true, _) => Step::Continue(
                     cases
                         .iter()
-                        .find(|(key, _)| key == &value)
+                        .find(|(key, _)| *key == floor)
                         .map(|(_, body)| body)
                         .unwrap_or(&default)
                         .clone(),
                 ),
-                false => Step::Stop(Term::from(Subterm::Match(Match {
+                (false, true) => Step::Continue(default),
+                (false, false) => Step::Stop(Term::from(Subterm::Match(Match {
                     head: forced,
                     goal,
                     cases: Cases::Switch { cases, default },

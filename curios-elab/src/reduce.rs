@@ -34,11 +34,11 @@ use {
     curios_core::{
         Advance, Applications, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost,
         ClosedMemo, Cost, Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
-        Instance, Intrinsic, Layer, Let, Match, Metavar, Nat, Polarity, Probe, Proj, Quality, Rec,
+        Instance, Intrinsic, Layer, Let, Match, Metavar, Polarity, Probe, Proj, Quality, Rec,
         RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm, Telescope,
         Term, Tuple, TupleType, UniverseConstraintOrigin, Universes, Var, Variant, Visit,
         accelerable, eta_head, instantiate_universes, probe_spellings, project_erased_universes,
-        project_literal, reduce_closed, reduce_intrinsic, weak_head_value,
+        project_literal, reduce_closed, reduce_intrinsic, switch_arm, weak_head_value,
     },
     std::{
         cell::OnceCell,
@@ -768,28 +768,14 @@ fn reduce_match(forced: Term, goal: Term, cases: Cases) -> Reduce {
             }))),
         },
 
-        Cases::Switch { cases, default } => {
-            let scrutinee = forced;
-            // A literal `Nat` is the certifier's spine floor over a `Zero` inner, so `is_zero` on the peeled inner is exactly "is this a concrete `k`?" — the same spine view the arithmetic family reads. A literal dispatches to its case, or the default when none matches; a symbolic scrutinee rebuilds the neutral switch.
-            let (value, inner) = Nat::decompose(&scrutinee);
-
-            match Nat::is_zero(&inner) {
-                true => {
-                    let body = cases
-                        .iter()
-                        .find(|(key, _)| key == &value)
-                        .map(|(_, body)| body)
-                        .unwrap_or(&default);
-
-                    Reduce::Continue(body.clone())
-                }
-                false => Reduce::Break(Term::from(Subterm::Match(Match {
-                    head: scrutinee,
-                    goal,
-                    cases: Cases::Switch { cases, default },
-                }))),
-            }
-        }
+        Cases::Switch { cases, default } => match switch_arm(&cases, &default, &forced) {
+            Some(arm) => Reduce::Continue(arm.clone()),
+            None => Reduce::Break(Term::from(Subterm::Match(Match {
+                head: forced,
+                goal,
+                cases: Cases::Switch { cases, default },
+            }))),
+        },
 
         // Dispatch on the reduced scrutinee — a `Variant` directly, or one reached through a match-arm refinement (`refine_head` registers `head := ctor_val`, which `reduce` follows). The selected arm is opened at the constructor's own payload components; `Scope::open` is what holds an arm and the constructor it dispatches on to the same arity.
         Cases::Induct {
