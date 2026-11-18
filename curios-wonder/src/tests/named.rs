@@ -402,24 +402,45 @@ fn a_place_answers_the_declaration_its_name_names() {
     );
 }
 
-/// What a consumer reaches through the module `path` names, asked with nothing in scope but the prelude, as standard input with no text asks.
+/// The path `path` spells.
+fn qualified(path: &str) -> Qualifier {
+    Qualifier::from(path.trim_start_matches('/').split('/'))
+}
+
+/// What a consumer reaches through the module `path` names, asked in the prelude's scope alone, as a question with no subject is outside every package.
 fn exported(path: &str) -> Option<ModuleDocumentation> {
     crate::exported(
         DEFAULT_BUDGET,
-        Subject::Entry {
-            units: Vec::new(),
-            origin: Origin::Text {
-                text: String::new(),
-            },
-            declares: None,
-            package: None,
-        },
-        &Qualifier::from(path.trim_start_matches('/').split('/')),
+        Subject::prelude(),
+        &qualified(path),
         &Overlay::default(),
         None,
         &mut |_| {},
     )
     .expect("the prelude documents itself")
+}
+
+/// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing.
+#[test]
+fn the_prelude_alone_answers_the_standard_librarys_declarations_and_nothing_else() {
+    let described = |path| {
+        crate::described(
+            DEFAULT_BUDGET,
+            Subject::prelude(),
+            &qualified(path),
+            &Overlay::default(),
+            None,
+            &mut |_| {},
+        )
+        .unwrap_or_else(|_| panic!("the prelude's scope checks"))
+    };
+    let map = described("/std/List/map").expect("the standard library declares it");
+
+    assert_eq!(
+        (map.path.as_str(), map.declared),
+        ("/sys/List/map", Declared::Function)
+    );
+    assert!(described("/app/main").is_none());
 }
 
 /// Every module of the standard library a consumer reaches is reached from its root by `--exports` alone, each child row's module answered in turn, and the modules so reached are the ones its documentation pages are: the listing and the pages are one reading of one record.

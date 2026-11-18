@@ -89,6 +89,18 @@ impl Subject {
         })
     }
 
+    /// The prelude's scope alone: a loose program of no text, which holds nothing of its own.
+    pub fn prelude() -> Self {
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                text: String::new(),
+            },
+            declares: None,
+            package: None,
+        }
+    }
+
     /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
     pub fn formed(self, overlay: &Overlay) -> Self {
         match self {

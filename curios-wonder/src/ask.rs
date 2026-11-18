@@ -142,7 +142,8 @@ impl Ended {
 /// One thing a question can be about, resolved: the subject, what a report names it with the manifest that declares it, and the store it reads and files into.
 pub struct Asked {
     pub subject: Subject,
-    pub named: curios_package::Named,
+    /// What a report names the subject — none for the prelude's scope alone, which has nothing of its own to compile or narrate.
+    pub named: Option<curios_package::Named>,
     pub manifest: Option<PathBuf>,
     pub store: Option<Verdicts>,
 }
@@ -189,7 +190,7 @@ impl Asked {
                 declares,
                 package,
             },
-            named,
+            named: Some(named),
             manifest,
             store,
         })
@@ -198,12 +199,22 @@ impl Asked {
     /// A library, asked about as the unit entire.
     fn about_library(library: Library) -> Self {
         Self {
-            named: library.named(),
+            named: Some(library.named()),
             manifest: Some(library.manifest),
             subject: Subject::Unit {
                 units: library.units,
             },
             store: Some(Verdicts::at(library.root)),
+        }
+    }
+
+    /// The prelude's scope alone ([`Subject::prelude`]), with no manifest and no store.
+    fn about_the_prelude() -> Self {
+        Self {
+            subject: Subject::prelude(),
+            named: None,
+            manifest: None,
+            store: None,
         }
     }
 
@@ -219,7 +230,9 @@ impl Asked {
 
     /// The subject and its store, `telling` told that the subject is taken on.
     fn taken(self, telling: &mut dyn Telling) -> (Subject, Option<Verdicts>) {
-        telling.asked(&self.named, self.manifest.as_deref());
+        if let Some(named) = &self.named {
+            telling.asked(named, self.manifest.as_deref());
+        }
 
         (self.subject, self.store)
     }
@@ -544,6 +557,24 @@ pub enum Staged {
     Library(Library),
 }
 
+/// What `wonder --name`, `--witnesses` and `--name --exports` ask in: a program's scope, a library's, or the prelude's alone, which a question with no subject asks in outside every package.
+pub enum Scope {
+    Program(Program),
+    Library(Library),
+    Prelude,
+}
+
+impl Scope {
+    /// The question asked in this scope.
+    fn asked(self) -> Result<Asked, Box<Report>> {
+        Ok(match self {
+            Self::Program(program) => Asked::about_program(program)?,
+            Self::Library(library) => Asked::about_library(library),
+            Self::Prelude => Asked::about_the_prelude(),
+        })
+    }
+}
+
 /// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted, to stdout.
 ///
 /// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `telling` is told as [`wonder_diagnostics`]' is.
@@ -727,16 +758,16 @@ pub fn wonder_declarations(
     })
 }
 
-/// `wonder --name PATH [SUBJECT]`: the declaration `path` names in the scope of what `staged` is, to stdout — a block, then its whole text as its author wrote it, where its unit read one. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH [SUBJECT]`: the declaration `path` names in `scope`, to stdout — a block, then its whole text as its author wrote it, where its unit read one. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_name(
     budget: u64,
-    staged: Staged,
+    scope: Scope,
     path: &Qualifier,
     subject: Option<&str>,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let described = declaration(budget, staged, path, telling)?;
+    let described = declaration(budget, scope, path, telling)?;
     answer(format_args!(
         "{}\n",
         block(&described, Some(listing(&path.join(), subject)))
@@ -752,12 +783,12 @@ pub fn wonder_name(
 /// `wonder --witnesses PATH [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, then a row for each, its place, an arrow, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_witnesses(
     budget: u64,
-    staged: Staged,
+    scope: Scope,
     path: &Qualifier,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let described = declaration(budget, staged, path, telling)?;
+    let described = declaration(budget, scope, path, telling)?;
 
     answer(format_args!(
         "{}\n",
@@ -782,17 +813,16 @@ pub fn wonder_witnesses(
 /// `wonder --name PATH --exports [SUBJECT]`: what a consumer reaches through the module `path` names, to stdout — a block naming the module, then a row for each name it exposes, its own declarations and each a `pub use` exposes in the order it writes them, the name, what it is declared as and its head on one line, as its documentation page lists them, then a row for each public child module, with the command that lists its own. Read off the documentation record ([`curios_document::ModuleDocumentation`]), so a page and the listing are one reading. A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_exports(
     budget: u64,
-    staged: Staged,
+    scope: Scope,
     path: &Qualifier,
     subject: Option<&str>,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let asked = match staged {
-        Staged::Program(program) => Asked::about_program(program)?,
-        Staged::Library(library) => Asked::about_library(library),
-    };
-    let Some(module) = asked.exported(budget, &Overlay::default(), path, telling)? else {
+    let Some(module) = scope
+        .asked()?
+        .exported(budget, &Overlay::default(), path, telling)?
+    else {
         return Err(Refused::of("unknown module")
             .stating("nothing in scope is a module at this path")
             .about_named(path.join())
@@ -870,21 +900,16 @@ fn listing(path: &str, subject: Option<&str>) -> String {
     }
 }
 
-/// The declaration `path` names in the scope of what `staged` is ([`described`]), an answer about to be written; refused where the path names nothing in scope, and where the subject stops before the answer, as a build stops.
+/// The declaration `path` names in `scope` ([`described`]), an answer about to be written; refused where the path names nothing in scope, and where the subject stops before the answer, as a build stops.
 fn declaration(
     budget: u64,
-    staged: Staged,
+    scope: Scope,
     path: &Qualifier,
     telling: &mut dyn Telling,
 ) -> Result<Described, CompileError> {
     let overlay = Overlay::default();
 
-    let asked = match staged {
-        Staged::Program(program) => Asked::about_program(program)?,
-        Staged::Library(library) => Asked::about_library(library),
-    };
-
-    let described = asked.described(budget, &overlay, path, telling);
+    let described = scope.asked()?.described(budget, &overlay, path, telling);
     match described {
         Ok(Some(described)) => {
             telling.answering();

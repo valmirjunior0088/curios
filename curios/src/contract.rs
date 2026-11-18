@@ -13,11 +13,12 @@ use {
     curios_module::Overlay,
     curios_package::{
         Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
+        nearest_manifest,
     },
     curios_pipeline::Stage,
     curios_surface::Format,
     curios_verdict::Verdicts,
-    curios_wonder::{Staged, file_subject},
+    curios_wonder::{Scope, Staged, file_subject},
     std::{
         env,
         path::{Path, PathBuf},
@@ -31,6 +32,8 @@ pub enum Accepts {
     Program,
     /// One program, as [`Accepts::Program`] takes one, or a library selected through one of its files.
     ProgramOrLibrary,
+    /// A scope to ask a name in: what [`Accepts::ProgramOrLibrary`] takes, and with no subject the widest scope where the command stands — the governing package's sole or `default` executable's, else its library's, and outside every package the prelude's alone.
+    Scope,
     /// A library: the governing package entire narrowed to its own.
     Library,
     /// Whatever the argument selects.
@@ -252,7 +255,7 @@ pub const DECLARATIONS: Contract = Contract {
 /// A question about a declaration by its path, asked in the scope of a program or a library.
 pub const NAME: Contract = Contract {
     command: "wonder --name",
-    accepts: Accepts::ProgramOrLibrary,
+    accepts: Accepts::Scope,
     own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
@@ -261,7 +264,7 @@ pub const NAME: Contract = Contract {
 /// A question about what a module exposes, by its path, as [`NAME`] is about a declaration.
 pub const EXPORTS: Contract = Contract {
     command: "wonder --name --exports",
-    accepts: Accepts::ProgramOrLibrary,
+    accepts: Accepts::Scope,
     own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
@@ -270,7 +273,7 @@ pub const EXPORTS: Contract = Contract {
 /// A question about a declaration by its path, as [`NAME`] is.
 pub const WITNESSES: Contract = Contract {
     command: "wonder --witnesses",
-    accepts: Accepts::ProgramOrLibrary,
+    accepts: Accepts::Scope,
     own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
@@ -428,6 +431,9 @@ impl Contract {
             Accepts::Program | Accepts::ProgramOrLibrary => {
                 "the governing package's sole or `default` executable"
             }
+            Accepts::Scope => {
+                "the scope of the governing package's sole or `default` executable, else of its library, and outside every package the prelude's"
+            }
             Accepts::Library => "the governing package's library",
             Accepts::Any | Accepts::Entire => "the governing package entire",
             Accepts::Files => "every file the governing package declares",
@@ -515,6 +521,30 @@ impl Contract {
             Selection::Program(program) => Staged::Program(program),
             Selection::Entire(entire) => Staged::Program(entire.default_program()?),
             Selection::Library(library) => Staged::Library(library),
+        })
+    }
+
+    /// The scope `subject` asks in: what [`Contract::admit_staged`] admits, but for no subject, which asks in the governing package's sole or `default` executable's scope, else its library's, and outside every package the prelude's alone.
+    pub fn admit_scope(
+        &self,
+        subject: Option<&str>,
+        manifest: Option<&Path>,
+        directory: &Path,
+    ) -> Result<Scope, Box<Report>> {
+        debug_assert_eq!(self.accepts, Accepts::Scope, "{}", self.command);
+
+        if subject.is_none() && manifest.is_none() && nearest_manifest(directory).is_none() {
+            return Ok(Scope::Prelude);
+        }
+
+        Ok(match Self::selection(subject, manifest, directory)? {
+            Selection::Program(program) => Scope::Program(program),
+            Selection::Library(library) => Scope::Library(library),
+            Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
+                (Ok(program), _) => Scope::Program(program),
+                (Err(_), Some(library)) => Scope::Library(library),
+                (Err(refused), None) => return Err(refused),
+            },
         })
     }
 

@@ -296,6 +296,15 @@ impl Standing<'_> {
                         Staged::Library(library) => self.library(&library),
                     })
             }
+            Accepts::Scope => {
+                contract
+                    .admit_scope(subject, None, directory)
+                    .map(|scope| match scope {
+                        Scope::Program(program) => self.program(&program),
+                        Scope::Library(library) => self.library(&library),
+                        Scope::Prelude => "the prelude".to_string(),
+                    })
+            }
             Accepts::Library => contract
                 .admit_library(subject, None, directory)
                 .map(|library| self.library(&library)),
@@ -700,7 +709,7 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
+wonder --name /std/Bool/not SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -718,9 +727,9 @@ wonder --name /std/Bool/not SUBJECT — ProgramOrLibrary, store Write, leaves No
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
   work/app/helper: bench → program bench
-  work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
-  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
+  work/app/nested: (none) → library nested
+  .: (none) → the prelude
+wonder --witnesses /std/Show SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -738,9 +747,9 @@ wonder --witnesses /std/Show SUBJECT — ProgramOrLibrary, store Write, leaves N
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
   work/app/helper: bench → program bench
-  work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
-  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
-wonder --name /std/Map --exports SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
+  work/app/nested: (none) → library nested
+  .: (none) → the prelude
+wonder --name /std/Map --exports SUBJECT — Scope, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
@@ -758,8 +767,8 @@ wonder --name /std/Map --exports SUBJECT — ProgramOrLibrary, store Write, leav
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: (none) → program serve
   work/app/helper: bench → program bench
-  work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
-  .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
+  work/app/nested: (none) → library nested
+  .: (none) → the prelude
 wonder --server — Nothing, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --name --witnesses --exports --server --budget --manifest
   takes no subject
 "#;

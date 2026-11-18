@@ -25,8 +25,8 @@ pub use format::FormatSettings;
 use format::*;
 
 mod govern;
-pub use govern::Governing;
 use govern::*;
+pub use govern::{Governing, nearest_manifest};
 
 mod graph;
 pub use graph::order;
