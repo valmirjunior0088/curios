@@ -557,6 +557,12 @@ impl<'a, E: Env> Grader<'a, E> {
                 | Intrinsic::ListSlice { .. },
             ) => self.monoid_shape(FreeMonoid::List, term)?,
 
+            // An element a list read hands out is one of the list's, below it as a case of the list hands one out; read out of a list literal it is whichever element the index picks, which nothing here reads.
+            Subterm::Intrinsic(Intrinsic::ListGet { list, .. }) => {
+                let list = self.shape_of(list)?;
+                below_scrutinee(&list).unwrap_or(Shape::Opaque)
+            }
+
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Intrinsic(Intrinsic::NatDiv {
                 dividend: left,

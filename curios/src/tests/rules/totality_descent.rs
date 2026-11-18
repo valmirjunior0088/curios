@@ -889,3 +889,38 @@ fn a_let_over_a_variable_an_inversion_solves_is_graded_as_the_variable() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// `/sys/List/get` hands out one of its list's elements, below the list as a case of the list hands one out, so a recursion through the element at an index of a tree's children descends. The refusal reads the element out of a list holding the tree itself, which a run reaches as the same call again.
+#[test]
+fn an_element_read_at_an_index_is_below_its_list() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let leftmost(t: Rose) -> Nat =
+            match t
+            | rose(n, cs) =>
+                match 0 < List/len(cs)
+                | true => leftmost(List/get(cs, 0))
+                | false => n
+                end
+            end;
+
+        let Small(t: Rose) -> Prop = Bool/Holds(leftmost(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("leftmost(List/get(cs, 0))", "leftmost(List/get([t], 0))")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
