@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, Option, List, Eq, Hash, Bytes};
 use /std/List/{Member};
-use /std/Map/{Map, Key, Rooted, Grounded, grounded, empty, has, insert, remove, map, union, filter,
-    intersection, difference, update, to_list};
+use /std/Map/{Map, Key, Grounded, empty, has, insert, remove, map, union, filter, intersection,
+    difference, update, to_list};
 use /std/Map/internal/{Node};
 use /std/Map/bits/{bit, Apart};
 
@@ -105,10 +105,10 @@ pub let of_insert(
     match m.root
     | none() => Eq/refl()
     | some(n) =>
-        match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @grounded(m.rooted))
+        match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
         | added(_, @_, @answers) | replaced(_, @_, @answers) => answers(Hash/hash(key))
         | parted(n2, c, @back, @apart, @past) =>
-            parted_answers(n, n2, key, v, c, back, grounded(m.rooted), apart, past)(Hash/hash(key))
+            parted_answers(n, n2, key, v, c, back, m.sound, apart, past)(Hash/hash(key))
         end
     end;
 
@@ -134,7 +134,7 @@ pub let of_insert_other(
             Eq/sym(codes),
             Eq/refl())
     | some(n) =>
-        match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @grounded(m.rooted))
+        match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
         | added(n2, @_, @answers) | replaced(n2, @_, @answers) =>
             elsewhere(n, n2, key, Option/some(v), other, codes, answers)
         | parted(n2, c, @back, @apart, @past) =>
@@ -145,7 +145,7 @@ pub let of_insert_other(
                 Option/some(v),
                 other,
                 codes,
-                parted_answers(n, n2, key, v, c, back, grounded(m.rooted), apart, past))
+                parted_answers(n, n2, key, v, c, back, m.sound, apart, past))
         end
     end;
 
@@ -160,7 +160,7 @@ pub let of_remove(
     match m.root
     | none() => Eq/refl()
     | some(n) =>
-        match Node/remove(n, Hash/hash(key), @grounded(m.rooted))
+        match Node/remove(n, Hash/hash(key), @m.sound)
         | gone(_) => Eq/refl()
         | kept(_, @_, @answers) => answers(Hash/hash(key))
         | absent(_, @back, answers) =>
@@ -185,7 +185,7 @@ pub let of_remove_other(
     match m.root
     | none() => Eq/refl()
     | some(n) =>
-        match Node/remove(n, Hash/hash(key), @grounded(m.rooted))
+        match Node/remove(n, Hash/hash(key), @m.sound)
         | gone(empty) =>
             Eq/sym(
                 Eq/subst(
@@ -280,10 +280,10 @@ let of_root(
     e: Eq()(a.root, b.root),
 ) -> Eq()(a, b) =
     Eq/subst(
-        (r: Option(Node(K, V))) => (w: Rooted(K, V)(r)) -> Eq()(a, Map { root = r, @rooted = w }),
+        (r: Option(Node(K, V))) => (w: Grounded(r)) -> Eq()(a, Map { root = r, @sound = w }),
         e,
         (_) => Eq/refl())(
-        b.rooted);
+        b.sound);
 
 --- Two maps with the same value at every key are one map.
 ---
@@ -296,7 +296,7 @@ pub let injective(
     b: Map(K, V),
     same: (key: K) -> Eq()(try_get(a, key), try_get(b, key)),
 ) -> Eq()(a, b) =
-    of_root(a, b, roots(a.root, b.root, grounded(a.rooted), grounded(b.rooted), same));
+    of_root(a, b, roots(a.root, b.root, a.sound, b.sound, same));
 
 -- Two keys whose encodings compare equal, as an equation, are one key.
 let same_key(
@@ -382,7 +382,7 @@ pub let of_union(
 ) -> Eq()(try_get(union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =
     match b.root
     | none() => Eq/refl()
-    | some(n) => inserted_all(n, grounded(b.rooted), a, key)
+    | some(n) => inserted_all(n, b.sound, a, key)
     end;
 
 -- What `filter`'s step keeps of a value found at `key`, over what the map it began with has there.
@@ -489,7 +489,7 @@ pub let of_filter(
 ) -> Eq()(try_get(filter(m, pred), key), Option/filter(try_get(m, key), (v: V) => pred(key, v))) =
     match m.root
     | none() => Eq/refl()
-    | some(n) => kept_all(n, grounded(m.rooted), pred, empty(), key)
+    | some(n) => kept_all(n, m.sound, pred, empty(), key)
     end;
 
 --- `intersection` has at every key the first map's value where the second has an entry there, and none otherwise.
@@ -570,7 +570,7 @@ pub let of_listed(
     let held = Eq/subst((l: List({K, V})) => Member()((key, v), l), entries_of(m), listed);
     match m.root
     | none() => match Member/absent(held) end
-    | some(n) => Node/entry_found(n, grounded(m.rooted), (key, v), held)
+    | some(n) => Node/entry_found(n, m.sound, (key, v), held)
     end;
 
 --- The value at a key is an entry `to_list` holds.

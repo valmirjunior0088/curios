@@ -1,6 +1,6 @@
 use /std/{List, Option, Eq, Ord, Bool};
 use /std/List/{Pairwise};
-use /std/Map/{Map, Key, Grounded, grounded};
+use /std/Map/{Map, Key, Grounded};
 use /std/Map/internal/{Node};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
@@ -34,7 +34,7 @@ pub let pairwise(
     @V: Type,
     m: Map(K, V),
 ) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
-    of_root(m.root, grounded(m.rooted));
+    of_root(m.root, m.sound);
 
 --- The keys of a map are in strict order at adjacent elements, as a decision.
 pub let ordered(
