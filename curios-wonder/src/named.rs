@@ -370,12 +370,7 @@ pub fn described(
     let through = store.as_ref().map(|store| store as &dyn Cache);
     // The subject lowered: the answer off the unit in scope that declares the name, or what the lowering says of the subject's own declaration, with the lexicons its scope keeps, for its elaboration to type.
     let lowered = |scope: &[&Unit], own: &PreparedText| {
-        let texts = scope
-            .iter()
-            .filter_map(|unit| unit.text())
-            .collect::<Vec<_>>();
-        let path = own.named_by(&texts, asked).unwrap_or(*asked);
-        let (said, unit) = said_of(scope, own, Global::Authored(path))?;
+        let (said, unit) = said_of(scope, own, resolved(scope, own, asked))?;
 
         Some(match unit {
             Some(unit) => {
@@ -484,7 +479,7 @@ pub fn exported(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Option<ModuleDocumentation>, CompileError> {
+) -> Result<Option<Exported>, CompileError> {
     let root = Qualifier::from([asked.head()]);
     let module = |record: Documentation| {
         record
@@ -495,23 +490,81 @@ pub fn exported(
     let units = match subject {
         Subject::Entry { units, .. } | Subject::Unit { units } => units,
     };
+    let store = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = store.as_ref().map(|store| store as &dyn Cache);
     let Some(holding) = units
         .iter()
         .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
     else {
-        return Ok(prelude_documentation()
+        let Some(module) = prelude_documentation()
             .into_iter()
             .find(|record| record.prefix == root)
-            .and_then(module));
+            .and_then(module)
+        else {
+            return Ok(None);
+        };
+        // The prelude's own unit holding the root reads its names, the others standing before it.
+        let declared = Fold::new(budget, &[], through).units(progress, |prelude, _| {
+            let own = prelude
+                .iter()
+                .find(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
+                .and_then(|unit| unit.text())
+                .expect("a prelude record is a prelude unit's");
+            Ok(declared_by(prelude, own, &module))
+        })?;
+
+        return Ok(Some(Exported { module, declared }));
     };
-    let store = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = store.as_ref().map(|store| store as &dyn Cache);
     let mut units = overlaid(units, overlay);
     units.truncate(holding + 1);
+    let Some(module) = module(Fold::new(budget, &units, through).documentation(&mut *progress)?)
+    else {
+        return Ok(None);
+    };
+    let declared = Fold::new(budget, &units, through)
+        .lowered_unit(progress, |scope, own| declared_by(scope, own, &module))?;
 
-    Ok(module(
-        Fold::new(budget, &units, through).documentation(progress)?,
-    ))
+    Ok(Some(Exported { module, declared }))
+}
+
+/// What a consumer reaches through a module ([`exported`]): its documentation record, and what each name the record lists is declared as, in the order it lists them, read as `--name` reads one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exported {
+    pub module: ModuleDocumentation,
+    pub declared: Vec<Declared>,
+}
+
+/// What each name `module` lists is declared as, by the path a consumer writes it at, read off `own` and the units in `scope` as [`described`] reads one: a witness, which has no name to be asked by, as what its record says it is.
+fn declared_by(scope: &[&Unit], own: &PreparedText, module: &ModuleDocumentation) -> Vec<Declared> {
+    module
+        .declarations
+        .iter()
+        .map(|declaration| match declaration.kind {
+            curios_document::Kind::Witness => Declared::Witness,
+            _ => {
+                let asked = Qualifier::from(
+                    declaration
+                        .home
+                        .iter()
+                        .chain([declaration.name.as_str()])
+                        .collect::<Vec<_>>(),
+                );
+                found(scope, own, &resolved(scope, own, &asked))
+                    .unwrap_or_else(|| panic!("{} is exposed and declared nowhere", asked.join()))
+                    .declared
+            }
+        })
+        .collect()
+}
+
+/// The declaration `asked` names, a path read as a reader outside every module writes one: a declaration at it, or one some module exports there ([`PreparedText::named_by`]), by `own` and the units in `scope`.
+fn resolved(scope: &[&Unit], own: &PreparedText, asked: &Qualifier) -> Global {
+    let texts = scope
+        .iter()
+        .filter_map(|unit| unit.text())
+        .collect::<Vec<_>>();
+
+    Global::Authored(own.named_by(&texts, asked).unwrap_or(*asked))
 }
 
 /// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering `own`, then the units in `scope` — beside the unit in scope that declares it, none for the subject's own. `None` for a name no lowered item declares.

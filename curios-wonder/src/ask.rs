@@ -6,9 +6,9 @@
 
 use {
     crate::{
-        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Origin, Refusal, Rendering,
-        Severity, Subject, Uncosted, checked, cost, declared_tests, described, diagnostics,
-        exported, placed, stage, unit_stage,
+        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Origin, Refusal,
+        Rendering, Severity, Subject, Uncosted, checked, cost, declared_tests, described,
+        diagnostics, exported, placed, stage, unit_stage,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -389,7 +389,7 @@ impl Asked {
         overlay: &Overlay,
         path: &Qualifier,
         telling: &mut dyn Telling,
-    ) -> Result<Option<curios_document::ModuleDocumentation>, CompileError> {
+    ) -> Result<Option<Exported>, CompileError> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let exported = exported(budget, subject, path, overlay, cache, &mut |progress| {
@@ -782,7 +782,7 @@ pub fn wonder_witnesses(
     Ok(())
 }
 
-/// `wonder --name PATH --exports [SUBJECT]`: what a consumer reaches through the module `path` names, to stdout — a block naming the module, then a row for each name it exposes, its own declarations and each a `pub use` exposes in the order it writes them, the name, what it is declared as and its head on one line, as its documentation page lists them, then a row for each public child module, with the command that lists its own. Read off the documentation record ([`curios_document::ModuleDocumentation`]), so a page and the listing are one reading. A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --exports [SUBJECT]`: what a consumer reaches through the module `path` names, to stdout — a block naming the module, then a row for each name it exposes, its own declarations and each a `pub use` exposes in the order it writes them, the name, what it is declared as in `--name`'s words and its head on one line, then a row for each public child module, with the command that lists its own. Its names and heads are read off the documentation record ([`curios_document::ModuleDocumentation`]), so a page and the listing list one set, and what each is declared as off the lowering, where `--name` reads it (`Exported`). A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_exports(
     budget: u64,
     scope: Scope,
@@ -791,9 +791,10 @@ pub fn wonder_exports(
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let Some(module) = scope
-        .asked()?
-        .exported(budget, &Overlay::default(), path, telling)?
+    let Some(Exported { module, declared }) =
+        scope
+            .asked()?
+            .exported(budget, &Overlay::default(), path, telling)?
     else {
         return Err(Refused::of("unknown module")
             .stating("nothing in scope is a module at this path")
@@ -812,7 +813,7 @@ pub fn wonder_exports(
     if !module.declarations.is_empty() || !module.children.is_empty() {
         answer("\n");
     }
-    for declaration in &module.declarations {
+    for (declaration, declared) in module.declarations.iter().zip(declared) {
         let head = declaration
             .signature
             .text
@@ -822,7 +823,7 @@ pub fn wonder_exports(
         answer(format_args!(
             "{}\t{}\t{head}\n",
             declaration.name,
-            exposed_as(declaration.kind)
+            declared_as(declared)
         ));
     }
     for child in &module.children {
@@ -841,18 +842,6 @@ fn counted(count: usize, noun: &str) -> String {
     match count {
         1 => format!("1 {noun}"),
         count => format!("{count} {noun}s"),
-    }
-}
-
-/// The word a name a module exposes is said to be declared as by, as its documentation page tallies it.
-fn exposed_as(kind: curios_document::Kind) -> &'static str {
-    match kind {
-        curios_document::Kind::Definition => "definition",
-        curios_document::Kind::Inductive => "inductive",
-        curios_document::Kind::Structure => "structure",
-        curios_document::Kind::Concept => "concept",
-        curios_document::Kind::Witness => "witness",
-        curios_document::Kind::Foreign => "foreign",
     }
 }
 

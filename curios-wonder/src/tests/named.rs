@@ -409,6 +409,11 @@ fn qualified(path: &str) -> Qualifier {
 
 /// What a consumer reaches through the module `path` names, asked in the prelude's scope alone, as a question with no subject is outside every package.
 fn exported(path: &str) -> Option<ModuleDocumentation> {
+    exposed(path).map(|exported| exported.module)
+}
+
+/// What `--exports` answers of the module `path` names in the prelude's scope alone: its record, and what each name it lists is declared as.
+fn exposed(path: &str) -> Option<crate::Exported> {
     crate::exported(
         DEFAULT_BUDGET,
         Subject::prelude(),
@@ -418,6 +423,27 @@ fn exported(path: &str) -> Option<ModuleDocumentation> {
         &mut |_| {},
     )
     .expect("the prelude documents itself")
+}
+
+/// A name a module exposes is said to be declared as `--name` says it, read off the lowering: a constructor a `pub use` brings out of its family is a constructor and a concept's method a method, which the documentation record, keyed by the keyword a page writes, tells from no definition.
+#[test]
+fn a_name_a_module_exposes_is_declared_as_its_declaration_says() {
+    let declared = |module: &str, name: &str| {
+        let exposed = exposed(module).unwrap_or_else(|| panic!("{module} is exposed"));
+        exposed
+            .module
+            .declarations
+            .iter()
+            .zip(exposed.declared)
+            .find(|(declaration, _)| declaration.name == name)
+            .map(|(_, declared)| declared)
+            .unwrap_or_else(|| panic!("{module} exposes {name}"))
+    };
+
+    assert_eq!(declared("/std/Option", "some"), Declared::Constructor);
+    assert_eq!(declared("/std/Option", "Option"), Declared::Inductive);
+    assert_eq!(declared("/std/Option", "map"), Declared::Function);
+    assert_eq!(declared("/std/Show", "show"), Declared::Method);
 }
 
 /// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing.
