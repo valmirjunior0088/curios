@@ -373,7 +373,7 @@ fn stated_value_sort(rechecked: &Rechecked, name: &str) -> Option<Term> {
 
     match &rechecked.definitions.items[place] {
         Item::Let(definition) => definition.value_sort.clone(),
-        Item::Rec(_) => None,
+        Item::Rec(_) | Item::Nominal(_) => None,
     }
 }
 

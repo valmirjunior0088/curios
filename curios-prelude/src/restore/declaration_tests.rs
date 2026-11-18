@@ -56,6 +56,14 @@ fn string_literal_machinery_is_monomorphic() {
                         );
                     }
                 }
+                Item::Nominal(nominals) => {
+                    for (name, _) in nominals.entries() {
+                        parameters.insert(
+                            name.faithful().to_string(),
+                            nominals.universe_context().parameter_count,
+                        );
+                    }
+                }
             }
         }
 

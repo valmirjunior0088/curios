@@ -27,7 +27,7 @@ use {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub enum Part {
-    /// Its signature as the certifier reads one: its type, its universe context, the registry entry its former carries, its totality and the entry's vectors.
+    /// Its signature as the certifier reads one: its type, its universe context, the registry entry it is the former of, its totality and the entry's vectors.
     Signature,
     /// What it unfolds to, as the certifier reads it.
     Body,
@@ -271,7 +271,7 @@ pub fn declared_digest(
         Part::Body => curios_cert::part_digest(unit, &name, true),
         Part::Kind => constructor(unit.definitions, unit.places, &name)
             .map(|constructor| {
-                let kind = (constructor.declared(), Some(constructor.owner()));
+                let kind = (constructor.declared(), constructor.owner());
 
                 curios_archive::to_bytes(&kind).map(|bytes| digest(&bytes))
             })

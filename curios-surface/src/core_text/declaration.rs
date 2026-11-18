@@ -1,14 +1,14 @@
 //! A nominal declaration in its form: a family's, a record's and a concept's.
 //!
-//! **A family is `induct /F(params): (indices) -> pub Sort`, a case to a line, `| tag(payload): (targets)`, and `end`**; a record is `struct /R(params): pub Sort { fields }` and a concept `concept /C(params): pub Sort { fields }`, a superclass edge among a concept's fields written `use T`. A form builds its declaration's entry and its former ([`curios_core::Definition::former`]), a family's declaring its constructors ([`curios_core::Definition::constructors`]), so nothing the module holds is written elsewhere. The inner `pub` is the entry's `rep_public`.
+//! **A family is `induct /F(params): (indices) -> pub Sort`, a case to a line, `| tag(payload): (targets)`, and `end`**; a record is `struct /R(params): pub Sort { fields }` and a concept `concept /C(params): pub Sort { fields }`, a superclass edge among a concept's fields written `use T`. A form builds its declaration's entry, which its former and a family's constructors are made of ([`curios_core::Made`]), so nothing the module holds is written elsewhere. The inner `pub` is the entry's `rep_public`.
 //!
 //! **Each binder is written by its word, under its mark**, `@n: Nat`, or as its type alone where nothing reads it, and a later type reads it by that word: a family's cases read its parameters by the head's words, a case holding its payload under its family's parameters and none of its own.
 
 use {
     super::{
         Fields, LabelRead, OpenedEntry, ReadError, Reader, Refusal, TelescopeEntry, core_read,
-        malformed, parameter_entry, proving_telescope, telescope_read, universe_context_read,
-        value_fields, value_list, value_module, value_word,
+        malformed, parameter_entry, proving_telescope, telescope_read, value_list, value_module,
+        value_word,
     },
     crate::{
         CasePayloadParam, CoreHead, CoreText, DecoratorField, Frame, FuncTypeParam, Rendered,
@@ -320,10 +320,9 @@ pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) ->
     }
 }
 
-/// The parts of an entry its decorator sets, each in place over its template: the module its representation belongs to, the polarities and the variances its elaboration filed, and its scheme apart from its former's — what the writer's `entry_fields` writes of an entry beside its form.
+/// The parts of an entry its decorator sets, each in place over its template: the module its representation belongs to, and the polarities and the variances its elaboration filed — what the writer's `entry_fields` writes of an entry beside its form.
 pub fn entry_fields_read(
     fields: &mut Fields<'_>,
-    universe_context: &mut UniverseContext,
     module: &mut Qualifier,
     polarities: &mut Vec<Polarity>,
     variances: &mut Vec<Variance>,
@@ -358,13 +357,6 @@ pub fn entry_fields_read(
                 _ => Err(malformed("a variance, as Core names it", variance)),
             })
             .collect::<Result<_, _>>()?;
-    }
-    if let Some(value) = fields.take("entry") {
-        let mut entry = value_fields(value)?;
-        if let Some(context) = entry.take("universe_context") {
-            *universe_context = universe_context_read(context)?;
-        }
-        entry.finish()?;
     }
 
     Ok(())
@@ -425,18 +417,12 @@ pub fn family_entry_read(
         )
     })?;
     let result_sort = core_read(&family.result_sort, reader)?;
-    let (mut universe_context, mut module) = (scheme.clone(), parent(name));
+    let mut module = parent(name);
     let (mut polarities, mut variances) = (Vec::new(), Vec::new());
-    entry_fields_read(
-        fields,
-        &mut universe_context,
-        &mut module,
-        &mut polarities,
-        &mut variances,
-    )?;
+    entry_fields_read(fields, &mut module, &mut polarities, &mut variances)?;
 
     Ok(InductDecl::new(
-        universe_context,
+        scheme.clone(),
         arity,
         cases,
         result_sort,
@@ -566,7 +552,7 @@ pub fn concept_entry_read(
     Ok((record, words))
 }
 
-/// A record's entry at its template — its representation's visibility as the form writes it, its name's parent as its module, no polarities or variances, its former's scheme — then each part its decorator sets.
+/// A record's entry at its template — its representation's visibility as the form writes it, its name's parent as its module, no polarities or variances, the scheme its form states — then each part its decorator sets.
 fn entry_template(
     record: &mut StructDecl,
     rep_public: bool,
@@ -579,7 +565,6 @@ fn entry_template(
     record.universe_context = scheme.clone();
     entry_fields_read(
         fields,
-        &mut record.universe_context,
         &mut record.module,
         &mut record.polarities,
         &mut record.variances,

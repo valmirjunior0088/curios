@@ -318,6 +318,11 @@ impl<'s> Context<'s> {
         self.define_declaration(name, term, kind);
     }
 
+    /// Bind the made name `name` — a former or a constructor, which no definition holds and its entry makes — to `term`, which it unfolds to.
+    pub(crate) fn define_made(&mut self, name: &Global, term: &Term) {
+        self.define_declaration_entry(name, DefEntry::new(term.clone(), None));
+    }
+
     /// Undo a top-level declaration's bindings ([`Frames::forget`](super::Frames::forget)) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
     pub(crate) fn forget(&mut self, name: &Global) {
         self.typing.frames.forget(name);

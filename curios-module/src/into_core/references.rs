@@ -48,24 +48,31 @@ impl LoweredItem {
                 .collect::<Vec<_>>();
         reaches.sort();
 
+        let lets = item.lets().iter().map(|let_| Declared {
+            label: let_.span.as_ref().and_then(&placed),
+            signature: match written_under_its_name(let_) {
+                true => globals(&let_.type_.mentions()),
+                false => Vec::new(),
+            },
+            alias: alias_of(&let_.type_, &let_.body),
+        });
+        // A former is written under its own name, in the module that declares it.
+        let formers = item.nominals().iter().map(|nominal| {
+            let former = nominal.former();
+            Declared {
+                label: nominal.span.as_ref().and_then(&placed),
+                signature: globals(&former.type_.mentions()),
+                alias: alias_of(&former.type_, &former.body),
+            }
+        });
+
         Self {
             reaches,
-            definitions: item
-                .lets()
-                .iter()
-                .map(|let_| Declared {
-                    label: let_.span.as_ref().and_then(&placed),
-                    signature: match written_under_its_name(let_) {
-                        true => globals(&let_.type_.mentions()),
-                        false => Vec::new(),
-                    },
-                    alias: alias_of(let_),
-                })
-                .collect(),
+            definitions: lets.chain(formers).collect(),
             members: item
-                .lets()
+                .nominals()
                 .iter()
-                .flat_map(|let_| &let_.members)
+                .flat_map(|nominal| &nominal.members)
                 .map(|(name, span)| (*name, span.as_ref().and_then(&placed)))
                 .collect(),
         }
@@ -198,14 +205,14 @@ pub struct AliasEdge {
     pub dependencies: Option<Vec<curios_core::Global>>,
 }
 
-/// The alias `let_` is, where its body is one.
-fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
-    let direct = let_.body.direct_type_alias_target(&let_.type_);
-    let target = direct.or_else(|| let_.body.transparent_alias_target())?;
+/// The alias a definition of `type_` whose value is `body` is, where `body` is one.
+fn alias_of(type_: &curios_core::Term, body: &curios_core::Term) -> Option<AliasEdge> {
+    let direct = body.direct_type_alias_target(type_);
+    let target = direct.or_else(|| body.transparent_alias_target())?;
 
     Some(AliasEdge {
         target,
-        dependencies: direct.map(|_| globals(&let_.body.mentions())),
+        dependencies: direct.map(|_| globals(&body.mentions())),
     })
 }
 

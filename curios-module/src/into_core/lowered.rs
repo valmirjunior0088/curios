@@ -10,7 +10,8 @@
 
 use {
     super::{
-        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
+        Context, FlatItem, FlatLet, FlatNominal, Journal, LoweredItem, Lowering, Resolution, Scan,
+        Step, Table,
     },
     crate::PreparedText,
     curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted},
@@ -289,9 +290,9 @@ impl LoweredDeclaration {
         // A name that was written and could not be placed is one the `unused-declaration` lint would lose with a kept lowering.
         let placed = items
             .iter()
-            .flat_map(FlatItem::lets)
+            .flat_map(FlatItem::spans)
             .zip(facts.iter().flat_map(|lowered| &lowered.definitions))
-            .all(|(let_, declared)| let_.span.is_none() || declared.label.is_some());
+            .all(|(span, declared)| span.is_none() || declared.label.is_some());
 
         let text = context.sited(|key, _| key);
         let key = match (unbound, placed, &scoped) {
@@ -709,9 +710,7 @@ impl<'a> Baseline<'a> {
             place = items.place_after(Some(at));
             let item = self.unit.lowered_item(at);
             let kept = match item {
-                curios_core::Item::Let(definition) => {
-                    FlatItem::Let(kept_let(definition, context, lowered))
-                }
+                curios_core::Item::Let(definition) => FlatItem::Let(kept_let(definition, context)),
                 // A group of witnesses is closed again under the names this lowering gives its members, which the scope it was closed under spells: opened at its members' written names, as a group is before the lowering binds it.
                 curios_core::Item::Rec(rec) if rec.exports().iter().any(is_witness) => {
                     let written = rec
@@ -722,17 +721,28 @@ impl<'a> Baseline<'a> {
                     FlatItem::Rec(
                         rec.opened(&written)
                             .iter()
-                            .map(|definition| kept_let(definition, context, lowered))
+                            .map(|definition| kept_let(definition, context))
                             .collect(),
                     )
                 }
-                curios_core::Item::Rec(rec) => {
-                    for definition in rec.exports() {
-                        keep_entries(definition.name, &definition.kind, lowered);
-                    }
-
-                    FlatItem::Kept(rec.clone())
-                }
+                curios_core::Item::Rec(rec) => FlatItem::Kept(rec.clone()),
+                // A kept declaration holds the entries the baseline lowered, which the walk's registries take again.
+                curios_core::Item::Nominal(nominals) => FlatItem::Nominal(
+                    nominals
+                        .entries()
+                        .iter()
+                        .map(|(name, entry)| {
+                            keep_entry(*name, entry, lowered);
+                            FlatNominal {
+                                name: *name,
+                                entry: (**entry).clone(),
+                                // What is read of where it was written was taken where it was lowered.
+                                span: None,
+                                members: Vec::new(),
+                            }
+                        })
+                        .collect(),
+                ),
             };
             names.extend(kept.names());
             lowered.items.push(kept);
@@ -752,21 +762,13 @@ impl<'a> Baseline<'a> {
 }
 
 /// One definition of a kept item as the walk holds one it lowered: a witness under the next name of its module, as a lowering gives it before its signature is read.
-fn kept_let(
-    definition: &curios_core::Definition,
-    context: &Context,
-    lowered: &mut Lowering,
-) -> FlatLet {
+fn kept_let(definition: &curios_core::Definition, context: &Context) -> FlatLet {
     // A kept witness keeps the name the baseline gives it, which naming changes where its place or its key may have moved; it still takes its place among its module's, which a witness lowered after it counts.
     if matches!(definition.kind, curios_core::DefinitionKind::Witness) {
         context.fresh_witness();
     }
-    let name = definition.name;
-    keep_entries(name, &definition.kind, lowered);
-
     FlatLet {
-        members: Vec::new(),
-        name,
+        name: definition.name,
         kind: definition.kind.clone(),
         // What is read of where it was written was taken where it was lowered.
         span: None,
@@ -776,25 +778,19 @@ fn kept_let(
     }
 }
 
-/// Take the entries the baseline lowered with its definition `name`, of kind `kind`, into `lowered`.
-fn keep_entries(
-    name: curios_core::Global,
-    kind: &curios_core::DefinitionKind,
-    lowered: &mut Lowering,
-) {
-    // A kept former carries the entry the baseline lowered with it.
-    match kind.nominal() {
-        Some(curios_core::Nominal::Inductive(entry)) => {
-            lowered.induct_decls.insert(name, entry.clone());
+/// Take the entry `entry` the baseline lowered under `name` into `lowered`'s registries.
+fn keep_entry(name: curios_core::Global, entry: &curios_core::Nominal, lowered: &mut Lowering) {
+    match entry {
+        curios_core::Nominal::Inductive(declaration) => {
+            lowered.induct_decls.insert(name, declaration.clone());
         }
-        Some(curios_core::Nominal::Struct(record)) => {
+        curios_core::Nominal::Struct(record) => {
             lowered.struct_decls.insert(name, record.clone());
         }
-        Some(curios_core::Nominal::Concept { concept, record }) => {
+        curios_core::Nominal::Concept { concept, record } => {
             lowered.struct_decls.insert(name, record.clone());
             lowered.concepts.insert(name, concept.clone());
         }
-        None => {}
     }
 }
 

@@ -579,7 +579,7 @@ fn verdicts_within<'s>(
             .map(|place| &definitions.items[*place])
     };
     let mut adopting = over.map(|over| Adopting::over(over.baseline));
-    // The registry entries the visited items' formers carry, each under the name that declares it, and those whose terms the walk holds to their rules.
+    // The registry entries the visited items hold, each under the name that declares it, and those whose terms the walk holds to their rules.
     let (mut inducts, mut structs) = (BTreeMap::new(), BTreeMap::new());
     let mut checked = BTreeSet::new();
     for place in &walk {
@@ -1006,6 +1006,28 @@ fn verdicts_within<'s>(
 
                 Item::Rec(rec)
             }
+            // A nominal declaration defines nothing to judge: each former is made of its entry, which is judged below, and defined as made ahead of the entries that may name it.
+            Item::Nominal(nominals) => {
+                let item = Item::Nominal(nominals);
+                for former in item.formers() {
+                    if let Err(error) = define_as_stated(
+                        certifier,
+                        &former.name,
+                        &former.type_,
+                        &former.body,
+                        false,
+                        former.value_sort.as_ref(),
+                        &former.universe_context,
+                    ) {
+                        verdicts.push(Verdict {
+                            name: item_name,
+                            error,
+                        });
+                    }
+                }
+
+                item
+            }
         };
         let item = &item;
 
@@ -1019,7 +1041,7 @@ fn verdicts_within<'s>(
             judged.push(name);
         }
 
-        // The registry entries the item's formers carry, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
+        // The registry entries the item holds, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
         let (carried_inducts, carried_structs) = carried(item);
         accept(
             certifier,
@@ -1697,6 +1719,8 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
 
             Item::Rec(rec)
         }
+        // Its names are made of its entries, and stand as made.
+        Item::Nominal(nominals) => Item::Nominal(nominals),
     };
 
     (stated, refusals)
@@ -1778,7 +1802,7 @@ fn adopt(
     adopted
 }
 
-/// The registry entries `item`'s formers carry, as the two maps a set of declarations is accepted as: a family's, and a record's, a structure's or the one a concept's witnesses are values of.
+/// The registry entries `item` holds, as the two maps a set of declarations is accepted as: a family's, and a record's, a structure's or the one a concept's witnesses are values of.
 fn carried(item: &Item) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, StructDecl>) {
     let mut inducts = BTreeMap::new();
     let mut structs = BTreeMap::new();

@@ -36,13 +36,12 @@ pub induct Box: pub Type
 end
 ";
 
-/// The name of the definition `unit` calls `symbol`.
+/// The name of the declaration `unit` calls `symbol`.
 fn named(unit: &Unit, symbol: &str) -> Global {
     unit.core()
         .items
         .iter()
-        .flat_map(|item| item.definitions())
-        .map(|definition| definition.name)
+        .flat_map(|item| item.declared_names())
         .find(|name| name.faithful().to_string().ends_with(&format!("/{symbol}")))
         .unwrap_or_else(|| panic!("the unit defines no `{symbol}`"))
 }

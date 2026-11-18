@@ -501,6 +501,8 @@ fn check_declared_sort(result_sort: &Term) -> Result<(), Error> {
             quality: Quality::Param(_) | Quality::Meta(_),
             level: _,
         }) => Err(Error::OpenSort(result_sort.clone())),
+        // A node only elaboration builds is elaboration's before it is anything else, as inference refuses it.
+        Subterm::Metavar(_) | Subterm::Transient(_) => Err(Error::NotCore(result_sort.clone())),
         _ => Err(Error::NotASort(result_sort.clone())),
     }
 }

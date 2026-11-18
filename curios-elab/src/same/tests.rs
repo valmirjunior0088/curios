@@ -84,7 +84,7 @@ fn constrained(upper: usize) -> Item {
         },
         ..match stated(1, false) {
             Item::Let(definition) => *definition,
-            Item::Rec(_) => unreachable!("a definition of its own"),
+            Item::Rec(_) | Item::Nominal(_) => unreachable!("a definition of its own"),
         }
     }))
 }

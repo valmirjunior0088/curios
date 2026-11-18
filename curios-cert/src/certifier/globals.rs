@@ -10,7 +10,7 @@
 //!
 //! # What a walk starts from is read where it stands
 //!
-//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, the entries its type formers carry, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`certify_definitions`](crate::certify_definitions) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name a unit here declares, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
+//! [`Globals`] is the units in scope, which is how an already-certified module reaches a later walk: its definitions at their declared types with their real bodies, the entries its items hold with the formers and constructors made of them, and the certifier's record of its definitions' totality and of its families' polarity vectors. Nothing of a unit is brought in. A name is answered by reference into the unit that holds it, by the places the unit keeps for its names (`curios_core::Places`), so what a walk costs of its scope is what its judgments read. A caller that has units hands them to [`certify_definitions`](crate::certify_definitions) and the walk judges the module it is handed against them. A name is one declaration: a module is refused for a name a unit here declares, whatever it declares under it (`Globals::in_scope`), and nothing about that question identifies an item by where it sits.
 //!
 //! # What a walk reads is three layers
 //!
@@ -41,7 +41,7 @@ pub struct Held<'a> {
     pub universes: &'a UniverseContext,
 }
 
-/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, either with nothing to unfold to where it is marked a proof, and a family's constructor as its family's entry makes it.
+/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, either with nothing to unfold to where it is marked a proof, and a former or a family's constructor as its entry makes it.
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
 pub fn held<'a>(
@@ -63,7 +63,9 @@ pub fn held<'a>(
                     universes: &definition.universe_context,
                 })
             }
-            Item::Rec(_) => unreachable!("a definition's place is a definition's"),
+            Item::Rec(_) | Item::Nominal(_) => {
+                unreachable!("a definition's place is a definition's")
+            }
         },
         Place::Member { member, .. } => match &definitions.items[place.item()] {
             Item::Rec(rec) => {
@@ -76,17 +78,17 @@ pub fn held<'a>(
                     universes: rec.universe_context(),
                 })
             }
-            Item::Let(_) => unreachable!("a member's place is a group's"),
+            Item::Let(_) | Item::Nominal(_) => unreachable!("a member's place is a group's"),
         },
-        // A family's constructor, as its family's entry makes it: its type and its injection, at its family's universes.
-        Place::Constructor { .. } => {
-            let definition = places.constructor(name, &definitions.items[place.item()]);
+        // A former or a family's constructor, as its entry makes it: its type and what it unfolds to, at its declaration's universes.
+        Place::Made { .. } => {
+            let made = places.made(name, &definitions.items[place.item()]);
 
             Some(Held {
-                type_: &definition.type_,
-                value: Some(&definition.body),
-                value_sort: None,
-                universes: &definition.universe_context,
+                type_: &made.type_,
+                value: Some(&made.body),
+                value_sort: made.value_sort.as_ref(),
+                universes: &made.universe_context,
             })
         }
     }
@@ -151,7 +153,7 @@ impl<'s> Mounted<'s> {
         held(self.definitions, self.places, name)
     }
 
-    /// Whether this unit declares `name`. An entry is held by its type former, so the names a unit declares are its items'.
+    /// Whether this unit declares `name`. An entry is held by the item that declares it, so the names a unit declares are its items'.
     fn holds(&self, name: &Global) -> bool {
         self.places.place(name).is_some()
     }
@@ -198,7 +200,7 @@ pub struct Globals<'s> {
 }
 
 impl<'s> Globals<'s> {
-    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and the entries its type formers carry — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
+    /// Put the unit `module` in scope — its definitions at their declared types with their real bodies, a proof's withheld, and the entries its items hold — read by the `places` its unit keeps for it, with the record the certifier's walk over it filed.
     ///
     /// Where `certification` covers `module`, its classifications are the environment's; where it does not, `module`'s items are a walk's to classify. Each registry entry answers its polarity from the vector the record files for it, and one it files none for is a walk's to compute. An environment built by hand, with no walk behind it, passes an empty record, which covers nothing a unit declares.
     ///

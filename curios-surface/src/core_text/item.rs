@@ -1,6 +1,6 @@
 //! A file of Core text read back into the module it writes, and the entry a program closes with.
 //!
-//! **Each item stands where it is written.** A group's members, a test and a foreign row's definition each make the item the text writes at its place. A family's constructors are no item: its form declares them, and they are what its entry makes of them ([`Item::constructors`]), so a module neither lacks one nor holds one apart from its family, and a definition is never declared one.
+//! **Each item stands where it is written.** A group's members, a test and a foreign row's definition each make the item the text writes at its place. A nominal declaration's forms make the item that holds their entries, and its formers and a family's constructors are what those entries make of them ([`Item::made`]), so a module neither lacks one nor holds one apart from its declaration, and a definition is never declared one.
 //!
 //! **A group's members name one another by their paths at the group's own instance**, as a group opened to be written names them ([`RecItem::definitions`]); each such reference is the group's own binder again where the group is made.
 
@@ -12,13 +12,13 @@ use {
     },
     crate::{
         CoreFile, CoreItem, CoreMember, CoreText, CoreValue, FormScope, LetSignature, TopForeign,
-        TopTest, concept_supers_read_off,
+        TopLet, TopTest, concept_supers_read_off,
     },
     curios_abi::ForeignFunction,
     curios_common::Qualifier,
     curios_core::{
         ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item, Nominal,
-        RecItem, Term, UniverseContext,
+        Nominals, RecItem, Term, UniverseContext,
     },
     std::sync::Arc,
 };
@@ -170,11 +170,33 @@ struct Member {
     node: Option<String>,
 }
 
-/// A group of members as the item it writes: a lone definition a `let`, a lone family a group, a lone record or concept a `let`, each unless its decorator's `node` says otherwise, and several members a group.
+/// A group of members as the item it writes: nominal forms the declaration whose entries they state, a lone definition a `let` unless its decorator's `node` says it is a group, and several definitions a group.
 fn group_read(members: &[CoreMember], reader: &mut Reader<'_>) -> Result<Item, ReadError> {
+    let definitions = members
+        .iter()
+        .filter_map(|member| match member {
+            CoreMember::Let(definition) => Some(definition),
+            CoreMember::Induct(_) | CoreMember::Struct(_) | CoreMember::Concept(_) => None,
+        })
+        .collect::<Vec<_>>();
+    if definitions.is_empty() {
+        let mut scheme = None;
+        let entries = members
+            .iter()
+            .enumerate()
+            .map(|(index, member)| entry_read(member, index, &mut scheme, reader))
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(Item::Nominal(Nominals::new(entries)));
+    }
+    if definitions.len() != members.len() {
+        return Err(ReadError::at(
+            Refusal::Malformed("a group of definitions, or of nominal declarations"),
+            members.first().and_then(member_span),
+        ));
+    }
     let mut scheme = None;
     let (mut read, held) = reader.grouped(|reader| {
-        members
+        definitions
             .iter()
             .enumerate()
             .map(|(index, member)| member_read(member, index, &mut scheme, reader))
@@ -187,14 +209,7 @@ fn group_read(members: &[CoreMember], reader: &mut Reader<'_>) -> Result<Item, R
         })
     };
     let grouped = match read.as_slice() {
-        [lone] => {
-            let family = matches!(lone.definition.kind.nominal(), Some(Nominal::Inductive(_)));
-            match lone.node.as_deref() {
-                Some("Rec") => true,
-                Some("Let") => false,
-                _ => family,
-            }
-        }
+        [lone] => lone.node.as_deref() == Some("Rec"),
         _ => true,
     };
     if !grouped {
@@ -254,19 +269,35 @@ fn member_span(member: &CoreMember) -> Option<&curios_common::Span> {
     }
 }
 
-/// One member under its decorator: a definition by its name, type and body, or a nominal declaration in its form. `scheme` is the group's, which its first member states.
-fn member_read(
+/// A nominal declaration's form as the name it declares and its entry: its entry's parts under the scheme `scheme` its group shares, which its first member states. A former is made of its entry, so its decorator states nothing of one.
+fn entry_read(
     member: &CoreMember,
     index: usize,
     scheme: &mut Option<UniverseContext>,
     reader: &mut Reader<'_>,
-) -> Result<Member, ReadError> {
+) -> Result<(Global, Nominal), ReadError> {
     let (core, span) = match member {
-        CoreMember::Let(member) => (&member.core, member.label.span()),
         CoreMember::Induct(member) => (&member.core, member.label.span()),
         CoreMember::Struct(member) => (&member.core, member.label.span()),
         CoreMember::Concept(member) => (&member.core, member.label.span()),
+        CoreMember::Let(_) => unreachable!("a definition is read by its name, type and body"),
     };
+    let mut fields = Fields::of(&core.fields, span)?;
+    let scheme = group_scheme(&mut fields, index, scheme)?;
+    let entry = nominal_read(member, &core.name, &scheme, &mut fields, reader)?;
+    fields.finish()?;
+
+    Ok((core.name, entry))
+}
+
+/// One definition of a group under its decorator, by its name, type and body. `scheme` is the group's, which its first member states.
+fn member_read(
+    member: &TopLet<CoreText>,
+    index: usize,
+    scheme: &mut Option<UniverseContext>,
+    reader: &mut Reader<'_>,
+) -> Result<Member, ReadError> {
+    let (core, span) = (&member.core, member.label.span());
     let name = core.name;
     let mut fields = Fields::of(&core.fields, span)?;
     let node = match index {
@@ -277,17 +308,7 @@ fn member_read(
             .map(str::to_string),
         _ => None,
     };
-    let context = match (index, fields.take("universe_context")) {
-        (0, Some(value)) => universe_context_read(value)?,
-        (0, None) => UniverseContext::empty(),
-        (_, Some(value)) => {
-            return Err(malformed("a scheme its group's first member states", value));
-        }
-        (_, None) => scheme.clone().unwrap_or_default(),
-    };
-    if index == 0 {
-        *scheme = Some(context.clone());
-    }
+    let context = group_scheme(&mut fields, index, scheme)?;
     let kind = fields.take("kind").map(kind_read).transpose()?;
     let island = island_read(&mut fields, &name)?;
     let proof = fields
@@ -299,53 +320,50 @@ fn member_read(
         .take("value_sort")
         .map(|value| core_read(&value_term(value)?, reader))
         .transpose()?;
-    let definition = match member {
-        CoreMember::Let(member) => {
-            let LetSignature::Name {
-                type_: Some(type_),
-                body,
-            } = &member.signature
-            else {
-                return Err(ReadError::at(
-                    Refusal::ProgramForm("a definition's sugar"),
-                    span,
-                ));
-            };
-            Definition {
-                name,
-                kind: kind.unwrap_or(DefinitionKind::Authored),
-                universe_context: context,
-                island,
-                proof,
-                value_sort,
-                type_: core_read(type_, reader)?,
-                body: core_read(body, reader)?,
-            }
-        }
-        nominal => {
-            if kind.is_some() {
-                return Err(ReadError::at(
-                    Refusal::UnknownField("kind".to_string()),
-                    span,
-                ));
-            }
-            let entry = nominal_read(nominal, &name, &context, &mut fields, reader)?;
-            let mut definition = Definition::former(name, island, entry);
-            definition.universe_context = context;
-            definition.proof = proof;
-            definition.value_sort = value_sort;
-            if let Some(value) = fields.take("type_") {
-                definition.type_ = core_read(&value_term(value)?, reader)?;
-            }
-            if let Some(value) = fields.take("body") {
-                definition.body = core_read(&value_term(value)?, reader)?;
-            }
-            definition
-        }
+    let LetSignature::Name {
+        type_: Some(type_),
+        body,
+    } = &member.signature
+    else {
+        return Err(ReadError::at(
+            Refusal::ProgramForm("a definition's sugar"),
+            span,
+        ));
+    };
+    let definition = Definition {
+        name,
+        kind: kind.unwrap_or(DefinitionKind::Authored),
+        universe_context: context,
+        island,
+        proof,
+        value_sort,
+        type_: core_read(type_, reader)?,
+        body: core_read(body, reader)?,
     };
     fields.finish()?;
 
     Ok(Member { definition, node })
+}
+
+/// The scheme the member at `index` of a group is read under: the one its decorator states where it is the first, which `scheme` keeps for the rest, each of which states none.
+fn group_scheme(
+    fields: &mut Fields<'_>,
+    index: usize,
+    scheme: &mut Option<UniverseContext>,
+) -> Result<UniverseContext, ReadError> {
+    let context = match (index, fields.take("universe_context")) {
+        (0, Some(value)) => universe_context_read(value)?,
+        (0, None) => UniverseContext::empty(),
+        (_, Some(value)) => {
+            return Err(malformed("a scheme its group's first member states", value));
+        }
+        (_, None) => scheme.clone().unwrap_or_default(),
+    };
+    if index == 0 {
+        *scheme = Some(context.clone());
+    }
+
+    Ok(context)
 }
 
 /// A nominal declaration's entry from its form.

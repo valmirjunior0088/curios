@@ -42,11 +42,10 @@ fn family(owner: &str, tags: &[&str]) -> Item {
         false,
     );
 
-    Item::Let(Box::new(Definition::former(
+    Item::Nominal(Nominals::new(vec![(
         name(&[owner]),
-        Qualifier::empty(),
         Nominal::Inductive(declaration),
-    )))
+    )]))
 }
 
 fn definitions(items: Vec<Item>) -> Definitions {

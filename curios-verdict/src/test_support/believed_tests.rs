@@ -1180,10 +1180,7 @@ end
 fn a_record_stepped_to_a_variance_its_fields_deny_is_refused_over_its_baseline() {
     let carrying = |variance: &str| {
         fill!(
-            r"#{
-    universe_context = {parameter_count = 1},
-    value_sort = #{level = u + 1} Type,
-    variances = [${variance}]}
+            r"#{universe_context = {parameter_count = 1}, variances = [${variance}]}
 struct /u/R: #{level = u + 1} Type { field: #{level = u} Type }
 ",
             variance = variance,

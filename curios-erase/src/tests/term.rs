@@ -71,7 +71,9 @@ fn bool_and_byte_keep_their_shapes() {
             ),
         ) {
             curios_core::Item::Let(definition) => *definition,
-            curios_core::Item::Rec(_) => unreachable!("a fixture's definition is a `let`"),
+            curios_core::Item::Rec(_) | curios_core::Item::Nominal(_) => {
+                unreachable!("a fixture's definition is a `let`")
+            }
         }
     }));
     let qed = curios_core::Term::func(

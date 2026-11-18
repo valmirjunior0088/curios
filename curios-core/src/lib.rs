@@ -42,11 +42,12 @@ mod definitions;
 pub use definitions::{
     Abroad, ArchivedAbroad, ArchivedCertification, ArchivedCertified, ArchivedDeclared,
     ArchivedDefinition, ArchivedDefinitionKind, ArchivedDefinitions, ArchivedItem, ArchivedNominal,
-    ArchivedParameterField, ArchivedRead, ArchivedReads, ArchivedRecDefinition, ArchivedRecItem,
-    ArchivedTotality, Certification, Certified, Concluded, Declared, Definition, DefinitionKind,
-    Definitions, Entrypoint, HeldReads, Item, Made, MadeKind, Nominal, ParameterField, Positional,
-    Program, Read, ReadBy, ReadRecord, Reads, RecDefinition, RecItem, Revision, Totality,
-    former_spelling, free_locals_of, open_positions_of, validate_stored_identities,
+    ArchivedNominals, ArchivedParameterField, ArchivedRead, ArchivedReads, ArchivedRecDefinition,
+    ArchivedRecItem, ArchivedTotality, Certification, Certified, Concluded, Declared, Definition,
+    DefinitionKind, Definitions, Entrypoint, HeldReads, Item, Made, MadeKind, Nominal, Nominals,
+    ParameterField, Positional, Program, Read, ReadBy, ReadRecord, Reads, RecDefinition, RecItem,
+    Revision, Totality, former_spelling, free_locals_of, open_positions_of,
+    validate_stored_identities,
 };
 
 mod places;

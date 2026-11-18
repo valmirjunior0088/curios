@@ -48,14 +48,13 @@ impl Same {
         match (made, held) {
             (Item::Let(made), Item::Let(held)) => Self::of_definition(made, held, classified),
             (Item::Rec(made), Item::Rec(held)) => Self::of_member(made, held, member, classified),
+            (Item::Nominal(_), Item::Nominal(_)) => Self::of_former(made, held, member, classified),
             _ => Self::default(),
         }
     }
 
     fn of_definition(made: &Definition, held: &Definition, classified: Self) -> Self {
-        let kind = made.name == held.name
-            && kinds_alike(&made.kind, &held.kind)
-            && made.island == held.island;
+        let kind = made.name == held.name && made.kind == held.kind && made.island == held.island;
         let signature = kind
             && made.universe_context == held.universe_context
             && spelled_alike(&made.type_, &held.type_);
@@ -86,9 +85,8 @@ impl Same {
         else {
             return Self::default();
         };
-        let kind = mine.name == theirs.name
-            && kinds_alike(&mine.kind, &theirs.kind)
-            && mine.island == theirs.island;
+        let kind =
+            mine.name == theirs.name && mine.kind == theirs.kind && mine.island == theirs.island;
         let group = kind && groups_alike(made, held);
         let totality = classified.totality;
 
@@ -101,6 +99,36 @@ impl Same {
             applications: classified.applications,
             // A group's member files no sort.
             sort: true,
+            ..Self::default()
+        }
+    }
+
+    /// [`Same::of_definition`] for the former at `member` among those of `made`, a nominal declaration, and `held`'s, each as its entry makes it.
+    fn of_former(made: &Item, held: &Item, member: usize, classified: Self) -> Self {
+        let (Some(mine), Some(theirs)) = (
+            made.formers().into_iter().nth(member),
+            held.formers().into_iter().nth(member),
+        ) else {
+            return Self::default();
+        };
+        let kind =
+            mine.name == theirs.name && mine.made == theirs.made && mine.island == theirs.island;
+        let signature = kind
+            && mine.universe_context == theirs.universe_context
+            && spelled_alike(&mine.type_, &theirs.type_);
+        let totality = classified.totality;
+
+        Self {
+            signature,
+            body: signature && totality && spelled_alike(&mine.body, &theirs.body),
+            kind,
+            totality,
+            variances: classified.variances,
+            applications: classified.applications,
+            sort: match (&mine.value_sort, &theirs.value_sort) {
+                (Some(mine), Some(theirs)) => spelled_alike(mine, theirs),
+                (mine, theirs) => mine.is_none() && theirs.is_none(),
+            },
             ..Self::default()
         }
     }
@@ -189,7 +217,7 @@ struct Asked<'a> {
     plain: Option<Plain<'a>>,
 }
 
-/// What a digest reads of a declaration held whole: its type, its value, its scheme, and the sort its value inhabits, where it states one. A definition's, or a made name's, which states none.
+/// What a digest reads of a declaration held whole: its type, its value, its scheme, and the sort its value inhabits, where it states one. A definition's, or a made name's.
 #[derive(Clone, Copy)]
 struct Plain<'a> {
     type_: &'a Term,
@@ -213,7 +241,7 @@ impl<'a> Plain<'a> {
             type_: &made.type_,
             body: &made.body,
             universe_context: &made.universe_context,
-            sort: None,
+            sort: made.value_sort.as_ref(),
         }
     }
 }
@@ -228,7 +256,7 @@ pub fn item_part_digest(
     let sharing = Sharing::new();
     let totality = classified.totality;
     let made;
-    // A definition of its own, a group's member with the group it is read through, or a constructor as its family's entry makes it, which is no definition and states no kind.
+    // A definition of its own, a group's member with the group it is read through, or a former or a constructor as its entry makes it, which is no definition and states no kind.
     let asked = match (item, place) {
         (Item::Let(definition), Place::Let(_)) => Asked {
             name: definition.name,
@@ -252,11 +280,11 @@ pub fn item_part_digest(
                 plain: None,
             }
         }
-        (_, Place::Constructor { .. }) => {
+        (_, Place::Made { .. }) => {
             made = question
                 .subject()
-                .and_then(|name| item.constructor(name))
-                .expect("a constructor's place is its family's item");
+                .and_then(|name| item.made(name))
+                .expect("a made name's place is its declaration's item");
 
             Asked {
                 name: made.name,
@@ -280,17 +308,8 @@ pub fn item_part_digest(
         plain,
     } = asked;
 
-    // What the name is declared as, the entry a former carries left out: the entry is a part of its own. A made name is what it is made as.
-    let origin = held
-        .filter(|held| !matches!(held, DefinitionKind::Nominal(_)))
-        .cloned();
-    let kind = (
-        name,
-        held.and_then(DefinitionKind::former),
-        origin,
-        made_as,
-        island,
-    );
+    // What the name is declared as: a definition what it was written as, and a made name what it is made as. A former's entry is a part of its own.
+    let kind = (name, held.cloned(), made_as, island);
     let signature = || match (plain, group) {
         (Some(definition), _) => {
             let type_ = sharing.share(definition.type_);
@@ -323,7 +342,7 @@ pub fn item_part_digest(
         }
         (None, None) => unreachable!("a name is a definition's or a member's"),
     };
-    let entry = held.and_then(DefinitionKind::nominal);
+    let entry = item.nominal(&name);
 
     match question {
         Question::Kind(_) => sealed(curios_archive::to_bytes(&kind)).map(Some),
@@ -370,14 +389,6 @@ pub fn item_part_digest(
 /// The digest of a part, of the bytes it archived as.
 fn sealed(archived: Result<curios_archive::Serialized, String>) -> Result<String, String> {
     archived.map(|bytes| digest(&bytes))
-}
-
-/// Whether two kinds say one thing of a name, the entry a type former carries left out. An entry is a part of its own, compared as the context holds it ([`Same::keying`]): the one a former made again carries is the lowering's until its item leaves the walk, and a former held to it would have moved for every declaration that read its signature.
-fn kinds_alike(this: &DefinitionKind, that: &DefinitionKind) -> bool {
-    match (this, that) {
-        (DefinitionKind::Nominal(_), DefinitionKind::Nominal(_)) => this.former() == that.former(),
-        _ => this == that,
-    }
 }
 
 /// Whether two finished terms are one as a unit stores them: equal, each binder under the name it was written with.

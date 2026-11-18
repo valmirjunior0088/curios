@@ -1,4 +1,4 @@
-//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former is a definition it checks as any other, typed by what the module holds under its name and never by what the form would have made; its constructors are names the form declares, made as its entry makes them, so no definition stands under one; and a concept's method is no definition at all.
+//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former and its constructors are names the form declares, made as its entry makes them, so no definition stands under one and no decorator states one otherwise; and a concept's method is no definition at all.
 
 use {
     super::test_support::*,
@@ -78,7 +78,7 @@ fn a_definition_under_a_constructors_name_is_a_second_declaration_of_it() {
     );
 }
 
-/// A family of no case whose former the text states as another proposition, one with a proof, and a match on a proof of the former's name over the family's no case: were the name read as the node its entry builds, the match would be a proof of anything.
+/// A family of no case whose former the text would state as another proposition, one with a proof, and a match on a proof of the former's name over the family's no case: were the name read as the statement, the match would be one on `True`, and were it read as the node with the statement's proof, a proof of anything.
 const FORMER_STATED_OTHERWISE: &str = r#"
 #{type_ = Prop, body = /std/Bool/True}
 induct /E: pub Prop
@@ -92,24 +92,26 @@ end
 )
 "#;
 
-/// A former's name is what its definition states, checked as any definition is, and the family's node is what its entry states: the name unfolds to `True`, so the match is one on `True` with no arm for `qed`, and nothing is refused under `/E`.
+/// A former is made of its entry, so a form's decorator states no part of one: a type or a body stated for it is refused where the text is read, and no module holds the family.
 #[test]
-fn a_former_stated_otherwise_is_read_as_it_is_stated() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${FORMER_STATED_OTHERWISE}",
-        PROPOSITIONS,
-        FORMER_STATED_OTHERWISE
-    ));
+fn a_former_stated_otherwise_is_refused_as_it_is_read() {
+    let read = put()
+        .read(&fill!(
+            "${PROPOSITIONS}\n${FORMER_STATED_OTHERWISE}",
+            PROPOSITIONS,
+            FORMER_STATED_OTHERWISE
+        ))
+        .map(|_| ());
 
     assert!(
         matches!(
-            &verdicts[..],
-            [Verdict {
-                name: None,
-                error: Error::MissingArm { .. }
-            }]
+            &read,
+            Err(crate::test_support::Unread::Read(curios_surface::ReadError {
+                refusal: curios_surface::Refusal::UnknownField(field),
+                ..
+            })) if field == "type_" || field == "body"
         ),
-        "{verdicts:?}"
+        "{read:?}"
     );
 }
 
@@ -147,5 +149,29 @@ fn two_cases_a_form_states_under_one_tag_are_refused_as_it_is_read() {
             })) if tag == "mk"
         ),
         "{read:?}"
+    );
+}
+
+/// A former's name is typed as its entry spells it: `/Box`, a record of one parameter, is a function from a type to a type, so a definition of that type stands at it, and one claiming it is a type is refused under its own name.
+#[test]
+fn a_former_is_typed_as_its_entry_spells_it() {
+    let verdicts = text_verdicts(
+        r#"
+struct /Box(A: Type): pub Type {
+    held: A,
+}
+
+let /boxing: (A: Type) -> Type = /Box;
+
+let /claimed: Type = /Box;
+"#,
+    );
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(name), .. }] if *name == Global::Authored(Qualifier::from(["claimed"]))
+        ),
+        "{verdicts:?}"
     );
 }

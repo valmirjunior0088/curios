@@ -13,10 +13,10 @@ use {
     super::Certifier,
     crate::bears_proof,
     curios_core::{
-        Bound, Definition, DefinitionKind, Entrypoint, Free, InductDecl, Item, Nominal,
-        ProofBinders, Telescope, Term,
+        Bound, Definition, Entrypoint, Free, InductDecl, Item, Nominal, ProofBinders, Telescope,
+        Term,
     },
-    std::{convert::Infallible, rc::Rc},
+    std::convert::Infallible,
 };
 
 /// The marking walk's questions, answered by this certifier's reading under the binders the walk has entered.
@@ -118,24 +118,10 @@ fn stating_parameters(declaration: InductDecl, proofs: &[bool]) -> InductDecl {
     declaration.with_arity(arity)
 }
 
-/// `kind`, with the family it carries stating its payloads' marks where it carries one.
-fn stated_kind(certifier: &mut Certifier, kind: &DefinitionKind) -> DefinitionKind {
-    match kind {
-        DefinitionKind::Nominal(nominal) => match &**nominal {
-            Nominal::Inductive(declaration) => DefinitionKind::Nominal(Rc::new(
-                Nominal::Inductive(stated_entry(certifier, declaration)),
-            )),
-            Nominal::Struct(_) | Nominal::Concept { .. } => kind.clone(),
-        },
-        _ => kind.clone(),
-    }
-}
-
-/// `item` with every binder its terms bind and every payload of the families it declares stating whether it binds a proof, as this certifier reads each. What it states of each name the item declares is the judgment's ([`check_definition`](super::check_definition), [`check_rec_group`](super::check_rec_group)).
+/// `item` with every binder its terms bind and every payload of the families it declares stating whether it binds a proof, as this certifier reads each. What it states of each name the item defines is the judgment's ([`check_definition`](super::check_definition), [`check_rec_group`](super::check_rec_group)).
 pub fn stated_marks(certifier: &mut Certifier, item: &Item) -> Item {
     match item {
         Item::Let(definition) => Item::Let(Box::new(Definition {
-            kind: stated_kind(certifier, &definition.kind),
             type_: stated_term(certifier, &definition.type_, &[]),
             body: stated_term(certifier, &definition.body, &[]),
             ..(**definition).clone()
@@ -151,12 +137,16 @@ pub fn stated_marks(certifier: &mut Certifier, item: &Item) -> Item {
             let group = rec
                 .group()
                 .map_members(|body| stated_term(certifier, body, &members));
-            let mut stated = rec.with_group(group);
-            for definition in stated.exports_mut() {
-                definition.kind = stated_kind(certifier, &definition.kind);
-            }
 
-            Item::Rec(stated)
+            Item::Rec(rec.with_group(group))
+        }
+        Item::Nominal(nominals) => {
+            Item::Nominal(nominals.clone().with_entries(|_, entry| match entry {
+                Nominal::Inductive(declaration) => {
+                    Some(Nominal::Inductive(stated_entry(certifier, declaration)))
+                }
+                Nominal::Struct(_) | Nominal::Concept { .. } => None,
+            }))
         }
     }
 }
@@ -169,7 +159,6 @@ pub fn stated_marks(certifier: &mut Certifier, item: &Item) -> Item {
 pub fn carried_marks(item: &Item, stated: &Item) -> Item {
     match (item, stated) {
         (Item::Let(definition), Item::Let(from)) => Item::Let(Box::new(Definition {
-            kind: carried_kind(&definition.kind, &from.kind),
             proof: from.proof,
             value_sort: from.value_sort.clone(),
             type_: definition.type_.with_proofs_of(&from.type_),
@@ -179,23 +168,28 @@ pub fn carried_marks(item: &Item, stated: &Item) -> Item {
         (Item::Rec(rec), Item::Rec(from)) => {
             let mut carried = rec.with_group(rec.group().with_proofs_of(from.group()));
             for (member, from) in carried.exports_mut().iter_mut().zip(from.exports()) {
-                member.kind = carried_kind(&member.kind, &from.kind);
                 member.proof = from.proof;
             }
 
             Item::Rec(carried)
         }
+        (Item::Nominal(nominals), Item::Nominal(from)) => {
+            let mut stated = from.entries().iter();
+            Item::Nominal(nominals.clone().with_entries(|_, entry| {
+                let (_, from) = stated
+                    .next()
+                    .expect("an item the baseline holds in another's place is of its shape");
+                carried_entry(entry, from)
+            }))
+        }
         _ => panic!("an item the baseline holds in another's place is of its kind"),
     }
 }
 
-/// `kind`, with the family it carries stating of its payloads what the one `stated` carries does.
-fn carried_kind(kind: &DefinitionKind, stated: &DefinitionKind) -> DefinitionKind {
-    let (DefinitionKind::Nominal(nominal), DefinitionKind::Nominal(from)) = (kind, stated) else {
-        return kind.clone();
-    };
-    let (Nominal::Inductive(declaration), Nominal::Inductive(from)) = (&**nominal, &**from) else {
-        return kind.clone();
+/// `nominal`, a family, stating of its payloads what `stated`, the family the baseline holds in its place, does: `None` for another kind of entry, which states no mark.
+fn carried_entry(nominal: &Nominal, stated: &Nominal) -> Option<Nominal> {
+    let (Nominal::Inductive(declaration), Nominal::Inductive(from)) = (nominal, stated) else {
+        return None;
     };
 
     let mut stated = from.signatures();
@@ -208,5 +202,5 @@ fn carried_kind(kind: &DefinitionKind, stated: &DefinitionKind) -> DefinitionKin
             case.with_proofs(&proofs)
         });
 
-    DefinitionKind::Nominal(Rc::new(Nominal::Inductive(carried)))
+    Some(Nominal::Inductive(carried))
 }

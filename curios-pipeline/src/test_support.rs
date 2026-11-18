@@ -150,7 +150,7 @@ pub fn compile_read(
     ))
 }
 
-/// The scope Core text is read over with the fixed prelude in front of it: the entries the prelude's formers carry and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.
+/// The scope Core text is read over with the fixed prelude in front of it: the entries the prelude's items hold and the foreign rows its declarations state, as a unit's lowering is handed those of the units before it.
 pub fn prelude_form_scope() -> FormScope {
     with_prelude(|prelude| FormScope::over(SYNTAX, prelude.iter().map(|unit| unit.core())))
 }

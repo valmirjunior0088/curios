@@ -1,5 +1,4 @@
 -- The tuple carrier's recursion with a structure's literal as the projected head: `/g(n, …)` is its first field, the first application typed inside it.
-#{value_sort = Type}
 struct /P: Type {
     a: {#NatType, ((#NatType) -> #{node = InductType} /sys/Bool/False()) -> #NatType},
     b: ((#NatType) -> #{node = InductType} /sys/Bool/False()) ->

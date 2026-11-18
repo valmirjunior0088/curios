@@ -93,7 +93,7 @@ impl<'a> Standing<'a> {
     fn group(&self, item: usize) -> &'a RecItem {
         match &self.definitions.items[item] {
             Item::Rec(rec) => rec,
-            Item::Let(_) => unreachable!("a member's place is a group's"),
+            Item::Let(_) | Item::Nominal(_) => unreachable!("a member's place is a group's"),
         }
     }
 
@@ -149,23 +149,23 @@ impl<'a> Standing<'a> {
                     island: definition.island,
                 })
             }
-            // A family's constructor, as its family's entry makes it: its injection, total by construction.
-            Place::Constructor { .. } => {
-                let definition = self
+            // A former or a family's constructor, as its entry makes it: total by construction.
+            Place::Made { .. } => {
+                let made = self
                     .places()
-                    .constructor(name, &self.definitions.items[place.item()]);
+                    .made(name, &self.definitions.items[place.item()]);
 
                 Some(Defined {
-                    type_: &definition.type_,
-                    body: Some(&definition.body),
-                    universe_context: &definition.universe_context,
+                    type_: &made.type_,
+                    body: Some(&made.body),
+                    universe_context: &made.universe_context,
                     totality: Totality::Total,
                     applications: None,
                     variances,
                     field_variances,
                     parameter_field,
-                    value_sort: None,
-                    island: definition.island,
+                    value_sort: made.value_sort.as_ref(),
+                    island: made.island,
                 })
             }
         }
@@ -222,7 +222,7 @@ impl<'a> Standing<'a> {
                             universe_context: rec.universe_context().clone(),
                         })
                 }
-                Item::Let(_) => None,
+                Item::Let(_) | Item::Nominal(_) => None,
             })
     }
 

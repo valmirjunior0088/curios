@@ -55,11 +55,11 @@ pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<curios_core::
         root(&curios_core::Global::Authored(target), &mut pending);
     }
     for (node, item) in items.iter().enumerate() {
-        if item.declared().any(|(name, kind, _)| {
+        if item.declared().any(|(name, declared, _)| {
             matches!(
-                kind,
-                curios_core::DefinitionKind::Witness | curios_core::DefinitionKind::Test
-            ) || (is_reportable(kind) && name.qualifier().is_some_and(kept))
+                declared,
+                curios_core::Declared::Witness | curios_core::Declared::Test
+            ) || (is_reportable(declared) && name.qualifier().is_some_and(kept))
         }) {
             pending.push(node);
         }
@@ -87,7 +87,7 @@ pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<curios_core::
         .enumerate()
         .filter(|(node, _)| !reached.contains(node))
         .flat_map(|(_, (item, lowered))| item.declared().zip(&lowered.definitions))
-        .filter(|((_, kind, _), _)| is_reportable(kind))
+        .filter(|((_, declared, _), _)| is_reportable(*declared))
         .filter_map(|((name, _, _), declared)| Some((name, declared.label.as_ref()?)))
         .collect::<Vec<_>>();
     let live = items
@@ -95,7 +95,7 @@ pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<curios_core::
         .enumerate()
         .filter(|(node, _)| reached.contains(node))
         .flat_map(|(_, item)| item.declared())
-        .filter(|(_, kind, _)| is_reportable(kind))
+        .filter(|(_, declared, _)| is_reportable(*declared))
         .filter_map(|(name, _, _)| name.qualifier().cloned())
         .collect::<Vec<_>>();
 
@@ -170,11 +170,8 @@ pub fn kept(name: &Qualifier) -> bool {
 }
 
 /// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a witness and a test are reached through their owner or are roots, and are never reported; a concept's method is its field, and no definition.
-fn is_reportable(kind: &curios_core::DefinitionKind) -> bool {
-    matches!(
-        kind,
-        curios_core::DefinitionKind::Authored | curios_core::DefinitionKind::Nominal(_)
-    )
+fn is_reportable(declared: curios_core::Declared) -> bool {
+    declared.is_defined() || declared.is_former()
 }
 
 /// The target of every binding a consumer outside the unit can reach: those of every module reachable from a claimed prefix through public children, re-exports included, since that is what the public interfaces record.

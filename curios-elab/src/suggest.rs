@@ -199,34 +199,33 @@ fn module_pool(
     let mut pool = Vec::new();
     let mut own = BTreeSet::new();
 
-    let mut definitions = |definition: &curios_core::Definition| {
-        own.insert(definition.name);
-        if Some(&definition.name) != owner && context.declared_type(&definition.name).is_some() {
-            pool.push((3, definition.name));
-        }
-    };
-    for item in written {
-        match item {
-            Item::Let(definition) => definitions(definition),
-            Item::Rec(rec) => rec.definitions().iter().for_each(&mut definitions),
+    // Each name the unit wrote a definition of or a declaration's former under, with the terms it is read by: a former's are what its entry makes.
+    let declared = written
+        .iter()
+        .flat_map(|item| {
+            let definitions = item
+                .definitions()
+                .into_iter()
+                .map(|definition| (definition.name, definition.type_, definition.body));
+            let formers = item
+                .formers()
+                .into_iter()
+                .map(|former| (former.name, former.type_, former.body));
+            definitions.chain(formers).collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    for (name, _, _) in &declared {
+        own.insert(*name);
+        if Some(name) != owner && context.declared_type(name).is_some() {
+            pool.push((3, *name));
         }
     }
 
     let mut referenced = BTreeSet::new();
     let mut collect = |term: &Term| referenced.extend(term.mentions().declarations().copied());
-    for item in written {
-        match item {
-            Item::Let(definition) => {
-                collect(&definition.type_);
-                collect(&definition.body);
-            }
-            Item::Rec(rec) => {
-                for definition in rec.definitions() {
-                    collect(&definition.type_);
-                    collect(&definition.body);
-                }
-            }
-        }
+    for (_, type_, body) in &declared {
+        collect(type_);
+        collect(body);
     }
     if let Some(entry) = entry {
         collect(&entry.body);

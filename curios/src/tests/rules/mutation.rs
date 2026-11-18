@@ -66,7 +66,7 @@ fn lets(definitions: &Definitions) -> Vec<usize> {
         .enumerate()
         .filter_map(|(index, item)| match item {
             Item::Let(_) => Some(index),
-            Item::Rec(_) => None,
+            Item::Rec(_) | Item::Nominal(_) => None,
         })
         .collect()
 }
@@ -143,7 +143,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
             .into_iter()
             .map(|index| match &program.definitions.items[index] {
                 Item::Let(definition) => (index, definition.type_.clone()),
-                Item::Rec(_) => unreachable!("the index came from a `let`"),
+                Item::Rec(_) | Item::Nominal(_) => unreachable!("the index came from a `let`"),
             })
             .collect::<Vec<_>>();
 

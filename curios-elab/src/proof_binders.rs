@@ -150,6 +150,8 @@ pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> 
                 definition.proof = proves(context, &definition.kind, type_)?;
             }
         }
+        // A former is made of its entry, whose binders are stated below, and binds no proof.
+        Item::Nominal(_) => {}
     }
 
     for (_, declaration) in &mut published.induct_decls {

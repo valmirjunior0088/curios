@@ -219,7 +219,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
         .iter()
         .filter_map(|item| match item {
             curios_core::Item::Let(def) => Some((def.name, def.kind.clone(), def.type_.clone())),
-            curios_core::Item::Rec(_) => None,
+            curios_core::Item::Rec(_) | curios_core::Item::Nominal(_) => None,
         })
         .collect();
     let expected_type = curios_core::Term::func_type(
@@ -303,7 +303,9 @@ fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
         .iter()
         .find_map(|item| match item {
             curios_core::Item::Let(def) if def.name == global_name("t") => Some(def),
-            curios_core::Item::Let(_) | curios_core::Item::Rec(_) => None,
+            curios_core::Item::Let(_)
+            | curios_core::Item::Rec(_)
+            | curios_core::Item::Nominal(_) => None,
         })
         .expect("the test lowers to a definition");
     assert_eq!(definition.kind, curios_core::DefinitionKind::Test);

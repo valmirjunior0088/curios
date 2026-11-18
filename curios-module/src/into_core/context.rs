@@ -182,31 +182,12 @@ pub struct FlatLet {
     pub kind: curios_core::DefinitionKind,
     /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A test's is its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
     pub span: Option<Span>,
-    /// The names it declares beside itself, each with where it was written: a concept's methods and a family's constructors, which its former declares and no definition holds. Empty for every other definition, and for one a later lowering keeps.
-    pub members: Vec<(curios_core::Global, Option<Span>)>,
     pub island: Qualifier,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
 }
 
 impl FlatLet {
-    /// The nominal declaration's former `former`, made of its lowered entry ([`curios_core::Definition::former`]), declaring `members` beside itself and written where `span` says.
-    pub fn former(
-        former: curios_core::Definition,
-        members: Vec<(curios_core::Global, Option<Span>)>,
-        span: Option<Span>,
-    ) -> Self {
-        Self {
-            name: former.name,
-            kind: former.kind,
-            span,
-            members,
-            island: former.island,
-            type_: former.type_,
-            body: former.body,
-        }
-    }
-
     pub fn into_core(self) -> curios_core::Definition {
         curios_core::Definition {
             island: self.island,
@@ -228,39 +209,81 @@ impl FlatLet {
     }
 }
 
+/// One name a nominal declaration declares a former under, as the lowering holds it: its entry, and where it and the names it declares beside its former were written.
+#[derive(Clone)]
+pub struct FlatNominal {
+    pub name: curios_core::Global,
+    pub entry: curios_core::Nominal,
+    /// Where the declaration's name was written: what the `unused-declaration` lint underlines. `None` for one a later lowering keeps, whose place was taken where it was lowered.
+    pub span: Option<Span>,
+    /// The names it declares beside its former, each with where it was written: a concept's methods and a family's constructors. Empty for one a later lowering keeps.
+    pub members: Vec<(curios_core::Global, Option<Span>)>,
+}
+
+impl FlatNominal {
+    /// Its former, as its entry makes it ([`curios_core::Made::former`]).
+    pub fn former(&self) -> curios_core::Made {
+        curios_core::Made::former(self.name, self.entry.module(), &self.entry)
+    }
+}
+
 #[derive(Clone)]
 pub enum FlatItem {
     Let(FlatLet),
     Rec(Vec<FlatLet>),
     /// A recursive group taken from a baseline as it was closed: no member's terms are opened again, and what the unit-wide passes read of it was taken where it was lowered.
     Kept(curios_core::RecItem),
+    /// A nominal declaration: each name of one `induct`, `struct` or `concept` item with its entry, in declaration order.
+    Nominal(Vec<FlatNominal>),
 }
 
 impl FlatItem {
-    /// Every name the item declares, as its Core item will ([`curios_core::Item::declared_names`]): each definition's, then each family's constructors, which its former declares.
+    /// Every name the item declares, as its Core item will ([`curios_core::Item::declared_names`]): each definition's or former's, then each family's constructors, which its entry names.
     pub fn names(&self) -> Vec<curios_core::Global> {
-        let declared = self
-            .declared()
-            .map(|(name, kind, _)| (name, kind))
-            .collect::<Vec<_>>();
-        let constructors = declared
-            .iter()
-            .flat_map(|(name, kind)| kind.constructor_names(name))
-            .collect::<Vec<_>>();
+        let constructors = self.nominals().iter().flat_map(|nominal| {
+            let (
+                curios_core::Nominal::Inductive(declaration),
+                curios_core::Global::Authored(owner),
+            ) = (&nominal.entry, nominal.name)
+            else {
+                return Vec::new();
+            };
+            declaration
+                .constructors()
+                .iter()
+                .map(|(tag, _)| curios_core::Global::Authored(owner.with(tag.as_str())))
+                .collect()
+        });
 
-        declared
-            .into_iter()
-            .map(|(name, _)| name)
+        self.declared()
+            .map(|(name, _, _)| name)
             .chain(constructors)
             .collect()
     }
 
-    /// The item's members as the walk lowered them: one for a `let`, every one of a group, and none of a group kept closed.
+    /// The names of a nominal declaration with their entries: none for an item of definitions.
+    pub fn nominals(&self) -> &[FlatNominal] {
+        match self {
+            FlatItem::Nominal(nominals) => nominals,
+            FlatItem::Let(_) | FlatItem::Rec(_) | FlatItem::Kept(_) => &[],
+        }
+    }
+
+    /// Where each name [`FlatItem::declared`] lists of a definition or a former the walk lowered was written: none of a group kept closed.
+    pub fn spans(&self) -> Vec<Option<&Span>> {
+        self.lets()
+            .iter()
+            .map(|let_| let_.span.as_ref())
+            .chain(self.nominals().iter().map(|nominal| nominal.span.as_ref()))
+            .collect()
+    }
+
+    /// The item's definitions as the walk lowered them: one for a `let`, every one of a group, and none of a group kept closed or of a nominal declaration.
     pub fn lets(&self) -> &[FlatLet] {
         match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
             FlatItem::Rec(lets) => lets.as_slice(),
-            FlatItem::Kept(_) => &[],
+            FlatItem::Kept(_) | FlatItem::Nominal(_) => &[],
         }
     }
 
@@ -269,33 +292,58 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => std::slice::from_mut(let_),
             FlatItem::Rec(lets) => lets.as_mut_slice(),
-            FlatItem::Kept(_) => &mut [],
+            FlatItem::Kept(_) | FlatItem::Nominal(_) => &mut [],
         }
     }
 
-    /// Each definition of the item: its name, its kind and the module declaring it.
+    /// Each definition of the item, or each name its declaration declares a former under: its name, what it is declared as and the module declaring it.
     pub fn declared(
         &self,
-    ) -> impl Iterator<Item = (curios_core::Global, &curios_core::DefinitionKind, Qualifier)> {
+    ) -> impl Iterator<Item = (curios_core::Global, curios_core::Declared, Qualifier)> {
         let kept = match self {
-            FlatItem::Kept(rec) => rec.exports(),
-            FlatItem::Let(_) | FlatItem::Rec(_) => &[],
+            FlatItem::Kept(rec) => Some(rec),
+            FlatItem::Let(_) | FlatItem::Rec(_) | FlatItem::Nominal(_) => None,
         };
+        let kept = kept.into_iter().flat_map(|rec| {
+            rec.exports()
+                .iter()
+                .enumerate()
+                .map(move |(member, definition)| {
+                    let type_ = rec.group().member_type(member);
+                    (
+                        definition.name,
+                        definition.kind.declared(&type_),
+                        definition.island,
+                    )
+                })
+        });
 
         self.lets()
             .iter()
-            .map(|let_| (let_.name, &let_.kind, let_.island))
-            .chain(
-                kept.iter()
-                    .map(|definition| (definition.name, &definition.kind, definition.island)),
-            )
+            .map(|let_| (let_.name, let_.kind.declared(&let_.type_), let_.island))
+            .chain(kept)
+            .chain(self.nominals().iter().map(|nominal| {
+                (
+                    nominal.name,
+                    nominal.entry.declared(),
+                    nominal.entry.module(),
+                )
+            }))
     }
 
     /// Every declaration this item names — the reachability prune's edges (see [`FlatItem::names`]). Locals are dropped: an item's binders are its own business, and reachability is a question about definitions.
     pub fn declarations_named(&self) -> HashSet<curios_core::Global> {
+        let formers = self
+            .nominals()
+            .iter()
+            .map(FlatNominal::former)
+            .collect::<Vec<_>>();
+
         self.lets()
             .iter()
-            .flat_map(|let_| named(&let_.type_).chain(named(&let_.body)))
+            .map(|let_| (&let_.type_, &let_.body))
+            .chain(formers.iter().map(|former| (&former.type_, &former.body)))
+            .flat_map(|(type_, body)| named(type_).chain(named(body)))
             .collect()
     }
 
@@ -304,6 +352,12 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => curios_core::Item::Let(Box::new(let_.into_core())),
             FlatItem::Kept(rec) => curios_core::Item::Rec(rec),
+            FlatItem::Nominal(nominals) => curios_core::Item::Nominal(curios_core::Nominals::new(
+                nominals
+                    .into_iter()
+                    .map(|nominal| (nominal.name, nominal.entry))
+                    .collect(),
+            )),
             FlatItem::Rec(items) => {
                 let floor = items
                     .iter()

@@ -5,7 +5,7 @@ use {
     curios_common::{
         Candidates, Digest, Facet, Object, Report, RootKind, candidate_prefix, test_support::*,
     },
-    curios_core::{Definitions, Enter, Item, LintKind, Sharing, Variance},
+    curios_core::{Definitions, Enter, Item, LintKind, Nominal, Sharing, Term, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
@@ -704,8 +704,14 @@ pub fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     panic!("a unit compiled over a baseline is stored differently, in {differing:?}");
 }
 
-/// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.
+/// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name`, or for the entry of the declaration named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.
 pub fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
+    /// What a reuse is told by: a definition's body, or a declaration's entry.
+    enum Held {
+        Body(Term),
+        Entry(Rc<Nominal>),
+    }
+
     let body = |unit: &Unit| {
         unit.core()
             .items
@@ -719,14 +725,18 @@ pub fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
                 })
             })
             .and_then(|item| match item {
-                Item::Let(definition) => Some(definition.body.clone()),
+                Item::Let(definition) => Some(Held::Body(definition.body.clone())),
+                Item::Nominal(nominals) => Some(Held::Entry(Rc::clone(&nominals.entries()[0].1))),
                 Item::Rec(_) => None,
             })
-            .unwrap_or_else(|| panic!("{name} is a let item of the unit"))
+            .unwrap_or_else(|| panic!("{name} is a let or a nominal item of the unit"))
     };
-    let (before, after) = (body(baseline), body(unit));
 
-    std::ptr::eq(&*before, &*after)
+    match (body(baseline), body(unit)) {
+        (Held::Body(before), Held::Body(after)) => std::ptr::eq(&*before, &*after),
+        (Held::Entry(before), Held::Entry(after)) => Rc::ptr_eq(&before, &after),
+        _ => false,
+    }
 }
 
 /// Whether `unit` holds the very allocation `baseline` holds for the lowered body of the `let` named `name`: its lowering was the baseline's, kept, since every lowering builds its own terms.

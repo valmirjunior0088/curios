@@ -1687,18 +1687,27 @@ impl Error {
         }
     }
 
-    /// The cycle through the declarations `members`, in source order: each definition of each by its name, and a witness, which has none, by the type it is declared at.
+    /// The cycle through the declarations `members`, in source order: each definition and each former of each by its name, and a witness, which has none, by the type it is declared at.
     pub fn declaration_cycle(members: &[&Item]) -> Self {
         Self::DeclarationCycle {
             members: members
                 .iter()
-                .flat_map(|item| item.definitions())
-                .map(|definition| match definition.kind {
-                    DefinitionKind::Witness => CycleMember::Witness {
-                        name: definition.name,
-                        type_: Box::new(definition.type_),
-                    },
-                    _ => CycleMember::Named(definition.name),
+                .flat_map(|item| {
+                    let defined = item
+                        .definitions()
+                        .into_iter()
+                        .map(|definition| match definition.kind {
+                            DefinitionKind::Witness => CycleMember::Witness {
+                                name: definition.name,
+                                type_: Box::new(definition.type_),
+                            },
+                            _ => CycleMember::Named(definition.name),
+                        });
+                    let formers = item
+                        .nominals()
+                        .into_iter()
+                        .map(|(name, _)| CycleMember::Named(*name));
+                    defined.chain(formers).collect::<Vec<_>>()
                 })
                 .collect(),
         }
@@ -1718,6 +1727,20 @@ impl Error {
                             },
                             _ => CycleMember::Named(members[index].name),
                         })
+                        .collect()
+                })
+                .collect(),
+        }
+    }
+
+    /// [`Error::group_apart`] for a nominal declaration, whose members are each named.
+    pub fn names_apart(names: &[Global], parts: &[Vec<usize>]) -> Self {
+        Self::GroupApart {
+            parts: parts
+                .iter()
+                .map(|part| {
+                    part.iter()
+                        .map(|&index| CycleMember::Named(names[index]))
                         .collect()
                 })
                 .collect(),

@@ -393,21 +393,17 @@ impl<'s> Context<'s> {
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
+            Item::Nominal(_) => Vec::new(),
         };
-        // A family's constructors are made of its elaborated entry, which holds no goal: each is declared at its type.
-        let constructors = self
-            .carrying(item.clone())
-            .constructors()
+        // A declaration's formers and a family's constructors are made of its elaborated entries, which hold no goal: each is declared at its type.
+        let item = self.carrying(item.clone());
+        let made = item
+            .formers()
             .into_iter()
-            .map(|constructor| {
-                Ok((
-                    constructor.name,
-                    zonk(self, &constructor.type_)?,
-                    constructor.universe_context,
-                ))
-            })
+            .chain(item.constructors())
+            .map(|made| Ok((made.name, zonk(self, &made.type_)?, made.universe_context)))
             .collect::<Result<Vec<_>, Error>>()?;
-        for (name, type_, universe_context) in types.into_iter().chain(constructors) {
+        for (name, type_, universe_context) in types.into_iter().chain(made) {
             self.forget(&name);
             self.declare(&name, &type_);
             self.set_universe_context(&name, universe_context);
@@ -471,22 +467,31 @@ impl<'s> Context<'s> {
                     }
                 }
             }
+            Item::Nominal(_) => {}
         }
-        // A family's constructors are names its item declares beside its definitions, which no elaboration assumed: each declared here and bound to the injection the entry just published makes, at its family's universes, and total by construction.
-        for constructor in self.carrying(published.item.clone()).constructors() {
-            let name = constructor.name;
+        // A declaration's formers and a family's constructors are names its item declares and holds no definition of: each declared here and bound to what the entry just published makes of it, at its declaration's universes, and total by construction.
+        let item = self.carrying(published.item.clone());
+        for made in item.formers().into_iter().chain(item.constructors()) {
+            let name = made.name;
             self.forget(&name);
-            self.declare(&name, &constructor.type_);
-            self.define_published(&name, &constructor.body, None, false);
-            self.set_universe_context(&name, constructor.universe_context.clone());
+            self.declare(&name, &made.type_);
+            self.define_published(&name, &made.body, None, false);
+            self.set_universe_context(&name, made.universe_context.clone());
             self.record_definition_totality(&name, curios_core::Totality::Total);
+            self.typing
+                .program
+                .record_definition_value_sort(&name, made.value_sort.as_ref());
         }
     }
 
-    /// `item` with each of its formers carrying the registry entries this context holds under its name: what a finished item is read and assembled as. An entry is elaborated in the context's tables, beside its former and after it, so the one the lowering wrote into the former is replaced here, where the item leaves the elaboration that made it; a former whose name the context holds nothing under keeps the one it has.
+    /// `item` holding the registry entries this context holds under each name it declares a former under: what a finished item is read and assembled as. An entry is elaborated in the context's tables and settled there as its item is published, so the one the item holds is replaced here, where the item leaves the elaboration that made it; a name the context holds nothing under keeps the one it has.
     pub(crate) fn carrying(&self, item: Item) -> Item {
-        item.with_nominals(|name, lowered| {
-            Some(match lowered {
+        let Item::Nominal(nominals) = item else {
+            return item;
+        };
+
+        Item::Nominal(nominals.with_entries(|name, held| {
+            Some(match held {
                 Nominal::Inductive(_) => Nominal::Inductive(self.induct_decl(name)?.clone()),
                 Nominal::Struct(_) => Nominal::Struct(self.struct_decl(name)?.clone()),
                 Nominal::Concept { .. } => Nominal::Concept {
@@ -494,10 +499,10 @@ impl<'s> Context<'s> {
                     record: self.struct_decl(name)?.clone(),
                 },
             })
-        })
+        }))
     }
 
-    /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with what that elaboration concluded of each of its definitions, as `classified` holds it by name: what the declarations that read it read of it.
+    /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries it holds being the ones its elaboration rebuilt, with what that elaboration concluded of each of its definitions, as `classified` holds it by name: what the declarations that read it read of it.
     pub(crate) fn publish_adopted(&mut self, item: &Item, classified: &[(Global, Classified)]) {
         let mut published = Published {
             item: item.clone(),
@@ -519,7 +524,7 @@ impl<'s> Context<'s> {
                 .concepts
                 .extend(nominal.concept().cloned().map(|concept| (*name, concept)));
         }
-        // An elaboration assumes each name before it publishes it, which publishing replaces.
+        // An elaboration assumes each name before it publishes it, which publishing replaces: a definition, or a former as its entry makes it.
         let types = match item {
             Item::Let(definition) => vec![(definition.name, definition.type_.clone())],
             Item::Rec(rec) => rec
@@ -527,6 +532,11 @@ impl<'s> Context<'s> {
                 .iter()
                 .enumerate()
                 .map(|(index, definition)| (definition.name, rec.group().member_type(index)))
+                .collect(),
+            Item::Nominal(_) => item
+                .formers()
+                .into_iter()
+                .map(|former| (former.name, former.type_))
                 .collect(),
         };
         for (name, type_) in &types {

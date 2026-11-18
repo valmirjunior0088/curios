@@ -6,9 +6,9 @@ mod tests;
 use {
     crate::{Error, universe_context_validate},
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, Definitions, Entrypoint, Global, InductDecl, Item,
-        Minted, Place, Places, StructDecl, Subterm, UniverseContext, UniverseMetaId, Visit,
-        rewrite_universe_levels, universe_metas,
+        Bound, ConceptDecl, Definitions, Entrypoint, Global, InductDecl, Item, Minted, Place,
+        Places, StructDecl, Subterm, UniverseMetaId, Visit, rewrite_universe_levels,
+        universe_metas,
     },
     curios_surface::Spellable,
     std::{
@@ -148,13 +148,17 @@ impl Schemes {
             (BTreeMap::new(), BTreeMap::new(), BTreeMap::new());
         for name in items.iter().flat_map(|item| definitions.reaches(item)) {
             if let Some(place) = places.place(&name) {
-                let count = match (place, &definitions.items[place.item()]) {
-                    (Place::Let(_) | Place::Constructor { .. }, Item::Let(definition)) => {
+                let item = &definitions.items[place.item()];
+                let count = match (place, item) {
+                    (Place::Made { .. }, _) => {
+                        places.made(&name, item).universe_context.parameter_count
+                    }
+                    (Place::Let(_), Item::Let(definition)) => {
                         definition.universe_context.parameter_count
                     }
                     (_, Item::Rec(rec)) => rec.universe_context().parameter_count,
-                    (Place::Member { .. }, Item::Let(_)) => {
-                        unreachable!("a member's place is a group's")
+                    (Place::Member { .. }, Item::Let(_)) | (_, Item::Nominal(_)) => {
+                        unreachable!("a definition's place is a definition's item's")
                     }
                 };
                 lets.insert(name, count);
@@ -176,11 +180,7 @@ impl Schemes {
 
     fn of(definitions: &Definitions) -> Self {
         Self {
-            definitions: Rc::new(
-                definition_schemes(definitions)
-                    .map(|(name, _, context)| (name, context.parameter_count))
-                    .collect(),
-            ),
+            definitions: Rc::new(definition_schemes(definitions).collect()),
             inducts: Rc::new(
                 definitions
                     .induct_decls()
@@ -207,34 +207,24 @@ impl Schemes {
     }
 }
 
-/// Each name `module` defines, with how it was introduced and the universe context it is generalized under: a definition's own, a group member's its group's. Read off what an item states of its members, so no group is opened to ask.
-fn definition_schemes(
-    definitions: &Definitions,
-) -> impl Iterator<Item = (Global, &DefinitionKind, &UniverseContext)> {
+/// Each name `module` declares, with the count of universe parameters it is generalized over: a definition's own, a group member's its group's, and a made name's its entry's. Read off what an item states of its members, so no group is opened to ask.
+fn definition_schemes(definitions: &Definitions) -> impl Iterator<Item = (Global, usize)> {
     definitions.items.iter().flat_map(|item| match item {
-        Item::Let(definition) => vec![(
-            definition.name,
-            &definition.kind,
-            &definition.universe_context,
-        )],
+        Item::Let(definition) => {
+            vec![(definition.name, definition.universe_context.parameter_count)]
+        }
         Item::Rec(rec) => rec
             .exports()
             .iter()
-            .map(|definition| (definition.name, &definition.kind, rec.universe_context()))
+            .map(|definition| (definition.name, rec.universe_context().parameter_count))
+            .collect(),
+        Item::Nominal(_) => item
+            .formers()
+            .into_iter()
+            .chain(item.constructors())
+            .map(|made| (made.name, made.universe_context.parameter_count))
             .collect(),
     })
-}
-
-/// The universe context `item` generalizes the name `name` it declares under: a definition's own, a group member's its group's.
-fn scheme_in<'a>(item: &'a Item, name: &Global) -> Option<&'a UniverseContext> {
-    match item {
-        Item::Let(definition) => (definition.name == *name).then_some(&definition.universe_context),
-        Item::Rec(rec) => rec
-            .exports()
-            .iter()
-            .any(|definition| definition.name == *name)
-            .then_some(rec.universe_context()),
-    }
 }
 
 fn validate_definitions_instance_arities(
@@ -262,7 +252,7 @@ fn validate_definitions_instance_arities(
         }
     }
     let (inducts, structs, concepts) = entries_of(items);
-    for (name, (item, declaration)) in &inducts {
+    for (name, declaration) in &inducts {
         let shown = name.faithful();
         validate!(declaration.arity(), &format!("inductive {shown} arity"))?;
         validate!(
@@ -275,33 +265,22 @@ fn validate_definitions_instance_arities(
                 &format!("inductive {shown} constructor {constructor}"),
             )?;
         }
-
-        if scheme_in(item, name).is_some_and(|actual| actual != declaration.universe_context()) {
-            return Err(Error::UniverseInvariant(format!(
-                "inductive {shown} and its type-former definition have different universe contexts"
-            )));
-        }
     }
-    for (name, (item, declaration)) in &structs {
+    for (name, declaration) in &structs {
         let shown = name.faithful();
         validate!(&declaration.arity, &format!("structure {shown} arity"))?;
         validate!(
             &declaration.result_sort,
             &format!("structure {shown} result sort"),
         )?;
-        if scheme_in(item, name).is_some_and(|actual| *actual != declaration.universe_context) {
-            return Err(Error::UniverseInvariant(format!(
-                "structure {shown} and its type-former definition have different universe contexts"
-            )));
-        }
     }
-    // A concept carries its record, so there is no concept without one to refuse.
-    for (name, (_, concept)) in &concepts {
+    // A concept is held with its record, so there is no concept without one to refuse.
+    for (name, concept) in &concepts {
         let shown = name.faithful();
         let record = structs
             .get(name)
-            .map(|(_, record)| *record)
-            .expect("a concept's former carries its record");
+            .copied()
+            .expect("a concept is held with its record");
         if concept.universe_context != record.universe_context {
             return Err(Error::UniverseInvariant(format!(
                 "concept {shown} and its structure registry have different universe contexts"
@@ -311,8 +290,8 @@ fn validate_definitions_instance_arities(
     Ok(())
 }
 
-/// The registry entries `items` carry, each under the name of its former with the item that declares it, by name: the families, the records — a structure's or a concept's — and the concepts.
-type Entries<'a, T> = BTreeMap<Global, (&'a Item, &'a T)>;
+/// The registry entries `items` hold, each under the name of its former: the families, the records — a structure's or a concept's — and the concepts.
+type Entries<'a, T> = BTreeMap<Global, &'a T>;
 
 /// [`Entries`] of `items`.
 fn entries_of<'a>(
@@ -327,13 +306,13 @@ fn entries_of<'a>(
     for item in items {
         for (name, nominal) in item.nominals() {
             if let Some(declaration) = nominal.inductive() {
-                inducts.insert(*name, (*item, declaration));
+                inducts.insert(*name, declaration);
             }
             if let Some(record) = nominal.record() {
-                structs.insert(*name, (*item, record));
+                structs.insert(*name, record);
             }
             if let Some(concept) = nominal.concept() {
-                concepts.insert(*name, (*item, concept));
+                concepts.insert(*name, concept);
             }
         }
     }
@@ -383,7 +362,7 @@ pub fn validate_universes_in(
         }
     }
     let (inducts, structs, concepts) = entries_of(items);
-    for (name, (_, induct_decl)) in &inducts {
+    for (name, induct_decl) in &inducts {
         let shown = name.faithful();
         universe_context_validate(induct_decl.universe_context()).map_err(|error| {
             Error::UniverseInvariant(format!(
@@ -410,7 +389,7 @@ pub fn validate_universes_in(
             )?;
         }
     }
-    for (name, (_, struct_decl)) in &structs {
+    for (name, struct_decl) in &structs {
         let shown = name.faithful();
         universe_context_validate(&struct_decl.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(
@@ -429,7 +408,7 @@ pub fn validate_universes_in(
             parameter_count,
             &format!("structure {shown} result sort"),
         )?;
-        if let Some((_, concept)) = concepts.get(name)
+        if let Some(concept) = concepts.get(name)
             && concept.universe_context != struct_decl.universe_context
         {
             return Err(Error::UniverseInvariant(format!(
@@ -437,7 +416,7 @@ pub fn validate_universes_in(
             )));
         }
     }
-    for (name, (_, concept)) in &concepts {
+    for (name, concept) in &concepts {
         let shown = name.faithful();
         universe_context_validate(&concept.universe_context).map_err(|error| {
             Error::UniverseInvariant(format!(

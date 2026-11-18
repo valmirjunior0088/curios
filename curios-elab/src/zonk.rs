@@ -11,9 +11,9 @@ use {
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
         Extent, Func, FuncType, Global, InductDecl, InductType, Instance, Intrinsic, Item, Let,
-        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec, Sort, Struct,
-        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
-        Variant, Visit, project_erased_universes,
+        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Nominal, Nominals, Proj,
+        Rec, Sort, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Universes, Var, Variant, Visit, project_erased_universes,
     },
     std::{
         cell::RefCell,
@@ -92,6 +92,30 @@ impl<'a> Zonk<'a> {
                     Some(error) => Err(error),
                     None => Ok(Item::Rec(rec.with_group(group))),
                 }
+            }
+            Item::Nominal(nominals) => {
+                let entries = nominals
+                    .entries()
+                    .iter()
+                    .map(|(name, entry)| {
+                        let entry = match &**entry {
+                            Nominal::Inductive(declaration) => {
+                                Nominal::Inductive(self.zonk_induct_decl(declaration)?)
+                            }
+                            Nominal::Struct(record) => {
+                                Nominal::Struct(self.zonk_struct_decl(record)?)
+                            }
+                            // A concept holds no term: its parameters and its fields are its record's.
+                            Nominal::Concept { concept, record } => Nominal::Concept {
+                                concept: concept.clone(),
+                                record: self.zonk_struct_decl(record)?,
+                            },
+                        };
+                        Ok((*name, entry))
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                Ok(Item::Nominal(Nominals::new(entries)))
             }
         }
     }
@@ -782,17 +806,15 @@ pub fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error
     let mut induct_decls = Vec::new();
     let mut struct_decls = Vec::new();
     let mut concepts = Vec::new();
-    for name in item.declared_names() {
-        if let Some(declaration) = context.induct_decl(&name) {
-            induct_decls.push((name, zonk.zonk_induct_decl(declaration)?));
-        }
-        if let Some(declaration) = context.struct_decl(&name) {
-            struct_decls.push((name, zonk.zonk_struct_decl(declaration)?));
-        }
-        // A concept holds no term: its parameters and its fields are its record's.
-        if let Some(concept) = context.concept(&name) {
-            concepts.push((name, concept.clone()));
-        }
+    // The entries a nominal item holds are its elaboration's, zonked with it.
+    for (name, nominal) in published.nominals() {
+        induct_decls.extend(
+            nominal
+                .inductive()
+                .map(|declaration| (*name, declaration.clone())),
+        );
+        struct_decls.extend(nominal.record().map(|record| (*name, record.clone())));
+        concepts.extend(nominal.concept().map(|concept| (*name, concept.clone())));
     }
 
     Ok(Published {
@@ -886,6 +908,8 @@ pub fn goal_sites(
         match item {
             Item::Let(def) => scan_definition(def),
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
+            // Its entries are scanned with every registry telescope below.
+            Item::Nominal(_) => {}
         }
     }
     if let Some(entry) = entry {

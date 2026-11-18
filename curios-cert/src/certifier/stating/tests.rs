@@ -32,7 +32,7 @@ fn defined(body: &str) -> Item {
 fn body(item: &Item) -> &Term {
     match item {
         Item::Let(definition) => &definition.body,
-        Item::Rec(_) => panic!("a definition of its own"),
+        Item::Rec(_) | Item::Nominal(_) => panic!("a definition of its own"),
     }
 }
 

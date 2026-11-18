@@ -107,6 +107,7 @@ fn first_name(item: &Item) -> Option<&Global> {
     match item {
         Item::Let(definition) => Some(&definition.name),
         Item::Rec(rec) => rec.exports().first().map(|definition| &definition.name),
+        Item::Nominal(nominals) => nominals.entries().first().map(|(name, _)| name),
     }
 }
 

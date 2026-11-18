@@ -10,7 +10,7 @@ use {
     crate::{test_support::*, *},
     curios_abi::HostOp,
     curios_common::{Report, Source},
-    curios_core::{Bound, DefinitionKind, Global, Nominal, Term},
+    curios_core::{Bound, Global, Nominal, Term},
     curios_core::{Definitions, Item},
     curios_module::{SYNTAX, prepare_prelude},
     curios_surface::{
@@ -356,14 +356,23 @@ fn no_term_of_the_prelude_names_a_type_former() {
         let mut named = Vec::new();
         for definitions in &roots {
             for item in definitions.items.iter() {
-                for definition in item.definitions() {
-                    let mut mentioned = definition.mentions();
-                    if let DefinitionKind::Nominal(entry) = &definition.kind {
-                        mentioned.extend(entry_mentions(entry));
-                    }
-                    named.extend(mentioned.into_iter().filter(&is_former).map(|former| {
-                        format!("{} names {}", definition.name.faithful(), former.faithful())
-                    }));
+                // A definition names what its terms mention, and a nominal declaration what its entries' telescopes do.
+                let written = item
+                    .definitions()
+                    .into_iter()
+                    .map(|definition| (definition.name, definition.mentions()))
+                    .chain(
+                        item.nominals()
+                            .into_iter()
+                            .map(|(name, entry)| (*name, entry_mentions(entry))),
+                    )
+                    .collect::<Vec<_>>();
+                for (name, mentioned) in written {
+                    named.extend(
+                        mentioned.into_iter().filter(&is_former).map(|former| {
+                            format!("{} names {}", name.faithful(), former.faithful())
+                        }),
+                    );
                 }
             }
         }

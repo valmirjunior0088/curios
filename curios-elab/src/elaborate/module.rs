@@ -28,10 +28,10 @@ use {
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
-        Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Minted,
-        Names, Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
-        stamp_declaration_instance,
+        Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Made,
+        Minted, Names, Nominal, Nominals, Order, Places, Quality, RecItem, Revised, Sort,
+        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext,
+        Universes, Visit, stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -629,12 +629,11 @@ fn registered(context: &Context, name: &Global) -> Option<Nominal> {
     })
 }
 
-/// The former `def`, a member of a nominal item, as the entry the registry holds for it now spells it ([`Definition::former`]).
-fn spelled(context: &Context, def: &Definition) -> Definition {
-    let entry =
-        registered(context, &def.name).expect("a member of a nominal item declares an entry");
+/// The former `name`, of a nominal item of `island`, as the entry the registry holds for it now makes it ([`Made::former`]).
+fn spelled(context: &Context, name: &Global, island: Qualifier) -> Made {
+    let entry = registered(context, name).expect("a member of a nominal item declares an entry");
 
-    Definition::former(def.name, def.island, entry)
+    Made::former(*name, island, &entry)
 }
 
 /// Obligation (T)'s early net over a nominal entry's telescope as it was lowered, before any of it is elaborated: its parameters, and a family's indices. A record's fields take theirs where they elaborate ([`elaborate_struct`]). Entries stay closed under the binders before them, and only the globals they name matter here, so nothing is opened.
@@ -666,43 +665,47 @@ fn check_entry_totality(context: &mut Context, name: &Global) -> Result<(), Erro
     Ok(())
 }
 
-/// Type-check a nominal declaration's item — a family, a record or a concept, alone or in a group of one kind — by its entries alone, and return its rebuilt item.
+/// Type-check a nominal declaration — a family, a record or a concept, alone or in a group of one kind — by its entries alone, and return the item holding them as they came out.
 ///
-/// **An entry is elaborated once.** Its former's type, spelled from the entry ([`Definition::former`]), is elaborated, and the entry takes the telescope that came out ([`share_former_telescope`]), so the two are one term. The member's name is then defined at that type and at the body its entry spells, so a domain written after it, a payload or a field reads it as any former's occurrence is read ([`reference`](super::reference)): no local stands for it and no body of its own is checked. Its constructors or fields follow once every member is defined, its levels close over its entries as a group's close over its signatures ([`close_group_levels`]), and each former is published as its finished entry spells it.
-fn elaborate_module_nominal(context: &mut Context, item: &Item) -> Result<(Item, Vectors), Error> {
-    let defs = item.definitions();
-    let names = defs.iter().map(|def| def.name).collect::<Vec<_>>();
+/// **An entry is elaborated once.** Its former's type, spelled from the entry ([`Made::former`]), is elaborated, and the entry takes the telescope that came out ([`share_former_telescope`]), so the two are one term. The member's name is then defined at that type and at the body its entry spells, so a domain written after it, a payload or a field reads it as any former's occurrence is read ([`reference`](super::reference)): no local stands for it and no body of its own is checked. Its constructors or fields follow once every member is defined, its levels close over its entries as a group's close over its signatures ([`close_group_levels`]), and each former is defined as its finished entry makes it.
+fn elaborate_module_nominal(context: &mut Context, nominals: &Nominals) -> Result<Item, Error> {
+    let names = nominals
+        .entries()
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let island = nominals.island();
     // Where what the item records begins, so what it names of its members can be stamped with their instance once they have one.
     let solved_from = context.solutions_committed();
     let checked_from = context.checked_mark();
 
     // Each member's signature, in the order they are written: a domain reads the members written before it, and the item is refused below where one does.
-    let mut types = Vec::with_capacity(defs.len());
-    let mut parameters = Vec::with_capacity(defs.len());
-    for def in &defs {
-        let outer_site = context.set_checked_site(def.name);
-        check_entry_totality(context, &def.name)?;
+    let mut types = Vec::with_capacity(names.len());
+    let mut parameters = Vec::with_capacity(names.len());
+    for name in &names {
+        let outer_site = context.set_checked_site(*name);
+        check_entry_totality(context, name)?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
-        context.enter_declaration(Some(def.name));
-        let (type_, levels) = check_former_type(context, &spelled(context, def).type_)?;
-        share_former_telescope(context, &def.name, &type_);
-        context.define_declaring(&def.name, &type_, &spelled(context, def).body, &def.kind);
+        context.enter_declaration(Some(*name));
+        let (type_, levels) = check_former_type(context, &spelled(context, name, island).type_)?;
+        share_former_telescope(context, name, &type_);
+        context.declare(name, &type_);
+        context.define_made(name, &spelled(context, name, island).body);
         context.restore_checked_site(outer_site);
         types.push(type_);
         parameters.push(levels);
     }
 
     // Each entry's constructors or fields, once every member is defined: a payload or a field may name any of them.
-    for (def, levels) in defs.iter().zip(&mut parameters) {
-        let outer_site = context.set_checked_site(def.name);
-        context.enter_declaration(Some(def.name));
-        context.enter_value(&def.kind);
-        if let Some(family) = context.induct_decl(&def.name) {
+    for (name, levels) in names.iter().zip(&mut parameters) {
+        let outer_site = context.set_checked_site(*name);
+        context.enter_declaration(Some(*name));
+        if let Some(family) = context.induct_decl(name) {
             // A family's first call is its indices where it takes no parameter.
             levels.truncate(family.param_count());
         }
-        elaborate_induct_constructors(context, &def.name, levels)?;
-        elaborate_struct(context, &def.name, levels)?;
+        elaborate_induct_constructors(context, name, levels)?;
+        elaborate_struct(context, name, levels)?;
         context.restore_checked_site(outer_site);
     }
     context.drain_parked()?;
@@ -736,7 +739,7 @@ fn elaborate_module_nominal(context: &mut Context, item: &Item) -> Result<(Item,
     // A nominal item is one cycle of what its entries reach, and no former's domains name a member: read once the entries are elaborated, before the item's levels close.
     let parts = nominal_parts(context, &names);
     if parts.len() > 1 {
-        return Err(Error::group_apart(&defs, &types, &parts));
+        return Err(Error::names_apart(&names, &parts));
     }
     if let Some((name, member)) = indexed_by_its_group(context, &names) {
         return Err(Error::IndexedByItsGroup { name, member }.in_declaration([name]));
@@ -746,9 +749,9 @@ fn elaborate_module_nominal(context: &mut Context, item: &Item) -> Result<(Item,
         .iter()
         .map(|type_| zonk_solved_term_metas(context, type_))
         .collect::<Vec<_>>();
-    let bodies = defs
+    let bodies = names
         .iter()
-        .map(|def| spelled(context, def).body)
+        .map(|name| spelled(context, name, island).body)
         .collect::<Vec<_>>();
     let universe_context = close_group_levels(context, &names, &types, &bodies)?;
 
@@ -799,66 +802,41 @@ fn elaborate_module_nominal(context: &mut Context, item: &Item) -> Result<(Item,
     }
     outside.restate_recorded(context, solved_from, checked_from)?;
 
-    let formers = defs
-        .iter()
-        .map(|def| spelled(context, def))
-        .collect::<Vec<_>>();
-    match item {
-        Item::Let(_) => publish_former(context, formers, &universe_context),
-        Item::Rec(_) => {
-            let locals = names
-                .iter()
-                .map(|name| context.fresh(name.qualifier().map(Qualifier::last)))
-                .collect::<Vec<_>>();
-            let rec = RecItem::try_new(locals.into_iter().zip(formers).collect())?;
-            for (index, definition) in rec.exports().iter().enumerate() {
-                context.redeclare(&definition.name, &rec.group().member_type(index));
-                context.define_declaration(
-                    &definition.name,
-                    &Term::rec_proj(rec.group().clone(), index),
-                    &definition.kind,
-                );
-                context.set_universe_context(&definition.name, universe_context.clone());
-            }
-            // A later item may compare two instances of a family this item declares, so each one's variance is settled here, with the formers defined and the entries stamped.
-            record_variances(context, &names)?;
-            let group = group_totality(context, rec.group())?;
-            for definition in rec.definitions() {
-                record_definition_totality(context, &definition, group)?;
-            }
-            record_applications(context, &rec);
-
-            // A group's member files no vector.
-            Ok((Item::Rec(rec), Vectors::default()))
-        }
+    // Each former as its finished entry makes it, at the item's universes: total by construction.
+    for name in &names {
+        let former = spelled(context, name, island);
+        context.redeclare(name, &former.type_);
+        context.define_made(name, &former.body);
+        context.set_universe_context(name, universe_context.clone());
+        context.record_definition_totality(name, Totality::Total);
     }
+    // A later item may compare two instances of a declaration this item declares, so each one's variance is settled here, with the formers defined and the entries stamped.
+    record_variances(context, &names)?;
+
+    Ok(Item::Nominal(Nominals::new(
+        names
+            .iter()
+            .map(|name| {
+                let entry =
+                    registered(context, name).expect("a nominal item's name declares an entry");
+                (*name, entry)
+            })
+            .collect(),
+    )))
 }
 
-/// Publish the one former of a nominal item that is no group, `formers` holding it alone, under `universe_context`: defined at its type and its body, its entry's variance settled, and the vectors it files as a definition does.
-fn publish_former(
-    context: &mut Context,
-    mut formers: Vec<Definition>,
-    universe_context: &UniverseContext,
-) -> Result<(Item, Vectors), Error> {
-    let former = formers
-        .pop()
-        .expect("a nominal item that is no group holds one former");
-    context.redeclare(&former.name, &former.type_);
-    context.define_declaration(&former.name, &former.body, &former.kind);
-    context.set_universe_context(&former.name, universe_context.clone());
-    // A later item may compare two instances of the record, so its variance is settled here, before the vectors read the former's body.
-    record_variances(context, &[former.name])?;
-    let vectors = Vectors {
-        variances: definition_variances(context, universe_context, &former.type_, &former.body)?,
-        field_variances: field_variances(universe_context, &former.type_, &former.body),
+/// The vectors the former `former` files, as a definition of its type and body does: what a later item compares two of its instances by before either is unfolded.
+fn former_vectors(context: &mut Context, former: &Made) -> Result<Vectors, Error> {
+    Ok(Vectors {
+        variances: definition_variances(
+            context,
+            &former.universe_context,
+            &former.type_,
+            &former.body,
+        )?,
+        field_variances: field_variances(&former.universe_context, &former.type_, &former.body),
         parameter_field: parameter_field(&former.type_, &former.body),
-    };
-
-    record_definition_totality(context, &former, Totality::Total)?;
-    if let Ok(Some(applications)) = definition_applications(context, &former.body) {
-        context.record_definition_applications(&former.name, applications);
-    }
-    Ok((Item::Let(Box::new(former)), vectors))
+    })
 }
 
 /// Close the levels of a declaration whose members are `names`, their signatures `types` and their values `bodies`, and hand back the context they are generalized under.
@@ -1338,6 +1316,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     let item_module = match item {
         Item::Let(definition) => definition.island,
         Item::Rec(rec) => rec.island(),
+        Item::Nominal(nominals) => nominals.island(),
     };
     context.set_island(item_module);
 
@@ -1352,8 +1331,10 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     let recorded = context.checked_mark();
 
     let (elaborated, vectors) = match item {
-        // A nominal declaration's item is elaborated by its entries, whichever item it lowered to.
-        _ if !item.nominals().is_empty() => elaborate_module_nominal(context, item),
+        // A former files its vectors once its entry is published, read off what the entry makes of it.
+        Item::Nominal(nominals) => {
+            elaborate_module_nominal(context, nominals).map(|item| (item, Vec::new()))
+        }
         Item::Let(definition) => elaborate_module_let(context, definition),
         Item::Rec(rec) => {
             elaborate_module_rec(context, rec).map(|(rec, vectors)| (Item::Rec(rec), vectors))
@@ -1400,6 +1381,11 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
         if let Some((_, vectors)) = vectors.iter().find(|(name, _)| *name == definition.name) {
             context.record_vectors(&definition.name, &definition.type_, vectors);
         }
+    }
+    for former in published.item.formers() {
+        let vectors = former_vectors(context, &former)
+            .map_err(|error| error.in_declaration(declared.iter().copied()))?;
+        context.record_vectors(&former.name, &former.type_, &vectors);
     }
     context
         .settle_checked(recorded)

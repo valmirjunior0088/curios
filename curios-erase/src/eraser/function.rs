@@ -303,7 +303,7 @@ impl Eraser<'_> {
         let Some((name, universes)) = named_head(head) else {
             return Ok(false);
         };
-        let Some(owner) = self.constructor(name).map(curios_core::Made::owner) else {
+        let Some(owner) = self.constructor(name).and_then(curios_core::Made::owner) else {
             return Ok(false);
         };
         // The sort alone, rather than the declaration with every constructor: a call is erased in its own size. A constructor is its family's at the family's universes, so the call's instance is the family's.

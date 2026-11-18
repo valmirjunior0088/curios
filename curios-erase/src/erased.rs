@@ -830,15 +830,16 @@ impl<'a> Erasures<'a> {
     }
 }
 
-/// The constructor `name` of a family `definitions` declares, where `places` holds it at a constructor's place, as its family's entry makes it: what erasure reads for the family a call constructs a value of and for its body. A name an item defines is no constructor.
+/// The constructor `name` of a family `definitions` declares, where `places` holds it at a made name's place, as its family's entry makes it: what erasure reads for the family a call constructs a value of and for its body. A name an item defines is no constructor.
 pub fn constructor<'a>(
     definitions: &curios_core::Definitions,
     places: &'a curios_core::Places,
     name: &curios_core::Global,
 ) -> Option<&'a curios_core::Made> {
     match places.place(name)? {
-        place @ curios_core::Place::Constructor { .. } => {
-            Some(places.constructor(name, &definitions.items[place.item()]))
+        place @ curios_core::Place::Made { .. } => {
+            Some(places.made(name, &definitions.items[place.item()]))
+                .filter(|made| made.owner().is_some())
         }
         curios_core::Place::Let(_) | curios_core::Place::Member { .. } => None,
     }

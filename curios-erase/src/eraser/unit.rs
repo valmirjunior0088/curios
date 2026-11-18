@@ -427,7 +427,7 @@ fn erase_forms(
     Ok((forms, asked.asked))
 }
 
-/// How many sorts `item` leaves to its caller: its definition's or its group's.
+/// How many sorts `item` leaves to its caller: its definition's, its group's or its declaration's.
 fn left_open(item: &curios_core::Item) -> usize {
     universe_context(item).quality_count
 }
@@ -437,6 +437,7 @@ fn universe_context(item: &curios_core::Item) -> &curios_core::UniverseContext {
     match item {
         curios_core::Item::Let(definition) => &definition.universe_context,
         curios_core::Item::Rec(rec) => rec.universe_context(),
+        curios_core::Item::Nominal(nominals) => nominals.universe_context(),
     }
 }
 
@@ -460,6 +461,8 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
 
             curios_core::Item::Rec(at)
         }
+        // A declaration binds nothing of its own: what it makes is read at the assignment where it is erased.
+        curios_core::Item::Nominal(_) => return Cow::Borrowed(item),
     })
 }
 
@@ -528,8 +531,10 @@ fn erase_item(
     match &*at {
         curios_core::Item::Let(definition) => lowering.erase_definition(reader, definition)?,
         curios_core::Item::Rec(rec) => lowering.erase_rec_item(reader, rec)?,
+        // A former is a type, which erases to nothing a term holds.
+        curios_core::Item::Nominal(_) => {}
     }
-    // A family's constructors are its item's: it declares them beside its former, and each is made of the family's entry, read at the item's sorts as its definitions are.
+    // A family's constructors are its item's: each is made of the family's entry, read at the item's sorts as its definitions are.
     for constructor in item.constructors() {
         let at_sorts = |term: &curios_core::Term| match sorts.is_none() {
             true => term.clone(),

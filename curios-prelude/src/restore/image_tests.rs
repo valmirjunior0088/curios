@@ -260,6 +260,7 @@ fn stored_prelude_measurements() {
                 .map(|item| match item {
                     Item::Let(_) => 1,
                     Item::Rec(rec) => rec.definitions().len(),
+                    Item::Nominal(nominals) => nominals.entries().len(),
                 })
                 .sum();
 

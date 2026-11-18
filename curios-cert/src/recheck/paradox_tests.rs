@@ -114,7 +114,7 @@ fn a_universe_context_with_no_model_through_several_parameters_is_refused() {
     }
 }
 
-/// `T@{u, v | u + 1 <= v} : Type v = Type u` read where its constraint fails: at `{0, 0}`, under a reader's `u <= v`, and under a reader's `u = v`; a family whose former states no constraint where its entry states `u + 1 <= v`, instantiated by its node at `{0, 0}`; and a family, a record and a definition stating no constraint each read `T@{u, v}` right after an item whose context holds the constraint, so a context left standing would discharge it.
+/// `T@{u, v | u + 1 <= v} : Type v = Type u` read where its constraint fails: at `{0, 0}`, under a reader's `u <= v`, and under a reader's `u = v`; a family whose scheme states `u + 1 <= v`, instantiated by its node at `{0, 0}`; and a family, a record and a definition stating no constraint each read `T@{u, v}` right after an item whose context holds the constraint, so a context left standing would discharge it.
 const INSTANCES_BELOW_THEIR_SCHEME: &str = r#"
 #{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}
 let /T : #{level = v} Type = #{level = u} Type;
@@ -123,9 +123,7 @@ let /collapse : Type = #{universes = {levels = [0, 0]}} /T;
 let /weaker : #{level = v} Type = #{universes = {levels = [u, v]}} /T;
 #{universe_context = {parameter_count = 2, constraints = [u <= v, v <= u]}}
 let /equal : #{level = v} Type = #{universes = {levels = [u, v]}} /T;
-#{
-    universe_context = {parameter_count = 2, constraints = []},
-    entry = {universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}}
+#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}
 induct /Big: pub #{level = v} Type
 | mk(T: #{level = u} Type)
 end
@@ -148,7 +146,7 @@ let /fits : #{level = 1} Type = #{universes = {levels = [0, 1]}} /T;
 /std/Bool/False
 "#;
 
-/// An instance chosen to collapse two levels is refused wherever it is read, under the reader's own context and none left by an item before it, the former of a family whose entry states the constraint included; `T@{0, 1}` stands.
+/// An instance chosen to collapse two levels is refused wherever it is read, under the reader's own context and none left by an item before it, the node of a family whose scheme states the constraint included; `T@{0, 1}` stands.
 #[test]
 fn an_instance_is_held_to_its_scheme_under_the_readers_own_context() {
     let verdicts = core_text_verdicts(&fill!(
@@ -157,9 +155,7 @@ fn an_instance_is_held_to_its_scheme_under_the_readers_own_context() {
         INSTANCES_BELOW_THEIR_SCHEME
     ));
 
-    for symbol in [
-        "collapse", "weaker", "equal", "Big", "node", "F", "S", "after",
-    ] {
+    for symbol in ["collapse", "weaker", "equal", "node", "F", "S", "after"] {
         assert!(
             refuses(&verdicts, symbol, |error| matches!(
                 error,

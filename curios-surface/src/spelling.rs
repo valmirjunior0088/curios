@@ -7,7 +7,7 @@ use {
         TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
         level_spelled, nested, print_core_entry, print_core_item, print_core_term, print_shown,
         print_shown_entry, print_shown_item, print_term, record_declared, spellings_reaching,
-        string, sub, tree, universe_context_written, value, word_value,
+        string, tree, universe_context_written, value, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
@@ -107,7 +107,7 @@ pub struct FormScope {
 }
 
 impl FormScope {
-    /// The scope of a text read over `units` under `syntax`: every entry their formers carry.
+    /// The scope of a text read over `units` under `syntax`: every entry their items hold.
     pub fn over<'d>(
         syntax: SyntaxRegistry,
         units: impl IntoIterator<Item = &'d Definitions>,
@@ -123,17 +123,9 @@ impl FormScope {
             {
                 rows.insert(definition.name, row);
             }
-            let held = match item {
-                Item::Let(definition) => vec![(definition.name, &definition.kind)],
-                Item::Rec(rec) => rec
-                    .exports()
-                    .iter()
-                    .map(|member| (member.name, &member.kind))
-                    .collect(),
-            };
-            for (name, kind) in held {
-                if let DefinitionKind::Nominal(nominal) = kind {
-                    entries.insert(name, Rc::clone(nominal));
+            if let Item::Nominal(nominals) = item {
+                for (name, entry) in nominals.entries() {
+                    entries.insert(*name, Rc::clone(entry));
                 }
             }
         }
@@ -2171,6 +2163,19 @@ fn items_written<D: Rendered>(
                     .collect();
                 each(CoreItem::Group(members))?;
             }
+            Item::Nominal(nominals) => {
+                let island = nominals.island();
+                // The scheme its entries share, stated by its first form as a group's first member states the group's.
+                let mut scheme = Some(nominals.universe_context());
+                let members = nominals
+                    .entries()
+                    .iter()
+                    .map(|(name, entry)| {
+                        nominal_written(*name, island, entry, scheme.take(), spelling)
+                    })
+                    .collect();
+                each(CoreItem::Group(members))?;
+            }
         }
     }
 
@@ -2299,129 +2304,113 @@ struct Member<'a> {
 }
 
 impl Member<'_> {
-    /// This member under its decorator: a nominal declaration in its form, any other definition as a `let`.
+    /// This member under its decorator, as a `let`.
     fn written<D: Rendered>(self, spelling: &Rc<Spelling>) -> CoreMember<D> {
-        match self.definition.kind.nominal() {
-            Some(nominal) => {
-                let nominal = nominal.clone();
-                let terms = declaration_terms(self.definition, &nominal);
-                let words =
-                    spelling.with_words_of(&terms, |frame| self.declared::<Shown>(&nominal, frame));
-                let mint = Minting::default();
-                mint.allow_all(&terms);
-
-                self.declared(&nominal, Frame::new(&words, &mint))
-            }
-            None => {
-                let definition = self.definition;
-                let mut fields = definition_fields(
-                    &definition.name,
-                    &definition.kind,
-                    &definition.island,
-                    self.proof,
-                    self.value_sort,
-                    self.universe_context.and_then(universe_context_written),
-                    spelling,
-                );
-                // A group of one member is written as a `let` is, so it says it is a group.
-                if let Some((_, 1)) = self.group {
-                    fields.insert(0, ("node", word_value("Rec")));
-                }
-                let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
-
-                CoreMember::Let(TopLet {
-                    doc: None,
-                    core: CoreHead {
-                        fields: decorated_fields(spelling, fields),
-                        name: definition.name,
-                    },
-                    vis_pub: false,
-                    label: declared_label(&definition.name),
-                    signature: LetSignature::Name {
-                        type_: Some(written(&definition.type_)),
-                        body: written(&definition.body),
-                    },
-                })
-            }
-        }
-    }
-
-    /// A nominal declaration in its form under `frame`, its decorator stating what differs from what the form builds: the node it is where its item is not the one its keyword makes, and its former's parts and its entry's beside the ones the form spells.
-    fn declared<D: Rendered>(&self, nominal: &Nominal, frame: Frame<'_, D>) -> CoreMember<D> {
         let definition = self.definition;
-        let (member, words) = match nominal {
-            Nominal::Inductive(declaration) => (
-                CoreMember::Induct(family_declared(&definition.name, declaration, frame)),
-                Vec::new(),
-            ),
-            Nominal::Struct(record) => {
-                let written = record_declared(record, frame);
-                let words = written.words.clone();
-                (
-                    CoreMember::Struct(written.structure(&definition.name)),
-                    words,
-                )
-            }
-            Nominal::Concept { record, .. } => {
-                let written = record_declared(record, frame);
-                let words = written.words.clone();
-                (
-                    CoreMember::Concept(written.concept(&definition.name)),
-                    words,
-                )
-            }
-        };
-
-        // A family's item is a group, its own where it is alone; a record's and a concept's is a `let` where it is alone.
-        let mut fields = Vec::<Decoration<D>>::new();
-        match (self.group, matches!(nominal, Nominal::Inductive(_))) {
-            (None, true) => fields.push(("node", word_value("Let"))),
-            (Some((_, 1)), false) => fields.push(("node", word_value("Rec"))),
-            _ => {}
-        }
-        fields.extend(definition_fields(
+        let mut fields = definition_fields(
             &definition.name,
             &definition.kind,
             &definition.island,
             self.proof,
             self.value_sort,
             self.universe_context.and_then(universe_context_written),
-            frame.spelling,
-        ));
-        let former = Definition::former(definition.name, definition.island, nominal.clone());
-        if definition.type_ != former.type_ {
-            fields.push(("type_", value(sub(definition.type_.clone(), frame))));
+            spelling,
+        );
+        // A group of one member is written as a `let` is, so it says it is a group.
+        if let Some((_, 1)) = self.group {
+            fields.insert(0, ("node", word_value("Rec")));
         }
-        if definition.body != former.body {
-            fields.push(("body", value(sub(definition.body.clone(), frame))));
-        }
-        fields.extend(entry_fields(definition, nominal, &words, frame));
+        let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
 
-        let fields = decorated_fields(frame.spelling, fields);
-        match member {
-            CoreMember::Induct(mut family) => {
-                family.core.fields = fields;
-                CoreMember::Induct(family)
-            }
-            CoreMember::Struct(mut record) => {
-                record.core.fields = fields;
-                CoreMember::Struct(record)
-            }
-            CoreMember::Concept(mut concept) => {
-                concept.core.fields = fields;
-                CoreMember::Concept(concept)
-            }
-            CoreMember::Let(_) => unreachable!("a nominal declaration is written in its form"),
+        CoreMember::Let(TopLet {
+            doc: None,
+            core: CoreHead {
+                fields: decorated_fields(spelling, fields),
+                name: definition.name,
+            },
+            vis_pub: false,
+            label: declared_label(&definition.name),
+            signature: LetSignature::Name {
+                type_: Some(written(&definition.type_)),
+                body: written(&definition.body),
+            },
+        })
+    }
+}
+
+/// The nominal declaration `name`, of `island`, whose entry is `nominal`, in its form, stating `scheme` where it is its group's first: its binders' words read off the terms it writes, so none reads like a name they mention.
+fn nominal_written<D: Rendered>(
+    name: Global,
+    island: Qualifier,
+    nominal: &Nominal,
+    scheme: Option<&UniverseContext>,
+    spelling: &Rc<Spelling>,
+) -> CoreMember<D> {
+    let terms = declaration_terms(name, island, nominal);
+    let words = spelling.with_words_of(&terms, |frame| {
+        nominal_declared::<Shown>(name, nominal, scheme, frame)
+    });
+    let mint = Minting::default();
+    mint.allow_all(&terms);
+
+    nominal_declared(name, nominal, scheme, Frame::new(&words, &mint))
+}
+
+/// The nominal declaration `name`, whose entry is `nominal`, in its form under `frame`, its decorator stating `scheme`, where it is handed one, and what else of the entry differs from what the form builds. A former is made of its entry, so nothing of one is written.
+fn nominal_declared<D: Rendered>(
+    name: Global,
+    nominal: &Nominal,
+    scheme: Option<&UniverseContext>,
+    frame: Frame<'_, D>,
+) -> CoreMember<D> {
+    let (member, words) = match nominal {
+        Nominal::Inductive(declaration) => (
+            CoreMember::Induct(family_declared(&name, declaration, frame)),
+            Vec::new(),
+        ),
+        Nominal::Struct(record) => {
+            let written = record_declared(record, frame);
+            let words = written.words.clone();
+            (CoreMember::Struct(written.structure(&name)), words)
         }
+        Nominal::Concept { record, .. } => {
+            let written = record_declared(record, frame);
+            let words = written.words.clone();
+            (CoreMember::Concept(written.concept(&name)), words)
+        }
+    };
+
+    let mut fields = Vec::<Decoration<D>>::new();
+    if let Some(context) = scheme.and_then(universe_context_written) {
+        fields.push(("universe_context", context));
+    }
+    fields.extend(entry_fields(name, nominal, &words, frame));
+
+    let fields = decorated_fields(frame.spelling, fields);
+    match member {
+        CoreMember::Induct(mut family) => {
+            family.core.fields = fields;
+            CoreMember::Induct(family)
+        }
+        CoreMember::Struct(mut record) => {
+            record.core.fields = fields;
+            CoreMember::Struct(record)
+        }
+        CoreMember::Concept(mut concept) => {
+            concept.core.fields = fields;
+            CoreMember::Concept(concept)
+        }
+        CoreMember::Let(_) => unreachable!("a nominal declaration is written in its form"),
     }
 }
 
 /// The terms a nominal declaration's form writes, whose names its binders' words must not read like and which bound what its render may build: its former's, and a family's constructors'.
-fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
-    let mut terms = vec![definition.type_.clone(), definition.body.clone()];
-    if let (Nominal::Inductive(declaration), Global::Authored(owner)) = (nominal, definition.name) {
+fn declaration_terms(name: Global, island: Qualifier, nominal: &Nominal) -> Vec<Term> {
+    let former = Made::former(name, island, nominal);
+    let mut terms = vec![former.type_, former.body];
+    if let (Nominal::Inductive(declaration), Global::Authored(owner)) = (nominal, name) {
         terms.extend(
-            Made::constructors(owner, definition.island, declaration)
+            Made::constructors(owner, island, declaration)
                 .into_iter()
                 .map(|constructor| constructor.type_),
         );
@@ -2436,29 +2425,27 @@ fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
     terms
 }
 
-/// What a nominal declaration's entry holds beside what its form spells and its former's: the module its representation belongs to where it is not its name's parent, the polarities and the variances its elaboration filed, and a scheme apart from its former's; and a concept's own parts where they are not read off its record — its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
+/// What a nominal declaration's entry holds beside what its form spells and its scheme: the module its representation belongs to where it is not its name's parent, and the polarities and the variances its elaboration filed; and a concept's own parts where they are not read off its record — its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
 fn entry_fields<D: Rendered>(
-    definition: &Definition,
+    name: Global,
     nominal: &Nominal,
     words: &[String],
     frame: Frame<'_, D>,
 ) -> Vec<Decoration<D>> {
-    let (universe_context, module, polarities, variances) = match nominal {
+    let (module, polarities, variances) = match nominal {
         Nominal::Inductive(declaration) => (
-            declaration.universe_context(),
             declaration.module(),
             declaration.polarities(),
             declaration.variances(),
         ),
         Nominal::Struct(record) | Nominal::Concept { record, .. } => (
-            &record.universe_context,
             record.module,
             record.polarities.as_slice(),
             record.variances.as_slice(),
         ),
     };
     let mut fields = Vec::<Decoration<D>>::new();
-    if Some(module) != definition.name.qualifier().map(Qualifier::without_last) {
+    if Some(module) != name.qualifier().map(Qualifier::without_last) {
         fields.push(("module", module_written(&module, frame.spelling)));
     }
     let listed = |values: Vec<String>| bracketed(values.into_iter().map(word_value).collect());
@@ -2484,11 +2471,6 @@ fn entry_fields<D: Rendered>(
             ),
         ));
     }
-    if *universe_context != definition.universe_context {
-        let context =
-            universe_context_written(universe_context).unwrap_or_else(|| nested(Vec::new()));
-        fields.push(("entry", nested(vec![("universe_context", context)])));
-    }
     if let Nominal::Concept { concept, record } = nominal {
         let mut own = Vec::<Decoration<D>>::new();
         if concept.universe_context != record.universe_context {
@@ -2496,7 +2478,7 @@ fn entry_fields<D: Rendered>(
                 .unwrap_or_else(|| nested(Vec::new()));
             own.push(("universe_context", context));
         }
-        if concept.supers != concept_supers_read_off(definition.name, record) {
+        if concept.supers != concept_supers_read_off(name, record) {
             own.push((
                 "supers",
                 bracketed(
@@ -2578,7 +2560,7 @@ fn definition_fields<D: Rendered>(
         fields.push(("universe_context", context));
     }
     match kind {
-        DefinitionKind::Authored | DefinitionKind::Nominal(_) => {}
+        DefinitionKind::Authored => {}
         DefinitionKind::Witness => fields.push(("kind", word_value("Witness"))),
         DefinitionKind::Test => fields.push(("kind", word_value("Test"))),
     }

@@ -10,9 +10,9 @@ use {
         Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
         Elements, Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam,
         Intrinsic, Item, Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
-        Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey,
-        WitnessOrigin,
+        Nominals, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl,
+        Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId,
+        WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -255,16 +255,11 @@ fn bit() -> InductDecl {
     )
 }
 
-/// A module of `/Bit`'s former, a group of its own as a family's is, beside the `let`s of `beside`, in the order a module is stored in.
+/// A module declaring `/Bit`, beside the `let`s of `beside`, in the order a module is stored in.
 fn module(declaration: InductDecl, beside: Vec<Definition>) -> Definitions {
-    let former = Definition::former(
+    let items = [Item::Nominal(Nominals::new(vec![(
         global(&["Bit"]),
-        Qualifier::empty(),
         Nominal::Inductive(declaration),
-    );
-    let items = [Item::Rec(RecItem::new(vec![(
-        Free::local(0, Some("Bit")),
-        former,
     )]))]
     .into_iter()
     .chain(
@@ -280,7 +275,7 @@ fn module(declaration: InductDecl, beside: Vec<Definition>) -> Definitions {
     .ordered()
 }
 
-/// A family is written in its form, which builds its former and declares its constructors, so no item of either is written.
+/// A family is written in its form, whose entry its former and its constructors are made of, so neither is written.
 #[test]
 fn a_family_is_written_in_its_form() {
     assert_eq!(
@@ -332,13 +327,12 @@ fn a_record_is_written_in_its_form() {
         polarities: Vec::new(),
         variances: Vec::new(),
     };
-    let former = Definition::former(
-        global(&["Pair"]),
-        Qualifier::empty(),
-        Nominal::Struct(record),
-    );
     let definitions = Definitions {
-        items: vec![Item::Let(Box::new(former))].into(),
+        items: vec![Item::Nominal(Nominals::new(vec![(
+            global(&["Pair"]),
+            Nominal::Struct(record),
+        )]))]
+        .into(),
     };
 
     assert_eq!(
@@ -595,14 +589,13 @@ fn every_node_written_reads_back_as_itself() {
     }
 }
 
-/// Every module a test above writes reads back as itself: a family from its form, a `let` stating a constructor's kind beside it, and a record from its form.
+/// Every module a test above writes reads back as itself: a family from its form, and a record from its form.
 #[test]
 fn every_module_written_reads_back_as_itself() {
     let (a, b) = (Free::local(0, Some("A")), Free::local(1, Some("B")));
     let (fst, snd) = (Free::local(2, Some("fst")), Free::local(3, Some("snd")));
-    let record = Definition::former(
+    let record = Nominals::new(vec![(
         global(&["Pair"]),
-        Qualifier::empty(),
         Nominal::Struct(StructDecl {
             universe_context: UniverseContext::empty(),
             arity: Telescope::build(
@@ -615,11 +608,11 @@ fn every_module_written_reads_back_as_itself() {
             polarities: Vec::new(),
             variances: Vec::new(),
         }),
-    );
+    )]);
     let modules = [
         module(bit(), Vec::new()),
         Definitions {
-            items: vec![Item::Let(Box::new(record))].into(),
+            items: vec![Item::Nominal(record)].into(),
         },
     ];
 

@@ -703,7 +703,7 @@ fn spelled(
             .into_iter()
             .find(|definition| definition.name == name)
             .map(|definition| definition.type_)
-            .or_else(|| item.constructor(&name).map(|constructor| constructor.type_))
+            .or_else(|| item.made(&name).map(|made| made.type_))
     });
 
     Described {

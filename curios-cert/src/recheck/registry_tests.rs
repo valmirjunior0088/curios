@@ -93,53 +93,7 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
     );
 }
 
-/// An inductive's registry entry and its type-former definition may declare different universe schemes here, and that is not a hole.
-///
-/// `curios-elab`'s `validate_universes` refuses the disagreement outright — "inductive Foo and its type-former definition have different universe contexts" — and it is one of three such agreement clauses, the others pairing a `struct` with its type-former and a `concept` with its structure entry. All three are elaborator-only, and one concept stored twice with the agreement checked in one place is a shape worth constructing rather than assuming.
-///
-/// The certifier accepts it, in both directions of the mismatch, and the reason it may is that it never reads the agreement: it reads each scheme where that scheme is *authoritative*. An `InductType` occurrence is checked and instantiated against the registry entry's context; the definition is checked under its own. Neither is ever consulted for the other's question, so there is nothing for a disagreement to corrupt.
-///
-/// The second fixture is what makes that a demonstration rather than a hope. It claims `Foo` at instance `[u, u]` inhabits the sort `Foo`'s registry gives instance `[u, v]`, and the certifier refuses with a `Mismatch` of `Type u` against `Type v` — the registry's `result_sort` applied faithfully to the levels the *occurrence* supplied. A certifier that read the definition's scheme here, or conflated the two, would accept it.
-///
-/// The verdict: this is the elaborator being strict, not the certifier being permissive. The distinction is not that the elaborator is merely cautious — the agreement is load-bearing *for the elaborator*, which reads a scheme from whichever of its two copies is in hand. It is not load-bearing for a checker that reads each in its own place. No rule was added: making the certifier enforce an elaborator construction invariant it does not consult would be the certifier believing elaborator output, which is the thing this crate exists not to do.
-///
-/// Both routes by which a disagreement *could* have mattered are closed already, and by this same file: an ill-scoped level (`a_level_naming_an_undeclared_universe_parameter_is_refused`) and an instance of the wrong width (`a_universe_instance_narrower_than_its_scheme_is_refused`).
-#[test]
-fn a_registry_and_its_type_former_may_declare_different_schemes() {
-    for (label, text) in [
-        (
-            "registry narrower",
-            r#"
-#{
-    node = Let,
-    universe_context = {parameter_count = 2},
-    entry = {universe_context = {parameter_count = 1}}}
-induct /Foo: pub #{level = u} Type
-end
-"#,
-        ),
-        (
-            "definition narrower",
-            r#"
-#{
-    node = Let,
-    universe_context = {parameter_count = 1},
-    body = #{node = InductType, universes = {levels = [u, u]}} /Foo(),
-    entry = {universe_context = {parameter_count = 2}}}
-induct /Foo: pub #{level = u} Type
-end
-"#,
-        ),
-    ] {
-        assert_eq!(
-            text_verdicts(text),
-            Vec::new(),
-            "{label}: the certifier refused a disagreement it never consults",
-        );
-    }
-}
-
-/// The demonstration that each scheme is nonetheless applied where it is authoritative: a claim about the family's sort that the *registry's* `result_sort` refutes.
+/// A family takes its sort from its entry at the levels an occurrence supplies: `Foo` at instance `[u, u]` claimed to inhabit the sort its entry gives instance `[u, v]` is refused with a `Mismatch` of `Type u` against `Type v`.
 #[test]
 fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     // The sort is the *second* parameter, so an occurrence's second level decides it: `Foo.{u, u}` claimed at `Type v`, whose sort is `Type u`, and nothing may conflate the two.
@@ -195,4 +149,31 @@ ${after}"#,
             "followed by a definition: {followed}; {verdicts:?}",
         );
     }
+}
+
+/// A family's index types are type positions its entry's typing records, checked under the item that declares the family: `Indexed`'s one index is typed `((g : (Nat) -> Nat) => Nat)(reaches)`, which names the partial `reaches` as written, and is refused under `Indexed`. A former is made of its entry and checked as no definition, so the entry's typing is the one place an index type is read.
+#[test]
+fn a_partial_index_type_is_refused_under_its_family() {
+    let verdicts = text_verdicts(
+        r#"
+let /sink: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
+
+let /reaches: (m: #NatType) -> #NatType =
+    (m: #NatType) => /sink(m);
+
+induct /Indexed: (i: ((g: (n: #NatType) -> #NatType) => #NatType)(/reaches)) -> pub Type
+end
+"#,
+    );
+
+    assert!(
+        refuses(&verdicts, Some("Indexed"), |error| matches!(
+            error,
+            Error::NotTotal { .. }
+        )),
+        "{verdicts:?}",
+    );
 }

@@ -15,8 +15,8 @@ use {
     curios_common::{Digest, Qualifier, digest},
     curios_core::{
         Applications, Certification, Concluded, Definition, DefinitionKind, Definitions, Global,
-        InductDecl, Item, ItemRun, Nominal, Places, Polarity, Reads, RecDefinition, RecItem,
-        Sharing, StructDecl, Totality, Variance,
+        InductDecl, Item, ItemRun, Nominal, Nominals, Places, Polarity, Reads, RecDefinition,
+        RecItem, Sharing, StructDecl, Totality, Variance,
     },
     std::collections::{BTreeMap, HashMap},
 };
@@ -30,7 +30,7 @@ pub struct Baseline<'a> {
 }
 
 impl<'a> Baseline<'a> {
-    /// Whether the entry `item` carries under `name` is the one `held`, the baseline's item, carries under it: the same declaration, by everything the certifier reads of one, or none on both sides.
+    /// Whether the entry `item` holds under `name` is the one `held`, the baseline's item, holds under it: the same declaration, by everything the certifier reads of one, or none on both sides.
     fn entries_alike(name: &Global, item: &Item, held: &Item) -> bool {
         let (this, that) = (item.nominal(name), held.nominal(name));
         let alike = |this: Option<&InductDecl>, that: Option<&InductDecl>| match (this, that) {
@@ -56,7 +56,7 @@ impl<'a> Baseline<'a> {
 
     /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, and the same registry entries under each name. Elaboration's stamps take no part, its proof marks and value sorts among them: the walk states those of every item it judges or takes by its own reading of the terms (`certifier::stating`), so an item whose terms are the baseline's is stated as the baseline's was.
     ///
-    /// Each form is compared by a function that destructures it whole ([`definition_alike`], [`group_alike`]), so a field added to the representation is classified there or does not compile. That is the rule and not a courtesy: comparing by the fields someone thought of is how the `rec` form came to be compared by its group and its members' names and marks, and silently not by the universe context its members' levels mean, which admitted Hurkens' paradox through a group adopted under constraints no walk assumed.
+    /// Each form is compared by a function that destructures it whole ([`definition_alike`], [`group_alike`], [`nominals_alike`]), so a field added to the representation is classified there or does not compile. That is the rule and not a courtesy: comparing by the fields someone thought of is how the `rec` form came to be compared by its group and its members' names and marks, and silently not by the universe context its members' levels mean, which admitted Hurkens' paradox through a group adopted under constraints no walk assumed.
     pub(crate) fn holds(&self, item: &Item) -> bool {
         let names = item.declared_names();
         let Some(place) = names.first().and_then(|name| self.places.place(name)) else {
@@ -66,6 +66,7 @@ impl<'a> Baseline<'a> {
         let terms = match (item, held) {
             (Item::Let(this), Item::Let(that)) => definition_alike(this, that),
             (Item::Rec(this), Item::Rec(that)) => group_alike(this, that),
+            (Item::Nominal(this), Item::Nominal(that)) => nominals_alike(this, that),
             _ => false,
         };
 
@@ -78,7 +79,7 @@ impl<'a> Baseline<'a> {
 
 /// Whether a `let` item is the baseline's: everything a judgment reads of a name in scope, the definition destructured whole so that what is left out is left out on purpose.
 ///
-/// What is read is the type, the body, the universe context and whether the declaration wrote the definition, which every statement the walk makes of the definition is read off. What is not: the registry entry a `kind` carries, which [`Baseline::entries_alike`] compares under each name, and what else a kind says, which no judgment reads; the island, which is elaboration's record; and the proof mark and the value sort, which the walk states of the definition itself.
+/// What is read is the type, the body, the universe context and whether the declaration wrote the definition, which every statement the walk makes of the definition is read off. What is not: what else a kind says, which no judgment reads; the island, which is elaboration's record; and the proof mark and the value sort, which the walk states of the definition itself.
 fn definition_alike(this: &Definition, that: &Definition) -> bool {
     let Definition {
         name,
@@ -101,6 +102,19 @@ fn definition_alike(this: &Definition, that: &Definition) -> bool {
 /// Whether a declaration wrote a definition of `kind`, which is what the walk reads of a kind where it states the definition a proof ([`check_definition`](crate::check_definition)).
 fn authored(kind: &DefinitionKind) -> bool {
     matches!(kind, DefinitionKind::Authored)
+}
+
+/// Whether a nominal declaration is the baseline's by its names: the same names in the same order, each entry compared under its name by [`Baseline::entries_alike`], which is everything its made formers and constructors are read off.
+fn nominals_alike(this: &Nominals, that: &Nominals) -> bool {
+    let names = |nominals: &Nominals| {
+        nominals
+            .entries()
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+    };
+
+    names(this) == names(that)
 }
 
 /// Whether a `rec` item is the baseline's: the universe context its members' levels mean, the group's own scopes, which hold every member's type and body, and each member by what is read of one.
@@ -177,7 +191,7 @@ pub fn held_digest(
     read.digest(body).map(Some)
 }
 
-/// What a signature read of a definition reads beside its terms: whether it is not known to terminate, the vectors of the entry its former carries, and how it applies its parameters.
+/// What a signature read of a definition reads beside its terms: whether it is not known to terminate, the vectors of the entry it is the former of, and how it applies its parameters.
 pub type Beside<'a> = (
     bool,
     Option<&'a [Polarity]>,
@@ -236,7 +250,7 @@ pub fn part_digest(
     held_digest(definitions, places, name, verdicts, body)
 }
 
-/// What a read reads of a declaration: its terms, the registry entries its former carries, and the certifier's verdict on it.
+/// What a read reads of a declaration: its terms, the registry entry it is the former of, and the certifier's verdict on it.
 struct Readable<'a> {
     held: Held<'a>,
     family: Option<&'a InductDecl>,

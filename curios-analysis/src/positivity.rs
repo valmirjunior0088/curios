@@ -569,7 +569,7 @@ fn fixpoint<E: Env>(
 
 /// Transitively close the occurrence relation under composition: if `middle` occurs in `owner` at `first` and `target` occurs in `middle` at `second`, then `target` occurs in `owner` at `first ∘ second`.
 ///
-/// This is what removes any need for the check to know which declarations were declared as one mutually recursive group. That grouping lives on `Item::Rec` and not on the registry entry, so asking "who else is in my group" would mean reaching outside the registry; closing the relation instead reaches every member of every cycle by construction.
+/// This is what removes any need for the check to know which declarations were declared as one mutually recursive group. That grouping lives on the item holding the entries (`Item::Nominal`) and not on an entry, so asking "who else is in my group" would mean reaching outside the registry; closing the relation instead reaches every member of every cycle by construction.
 fn close(direct: &Occurrences) -> Occurrences {
     let mut closed = direct.clone();
     loop {

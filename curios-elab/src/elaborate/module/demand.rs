@@ -1332,7 +1332,7 @@ impl<'a> Demand<'a> {
     }
 }
 
-/// Where `item` holds `name`, as a module holding it alone would place it: among its definitions, or as a constructor of a family it declares.
+/// Where `item` holds `name`, as a module holding it alone would place it: among its definitions, or as a name its entries make.
 fn place_in(item: &Item, name: &Global) -> Option<Place> {
     let own = match item {
         Item::Let(definition) => (definition.name == *name).then_some(Place::Let(0)),
@@ -1342,11 +1342,12 @@ fn place_in(item: &Item, name: &Global) -> Option<Place> {
             .position(|definition| definition.name == *name)
             .and_then(|member| u32::try_from(member).ok())
             .map(|member| Place::Member { item: 0, member }),
+        Item::Nominal(_) => None,
     };
 
     own.or_else(|| {
         item.declared_names()
             .contains(name)
-            .then_some(Place::Constructor { item: 0 })
+            .then_some(Place::Made { item: 0 })
     })
 }

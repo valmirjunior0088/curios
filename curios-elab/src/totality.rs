@@ -131,7 +131,7 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
     curios_profile::profile!("record_totality");
     // A group that does not descend makes every member partial, whatever each body looks like on its own.
     let rejected = match item {
-        Item::Let(_) => false,
+        Item::Let(_) | Item::Nominal(_) => false,
         Item::Rec(rec) => group_totality(context, rec.group())? == Totality::Partial,
     };
     let definitions = item.definitions();

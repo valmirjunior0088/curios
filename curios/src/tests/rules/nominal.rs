@@ -24,3 +24,24 @@ fn a_nominal_group_whose_members_do_not_all_reach_one_another_is_refused() {
     .refused(&[("| b(a: A)\n", "")])
     .by_elaborator_in("/A", |error| matches!(error, Error::GroupApart { .. }));
 }
+
+// A former's name is typed as its entry spells it: `Box`, a record of one parameter, is a function from a type to a type, which `boxing` is declared at; the refusal claims it is a type.
+#[test]
+fn a_former_is_typed_as_its_entry_spells_it() {
+    control(
+        r#"
+        struct Box(A: Type): Type {
+            held: A,
+        }
+
+        let boxing: (A: Type) -> Type = Box;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("let boxing: (A: Type) -> Type", "let boxing: Type")])
+    .by_elaborator_in("/boxing", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}

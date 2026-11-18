@@ -189,7 +189,7 @@ pub struct Concluded {
     pub totality: Totality,
     /// How it applies its parameters ([`Applications`]).
     pub applications: Applications,
-    /// The vectors of the registry entry its former carries, where it carries one.
+    /// The vectors of the registry entry it is the former of, where it is a former.
     pub vectors: Option<(Vec<Polarity>, Vec<Variance>)>,
 }
 
@@ -629,57 +629,22 @@ type Located = HashMap<Global, (usize, usize)>;
 #[curios_archive::archived]
 pub enum DefinitionKind {
     Authored,
-    /// A nominal declaration's former, with the entry it is the former of: what says a definition is one, so no former is spelled without its entry and no entry without its former.
-    Nominal(Rc<Nominal>),
     Witness,
     Test,
 }
 
 impl DefinitionKind {
-    /// The entry a former carries.
-    pub fn nominal(&self) -> Option<&Nominal> {
-        match self {
-            DefinitionKind::Nominal(nominal) => Some(nominal),
-            _ => None,
-        }
-    }
-
-    /// The names of the constructors a definition of this kind, `name`, declares beside itself: a family's former's, its path with each case's tag in declaration order, and none of any other.
-    pub fn constructor_names(&self, name: &Global) -> Vec<Global> {
-        let (Global::Authored(owner), Some(declaration)) =
-            (name, self.nominal().and_then(Nominal::inductive))
-        else {
-            return Vec::new();
-        };
-
-        declaration
-            .constructors()
-            .iter()
-            .map(|(tag, _)| Global::Authored(owner.with(tag.as_str())))
-            .collect()
-    }
-
-    /// What a former is declared as, with nothing of its entry in it: an inductive, a structure or a concept. `None` for any other definition.
-    pub fn former(&self) -> Option<Declared> {
-        self.nominal().map(|nominal| match nominal {
-            Nominal::Inductive(_) => Declared::Inductive,
-            Nominal::Struct(_) => Declared::Struct,
-            Nominal::Concept { .. } => Declared::Concept,
-        })
-    }
-
-    /// What the definition is declared as, with nothing of its entry in it, `type_` being the type it states: a written definition is a type, a function or a value by that type ([`Declared::defined`]).
+    /// What the definition is declared as, `type_` being the type it states: a written definition is a type, a function or a value by that type ([`Declared::defined`]).
     pub fn declared(&self, type_: &Term) -> Declared {
         match self {
             DefinitionKind::Authored => Declared::defined(type_),
-            DefinitionKind::Nominal(_) => self.former().expect("a nominal is a former"),
             DefinitionKind::Witness => Declared::Witness,
             DefinitionKind::Test => Declared::Test,
         }
     }
 }
 
-/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand, or a concept's method, which is a name its concept declares and no definition. A written definition is told a type, a function and a value apart by the type it states ([`Declared::defined`]), so what a name is painted as is read here with nothing read either.
+/// What a name is declared as: a [`DefinitionKind`], a former or a constructor as its item makes it ([`MadeKind`]), or a concept's method, which is a name its concept declares and no definition; read and compared with no declaration in hand. A written definition is told a type, a function and a value apart by the type it states ([`Declared::defined`]), so what a name is painted as is read here with nothing read either.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Declared {
@@ -739,9 +704,9 @@ impl Declared {
     }
 }
 
-/// A nominal declaration's registry entry, held by the definition that is its former ([`DefinitionKind::Nominal`]).
+/// A nominal declaration's registry entry, held by the item that declares it ([`Nominals`]), which makes its former of it.
 ///
-/// **One fact, held once.** A former among a module's items and its entry in a registry beside them are two facts under one name with nothing holding one to the other; held by the former, an item's entries are the ones its formers carry, and a name declares at most one. A concept's record is held with it for the same reason: a concept is its resolution metadata and the record a witness is a value of, and neither is declared alone. Why is the crate `README.md`'s "A nominal declaration's entry is held by its type former".
+/// **One fact, held once.** A former among a module's items and its entry in a registry beside them are two facts under one name with nothing holding one to the other; held by the item, a former is what its entry makes, and a name declares at most one. A concept's record is held with it for the same reason: a concept is its resolution metadata and the record a witness is a value of, and neither is declared alone. Why is the crate `README.md`'s "A nominal declaration is held as its entries".
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Nominal {
@@ -754,6 +719,31 @@ pub enum Nominal {
 }
 
 impl Nominal {
+    /// What the declaration's former is declared as: an inductive, a structure or a concept.
+    pub fn declared(&self) -> Declared {
+        match self {
+            Nominal::Inductive(_) => Declared::Inductive,
+            Nominal::Struct(_) => Declared::Struct,
+            Nominal::Concept { .. } => Declared::Concept,
+        }
+    }
+
+    /// The scheme the declaration is generalized under: a family's, or its record's.
+    pub fn universe_context(&self) -> &UniverseContext {
+        match self {
+            Nominal::Inductive(declaration) => declaration.universe_context(),
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => &record.universe_context,
+        }
+    }
+
+    /// The module the declaration sits in.
+    pub fn module(&self) -> Qualifier {
+        match self {
+            Nominal::Inductive(declaration) => declaration.module(),
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => record.module,
+        }
+    }
+
     /// The inductive family's entry, where the declaration is one.
     pub fn inductive(&self) -> Option<&InductDecl> {
         match self {
@@ -838,6 +828,8 @@ pub struct Made {
     pub universe_context: UniverseContext,
     /// The module its maker sits in, which it shares.
     pub island: Qualifier,
+    /// The sort its value inhabits where it takes nothing and its type is a sort ([`Definition::value_sort`]): a former's of a declaration with no parameter, which is the declaration's result sort.
+    pub value_sort: Option<Term>,
     pub type_: Term,
     pub body: Term,
 }
@@ -846,11 +838,42 @@ pub struct Made {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum MadeKind {
+    /// The former of the declaration it names, which is declared as `declared`.
+    Former(Declared),
     /// The constructor `tag` of the family `owner`.
     Constructor { owner: Qualifier, tag: Atom },
 }
 
 impl Made {
+    /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry ([`former_spelling`]): declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels; where it takes nothing, its value inhabits the declaration's result sort.
+    ///
+    /// **The one spelling of a former from an entry.** A former says nothing its entry does not: an item holds the entry alone, and every reader of the former's name reads what this makes of it.
+    pub fn former(name: Global, island: Qualifier, nominal: &Nominal) -> Self {
+        let (universe_context, arity, result_sort) = match nominal {
+            Nominal::Inductive(declaration) => (
+                declaration.universe_context(),
+                declaration.arity(),
+                declaration.result_sort(),
+            ),
+            Nominal::Struct(record) | Nominal::Concept { record, .. } => {
+                (&record.universe_context, &record.arity, &record.result_sort)
+            }
+        };
+        let family = matches!(nominal, Nominal::Inductive(_));
+        let (type_, body) = former_spelling(name, universe_context, arity, result_sort, family);
+        let value_sort = matches!(&*type_, Subterm::Sort(_)).then(|| result_sort.clone());
+
+        Self {
+            name,
+            made: MadeKind::Former(nominal.declared()),
+            universe_context: universe_context.clone(),
+            island,
+            value_sort,
+            type_,
+            body,
+        }
+    }
+
     /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, each binding a proof where the signature's does, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
     ///
     /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
@@ -889,6 +912,7 @@ impl Made {
                     },
                     universe_context: declaration.universe_context().clone(),
                     island,
+                    value_sort: None,
                     type_: Term::from(Subterm::FuncType(FuncType {
                         telescope: Telescope::build_marked(binders.clone(), type_)
                             .with_proofs(&proofs),
@@ -901,16 +925,18 @@ impl Made {
             .collect()
     }
 
-    /// The declaration this name is made of.
-    pub fn owner(&self) -> Qualifier {
+    /// The family this name is a constructor of, where it is a constructor.
+    pub fn owner(&self) -> Option<Qualifier> {
         match &self.made {
-            MadeKind::Constructor { owner, .. } => *owner,
+            MadeKind::Constructor { owner, .. } => Some(*owner),
+            MadeKind::Former(_) => None,
         }
     }
 
     /// What this name is declared as.
     pub fn declared(&self) -> Declared {
         match self.made {
+            MadeKind::Former(declared) => declared,
             MadeKind::Constructor { .. } => Declared::Constructor,
         }
     }
@@ -1084,7 +1110,7 @@ impl RecItem {
 
 /// A nominal declaration's former spelled from its entry's parts, its type and its body: declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels — the lambdas over the node, one to a call, which are the former's η-form ([`former_eta`](crate::former_eta)), or the node itself where the former takes nothing. `family` says whether the arity's inner telescope is a family's indices, part of its former, or a record's fields, no part of it.
 ///
-/// **The one spelling of a former from an entry**, read by the former's definition ([`Definition::former`]) and by an occurrence of the former's name, which elaboration spells as this body at the occurrence's levels.
+/// **The one spelling of a former from an entry**, read by the former its entry makes ([`Made::former`]) and by an occurrence of the former's name, which elaboration spells as this body at the occurrence's levels.
 pub fn former_spelling(
     name: Global,
     universe_context: &UniverseContext,
@@ -1174,35 +1200,6 @@ impl Definition {
         match self.proof {
             true => (None, None),
             false => (Some(&self.body), self.value_sort.as_ref()),
-        }
-    }
-
-    /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry ([`former_spelling`]): declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels.
-    ///
-    /// **The one spelling of a former from an entry.** A former says nothing its entry does not: the lowering writes both from one telescope, and what an elaborated former holds beside its entry is measured against this (`std_former_derivation`).
-    pub fn former(name: Global, island: Qualifier, nominal: Nominal) -> Self {
-        let (universe_context, arity, result_sort) = match &nominal {
-            Nominal::Inductive(declaration) => (
-                declaration.universe_context(),
-                declaration.arity(),
-                declaration.result_sort(),
-            ),
-            Nominal::Struct(record) | Nominal::Concept { record, .. } => {
-                (&record.universe_context, &record.arity, &record.result_sort)
-            }
-        };
-        let family = matches!(nominal, Nominal::Inductive(_));
-        let (type_, body) = former_spelling(name, universe_context, arity, result_sort, family);
-
-        Self {
-            name,
-            universe_context: universe_context.clone(),
-            kind: DefinitionKind::Nominal(Rc::new(nominal)),
-            island,
-            value_sort: None,
-            proof: false,
-            type_,
-            body,
         }
     }
 
@@ -1312,28 +1309,89 @@ impl Definition {
     }
 }
 
-/// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`). A definition is held by a box: it carries what its declaration publishes beside its terms, and a group carries its members' behind the group it shares, so held inline it would size every item of a module by the widest.
+/// A top-level item: a single `let` definition, a `rec` group of mutually-recursive definitions (which may reference each other by `name`), or a nominal declaration held as its entries. A definition is held by a box: it carries what its declaration publishes beside its terms, and a group carries its members' behind the group it shares, so held inline it would size every item of a module by the widest.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub enum Item {
     Let(Box<Definition>),
     Rec(RecItem),
+    Nominal(Nominals),
+}
+
+/// A nominal declaration as an item holds it: each name it declares a former under, with that name's entry, in declaration order — one for a lone declaration, several for a group, of one kind. It holds nothing else: its formers and their constructors are made of the entries where they are read ([`Made`]), its island is its entries' module, and its scheme the one its entries share, as a group's members share theirs. Why is the crate `README.md`'s "A nominal declaration is held as its entries".
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub struct Nominals {
+    entries: Vec<(Global, Rc<Nominal>)>,
+}
+
+impl Nominals {
+    /// The declaration whose names and entries are `entries`, in declaration order: at least one, all under one scheme.
+    pub fn new(entries: Vec<(Global, Nominal)>) -> Self {
+        assert!(!entries.is_empty(), "a declaration declares a name");
+        assert!(
+            entries
+                .iter()
+                .all(|(_, entry)| entry.universe_context() == entries[0].1.universe_context()),
+            "a declaration's entries share one scheme"
+        );
+
+        Self {
+            entries: entries
+                .into_iter()
+                .map(|(name, entry)| (name, Rc::new(entry)))
+                .collect(),
+        }
+    }
+
+    /// Each name the declaration declares a former under, with its entry, in declaration order.
+    pub fn entries(&self) -> &[(Global, Rc<Nominal>)] {
+        &self.entries
+    }
+
+    /// The module the declaration sits in: its entries'.
+    pub fn island(&self) -> Qualifier {
+        self.entries[0].1.module()
+    }
+
+    /// The scheme the declaration is generalized under, which its entries share.
+    pub fn universe_context(&self) -> &UniverseContext {
+        self.entries[0].1.universe_context()
+    }
+
+    /// The declaration with every term hash-consed against `sharing` — see [`Definitions::shared`].
+    pub fn shared(&self, sharing: &Sharing) -> Self {
+        Self {
+            entries: self
+                .entries
+                .iter()
+                .map(|(name, entry)| (*name, Rc::new(entry.shared(sharing))))
+                .collect(),
+        }
+    }
+
+    /// The declaration with each entry replaced by what `entry` answers for its name and the entry it holds now, where it answers one.
+    pub fn with_entries(
+        mut self,
+        mut entry: impl FnMut(&Global, &Nominal) -> Option<Nominal>,
+    ) -> Self {
+        for (name, held) in &mut self.entries {
+            if let Some(replaced) = entry(name, held) {
+                *held = Rc::new(replaced);
+            }
+        }
+
+        self
+    }
 }
 
 impl Item {
     /// This item with every term hash-consed against `sharing` — see [`Definitions::shared`].
     pub fn shared(&self, sharing: &Sharing) -> Item {
-        let kind = |kind: &DefinitionKind| match kind {
-            DefinitionKind::Nominal(nominal) => {
-                DefinitionKind::Nominal(Rc::new(nominal.shared(sharing)))
-            }
-            other => other.clone(),
-        };
-
         match self {
             Item::Let(definition) => Item::Let(Box::new(Definition {
                 name: definition.name,
-                kind: kind(&definition.kind),
+                kind: definition.kind.clone(),
                 universe_context: definition.universe_context.clone(),
                 island: definition.island,
                 proof: definition.proof,
@@ -1350,7 +1408,7 @@ impl Item {
                     .iter()
                     .map(|member| RecDefinition {
                         name: member.name,
-                        kind: kind(&member.kind),
+                        kind: member.kind.clone(),
                         island: member.island,
                         proof: member.proof,
                     })
@@ -1359,6 +1417,7 @@ impl Item {
                 group: rec.group.map_members(|term| sharing.share(term)),
                 universe_context: rec.universe_context.clone(),
             }),
+            Item::Nominal(nominals) => Item::Nominal(nominals.shared(sharing)),
         }
     }
 
@@ -1381,10 +1440,16 @@ impl Item {
                 .map(described)
                 .collect::<Vec<_>>()
                 .join(", "),
+            Item::Nominal(nominals) => nominals
+                .entries()
+                .iter()
+                .map(|(name, _)| name.faithful().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
         }
     }
 
-    /// The names this top-level item declares, in declaration order: each of its definitions', then each constructor of each family it declares, which the family's entry names and no definition of the item holds ([`Item::constructors`]).
+    /// The names this top-level item declares, in declaration order: each of its definitions' or each name its declaration declares a former under, then each constructor of each family it declares, which the family's entry names ([`Item::constructors`]).
     pub fn declared_names(&self) -> Vec<Global> {
         let own = match self {
             Item::Let(definition) => vec![definition.name],
@@ -1393,14 +1458,20 @@ impl Item {
                 .iter()
                 .map(|definition| definition.name)
                 .collect(),
+            Item::Nominal(nominals) => nominals.entries().iter().map(|(name, _)| *name).collect(),
         };
 
         own.into_iter().chain(self.constructor_names()).collect()
     }
 
-    /// What this item declares each of its names as, in the order of [`Item::declared_names`]: each definition it holds as it is written, then each constructor of a family it declares.
+    /// What this item declares each of its names as, in the order of [`Item::declared_names`]: each definition it holds as it is written, or each former as its entry's kind, then each constructor of a family it declares.
     pub fn declared(&self) -> Vec<Declared> {
         let own = match self {
+            Item::Nominal(nominals) => nominals
+                .entries()
+                .iter()
+                .map(|(_, entry)| entry.declared())
+                .collect(),
             Item::Let(definition) => vec![definition.kind.declared(&definition.type_)],
             Item::Rec(rec) => rec
                 .definitions
@@ -1420,38 +1491,31 @@ impl Item {
 
     /// Each family this item declares: the path its former is named by, the module it sits in, and its entry.
     fn families(&self) -> Vec<(Qualifier, Qualifier, &InductDecl)> {
-        fn family<'a>(
-            name: &Global,
-            island: Qualifier,
-            kind: &'a DefinitionKind,
-        ) -> Option<(Qualifier, Qualifier, &'a InductDecl)> {
-            let Global::Authored(owner) = name else {
-                return None;
-            };
-            Some((*owner, island, kind.nominal()?.inductive()?))
-        }
-        match self {
-            Item::Let(definition) => family(&definition.name, definition.island, &definition.kind)
-                .into_iter()
-                .collect(),
-            Item::Rec(rec) => rec
-                .definitions
-                .iter()
-                .filter_map(|member| family(&member.name, member.island, &member.kind))
-                .collect(),
-        }
+        let Item::Nominal(nominals) = self else {
+            return Vec::new();
+        };
+        let island = nominals.island();
+        nominals
+            .entries()
+            .iter()
+            .filter_map(|(name, entry)| match name {
+                Global::Authored(owner) => Some((*owner, island, entry.inductive()?)),
+                Global::Witness(_) => None,
+            })
+            .collect()
     }
 
     /// The names of the constructors of each family this item declares, one to a case in declaration order.
     fn constructor_names(&self) -> Vec<Global> {
-        match self {
-            Item::Let(definition) => definition.kind.constructor_names(&definition.name),
-            Item::Rec(rec) => rec
-                .definitions
-                .iter()
-                .flat_map(|member| member.kind.constructor_names(&member.name))
-                .collect(),
-        }
+        self.families()
+            .into_iter()
+            .flat_map(|(owner, _, declaration)| {
+                declaration
+                    .constructors()
+                    .iter()
+                    .map(move |(tag, _)| Global::Authored(owner.with(tag.as_str())))
+            })
+            .collect()
     }
 
     /// The value constructors of each family this item declares, as each family's entry makes them ([`Made::constructors`]): what the item declares beside its definitions and holds in none of them, so a constructor is its family's by construction.
@@ -1460,6 +1524,29 @@ impl Item {
             .into_iter()
             .flat_map(|(owner, island, declaration)| Made::constructors(owner, island, declaration))
             .collect()
+    }
+
+    /// The formers of the declaration this item holds, as each entry makes it ([`Made::former`]): none for an item of definitions.
+    pub fn formers(&self) -> Vec<Made> {
+        let Item::Nominal(nominals) = self else {
+            return Vec::new();
+        };
+        let island = nominals.island();
+        nominals
+            .entries()
+            .iter()
+            .map(|(name, entry)| Made::former(*name, island, entry))
+            .collect()
+    }
+
+    /// The name `name` as this item makes it of an entry it holds: a former, or a constructor of a family it declares. `None` for a name the item holds a definition under, or declares not at all.
+    pub fn made(&self, name: &Global) -> Option<Made> {
+        if let Item::Nominal(nominals) = self
+            && let Some((_, entry)) = nominals.entries().iter().find(|(held, _)| held == name)
+        {
+            return Some(Made::former(*name, nominals.island(), entry));
+        }
+        self.constructor(name)
     }
 
     /// The constructor `name` of a family this item declares, as its family's entry makes it.
@@ -1478,52 +1565,26 @@ impl Item {
             .find(|constructor| constructor.name == *name)
     }
 
-    /// The entries this item's formers carry, each under the name that declares it, in declaration order.
+    /// The entries this item holds, each under the name that declares it, in declaration order: none for an item of definitions.
     pub fn nominals(&self) -> Vec<(&Global, &Nominal)> {
         match self {
-            Item::Let(definition) => definition
-                .kind
-                .nominal()
-                .map(|nominal| (&definition.name, nominal))
-                .into_iter()
-                .collect(),
-            Item::Rec(rec) => rec
-                .definitions
+            Item::Nominal(nominals) => nominals
+                .entries()
                 .iter()
-                .filter_map(|member| Some((&member.name, member.kind.nominal()?)))
+                .map(|(name, entry)| (name, &**entry))
                 .collect(),
+            Item::Let(_) | Item::Rec(_) => Vec::new(),
         }
     }
 
-    /// The entry the former `name` carries, where this item declares a nominal under that name.
+    /// The entry this item holds under `name`, where it holds one.
     pub fn nominal(&self, name: &Global) -> Option<&Nominal> {
         self.nominals()
             .into_iter()
             .find_map(|(held, nominal)| (held == name).then_some(nominal))
     }
 
-    /// This item with the entry each of its formers carries replaced by what `entry` answers for the former's name and the entry it carries now, where it answers one.
-    pub fn with_nominals(mut self, entry: impl Fn(&Global, &Nominal) -> Option<Nominal>) -> Self {
-        let carried = |name: &Global, kind: &mut DefinitionKind| {
-            if let DefinitionKind::Nominal(nominal) = kind
-                && let Some(replaced) = entry(name, nominal)
-            {
-                *nominal = Rc::new(replaced);
-            }
-        };
-        match &mut self {
-            Item::Let(definition) => carried(&definition.name, &mut definition.kind),
-            Item::Rec(rec) => {
-                for member in &mut rec.definitions {
-                    carried(&member.name, &mut member.kind);
-                }
-            }
-        }
-
-        self
-    }
-
-    /// The definitions this top-level item declares, in the same order as [`Item::declared_names`] — one for a `let`, one per member for a `rec`.
+    /// The definitions this top-level item holds, in the same order as [`Item::declared_names`] — one for a `let`, one per member for a `rec`, and none for a nominal declaration, whose names are made ([`Item::made`]).
     ///
     /// Written out at each caller, the fan-out would be one more place a new `Item` variant could be missed. It belongs here beside `declared_names` for the same reason that one does: what an item declares is the item's own question.
     ///
@@ -1532,6 +1593,7 @@ impl Item {
         match self {
             Item::Let(definition) => vec![Definition::clone(definition)],
             Item::Rec(rec) => rec.definitions(),
+            Item::Nominal(_) => Vec::new(),
         }
     }
 
@@ -1574,19 +1636,12 @@ pub struct Definitions {
 }
 
 impl Definitions {
-    /// The entry the definition `name` carries, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
+    /// The entry the former `name` is made of, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
     pub fn nominal(&self, places: &Places, name: &Global) -> Option<&Nominal> {
         let place = places.place(name)?;
         match place {
-            Place::Let(_) => match &self.items[place.item()] {
-                Item::Let(definition) => definition.kind.nominal(),
-                Item::Rec(_) => None,
-            },
-            Place::Member { member, .. } => match &self.items[place.item()] {
-                Item::Rec(rec) => rec.definitions[member as usize].kind.nominal(),
-                Item::Let(_) => None,
-            },
-            Place::Constructor { .. } => None,
+            Place::Made { .. } => self.items[place.item()].nominal(name),
+            Place::Let(_) | Place::Member { .. } => None,
         }
     }
 
@@ -1618,7 +1673,7 @@ impl Definitions {
             .collect()
     }
 
-    /// Every entry the module's formers carry, each under the name that declares it, in the order the module stores its items. Reads every item: for a module in hand, never for a unit in scope, which is asked by name.
+    /// Every entry the module's items hold, each under the name that declares it, in the order the module stores its items. Reads every item: for a module in hand, never for a unit in scope, which is asked by name.
     pub fn nominals(&self) -> impl Iterator<Item = (&Global, &Nominal)> {
         self.items.iter().flat_map(Item::nominals)
     }
@@ -1681,8 +1736,8 @@ impl Definitions {
         let mut marks = Marks::new();
         // Which definitions are type formers is what each place says it declares, so the formers are read and no other item is.
         for name in &self.declared_as(Declared::is_former) {
-            if let Some(former) = self.definition_at(located, name)
-                && let Some(collected) = former_marks(&former)
+            if let Some(former) = self.item_at(located, name).and_then(|item| item.made(name))
+                && let Some(collected) = former_marks(&former.type_)
             {
                 marks.insert(former.name, Rc::new(collected));
             }
@@ -1719,11 +1774,11 @@ impl Definitions {
             .collect()
     }
 
-    /// The definition `name` names, read where `located` holds it, a group's member as [`RecItem::definitions`] materializes it: the one item is read, and where the module was stored the one item is restored.
-    fn definition_at(&self, located: &Located, name: &Global) -> Option<Definition> {
-        let &(place, member) = located.get(name)?;
+    /// The item `located` holds `name` in: the one item read, and where the module was stored the one item restored.
+    fn item_at(&self, located: &Located, name: &Global) -> Option<&Item> {
+        let &(place, _) = located.get(name)?;
 
-        item_definition(&self.items[place], name, member)
+        Some(&self.items[place])
     }
 
     /// What a report spells this unit's names by — see [`Lexicon`].
@@ -1755,19 +1810,20 @@ impl Definitions {
             plicities.remove(name);
             members.fields.remove(name);
             members.payloads.remove(name);
-            let Some((former, declared)) = places
-                .place(name)
-                .and_then(|place| self.definition_placed(place, name))
-            else {
+            // A former is a name its item holds an entry under: one read, the item restored where the module was stored.
+            let Some(item) = places.place(name).map(|place| &self.items[place.item()]) else {
                 continue;
             };
-            if !declared.is_former() {
+            let Some(entry) = item.nominal(name) else {
                 continue;
-            }
-            if let Some(marks) = former_marks(&former) {
+            };
+            if let Some(marks) = item
+                .made(name)
+                .and_then(|former| former_marks(&former.type_))
+            {
                 plicities.insert(*name, Rc::new(marks));
             }
-            put_members(&mut members, name, &former);
+            put_members(&mut members, name, entry);
         }
 
         Lexicon {
@@ -1775,19 +1831,6 @@ impl Definitions {
             plicities: Rc::new(plicities),
             members: Rc::new(members),
         }
-    }
-
-    /// The definition `name` names where `place` holds it, a group's member as [`RecItem::definitions`] materializes it, and what it is declared as: the one item is read.
-    fn definition_placed(&self, place: Place, name: &Global) -> Option<(Definition, Declared)> {
-        let at = self
-            .items
-            .names(place.item())
-            .into_iter()
-            .position(|held| held == *name)?;
-        let declared = *self.items.declared(place.item()).get(at)?;
-        let definition = item_definition(&self.items[place.item()], name, at)?;
-
-        Some((definition, declared))
     }
 
     /// The module the definition `name` names sits in ([`Definition::island`]), where `places` holds it: the one item is read.
@@ -1800,15 +1843,18 @@ impl Definitions {
             .into_iter()
             .find(|definition| definition.name == *name)
             .map(|definition| definition.island)
-            .or_else(|| item.constructor(name).map(|constructor| constructor.island))
+            .or_else(|| item.made(name).map(|made| made.island))
     }
 
     /// What this unit's structures and constructors are written by ([`Members`]): each structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
     fn members(&self, located: &Located) -> Members {
         let mut members = Members::default();
         for name in &self.declared_as(Declared::is_former) {
-            if let Some(former) = self.definition_at(located, name) {
-                put_members(&mut members, name, &former);
+            if let Some(entry) = self
+                .item_at(located, name)
+                .and_then(|item| item.nominal(name))
+            {
+                put_members(&mut members, name, entry);
             }
         }
 
@@ -1872,17 +1918,8 @@ impl Entrypoint {
     }
 }
 
-/// The definition `name` names among those `item` holds, at `at` among its names: one of its own, or a group's member as [`RecItem::definitions`] materializes it. A constructor is made, not held, so it names none.
-fn item_definition(item: &Item, name: &Global, at: usize) -> Option<Definition> {
-    match item {
-        Item::Let(definition) if definition.name == *name => Some(Definition::clone(definition)),
-        Item::Rec(rec) if at < rec.exports().len() => rec.definitions().into_iter().nth(at),
-        _ => None,
-    }
-}
-
 impl Item {
-    /// The top-level names this item's definitions reach — [`Definition::reaches`] for a `let`; for a `rec`, its members read under the group's own binders rather than opened, so a member's reference to a sibling is not an edge to itself.
+    /// The top-level names this item reaches — [`Definition::reaches`] for a `let`; for a `rec`, its members read under the group's own binders rather than opened, so a member's reference to a sibling is not an edge to itself; for a nominal declaration, its entries'.
     pub fn reaches(&self) -> BTreeSet<Global> {
         match self {
             Item::Let(definition) => definition.reaches(),
@@ -1894,6 +1931,11 @@ impl Item {
                 }
                 names
             }
+            Item::Nominal(nominals) => nominals
+                .entries()
+                .iter()
+                .flat_map(|(_, entry)| entry.reaches())
+                .collect(),
         }
     }
 }
@@ -2288,10 +2330,10 @@ pub fn open_positions_of<'a>(
     found
 }
 
-/// The plicities a type former's declared type states, parameters then indices: `None` for a nullary declaration, which has no `FuncType` wrapper and contributes nothing. A former's result is a sort, so the walk ends at the first node that is not a function type.
-fn former_marks(former: &Definition) -> Option<Vec<Plicity>> {
+/// The plicities a type former's type, `type_`, states, parameters then indices: `None` for a nullary declaration, which has no `FuncType` wrapper and contributes nothing. A former's result is a sort, so the walk ends at the first node that is not a function type.
+fn former_marks(type_: &Term) -> Option<Vec<Plicity>> {
     let mut collected = Vec::new();
-    let mut type_ = &former.type_;
+    let mut type_ = type_;
     while let Subterm::FuncType(FuncType { telescope }) = &**type_ {
         collected.extend(telescope.marks());
         type_ = telescope.terminal();
@@ -2300,11 +2342,8 @@ fn former_marks(former: &Definition) -> Option<Vec<Plicity>> {
     (!collected.is_empty()).then_some(collected)
 }
 
-/// What the former `former`, named `name`, declares of structures and constructors, put in `members`: a structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
-fn put_members(members: &mut Members, name: &Global, former: &Definition) {
-    let Some(nominal) = former.kind.nominal() else {
-        return;
-    };
+/// What the declaration `nominal`, the entry of `name`, declares of structures and constructors, put in `members`: a structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
+fn put_members(members: &mut Members, name: &Global, nominal: &Nominal) {
     if let Some(record) = nominal.record() {
         let fields = record.fields();
         let written = fields

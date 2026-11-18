@@ -6,8 +6,7 @@ use {
     curios_anf::FieldShape,
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
-        Certification, Definition, DefinitionKind, Definitions, Global, Item, Nominal, Places,
-        Sharing, Term,
+        Certification, DefinitionKind, Definitions, Global, Item, Places, Sharing, Term,
     },
     curios_elab::{
         Context, DEFAULT_BUDGET, Error, Established, Reading, Recompile, Recompiled, Traces,
@@ -1031,77 +1030,6 @@ fn std_replay_census() {
                 "beside {padding} unrelated definitions: {differing} of {} declarations differ, {refused} are refused, {retraced} ask otherwise, {beside} take another declaration with them",
                 declarations.len()
             );
-        }
-    });
-}
-
-/// What a type former of the prelude holds that its entry does not spell: each former of `/sys` and `/std` spelled again from the entry it carries ([`Definition::former`]) and compared, part by part, with the one the archive holds. A former is a function of its entry exactly where this reports nothing, and what it reports is what deriving every former would have to account for. A measurement, so it reports rather than asserts; counted.
-#[test]
-#[ignore = "measurement, counted: spells each type former of the prelude from the entry it carries and reports the parts that differ from the stored one"]
-fn std_former_derivation() {
-    /// How much of a differing term a line shows.
-    const SHOWN: usize = 400;
-    /// How many differing formers of one kind are shown in full.
-    const EXAMPLES: usize = 4;
-
-    with_prelude(|prelude| {
-        println!("\n=== each type former of the prelude, spelled from its entry ===");
-        let mut tally: BTreeMap<(&str, &str), usize> = BTreeMap::new();
-        let mut shown: BTreeMap<&str, usize> = BTreeMap::new();
-        for root in prelude {
-            let definitions = root.core().items.iter().flat_map(Item::definitions);
-            for stored in definitions {
-                let Some(nominal) = stored.kind.nominal() else {
-                    continue;
-                };
-                let kind = match nominal {
-                    Nominal::Inductive(_) => "induct",
-                    Nominal::Struct(_) => "struct",
-                    Nominal::Concept { .. } => "concept",
-                };
-                let derived = Definition::former(stored.name, stored.island, nominal.clone());
-                let parts = [
-                    (
-                        "universe context",
-                        stored.universe_context != derived.universe_context,
-                    ),
-                    ("type", stored.type_ != derived.type_),
-                    ("body", stored.body != derived.body),
-                    ("proof", stored.proof != derived.proof),
-                ]
-                .into_iter()
-                .filter_map(|(part, differs)| differs.then_some(part))
-                .collect::<Vec<_>>();
-
-                *tally.entry((kind, "formers")).or_default() += 1;
-                if parts.is_empty() {
-                    *tally.entry((kind, "alike")).or_default() += 1;
-                    continue;
-                }
-                for part in &parts {
-                    *tally.entry((kind, *part)).or_default() += 1;
-                }
-                let examples = shown.entry(kind).or_default();
-                if *examples < EXAMPLES {
-                    *examples += 1;
-                    let cut = |term: &Term| {
-                        let printed = term.faithful().to_string();
-                        printed.chars().take(SHOWN).collect::<String>()
-                    };
-                    println!("{kind} {}: {}", stored.name.faithful(), parts.join(", "));
-                    if stored.type_ != derived.type_ {
-                        println!("  stored type   {}", cut(&stored.type_));
-                        println!("  derived type  {}", cut(&derived.type_));
-                    }
-                    if stored.body != derived.body {
-                        println!("  stored body   {}", cut(&stored.body));
-                        println!("  derived body  {}", cut(&derived.body));
-                    }
-                }
-            }
-        }
-        for ((kind, part), count) in tally {
-            println!("{kind:<8} {part:<17} {count:>5}");
         }
     });
 }

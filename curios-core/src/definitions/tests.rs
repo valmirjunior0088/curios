@@ -294,9 +294,9 @@ fn a_construction_reaches_the_nominal_head_it_never_mentions() {
     assert!(packed.reaches().contains(&authored("Box")));
 }
 
-/// `former` as the former of a record whose one field is a `Payload`: the entry rides in the definition that declares it.
-fn boxed(mut former: Definition) -> Definition {
-    former.kind = DefinitionKind::Nominal(Rc::new(Nominal::Struct(StructDecl {
+/// The item declaring `name` a record whose one field is a `Payload`.
+fn boxed(name: &str) -> Item {
+    let record = Nominal::Struct(StructDecl {
         universe_context: UniverseContext::empty(),
         arity: Telescope::done(Telescope::build(
             [(
@@ -310,17 +310,15 @@ fn boxed(mut former: Definition) -> Definition {
         rep_public: true,
         polarities: Vec::new(),
         variances: Vec::new(),
-    })));
-    former
+    });
+
+    Item::Nominal(Nominals::new(vec![(authored(name), record)]))
 }
 
 /// A struct's field types live only in its registry entry, so the item declaring it reaches them through the entry.
 #[test]
 fn a_struct_declaration_reaches_its_field_types() {
-    let definitions = over(vec![Item::Let(Box::new(boxed(definition(
-        "Box",
-        UniverseContext::empty(),
-    ))))]);
+    let definitions = over(vec![boxed("Box")]);
 
     let reached = definitions.reaches(&definitions.items[0]);
 
@@ -330,7 +328,7 @@ fn a_struct_declaration_reaches_its_field_types() {
 /// A unit's nominal marks are read off the definitions it declares as type formers, which each place says of its names: of a stored module the formers are restored, and no other item is, each other item standing on bytes that hold none.
 #[test]
 fn nominal_marks_read_the_type_formers_and_no_other_item() {
-    let former = Item::Let(Box::new(boxed(definition("Box", UniverseContext::empty()))));
+    let former = boxed("Box");
     let items = [
         Item::Let(Box::new(definition("before", UniverseContext::empty()))),
         former.clone(),
@@ -379,13 +377,7 @@ fn names(definitions: &Definitions) -> Vec<String> {
 /// An item follows what the registry entries it declares reach, which no term of its own names.
 #[test]
 fn an_item_follows_what_its_registry_entry_reaches() {
-    let Item::Let(former) = reading("Box", &[]) else {
-        unreachable!("a reading is one definition");
-    };
-    let definitions = over(vec![
-        Item::Let(Box::new(boxed(*former))),
-        reading("Payload", &[]),
-    ]);
+    let definitions = over(vec![boxed("Box"), reading("Payload", &[])]);
 
     assert_eq!(names(&definitions.ordered()), ["/Payload", "/Box"]);
 }
@@ -399,17 +391,14 @@ fn a_lexicon_revised_at_what_changed_answers_as_the_whole_one() {
         Item::Let(Box::new(definition))
     };
     let then = over(vec![
-        Item::Let(Box::new(boxed(definition("Box", UniverseContext::empty())))),
+        boxed("Box"),
         reading("Payload", &[]),
         nested(&["a", "shared"]),
         nested(&["gone", "shared"]),
     ]);
     let now = over(vec![
         Item::Let(Box::new(definition("Box", UniverseContext::empty()))),
-        Item::Let(Box::new(boxed(definition(
-            "Crate",
-            UniverseContext::empty(),
-        )))),
+        boxed("Crate"),
         reading("Payload", &[]),
         nested(&["a", "shared"]),
         nested(&["b", "other"]),

@@ -43,6 +43,10 @@ pub fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
                 (definition.name, (definition.kind.declared(&type_), None))
             })
             .collect(),
+        FlatItem::Nominal(nominals) => nominals
+            .iter()
+            .map(|nominal| (nominal.name, (nominal.entry.declared(), None)))
+            .collect(),
     }
 }
 

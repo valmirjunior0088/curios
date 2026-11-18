@@ -1,7 +1,7 @@
 //! What a program's declarations elaborate to, read by more than one theme.
 
 use {
-    curios_core::{Item, Program, Variance},
+    curios_core::{Global, Item, Program, Term, UniverseContext, Variance},
     curios_elab::{Context, DEFAULT_BUDGET, Established, Tail, elaborate_and_zonk_entry},
     curios_module::{RootSource, SYNTAX, UnitSource, into_core_entry},
     curios_pipeline::test_support::*,
@@ -10,7 +10,24 @@ use {
     std::collections::BTreeMap,
 };
 
-/// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
+/// Each name `item` defines or declares a former under, with the scheme it is generalized under and its type: a former's as its entry makes it.
+fn declared(item: &Item) -> Vec<(Global, UniverseContext, Term)> {
+    let definitions = item.definitions().into_iter().map(|definition| {
+        (
+            definition.name,
+            definition.universe_context,
+            definition.type_,
+        )
+    });
+    let formers = item
+        .formers()
+        .into_iter()
+        .map(|former| (former.name, former.universe_context, former.type_));
+
+    definitions.chain(formers).collect()
+}
+
+/// Every definition's and former's finalized universe parameter count, keyed by the name its item describes itself with.
 pub fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
     let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
@@ -23,12 +40,9 @@ pub fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
         .iter()
         .flat_map(|item| {
             let described = item.describe();
-            item.definitions().into_iter().map(move |definition| {
-                (
-                    described.clone(),
-                    definition.universe_context.parameter_count,
-                )
-            })
+            declared(item)
+                .into_iter()
+                .map(move |(_, context, _)| (described.clone(), context.parameter_count))
         })
         .collect()
 }
@@ -46,9 +60,9 @@ pub fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
         .iter()
         .flat_map(|item| {
             let described = item.describe();
-            item.definitions().into_iter().map(move |definition| {
-                (described.clone(), definition.universe_context.quality_count)
-            })
+            declared(item)
+                .into_iter()
+                .map(move |(_, context, _)| (described.clone(), context.quality_count))
         })
         .collect()
 }
@@ -100,14 +114,14 @@ pub fn signatures(source: &str) -> BTreeMap<String, String> {
         .iter()
         .flat_map(|item| {
             let described = item.describe();
-            item.definitions()
+            declared(item)
                 .into_iter()
-                .map(move |definition| (described.clone(), definition.type_.faithful().to_string()))
+                .map(move |(_, _, type_)| (described.clone(), type_.faithful().to_string()))
         })
         .collect()
 }
 
-/// Every definition's variance vector as its unit files it ([`curios_elab::Vectors`]), a recursive group's members each its own, keyed by the definition as [`universe_parameters`] keys a `let`: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none. A vector holding no irrelevant level is filed as none, and spelled as every level invariant.
+/// Every definition's and every former's variance vector as its unit files it ([`curios_elab::Vectors`]), a recursive group's members each its own, keyed by the declaration as [`universe_parameters`] keys a `let`: `*` for an irrelevant level and `=` for an invariant one, empty for a declaration that takes none. A vector holding no irrelevant level is filed as none, and spelled as every level invariant.
 ///
 /// The program's declarations are lowered and elaborated as the unit a compilation takes them as, over the prelude's roots, since the vectors are the unit's and no program carries them.
 pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
@@ -145,10 +159,25 @@ pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
         definitions
             .items
             .iter()
-            .flat_map(Item::definitions)
-            .map(|definition| {
-                let described = Item::Let(Box::new(definition.clone())).describe();
-                let spelled = match traces.classified(&definition.name) {
+            .flat_map(|item| {
+                let defined = item.definitions().into_iter().map(|definition| {
+                    (
+                        Item::Let(Box::new(definition.clone())).describe(),
+                        definition.name,
+                        definition.universe_context,
+                    )
+                });
+                let formers = item.formers().into_iter().map(|former| {
+                    (
+                        former.name.faithful().to_string(),
+                        former.name,
+                        former.universe_context,
+                    )
+                });
+                defined.chain(formers).collect::<Vec<_>>()
+            })
+            .map(|(described, name, context)| {
+                let spelled = match traces.classified(&name) {
                     Some(classified) if !classified.vectors.variances.is_empty() => classified
                         .vectors
                         .variances
@@ -158,7 +187,7 @@ pub fn definition_variances(source: &str) -> BTreeMap<String, String> {
                             Variance::Invariant => '=',
                         })
                         .collect(),
-                    _ => "=".repeat(definition.universe_context.parameter_count),
+                    _ => "=".repeat(context.parameter_count),
                 };
                 (described, spelled)
             })

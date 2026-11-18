@@ -248,12 +248,20 @@ pub fn universe_parameters(definitions: &curios_core::Definitions, name: &str) -
             {
                 Some(definition.universe_context.parameter_count)
             }
-            // An inductive and its constructors are one recursive group, so a lookup restricted to `Let` would miss every one of them.
             curios_core::Item::Rec(rec) => rec
                 .definitions()
                 .iter()
                 .find(|definition| definition.name.faithful().to_string() == name)
                 .map(|definition| definition.universe_context.parameter_count),
+            // A former or a constructor is made of its declaration's entry, at the entry's scheme.
+            curios_core::Item::Nominal(nominals)
+                if item
+                    .declared_names()
+                    .iter()
+                    .any(|declared| declared.faithful().to_string() == name) =>
+            {
+                Some(nominals.universe_context().parameter_count)
+            }
             _ => None,
         })
         .unwrap_or_else(|| panic!("{name} is declared"))

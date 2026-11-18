@@ -6,11 +6,8 @@
 
 use {
     crate::*,
-    curios_common::{Plicity, Qualifier},
-    std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
-        rc::Rc,
-    },
+    curios_common::Plicity,
+    std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
 /// The case of a family of `params` parameters whose whole signature is `signature`, its binders under `plicities`: its leading `params` binders the family's parameters, which the case holds no type of, and the rest its payload. How a fixture written as a constructor's whole signature builds a case.
@@ -52,9 +49,9 @@ fn after_what_each_reaches(mut pending: Vec<(Global, BTreeSet<Global>, Item)>) -
     stored
 }
 
-/// `module` declaring each of `inducts`, `structs` and `concepts`: carried by the definition of its name where the module holds one, and where it holds none by the former spelled from it ([`Definition::former`]), a family's in a group of its own as the lowering writes one, stored as a module stores an item ([`Definitions::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
+/// `module` declaring each of `inducts`, `structs` and `concepts`, each a nominal item of its own ([`Item::Nominal`]): in place of the item of the module holding a definition of its name, a group's whole where every member is one, and otherwise stored as a module stores an item ([`Definitions::ordered`]): after the items its entry names, so ahead of the module's own or just past the last of them it reaches. A concept takes the record `structs` holds under its name.
 ///
-/// How a fixture that names a registry entry builds its module: an entry is carried by a former and by nothing else, so a fixture that wants one and no former of its own is handed the one the entry spells.
+/// How a fixture that names a registry entry builds its module: an entry is held by a nominal item and by nothing else, so a fixture that wants one is handed the item that holds it, its former made of it.
 pub fn declaring(
     definitions: Definitions,
     inducts: impl IntoIterator<Item = (Global, InductDecl)>,
@@ -83,21 +80,18 @@ pub fn declaring(
         );
     }
 
-    let carried = |name: &Global, kind: &mut DefinitionKind, entries: &mut BTreeMap<_, _>| {
-        if let Some(nominal) = entries.remove(name) {
-            *kind = DefinitionKind::Nominal(Rc::new(nominal));
-        }
-    };
     let mut items = definitions.items.to_vec();
     for item in &mut items {
-        match item {
-            Item::Let(definition) => carried(&definition.name, &mut definition.kind, &mut entries),
-            Item::Rec(rec) => {
-                for member in rec.exports_mut() {
-                    carried(&member.name, &mut member.kind, &mut entries);
-                }
-            }
+        let names = item.declared_names();
+        if !names.iter().any(|name| entries.contains_key(name)) {
+            continue;
         }
+        let held = names
+            .iter()
+            .map(|name| Some((*name, entries.remove(name)?)))
+            .collect::<Option<Vec<_>>>()
+            .expect("a group stating an entry states one for every member");
+        *item = Item::Nominal(Nominals::new(held));
     }
     // Each former by the place it is stored ahead of: a walk takes the items as they come, and an entry may name a definition the module holds.
     let mut formers: BTreeMap<usize, Vec<(Global, BTreeSet<Global>, Item)>> = BTreeMap::new();
@@ -111,20 +105,7 @@ pub fn declaring(
                     .any(|declared| reach.contains(&declared))
             })
             .map_or(0, |last| last + 1);
-        let grouped = matches!(nominal, Nominal::Inductive(_));
-        let island = name
-            .qualifier()
-            .map(Qualifier::without_last)
-            .unwrap_or_default();
-        let former = Definition::former(name, island, nominal);
-
-        let item = match grouped {
-            true => Item::Rec(RecItem::new(vec![(
-                fresh(name.qualifier().map(Qualifier::last)),
-                former,
-            )])),
-            false => Item::Let(Box::new(former)),
-        };
+        let item = Item::Nominal(Nominals::new(vec![(name, nominal)]));
         formers.entry(place).or_default().push((name, reach, item));
     }
     let mut stored = Vec::new();

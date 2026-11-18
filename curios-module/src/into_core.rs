@@ -760,11 +760,22 @@ impl PreparedText {
     }
 
     /// What `name` is declared as at `place`, with nothing read.
-    fn declared_at(&self, place: curios_core::Place) -> curios_core::Declared {
+    fn declared_at(
+        &self,
+        name: &curios_core::Global,
+        place: curios_core::Place,
+    ) -> curios_core::Declared {
         let member = match place {
             curios_core::Place::Let(_) => 0,
             curios_core::Place::Member { member, .. } => member as usize,
-            curios_core::Place::Constructor { .. } => return curios_core::Declared::Constructor,
+            // A made name is placed by its item alone, among whose names it stands.
+            curios_core::Place::Made { .. } => self
+                .core
+                .items
+                .names(place.item())
+                .iter()
+                .position(|held| held == name)
+                .expect("a made name is its item's"),
         };
 
         self.core.items.declared(place.item())[member]
@@ -773,7 +784,7 @@ impl PreparedText {
     /// The entry this unit's lowering wrote for the nominal declaration `name`, read at the former that carries it: the one lowered item, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit declares no nominal under.
     pub(crate) fn nominal(&self, name: &curios_core::Global) -> Option<&curios_core::Nominal> {
         let place = self.places().place(name)?;
-        if !self.declared_at(place).is_former() {
+        if !self.declared_at(name, place).is_former() {
             return None;
         }
 
@@ -786,7 +797,7 @@ impl PreparedText {
     /// What this unit declares `name` as, with nothing read: a definition's kind, or a concept's method, which its concept declares and no definition holds. `None` for a name the unit does not declare.
     pub fn declared_as(&self, name: &curios_core::Global) -> Option<curios_core::Declared> {
         if let Some(place) = self.places().place(name) {
-            return Some(self.declared_at(place));
+            return Some(self.declared_at(name, place));
         }
         let curios_core::Global::Authored(target) = name else {
             return None;
@@ -842,12 +853,12 @@ impl PreparedText {
         name: &curios_core::Global,
     ) -> Option<(curios_core::Declared, Option<&curios_core::Term>)> {
         let place = self.places().place(name)?;
-        let declared = self.declared_at(place);
+        let declared = self.declared_at(name, place);
         let body = match (declared, place) {
             (declared, curios_core::Place::Let(_)) if declared.is_defined() => {
                 match self.lowered_item(place.item()) {
                     curios_core::Item::Let(definition) => Some(&definition.body),
-                    curios_core::Item::Rec(_) => None,
+                    curios_core::Item::Rec(_) | curios_core::Item::Nominal(_) => None,
                 }
             }
             _ => None,
@@ -1637,7 +1648,6 @@ fn process_items(
                             lower.signature_type(&signature, None)
                         })?;
                         Ok(FlatLet {
-                            members: Vec::new(),
                             kind: curios_core::DefinitionKind::Authored,
                             span: let_item.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
@@ -1678,7 +1688,6 @@ fn process_items(
                 };
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 lowered.items.push(FlatItem::Let(FlatLet {
-                    members: Vec::new(),
                     kind: curios_core::DefinitionKind::Test,
                     span: test.label.span().cloned(),
                     name,
@@ -1701,7 +1710,6 @@ fn process_items(
                 let lower = Lowerer::new(context, Some(name));
                 let (type_, body) = lower.foreign(&Arc::new(function), name);
                 lowered.items.push(FlatItem::Let(FlatLet {
-                    members: Vec::new(),
                     kind: curios_core::DefinitionKind::Authored,
                     span: f.label.span().cloned(),
                     name,
@@ -1713,8 +1721,8 @@ fn process_items(
             TopItem::Induct(group) => {
                 // An inductive's lowering is its signature throughout: parameters, indices and constructor telescopes.
                 context.sorts_stand_in(SortSite::Signature);
-                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Bytes, Nat)` beta-reduces to `InductType { Result, [Bytes, Nat] }` and `Vec(Bytes, 3)` to `InductType { Vec, [Bytes], [3] }`), and its shape is recorded in the inductive registry.
-                let type_flat_items = group
+                // Each family's entry, recorded in the inductive registry; its former is made of it ([`curios_core::Made::former`]), wrapping the family's `InductType` normal form in a `Func` over its type parameters and indices, so `Result(Bytes, Nat)` beta-reduces to `InductType { Result, [Bytes, Nat] }` and `Vec(Bytes, 3)` to `InductType { Vec, [Bytes], [3] }`.
+                let nominals = group
                     .iter()
                     .map(|u| {
                         let name = curios_core::Global::Authored(context.prefixed(&u.label));
@@ -1840,33 +1848,25 @@ fn process_items(
                                 )
                             })
                             .collect();
-                        Ok(FlatLet::former(
-                            curios_core::Definition::former(
-                                name,
-                                context.island(),
-                                curios_core::Nominal::Inductive(
-                                    lowered.induct_decls[&name].clone(),
-                                ),
+                        Ok(FlatNominal {
+                            name,
+                            entry: curios_core::Nominal::Inductive(
+                                lowered.induct_decls[&name].clone(),
                             ),
+                            span: u.label.span().cloned(),
                             members,
-                            u.label.span().cloned(),
-                        ))
+                        })
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                // Unconditionally, where a `struct`, `concept` or `witness` group tests `formers.len()` and a `let` group tests `mentions_itself` besides — so a lone non-recursive `induct` carries a `rec` group of one that means nothing, and every occurrence of `Option`, `Result` or `Bool` reduces through it.
-                //
-                // Making this conditional is not the two-line change the neighbours make it look like, and both halves were measured rather than reasoned. `mentions_itself` asks whether the type or body mentions the name, but an inductive's recursion lives in its *registry entry* — `InductType` holds `name: Global` as a field, not a reference — so the test is false for every inductive, recursive ones included, and reaching for it lowers a recursive inductive such as `/std/Cli/Values` as a `Let` that loses `elaborate_module_rec`'s `context.assume` and leaves its own name unbound while the registry telescopes rebuild. Reading the reach through `references::induct_references` instead clears that and then fails at the first universe-polymorphic inductive of a group with `universe instance has 1 arguments but its scheme expects 0`: the group is also where a universe-polymorphic inductive's levels are generalized, and as a `Let` the scheme comes out monomorphic while occurrences still pass a level.
-                //
-                // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that — a folded spelling reduces correctly, `curios-elab`'s `unfold_rec_apply` applying a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
-                lowered.items.push(FlatItem::Rec(type_flat_items));
+                lowered.items.push(FlatItem::Nominal(nominals));
             }
-            // A struct lowers to a single type-former `let` plus a registry entry — no value-constructor binding (the literal elaborates directly) and no indices.
-            // A group of structures lowers its formers into one `rec` item, as an `induct` group does, so each member's fields may name the others; a lone structure stays a `let`, its own name reached through its registry telescope.
+            // A struct lowers to its registry entry, which its former is made of — no value-constructor binding (the literal elaborates directly) and no indices.
+            // A group of structures lowers to one nominal item, as an `induct` group does, so each member's fields may name the others.
             TopItem::Struct(group) => {
                 // A structure's lowering is its signature throughout: parameters and fields.
                 context.sorts_stand_in(SortSite::Signature);
-                let mut formers = Vec::with_capacity(group.len());
+                let mut nominals = Vec::with_capacity(group.len());
                 for s in group {
                     let name = curios_core::Global::Authored(context.prefixed(&s.label));
                     context.record_import_scope(Some(&name));
@@ -1942,27 +1942,21 @@ fn process_items(
                         },
                     );
 
-                    // The type-former, `Pair : (A : Type, B : Type) -> Type`, as its entry spells it. No value constructor.
-                    formers.push(FlatLet::former(
-                        curios_core::Definition::former(
-                            name,
-                            context.island(),
-                            curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
-                        ),
-                        Vec::new(),
-                        s.label.span().cloned(),
-                    ));
+                    // The entry its former, `Pair : (A : Type, B : Type) -> Type`, is made of. No value constructor.
+                    nominals.push(FlatNominal {
+                        name,
+                        entry: curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
+                        span: s.label.span().cloned(),
+                        members: Vec::new(),
+                    });
                 }
-                lowered.items.push(match formers.len() {
-                    1 => FlatItem::Let(formers.pop().expect("a `struct` item has a member")),
-                    _ => FlatItem::Rec(formers),
-                });
+                lowered.items.push(FlatItem::Nominal(nominals));
             }
-            // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
-            // A concept group lowers its formers into one `rec` item as a struct group does; its methods are its fields, which no item declares.
+            // A concept lowers to a representation-public nominal `StructDecl`, which its former is made of, beside a concept-registry entry (field labels, superclass edges, the parameter telescope).
+            // A concept group lowers to one nominal item as a struct group does; its methods are its fields, which no item declares.
             TopItem::Concept(group) => {
                 context.sorts_stand_in(SortSite::Concept);
-                let mut formers = Vec::with_capacity(group.len());
+                let mut nominals = Vec::with_capacity(group.len());
                 for concept in group {
                     let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                     let module = context.prefixed(&concept.label).without_last();
@@ -2077,24 +2071,18 @@ fn process_items(
                             )
                         })
                         .collect();
-                    // The type-former, as its entry spells it, exactly like a representation-public struct's.
-                    formers.push(FlatLet::former(
-                        curios_core::Definition::former(
-                            name,
-                            context.island(),
-                            curios_core::Nominal::Concept {
-                                concept: lowered.concepts[&name].clone(),
-                                record: lowered.struct_decls[&name].clone(),
-                            },
-                        ),
-                        methods,
-                        concept.label.span().cloned(),
-                    ));
+                    // The entry its former is made of, exactly like a representation-public struct's.
+                    nominals.push(FlatNominal {
+                        name,
+                        entry: curios_core::Nominal::Concept {
+                            concept: lowered.concepts[&name].clone(),
+                            record: lowered.struct_decls[&name].clone(),
+                        },
+                        span: concept.label.span().cloned(),
+                        members: methods,
+                    });
                 }
-                lowered.items.push(match formers.len() {
-                    1 => FlatItem::Let(formers.pop().expect("a `concept` item has a member")),
-                    _ => FlatItem::Rec(formers),
-                });
+                lowered.items.push(FlatItem::Nominal(nominals));
             }
             // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`. The identity it is lowered under is its place in its module; the one it keeps is what its signature spells, read once every item is lowered (`name_witnesses`).
             // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.
@@ -2161,7 +2149,6 @@ fn process_items(
                         let lower = Lowerer::new(context, Some(name));
                         let signature = lower.signature(&signature);
                         let item = FlatLet {
-                            members: Vec::new(),
                             kind: curios_core::DefinitionKind::Witness,
                             span: declared.clone(),
                             name,
@@ -3060,7 +3047,7 @@ fn into_core_unit_within(
                 let formers = made
                     .iter()
                     .flat_map(|index| flat_items[*index].declared())
-                    .filter(|(_, kind, _)| kind.nominal().is_some())
+                    .filter(|(_, declared, _)| declared.is_former())
                     .map(|(name, _, _)| name)
                     .chain(
                         gone.iter()

@@ -26,8 +26,8 @@ pub enum Place {
         item: u64,
         member: u32,
     },
-    /// A constructor of a family the item declares: a name the item declares and none of its definitions holds, made from the family's entry where it is read ([`Places::constructor`]).
-    Constructor {
+    /// A name the item makes of an entry it holds: a former of its declaration, or a constructor of a family it declares, made where it is read ([`Places::made`]).
+    Made {
         item: u64,
     },
 }
@@ -36,7 +36,7 @@ impl Place {
     /// The item that declares the name, as its place among the module's items.
     pub fn item(&self) -> usize {
         match self {
-            Place::Let(item) | Place::Member { item, .. } | Place::Constructor { item } => {
+            Place::Let(item) | Place::Member { item, .. } | Place::Made { item } => {
                 usize::try_from(*item).expect("a place is counted in a usize")
             }
         }
@@ -48,7 +48,7 @@ impl Place {
 struct Held {
     place: Place,
     member: Option<Rc<OnceCell<(Term, Term)>>>,
-    constructor: Option<Rc<OnceCell<Made>>>,
+    made: Option<Rc<OnceCell<Made>>>,
 }
 
 /// Where a module holds each name it defines.
@@ -87,15 +87,18 @@ impl Places {
         // An item's definitions' names come first, so a member's place among them is its place among the group's members.
         for (member, (name, declared)) in names.into_iter().zip(declared).enumerate() {
             let held = match (declared, group) {
-                (Declared::Constructor, _) => Held {
-                    place: Place::Constructor { item },
-                    member: None,
-                    constructor: Some(Rc::new(OnceCell::new())),
-                },
+                // A former and a constructor are made of the item's entries, never held as a definition.
+                (declared, _) if declared.is_former() || declared == Declared::Constructor => {
+                    Held {
+                        place: Place::Made { item },
+                        member: None,
+                        made: Some(Rc::new(OnceCell::new())),
+                    }
+                }
                 (_, false) => Held {
                     place: Place::Let(item),
                     member: None,
-                    constructor: None,
+                    made: None,
                 },
                 (_, true) => Held {
                     place: Place::Member {
@@ -104,7 +107,7 @@ impl Places {
                             .expect("a group's members are counted in a u32"),
                     },
                     member: Some(Rc::new(OnceCell::new())),
-                    constructor: None,
+                    made: None,
                 },
             };
             let earlier = self.places.get(&name).map(|earlier| earlier.place.item());
@@ -177,18 +180,15 @@ impl Places {
         })
     }
 
-    /// The constructor `name`, which `item` declares, as its family's entry makes it ([`Item::constructor`]), kept from the first time it is asked for.
-    pub fn constructor(&self, name: &Global, item: &Item) -> &Made {
+    /// The name `name`, which `item` makes of an entry it holds, as the entry makes it ([`Item::made`]): a former or a constructor, kept from the first time it is asked for.
+    pub fn made(&self, name: &Global, item: &Item) -> &Made {
         let cell = self
             .places
             .get(name)
-            .and_then(|held| held.constructor.as_deref())
-            .expect("a constructor of a family the module holds");
+            .and_then(|held| held.made.as_deref())
+            .expect("a name the module's item makes");
 
-        cell.get_or_init(|| {
-            item.constructor(name)
-                .expect("a constructor's item declares its family")
-        })
+        cell.get_or_init(|| item.made(name).expect("a made name's item holds its entry"))
     }
 
     /// The item of `module` that is `group`, where it holds it.
@@ -200,7 +200,7 @@ impl Places {
                 .filter(|place| definitions.items.is_group(*place))
                 .filter_map(|place| match &definitions.items[place] {
                     Item::Rec(rec) => Some((Keyed::new(rec.group().clone()), place)),
-                    Item::Let(_) => None,
+                    Item::Let(_) | Item::Nominal(_) => None,
                 })
                 .collect()
         });
