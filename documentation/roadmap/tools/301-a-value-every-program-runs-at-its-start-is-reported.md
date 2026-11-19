@@ -16,6 +16,7 @@ A statement that does not finish where its unit is erased runs when a program st
 
 - The rule as erasure states it: which statements of an erased value still compute, an application, an allocation and a recursion among them, and whether a value every program's optimizer drops is reported.
 - Where erasure keeps the lint it decides, beside the lowering's and the records' elaboration files, and how it travels with its unit; and what `wonder` and the server show of a unit erasure has not reached.
+- Whether its kind names itself beside the rule erasure states, or joins the closed enum every kind is a variant of today (`LintKind`, `curios-core/src/lint.rs`): the uncertain finding of a lint's identity in [the tools findings](000-findings.md).
 - What the report says the remedy is. A lint is fixed by changing the program, and the change here is a function in the value's place or a value that finishes where its unit is compiled.
 
 It retires when the two programs above are reported, a value finished where its unit is erased is not, and no value of `/std` is.

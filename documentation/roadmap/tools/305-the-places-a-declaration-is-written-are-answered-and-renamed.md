@@ -6,6 +6,7 @@
 
 - **A declaration's name is told from another of the same spelling by what it resolves to**, as `wonder --at` tells `/std/Bool/not` from `/std/Bytes/not` a place at a time, off the names each check reads (`Named`, `curios-wonder/src/named.rs`).
 - **A place answers an occurrence**, recorded where the compilation resolved it: a name a term holds; a head the lowering resolves and a path's segment, with what the declaration minted (`curios_core::Mints`); a written binder where it is bound and read; a word the elaborator resolves, with what the declaration concluded (`curios_elab::Concluded::resolved`); and a `use` or a `mod` line's names, with the body's imports (`curios_core::Imports::lines`). A rename reads every one of them: a name on a `use` line renamed, or a local's every use.
+- **A declaration's places within one file are held already.** The record a check leaves of a file holds each name with the declaration it names, each local by its binder, and each field and module (`Placed`, `curios-wonder/src/named.rs`): what the protocol's `documentHighlight` asks of one document, with nothing compiled at the request, and the half of a rename that edits one file.
 
 ## What it waits on
 
