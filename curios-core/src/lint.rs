@@ -21,6 +21,7 @@ pub enum LintKind {
     UnusedDeclaration,
     UnusedDependency,
     RenamingBinder,
+    StartupValue,
 }
 
 impl LintKind {
@@ -33,6 +34,7 @@ impl LintKind {
             LintKind::UnusedDeclaration => "unused-declaration",
             LintKind::UnusedDependency => "unused-dependency",
             LintKind::RenamingBinder => "renaming-binder",
+            LintKind::StartupValue => "startup-value",
         }
     }
 }

@@ -16,7 +16,7 @@ mod test_support;
 use {
     crate::{
         AskedBy, AskedItems, AtSorts, Binding, Environment, HeldAsked, Part, Sorts,
-        declared_digest, erased_digest,
+        declared_digest, erased_digest, startup_value,
     },
     curios_archive::{Bytes, Deferred},
     curios_common::{Digest, Object, Ordered, Persistent, Recorded, digest},
@@ -558,6 +558,31 @@ impl ErasedUnit {
     /// The places of the items whose initialization is observable, ascending.
     pub(super) fn observable(&self) -> impl Iterator<Item = usize> {
         self.index.observable.iter().map(|(at, _)| place_of(at))
+    }
+
+    /// What erasure reports of this unit, `definitions` being its module and `anchors` where its texts lie: `startup-value` for each item whose initialization is observable, at the name its first declared name was written under, a witness worded as one (`startup_value`).
+    pub fn lints(
+        &self,
+        definitions: &curios_core::Definitions,
+        anchors: &curios_core::Anchors,
+    ) -> Vec<curios_core::Lint> {
+        self.observable()
+            .filter_map(|place| {
+                let item = &definitions.items[place];
+                let name = *item.declared_names().first()?;
+                let witness = matches!(
+                    item,
+                    curios_core::Item::Let(definition)
+                        if definition.kind == curios_core::DefinitionKind::Witness
+                );
+
+                Some(startup_value(
+                    &name,
+                    witness,
+                    anchors.label_of(&name).copied(),
+                ))
+            })
+            .collect()
     }
 
     /// This unit with `asked` as what erasing each of its items read.

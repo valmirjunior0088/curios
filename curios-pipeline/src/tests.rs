@@ -30,6 +30,7 @@ mod placement;
 mod read;
 mod resolution;
 mod spelling;
+mod startup_value;
 mod suggestion;
 mod translation;
 mod tuple;

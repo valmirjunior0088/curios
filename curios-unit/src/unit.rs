@@ -383,12 +383,13 @@ impl Unit {
         observed: &Observed,
     ) -> Self {
         let (core, certification) = accepted.into_parts();
-        // Gathered once, here, where every unit written as a program is made, from what each stage decided: the lowering's lints, and the binder lints elaboration filed with each declaration's record — elaborated now, kept from a baseline or taken from a store — and decided of the program's final term.
+        // Gathered once, here, where every unit written as a program is made, from what each stage decided: the lowering's lints, the binder lints elaboration filed with each declaration's record — elaborated now, kept from a baseline or taken from a store — and decided of the program's final term, and what erasure decided of each item's erased forms, placed through the lowering's anchors.
         let lints = Lint::ordered(
             text.lints()
                 .iter()
                 .chain(&observed.lints)
                 .cloned()
+                .chain(erased.lints(&core, text.anchors()))
                 .collect(),
             text.anchors(),
         );
