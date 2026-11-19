@@ -944,7 +944,7 @@ let _right_identity(n: Nat) -> Eq()(n + 0, n) =
 
 A test takes no parameters. A claim about every instance is a proposition, not a description: it is a `let` whose type states the claim and whose body proves it, checked on every build, as the second declaration above is, its `_` marking a declaration that exists for its type. Why: [A test is a declared description, and a proof is a `let`](design/tools/a-test-is-a-declared-description-and-a-proof-is-a-let.md).
 
-A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found.
+A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
 
 A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. `test` is a word only where an item may start, and an ordinary name elsewhere. A test is never `pub`, since its name is no export, and no documentation comment precedes one.
 

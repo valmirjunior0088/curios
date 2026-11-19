@@ -138,6 +138,22 @@ fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
 }
 
 #[test]
+fn a_failure_is_reported_under_every_step_that_reached_it() {
+    // `Test/step` names a part of a test, its label leading each failure the part reports, ahead of the steps within it, a table's case among them.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Test};
+        test nested =
+            Test/step("parsing", Test/step("headers", Test/all([Test/equal(1, 1), Test/equal(2, 3)])));
+        ()
+        "#
+        ),
+        b"/nested: failed\n  parsing: headers: case 1: not equal\n    expected: `3`\n    obtained: `2`\n"
+    );
+}
+
+#[test]
 fn a_declared_test_applied_to_a_table_is_one_test() {
     // An open claim is an ordinary definition: it takes its arguments, is not scheduled, and owes no proof, because it is not a claim about anything until it is instantiated. The test is the table that applies it to the author's own cases, and a case's failure carries both its position and the inner report.
     assert_eq!(

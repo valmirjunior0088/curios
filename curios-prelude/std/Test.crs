@@ -90,14 +90,15 @@ pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Tes
 pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =
     bind(Monad/lift(thunk()), (inner) => inner);
 
-let context(@A: Type, label: Str, test: Test(A)) -> Test(A) =
+--- `test` as a named step: `label` leads the path of each failure it reports, ahead of the steps within it, as `Test/all` names each of its cases by its position.
+pub let step(@A: Type, label: Str, test: Test(A)) -> Test(A) =
     match test
     | success(_) => test
     | failed(failures) =>
         Test/failed(
             List/map(failures, (failure) =>
                 Failure { ..failure, steps = [label, ..failure.steps] }))
-    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(context(label, inner))))
+    | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(step(label, inner))))
     end;
 
 -- The failures `found` holds, then those `next` ends with: `next` runs whatever `found` held, after its actions.
@@ -124,7 +125,7 @@ pub let all(tests: List(Test({}))) -> Test({}) =
                     found =
                         gathered(
                             state.found,
-                            context(Str/concat("case ", Nat/to_str(state.index)), next)),
+                            step(Str/concat("case ", Nat/to_str(state.index)), next)),
                     index = state.index + 1)).found;
     bind(found, (failures) => match failures | [] => pure(()) | _ => Test/failed(failures) end);
 
