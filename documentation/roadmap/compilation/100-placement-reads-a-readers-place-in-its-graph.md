@@ -10,4 +10,4 @@ The next step is that count, a measurement.
 
 ## Retirement
 
-Once `growth_slopes` holds `Growth::Loops` among the growths every stage of which is linear (`HELD`), with its record restated at its commit, [An optimizer query costs what its answer uses](200-an-optimizer-query-costs-what-its-answer-uses.md) names this file no longer, and it is deleted. Where a stage shows the square, this file is restated to the climb that holds it.
+Once `growth_slopes` holds `Growth::Loops` among the growths every stage of which is linear (`HELD`), with its record restated at its commit, this file is deleted. Where a stage shows the square, this file is restated to the climb that holds it.
