@@ -1948,13 +1948,15 @@ impl Shape {
 
     /// Every parameter of a continuation jumps enter that nothing its region builds could rebuild: what [`Shape::borrowed`] starts from where continuations borrow. A continuation a call resumes takes what the callee hands back, which no caller keeps, so its parameters own; and one whose region builds a row its parameter or a field of it is read at keeps the parameter owned, a rebuild there writing into it.
     fn continuation_receivers(&self, module: &Module) -> Borrowed {
+        let regions = self.rows_built_by_region(module);
+        let none = BTreeSet::new();
         module
             .live_continuations()
             .filter(|(continuation, _)| {
                 !self.resumes.contains_key(continuation) && self.entries.contains_key(continuation)
             })
             .flat_map(|(continuation, definition)| {
-                let built = self.rows_built_within(module, continuation);
+                let built = regions.get(&continuation).unwrap_or(&none);
                 definition
                     .params
                     .iter()
@@ -1971,31 +1973,52 @@ impl Shape {
             .collect()
     }
 
-    /// The rows the region of `continuation` builds: its body's constructions and those of the continuations defined within it.
-    fn rows_built_within(&self, module: &Module, continuation: ContinuationId) -> BTreeSet<RowId> {
-        let mut region = BTreeSet::from([Block::Cont(continuation)]);
-        loop {
-            let before = region.len();
-            for (nested, definer) in &self.defined_at {
-                if region.contains(&self.place[definer].0) {
-                    region.insert(Block::Cont(*nested));
-                }
-            }
-            if region.len() == before {
-                break;
+    /// The rows the region of each continuation builds: its body's constructions and those of the continuations defined within it, read from one pass over the places and one walk of the nesting, inner regions first, so a region costs what it holds and not the module.
+    fn rows_built_by_region(&self, module: &Module) -> BTreeMap<ContinuationId, BTreeSet<RowId>> {
+        let mut own = BTreeMap::<Block, BTreeSet<RowId>>::new();
+        for (node, (block, _)) in &self.place {
+            if let Some(Node::LetValue {
+                value: ValueExpr::Row(row, _),
+                ..
+            }) = module.node(*node)
+            {
+                own.entry(*block).or_default().insert(*row);
             }
         }
-        self.place
-            .iter()
-            .filter(|(_, (block, _))| region.contains(block))
-            .filter_map(|(node, _)| match module.node(*node) {
-                Some(Node::LetValue {
-                    value: ValueExpr::Row(row, _),
-                    ..
-                }) => Some(*row),
-                _ => None,
-            })
-            .collect()
+        let mut nested = BTreeMap::<Block, Vec<ContinuationId>>::new();
+        for (continuation, definer) in &self.defined_at {
+            nested
+                .entry(self.place[definer].0)
+                .or_default()
+                .push(*continuation);
+        }
+        let mut regions = BTreeMap::<ContinuationId, BTreeSet<RowId>>::new();
+        let mut work = module
+            .live_continuations()
+            .map(|(continuation, _)| (continuation, false))
+            .collect::<Vec<_>>();
+        while let Some((continuation, inner_done)) = work.pop() {
+            if regions.contains_key(&continuation) {
+                continue;
+            }
+            let inner = nested
+                .get(&Block::Cont(continuation))
+                .map_or(&[][..], Vec::as_slice);
+            if !inner_done {
+                work.push((continuation, true));
+                work.extend(inner.iter().map(|&nested| (nested, false)));
+                continue;
+            }
+            let mut built = own
+                .get(&Block::Cont(continuation))
+                .cloned()
+                .unwrap_or_default();
+            for nested in inner {
+                built.extend(regions.get(nested).into_iter().flatten().copied());
+            }
+            regions.insert(continuation, built);
+        }
+        regions
     }
 
     /// Of `candidates`, the parameters that only read what they are handed, given the values rebuilt when every parameter is owned: optimistic, each demoted where it must own ([`Shape::must_own`]), where a transfer into it hands what it is handed to an owned parameter too ([`Shape::handed_beside_an_owner`]), and, a continuation's, where what it is handed is consumed while it is live ([`Shape::consumed_under`]).

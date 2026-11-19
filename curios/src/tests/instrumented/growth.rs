@@ -168,7 +168,7 @@ fn base(growth: Growth) -> usize {
         | Growth::Lets
         | Growth::ChainedMatches => 100,
         Growth::Matches => 200,
-        Growth::ProductCommuted => 128,
+        Growth::ProductCommuted | Growth::Loops => 128,
         Growth::Lists | Growth::ListOpen | Growth::Parameters => 400,
         Growth::Calls | Growth::RightPlus | Growth::LeftPlus | Growth::LetsSummed => 250,
         Growth::Definitions

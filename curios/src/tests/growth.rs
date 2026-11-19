@@ -77,6 +77,8 @@ pub enum Growth {
     Matches,
     /// Matches, each on the option the `let` before it binds and binding the next.
     ChainedMatches,
+    /// Self-tail loops, each called once from the entry: each a continuation jumps enter once contified into it.
+    Loops,
     /// Lambdas, each the body of the one around it, applied in turn.
     Lambdas,
     /// Singleton list literals, each the element of the next.
@@ -91,7 +93,7 @@ pub enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub const ALL: [Growth; 35] = [
+    pub const ALL: [Growth; 36] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -122,6 +124,7 @@ impl Growth {
         Growth::LeftPlus,
         Growth::Matches,
         Growth::ChainedMatches,
+        Growth::Loops,
         Growth::Lambdas,
         Growth::Lists,
         Growth::Lets,
@@ -396,6 +399,19 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 format!("match a | 0 => {index} | _ => {inner} end")
             });
             program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
+        }
+        Growth::Loops => {
+            let mut definitions = String::new();
+            for index in 0..size {
+                writeln!(
+                    definitions,
+                    "let loop{index}(n: Nat, acc: Nat) -> Nat = match n | 0 => acc | p + 1 => loop{index}(p, acc + {}) end;",
+                    index + 1
+                )
+                .expect("a string takes a line");
+            }
+            let result = joined((0..size).map(|index| format!("loop{index}(a, 0)")), " + ");
+            program(&definitions, &result)
         }
         Growth::ChainedMatches => {
             let mut body =
