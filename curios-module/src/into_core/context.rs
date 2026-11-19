@@ -13,6 +13,9 @@ use {
     },
 };
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 /// One `use` selector or glob as resolution met it: what it imports, whether it re-exports, and whether any reference resolved through it — the fact the `unused-import` lint reads. Shared across the unit's contexts as the import table is, since a lint is about the unit.
 pub struct UseSite {
     /// The module body the `use` is written in.

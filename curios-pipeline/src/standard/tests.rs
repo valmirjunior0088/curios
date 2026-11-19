@@ -927,6 +927,26 @@ fn differences(
     differences
 }
 
+/// Each declaration of the standard library, lowered from its sources over the archived `/sys`, is held to its record and to its answers: asked again where only what its record names stands, every name it resolved answers as it did, and lowered where only what its doors answered stands, it lowers to what the library holds. What a recompile keeps of a declaration is what a whole lowering makes exactly where this holds (`PreparedText::census`).
+#[test]
+fn every_declaration_of_the_library_is_held_to_its_record_and_its_answers() {
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let source = std_from_its_tree();
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let lowered =
+            into_core_unit(&unit, &predecessors.text(), &SYNTAX).expect("the library lowers");
+
+        let departures = lowered.census(&predecessors.text(), &SYNTAX);
+
+        assert!(departures.is_empty(), "{}", departures.join("\n"));
+    });
+}
+
 /// How many unrelated definitions the replay elaborates ahead of a declaration, one pass each.
 const PADDINGS: [usize; 2] = [0, 1];
 

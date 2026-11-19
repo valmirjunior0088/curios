@@ -7,6 +7,8 @@
 //! **Decided by asking again, through the same doors.** A resolution marks the `use` it came through as used and the mount it was spelled under as reached, so a trace asked again leaves the unit's tables as lowering the declaration would have. An answer that differs, or a resolution the scope now refuses, lowers the declaration from its text, where the refusal is raised as it always was.
 //!
 //! **Found by its text, confirmed by its text.** A lowered declaration is held under its anchor and the stamp of the text it was lowered from, which is how a position finds its declaration too; a stamp is thirty-two bits, so the text itself is compared before a lowering is believed.
+//!
+//! **Held by a census.** Every declaration of `/std` is held to its record and to its answers (`PreparedText::census`, this module's `test_support`): asked again where only what its record names stands, and lowered where only what its doors answered stands. So what the claims above rest on is checked over the library, not only read.
 
 use {
     super::{
@@ -21,6 +23,12 @@ use {
         rc::Rc,
     },
 };
+
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
+#[cfg(test)]
+mod census_tests;
 
 /// A lowered declaration as a later lowering finds it: by its anchor and the stamp of its text.
 pub type Key = (curios_core::Anchor, u32);
