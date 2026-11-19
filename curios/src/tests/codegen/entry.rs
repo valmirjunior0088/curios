@@ -127,7 +127,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
         },
     );
     module.set_entry(entry);
-    let (wasm, foreigns) = curios_emit::into_wasm(&module, module.entry_suspension());
+    let (wasm, foreigns) = curios_emit::into_wasm(&module, module.entry_suspension(), None);
     assert!(module.suspension().is_some());
     assert!(!wasm.to_string().contains("(export \"func/advance\""));
     let raw = to_bytes(&wasm);

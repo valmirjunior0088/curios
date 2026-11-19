@@ -118,7 +118,7 @@ fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
         "#,
             ticking
         ),
-        b"cancelled|/expired: failed\n  the test timed out\n"
+        b"cancelled|/expired: failed\n  timed out\n    after: `Duration/of_nanos(+2000000000)`\n"
     );
 }
 

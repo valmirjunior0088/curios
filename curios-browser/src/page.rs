@@ -15,7 +15,7 @@ use {
     crate::{bridge_bytes, configuration, rows},
     askama::Template,
     base64::{Engine, engine::general_purpose::STANDARD},
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, WireType},
     curios_common::{About, Digest, Report, Said},
     serde::Serialize,
     std::collections::{BTreeMap, btree_map::Entry},
@@ -62,12 +62,13 @@ pub struct Placed {
     pub bytes: Vec<u8>,
 }
 
-/// The program a page runs: the name it is run by, which is its first argument and the page's title, the package whose root the page's root is — none for a program no package declares — its module, and its rows.
+/// The program a page runs: the name it is run by, which is its first argument and the page's title, the package whose root the page's root is — none for a program no package declares — its module, its rows, and the wire type its entry answers at, where its kind declares one, which the harness lifts its answer at.
 pub struct Program<'a> {
     pub name: &'a str,
     pub package: Option<&'a str>,
     pub module: Vec<u8>,
     pub foreigns: &'a ForeignStore,
+    pub answer: Option<&'a WireType>,
 }
 
 /// The page that runs `program`, linking `linked`, as every file it holds by its path — or why no page holds them: a path two files claim.
@@ -129,6 +130,7 @@ pub fn page(
         argument: json(ARGUMENT),
         configuration: configuration(),
         rows: rows(program.foreigns),
+        answer: json(&program.answer.map(ToString::to_string)),
         bridge: json(&STANDARD.encode(bridge_bytes())),
         integrity: json(&subresource(&program.module)),
         program: json(INDEX_WASM),
@@ -207,6 +209,7 @@ struct Loader {
     argument: String,
     configuration: String,
     rows: String,
+    answer: String,
     bridge: String,
     integrity: String,
     program: String,

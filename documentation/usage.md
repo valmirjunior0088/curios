@@ -242,7 +242,7 @@ The program and every JavaScript file the page loads are held to the build: the 
 
 The program runs on the page's main thread, its output written to the `<pre>` and, line by line, to the console, where a program the runtime stops says why in both. Its arguments are the page's name — the executable's, a loose file's stem, or `stdin` — then each `arg=` of the URL's query in order, percent-decoded to its bytes, `+` included as itself: `index.html?arg=one&arg=two%20words`. `arg` is the one key the page claims in its query; every other key is a gateway's to read. Before the program runs, a gateway's export that is no function is refused, naming the row.
 
-A framed page — one whose window has a parent other than itself — posts to that parent, at its own origin alone: `{ type: "started" }` before the program runs, and `{ type: "outcome", outcome }` after, `outcome` being `{ stdout, stderr, exitCode, trap, held }` with each stream whole and `held` the `Bool` a test program's entry answered, or `null` for a program's unit, an exit or a trap. It is how the runner of [`test --target browser`](#serving-the-tests) reads each test, and any embedder's to use.
+A framed page — one whose window has a parent other than itself — posts to that parent, at its own origin alone: `{ type: "started" }` before the program runs, and `{ type: "outcome", outcome }` after, `outcome` being `{ stdout, stderr, exitCode, trap, answer }` with each stream whole and `answer` what a test program's entry answered, the bytes of what its test found as a `Uint8Array`, or `null` for a program, which answers nothing a host reads, an exit or a trap. It is how the runner of [`test --target browser`](#serving-the-tests) reads each test, and any embedder's to use.
 
 Each export `[foreign.answers]` names is a function answering the declaration it is named for, held to the row where the page loads it: an export that is no function is refused before the program runs, naming the row. It is handed each operand as the JavaScript value its wire type names, a copy it owns, then an `AbortSignal` that fires where the call is cancelled, and it answers the row's results in the same values — nothing for a row with none, the value for a row with one, and an object keyed by exactly the results' labels for a row with several — at once, or as a promise of them, which the call waits on while the rest of the program runs. A row declared `-> Never` is answered by an export that ends the program by throwing. An answer outside the row, or a promise that rejects, stops the program naming the row; a value of another JavaScript type is refused rather than converted, so a `Number` where a `Nat` is declared stops the program instead of crossing wrong past 2⁵³.
 
@@ -308,9 +308,10 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ├─ build; 0.2s
 ├─ emit; 0.4s
 ├─ /demo/shapes/a_square_has_four_sides; ✓ passed in 0.0s
-├─ /demo/two_is_three
-│  > the condition was false
-│  ✗ failed in 0.0s
+├─ /demo/two_is_three; ✗ failed in 0.0s
+│    not equal
+│      expected: `3`
+│      obtained: `2`
 ├─ /demo/render/draws_a_square
 │  > ■■■■
 │  ✓ passed in 0.1s
@@ -320,7 +321,7 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 
 Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
 
-What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a quote mark, `│  >`, so what stands there reads as the test's; the mark of a line on standard error is painted apart where colour is seen. Its first byte ends the line its node opened on, and the node closes beneath what was written, its verdict's mark in the quote's column, whichever stream that was and wherever either stream goes: a stream sent elsewhere carries its lines behind the frame too. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath. A test that trapped wrote nothing of why, so its trap's text stands beneath its verdict, which is the one thing the runner adds. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
+What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a quote mark, `│  >`, so what stands there reads as the test's; the mark of a line on standard error is painted apart where colour is seen. Its first byte ends the line its node opened on, and the node closes beneath what was written, its verdict's mark in the quote's column, whichever stream that was and wherever either stream goes: a stream sent elsewhere carries its lines behind the frame too. Beneath a test's verdict stands what only the runner holds: what a failing test found, and a trap's text. A test answers what it found rather than writing it, so it reads apart from what the test wrote: each check that failed on a line, the steps that reached it leading — `case 2: not equal` for the third case of a `Test/all` — and beneath it each value it compared behind its label, in backticks as a report shows what a program writes. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 
 A subject's tally closes its tree and the run's is the last line, each with what its tests took together where any ran: `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
 

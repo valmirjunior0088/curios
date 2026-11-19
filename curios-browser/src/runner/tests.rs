@@ -10,14 +10,20 @@ fn a_write_and_an_outcome_are_each_read_as_the_runner_sends_them() {
     assert_eq!(wrote.stream, Stream::Stderr);
     assert_eq!(wrote.decoded().unwrap(), b"hi");
 
+    let Sent::Outcome(posted) =
+        Sent::parse(br#"{"outcome":{"exitCode":0,"trap":null,"answer":"W10="}}"#).unwrap()
+    else {
+        panic!("an outcome");
+    };
     assert_eq!(
-        Sent::parse(br#"{"outcome":{"exitCode":0,"trap":null,"held":true}}"#).unwrap(),
-        Sent::Outcome(Posted {
+        posted,
+        Posted {
             exit_code: Some(0),
             trap: None,
-            held: Some(true),
-        })
+            answer: Some("W10=".to_string()),
+        }
     );
+    assert_eq!(posted.answered(), Some(Ok(b"[]".to_vec())));
 }
 
 #[test]

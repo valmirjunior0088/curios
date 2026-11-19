@@ -151,7 +151,7 @@ fn a_switch_edge_to_the_return_lands_in_a_block_that_returns() {
         function.block_scopes[&function.entry],
         vec![cases[&0].target, default.as_ref().unwrap().target]
     );
-    into_wasm(&source, source.entry_suspension());
+    into_wasm(&source, source.entry_suspension(), None);
 }
 
 #[test]

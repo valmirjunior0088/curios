@@ -306,12 +306,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
-            // A packed value is small-canonical — an immediate inside its envelope, a rope past it — so a position demanding the rope goes through the box helper, which materialises an immediate and casts (trapping on null) as a bare cast would.
-            LoadAs::Bytes => {
-                let func_name = self.table().bytes_box_func();
-                vec![curios_wasm::Instr::Call { func_name }]
-            }
-            LoadAs::List => vec![self.table().enter(&self.table().list_rope_type(), false)],
+            LoadAs::Bytes | LoadAs::List => vec![rope_read(self.table(), &load_as)],
         };
 
         producer.into_iter().chain(read).collect()
@@ -1021,25 +1016,6 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// The rope→wire step for one host argument: a reference param crosses as a flat payload exactly its run, since a host lifts the whole array, so the loaded rope is taken exact first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
-    fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
-        let force = match wire_type {
-            // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
-            WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int | WireType::Flt => {
-                return vec![];
-            }
-            WireType::Bytes | WireType::Handle => self.table().bytes_exact_func(),
-            WireType::List(inner) | WireType::Option(inner) => match inner {
-                WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
-                leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
-                    self.table().scalars_force_func(*leaf)
-                }
-            },
-        };
-
-        vec![curios_wasm::Instr::Call { func_name: force }]
-    }
-
     /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`, and out of `$longs` or `$words` for a list of scalars, each element boxed as a lone result is. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
     fn wire_embed_instrs(&self, reference: WireReference) -> Vec<curios_wasm::Instr> {
         let embed = match reference {
@@ -1082,7 +1058,7 @@ impl<'a, 'b> Context<'a, 'b> {
         let mut output = Vec::new();
         for (operand, wire_type) in operands.iter().zip(&params) {
             output.extend(self.load_value_instrs(operand, wire_type.into()));
-            output.extend(self.wire_force_instrs(wire_type));
+            output.extend(wire_forced(self.table(), wire_type));
 
             // An option rides its list, holding none or one value, and one holding none crosses as null.
             if wire_type.admits_null() {
@@ -1302,6 +1278,50 @@ impl LoadAs {
             curios_cps::Repr::Number | curios_cps::Repr::Ref => Self::Null,
         }
     }
+}
+
+/// The read that takes a reference to the rope `load_as` names, `Bytes` or `List`. A packed value is small-canonical — an immediate inside its envelope, a rope past it — so a position demanding the rope goes through the box helper, which materialises an immediate and casts (trapping on null) as a bare cast would; a list is entered by its cast.
+fn rope_read(table: &Table, load_as: &LoadAs) -> curios_wasm::Instr {
+    match load_as {
+        LoadAs::Bytes => curios_wasm::Instr::Call {
+            func_name: table.bytes_box_func(),
+        },
+        LoadAs::List => table.enter(&table.list_rope_type(), false),
+        _ => unreachable!("only `Bytes` and `List` are ropes"),
+    }
+}
+
+/// The rope→wire step for a value crossing to the host, a host argument or what an entry answers: a reference param crosses as a flat payload exactly its run, since a host lifts the whole array, so the loaded rope is taken exact first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`, and into `$longs` or `$words` for a list of scalars, each element narrowed as a lone argument is.
+fn wire_forced(table: &Table, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
+    let force = match wire_type {
+        // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
+        WireType::Nat | WireType::Bool | WireType::Byte | WireType::Int | WireType::Flt => {
+            return vec![];
+        }
+        WireType::Bytes | WireType::Handle => table.bytes_exact_func(),
+        WireType::List(inner) | WireType::Option(inner) => match inner {
+            WireLeaf::Bytes | WireLeaf::Handle => table.list_bytes_force_func(),
+            leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
+                table.scalars_force_func(*leaf)
+            }
+        },
+    };
+
+    vec![curios_wasm::Instr::Call { func_name: force }]
+}
+
+/// What an entry's answer crosses as where it is declared at `wire_type`, read off the reference the entry yields: entered into its rope as a host operand of that type is loaded, and forced to the flat payload a host lifts ([`wire_forced`]), so a value leaves the program one way, whether a row or the entry hands it over. An entry yields one reference, so the type is a reference's.
+pub fn answer_instrs(table: &Table, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
+    let read = match LoadAs::from(wire_type) {
+        load_as @ (LoadAs::Bytes | LoadAs::List) => rope_read(table, &load_as),
+        _ => {
+            unreachable!("an entry yields one reference, so it answers at a reference's wire type")
+        }
+    };
+
+    iter::once(read)
+        .chain(wire_forced(table, wire_type))
+        .collect()
 }
 
 /// How a host-import operand of the given wire type is loaded at the call site: a `Bool` or a `Byte` as its word, a `Nat` or `Int` narrowed to the wire's `i64` — refusing a value the wire cannot carry, the one narrowing that refuses — `Flt` read out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.

@@ -6,7 +6,11 @@
 //!
 //! The crate owns neither representation it works between, so every name from `curios_cps` and `curios_wasm` is written with its crate.
 
-use {curios_abi::ForeignStore, curios_common::grown, std::collections::HashMap};
+use {
+    curios_abi::{ForeignStore, WireType},
+    curios_common::grown,
+    std::collections::HashMap,
+};
 
 mod machine;
 use machine::*;
@@ -82,18 +86,20 @@ mod tests;
 ///
 /// The module comes beside the rows its `ffi` imports are declared as, by import name: exactly the rows whose call sites the emitted code holds, which is what a program asks an implementation of. A row a unit declares and nothing calls is not among them.
 ///
-/// `turns` is the suspension row the entry's results may carry, which decides the entry's exports ([`curios_cps::Module::entry_suspension`]): read by whoever hands the module over, over the module as the rebuild in place left it, before the frame bound's twins, which change no value an entry returns.
+/// `turns` is the suspension row the entry's results may carry, which decides the entry's exports ([`curios_cps::Module::entry_suspension`]): read by whoever hands the module over, over the module as the rebuild in place left it, before the frame bound's twins, which change no value an entry returns. `answer` is the wire type the entry's answer crosses at, where the program's kind declares one (`curios_abi::ENTRY`): the answer is lowered as a row's operand of that type is.
 pub fn into_wasm(
     module: &curios_cps::Module,
     turns: Option<curios_cps::RowId>,
+    answer: Option<&WireType>,
 ) -> (curios_wasm::Module, ForeignStore) {
     // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS would outgrow the default test-thread stack.
-    grown(|| into_wasm_within(module, turns))
+    grown(|| into_wasm_within(module, turns, answer))
 }
 
 fn into_wasm_within(
     module: &curios_cps::Module,
     turns: Option<curios_cps::RowId>,
+    answer: Option<&WireType>,
 ) -> (curios_wasm::Module, ForeignStore) {
     curios_profile::profile!("into_wasm");
     let representation = curios_cps::representation(module);
@@ -105,7 +111,7 @@ fn into_wasm_within(
     hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
     let table = Table::new(&structured, &raw, &closures);
-    ModuleEmitter::new(&table, &mut wasm_module).emit_module(&structured);
+    ModuleEmitter::new(&table, &mut wasm_module).emit_module(&structured, answer);
     spill_wide_shapes(&mut wasm_module, Envelope::ENGINE);
     allocate_locals(&mut wasm_module);
 

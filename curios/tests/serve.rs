@@ -236,10 +236,10 @@ fn tested(root: &Path) {
     fs::write(root.join("quiet.crs"), "/std/print(\"quiet\\n\")\n").unwrap();
 }
 
-/// An outcome as a runner sends one over the run's socket: the streams in base64, given encoded, and the rest as the harness resolves it.
-fn posted(exit_code: &str, trap: &str, held: &str) -> Message {
+/// An outcome as a runner sends one over the run's socket: the answer in base64, given encoded, and the rest as the harness resolves it.
+fn posted(exit_code: &str, trap: &str, answer: &str) -> Message {
     Message::text(format!(
-        "{{\"outcome\":{{\"exitCode\":{exit_code},\"trap\":{trap},\"held\":{held}}}}}"
+        "{{\"outcome\":{{\"exitCode\":{exit_code},\"trap\":{trap},\"answer\":{answer}}}}}"
     ))
 }
 
@@ -322,14 +322,15 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (status, _, library) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
 
-    // What each page's runner sends of its test: a failing test's own word of what went wrong as it wrote it, on its standard error — the base64 of `expected 2 but got 1\n` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, each ahead of the outcome.
-    let held = vec![posted("0", "null", "true")];
-    let failed = vec![
-        wrote("stderr", "ZXhwZWN0ZWQgMiBidXQgZ290IDEK"),
-        posted("0", "null", "false"),
-    ];
+    // What each page's runner sends of its test: what its entry answered, in base64 — the text of an empty list for a test that held, and for the failing one the verdict `/std/Test` spells of `Test/equal(1, 2)` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, ahead of the outcome.
+    let held = vec![posted("0", "null", "\"W10=\"")];
+    let failed = vec![posted(
+        "0",
+        "null",
+        "\"W0ZhaWx1cmUgeyBzdGVwcyA9IFtdLCBzdGF0ZW1lbnQgPSAibm90IGVxdWFsIiwgZmFjdHMgPSBbKCJleHBlY3RlZCIsICIyIiksICgib2J0YWluZWQiLCAiMSIpXSB9XQ==\"",
+    )];
     let exited = vec![posted("7", "null", "null")];
-    let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "true")];
+    let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "\"W10=\"")];
 
     let mut socket = serving.socket();
     let (mut shown, first) = reply(&mut socket);
@@ -384,9 +385,10 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "serve; http://127.0.0.1:{port}/\n",
                 "/app\n",
                 "├─ /app/holds; ✓ passed in _\n",
-                "├─ /app/fails\n",
-                "│  > expected 2 but got 1\n",
-                "│  ✗ failed in _\n",
+                "├─ /app/fails; ✗ failed in _\n",
+                "│    not equal\n",
+                "│      expected: `2`\n",
+                "│      obtained: `1`\n",
                 "├─ /app/exits; ✗ exited 7 in _\n",
                 "└─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
@@ -442,7 +444,7 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         opening.ends_with(&format!("serve; http://127.0.0.1:{port}/\napp\n├─ /own")),
         "{opening}"
     );
-    socket.send(posted("0", "null", "true")).unwrap();
+    socket.send(posted("0", "null", "\"W10=\"")).unwrap();
     let (closing, after) = reply(&mut socket);
     assert_eq!(after, None);
     assert_eq!(

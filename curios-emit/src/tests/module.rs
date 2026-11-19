@@ -35,7 +35,7 @@ fn exports_the_entry_and_defines_every_function() {
 #[test]
 fn every_function_is_found_under_the_names_the_emitter_gives_it() {
     let source = indirect_apply();
-    let held = curios_wasm::code_sizes(&into_wasm(&source, source.entry_suspension()).0);
+    let held = curios_wasm::code_sizes(&into_wasm(&source, source.entry_suspension(), None).0);
 
     for function in source.function_ids() {
         let [body, _, _] = emitted_functions(&source, function);
@@ -157,7 +157,7 @@ fn a_cycles_panic_names_the_member_it_was_seated_for() {
     );
     module.set_entry(main);
 
-    let (emitted, _) = into_wasm(&module, module.entry_suspension());
+    let (emitted, _) = into_wasm(&module, module.entry_suspension(), None);
     let wat = emitted.to_string();
     assert_contains(&wat, "call $refuse/cycle/1");
     assert_contains(&wat, "array.new_data $bytes $refusal/cycle/1");

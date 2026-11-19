@@ -1,7 +1,7 @@
 use {
     super::{
         BundledPlugin, Lift, Lower, Plugin, Raised, Replied, Reply, Stop, Unlinked,
-        anyref_array_type, bool_of, filled, i8_array_type, longs_array_type, raised,
+        anyref_array_type, bool_of, bytes_of, filled, i8_array_type, longs_array_type, raised,
         words_array_type,
     },
     curios_abi::{
@@ -720,7 +720,7 @@ impl Error for PanicTrap {}
 /// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc_exit` unwound it, of the code. A trap is neither, and is every run's error alike.
 pub trait Ended: Sized + Send {
     /// The entry returned `result`, read while the store it lives in is open.
-    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop>;
+    fn returned(store: &mut Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop>;
 
     /// `proc_exit` ended the run with `code`.
     fn exited(code: u8) -> Self;
@@ -728,7 +728,7 @@ pub trait Ended: Sized + Send {
 
 /// A program's exit code: the code it exited with, and `0` where its entry returned. What the entry hands back there is the unit every program's description yields, which says nothing and is not read.
 impl Ended for u8 {
-    fn returned(_: &Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
+    fn returned(_: &mut Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
         Ok(0)
     }
 
@@ -738,32 +738,29 @@ impl Ended for u8 {
 }
 
 /// How a test program's run ended: with the verdict its entry answered, or by an exit that left it unanswered. An exit is the second whatever its code, so no code is ever read as a verdict.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestEnd {
-    /// The entry returned, answering whether what it ran held.
-    Answered(bool),
+    /// The entry returned, answering what the test it ran found: the text `/std/Test` writes of the checks that failed, which the runner reads back.
+    Answered(Vec<u8>),
     /// `proc_exit` ended the run with this code before the entry answered.
     Exited(u8),
 }
 
-/// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is no i31 word is refused rather than read as a verdict. The unit a program's entry hands back is a struct, no word, so a module that is no test program is never read as one whose tests held.
+/// A test program's entry answers at [`TEST_ANSWER`](curios_abi::TEST_ANSWER), `Bytes` ([`ENTRY`]), lifted as a row's operand of that type is, and a reference that is no byte string is refused rather than read as a verdict. The unit a program's entry hands back is a struct, so a module that is no test program is never read as one that answered.
 impl Ended for TestEnd {
-    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
-        let refused = || Stop::of("compiler fault", format_args!("`{ENTRY}` answered no Bool"));
-        let word = result
-            .ok_or_else(refused)?
-            .as_i31(store)
+    fn returned(store: &mut Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
+        let answer = result.ok_or_else(|| {
+            Stop::of("compiler fault", format_args!("`{ENTRY}` answered nothing"))
+        })?;
+
+        bytes_of(&mut *store, &answer)
+            .map(TestEnd::Answered)
             .map_err(|error| {
                 Stop::of(
                     "compiler fault",
                     format_args!("what `{ENTRY}` answered could not be read: {error}"),
                 )
-            })?
-            .ok_or_else(refused)?;
-
-        bool_of(word.get_i32())
-            .map(TestEnd::Answered)
-            .map_err(|_| refused())
+            })
     }
 
     fn exited(code: u8) -> Self {
@@ -1001,7 +998,7 @@ fn entered<E: Ended>(
     };
 
     match ended {
-        Ok(result) => E::returned(&store, result),
+        Ok(result) => E::returned(&mut store, result),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
             Some(ExitTrap(code)) => Ok(E::exited(*code)),
             None => Err(stopped(&error)),

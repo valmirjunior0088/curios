@@ -4,9 +4,12 @@
 //!
 //! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
 
+mod verdict;
+pub use verdict::{FailedCheck, Verdict};
+
 use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
-    curios_abi::{ForeignStore, HostOps},
+    curios_abi::{ForeignStore, HostOps, TEST_ANSWER},
     curios_browser::page,
     curios_common::{Qualifier, Report, STDIN_NAME, Source, SourceName},
     curios_module::{
@@ -420,6 +423,7 @@ impl Tested {
                     .map(|filing| filing.package.as_str()),
                 module: module.clone(),
                 foreigns,
+                answer: Some(&TEST_ANSWER),
             },
             linked,
         )
@@ -435,7 +439,7 @@ pub struct TestRun {
 }
 
 impl TestRun {
-    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test that fails says what went wrong on its standard error and answers that it did not hold; a trap is the error.
+    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test answers what it found, which [`Verdict::read`] reads; a trap is the error.
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         index: usize,

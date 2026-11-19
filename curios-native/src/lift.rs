@@ -3,7 +3,7 @@ use {
     curios_abi::{
         ClosedCode, Handle, Mode, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireType,
     },
-    wasmtime::{Caller, Val},
+    wasmtime::{AnyRef, AsContextMut, Caller, Rooted, Val},
 };
 
 /// Decoding one host-import argument list out of wasmtime `Val`s — the inbound half of the FFI boundary (`Lower` is the outbound half). `ForeignBindings::define` and the `sys`-tier glue compose each trampoline from `Li::lift`/`Lo::lower`, so a host implementation is written against plain Rust types (`u64`, `Vec<u8>`, [`Handle`], tuples) and never touches a `Val`.
@@ -257,17 +257,25 @@ impl Lift for Vec<u8> {
             return Err(raised("compiler fault", "expected non-null anyref"));
         };
 
-        let array_ref = anyref
-            .as_array(&*caller)?
-            .ok_or_else(|| raised("compiler fault", "expected array ref"))?;
-
-        // The whole body in one copy: read an element at a time, a byte string costs a decoded value a byte, which is what a program that shuttles bytes to a module pays twice for each.
-        let mut bytes = vec![0; array_ref.len(&*caller)? as usize];
-
-        array_ref.copy_to_i8_slice(&mut *caller, &mut bytes)?;
-
-        Ok(bytes)
+        bytes_of(&mut *caller, anyref)
     }
+}
+
+/// The bytes of the flat payload `anyref` is, as a host lifts a byte string wherever one crosses to it: a row's operand, and what an entry answers at `Bytes`.
+pub fn bytes_of(
+    mut store: impl AsContextMut,
+    anyref: &Rooted<AnyRef>,
+) -> Result<Vec<u8>, wasmtime::Error> {
+    let array_ref = anyref
+        .as_array(&store)?
+        .ok_or_else(|| raised("compiler fault", "expected array ref"))?;
+
+    // The whole body in one copy: read an element at a time, a byte string costs a decoded value a byte, which is what a program that shuttles bytes to a module pays twice for each.
+    let mut bytes = vec![0; array_ref.len(&store)? as usize];
+
+    array_ref.copy_to_i8_slice(&mut store, &mut bytes)?;
+
+    Ok(bytes)
 }
 
 /// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape, a handle being its token's bytes.

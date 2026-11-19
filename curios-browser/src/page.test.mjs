@@ -141,8 +141,8 @@ test("a gateway's export answers its row through the loader", async (t) => {
 
   assert.equal(outcome.trap, null);
   assert.equal(outcome.exitCode, 0);
-  // A program's entry answers the unit, which is no word.
-  assert.equal(outcome.held, null);
+  // A program's kind declares no answer, so its entry's unit is not read.
+  assert.equal(outcome.answer, null);
   assert.deepEqual(outcome.out, ["42"]);
   assert.deepEqual(outcome.posted, []);
 });
@@ -167,7 +167,7 @@ test("a framed page posts started, each write as it is made, then its outcome, a
     "42",
   );
   assert.deepEqual(posted.at(-1), [
-    { type: "outcome", outcome: { exitCode: 0, trap: null, held: null } },
+    { type: "outcome", outcome: { exitCode: 0, trap: null, answer: null } },
     "/",
   ]);
 });
@@ -415,12 +415,22 @@ test("a test page served by the command answers its word through its gateway, an
     query: `?${run.argument}=0`,
   });
 
+  // A test that held answers no failure: the text of an empty list.
   assert.equal(outcome.trap, null);
-  assert.equal(outcome.held, true);
+  assert.equal(new TextDecoder().decode(outcome.answer), "[]");
   assert.equal(posted[0][0].type, "started");
-  assert.equal(posted.at(-1)[0].outcome.held, true);
+  assert.equal(new TextDecoder().decode(posted.at(-1)[0].outcome.answer), "[]");
 
-  socket.send(JSON.stringify({ outcome: posted.at(-1)[0].outcome }));
+  // Sent as the runner sends it, the answer in base64.
+  const { answer, ...outcomeRest } = posted.at(-1)[0].outcome;
+  socket.send(
+    JSON.stringify({
+      outcome: {
+        ...outcomeRest,
+        answer: Buffer.from(answer).toString("base64"),
+      },
+    }),
+  );
   const reply = await replied();
   assert.equal(reply.next, null);
   assert.match(

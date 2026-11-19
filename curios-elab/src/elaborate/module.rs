@@ -24,6 +24,7 @@ use {
         test_program_tail, validate_entry_universes, validate_universes, zonk, zonk_arity,
         zonk_entry, zonk_published, zonk_solved_term_metas,
     },
+    curios_abi::TEST_ANSWER,
     curios_analysis::{definition_applications, group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
@@ -31,7 +32,7 @@ use {
         FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Made, Minted, Names, Nominal,
         Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
         Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
-        stamp_declaration_instance,
+        stamp_declaration_instance, wire_term,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -1618,12 +1619,11 @@ fn elaborate_definitions_suffix<'s>(
                 .filter(|test| !poison.holds(test))
                 .cloned()
                 .collect::<Vec<_>>();
-            // A test program's tail is judged at what `Test/main` answers, whether its tests held: the verdict is the value the entry hands back, where a program's unit says nothing a runner could read.
+            // A test program's tail is judged at what `Test/main` answers, the text of what the test found, read off the wire type its entry crosses at: the verdict is the value the entry hands back, where a program's unit says nothing a runner could read.
+            let answer = wire_term(&TEST_ANSWER, &context.syntax());
             synthesized = Entrypoint {
                 body: test_program_tail(context, &scheduled),
-                type_: Some(Term::intrinsic(Intrinsic::io_type(Term::intrinsic(
-                    Intrinsic::BoolType,
-                )))),
+                type_: Some(Term::intrinsic(Intrinsic::io_type(answer))),
             };
             // Choosing each test's discharge reduces bodies under their telescopes; that is spent on the declarations' behalf, so the tail itself still checks on a full budget.
             context.restore_budget();

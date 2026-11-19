@@ -1,14 +1,20 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Fmt, print_err,
-    Proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Proc};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
+--- What a check that failed found, as the runner presents it: the steps that reached it, the outermost first, what it states, and the values it compared, each behind its label and spelled as Curios writes it.
 struct Failure: Type {
-    message: Str,
-    contexts: List(Str),
+    steps: List(Str),
+    statement: Str,
+    facts: List({Str, Str}),
 }
 
---- A computation that succeeds with an `A` or ends the current test with a diagnostic.
+-- What a test found crosses to its runner as the text this writes, which the runner reads back as Curios.
+satisfy Spell(Failure) {
+    ..
+}
+
+--- A computation that succeeds with an `A` or ends the current test with what it found.
 --- Its private representation keeps interpretation inside the test runner and resource combinators.
 pub induct Test(A: Type): Type
 | success(A)
@@ -20,9 +26,13 @@ end
 pub let pure(@A: Type, a: A) -> Test(A) =
     Test/success(a);
 
+-- End the current test with a check that failed, stating `statement` beside the values `facts` spell.
+let failing(@A: Type, statement: Str, facts: List({Str, Str})) -> Test(A) =
+    Test/failed(Failure { steps = [], statement = statement, facts = facts });
+
 --- End the current test with `message`, skipping its remaining continuations.
 pub let fail(@A: Type, message: Str) -> Test(A) =
-    Test/failed(Failure { message = message, contexts = [] });
+    failing(message, []);
 
 --- Continue a successful computation; a failure skips `next`.
 pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B) =
@@ -73,7 +83,10 @@ pub let assert(condition: Bool) -> Test({}) =
 pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =
     match actual == expected
     | true => pure(())
-    | false => fail(Fmt/render("expected # but got #")(expected)(actual))
+    | false =>
+        failing("not equal", [
+            ("expected", Spell/spell(expected)),
+            ("obtained", Spell/spell(actual))])
     end;
 
 --- Flatten a fallible thunk returning a test, reporting its error when it fails.
@@ -83,7 +96,7 @@ pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -
 let context(@A: Type, label: Str, test: Test(A)) -> Test(A) =
     match test
     | success(_) => test
-    | failed(failure) => Test/failed(Failure { ..failure, contexts = [label, ..failure.contexts] })
+    | failed(failure) => Test/failed(Failure { ..failure, steps = [label, ..failure.steps] })
     | action(io) => Test/action(Io/bind(io, (inner) => Io/pure(context(label, inner))))
     end;
 
@@ -123,20 +136,19 @@ pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
     let result = Io/timeout(d, finish(body()))!;
     match result
     | some(outcome) => from_result(outcome)
-    | none() => fail("the test timed out")
+    | none() => failing("timed out", [("after", Spell/spell(d))])
     end;
 
-let message(failure: Failure) -> Str =
-    Str/join(": ", [..failure.contexts, failure.message]);
+-- What a test found, spelled for its runner to read back and present: the checks that failed, none where it held.
+let verdict(failures: List(Failure)) -> Bytes =
+    Str/to_bytes(Spell/spell(failures));
 
--- The one test a runner selected is named by the runner, which says how it ended: the test says only what went wrong.
-let answer(test: Test({})) -> Io(Bool) =
+-- The one test a runner selected is named by the runner, which says how it ended and presents what it found: the test writes nothing of its own.
+let answer(test: Test({})) -> Io(Bytes) =
     let result = finish(test)!;
     match result
-    | success(()) => Io/pure(true)
-    | failure(failure) =>
-        let () = print_err(Str/concat(message(failure), "\n"))!;
-        Io/pure(false)
+    | success(()) => Io/pure(verdict([]))
+    | failure(failure) => Io/pure(verdict([failure]))
     end;
 
 let parse_index(raw: Bytes) -> Option(Nat) =
@@ -145,8 +157,8 @@ let parse_index(raw: Bytes) -> Option(Nat) =
     | failure(_) => Option/none()
     end;
 
---- Run the test the runner selected, its index in `tests` the program's first argument, and answer whether it held. A test that fails says what went wrong on standard error and nothing else, since the runner names it and says how it ended.
-pub let main(tests: List(() -> Test({}))) -> Io(Bool) =
+--- Run the test the runner selected, its index in `tests` the program's first argument, and answer what it found, for the runner to present: the checks that failed, spelled, and none where it held. An index the program does not hold answers no verdict, which the runner reports as its own fault.
+pub let main(tests: List(() -> Test({}))) -> Io(Bytes) =
     let arguments = Proc/args()!;
     match List/try_get(arguments, 1)
     | some(raw) =>
@@ -154,9 +166,9 @@ pub let main(tests: List(() -> Test({}))) -> Io(Bool) =
         | some(index) =>
             match List/try_get(tests, index)
             | some(body) => answer(body())
-            | none() => Io/pure(false)
+            | none() => Io/pure(x[])
             end
-        | none() => Io/pure(false)
+        | none() => Io/pure(x[])
         end
-    | none() => Io/pure(false)
+    | none() => Io/pure(x[])
     end;

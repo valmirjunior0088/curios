@@ -35,6 +35,7 @@ pub fn built(
             package: package.as_deref(),
             module,
             foreigns: &foreigns,
+            answer: None,
         },
         linked,
     )?;

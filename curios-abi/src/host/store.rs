@@ -415,8 +415,11 @@ pub const PANIC: &str = "panic";
 
 /// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, so no debug name decides a wire string.
 ///
-/// The entry takes nothing and hands back what the program's description yields, as one reference. A program's yields the unit, which no host reads. A test program's yields a `Bool`, whether every test it ran held, as the reference a `Bool` is boxed into: the i31 `0` or `1`. A program that can suspend answers its first turn here instead, as [`ADVANCE`] states.
+/// The entry takes nothing and hands back what the program's description yields, as one reference, at the wire type its kind of program declares, crossing as a row's operand of that type crosses: lowered to the flat payload the host lifts. A program declares none, and yields the unit, which no host reads; a test program answers at [`TEST_ANSWER`]. A program that can suspend answers its first turn here instead, as [`ADVANCE`] states, the value a turn yields crossing the same way.
 pub const ENTRY: &str = "func/main";
+
+/// The wire type a test program's entry answers at: what its test found, which its runner reads — the text `/std/Test` writes of the checks that failed. The one statement of it, as a row's are its declaration's, so the type the compiler judges a test program's tail at, the lowering of its answer and each host's reading of it cannot disagree.
+pub const TEST_ANSWER: WireType = WireType::Bytes;
 
 /// The export a program that can suspend is advanced through, beside [`ENTRY`]: it takes a description the host was handed — a suspension's rest or its cancel — forces it, and answers the next turn.
 ///

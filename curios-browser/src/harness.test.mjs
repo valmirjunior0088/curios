@@ -173,8 +173,8 @@ test("entry exports select the direct or turn protocol for the program they run,
     const outcome = await run(compiled);
     assert.equal(outcome.exitCode, status, source);
     assert.equal(outcome.trap, null, source);
-    // A program's entry answers the unit, a struct and no word; a test program's answers a `Bool`, which the page suite reads.
-    assert.equal(outcome.held, null, source);
+    // A program's kind declares no answer, so its entry's unit is not read; a test program's answers at a wire type, which the page suite reads.
+    assert.equal(outcome.answer, null, source);
     assert.equal(text(outcome.stdout), output, source);
     if (status === 1) {
       assert.match(text(outcome.stderr), /^deadlock: /);
@@ -555,7 +555,7 @@ main()
   assert.equal(stdout, "+1999999999");
 });
 
-test("an exit ends the run with its code and no word, whatever the code", async () => {
+test("an exit ends the run with its code and no answer, whatever the code", async () => {
   for (const code of [0, 3, 255]) {
     const outcome = await execute(`
 let main() -> /std/Io({}) =
@@ -565,7 +565,7 @@ main()
 `);
 
     assert.deepEqual(
-      [outcome.stdout, outcome.exitCode, outcome.trap, outcome.held],
+      [outcome.stdout, outcome.exitCode, outcome.trap, outcome.answer],
       ["bye", code, null, null],
     );
   }

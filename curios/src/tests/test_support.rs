@@ -1,7 +1,7 @@
 //! What the suites share: a program compiled and run as a fixture states it, the refusal or the stage a fixture reads off it, and a host that answers one row with a scripted reply and every other with a [`MockHost`]'s, which is how one call of a row fails where the mock's script only succeeds.
 
 use {
-    crate::test_support::*,
+    crate::{Verdict, test_support::*},
     curios_abi::{
         Answer, ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, HostOp, HostOps,
         Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
@@ -146,7 +146,7 @@ pub fn run_tests_program(source: &str) -> Vec<u8> {
     run_tests_under(source, MockHost::builder)
 }
 
-/// [`test_program`], each test it schedules run by its index, as the runner runs one, under a host `host` builds, and what each came to, in order: what the test wrote, then its path and `passed`, or `failed` and beneath it what it said went wrong, indented. That every test ran to an answer is asserted, and that a failing one's account is the last it wrote: a fixture about an exit or a trap reaches for the pieces itself.
+/// [`test_program`], each test it schedules run by its index, as the runner runs one, under a host `host` builds, and what each came to, in order: what the test wrote, then its path and `passed`, or `failed` and beneath it what it found, as the runner draws it — each failed check's steps and statement, and each value it compared behind its label. That every test ran to a verdict is asserted: a fixture about an exit or a trap reaches for the pieces itself.
 pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<u8> {
     let program = test_program(source);
     let (module, foreigns) = program
@@ -159,24 +159,30 @@ pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<
     for (index, test) in scheduled.enumerate() {
         let (system, io) = host().args(["prog".to_string(), index.to_string()]).build();
         let outcome = compiled.run_test(system, ForeignBindings::empty());
-        let (output, errors) = (io.output(), io.errors());
-        let wrote = output
-            .strip_suffix(errors.as_slice())
-            .expect("a test writes on standard error only what went wrong, last");
+        let Ok(TestEnd::Answered(answer)) = outcome else {
+            panic!("`{}` ran to {outcome:?}", test.join());
+        };
+        let verdict = Verdict::read(&answer)
+            .unwrap_or_else(|why| panic!("`{}` answered no verdict: {why}", test.join()));
 
-        drawn.extend_from_slice(wrote);
-        match outcome {
-            Ok(TestEnd::Answered(true)) => {
-                drawn.extend_from_slice(format!("{}: passed\n", test.join()).as_bytes());
+        drawn.extend_from_slice(&io.output());
+        let ended = match verdict.held() {
+            true => "passed",
+            false => "failed",
+        };
+        drawn.extend_from_slice(format!("{}: {ended}\n", test.join()).as_bytes());
+        for check in &verdict.failures {
+            let stated = check
+                .steps
+                .iter()
+                .chain([&check.statement])
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(": ");
+            drawn.extend_from_slice(format!("  {stated}\n").as_bytes());
+            for (label, value) in &check.facts {
+                drawn.extend_from_slice(format!("    {label}: `{value}`\n").as_bytes());
             }
-            Ok(TestEnd::Answered(false)) => {
-                drawn.extend_from_slice(format!("{}: failed\n", test.join()).as_bytes());
-                for line in errors.split_inclusive(|byte| *byte == b'\n') {
-                    drawn.extend_from_slice(b"  ");
-                    drawn.extend_from_slice(line);
-                }
-            }
-            outcome => panic!("`{}` ran to {outcome:?}", test.join()),
         }
     }
 

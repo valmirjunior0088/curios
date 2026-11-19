@@ -24,10 +24,6 @@ export class PanicSignal extends Error {
 }
 
 /** The largest `Nat` and the `Int` range a 64-bit wire integer holds. */
-/** The `Bool` a yielded reference is, where it is one: the i31 `0` or `1` crosses as that number, and anything else — a program's unit, a struct — is no word. */
-const word = (yielded) =>
-  yielded === 0 || yielded === 1 ? yielded === 1 : null;
-
 const NAT_MAX = 2n ** 64n - 1n;
 const INT_MIN = -(2n ** 63n);
 const INT_MAX = 2n ** 63n - 1n;
@@ -57,14 +53,14 @@ const describe = (value) => {
 
 /**
  * Run a compiled program. `config` carries:
- * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return;
+ * - `compiled`: what `compile` returned — `program`, the module bytes, `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return, and `answer`, optional, the wire type the program's entry answers at where its kind declares one, spelled as a row's types are — a test program's `Bytes`;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from the configuration curios-browser renders;
  * - `rows`: from that configuration too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
  * - `args`: optional, the program's arguments, each a `Uint8Array`, its name first, which a page passes and the playground does not;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each handed every write to its stream as a `Uint8Array` it owns, which the run then keeps no copy of; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
- * Resolves to `{ stdout, stderr, exitCode, trap, held }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), the trap message if execution failed instead, and the word the entry answered where it returned one — `true` or `false`, a test program's verdict — or `null` where it answered none: a program's unit, an exit, a trap.
+ * Resolves to `{ stdout, stderr, exitCode, trap, answer }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), the trap message if execution failed instead, and what the entry answered where its kind declares an answer and it returned one, lifted at `compiled.answer` as a row's operand of that type is — a test program's verdict, the bytes of what its test found — or `null`: a program's unit, an exit, a trap.
  */
 export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
@@ -793,7 +789,7 @@ export async function run(config) {
     stderr: concat(output.stderr),
     exitCode: 0,
     trap: null,
-    held: null,
+    answer: null,
   });
 
   try {
@@ -822,10 +818,16 @@ export async function run(config) {
       turn = advance(turn[4]);
     }
 
-    // The entry's word: a test program's entry answers a `Bool` as the i31 `0` or `1`, which crosses as a number, and a program's the unit, a struct, which is no word and is not read.
+    // What the entry answered, where the program's kind declares a wire type for it: lowered by the program as a row's operand of that type is, and lifted here as one is. A program's unit is not read.
     const yielded = advance === undefined ? turn : turn[1];
+    const answer =
+      config.compiled.answer === undefined || config.compiled.answer === null
+        ? null
+        : lifts[config.compiled.answer](yielded, (what) => {
+            throw new Error(`the entry's answer: ${what}`);
+          });
 
-    return { ...result(), held: word(yielded) };
+    return { ...result(), answer };
   } catch (error) {
     if (error instanceof ExitSignal) {
       return { ...result(), exitCode: error.code };

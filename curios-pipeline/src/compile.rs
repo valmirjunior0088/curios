@@ -5,7 +5,7 @@ pub mod test_support;
 
 use {
     super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, TEST_ANSWER, WireType},
     curios_anf::lower_to_cps,
     curios_cert::{Accepted, Globals, Rechecked, Verdict, certify_definitions, certify_program},
     curios_common::{
@@ -612,6 +612,14 @@ impl EntryTail {
             })
             .copied()
             .collect()
+    }
+
+    /// The wire type the entry's answer crosses to its host at, where a host reads one: a test program's, what its test found ([`TEST_ANSWER`]). A program's unit is read by no host, and an entry put at `False` is never run.
+    fn answer(&self) -> Option<WireType> {
+        match self {
+            EntryTail::Program | EntryTail::False => None,
+            EntryTail::Test { .. } => Some(TEST_ANSWER),
+        }
     }
 
     /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
@@ -1281,9 +1289,10 @@ pub fn examine_entrypoint(
     })
 }
 
-/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, observing every stage in order.
+/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, the entry's answer crossing at `answer` where it is declared at one, observing every stage in order.
 fn lower_from_anf<O>(
     mut anf_module: curios_anf::Module,
+    answer: Option<&WireType>,
     observe: &mut O,
 ) -> (curios_wasm::Module, ForeignStore)
 where
@@ -1314,7 +1323,7 @@ where
 
     observe(Stage::CpsOptm(&cps_optm_module));
 
-    let (wasm_module, imported) = into_wasm(&cps_optm_module, turns);
+    let (wasm_module, imported) = into_wasm(&cps_optm_module, turns, answer);
 
     observe(Stage::Wasm(&wasm_module));
 
@@ -1829,6 +1838,7 @@ where
         read,
         progress,
     } = told;
+    let answer = tail.answer();
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -1850,7 +1860,7 @@ where
             let anf_module = anf_module?;
 
             // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-            Some(lower_from_anf(anf_module, observe))
+            Some(lower_from_anf(anf_module, answer.as_ref(), observe))
         }
     };
 

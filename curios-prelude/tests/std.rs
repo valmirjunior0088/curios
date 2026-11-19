@@ -3,7 +3,7 @@
 //! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one store under the build's scratch directory, which a rerun of an unchanged build takes whole.
 
 use {
-    curios::{TestSubject, test_subjects, test_support::*},
+    curios::{TestSubject, Verdict, test_subjects, test_support::*},
     curios_common::{Qualifier, Style, fill},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
@@ -186,20 +186,21 @@ fn run_module(module: &Qualifier) {
             String::from_utf8_lossy(&io.output()).into_owned()
         });
 
-        match outcome {
-            // The test answered that it held.
-            Ok(TestEnd::Answered(true)) => passed += 1,
-            // The test said what went wrong and answered that it did not hold; its path is what only the schedule knows.
-            Ok(TestEnd::Answered(false)) => {
-                failures.push_str(&format!("{}: failed\n{reported}", record.join()));
-            }
+        let failed = match outcome {
+            Ok(TestEnd::Answered(answer)) => match Verdict::read(&answer) {
+                // The test answered that nothing it checked failed.
+                Ok(verdict) if verdict.held() => None,
+                // What the test found, drawn as this suite draws it, beneath what it wrote; its path is what only the schedule knows.
+                Ok(verdict) => Some(format!("failed\n{reported}{:#?}", verdict.failures)),
+                Err(why) => Some(format!("answered no verdict: {why}\n{reported}")),
+            },
             // An exit is a failure whatever its code: a verdict is answered, never exited with.
-            Ok(TestEnd::Exited(code)) => {
-                failures.push_str(&format!("{}: exited {code}\n{reported}", record.join()));
-            }
-            Err(error) => {
-                failures.push_str(&format!("{}: {error}\n{reported}", record.join()));
-            }
+            Ok(TestEnd::Exited(code)) => Some(format!("exited {code}\n{reported}")),
+            Err(error) => Some(format!("{error}\n{reported}")),
+        };
+        match failed {
+            None => passed += 1,
+            Some(failed) => failures.push_str(&format!("{}: {failed}\n", record.join())),
         }
     }
 

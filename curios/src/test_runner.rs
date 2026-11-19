@@ -1,4 +1,4 @@
-//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to, on each subject's own tree after its build — a node for each test, opened by its path before it runs and closed by how it ended, the subject's tally as the node that closes its tree, and the run's as the last line, each with what its tests took — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). A test says what went wrong itself, on its own standard error, and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the runner knows — the test's path, how it ended, the failing declaration's body as written, the tests the selection skipped — is written here from the modules the compile hands back.
+//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to, on each subject's own tree after its build — a node for each test, opened by its path before it runs and closed by how it ended, the subject's tally as the node that closes its tree, and the run's as the last line, each with what its tests took — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). A test answers what it found, read off what its entry hands back and never off an exit code ([`Verdict`]), and writes nothing of it; what only the runner knows or draws — the test's path, how it ended, what a failing test found, a trap's text, the tests the selection skipped — is written here, beneath the test's verdict where it is the test's, from the answer and the modules the compile hands back.
 //!
 //! **A test's own output is never held.** Natively it goes where the test wrote it, as it is written, and the test's host ([`TestHost`]) tells the runner that it wrote; a page's is relayed when its outcome arrives. Either way the first byte ends the line the test's node opened on, and the node closes beneath what was written.
 //!
@@ -16,9 +16,9 @@ use {
         Wrote, alone, answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed,
         serve_run, total, troubled, url,
     },
-    curios::{TestSubject, Tested, test_subjects},
+    curios::{TestSubject, Tested, Verdict, test_subjects},
     curios_browser::{Posted, Step, Stream},
-    curios_common::{Qualifier, Report, Style},
+    curios_common::{Code, Qualifier, Report, Style},
     curios_native::{OsHost, Stop, TestEnd},
     curios_package::{Refused, Selection, Target},
     curios_pipeline::{CompileError, TestModule},
@@ -27,7 +27,7 @@ use {
         cell::RefCell,
         cmp::Reverse,
         collections::VecDeque,
-        io, mem,
+        io, iter, mem,
         sync::Arc,
         time::{Duration, Instant},
     },
@@ -81,19 +81,54 @@ impl Totals {
 
 /// How one test ended, in the vocabulary every source reports in: the verdict its entry answered, the exit that left it unanswered, or the trap that stopped it. Natively it is what `TestRun::run` answers, read into this once.
 pub enum Outcome {
-    Answered(bool),
+    Answered(Verdict),
     Exited(u8),
     Trapped(String),
+}
+
+impl Outcome {
+    /// The outcome of a test whose entry answered `answer`, the text `/std/Test` writes of what it found: an answer that spells no verdict, which a test program never gives, is reported as the trap of the compiler's own fault.
+    fn answered(answer: &[u8]) -> Self {
+        match Verdict::read(answer) {
+            Ok(verdict) => Outcome::Answered(verdict),
+            Err(why) => Outcome::Trapped(format!(
+                "compiler fault: the test answered no verdict: {why}"
+            )),
+        }
+    }
 }
 
 impl From<Result<TestEnd, Stop>> for Outcome {
     fn from(end: Result<TestEnd, Stop>) -> Self {
         match end {
-            Ok(TestEnd::Answered(held)) => Outcome::Answered(held),
+            Ok(TestEnd::Answered(answer)) => Outcome::answered(&answer),
             Ok(TestEnd::Exited(code)) => Outcome::Exited(code),
             Err(stop) => Outcome::Trapped(stop.to_string()),
         }
     }
+}
+
+/// The lines a verdict is drawn as beneath its test's verdict, where only the runner writes: each failed check's steps and statement on a line, the steps leading, and beneath it each value it compared behind its label, in backticks as a report shows what a program writes.
+fn drawn(verdict: &Verdict) -> Vec<String> {
+    verdict
+        .failures
+        .iter()
+        .flat_map(|check| {
+            let stated = check
+                .steps
+                .iter()
+                .chain([&check.statement])
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(": ");
+            let facts = check
+                .facts
+                .iter()
+                .map(|(label, value)| format!("  {label}: {}", Code(value)));
+
+            iter::once(stated).chain(facts)
+        })
+        .collect()
 }
 
 /// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
@@ -329,21 +364,21 @@ impl<'a> Printer<'a> {
         hand.tree.open(&path, false);
     }
 
-    /// The test whose node is open ended as `outcome` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then a trap's text, which no test writes and only the runner holds, and the subject's tally where it was the subject's last.
+    /// The test whose node is open ended as `outcome` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then what only the runner holds — what a failing test found, or a trap's text — and the subject's tally where it was the subject's last.
     pub fn ended(&mut self, outcome: Outcome, wrote: Wrote, taken: Duration) {
         let hand = self.hand.as_mut().expect(IN_HAND);
         hand.scheduled.pop_front().expect(IN_HAND);
         let (verdict, beneath) = match outcome {
-            Outcome::Answered(true) => {
+            Outcome::Answered(verdict) if verdict.held() => {
                 hand.tally.passed += 1;
 
                 ("passed".to_string(), Vec::new())
             }
-            // The test said what went wrong itself, on its own stream, above its verdict.
-            Outcome::Answered(false) => {
+            // What the test found is the runner's to present, beneath its verdict, as a trap's text is.
+            Outcome::Answered(verdict) => {
                 hand.tally.failed += 1;
 
-                ("failed".to_string(), Vec::new())
+                ("failed".to_string(), drawn(&verdict))
             }
             // The test exited on its own before its entry answered, whatever the code: a verdict is answered, never exited with.
             Outcome::Exited(code) => {
@@ -538,14 +573,15 @@ impl Reporting for Printing<'_, '_> {
     }
 }
 
-/// How a test ended, read off what its page posted: a trap, the word its entry answered, or the exit that left it unanswered — read once here, as native's end is read into [`Outcome`] once. A page that posted none of the three, which the harness never does, is read as a trap saying so.
+/// How a test ended, read off what its page posted: a trap, what its entry answered, or the exit that left it unanswered — read once here, as native's end is read into [`Outcome`] once, the answer through the same reading. A page that posted none of the three, which the harness never does, is read as a trap saying so.
 fn outcome_of(posted: &Posted) -> Outcome {
-    match (&posted.trap, posted.held, posted.exit_code) {
+    match (&posted.trap, posted.answered(), posted.exit_code) {
         (Some(trap), _, _) => Outcome::Trapped(trap.clone()),
-        (None, Some(held), _) => Outcome::Answered(held),
+        (None, Some(Ok(answer)), _) => Outcome::answered(&answer),
+        (None, Some(Err(why)), _) => Outcome::Trapped(why),
         (None, None, Some(code)) => Outcome::Exited(code),
         (None, None, None) => {
-            Outcome::Trapped("the page reported neither a word, an exit nor a trap".to_string())
+            Outcome::Trapped("the page reported neither an answer, an exit nor a trap".to_string())
         }
     }
 }

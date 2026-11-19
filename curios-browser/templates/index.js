@@ -6,12 +6,13 @@ import * as gateway{{ loop.index0 }} from {{ gateway.specifier }};
 
 {{ harness }}
 
-/** What this page was built with: the name the program is run by, the key the query spells its arguments under, the harness's configuration, the program's rows, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
+/** What this page was built with: the name the program is run by, the key the query spells its arguments under, the harness's configuration, the program's rows, the wire type its entry answers at or null, the bridge in base64, the program's integrity, where it stands and the element its output is written into. */
 const page = {
   name: {{ name }},
   argument: {{ argument }},
   configuration: {{ configuration }},
   rows: {{ rows }},
+  answer: {{ answer }},
   bridge: {{ bridge }},
   integrity: {{ integrity }},
   program: {{ program }},
@@ -147,7 +148,7 @@ export async function start({ program, query = globalThis.location?.search ?? ""
     const { refusal, foreign } = answers();
 
     if (refusal !== undefined) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal, held: null };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: refusal, answer: null };
     }
 
     try {
@@ -155,13 +156,13 @@ export async function start({ program, query = globalThis.location?.search ?? ""
 
       return await run({
         ...page.configuration,
-        compiled: { program: bytes, foreigns: page.rows },
+        compiled: { program: bytes, foreigns: page.rows, answer: page.answer },
         bridge: decoded(page.bridge),
         args: [encoder.encode(page.name), ...argumentsOf(query)],
         hooks: { onStdout: stdout.write, onStderr: stderr.write, foreign },
       });
     } catch (error) {
-      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error), held: null };
+      return { stdout: new Uint8Array(0), stderr: new Uint8Array(0), exitCode: null, trap: String(error), answer: null };
     }
   })();
 
@@ -180,7 +181,7 @@ export async function start({ program, query = globalThis.location?.search ?? ""
     parent.postMessage(
       {
         type: "outcome",
-        outcome: { exitCode: outcome.exitCode, trap: outcome.trap, held: outcome.held },
+        outcome: { exitCode: outcome.exitCode, trap: outcome.trap, answer: outcome.answer },
       },
       "/",
     );

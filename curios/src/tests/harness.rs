@@ -5,10 +5,11 @@ mod sequence;
 
 use {
     super::test_support::*,
+    crate::{FailedCheck, Verdict, test_support::*},
     curios_common::{Qualifier, RootKind},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::test_support::*,
+    curios_native::{ForeignBindings, TestEnd, test_support::*},
     curios_pipeline::Fold,
     curios_surface::Entrypoint,
 };
@@ -33,7 +34,7 @@ fn the_description_schedules_every_rung() {
         ()
         "#
         ),
-        b"/a_bool: passed\n/doubling: passed\n/a_failing_equal: failed\n  expected 5 but got 4\n/an_action: passed\n/a_failing_action: failed\n  the condition was false\n"
+        b"/a_bool: passed\n/doubling: passed\n/a_failing_equal: failed\n  not equal\n    expected: `5`\n    obtained: `4`\n/an_action: passed\n/a_failing_action: failed\n  the condition was false\n"
     );
 }
 
@@ -61,28 +62,42 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
 
 #[test]
 fn an_index_argument_selects_one_test() {
-    // The runner's protocol: argv[1] names the test to run, and whoever selected it names it and says how it ended, so the test says only what went wrong, on its standard error, and nothing where it held.
+    // The runner's protocol: argv[1] names the test to run, which answers what it found and writes nothing of it, since whoever selected it names it, says how it ended and presents what it found. An index the program does not hold answers no verdict, which the runner reports as its own fault.
+    let (module, foreigns) = test_program(
+        r#"
+        use /std/{Nat, Test};
+        test first = Test/assert(true);
+        test second = Test/equal(1 + 1, 3);
+        ()
+        "#,
+    )
+    .compiled
+    .expect("a test program scheduling a test is built");
+    let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
     let selected = |index: &str| {
         let (system, io) = MockHost::builder().args(["prog", index]).build();
-        run_text(
-            r#"
-            use /std/{Nat, Io, Test};
-            let entry() -> /std/Io({}) =
-                let _ = Test/main([() => Test/assert(true), () => Test/equal(1 + 1, 3)])!;
-                Io/pure(());
-            entry()
-            "#,
-            system,
-        )
-        .expect("expected result");
+        let Ok(TestEnd::Answered(answer)) = compiled.run_test(system, ForeignBindings::empty())
+        else {
+            panic!("the test at {index} answers");
+        };
+        assert_eq!(io.output(), b"", "the test at {index} writes nothing");
 
-        (io.output(), io.errors())
+        Verdict::read(&answer)
     };
 
-    assert_eq!(selected("0"), (Vec::new(), Vec::new()));
-    let (output, errors) = selected("1");
-    assert_eq!(errors, b"expected 3 but got 2\n");
-    assert_eq!(output, errors, "nothing on standard output");
+    assert!(selected("0").is_ok_and(|verdict| verdict.held()));
+    assert_eq!(
+        selected("1").map(|verdict| verdict.failures),
+        Ok(vec![FailedCheck {
+            steps: vec![],
+            statement: "not equal".to_string(),
+            facts: vec![
+                ("expected".to_string(), "3".to_string()),
+                ("obtained".to_string(), "2".to_string()),
+            ],
+        }])
+    );
+    assert!(selected("2").is_err());
 }
 
 #[test]
@@ -96,7 +111,7 @@ fn spelled_strings_are_quoted_and_escaped() {
         ()
         "#
         ),
-        b"/newline: failed\n  expected \"a\" but got \"a\\n\"\n"
+        b"/newline: failed\n  not equal\n    expected: `\"a\"`\n    obtained: `\"a\\n\"`\n"
     );
 }
 
@@ -118,7 +133,7 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
         ()
         "#
         ),
-        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/action_then_verdict: passed\n/failure_before_action: failed\n  case 0: the condition was false\n"
+        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    expected: `3`\n    obtained: `2`\nperformed\n/action_then_verdict: passed\n/failure_before_action: failed\n  case 0: the condition was false\n"
     );
 }
 
@@ -272,7 +287,7 @@ fn a_structural_fixture_compares_and_spells() {
         ()
         "#
         ),
-        b"/options: failed\n  expected Option/some(4) but got Option/some(3)\n"
+        b"/options: failed\n  not equal\n    expected: `Option/some(4)`\n    obtained: `Option/some(3)`\n"
     );
 }
 

@@ -11,7 +11,9 @@ mod link;
 pub use link::{bindings_of, linked_of, unlinked};
 
 mod testing;
-pub use testing::{TestRun, TestSubject, Tested, opened, page_name, supplied, test_subjects};
+pub use testing::{
+    FailedCheck, TestRun, TestSubject, Tested, Verdict, opened, page_name, supplied, test_subjects,
+};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]

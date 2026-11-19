@@ -51,7 +51,7 @@ test addition_passes =
     Test/assert(1 + 1 == 2);
 
 test equality_fails =
-    Test/equal(double(2), 5);
+    let _ = /std/print_err("comparing\n")!; Test/equal(double(2), 5);
 
 test overflow_traps =
     let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Test/assert(true);
@@ -120,7 +120,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: a failing test says what went wrong itself, behind the frame its own lines stand behind, so its verdict stands beneath that, and a trap's text is the runner's to add. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
@@ -133,7 +133,8 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ emit; ",
             "├─ /app/doubling_passes; ✓ passed in ",
             "├─ /app/addition_passes; ✓ passed in ",
-            "├─ /app/equality_fails\n│  > expected 5 but got 4\n│  ✗ failed in ",
+            "├─ /app/equality_fails\n│  > comparing\n│  ✗ failed in ",
+            "│    not equal\n│      expected: `5`\n│      obtained: `4`\n",
             "├─ /app/overflow_traps; ✗ trapped in ",
             "├─ /app/exits_seven; ✗ exited 7 in ",
             "├─ /app/effect_passes; ✓ passed in ",

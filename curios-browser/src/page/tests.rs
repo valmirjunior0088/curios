@@ -38,6 +38,7 @@ fn page_text(rows: Vec<Linked>) -> Result<BTreeMap<String, Vec<u8>>, Box<Report>
             package: Some("app"),
             module: b"\0asm".to_vec(),
             foreigns: &ForeignStore::new(),
+            answer: None,
         },
         rows,
     )
