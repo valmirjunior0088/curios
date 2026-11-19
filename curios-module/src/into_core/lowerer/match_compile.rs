@@ -284,9 +284,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Char(character) => curios_core::Pattern::Character(character.value),
             MatchPattern::Str(literal) => curios_core::Pattern::Str(literal.value.clone()),
             MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
-            MatchPattern::Nat(NatPattern::Succ { pred_label }) => curios_core::Pattern::Succ {
-                predecessor: self.slot(pred_label, binders),
-            },
+            MatchPattern::Nat(NatPattern::Succ { pred_label, step }) => {
+                curios_core::Pattern::Succ {
+                    predecessor: self.slot(pred_label, binders),
+                    step: step.0.clone(),
+                }
+            }
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
                 curios_core::Pattern::Literal(value.clone())
             }

@@ -78,7 +78,7 @@ type Label = (Option<String>, Option<u32>);
 /// What a row writes at one column beside the place of the first binder it writes there among its row's, or nothing where the compiler put the column under a pattern another row wrote, which the row reads as a binder that binds nothing.
 type Cell<'m> = Option<(Shape<'m>, usize)>;
 
-/// What a row writes at a column: a pattern, or what is left of a run once a split has read elements off its front, which is a run of its own.
+/// What a row writes at a column: a pattern, what is left of a run once a split has read elements off its front, which is a run of its own, or what is left of a successor's step once splits have peeled successors off its value, which is a successor of its own.
 #[derive(Clone, Copy)]
 enum Shape<'m> {
     Pattern(&'m Pattern),
@@ -86,9 +86,39 @@ enum Shape<'m> {
     Remains(Sequence, &'m [Pattern], Ending),
     /// What a string pattern spells past the bytes read: a closed run of those bytes.
     Text(&'m [u8]),
+    /// A successor pattern with this many successors of its value peeled by the splits around it, always short of its whole step: one peeled to its step is its predecessor's binder ([`Shape::peel`]).
+    Peeled(&'m Pattern, usize),
 }
 
 impl<'m> Shape<'m> {
+    /// What a successor pattern leaves past one more successor of its value: what is left of its step, or its predecessor's binder once its step is spent.
+    fn peel(self) -> Shape<'m> {
+        let (pattern, peeled) = match self {
+            Shape::Pattern(pattern) => (pattern, 1),
+            Shape::Peeled(pattern, peeled) => (pattern, peeled + 1),
+            Shape::Remains(..) | Shape::Text(_) => unreachable!("only a successor is peeled"),
+        };
+        let Pattern::Succ { predecessor, step } = pattern else {
+            unreachable!("only a successor is peeled");
+        };
+
+        match Natural::from(peeled) == *step {
+            true => Shape::Pattern(slot_pattern(*predecessor)),
+            false => Shape::Peeled(pattern, peeled),
+        }
+    }
+
+    /// What is left of a successor pattern's step at its column, where this is one: its step, less what the splits around it peeled.
+    fn step_left(self) -> Option<Natural> {
+        match self {
+            Shape::Pattern(Pattern::Succ { step, .. }) => Some(step.clone()),
+            Shape::Peeled(Pattern::Succ { step, .. }, peeled) => {
+                Some(step.monus(&Natural::from(peeled)))
+            }
+            _ => None,
+        }
+    }
+
     /// What a run leaves past an element: its elements after it and its end, or its rest itself where no element is left of an open one.
     fn after(sequence: Sequence, then: &'m [Pattern], ending: Ending) -> Shape<'m> {
         match (then, ending) {
@@ -121,7 +151,7 @@ impl<'m> Shape<'m> {
             }
             Shape::Pattern(Pattern::Str(value)) => Some((Sequence::Bytes, text(value.as_bytes()))),
             Shape::Text(bytes) => Some((Sequence::Bytes, text(bytes))),
-            Shape::Pattern(_) => None,
+            Shape::Pattern(_) | Shape::Peeled(..) => None,
             Shape::Remains(sequence, elements, ending) => Some((
                 sequence,
                 elements
@@ -131,10 +161,10 @@ impl<'m> Shape<'m> {
         }
     }
 
-    /// The pattern this is, where it is no run's remainder.
+    /// The pattern this is, where it is no run's remainder: a successor peeled short of its step is the successor it was written as.
     fn pattern(self) -> Option<&'m Pattern> {
         match self {
-            Shape::Pattern(pattern) => Some(pattern),
+            Shape::Pattern(pattern) | Shape::Peeled(pattern, _) => Some(pattern),
             Shape::Remains(..) | Shape::Text(_) => None,
         }
     }
@@ -193,6 +223,8 @@ enum Seen {
     Any,
     /// A carrier's case, as a pattern writes it.
     Leaf(String),
+    /// A natural's successor, over the place of its predecessor.
+    Successor(usize),
     /// A constructor over its plain payloads.
     Variant(String, Vec<usize>),
     /// A tuple, or a struct under its head, over its fields.
@@ -488,26 +520,24 @@ impl<'m> Compiler<'m> {
     fn reached<K: Ord>(
         &self,
         lines: &[Line<'m>],
-        closes: impl Fn(&Pattern) -> Option<K>,
+        closes: impl Fn(Shape<'m>) -> Option<K>,
         places: usize,
     ) -> Vec<(usize, usize)> {
         let mut closed = BTreeSet::new();
         let mut reached = Vec::new();
         for line in lines {
-            match line.cells[0] {
-                None => reached.push((line.row, places.saturating_sub(closed.len()))),
-                Some((Shape::Pattern(pattern), _)) => {
-                    let unfailing = self.row(line.row).guards.is_empty()
-                        && line.cells[1..].iter().all(|cell| match cell {
-                            None => true,
-                            Some((Shape::Pattern(pattern), _)) => refutations(pattern) == 0,
-                            Some(_) => false,
-                        });
-                    if unfailing && let Some(case) = closes(pattern) {
-                        closed.insert(case);
-                    }
+            if let Some((shape, _)) = line.cells[0] {
+                let unfailing = self.row(line.row).guards.is_empty()
+                    && line.cells[1..].iter().all(|cell| match cell {
+                        None => true,
+                        Some((Shape::Pattern(pattern), _)) => refutations(pattern) == 0,
+                        Some(_) => false,
+                    });
+                if unfailing && let Some(case) = closes(shape) {
+                    closed.insert(case);
                 }
-                Some(_) => {}
+            } else {
+                reached.push((line.row, places.saturating_sub(closed.len())));
             }
         }
 
@@ -595,6 +625,21 @@ impl<'m> Compiler<'m> {
         match &self.seen[place] {
             Seen::Any => "_".to_string(),
             Seen::Leaf(leaf) => leaf.clone(),
+            // A run of successors is written as the number it reaches, `2` and not `0 + 1 + 1`, over a predecessor that was read, and as `_ + 2` over one that was not.
+            Seen::Successor(predecessor) => {
+                let mut steps = 1usize;
+                let mut at = *predecessor;
+                while let Seen::Successor(next) = &self.seen[at] {
+                    steps += 1;
+                    at = *next;
+                }
+                let past = self.value(at);
+
+                match Natural::parse_bytes(past.as_bytes(), 10) {
+                    Some(value) => (value + Natural::from(steps)).to_string(),
+                    None => format!("{past} + {steps}"),
+                }
+            }
             Seen::Variant(tag, payloads) => {
                 let payloads = payloads
                     .iter()
@@ -966,7 +1011,7 @@ impl<'m> Compiler<'m> {
         }
         let named = self.reached(
             &lines,
-            |pattern| match pattern {
+            |shape| match shape.pattern()? {
                 Pattern::Variant { tag, args }
                     if args.iter().all(|(_, arg)| refutations(arg) == 0) =>
                 {
@@ -1255,7 +1300,7 @@ impl<'m> Compiler<'m> {
         self.joined(context, &mut lines, &column);
         let reached = self.reached(
             &lines,
-            |pattern| match pattern {
+            |shape| match shape.pattern()? {
                 Pattern::Bool(value) => Some(*value),
                 _ => None,
             },
@@ -1414,7 +1459,7 @@ impl<'m> Compiler<'m> {
             }
             let reached = self.reached(
                 &lines,
-                |pattern| match pattern {
+                |shape| match shape.pattern()? {
                     Pattern::Zero => Some(Natural::zero()),
                     Pattern::Literal(value) => Some(value.clone()),
                     Pattern::Character(character) => Some(Natural::from(*character as u32)),
@@ -1491,12 +1536,12 @@ impl<'m> Compiler<'m> {
             });
         }
 
+        // A successor closes the case of every successor where a step of one is left of it; a larger step leaves the successor of `0` to the rows after it.
         let reached = self.reached(
             &lines,
-            |pattern| match pattern {
-                Pattern::Zero => Some(false),
-                Pattern::Succ { .. } => Some(true),
-                _ => None,
+            |shape| match shape {
+                Shape::Pattern(Pattern::Zero) => Some(false),
+                _ => shape.step_left().filter(Natural::is_one).map(|_| true),
             },
             2,
         );
@@ -1506,9 +1551,9 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Shape::Pattern(Pattern::Zero), _)) => zeros.push(line),
-                Some((Shape::Pattern(Pattern::Succ { predecessor }), place)) => {
-                    let predecessor = Some((Shape::Pattern(slot_pattern(*predecessor)), place));
-                    successors.push((Some(vec![predecessor]), line));
+                // A successor of a step past one is one of a step less over the predecessor, `p + 2` at `n` being `p + 1` at `n - 1`.
+                Some((shape, place)) if shape.step_left().is_some() => {
+                    successors.push((Some(vec![Some((shape.peel(), place))]), line));
                 }
                 _ => {
                     zeros.push(line.clone());
@@ -1545,7 +1590,7 @@ impl<'m> Compiler<'m> {
             let (binders, mut columns, group) = self.case_parts(context, successors, &places);
             columns.extend(rest);
             let predecessor = binders[0];
-            self.seen[column.seen] = Seen::Leaf("_ + 1".to_string());
+            self.seen[column.seen] = Seen::Successor(places[0]);
             let successor = split.successor(context, &predecessor, |context, expected| {
                 self.case(context, columns, group, expected)
             })?;
@@ -2080,7 +2125,7 @@ impl<'m> Compiler<'m> {
 
             return Ok(walked.expect("the arm of a row's case is its walk"));
         }
-        let Shape::Pattern(pattern) = shape else {
+        let Some(pattern) = shape.pattern() else {
             unreachable!("what is left of a run is a run");
         };
 
@@ -2197,14 +2242,20 @@ impl<'m> Compiler<'m> {
                 };
 
                 match pattern {
-                    Pattern::Succ { predecessor } => {
-                        let cells = vec![Some((Shape::Pattern(slot_pattern(*predecessor)), place))];
-                        let (binders, _) = self.alone(context, &mut line, cells);
+                    // What is left of a step past one is read at the predecessor, as a column of its own.
+                    Pattern::Succ { .. } => {
+                        let cells = vec![Some((shape.peel(), place))];
+                        let (binders, slots) = self.alone(context, &mut line, cells);
                         let predecessor = binders[0];
+                        let mut parts = slots
+                            .into_iter()
+                            .map(|slot| Term::free_var(&binders[slot]))
+                            .collect::<Vec<_>>();
+                        parts.extend(columns);
 
                         walk_awaited(context, awaits, |context| {
                             split.successor(context, &predecessor, |context, expected| {
-                                arm(self, context, columns, line, expected)
+                                arm(self, context, parts, line, expected)
                             })
                         })?;
                     }

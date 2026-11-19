@@ -496,9 +496,14 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Char(character) => print_char_literal(character),
             MatchPattern::Str(literal) => print_string_literal(&literal),
             MatchPattern::Nat(NatPattern::Zero) => pure("0"),
-            MatchPattern::Nat(NatPattern::Succ { pred_label }) => {
-                flat([self.binder(pred_label), pure(" + 1")])
-            }
+            MatchPattern::Nat(NatPattern::Succ {
+                pred_label,
+                step: NatLiteral(step, radix),
+            }) => flat([
+                self.binder(pred_label),
+                pure(" + "),
+                pure(format_radix(&step, radix)),
+            ]),
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => {
                 pure(format_radix(&n, radix))
             }

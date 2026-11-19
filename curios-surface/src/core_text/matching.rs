@@ -15,6 +15,7 @@ use {
     curios_core::{
         Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, One, Scope, Term, Two,
     },
+    curios_num::Natural,
     std::{array, iter},
 };
 
@@ -79,6 +80,7 @@ pub fn match_written<D: Rendered>(
                     arm(
                         MatchPattern::Nat(NatPattern::Succ {
                             pred_label: decorated(predecessor_core, &predecessor, frame),
+                            step: NatLiteral(Natural::one(), Radix::Dec(0)),
                         }),
                         step,
                         frame,
@@ -264,8 +266,8 @@ pub fn match_read(
         },
         [
             MatchPattern::Nat(NatPattern::Zero),
-            MatchPattern::Nat(NatPattern::Succ { pred_label }),
-        ] => {
+            MatchPattern::Nat(NatPattern::Succ { pred_label, step }),
+        ] if step.0 == Natural::one() => {
             let labels = [LabelRead::binder(pred_label)?];
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
@@ -332,7 +334,7 @@ pub fn match_read(
                     .map(|(arm, pattern)| {
                         let key = match pattern {
                             MatchPattern::Nat(NatPattern::Lit(literal)) => literal.0.clone(),
-                            _ => curios_num::Natural::zero(),
+                            _ => Natural::zero(),
                         };
                         Ok((key, core_read(&arm.body, reader)?))
                     })

@@ -504,8 +504,9 @@ fn pattern_read(
         MatchPattern::Char(character) => Pattern::Character(character.value),
         MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
         MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
-        MatchPattern::Nat(NatPattern::Succ { pred_label }) => Pattern::Succ {
+        MatchPattern::Nat(NatPattern::Succ { pred_label, step }) => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,
+            step: step.0.clone(),
         },
         MatchPattern::Nat(NatPattern::Lit(literal)) => Pattern::Literal(literal.0.clone()),
         MatchPattern::List(elements) => Pattern::List(elements_read(elements, at, places)?),

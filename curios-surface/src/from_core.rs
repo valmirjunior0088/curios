@@ -622,8 +622,9 @@ pub fn written_pattern<D: Dialect>(
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
-        curios_core::Pattern::Succ { predecessor } => MatchPattern::Nat(NatPattern::Succ {
+        curios_core::Pattern::Succ { predecessor, step } => MatchPattern::Nat(NatPattern::Succ {
             pred_label: written_slot(*predecessor, names, own),
+            step: NatLiteral(step.clone(), Radix::Dec(0)),
         }),
         curios_core::Pattern::Literal(value) => {
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
@@ -1312,6 +1313,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 let body = cons_case.open(&[opened]);
                 let succ = NatPattern::Succ {
                     pred_label: binder(predecessor, &body, frame),
+                    step: NatLiteral(Natural::one(), Radix::Dec(0)),
                 };
 
                 vec![

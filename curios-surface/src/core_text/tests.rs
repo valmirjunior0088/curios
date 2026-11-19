@@ -14,7 +14,7 @@ use {
         Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId,
         WitnessKey, WitnessOrigin,
     },
-    curios_num::Floating,
+    curios_num::{Floating, Natural},
     std::rc::Rc,
 };
 
@@ -485,6 +485,7 @@ fn every_node_written_reads_back_as_itself() {
                     alternatives: vec![Row {
                         pattern: Pattern::Succ {
                             predecessor: Slot::Binder,
+                            step: Natural::from(2u32),
                         },
                         guards: Vec::new(),
                         body: over(Free::local(1, None), one()),

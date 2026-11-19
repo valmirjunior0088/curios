@@ -17,5 +17,6 @@ mod recording;
 mod refinement;
 mod run;
 mod spelling;
+mod successor;
 mod target;
 mod text;

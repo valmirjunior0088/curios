@@ -497,8 +497,11 @@ impl<D: Dialect> MatchPattern<D> {
 pub enum NatPattern<D: Dialect = Program> {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1` leaf. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
-    Succ { pred_label: Binder<D> },
+    /// The `pred + step` leaf, `step` successors over `pred_label`: one at least, and kept with the radix it was written in so it prints back as written. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
+    Succ {
+        pred_label: Binder<D>,
+        step: NatLiteral,
+    },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, compiled to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (`curios-elab`'s matrix compiler).
     ///
     /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`). Narrowed here, a numeral past a machine word would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one.

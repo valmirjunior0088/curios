@@ -645,7 +645,7 @@ pub let answer(condition: Bool) -> Str =
 
 ### Natural-number case split
 
-A case split on a `Nat` has a zero arm and a successor arm, which binds the predecessor before `+ 1`. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern.
+A case split on a `Nat` has a zero arm and successor arms, each binding a predecessor before a `+` and a step of one or more: `p + 2` takes the value apart two successors deep, so `p` is the value less two. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern, and `p + 0` is the binder `p`. A value a step leaves below it is another arm's: `| 0 => … | p + 2 => …` leaves `1` to no arm, and is refused for it.
 
 ```crs
 use /std/{Nat};

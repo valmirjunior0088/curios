@@ -424,7 +424,7 @@ pub fn parse_nat_zero_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// The `pred + 1` leaf of a `Nat` match-arm pattern. Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name + 1` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern, and neither is a step past one; `refuse_misread_successor` refuses each by name.
+// The `pred + step` leaf of a `Nat` match-arm pattern. Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name + 2` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern, and neither is a step of none; `refuse_misread_successor` refuses each by name.
 pub fn parse_nat_succ_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
@@ -432,19 +432,20 @@ pub fn parse_nat_succ_match_pattern<'a, D: Grammar>(
         .and_drop(preceded_by_space)
         .and_drop(take_exact("+"))
         .and_drop(require_space)
-        .and_drop(parse_step_of_one)
-        .map(|pred_label: Binder<D>| MatchPattern::Nat(NatPattern::Succ { pred_label }))
+        .and(parse_step)
+        .map(|(pred_label, step): (Binder<D>, NatLiteral)| {
+            MatchPattern::Nat(NatPattern::Succ { pred_label, step })
+        })
         .parse(state)
 }
 
-// The step a successor pattern takes, `1` and nothing that only opens with it: `10` is a step of ten, not a step of one before a stray `0`.
-fn parse_step_of_one<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
-    take_while(is_step_char)
-        .flat_map(|step| match step == "1" {
-            true => pure(()).boxed(),
-            false => fail("a successor pattern takes a step of one").boxed(),
+// The step a successor pattern takes: a numeral of one or more, read whole, so `10` is a step of ten and not a step of one before a stray `0`.
+fn parse_step<'a>(state: ParserState<'a>) -> Parsed<'a, NatLiteral> {
+    parse_nat_digits
+        .flat_map(|step| match step.0.is_zero() {
+            true => fail("a successor pattern takes a step of one or more").boxed(),
+            false => pure(step).boxed(),
         })
-        .and_drop(parse_whitespace)
         .parse(state)
 }
 
@@ -453,7 +454,7 @@ fn is_step_char(char: char) -> bool {
     char.is_ascii_alphanumeric() || char == '_'
 }
 
-// A label and a `+` that make no successor pattern, refused by what failed rather than read as the binder `p` with `+…` left over for the arm grammar to report as the token it did not expect: a side of the `+` without its blank, which reads `p+1` as the binder `p` and the literal `+1`, or a step other than one, which a successor pattern does not take. Tried after the spaced successor form, and before the binder the label would otherwise become; the `+` is consumed so the refusal is past the choice point, the caret underlining the spacing from the label's end or the step itself.
+// A label and a `+` that make no successor pattern, refused by what failed rather than read as the binder `p` with `+…` left over for the arm grammar to report as the token it did not expect: a side of the `+` without its blank, which reads `p+1` as the binder `p` and the literal `+1`, a step of none, which is the binder `p` itself, or a step that is no numeral. Tried after the spaced successor form, and before the binder the label would otherwise become; the `+` is consumed so the refusal is past the choice point, the caret underlining the spacing from the label's end or the step itself.
 fn refuse_misread_successor<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
     parse_decorated_binder::<D>
         .and_drop(look_ahead(take_while(is_blank).and(take_exact("+"))))
@@ -466,19 +467,27 @@ fn refuse_misread_successor<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a
                 .and_drop(take_exact("+"))
                 .and(take_while(is_blank))
                 .and(mark)
-                .and(take_while(is_step_char))
-                .flat_map(move |(((spaced, after), step), written)| {
-                    match (!spaced || after.is_empty(), written) {
+                .and(look_ahead(parse_nat_digits.map(Some).or(pure(None))))
+                .and_drop(take_while(is_step_char))
+                .flat_map(move |(((spaced, after), step), numeral)| {
+                    match (!spaced || after.is_empty(), numeral) {
                         (true, _) => commit(fail_from(
                             &start,
                             &["a successor pattern takes whitespace on both sides of its `+`, as in `p + 1`", "`p+1` is the binder `p` followed by the literal `+1`"],
                         ))
                         .boxed(),
-                        // A spaced step of one the successor form did not take failed past it, where that refusal stands.
-                        (false, "1") => fail("a successor pattern takes a step of one").boxed(),
-                        (false, _) => commit(fail_from(
+                        // A spaced step the successor form did not take failed past it, where that refusal stands.
+                        (false, Some(NatLiteral(value, _))) if !value.is_zero() => {
+                            fail("a successor pattern takes a step of one or more").boxed()
+                        }
+                        (false, Some(_)) => commit(fail_from(
                             &step,
-                            &["a successor pattern takes a step of one, `p + 1`", "a larger step is a match on the predecessor inside its arm"],
+                            &["a successor pattern takes a step of one or more, as in `p + 2`", "`p + 0` is the binder `p`"],
+                        ))
+                        .boxed(),
+                        (false, None) => commit(fail_from(
+                            &step,
+                            &["a successor pattern's step is a numeral, as in `p + 2`"],
                         ))
                         .boxed(),
                     }

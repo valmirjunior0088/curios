@@ -188,18 +188,38 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
     }
 }
 
-// A spaced successor pattern takes a step of one: a larger step is refused at the step, and not as a spacing it has, nor as a step of one before a stray digit.
+// A spaced successor pattern takes a step of one or more, read whole, so `10` is a step of ten, and printed back in the radix it was written in.
 #[test]
-fn a_successor_pattern_past_one_is_refused_at_its_step() {
+fn a_successor_pattern_takes_a_step_of_one_or_more() {
     for source in [
         "match n | 0 => 10 | 1 => 11 | k + 2 => k end",
         "match n | 0 => 0 | p + 10 => p end",
+        "match n | 0 => 0 | p + 0x10 => p end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "{source:?} printed back as {term}"
+        );
+    }
+}
+
+// A step of none, which is the binder itself, and a step that is no numeral are refused at the step, and not as a spacing they have.
+#[test]
+fn a_successor_pattern_of_no_step_is_refused_at_its_step() {
+    for (source, refusal) in [
+        (
+            "match n | 0 => 0 | p + 0 => p end",
+            "`p + 0` is the binder `p`",
+        ),
+        (
+            "match n | 0 => 0 | p + q => p end",
+            "a successor pattern's step is a numeral",
+        ),
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
-        assert!(
-            report.contains("a successor pattern takes a step of one"),
-            "{source:?} reported {report}"
-        );
+        assert!(report.contains(refusal), "{source:?} reported {report}");
         assert!(
             !report.contains("whitespace"),
             "{source:?} reported {report}"
