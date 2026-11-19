@@ -5,9 +5,9 @@
 //! Why the board is built this way is the README's. Its modules read in the order a run uses them:
 //!
 //! - [`load_board`] reads the records into [`Part`]s, [`Ticket`]s and [`Witness`]es, a witness carrying the [`Proof`] of `False` it alleges and the [`Expected`] refusal of it once its flaw is closed.
-//! - [`Proof::answer`] puts a witness to the checkers at `False`, and an [`Answer`] is what they said, each [`Refusal`] the checker's own error.
+//! - [`Witness::answer`] puts a witness to the checkers at `False` through the product's put, its history walked first, and an [`Answer`] is what they said, each refusal the checker's own error, or where the witness stopped.
 //! - [`Report`] runs every ticket and says where each one stands, a [`Standing`], a [`Row`] for each.
-//! - [`Probe`] puts one proof that is on no ticket, and says what the checkers made of it.
+//! - [`Proof::put`] puts one proof that is on no ticket, as `curios wonder --false` puts it, for the probe to print what the checkers made of it.
 
 #[cfg(test)]
 mod tests;
@@ -29,9 +29,6 @@ use put::*;
 
 mod report;
 use report::*;
-
-mod probe;
-use probe::*;
 
 use {
     clap::{Parser, Subcommand},
@@ -75,7 +72,7 @@ enum Board {
 
     #[command(
         about = "Put one program, one module written as Core text, or one ticket to the checkers as a proof of False, and say whether it was admitted",
-        after_help = "Exits 0 where a proof was admitted, 1 where it was refused, and 2 where it could not be put."
+        after_help = "Exits 0 where a proof was admitted, 1 where it was refused, and 2 where it could not be put: a candidate that cannot be read, or a text no checker reads."
     )]
     Probe {
         #[arg(
@@ -109,12 +106,19 @@ fn main() -> ExitCode {
         Board::Probe { candidate } => {
             // As a search exits: found is success.
             let admitted = match candidate_at(&candidate) {
-                Ok(Candidate::Proof(proof)) => {
-                    let probe = Probe::put(&proof);
-                    print!("{probe}");
+                Ok(Candidate::Proof(proof)) => match proof.put() {
+                    Ok(put) => {
+                        print!("{put}");
 
-                    probe.admitted()
-                }
+                        put.answer.admitted()
+                    }
+                    // Declining is not refusing: a text no checker read says nothing of the checkers.
+                    Err(reported) => {
+                        eprintln!("{reported}");
+
+                        return ExitCode::from(2);
+                    }
+                },
                 Ok(Candidate::Ticket { part, ticket }) => {
                     let row = Row::put(&part, &ticket);
                     print!("{row}");

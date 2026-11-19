@@ -6,9 +6,8 @@
 mod tests;
 
 use {
-    crate::{
-        Archived, Checker, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness,
-    },
+    crate::{Archived, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness},
+    curios_pipeline::Checker,
     curios_surface::WrittenIn,
     serde::Deserialize,
     std::collections::{BTreeMap, BTreeSet},
@@ -65,9 +64,18 @@ struct StepRecord {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RefusedRecord {
+    #[serde(with = "CheckerRecord")]
     by: Checker,
     error: Option<String>,
     within: Option<String>,
+}
+
+/// The word a record names a checker by: the one an answer displays it as.
+#[derive(Deserialize)]
+#[serde(remote = "Checker", rename_all = "lowercase")]
+enum CheckerRecord {
+    Elaborator,
+    Certifier,
 }
 
 /// Every part the files of a board hold, each by its path below the board's directory, in the order of their directories' names, with the tickets the files of the archive hold, each by its path below the archive's, after the part's own.

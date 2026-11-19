@@ -1,247 +1,104 @@
-//! A witness put to the checkers at `False`, and what they said.
+//! A witness put to the checkers at `False`, through the product's put ([`put_program`], [`put_core_text`]), and what they said: what `curios wonder --false` answers of the same text, the history before it the board's own.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{Proof, Step, Witness},
-    curios_cert::{Verdict, certify_program},
-    curios_common::{Report, Source, Variants},
-    curios_core::{Global, Program, Term, Universes},
+    curios_cert::Verdict,
+    curios_common::{Report, Source},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{
-        EntryTail, Examined, Unmade, Unread, examine_entrypoint, globals, read_core_text,
-    },
-    curios_surface::{FormScope, ReadError, Spelling},
+    curios_pipeline::{Put, Refusal, Unmade, put_core_text, put_program},
+    curios_surface::{Entrypoint, ReadError, Spelling},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
-    serde::Deserialize,
-    std::fmt,
 };
-
-/// The name the compiler's own registry holds `/std/Bool/False` under: its type former's, and the key its registry entry stands at.
-pub fn false_name() -> Global {
-    Global::Authored(SYNTAX.proof.false_type.qualifier())
-}
-
-/// What judges a witness: the two checkers. A record names one by the word it is displayed as. Core text the reader cannot make a module of is judged by neither: its construction is one no type of the trusted base can hold, read by no checker as a construct the grammar no longer has is not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Checker {
-    /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the certifier either way.
-    Elaborator,
-    /// `curios-cert` and the layer it judges through: the trusted base.
-    Certifier,
-}
-
-impl Checker {
-    /// Every error the checker raises, by the name its crate states for it once, in a match no variant is missing from.
-    pub fn errors(self) -> &'static [&'static str] {
-        match self {
-            Checker::Elaborator => <curios_elab::Error as Variants>::NAMES,
-            Checker::Certifier => <curios_cert::Error as Variants>::NAMES,
-        }
-    }
-}
-
-impl fmt::Display for Checker {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Checker::Elaborator => "elaborator",
-            Checker::Certifier => "certifier",
-        })
-    }
-}
-
-/// One refusal a witness met, as the checker that made it raised it.
-#[derive(Debug)]
-pub enum Refusal {
-    /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
-    Text(String),
-    /// Core text no checker reads: one that does not parse, one the reader cannot make a module of, or one closing otherwise than with a term stating no type. On the board a text that has rotted, which no expectation meets. Held as the reader reports it, at the place it stands where it names one.
-    Unread(String),
-    /// The elaborator's error, with the diagnostic a compilation prints for it.
-    Elaborator {
-        error: curios_elab::Error,
-        reported: String,
-    },
-    /// The certifier's refusal, and the item or registry entry it refused.
-    Certifier(Verdict),
-    /// A history stopped at the step of the unit claiming `mount` by what names no checker's error, held as it was reported: a program refused as a build reports it, a unit erasure refused, or the history's store. No expectation meets it, so a fix that refuses a unit before the proof writes that unit as Core text.
-    Stopped { mount: String, reported: String },
-}
-
-/// Where a refusal stands, as a report says it: in the declaration it names by its path, or at the closing term.
-pub fn standing_at(name: Option<&Global>) -> String {
-    match name {
-        None => "at the closing term".to_string(),
-        Some(Global::Authored(path)) => {
-            format!("in `/{}`", path.iter().collect::<Vec<_>>().join("/"))
-        }
-        Some(Global::Witness(_)) => "in a witness".to_string(),
-    }
-}
-
-impl Refusal {
-    /// The checker that made it, where the refusal names one.
-    pub fn by(&self) -> Option<Checker> {
-        match self {
-            Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
-            Refusal::Certifier(_) => Some(Checker::Certifier),
-            Refusal::Unread(_) | Refusal::Stopped { .. } => None,
-        }
-    }
-
-    /// The checker and the errors it raised, by variant and by where each stands: what a report notes beside a witness, and what an expectation that names an error is written from.
-    pub fn named(&self) -> String {
-        match self {
-            Refusal::Text(_) => "text".to_string(),
-            Refusal::Unread(_) => "text".to_string(),
-            Refusal::Elaborator { error, .. } => {
-                let mut variants = error
-                    .each()
-                    .map(|member| {
-                        format!(
-                            "`{}` {}",
-                            member.raised().variant_name(),
-                            standing_at(member.declared_in())
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                variants.dedup();
-
-                format!("elaborator {}", variants.join(" "))
-            }
-            Refusal::Certifier(verdict) => format!(
-                "certifier `{}` {}",
-                verdict.error.variant_name(),
-                standing_at(verdict.name.as_ref())
-            ),
-            Refusal::Stopped { mount, .. } => format!("the step of `/{mount}`"),
-        }
-    }
-}
-
-/// What the refusal says, as a compilation prints it.
-impl fmt::Display for Refusal {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Refusal::Text(reported)
-            | Refusal::Unread(reported)
-            | Refusal::Elaborator { reported, .. }
-            | Refusal::Stopped { reported, .. } => formatter.write_str(reported),
-            Refusal::Certifier(verdict) => {
-                write!(
-                    formatter,
-                    "{}",
-                    verdict.error.rendered(&Spelling::default())
-                )
-            }
-        }
-    }
-}
 
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
 pub enum Answer {
-    /// Refused before a module existed for the certifier to judge: by the program's text, by the elaborator while it was building one, or by Core text no checker reads; or a history stopped by what names no checker, which says nothing of whether the certifier was asked.
-    Unbuilt(Refusal),
-    /// Judged by the certifier, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
-    Judged(Vec<Refusal>),
+    /// What the checkers said of the proof put at `False`, or of a step's unit the certifier refused, which stops a history there.
+    Put(curios_pipeline::Answer),
+    /// Kept from the checkers' judgment at `False`: a text no checker read, the proof's or a step's, or a history stopped at a step by what names no checker's error.
+    Stopped(Stop),
+}
+
+/// What kept a witness from the checkers' judgment at `False`, as it was reported. No expectation meets it: on the board it is a text that has rotted, or a fix that refuses an earlier unit by no checker's error, which a witness writes as Core text instead.
+#[derive(Debug)]
+pub struct Stop {
+    /// Where it stopped, as a report names it: `text` for one no checker read, or the step of the unit it stopped at.
+    pub at: String,
+    pub reported: String,
+    /// Whether the certifier judged a unit on the way: one a step wrote, admitted before erasure refused it.
+    pub judged: bool,
 }
 
 impl Answer {
-    /// Every refusal the witness met.
+    /// Every refusal a checker made: none for a stop.
     pub fn refusals(&self) -> &[Refusal] {
         match self {
-            Answer::Unbuilt(refusal) => std::slice::from_ref(refusal),
-            Answer::Judged(refusals) => refusals,
+            Answer::Put(answer) => answer.refusals(),
+            Answer::Stopped(_) => &[],
         }
     }
 
     /// Whether every checker accepted the term at `False`: a forgery.
     pub fn admitted(&self) -> bool {
-        self.refusals().is_empty()
+        match self {
+            Answer::Put(answer) => answer.admitted(),
+            Answer::Stopped(_) => false,
+        }
     }
 
-    /// Whether the certifier judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
+    /// Whether the certifier judged the witness: always for a module put, for a program only where the elaborator built one to hand it, and for a history stopped by erasure at the unit it admitted.
     pub fn certifier_asked(&self) -> bool {
-        matches!(self, Answer::Judged(_))
+        match self {
+            Answer::Put(answer) => answer.certifier_asked(),
+            Answer::Stopped(stop) => stop.judged,
+        }
+    }
+
+    /// Who refused the witness and by which error, as a report notes it beside the witness, or where it stopped.
+    pub fn refusers(&self) -> String {
+        match self {
+            Answer::Put(answer) => answer.refusers(),
+            Answer::Stopped(stop) => stop.at.clone(),
+        }
     }
 }
 
-/// Put a source program to both checkers as a proof of `False`, over `predecessors`: the elaborator, then the certifier over the module it built. The pipeline states the type; nothing here or in the program chooses it.
-///
-/// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the certifier to judge. A refusal while the module is being built leaves the certifier nothing to judge.
-fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
-    let entrypoint = match source.parse::<curios_surface::Entrypoint>() {
-        Ok(entrypoint) => entrypoint,
-        Err(error) => return Answer::Unbuilt(Refusal::Text(format!("{error:?}"))),
-    };
+/// Put `proof` at `False` over `predecessors` through the product's put. `Err` is its text put to no checker, as it was reported: a program that does not parse or lower, or Core text that does not read or closes with no term.
+fn put_proof(predecessors: Predecessors<'_>, proof: &Proof) -> Result<Put, String> {
+    let put = match proof {
+        Proof::Program(text) => {
+            let entrypoint = Entrypoint::parse(&Source::inline(text.as_str()))
+                .map_err(|error| error.report().render())?;
 
-    match examine_entrypoint(
-        DEFAULT_BUDGET,
-        predecessors,
-        &SYNTAX,
-        &entrypoint,
-        &RootSource::none(),
-        EntryTail::False,
-    ) {
-        Err(refused) => Answer::Unbuilt(match refused.error {
-            Some(error) => Refusal::Elaborator {
-                error: *error,
-                reported: refused.reported.into(),
-            },
-            None => Refusal::Text(refused.reported.into()),
-        }),
-        Ok(Examined {
-            obligations,
-            verdicts,
-        }) => Answer::Judged(
-            obligations
-                .into_iter()
-                .map(|obligation| Refusal::Elaborator {
-                    error: obligation.error,
-                    reported: Report::render_all(&obligation.reported),
-                })
-                .chain(
-                    verdicts
-                        .into_iter()
-                        .map(|refuted| Refusal::Certifier(refuted.verdict)),
-                )
-                .collect(),
+            put_program(
+                DEFAULT_BUDGET,
+                predecessors,
+                &SYNTAX,
+                &entrypoint,
+                &RootSource::none(),
+            )
+            .map(Some)
+        }
+        Proof::Module(text) => put_core_text(
+            DEFAULT_BUDGET,
+            predecessors,
+            &SYNTAX,
+            &Source::inline(text.as_str()),
         ),
-    }
+    };
+
+    put.map_err(String::from)?
+        .ok_or_else(|| "the text closes with no term to put".to_string())
 }
 
-/// Read `text` as Core text over `predecessors`, through the product's door, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term but `False`: the board states it, and what elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
-fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
-    let scope = FormScope::over(SYNTAX, predecessors.cores());
-    let empty = Term::instance(false_name(), Universes::default());
-    let read = match read_core_text(&Source::inline(text), &scope, &empty) {
-        Ok(read) => read,
-        Err(Unread::Parse(report)) => return Answer::Unbuilt(Refusal::Unread(report.render())),
-        Err(Unread::Read(error)) => return Answer::Unbuilt(Refusal::Unread(located(&error))),
-    };
-    let Some(entrypoint) = read.entry else {
-        return Answer::Unbuilt(Refusal::Unread(
-            "the text closes with no term to put".to_string(),
-        ));
-    };
-    let program = Program {
-        definitions: read.definitions,
-        entrypoint,
-    };
-    let (rechecked, _) = certify_program(&program, DEFAULT_BUDGET, &globals(predecessors), SYNTAX);
-
-    Answer::Judged(
-        rechecked
-            .into_verdicts()
-            .into_iter()
-            .map(Refusal::Certifier)
-            .collect(),
-    )
+/// The certifier's own words for `verdict`, on no place: what a report quotes of a certifier's refusal, and what a step's refusal is reported as, its reading being the history's.
+pub fn words(verdict: &Verdict) -> String {
+    verdict.error.rendered(&Spelling::default()).to_string()
 }
 
 /// The reader's refusal, at the place in the text it stands where it names one.
@@ -270,38 +127,53 @@ pub fn put(steps: &[Step], proof: &Proof) -> Answer {
     }
 
     history
-        .built(|predecessors| match proof {
-            Proof::Program(source) => put_program(predecessors, source),
-            Proof::Module(text) => put_core_text(predecessors, text),
+        .built(|predecessors| match put_proof(predecessors, proof) {
+            Ok(put) => Answer::Put(put.answer),
+            Err(reported) => unread(reported),
         })
         .unwrap_or_else(halted)
+}
+
+/// A text no checker read, as it was reported.
+fn unread(reported: String) -> Answer {
+    Answer::Stopped(Stop {
+        at: "text".to_string(),
+        reported,
+        judged: false,
+    })
 }
 
 /// What a history that stopped before its proof answered: the refusal of the step it stopped at, as the checker that made it raised it where one did.
 fn halted(Stopped { mount, why }: Stopped) -> Answer {
     let at = |reported: String| format!("in the step of `/{mount}`: {reported}");
+    let step = |reported: String, judged: bool| {
+        Answer::Stopped(Stop {
+            at: format!("the step of `/{mount}`"),
+            reported,
+            judged,
+        })
+    };
     match why {
-        Unbuilt::Unparsed(reported) => Answer::Unbuilt(Refusal::Unread(at(reported))),
-        Unbuilt::Read(error) => Answer::Unbuilt(Refusal::Unread(at(located(&error)))),
+        Unbuilt::Unparsed(reported) => unread(at(reported)),
+        Unbuilt::Read(error) => unread(at(located(&error))),
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
-            Answer::Judged(vec![Refusal::Certifier(*verdict)])
+            Answer::Put(curios_pipeline::Answer::Judged(vec![Refusal::Certifier {
+                reported: words(&verdict),
+                verdict: *verdict,
+            }]))
         }
-        Unbuilt::Unmade(Unmade::Erased(error)) => Answer::Judged(vec![Refusal::Stopped {
-            mount,
-            reported: format!("{error:?}"),
-        }]),
-        Unbuilt::Compiled(error) => Answer::Unbuilt(Refusal::Stopped {
-            mount,
-            reported: error.to_string(),
-        }),
-        Unbuilt::Stored(reported) => Answer::Unbuilt(Refusal::Stopped { mount, reported }),
+        Unbuilt::Unmade(Unmade::Erased(error)) => step(format!("{error:?}"), true),
+        Unbuilt::Compiled(error) => step(error.to_string(), false),
+        Unbuilt::Stored(reported) => step(reported, false),
     }
 }
 
 impl Proof {
-    /// Put the proof to the checkers at `False` over the prelude alone.
-    pub fn answer(&self) -> Answer {
-        put(&[], self)
+    /// Put the proof at `False` over the prelude alone, as `curios wonder --false` puts it: `Err` is its text, put to no checker, as it was reported.
+    pub fn put(&self) -> Result<Put, String> {
+        History::new()
+            .built(|predecessors| put_proof(predecessors, self))
+            .expect("a history of no step builds")
     }
 }
 

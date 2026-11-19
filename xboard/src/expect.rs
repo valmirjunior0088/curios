@@ -1,9 +1,10 @@
 //! The refusal a witness expects once its flaw is closed, and whether what the checkers said meets it.
 
 use {
-    crate::{Answer, Checker, Refusal, Witness, standing_at},
+    crate::{Answer, Witness, words},
     curios_common::{Qualifier, Variants},
     curios_core::Global,
+    curios_pipeline::{Checker, Refusal, standing_at},
     std::fmt,
 };
 
@@ -49,7 +50,7 @@ impl Expected {
                     named(member.raised().variant_name()) && stands(member.declared_in())
                 })
             }
-            (Checker::Certifier, Refusal::Certifier(verdict)) => {
+            (Checker::Certifier, Refusal::Certifier { verdict, .. }) => {
                 named(verdict.error.variant_name()) && stands(verdict.name.as_ref())
             }
             _ => false,
@@ -71,13 +72,28 @@ impl fmt::Display for Expected {
     }
 }
 
-/// What a refusal says, on one line, with the checker and error it is.
-fn said(refusal: &Refusal) -> String {
-    let reported = refusal.to_string();
+/// What `answer` says nearest to a refusal by `by`, on one line, with what said it: that checker's first refusal, else the first any checker made, else where the witness stopped. A certifier's refusal is quoted in its own words, which its report places beneath a heading.
+fn nearest(answer: &Answer, by: Checker) -> String {
+    let (named, reported) = match answer {
+        Answer::Stopped(stop) => (stop.at.clone(), stop.reported.clone()),
+        Answer::Put(put) => {
+            let refusals = put.refusals();
+            match refusals
+                .iter()
+                .find(|refusal| refusal.by() == by)
+                .or(refusals.first())
+            {
+                Some(refusal @ Refusal::Certifier { verdict, .. }) => {
+                    (refusal.named(), words(verdict))
+                }
+                Some(refusal) => (refusal.named(), refusal.to_string()),
+                None => return "admitted".to_string(),
+            }
+        }
+    };
 
     format!(
-        "{} says {}",
-        refusal.named(),
+        "{named} says {}",
         reported.lines().next().unwrap_or_default()
     )
 }
@@ -85,26 +101,22 @@ fn said(refusal: &Refusal) -> String {
 impl Witness {
     /// What keeps `answer` from being the refusal the witness expects, or nothing.
     pub fn unmet(&self, answer: &Answer) -> Option<String> {
-        let refusals = answer.refusals();
-        let [first, ..] = refusals else {
+        if answer.admitted() {
             return Some("admitted".to_string());
-        };
+        }
+        let refusals = answer.refusals();
 
         self.expect
             .iter()
             .find(|expected| !refusals.iter().any(|refusal| expected.meets(refusal)))
             .map(|expected| {
                 let asked = expected.by != Checker::Certifier || answer.certifier_asked();
-                let nearest = refusals
-                    .iter()
-                    .find(|refusal| refusal.by() == Some(expected.by))
-                    .unwrap_or(first);
+                let nearest = nearest(answer, expected.by);
 
                 match asked {
-                    true => format!("refused, but not by {expected}: the {}", said(nearest)),
+                    true => format!("refused, but not by {expected}: the {nearest}"),
                     false => format!(
-                        "refused, but not by {expected}, which was not asked: the {}",
-                        said(nearest)
+                        "refused, but not by {expected}, which was not asked: the {nearest}"
                     ),
                 }
             })

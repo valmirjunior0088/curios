@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    crate::{Answer, Archived, Part, Refusal, Status, Ticket, Witness},
+    crate::{Answer, Archived, Part, Status, Ticket, Witness},
     std::fmt,
 };
 
@@ -123,7 +123,7 @@ impl fmt::Display for Row<'_> {
         )?;
         writeln!(formatter, "             part     {}", self.part)?;
         for (witness, answer) in self.ticket.witnesses.iter().zip(&self.answers) {
-            writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
+            writeln!(formatter, "             {witness} [{}]", answer.refusers())?;
         }
         if let Standing::Regressed(problems) | Standing::Unshown(problems) = &self.standing {
             for problem in problems {
@@ -183,23 +183,6 @@ impl<'b> Report<'b> {
 
     fn count(&self, wanted: fn(&Standing) -> bool) -> usize {
         self.rows.iter().filter(|row| wanted(&row.standing)).count()
-    }
-}
-
-/// Who refused a witness and by which error, as a report notes it beside the witness.
-pub fn refusers(answer: &Answer) -> String {
-    match answer.admitted() {
-        true => "admitted".to_string(),
-        false => {
-            let mut named = answer
-                .refusals()
-                .iter()
-                .map(Refusal::named)
-                .collect::<Vec<_>>();
-            named.dedup();
-
-            named.join(", ")
-        }
     }
 }
 

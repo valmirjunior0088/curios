@@ -1,7 +1,12 @@
 //! Where a ticket stands for what its witnesses answered.
 
 use {
-    super::*, crate::*, curios_cert::Verdict, curios_common::Qualifier, curios_core::Global,
+    super::*,
+    crate::*,
+    curios_cert::Verdict,
+    curios_common::Qualifier,
+    curios_core::Global,
+    curios_pipeline::{Checker, Refusal},
     std::slice,
 };
 
@@ -20,21 +25,34 @@ fn forged() -> Witness {
     }
 }
 
+/// What the checkers said of a witness put to them, every refusal either made.
+fn judged(refusals: Vec<Refusal>) -> Answer {
+    Answer::Put(curios_pipeline::Answer::Judged(refusals))
+}
+
+/// The certifier's refusal by `verdict`, reported in its own words.
+fn refusal_of(verdict: Verdict) -> Refusal {
+    Refusal::Certifier {
+        reported: words(&verdict),
+        verdict,
+    }
+}
+
 fn admitted() -> Answer {
-    Answer::Judged(Vec::new())
+    judged(Vec::new())
 }
 
 /// The certifier's refusal of the entry by `error`.
 fn by_certifier(error: curios_cert::Error) -> Answer {
-    Answer::Judged(vec![Refusal::Certifier(Verdict { name: None, error })])
+    judged(vec![refusal_of(Verdict { name: None, error })])
 }
 
 /// The elaborator's refusal by `error`, while it was still building the module.
 fn by_elaborator(error: curios_elab::Error) -> Answer {
-    Answer::Unbuilt(Refusal::Elaborator {
+    Answer::Put(curios_pipeline::Answer::Unbuilt(Refusal::Elaborator {
         error,
         reported: "a diagnostic".to_string(),
-    })
+    }))
 }
 
 #[test]
@@ -97,12 +115,12 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
         Standing::Regressed(_)
     ));
 
-    let refused_by_both = Answer::Judged(vec![
+    let refused_by_both = judged(vec![
         Refusal::Elaborator {
             error: curios_elab::Error::Poisoned,
             reported: "a diagnostic".to_string(),
         },
-        Refusal::Certifier(Verdict {
+        refusal_of(Verdict {
             name: None,
             error: curios_cert::Error::UntypedEntry,
         }),
@@ -173,7 +191,7 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
         )],
         ..forged()
     };
-    let in_g = Answer::Judged(vec![Refusal::Certifier(Verdict {
+    let in_g = judged(vec![refusal_of(Verdict {
         name: Some(declared("g")),
         error: curios_cert::Error::UntypedEntry,
     })]);

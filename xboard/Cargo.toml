@@ -8,28 +8,32 @@ description = "The soundness board: every flaw found in the Curios checkers as a
 [lints]
 workspace = true
 
-# Over the pipeline and the certifier, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
+# Over the pipeline, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
 [dependencies]
-# The module a witness built by hand is read to, and the term it closes with.
+# The declaration a refusal stands in, which an expected one names.
 curios-core = { workspace = true }
 # The qualified name an expected refusal stands in, the report a reader's refusal is located by, and the trait each checker's errors are named through.
-curios-common = { workspace = true, features = ["test-support"] }
-# The error a witness expects of the certifier, and every one's name.
-curios-cert = { workspace = true, features = ["test-support"] }
-# The error a witness expects of the elaborator, and every one's name.
-curios-elab = { workspace = true, features = ["test-support"] }
-# A program put to both checkers as a compilation puts it, and a module built by hand read through the product's door and put to the certifier, over the units in scope.
+curios-common = { workspace = true }
+# The budget a witness is put under.
+curios-elab = { workspace = true }
+# The certifier's refusal of a step's unit, which stops a history, quoted in its own words.
+curios-cert = { workspace = true }
+# The product's put at `False`, `wonder --false`'s: a program to both checkers as a compilation puts it, a module built by hand read through the product's door and put to the certifier, over the units in scope, and what each checker said.
 curios-pipeline = { workspace = true }
 # A witness's history: its steps walked over a store of their own, and the units in scope its proof is put over.
 curios-verdict = { workspace = true, features = ["test-support"] }
 # The units in scope, as the history hands them to the proof's put.
 curios-unit = { workspace = true }
-# The registry's name for `False`, which a module built by hand is put at.
+# The registry the product's put reads, and the empty scope a program witness is lowered over.
 curios-module = { workspace = true }
-# The program a witness's text is parsed as, the reader that makes a module of one written as Core text, and the spelling a certifier's refusal is printed in.
+# The program a witness's text is parsed as, the reader's refusal a history's step is stopped by, and the form a text is written in.
 curios-surface = { workspace = true }
 # The binary's subcommands, `report` and `probe`.
 clap = { workspace = true }
 # The board's records, each a `metadata.toml`.
 serde = { workspace = true }
 toml = { workspace = true }
+
+[dev-dependencies]
+# A directory of its own for the suite's board.
+curios-common = { workspace = true, features = ["test-support"] }

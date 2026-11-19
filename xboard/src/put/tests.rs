@@ -3,7 +3,9 @@
 use {
     super::*,
     crate::*,
-    curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Term},
+    curios_cert::certify_program,
+    curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Program, Term},
+    curios_pipeline::{Checker, globals},
     curios_surface::WrittenIn,
 };
 
@@ -25,7 +27,7 @@ fn a_program_whose_tail_proves_something_else_is_refused_at_false() {
         }],
     };
 
-    assert_eq!(witness.unmet(&witness.proof.answer()), None);
+    assert_eq!(witness.unmet(&put(&[], &witness.proof)), None);
 }
 
 #[test]
@@ -60,7 +62,7 @@ fn a_module_whose_term_proves_nothing_is_refused_at_false() {
         }],
     };
 
-    assert_eq!(witness.unmet(&witness.proof.answer()), None);
+    assert_eq!(witness.unmet(&put(&[], &witness.proof)), None);
 }
 
 /// A construction no type of the trusted base can hold still parses, but the reader makes no module of it, so no checker reads it: a live witness written so has rotted, as one that does not parse has, and no expectation meets it.
@@ -76,37 +78,38 @@ fn core_text_the_reader_cannot_build_is_read_by_no_checker() {
             within: None,
         }],
     };
-    let answer = witness.proof.answer();
+    let answer = put(&[], &witness.proof);
 
-    assert!(matches!(answer, Answer::Unbuilt(Refusal::Unread(_))) && !answer.certifier_asked());
+    assert!(matches!(&answer, Answer::Stopped(Stop { at, .. }) if at == "text"));
+    assert!(!answer.certifier_asked());
     assert!(witness.unmet(&answer).is_some());
 }
 
 /// A text that does not parse has rotted, and no expectation meets it, so it fails whatever its witness expects.
 #[test]
 fn core_text_that_does_not_parse_is_read_by_no_checker() {
-    let answer = Proof::Module("let".to_string()).answer();
+    let answer = put(&[], &Proof::Module("let".to_string()));
 
     assert!(!answer.certifier_asked());
-    assert!(matches!(answer.refusals(), [refusal] if refusal.by().is_none()));
+    assert!(matches!(&answer, Answer::Stopped(Stop { at, .. }) if at == "text"));
 }
 
 /// The board puts the term at `False`, so a text stating another type for it is refused by the reader, as the product's door refuses it, and one stating `False` is put as one stating nothing is.
 #[test]
 fn core_text_that_states_another_type_for_its_term_is_refused_by_the_reader() {
-    let answer = Proof::Module("0\n: #NatType".to_string()).answer();
+    let answer = put(&[], &Proof::Module("0\n: #NatType".to_string()));
 
     assert!(!answer.certifier_asked());
     assert!(
-        matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.contains("states a type"))
+        matches!(&answer, Answer::Stopped(Stop { at, reported, .. }) if at == "text" && reported.contains("states a type"))
     );
 
-    let stated = Proof::Module("0\n: /sys/Bool/False".to_string()).answer();
+    let stated = put(&[], &Proof::Module("0\n: /sys/Bool/False".to_string()));
     assert!(stated.certifier_asked());
     assert!(
         !stated.refusals().is_empty()
             && stated.refusals().iter().all(
-                |refusal| matches!(refusal, Refusal::Certifier(verdict) if verdict.name.is_none())
+                |refusal| matches!(refusal, Refusal::Certifier { verdict, .. } if verdict.name.is_none())
             ),
         "{:?}",
         stated.refusals()
@@ -186,7 +189,7 @@ fn a_step_the_reader_refuses_stops_the_history_and_says_where() {
 
     assert!(!answer.certifier_asked());
     assert!(
-        matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.starts_with("in the step of `/lib`"))
+        matches!(&answer, Answer::Stopped(Stop { at, reported, .. }) if at == "text" && reported.starts_with("in the step of `/lib`"))
     );
 }
 
@@ -210,7 +213,38 @@ fn a_program_step_refused_stops_the_history_by_no_checker() {
     let answer = witness.answer();
 
     assert!(
-        matches!(answer.refusals(), [refusal @ Refusal::Stopped { mount, .. }] if mount == "lib" && refusal.by().is_none())
+        matches!(&answer, Answer::Stopped(Stop { at, judged: false, .. }) if at == "the step of `/lib`")
     );
     assert!(witness.unmet(&answer).is_some());
+}
+
+/// A proof on no ticket is put as `curios wonder --false` puts it, and answered in that query's text: a program to both checkers, a module to the certifier alone.
+#[test]
+fn a_proof_on_no_ticket_is_answered_as_the_product_answers_it() {
+    let program = Proof::Program("/std/Bool/True/qed()".to_string())
+        .put()
+        .expect("the program lowers");
+    let module = Proof::Module("0".to_string())
+        .put()
+        .expect("the text reads");
+
+    assert!(
+        program
+            .to_string()
+            .starts_with("REFUSED    by elaborator `TypeMismatch` at the closing term\n"),
+        "{program}"
+    );
+    assert!(
+        module.to_string().starts_with(
+            "REFUSED    by certifier `Mismatch` at the closing term\n           certifier   refused\n"
+        ),
+        "{module}"
+    );
+}
+
+/// A text no checker reads is put to none: the probe declines it rather than refuse it.
+#[test]
+fn a_proof_whose_text_does_not_read_is_put_to_no_checker() {
+    assert!(Proof::Program("let".to_string()).put().is_err());
+    assert!(Proof::Module("let".to_string()).put().is_err());
 }

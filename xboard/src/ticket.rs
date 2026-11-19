@@ -1,7 +1,8 @@
 //! What is written on the board: a part of the judgment, the tickets filed under it, and the witnesses each carries, as the loader reads them off their records.
 
 use {
-    crate::{Checker, Date, Expected},
+    crate::{Date, Expected},
+    curios_pipeline::Checker,
     curios_surface::WrittenIn,
     serde::Deserialize,
     std::fmt,
@@ -83,11 +84,11 @@ impl Step {
             Step::Unit {
                 written: WrittenIn::Program,
                 ..
-            } => &[Checker::Elaborator, Checker::Certifier],
+            } => Checker::PROGRAM,
             Step::Unit {
                 written: WrittenIn::CoreText,
                 ..
-            } => &[Checker::Certifier],
+            } => Checker::CORE_TEXT,
             Step::Unmount { .. } => &[],
         }
     }
@@ -111,8 +112,9 @@ impl Witness {
             .chain(self.proof.asked().iter().copied())
             .collect::<Vec<_>>();
 
-        [Checker::Elaborator, Checker::Certifier]
-            .into_iter()
+        Checker::PROGRAM
+            .iter()
+            .copied()
             .filter(|checker| asked.contains(checker))
             .collect()
     }
@@ -138,8 +140,8 @@ impl Proof {
     /// What the proof is put to, in the order it meets them: for a program the elaborator that builds its module, then the certifier; for a module the certifier alone.
     pub fn asked(&self) -> &'static [Checker] {
         match self {
-            Proof::Program(_) => &[Checker::Elaborator, Checker::Certifier],
-            Proof::Module(_) => &[Checker::Certifier],
+            Proof::Program(_) => Checker::PROGRAM,
+            Proof::Module(_) => Checker::CORE_TEXT,
         }
     }
 }
