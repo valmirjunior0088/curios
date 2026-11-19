@@ -449,41 +449,63 @@ pub fn continuation_entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Opt
 pub fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
     nodes_from(module, module.function(function).unwrap().body)
 }
+/// The nodes `body` reaches, ascending. A body reaches each node once, as the verifier holds ([`Module::node_owners`]), so the walk keeps no record of where it has been and sorts what it met: a node met twice is answered once, and a walk meeting more nodes than the module holds, which only links that loop can make, walks again keeping its record.
 pub fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
+    let bound = module.nodes().len();
+    let mut found = Vec::new();
+    let mut work = vec![body];
+    while let Some(node_id) = work.pop() {
+        if found.len() > bound {
+            return nodes_from_recorded(module, body);
+        }
+        found.push(node_id);
+        successors(module, node_id, &mut work);
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// [`nodes_from`], recording each node it meets so that it meets none again.
+fn nodes_from_recorded(module: &Module, body: NodeId) -> Vec<NodeId> {
     let mut found = BTreeSet::new();
     let mut work = vec![body];
     while let Some(node_id) = work.pop() {
-        if !found.insert(node_id) {
-            continue;
-        }
-        match module.node(node_id).unwrap() {
-            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => work.push(*next),
-            Node::LetFun { body, .. } => work.push(*body),
-            Node::LetCont {
-                continuations,
-                body,
-            } => {
-                work.push(*body);
-                for continuation in continuations.iter().rev() {
-                    // Tolerate a tombstoned continuation: an inline sweep can leave a `LetCont` transiently referencing an inlined-away continuation until its sweep-ending prune. That continuation's body is dead, so skipping it is correct.
-                    if let Some(continuation) = module.continuation(*continuation) {
-                        work.push(continuation.body);
-                    }
-                }
-            }
-            Node::ApplyFun { .. }
-            | Node::ApplyCont(_)
-            | Node::Switch { .. }
-            | Node::Foreign { .. }
-            | Node::Cell { .. }
-            | Node::Channel { .. }
-            | Node::Intrinsic { .. }
-            | Node::Halt { .. }
-            | Node::Panic(_)
-            | Node::Unreachable => {}
+        if found.insert(node_id) {
+            successors(module, node_id, &mut work);
         }
     }
     found.into_iter().collect()
+}
+
+/// Queue on `work` the nodes `node_id` leads to within its body.
+fn successors(module: &Module, node_id: NodeId, work: &mut Vec<NodeId>) {
+    match module.node(node_id).unwrap() {
+        Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => work.push(*next),
+        Node::LetFun { body, .. } => work.push(*body),
+        Node::LetCont {
+            continuations,
+            body,
+        } => {
+            work.push(*body);
+            for continuation in continuations.iter().rev() {
+                // Tolerate a tombstoned continuation: an inline sweep can leave a `LetCont` transiently referencing an inlined-away continuation until its sweep-ending prune. That continuation's body is dead, so skipping it is correct.
+                if let Some(continuation) = module.continuation(*continuation) {
+                    work.push(continuation.body);
+                }
+            }
+        }
+        Node::ApplyFun { .. }
+        | Node::ApplyCont(_)
+        | Node::Switch { .. }
+        | Node::Foreign { .. }
+        | Node::Cell { .. }
+        | Node::Channel { .. }
+        | Node::Intrinsic { .. }
+        | Node::Halt { .. }
+        | Node::Panic(_)
+        | Node::Unreachable => {}
+    }
 }
 pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut known = BTreeMap::new();

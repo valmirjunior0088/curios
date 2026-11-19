@@ -7,6 +7,41 @@ use {
     std::collections::BTreeMap,
 };
 
+/// A body reaches each node once in a module the verifier holds; where its links meet or loop, as no such module's do, its walk still answers each node it reaches once, ascending.
+#[test]
+fn a_body_whose_links_meet_or_loop_is_walked_to_each_node_once() {
+    let mut module = Module::new();
+    let end = module.add_node(Node::Unreachable);
+    let continuation = module.reserve_continuation();
+    module.define_continuation(
+        continuation,
+        Continuation {
+            lineage: None,
+            debug_name: None,
+            params: Vec::new(),
+            body: end,
+            terminates: false,
+        },
+    );
+    let meeting = module.add_node(Node::LetCont {
+        continuations: vec![continuation],
+        body: end,
+    });
+    let looping = module.reserve_node();
+    let result = module.add_value(None);
+    module.define_node(
+        looping,
+        Node::LetValue {
+            result,
+            value: ValueExpr::Literal(Literal::Nat(Natural::zero())),
+            next: looping,
+        },
+    );
+
+    assert_eq!(nodes_from(&module, meeting), vec![end, meeting]);
+    assert_eq!(nodes_from(&module, looping), vec![looping]);
+}
+
 /// Two functions in one group, each applying its own parameter and passing a reference onward: `a(p) = p(b)`, and `b(q) = q(a)` when `mutual`, else `b(q) = q(1)`. `main` calls `a(b)`. Neither ever calls the other by name, so the knot exists only in the references — which is the whole point.
 fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, FunctionId) {
     let mut module = Module::new();

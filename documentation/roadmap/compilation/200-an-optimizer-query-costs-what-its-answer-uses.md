@@ -6,7 +6,7 @@ The next step is stage 1, each narrowing prototyped and counted; stage 2 waits o
 
 ## What is missing
 
-**A fact is built for readers that never read it.** `analyze_calls` (`curios-cps/src/analysis.rs`) builds, wherever a pass asks it of a module written since, the call sites, the body-only call graph and its components, the owner of each known call and `LetFun`, the escapes, and recursion closed under definition. The components are read by known-value propagation and component specialization alone; recursion by those two, the inliner and the shrinker; and the shrinker, which reads recursion alone, builds all of it. Every body is collected into a set before it is walked.
+**A fact is built for readers that never read it.** `analyze_calls` (`curios-cps/src/analysis.rs`) builds, wherever a pass asks it of a module written since, the call sites, the body-only call graph and its components, the owner of each known call and `LetFun`, the escapes, and recursion closed under definition. The components are read by known-value propagation and component specialization alone; recursion by those two, the inliner and the shrinker; and the shrinker, which reads recursion alone, builds all of it.
 
 **A bounded copy enumerates before it declines.** `CopyPlan::limited` (`curios-cps/src/optimize/clone.rs`) checks the distinct-node allowance when a pending body is popped, but a visited `LetFun` first reads every defined member, inserts its identity in `nested` and queues its body, and a `LetCont` likewise its complete group, so a request allowed sixteen nodes can enumerate thousands of members before its seventeenth node refuses it. Synthetic wide-group controls establish the shape; no program measured supplies one (*What is known*). It is the documented qualification of [bounded copy admission](../../../curios-cps/README.md#a-copy-is-planned-within-its-allowance), not a violation of its copied-node ceiling.
 
@@ -36,7 +36,7 @@ The next step is stage 1, each narrowing prototyped and counted; stage 2 waits o
 
 ## Stages
 
-1. **The narrowings worth taking.** Each prototyped over the module's filed facts and counted, and taken where it pays a percent: recursion closed only for its readers; a body walked without collecting it into a set first. Check: the optimized CPS and both Wasm artifacts byte-equal over the corpus; the counted saving.
+1. **The narrowings worth taking.** Each prototyped over the module's filed facts and counted, and taken where it pays a percent: recursion closed only for its readers. Check: the optimized CPS and both Wasm artifacts byte-equal over the corpus; the counted saving.
 2. **A bounded copy stops at its allowance.** Waits for a consumer: attribution naming a program whose compilation pays for group enumeration. Then group bodies enumerated incrementally in the shared planner, counted against the allowance as an effort counter is, keeping complete successful extents, deduplication and fresh-plan execution; no second fuel limit, and no change to which copies fit. Check: counted group-member enumeration and pending work over doubling groups, identical exact-limit plans and nested captures, unchanged consumer artifacts and scheduling.
 
 ## Verification
