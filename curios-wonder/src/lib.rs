@@ -32,8 +32,8 @@ use stage::*;
 mod named;
 use named::*;
 pub use named::{
-    Answer, Declaration, Described, Fact, Named, Placed, Stands, Witnessed, Written, described,
-    placed,
+    Answer, Declaration, Described, Fact, Local, Named, Placed, Stands, Witnessed, Written,
+    described, placed,
 };
 
 mod footprint;

@@ -23,9 +23,10 @@ use {
     curios_core::{
         Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
         Intrinsic, Item, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths,
-        WitnessKey,
+        WitnessKey, WrittenBinder,
     },
     curios_document::{Documentation, ModuleDocumentation},
+    curios_elab::Traces,
     curios_module::{Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity},
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
@@ -42,6 +43,7 @@ use {
         path::{Path, PathBuf},
         ptr,
         rc::Rc,
+        sync::Arc,
     },
 };
 
@@ -119,6 +121,23 @@ pub struct Written {
     pub terms: Vec<Span>,
     /// The type of each declaration the text names, spelled for a reader standing in the text: none for one no compilation typed.
     pub types: BTreeMap<Global, String>,
+    /// Each place a written binder of the text is bound at or read, in no order: where it is bound from the lowering, where it is read from what elaboration settled ([`Placed::establish`]).
+    pub locals: Vec<Local>,
+    /// Where each written binder of the text is bound.
+    pub bound: BTreeMap<WrittenBinder, Span>,
+    /// The type each written binder was opened at, spelled for a reader standing in the text.
+    pub binders: BTreeMap<WrittenBinder, String>,
+    /// The type each term settled at, by where it stands, spelled for a reader standing in the text: none for a declaration elaboration settled nothing of, and none of the term a program closes with.
+    pub settled: BTreeMap<(usize, usize), String>,
+}
+
+/// One place a written binder is bound at or read, as a question about a place answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Local {
+    pub written: Span,
+    pub binder: WrittenBinder,
+    /// Whether `written` is where the binder is bound, rather than a use of it.
+    pub declares: bool,
 }
 
 /// What a check left of one file: each of its texts with what it writes, and what each declaration they name is answered with, but for its type, which each text spells for its own reader.
@@ -143,8 +162,45 @@ pub enum Stands {
         declares: bool,
         described: Described,
     },
-    /// A term no name stands at, as it is written.
-    Term { written: String },
+    /// A written binder, where it is bound or read: its name, where it is bound, and its type, the one it was opened at where it is bound and the one a use settled at where it is read.
+    Local {
+        declares: bool,
+        name: String,
+        bound: Option<Span>,
+        type_: Option<String>,
+    },
+    /// A term no name stands at, as it is written, and the type it settled at.
+    Term {
+        written: String,
+        type_: Option<String>,
+    },
+}
+
+impl Answer {
+    /// What is stated of what stands here, a fact a line in the order a block states them: a declaration's ([`Described::facts`]), a local's — that it is one, and its type — and a term's type.
+    pub fn facts(&self) -> Vec<Fact> {
+        let typed = |type_: &Option<String>| -> Vec<Fact> {
+            type_
+                .iter()
+                .map(|type_| Fact {
+                    lead: "type:".to_string(),
+                    values: vec![Code(type_).to_string()],
+                })
+                .collect()
+        };
+
+        match &self.stands {
+            Stands::Declaration { described, .. } => described.facts(),
+            Stands::Local { type_, .. } => [Fact {
+                lead: "local".to_string(),
+                values: Vec::new(),
+            }]
+            .into_iter()
+            .chain(typed(type_))
+            .collect(),
+            Stands::Term { type_, .. } => typed(type_),
+        }
+    }
 }
 
 impl Placed {
@@ -162,16 +218,44 @@ impl Placed {
                 },
             });
         }
+        let holds = |span: &Span| span.start <= offset && offset <= span.end;
+        let narrowest = |span: &Span| (span.end - span.start, offset == span.end);
+        if let Some(local) = written
+            .locals
+            .iter()
+            .filter(|local| holds(&local.written))
+            .min_by_key(|local| (narrowest(&local.written), local.declares))
+        {
+            let bound = written.bound.get(&local.binder).cloned();
+            let named = bound.as_ref().unwrap_or(&local.written);
+            let type_ = match local.declares {
+                true => written.binders.get(&local.binder),
+                false => written
+                    .settled
+                    .get(&(local.written.start, local.written.end)),
+            };
+
+            return Some(Answer {
+                range: local.written.clone(),
+                stands: Stands::Local {
+                    declares: local.declares,
+                    name: named.source.text()[named.start..named.end].to_string(),
+                    bound,
+                    type_: type_.cloned(),
+                },
+            });
+        }
         let term = written
             .terms
             .iter()
-            .filter(|term| term.start <= offset && offset <= term.end)
-            .min_by_key(|term| (term.end - term.start, offset == term.end))?;
+            .filter(|term| holds(term))
+            .min_by_key(|term| narrowest(term))?;
 
         Some(Answer {
             range: term.clone(),
             stands: Stands::Term {
                 written: term.source.text()[term.start..term.end].to_string(),
+                type_: written.settled.get(&(term.start, term.end)).cloned(),
             },
         })
     }
@@ -182,13 +266,47 @@ impl Placed {
         scope: &[&Unit],
         own: &PreparedText,
         definitions: &Definitions,
+        traces: &Traces,
         certification: Option<&Certification>,
     ) {
         let saying = Saying::over(scope, own);
         let places = Places::of(definitions);
         let owned = |name: &Global| own.declared_as(name).is_some();
+        let anchors = [own.anchors()];
         for written in &mut self.texts {
             let reader = saying.reader(written.owner);
+            // What elaboration concluded of the declaration written here: the type each place settled at, the binder each local reads, and each binder's type.
+            let concluded = written
+                .owner
+                .and_then(|owner| traces.held(&owner))
+                .map(|record| record.concluded());
+            for settled in concluded.iter().flat_map(|concluded| &concluded.settled) {
+                let Some(at) = settled.at.resolved(&anchors) else {
+                    continue;
+                };
+                if !Arc::ptr_eq(&at.source, &written.text.source)
+                    || at.start < written.text.start
+                    || written.text.end < at.end
+                {
+                    continue;
+                }
+                written.settled.insert(
+                    (at.start, at.end),
+                    settled.type_.spelled(&reader).to_string(),
+                );
+                if let Some(binder) = settled.local {
+                    written.locals.push(Local {
+                        written: at,
+                        binder,
+                        declares: false,
+                    });
+                }
+            }
+            for (binder, type_) in concluded.iter().flat_map(|concluded| &concluded.binders) {
+                written
+                    .binders
+                    .insert(*binder, type_.spelled(&reader).to_string());
+            }
             let named = written
                 .names
                 .iter()
@@ -332,12 +450,36 @@ impl Reading {
                     })
                     .collect();
 
+                // Where each written binder of the declaration written here is bound, read off what its lowering minted.
+                let anchors = [text.anchors()];
+                let minted = match passage.owner() {
+                    Some(owner) => text.minted().of(&owner),
+                    None => &text.minted().entry,
+                };
+                let bound = minted
+                    .written
+                    .iter()
+                    .filter_map(|(binder, at)| Some((*binder, at.resolved(&anchors)?)))
+                    .collect::<BTreeMap<_, _>>();
+                let locals = bound
+                    .iter()
+                    .map(|(binder, at)| Local {
+                        written: at.clone(),
+                        binder: *binder,
+                        declares: true,
+                    })
+                    .collect();
+
                 Written {
                     text: passage.span().clone(),
                     owner: passage.owner(),
                     names,
                     terms: passage.terms(),
                     types,
+                    locals,
+                    bound,
+                    binders: BTreeMap::new(),
+                    settled: BTreeMap::new(),
                 }
             })
             .collect();

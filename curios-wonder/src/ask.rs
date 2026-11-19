@@ -876,15 +876,23 @@ pub fn wonder_at(
                 answer(format_args!("{}\n", heading.head));
             }
         }
-        Some(Answer {
-            range,
-            stands: Stands::Term { written },
-        }) => {
-            answer(format_args!(
-                "{}\n",
-                Report::about(About::Place(range), Said::line(opening(&written)))
-                    .rendered(Kind::Term, &reader)
-            ));
+        Some(answered) => {
+            let (about, said, kind) = match &answered.stands {
+                Stands::Local { name, bound, .. } => (
+                    bound.clone().unwrap_or_else(|| answered.range.clone()),
+                    name.clone(),
+                    Kind::Local,
+                ),
+                Stands::Term { written, .. } => {
+                    (answered.range.clone(), opening(written), Kind::Term)
+                }
+                Stands::Declaration { .. } => unreachable!("a declaration is answered above"),
+            };
+            let report = answered.facts().into_iter().fold(
+                Report::about(About::Place(about), Said::line(said)),
+                |report, fact| report.stating(stated(fact)),
+            );
+            answer(format_args!("{}\n", report.rendered(kind, &reader)));
         }
     }
 
@@ -1058,12 +1066,8 @@ fn block(described: &Described, listing: Option<String>) -> Report {
     };
     let mut report = Report::about(about, Said::line(&described.asked));
 
-    for Fact { lead, values } in described.facts() {
-        report = report.stating(match values.as_slice() {
-            [] => lead,
-            [value] => format!("{lead} {value}"),
-            _ => listed(&lead, &values),
-        });
+    for fact in described.facts() {
+        report = report.stating(stated(fact));
     }
     if let Some(listing) = listing.filter(|_| {
         described
@@ -1075,6 +1079,15 @@ fn block(described: &Described, listing: Option<String>) -> Report {
     }
 
     report
+}
+
+/// A fact as a block states it: its lead, then its values, several laid over as many lines as keep each within a block's width.
+fn stated(Fact { lead, values }: Fact) -> String {
+    match values.as_slice() {
+        [] => lead,
+        [value] => format!("{lead} {value}"),
+        _ => listed(&lead, &values),
+    }
 }
 
 /// What a block about a term opens on: its first line as written, and an ellipsis where more follow.

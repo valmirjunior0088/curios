@@ -22,6 +22,8 @@ pub enum Kind {
     Module,
     /// A term asked about by its place, where no name stands.
     Term,
+    /// A local asked about by its place: where it is bound, and what it was bound at.
+    Local,
 }
 
 impl Kind {
@@ -35,6 +37,7 @@ impl Kind {
             Kind::Declaration => "declaration",
             Kind::Module => "module",
             Kind::Term => "term",
+            Kind::Local => "local",
         }
     }
 

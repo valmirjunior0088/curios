@@ -86,7 +86,7 @@ use {
     curios_common::SyntaxRegistry,
     curios_core::{
         Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
-        Nominal, Subterm, Term,
+        Nominal, Subterm, Term, WrittenBinder,
     },
     std::{
         collections::{BTreeSet, HashMap},
@@ -613,6 +613,11 @@ impl<'s> Context<'s> {
     /// Elaborate `declaration`, a member of the item being elaborated, from here on: whose written binders the locals opened next count among.
     pub(crate) fn enter_declaration(&mut self, declaration: Option<Global>) {
         self.underway.declaration = declaration;
+    }
+
+    /// [`Credits::written_of`].
+    pub(crate) fn written_of(&self, local: &Free) -> Option<WrittenBinder> {
+        self.underway.credits.written_of(local)
     }
 
     /// [`Credits::credit`].

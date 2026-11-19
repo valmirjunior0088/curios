@@ -267,18 +267,27 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// The written sites of the declaration this lowered that no written name reads, read now that every binder's scope has closed and every mention has been seen: each binder nothing referenced, each written `_`, and each `let` that runs no action and none of whose binders anything referenced. A declaration holding a written goal records none: its binders are what the goal's report lists for the author to use next.
+    /// Where each written binder of the declaration this lowered stands, and the written sites no written name reads, read now that every binder's scope has closed and every mention has been seen: each binder nothing referenced, each written `_`, and each `let` that runs no action and none of whose binders anything referenced. A declaration holding a written goal records none: its binders are what the goal's report lists for the author to use next.
     fn flush(&self) {
-        if self.saw_goal.get() {
-            return;
-        }
-        let used = self.used.borrow();
         let candidates = self.candidates.borrow();
-        let unread = |place: &usize| !candidates[*place].ids.iter().any(|id| used.contains(id));
         let binder = |place: &usize| curios_core::WrittenBinder {
             declaration: self.declaration,
             ordinal: u32::try_from(*place).expect("a declaration's binders fit a u32"),
         };
+        // Where every written binder stands, read or not, whatever else the declaration holds: what a local answers it is bound at.
+        self.context.written(
+            candidates
+                .iter()
+                .enumerate()
+                .filter_map(|(place, candidate)| {
+                    Some((binder(&place), self.context.extent(&candidate.span)?))
+                }),
+        );
+        if self.saw_goal.get() {
+            return;
+        }
+        let used = self.used.borrow();
+        let unread = |place: &usize| !candidates[*place].ids.iter().any(|id| used.contains(id));
         let binders =
             (0..candidates.len())
                 .filter(|place| unread(place))

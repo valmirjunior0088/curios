@@ -199,7 +199,7 @@ pub fn compile_lowered_over(
                 syntax,
             );
             // What elaboration established stands, the certifier's verdict on it being the refusal.
-            observed.elaborated = Some(core);
+            observed.elaborated = Some((core, traces));
             return Err(refuse(&lowered, &observed, refusal));
         }
     };
@@ -236,7 +236,7 @@ pub fn compile_lowered_over(
             syntax,
         );
         let erasing = Observed {
-            elaborated: Some(core.as_definitions().clone()),
+            elaborated: Some((core.as_definitions().clone(), traces.clone())),
             ..observed.clone()
         };
 

@@ -84,9 +84,10 @@ pub use lints::binder_lints;
 mod traces;
 use traces::*;
 pub use traces::{
-    ArchivedClassified, ArchivedForeign, ArchivedSiteClass, ArchivedTraceTable, ArchivedTraces,
-    ArchivedVectors, Classified, Concluded, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts,
-    Readers, SiteClass, TraceRecord, TraceTable, TracedEntry, Traces, Vectors,
+    ArchivedClassified, ArchivedForeign, ArchivedSettledPlace, ArchivedSiteClass,
+    ArchivedTraceTable, ArchivedTraces, ArchivedVectors, Classified, Concluded, Foreign, HeldTrace,
+    KeyAnswers, Keyed, Made, Parts, Readers, SettledPlace, SiteClass, TraceRecord, TraceTable,
+    TracedEntry, Traces, Vectors,
 };
 
 mod same;

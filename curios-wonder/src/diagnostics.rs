@@ -267,9 +267,10 @@ fn diagnosed_reading(
     let elaborated = |scope: &[&Unit],
                       text: &PreparedText,
                       definitions: &curios_core::Definitions,
+                      traces: &curios_elab::Traces,
                       certification: Option<&curios_core::Certification>| {
         if let Some(placed) = placed.borrow_mut().as_mut() {
-            placed.establish(scope, text, definitions, certification);
+            placed.establish(scope, text, definitions, traces, certification);
         }
     };
     let fold = |units| {

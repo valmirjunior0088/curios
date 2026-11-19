@@ -405,12 +405,13 @@ impl Server {
         let asked = &params.text_document_position_params;
         let (buffer, checked) = self.held(&asked.text_document.uri)?;
         let (answer, _) = answered_at(buffer, &checked, offset_of(buffer, asked.position))?;
-        let Stands::Declaration { described, .. } = answer.stands else {
-            return None;
+        let place = match &answer.stands {
+            Stands::Declaration { described, .. } => described.declaration.as_ref()?.place()?,
+            Stands::Local { bound, .. } => bound.as_ref()?,
+            Stands::Term { .. } => return None,
         };
 
-        self.located(described.declaration.as_ref()?.place()?)
-            .map(GotoDefinitionResponse::Scalar)
+        self.located(place).map(GotoDefinitionResponse::Scalar)
     }
 
     /// What stands at a position of a document, as `wonder --at` answers it ([`markup`]), over the range it covers in the buffer. Nothing where nothing stands there, and where the declaration it stands in was edited since the document's last check.
@@ -564,41 +565,39 @@ fn answered_at(buffer: &str, checked: &Placed, offset: usize) -> Option<(Answer,
     })
 }
 
-/// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, then each fact a block states of it a line ([`Described::facts`](crate::Described::facts)), then the prose above it; a term by its text as source.
+/// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, a local by its name and a term by its text; then each fact a block states of it a line ([`Answer::facts`]); then the prose above a declaration.
 fn markup(answer: &Answer) -> String {
     let fenced = |source: &str| format!("```curios\n{source}\n```");
+    let facts = answer
+        .facts()
+        .into_iter()
+        .map(|fact| match fact.values.as_slice() {
+            [] => fact.lead,
+            values => format!("{} {}", fact.lead, values.join(", ")),
+        })
+        .collect::<Vec<_>>();
+    let (shown, prose) = match &answer.stands {
+        Stands::Term { written, .. } => (written.clone(), Vec::new()),
+        Stands::Local { name, .. } => (name.clone(), Vec::new()),
+        Stands::Declaration { described, .. } => match described
+            .declaration
+            .as_ref()
+            .and_then(|declaration| declaration.heading())
+        {
+            Some(heading) => (heading.head, heading.prose),
+            None => (described.asked.clone(), Vec::new()),
+        },
+    };
 
-    match &answer.stands {
-        Stands::Term { written } => fenced(written),
-        Stands::Declaration { described, .. } => {
-            let heading = described
-                .declaration
-                .as_ref()
-                .and_then(|declaration| declaration.heading());
-            let facts = described
-                .facts()
-                .into_iter()
-                .map(|fact| match fact.values.as_slice() {
-                    [] => fact.lead,
-                    values => format!("{} {}", fact.lead, values.join(", ")),
-                })
-                .collect::<Vec<_>>();
-
-            let mut parts = vec![
-                fenced(
-                    heading
-                        .as_ref()
-                        .map_or(described.asked.as_str(), |heading| heading.head.as_str()),
-                ),
-                facts.join("  \n"),
-            ];
-            if let Some(heading) = heading.filter(|heading| !heading.prose.is_empty()) {
-                parts.push(heading.prose.join("\n"));
-            }
-
-            parts.join("\n\n")
-        }
+    let mut parts = vec![fenced(&shown)];
+    if !facts.is_empty() {
+        parts.push(facts.join("  \n"));
     }
+    if !prose.is_empty() {
+        parts.push(prose.join("\n"));
+    }
+
+    parts.join("\n\n")
 }
 
 /// What `buffer` declares, by what its last check left: each definition of each text that stands in the buffer as it was checked, a constructor under its type and a method under its concept.

@@ -3,7 +3,7 @@
 //! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the binder lints a declaration's record is filed with report none it credits ([`binder_lints`](crate::binder_lints)). Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
 
 use {
-    curios_core::{Free, Global, Term},
+    curios_core::{Free, Global, Term, WrittenBinder},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -20,6 +20,16 @@ impl Credits {
     /// Record that `local` was opened from the binder written at `written` among `declaration`'s written binders.
     pub fn open(&mut self, local: Free, declaration: Option<Global>, written: u32) {
         self.opened.insert(local, (declaration, written));
+    }
+
+    /// The written binder `local` was opened from, while the item it was opened in elaborates: what a place a local stands at answers it is bound at.
+    pub fn written_of(&self, local: &Free) -> Option<WrittenBinder> {
+        self.opened
+            .get(local)
+            .map(|(declaration, ordinal)| WrittenBinder {
+                declaration: *declaration,
+                ordinal: *ordinal,
+            })
     }
 
     /// Forget where the previous item's locals were opened: a proof is written only while its bound's item elaborates.

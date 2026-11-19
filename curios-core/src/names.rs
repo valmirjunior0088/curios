@@ -10,7 +10,10 @@
 mod tests;
 
 use {
-    crate::{Lint, UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenSort},
+    crate::{
+        Extent, Lint, UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenBinder,
+        WrittenSort,
+    },
     curios_common::{
         Digest, Filed, InKeyOrder, InfixOp, Object, Plicity, Qualifier, Records, Sorted, Symbol,
         name,
@@ -183,12 +186,14 @@ pub struct Mints {
     pub qualities: Vec<Option<WrittenSort>>,
     /// Every written site of the declaration no written name reads, each by the definition it is written in ([`Unread`]): what elaboration decides the binder lints from where it files the declaration's record, beside what the proofs it wrote read. Held here, as `unbound` is, because a written binder's place means something within its declaration alone.
     pub unread: Vec<Unread>,
+    /// Where each written binder of the declaration stands, read or not: what a local answers it is bound at. Held here, as `unread` is, because a written binder's place means something within its declaration alone.
+    pub written: Vec<(WrittenBinder, Extent)>,
     /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
     pub lints: Vec<Lint>,
 }
 
 impl Mints {
-    /// These mints with every unread site of the definition `name` re-keyed to `renamed`: a witness's, whose name is given anew by every lowering.
+    /// These mints with every written site of the definition `name` re-keyed to `renamed`: a witness's, whose name is given anew by every lowering.
     pub fn renamed(&self, name: &Global, renamed: Global) -> Self {
         Self {
             unread: self
@@ -196,8 +201,20 @@ impl Mints {
                 .iter()
                 .map(|site| site.renamed(name, renamed))
                 .collect(),
+            written: self
+                .written
+                .iter()
+                .map(|(binder, at)| (binder.renamed(name, renamed), *at))
+                .collect(),
             ..self.clone()
         }
+    }
+
+    /// Where the written binder `binder` stands, where the lowering placed it.
+    pub fn bound_at(&self, binder: &WrittenBinder) -> Option<Extent> {
+        self.written
+            .iter()
+            .find_map(|(written, at)| (written == binder).then_some(*at))
     }
 }
 
@@ -228,6 +245,7 @@ impl Minted {
             universes: Vec::new(),
             qualities: Vec::new(),
             unread: Vec::new(),
+            written: Vec::new(),
             lints: Vec::new(),
         };
 

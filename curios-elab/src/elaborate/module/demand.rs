@@ -1274,8 +1274,10 @@ impl<'a> Demand<'a> {
 
             let needs = context.take_needs();
             if needs.is_empty() {
-                // The binder lints, decided before the trace is taken, so what deciding what each written site binds read is the declaration's too.
+                // What each written binder was opened at, read before the lints take the sites; then the binder lints, decided before the trace is taken, so what deciding what each written site binds read is the declaration's too.
+                let binders = context.binders_in(&names);
                 let lints = context.lints_in(&names);
+                let settled = context.take_settled();
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
@@ -1289,7 +1291,12 @@ impl<'a> Demand<'a> {
                     .flatten()
                     .map(|name| (name, context.classified(&name)))
                     .collect();
-                let concluded = Concluded { classified, lints };
+                let concluded = Concluded {
+                    classified,
+                    lints,
+                    settled,
+                    binders,
+                };
                 self.file(&names, Rc::new(TraceRecord::new(trace, concluded)));
                 self.poison = poison;
                 let mut holding = Vec::new();

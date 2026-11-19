@@ -2017,7 +2017,7 @@ fn elaborate_and_zonk<'s>(
         )?;
         // Taken before finalizing consumes them: where the walk refused, the declarations that elaborated are what a question about the unit answers them from.
         if !elaborated.refusals.is_empty() {
-            context.hold_elaborated(elaborated.definitions.clone());
+            context.hold_elaborated(elaborated.definitions.clone(), elaborated.traces.clone());
         }
         let finalized = finalize_and_check(
             context,
@@ -2155,9 +2155,12 @@ fn elaborate_and_zonk_over<'s>(
                 .chain(kept)
                 .cloned()
                 .collect::<Vec<_>>();
-            context.hold_elaborated(Definitions {
-                items: items.into(),
-            });
+            context.hold_elaborated(
+                Definitions {
+                    items: items.into(),
+                },
+                elaborated.traces.clone(),
+            );
         }
         let finalized = finalize_and_check(
             context,

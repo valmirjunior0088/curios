@@ -11,7 +11,10 @@ use reach::*;
 mod tests;
 
 use {
-    super::{Context, ErasedSite, Error, ZonkPass, proof_position, reduce, zonk_solved_term_metas},
+    super::{
+        Context, ErasedSite, Error, SettledPlace, ZonkPass, proof_position, reduce,
+        zonk_solved_term_metas,
+    },
     curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
     curios_core::{
         Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Sharing,
@@ -361,6 +364,9 @@ fn checked_proof_positions(
 ) -> Result<Vec<Position>, Error> {
     let labels = context.checked_labels(mark);
     let checked = context.split_checked(mark);
+    // What each written place settled at, kept for the declaration's record: the last recorded at a place, which is the term as it stands in what holds it.
+    let mut settled = Vec::<SettledPlace>::new();
+    let mut placed = HashMap::<Extent, usize>::new();
     // One site per definition and kind of proof, not per position: many recorded terms were settled in one.
     let mut sites: HashMap<(Option<Global>, &'static str), Rc<ErasedSite>> = HashMap::new();
     let mut memo: HashMap<Term, Option<&'static str>> = HashMap::new();
@@ -371,6 +377,24 @@ fn checked_proof_positions(
         //
         // Sound because zonk is a pure function of the solution set, and the solution set is final here: what is read has been published, and `proof_position` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
         let type_ = zonked(context, cache, &type_)?;
+        if let Some(at) = term.extent() {
+            let local = match &*term {
+                Subterm::Var(var) => var.as_free().and_then(|free| context.written_of(free)),
+                _ => None,
+            };
+            let entry = SettledPlace {
+                at,
+                type_: type_.clone(),
+                local,
+            };
+            match placed.get(&at) {
+                Some(&index) => settled[index] = entry,
+                None => {
+                    placed.insert(at, settled.len());
+                    settled.push(entry);
+                }
+            }
+        }
         let held = match memo.get(&type_) {
             Some(held) => *held,
             None => {
@@ -396,6 +420,7 @@ fn checked_proof_positions(
     curios_profile::sample!("totality::proof_distinct_zonked", memo.len());
     curios_profile::sample!("totality::proof_sites", sites.len());
     curios_profile::sample!("totality::checked_proof_positions", positions.len());
+    context.keep_settled(settled);
     Ok(positions)
 }
 

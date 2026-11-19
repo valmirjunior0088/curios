@@ -4,7 +4,7 @@
 //!
 //! **A version of the baseline's.** A unit compiled over a baseline holds its baseline's traces with the trace of each declaration it made filed in place of the one it replaces and each declaration it dropped taken out: the table is persistent and read back in the order of its names ([`Sorted`]), so a trace kept is shared, never copied, and nothing is visited to keep it.
 //!
-//! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a store holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it.
+//! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a store holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it. So is what a question about a place reads of the declaration: the type each of its written places settled at and each of its written binders was opened at ([`SettledPlace`]).
 //!
 //! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 //!
@@ -19,7 +19,8 @@ use {
         Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
     },
     curios_core::{
-        Applications, Global, Lint, Order, ParameterField, Totality, Trace, Variance, WitnessKey,
+        Applications, Extent, Global, Lint, Order, ParameterField, Sharing, Term, Totality, Trace,
+        Variance, WitnessKey, WrittenBinder,
     },
     std::{
         cell::OnceCell,
@@ -52,6 +53,19 @@ pub struct Concluded {
     pub classified: Vec<(Global, Classified)>,
     /// The binder lints of its written sites, decided as it is filed ([`binder_lints`](crate::binder_lints)): each site the lowering found no written name reads, less every binder a proof it wrote read, worded by what each site binds. Placed by the extents of its text, which a record is reused only beside, since a lowered item's digest holds them and a declaration lowered again is elaborated again.
     pub lints: Vec<Lint>,
+    /// The type each written place of its text settled at, one a place, with the written binder a local there reads ([`SettledPlace`]): what a question about a place answers a term with. Placed as `lints` are.
+    pub settled: Vec<SettledPlace>,
+    /// The type each written binder of its text was opened at: what a local answers where it is bound.
+    pub binders: Vec<(WrittenBinder, Term)>,
+}
+
+/// The type a written place of a declaration's text settled at ([`Concluded::settled`]), zonked as the declaration was published, and where the place is a use of one of its written binders, which.
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub struct SettledPlace {
+    pub at: Extent,
+    pub type_: Term,
+    pub local: Option<WrittenBinder>,
 }
 
 /// What a written site binds, as far as a lint's wording reads it: decided off the type the site was opened at, reduced at its declaration's close, and absent where that type was left a metavariable, the reduction ran out of its allowance, or it is neither.
@@ -686,6 +700,8 @@ struct TabledTrace {
     asked: Trace<Question<u32, u32>, Answered<u32>>,
     classified: Vec<(u32, Classified)>,
     lints: Vec<Lint>,
+    settled: Vec<SettledPlace>,
+    binders: Vec<(WrittenBinder, Term)>,
     made: Option<TabledMade>,
 }
 
@@ -725,6 +741,8 @@ impl TabledTrace {
                 .map(|(place, classified)| Ok((name(place)?, classified)))
                 .collect::<Result<_, String>>()?,
             lints: self.lints,
+            settled: self.settled,
+            binders: self.binders,
         };
 
         Ok((name(self.name)?, trace, concluded, made))
@@ -832,6 +850,8 @@ impl TraceTable {
     fn of<'t>(entries: impl IntoIterator<Item = Entry<'t>>) -> TraceTable {
         let mut names = Placing::new();
         let mut keys = Placing::new();
+        // A type each place settled at is stored as the canonical node of its spelling, so a run is the same bytes whichever compile shared its terms how.
+        let sharing = Sharing::new();
         let declarations = entries
             .into_iter()
             .map(|(name, trace, concluded, made)| {
@@ -864,6 +884,19 @@ impl TraceTable {
                         .map(|(name, classified)| (names.place(*name), classified.clone()))
                         .collect(),
                     lints: concluded.lints.clone(),
+                    settled: concluded
+                        .settled
+                        .iter()
+                        .map(|settled| SettledPlace {
+                            type_: sharing.share(&settled.type_),
+                            ..settled.clone()
+                        })
+                        .collect(),
+                    binders: concluded
+                        .binders
+                        .iter()
+                        .map(|(binder, type_)| (*binder, sharing.share(type_)))
+                        .collect(),
                     made,
                 }
             })

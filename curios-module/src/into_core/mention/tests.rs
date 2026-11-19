@@ -237,6 +237,37 @@ fn a_texts_terms_are_each_place_it_writes_one() {
     assert_eq!(terms, ["pick(7)", "pick", "7"]);
 }
 
+/// Every written binder of a declaration is placed where it is written, read or not: what a local answers it is bound at.
+#[test]
+fn every_written_binder_is_placed_where_it_is_written() {
+    let (text, _) = unmarked(PROGRAM);
+    let entrypoint = text.parse::<Entrypoint>().unwrap();
+    let loader = fixture_loader();
+    let (unit, _) = into_core_entry(
+        &UnitSource::entry(&entrypoint, &loader),
+        &[],
+        syntax(),
+        None,
+    )
+    .unwrap();
+    let twice = curios_core::Global::Authored(curios_common::Qualifier::from(["twice"]));
+
+    let placed = unit
+        .minted()
+        .of(&twice)
+        .written
+        .iter()
+        .map(|(binder, at)| {
+            let span = at
+                .resolved(&[unit.anchors()])
+                .expect("a binder's place resolves");
+            (binder.ordinal, &text[span.start..span.end])
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(placed, [(0, "turn"), (1, "start")]);
+}
+
 #[test]
 fn a_witness_is_declared_by_its_head_and_a_member_by_its_name() {
     let (text, _) = unmarked(PROGRAM);

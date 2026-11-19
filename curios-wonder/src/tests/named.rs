@@ -66,7 +66,8 @@ fn said(answer: &Answer) -> (&str, Declared, bool, Option<(usize, usize)>) {
             declares,
             described,
         } => row(described, *declares),
-        Stands::Term { written } => panic!("a term stands there, `{written}`, and no name"),
+        Stands::Local { name, .. } => panic!("a local stands there, `{name}`, and no declaration"),
+        Stands::Term { written, .. } => panic!("a term stands there, `{written}`, and no name"),
     }
 }
 
@@ -106,7 +107,8 @@ fn a_place_no_name_stands_at_answers_the_narrowest_term() {
         (literal.stands, literal.range.line_column()),
         (
             Stands::Term {
-                written: "true".to_string()
+                written: "true".to_string(),
+                type_: None
             },
             (1, 21)
         )
@@ -122,6 +124,52 @@ fn declared_at(program: &str, written: &str, within: usize) -> Described {
 }
 
 const TYPED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\nlet three: /std/Nat = 3;\n/std/print(\"\")";
+
+const LOCAL: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\nlet four: /std/Nat = twice(/std/Nat/add(1, 1));\n/std/print(\"\")";
+
+/// A local answers where it is bound and its type, at a use and where it is bound alike: the type a use settled at, and the one its binder was opened at.
+#[test]
+fn a_local_answers_where_it_is_bound_and_its_type() {
+    let local = |nth| match at(LOCAL, "n", nth, 0).map(|answer| answer.stands) {
+        Some(Stands::Local {
+            declares,
+            name,
+            bound,
+            type_,
+        }) => (
+            declares,
+            name,
+            bound.map(|bound| bound.line_column()),
+            type_,
+        ),
+        stands => panic!("no local stands there: {stands:?}"),
+    };
+    let typed = |declares| {
+        (
+            declares,
+            "n".to_string(),
+            Some((1, 11)),
+            Some("/std/Nat".to_string()),
+        )
+    };
+
+    assert_eq!(local(0), typed(true));
+    assert_eq!(local(1), typed(false));
+}
+
+/// A term no name stands at answers the type it settled at, spelled where it is written: an application, where the offset stands between its arguments.
+#[test]
+fn a_term_answers_the_type_it_settled_at() {
+    let applied = at(LOCAL, ", 1)", 0, 1).expect("a term stands there");
+
+    assert_eq!(
+        applied.stands,
+        Stands::Term {
+            written: "/std/Nat/add(1, 1)".to_string(),
+            type_: Some("/std/Nat".to_string())
+        }
+    );
+}
 
 /// A declaration of the file's own that elaborated answers its type, spelled where it is written, in a file elaboration refused; and no totality, which the certifier never judged.
 #[test]

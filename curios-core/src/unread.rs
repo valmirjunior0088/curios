@@ -73,3 +73,16 @@ pub struct WrittenBinder {
     pub declaration: Option<Global>,
     pub ordinal: u32,
 }
+
+impl WrittenBinder {
+    /// This binder re-keyed to `renamed` where it is written in the definition `name`: a witness's, whose name is given anew by every lowering.
+    pub fn renamed(&self, name: &Global, renamed: Global) -> Self {
+        match self.declaration.as_ref() == Some(name) {
+            true => Self {
+                declaration: Some(renamed),
+                ..*self
+            },
+            false => *self,
+        }
+    }
+}

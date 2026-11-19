@@ -7,10 +7,10 @@
 use {
     super::Spend,
     crate::{
-        Context, LINT_ALLOWANCE, Mode, SiteClass, Traces, binder_lints, elaborate, reduce_with,
-        zonk_solved_term_metas,
+        Context, LINT_ALLOWANCE, Mode, SettledPlace, SiteClass, Traces, binder_lints, elaborate,
+        reduce_with, zonk_solved_term_metas,
     },
-    curios_core::{Definitions, Global, HeadKey, Lint, Subterm, Term, WitnessKey},
+    curios_core::{Definitions, Global, HeadKey, Lint, Subterm, Term, WitnessKey, WrittenBinder},
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
@@ -21,8 +21,8 @@ use {
 #[derive(Debug, Clone, Default)]
 pub struct Observed {
     pub lints: Vec<Lint>,
-    /// The declarations that elaborated, where the walk refused: each as it was published, zonked, a refused declaration and every one reaching it left out, and over a baseline the ones it kept beside them. None where the walk did not refuse, whose module is what it hands back, and where elaboration never ran.
-    pub elaborated: Option<Definitions>,
+    /// The declarations that elaborated, where the walk refused: each as it was published, zonked, a refused declaration and every one reaching it left out, and over a baseline the ones it kept beside them; with the walk's traces, which hold what elaboration concluded of each. None where the walk did not refuse, whose module is what it hands back, and where elaboration never ran.
+    pub elaborated: Option<(Definitions, Traces)>,
 }
 
 /// How many structs of one field a class reads through to the action one holds: `Try(Io, E, A)` holds `Io(Result(E, A))` one deep.
@@ -140,6 +140,45 @@ impl Context<'_> {
     }
 
     /// The binder lints of the declaration declaring `names`, decided as its record is filed: the sites its lowering found no written name reads ([`curios_core::Mints::unread`]), less every binder a proof it wrote read, worded by the class each site's openings decide now; and beside them the lints its lowering decided ([`curios_core::Mints::lints`]), which nothing elaboration writes moves. Asked before the declaration's trace is taken, since what deciding a class reads is the declaration's too.
+    /// The type each written binder of a definition `names` names was opened at, its first opening where it was opened more than once: what its declaration's record holds of it ([`Concluded::binders`](crate::Concluded::binders)). Read before [`Context::lints_in`] takes the sites.
+    pub(crate) fn binders_in(&mut self, names: &[Global]) -> Vec<(WrittenBinder, Term)> {
+        let opened = self
+            .underway
+            .sites
+            .opened
+            .iter()
+            .filter(|site| site.declaration.is_some_and(|name| names.contains(&name)))
+            .map(|site| {
+                (
+                    WrittenBinder {
+                        declaration: site.declaration,
+                        ordinal: site.place,
+                    },
+                    site.type_.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut binders = Vec::<(WrittenBinder, Term)>::new();
+        for (binder, type_) in opened {
+            if !binders.iter().any(|(written, _)| *written == binder) {
+                let type_ = zonk_solved_term_metas(self, &type_);
+                binders.push((binder, type_));
+            }
+        }
+
+        binders
+    }
+
+    /// Keep `settled`, what the item published now settled at its written places, for the record of the declaration it belongs to.
+    pub(crate) fn keep_settled(&mut self, settled: impl IntoIterator<Item = SettledPlace>) {
+        self.underway.settled.extend(settled);
+    }
+
+    /// Take what the items published since the last record was filed settled at their written places, for the record filed now.
+    pub(crate) fn take_settled(&mut self) -> Vec<SettledPlace> {
+        std::mem::take(&mut self.underway.settled)
+    }
+
     pub(crate) fn lints_in(&mut self, names: &[Global]) -> Vec<Lint> {
         let classes = self
             .classes_in(names)
@@ -167,9 +206,9 @@ impl Context<'_> {
         .collect()
     }
 
-    /// Hold `elaborated`, the declarations a refused walk elaborated, for [`Context::observed`] to hand out.
-    pub(crate) fn hold_elaborated(&mut self, elaborated: Definitions) {
-        self.underway.elaborated = Some(elaborated);
+    /// Hold `elaborated`, the declarations a refused walk elaborated, with `traces`, the walk's, for [`Context::observed`] to hand out.
+    pub(crate) fn hold_elaborated(&mut self, elaborated: Definitions, traces: Traces) {
+        self.underway.elaborated = Some((elaborated, traces));
     }
 
     /// Hold the binder lints of every declaration `traces` holds, the walk's as it ends, for [`Context::observed`] to hand out whatever the walk concluded.

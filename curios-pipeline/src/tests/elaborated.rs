@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_core::{Certification, Definitions},
-    curios_elab::DEFAULT_BUDGET,
+    curios_elab::{DEFAULT_BUDGET, Traces},
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_unit::{Predecessors, Unit},
@@ -20,6 +20,7 @@ fn told(source: &str, cache: Option<&dyn Cache>) -> Option<(BTreeSet<String>, bo
     let elaborated = |_: &[&Unit],
                       _: &PreparedText,
                       definitions: &Definitions,
+                      _: &Traces,
                       certification: Option<&Certification>| {
         let names = definitions
             .items

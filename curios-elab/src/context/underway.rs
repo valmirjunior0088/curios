@@ -6,6 +6,7 @@ use {
     super::{
         Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture, Sites,
     },
+    crate::{SettledPlace, Traces},
     curios_core::{Declarations, Definitions, Extent, Free, Global, Imports, Lint, Minted},
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -25,8 +26,10 @@ pub struct Underway {
     pub sites: Sites,
     /// The binder lints of every declaration the walk's traces hold — elaborated now, adopted from a store or kept from a baseline — taken where the walk ends (`Context::hold_lints`), whatever it concluded: what `Context::observed` hands out beside the final term's.
     pub held: Vec<Lint>,
-    /// The declarations that elaborated, where the walk refused, taken where it ends (`Context::hold_elaborated`): what `Context::observed` hands out beside the lints.
-    pub elaborated: Option<Definitions>,
+    /// The type each written place settled at, of the items published since the declaration they belong to was last filed ([`SettledPlace`]): taken into its record where it is filed (`Context::take_settled`).
+    pub settled: Vec<SettledPlace>,
+    /// The declarations that elaborated, where the walk refused, with the record of each, taken where it ends (`Context::hold_elaborated`): what `Context::observed` hands out beside the lints.
+    pub elaborated: Option<(Definitions, Traces)>,
     // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
     pub checked: CheckedTerms,
     // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
@@ -61,6 +64,7 @@ impl Default for Underway {
             credits: Credits::default(),
             sites: Sites::default(),
             held: Vec::new(),
+            settled: Vec::new(),
             elaborated: None,
             checked: CheckedTerms::default(),
             posture: Posture::default(),

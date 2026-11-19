@@ -121,7 +121,7 @@ fn named(program: &str, buffer: &str, written: &str, nth: usize) -> Option<Strin
 
     match answered_at(buffer, &checked(program), offset)?.0.stands {
         Stands::Declaration { described, .. } => Some(described.asked),
-        Stands::Term { .. } => None,
+        Stands::Local { .. } | Stands::Term { .. } => None,
     }
 }
 

@@ -16,9 +16,9 @@ use {
         Subterm, Term, Transient,
     },
     curios_elab::{
-        Context, Established, FinalizedProgram, Observed, Reading, Tail, elaborate_and_zonk_entry,
-        elaborate_and_zonk_program, elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit,
-        validate_entry_universes,
+        Context, Established, FinalizedProgram, Observed, Reading, Tail, Traces,
+        elaborate_and_zonk_entry, elaborate_and_zonk_program, elaborate_and_zonk_program_reporting,
+        elaborate_and_zonk_unit, validate_entry_universes,
     },
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
@@ -1101,6 +1101,7 @@ where
                     predecessors.units(),
                     text,
                     unit.core(),
+                    unit.traces(),
                     Some(unit.certification()),
                 );
             }
@@ -1123,8 +1124,10 @@ where
                 };
             let mut refused = |lowered: &PreparedText, observed: &Observed| {
                 findings = Some(Findings::of_text(lowered, observed));
-                if let (Some(tell), Some(elaborated)) = (told_elaborated, &observed.elaborated) {
-                    tell(predecessors.units(), lowered, elaborated, None);
+                if let (Some(tell), Some((elaborated, traces))) =
+                    (told_elaborated, &observed.elaborated)
+                {
+                    tell(predecessors.units(), lowered, elaborated, traces, None);
                 }
             };
             let closing = Some(Closing {
@@ -1169,6 +1172,7 @@ where
                         predecessors.units(),
                         text,
                         unit.core(),
+                        unit.traces(),
                         Some(unit.certification()),
                     );
                 }
@@ -1583,7 +1587,7 @@ pub fn compile_lowered(
                 syntax,
             );
             // What elaboration established stands, the certifier's verdict on it being the refusal.
-            observed.elaborated = Some(core);
+            observed.elaborated = Some((core, traces));
             return Err(refuse(&lowered, &observed, refusal));
         }
     };
@@ -1602,7 +1606,7 @@ pub fn compile_lowered(
             syntax,
         );
         let erasing = Observed {
-            elaborated: Some(core.as_definitions().clone()),
+            elaborated: Some((core.as_definitions().clone(), traces.clone())),
             ..observed.clone()
         };
 
@@ -1719,7 +1723,13 @@ where
             if let Some(text) = unit.text() {
                 told(text);
                 if let Some(tell) = told_elaborated {
-                    tell(&predecessors, text, unit.core(), Some(unit.certification()));
+                    tell(
+                        &predecessors,
+                        text,
+                        unit.core(),
+                        unit.traces(),
+                        Some(unit.certification()),
+                    );
                 }
             }
             answered(source, &unit)?;
@@ -1737,8 +1747,10 @@ where
         let mut findings = None;
         let mut refused = |text: &PreparedText, observed: &Observed| {
             findings = Some(Findings::of_text(text, observed));
-            if let (Some(tell), Some(elaborated)) = (told_elaborated, &observed.elaborated) {
-                tell(&predecessors, text, elaborated, None);
+            if let (Some(tell), Some((elaborated, traces))) =
+                (told_elaborated, &observed.elaborated)
+            {
+                tell(&predecessors, text, elaborated, traces, None);
             }
         };
         let compiled = match &baseline {
@@ -1774,7 +1786,13 @@ where
         let unit = match compiled {
             Ok(unit) => {
                 if let (Some(tell), Some(text)) = (told_elaborated, unit.text()) {
-                    tell(&predecessors, text, unit.core(), Some(unit.certification()));
+                    tell(
+                        &predecessors,
+                        text,
+                        unit.core(),
+                        unit.traces(),
+                        Some(unit.certification()),
+                    );
                 }
 
                 unit
@@ -1936,11 +1954,12 @@ pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_c
 /// Told the findings of a fold's subject where its compile is refused: its lowering's lints, and the binder lints its elaboration held whatever it concluded — what a question about a refused library reports beside the refusal, as a refused program's are reported beside its verdict ([`Checked`]).
 pub type ReadRefusal<'a> = &'a dyn Fn(Findings);
 
-/// Told a subject's declarations as elaboration established them, beside the units it was compiled against and its lowering: the module of the unit made or restored, with the record the certifier filed of it, or where its compile is refused, the declarations that elaborated, with none ([`Observed::elaborated`]) — what a question about a place answers a declaration of the subject's own from, whatever its compile concluded. Told nothing where elaboration established nothing: a subject refused before it, or one whose refusal left no module.
+/// Told a subject's declarations as elaboration established them, beside the units it was compiled against and its lowering: the module of the unit made or restored, with what elaboration concluded of each declaration (its traces) and the record the certifier filed of it, or where its compile is refused, the declarations that elaborated, with none ([`Observed::elaborated`]) — what a question about a place answers a declaration of the subject's own from, whatever its compile concluded. Told nothing where elaboration established nothing: a subject refused before it, or one whose refusal left no module.
 pub type ReadElaborated<'a> = &'a dyn Fn(
     &[&Unit],
     &PreparedText,
     &curios_core::Definitions,
+    &Traces,
     Option<&curios_core::Certification>,
 );
 
