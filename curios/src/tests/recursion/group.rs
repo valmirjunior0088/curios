@@ -302,3 +302,41 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
         "is a type position\n│  it does not terminate on every input",
     );
 }
+
+/// Two members of one group that hand each other a constructor's fields convert where one unfolding of each meets the same two again. `first_in([T/node(kids), ..r])` and `first(T/node(kids))` unfold to `first(T/node(kids))` and `first_in(kids)`, the same two heads, and the first of those still takes its match apart, so the pair is unfolded again rather than apart; the closed pair, `first_in([T/node([])])` and `first(T/node([]))`, walks the same way to `0` on both sides. Both checkers read a pair met again by the same test.
+///
+/// Mutation-checked: with every pair met again apart, in either checker, both are refused.
+#[test]
+fn two_members_met_again_where_one_takes_a_constructor_apart_convert() {
+    let program = |claim: &str| {
+        fill!(
+            r#"
+            use /std/{Nat, List, Eq};
+            induct T: Type | nil() | leaf(n: Nat) | node(kids: List(T)) end
+            let first(t: T) -> Nat =
+                match t | nil() => 0 | leaf(n) => n | node(kids) => first_in(kids) end
+            and first_in(l: List(T)) -> Nat =
+                match l
+                | [] => 0
+                | [h, ..r] => match h | nil() => first_in(r) | leaf(_) => first(h) | node(_) => first(h) end
+                end;
+            ${claim}
+            /std/print("")
+            "#,
+            claim
+        )
+    };
+
+    assert_eq!(
+        typecheck(&program(
+            "let open(kids: List(T), r: List(T)) -> Eq()(first_in([T/node(kids), ..r]), first(T/node(kids))) = Eq/refl();"
+        )),
+        Ok(())
+    );
+    assert_eq!(
+        typecheck(&program(
+            "let closed() -> Eq()(first_in([T/node([])]), first(T/node([]))) = Eq/refl();"
+        )),
+        Ok(())
+    );
+}

@@ -915,6 +915,23 @@ fn finished(certifier: &mut ByValue, folded: Term, value: Term) -> Result<Term, 
     })
 }
 
+/// Whether one unfolding of the folded call `folded`, at its weak-head form `reduct`, re-sticks: a stuck form, no folded call, that still mentions the group `folded` is a call on — the test [`force`] keeps a restuck call folded by, asked of one step. A head constructor, a reduct free of the group, or another folded call is an unfolding that took its match apart.
+pub fn restuck(certifier: &mut ByValue, folded: &Term, reduct: &Term) -> Result<bool, ReduceError> {
+    // An application or a projection no unfolding opens is stuck as a `match` on a variable is, as `force` reads one.
+    let stuck = !reduct.is_folded()
+        && matches!(
+            &**reduct,
+            Subterm::Match(_)
+                | Subterm::Var(_)
+                | Subterm::Metavar(_)
+                | Subterm::Proj(_)
+                | Subterm::Apply(_)
+        );
+
+    Ok(stuck
+        && forced_group(certifier, folded)?.is_some_and(|group| reduct.mentions_rec_member(&group)))
+}
+
 /// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
 ///
 /// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application or a field's projection carries it at the root of its call's path — the same place [`unfold_rec_apply`] and [`unfold_rec_proj`] read it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.

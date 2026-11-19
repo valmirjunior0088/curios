@@ -451,6 +451,24 @@ fn finished(context: &mut Context, folded: Term, reduct: Term) -> Result<Term, R
     })
 }
 
+/// Whether one unfolding of the folded call `folded`, reduced to `reduct`, re-sticks: a neutral form, no folded call, that still mentions the group `folded` is a call on — the test [`force_rec`] keeps a restuck call folded by, asked of one step. A head constructor, a reduct free of the group, or another folded call is an unfolding that took its match apart.
+pub fn restuck(context: &mut Context, folded: &Term, reduct: &Term) -> Result<bool, ReduceError> {
+    // An application or a projection no unfolding opens is neutral as a `match` on a variable is, as `force_rec` reads one.
+    let neutral = !reduct.is_folded()
+        && matches!(
+            &**reduct,
+            Subterm::Match(_)
+                | Subterm::Var(_)
+                | Subterm::Instance(_)
+                | Subterm::Metavar(_)
+                | Subterm::Proj(_)
+                | Subterm::Apply(_)
+        );
+
+    Ok(neutral
+        && demanded_group(context, folded)?.is_some_and(|group| reduct.mentions_rec_member(&group)))
+}
+
 /// The group whose call `folded` is, for [`force_rec`]'s occurrence test.
 ///
 /// A member selection and a bare `rec` value carry it directly; an application or a field's projection carries it at the root of its call's path, which is where `unfold_rec_apply` and `unfold_rec_proj` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.

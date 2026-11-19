@@ -305,6 +305,51 @@ fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
     assert_eq!(conv(&mut context, &call(&a, &c), &call(&b, &c)), Ok(true));
 }
 
+/// `rec a : (n: Nat) -> Nat = (n) => match n | 0 => 0 | pred + 1 => b(pred) and b : (n: Nat) -> Nat = (n) => match n | 0 => 0 | pred + 1 => a(pred)`, at each of its two members: two that hand each other the predecessor, so a call of one on a successor computes to a call of the other.
+fn alternating(context: &mut Context) -> [Term; 2] {
+    let members = [context.fresh(Some("a")), context.fresh(Some("b"))];
+    let items = [members, [members[1], members[0]]].map(|[member, other]| {
+        let n = context.fresh(Some("n"));
+        let pred = context.fresh(Some("pred"));
+        (
+            member,
+            Term::func_type([(n, nat_type())], nat_type()),
+            Term::func(
+                [(n, nat_type())],
+                Term::nat_match(
+                    Term::free_var(&n),
+                    nat_type(),
+                    nat(0),
+                    &pred,
+                    Term::apply(Term::free_var(&other), [Term::free_var(&pred)]),
+                ),
+            ),
+        )
+    });
+
+    members.map(|member| Term::rec(items.clone(), Term::free_var(&member)))
+}
+
+/// A pair met again inside its own unfolding is unfolded again where one call's unfolding takes its match apart. `a(m + 2)` and `b(m + 1)`, two members of one group, unfold to `b(m + 1)` and `a(m)`, the same two heads, and `b(m + 1)` takes its successor apart: a second unfolding meets `a(m)` against its own body, one term. `a(m)` and `b(m)` unfold to two matches stuck on `m` whose arms pose `b(pred)` and `a(pred)`, both re-stuck, and that pair is apart, as an induction would hold it. The certifier's twin shares the name.
+///
+/// Mutation-checked: with every pair met again apart, the first two are refused; and with none, the budget, small here, runs out on the second two.
+#[test]
+fn a_pair_met_again_where_one_call_computes_is_unfolded_again() {
+    let mut context = Context::new(10_000, SYNTAX);
+    let m = Term::free_var(&context.fresh(Some("m")));
+    let [a, b] = alternating(&mut context);
+    let call = |member: &Term, by: usize| {
+        let argument = match by {
+            0 => m.clone(),
+            by => Term::intrinsic(Intrinsic::nat_add(m.clone(), nat(by))),
+        };
+        Term::apply(member.clone(), [argument])
+    };
+
+    assert_eq!(conv(&mut context, &call(&a, 2), &call(&b, 1)), Ok(true));
+    assert_eq!(conv(&mut context, &call(&a, 0), &call(&b, 0)), Ok(false));
+}
+
 #[test]
 fn growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.

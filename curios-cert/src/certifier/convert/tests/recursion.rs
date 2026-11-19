@@ -196,6 +196,30 @@ fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
     );
 }
 
+/// `rec a : (n: Nat) -> Nat = (n) => match n | 0 => 0 | pred + 1 => b(pred) and b : (n: Nat) -> Nat = (n) => match n | 0 => 0 | pred + 1 => a(pred); ${member}`: two members that hand each other the predecessor, so a call of one on a successor computes to a call of the other.
+const ALTERNATING: &str = "#{node = Rec} (let a: (n: #NatType) -> #NatType = (n: #NatType) => #{goal = #NatType} match n | 0 => 0 | pred + 1 => b(pred) end and b: (n: #NatType) -> #NatType = (n: #NatType) => #{goal = #NatType} match n | 0 => 0 | pred + 1 => a(pred) end; ${member})";
+
+/// A pair met again inside its own unfolding is unfolded again where one call's unfolding takes its match apart. `a(m + 2)` and `b(m + 1)`, two members of one group, unfold to `b(m + 1)` and `a(m)`, the same two heads, and `b(m + 1)` takes its successor apart: a second unfolding meets `a(m)` against its own body, one term. `a(m)` and `b(m)` unfold to two matches stuck on `m` whose arms pose `b(pred)` and `a(pred)`, both re-stuck, and that pair is apart, as an induction would hold it. The elaborator's twin shares the name.
+///
+/// Mutation-checked: with every pair met again apart, the first two are refused; and with none, the budget, small here, runs out on the second two.
+#[test]
+fn a_pair_met_again_where_one_call_computes_is_unfolded_again() {
+    let mut certifier = Certifier::new(10_000, SYNTAX);
+    let [ahead, behind, at_a, at_b] = under(
+        &mut certifier,
+        "m: #NatType",
+        &fill!(
+            "(${a})(#NatAdd(m, 2)), (${b})(#NatAdd(m, 1)), (${a})(m), (${b})(m)",
+            a = fill!(ALTERNATING, member = "a"),
+            b = fill!(ALTERNATING, member = "b")
+        ),
+    );
+    let nat = term("#NatType");
+
+    assert_eq!(convert(&mut certifier, &nat, &ahead, &behind), Ok(true));
+    assert_eq!(convert(&mut certifier, &nat, &at_a, &at_b), Ok(false));
+}
+
 /// A verdict that rested on a pair left apart is not remembered. Two calls are apart inside their own unfolding and nowhere else, so a refusal that met one is true of the path it was reached on, and it is filed nowhere — where a comparison that met none is filed, and forgotten with the budget.
 ///
 /// Mutation-checked: with a verdict filed whatever was left apart while deciding it, the two calls are remembered apart; and with the declaration's verdicts kept across a restore, the control still answers after it.

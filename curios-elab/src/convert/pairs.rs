@@ -1,6 +1,6 @@
 //! The unfoldings a conversion problem stands inside.
 //!
-//! Two folded calls their heads and their spines do not decide are unfolded once, both of them, and compared again. Where that comparison poses the same two heads again, a second unfolding reproduces the first: the pair is apart there, and what it would take to hold it is an induction, which a lemma states (`documentation/design/soundness/conversion-recurrence.md`).
+//! Two folded calls their heads and their spines do not decide are unfolded once, both of them, and compared again. Where that comparison poses the same two heads again with both calls re-stuck ([`restuck`](crate::restuck)), a second unfolding poses the first's question one binder further in: the pair is apart there, and what it would take to hold it is an induction, which a lemma states (`documentation/design/soundness/conversion-recurrence.md`). Where one call still takes its match apart, the pair is unfolded again.
 //!
 //! A recursive definition opened alone, against a term with nothing to open, is no pair, and is recorded all the same. What a problem stands inside is part of what a run remembers having posed ([`Posed`](super::Posed)), so a problem posed inside an unfolding is never taken for the same problem posed outside it: skipped as posed already, it would be held by itself.
 

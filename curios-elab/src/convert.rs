@@ -30,7 +30,9 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Context, applied_head, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
+    super::{
+        Context, applied_head, check, reduce, reduce_forced, restuck, unfold_rec, unfold_rec_apply,
+    },
     crate::{
         Declined, Error, Occurrence, Scoped, locals_outside_spines, metavar_origins,
         metavar_spines, named_members, read_outside_spines, zonk_solved_term_metas,
@@ -1050,19 +1052,29 @@ impl Convert {
                 Ok(Outcome::Mismatch(_)) => {
                     context.rollback_solutions(mark);
                     context.end_solutions(mark);
-                    // A pair of calls is unfolded against itself once: inside its own unfolding it is apart, since unfolded again it poses itself again.
-                    if self.pairs.hold(&this.head, &that.head) {
-                        context.note_apart();
-                        return Ok(Settled::Decided(false));
-                    }
                     let (this_head, that_head) = (this.head.clone(), that.head.clone());
+                    let held = self
+                        .pairs
+                        .hold(&this_head, &that_head)
+                        .then(|| (this.clone(), that.clone()));
                     let this = unfold_rec_apply(context, this)?;
                     let that = unfold_rec_apply(context, that)?;
                     return Ok(Settled::Decided(match (this, that) {
                         (Some(this), Some(that)) => {
-                            self.unfolded(Some(&this_head), Some(&that_head));
-                            self.enqueue(type_, this, that);
-                            true
+                            // A pair of calls met again inside its own unfolding is apart where both unfoldings re-stick: unfolded again it poses what its first unfolding posed one binder further in. Where one takes its match apart, the unfolding is taken again.
+                            let apart = match &held {
+                                Some((this_call, that_call)) => {
+                                    both_restuck(context, [(this_call, &this), (that_call, &that)])?
+                                }
+                                None => false,
+                            };
+                            if apart {
+                                context.note_apart();
+                            } else {
+                                self.unfolded(Some(&this_head), Some(&that_head));
+                                self.enqueue(type_, this, that);
+                            }
+                            !apart
                         }
                         _ => false,
                     }));
@@ -3164,10 +3176,18 @@ impl Convert {
                             match (this_unfolded, that_unfolded) {
                                 (None, None) => self.compare_apply(context, this_a, that_a)?,
                                 (this_unfolded, that_unfolded) => {
-                                    // Both opened is a pair unfolded against itself, once: inside its own unfolding it is apart, since unfolded again it poses itself again. Where a metavariable keeps its heads undecided it waits for that instead, as the question of its levels does: a pair refused there would be refused by the order its metavariables were solved in.
-                                    let pair = this_unfolded.is_some() && that_unfolded.is_some();
-                                    let nested =
-                                        pair && self.pairs.hold(&this_a.head, &that_a.head);
+                                    // Both opened is a pair unfolded against itself, and met again inside its own unfolding it is apart where both unfoldings re-stick, since unfolded again it poses what it posed one binder further in; where one takes its match apart, the unfolding is taken again. Where a metavariable keeps its heads undecided it waits for that instead, as the question of its levels does: a pair refused there would be refused by the order its metavariables were solved in.
+                                    let nested = match (&this_unfolded, &that_unfolded) {
+                                        (Some(this), Some(that))
+                                            if self.pairs.hold(&this_a.head, &that_a.head) =>
+                                        {
+                                            both_restuck(
+                                                context,
+                                                [(&this_a, this), (&that_a, that)],
+                                            )?
+                                        }
+                                        _ => false,
+                                    };
                                     if nested {
                                         context.note_apart();
                                     }
@@ -3619,4 +3639,16 @@ fn named_by(context: &Context, metavar: &Metavar) -> u8 {
         MetavarOrigin::Witness(_) => 2,
         _ => 3,
     }
+}
+
+/// Whether two folded calls, each unfolded once, both re-stick ([`restuck`]): a pair that, met again inside its own unfolding, is apart. The second is asked only where the first re-sticks.
+fn both_restuck(context: &mut Context, calls: [(&Apply, &Term); 2]) -> Result<bool, ReduceError> {
+    for (call, unfolded) in calls {
+        let reduct = reduce(context, unfolded.clone())?;
+        if !restuck(context, &Subterm::Apply(call.clone()).into(), &reduct)? {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }

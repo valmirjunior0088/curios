@@ -29,7 +29,7 @@ mod test_support;
 mod tests;
 
 use {
-    super::{ByValue, Certifier, Converted, Error, InductAt, unfold_spelling},
+    super::{ByValue, Certifier, Converted, Error, InductAt, restuck, unfold_spelling},
     curios_analysis::{
         Classes, Within, case_target_indices, held_pairs, holds_no_type, one_up_to_instances,
         pinned_instance, struct_reaches_itself,
@@ -71,7 +71,7 @@ struct Pairs {
 impl Pairs {
     /// Record that the heads `this` and `that` are being unfolded against each other, until [`Pairs::refold`]: `false` where the pair is being unfolded already on this path, whichever side each was on.
     ///
-    /// **A pair of calls is unfolded against itself once.** Two folded calls their heads and spines do not decide are opened one definitional step and compared again, and where that comparison poses the same two heads, a second unfolding reproduces the first without end. The pair is apart there: what it would take to hold it is an induction, which a lemma states. It only withholds an unfolding, so it accepts nothing.
+    /// **A pair of calls that re-sticks is unfolded against itself once.** Two folded calls their heads and spines do not decide are opened one definitional step and compared again, and where that comparison poses the same two heads with both calls re-stuck ([`restuck`]), a second unfolding poses the first's question one binder further in. The pair is apart there: what it would take to hold it is an induction, which a lemma states. It only withholds an unfolding, so it accepts nothing. A pair met again where one call still takes its match apart is unfolded again by [`unfolded_retry`] without asking here, and what bounds it is the budget, as it bounds a partial recursion.
     ///
     /// **Apart there is a verdict of the path**, the pair being one, perhaps, where it is met outside its own unfolding. So it is counted, and [`compare`] files no verdict reached across it.
     fn unfold(&mut self, this: &Term, that: &Term) -> bool {
@@ -133,7 +133,7 @@ impl Pairs {
 ///
 /// A pair being unfolded stays recorded until the comparison of its two unfoldings returns ([`Pairs::refold`]), because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what a path is, and unwinding it releases the innermost pair first.
 ///
-/// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]), the budget spent on entry standing behind it — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted.
+/// An unfolding retry recurses back into here, and what bounds that chain is that a pair of heads re-stuck on both sides is unfolded against itself once ([`Pairs::unfold`]), the budget spent on entry standing behind it and bounding a pair that keeps computing — a constant standing in for the call stack is what [`recurse`] makes unnecessary. One chain is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted.
 fn compare(
     certifier: &mut ByValue,
     pairs: &mut Pairs,
@@ -1141,7 +1141,7 @@ fn struct_eta(
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
 ///
-/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
+/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*; what stops an unproductive pair is that a pair of heads is unfolded against itself once ([`Pairs::unfold`]): where both sides are opened, the two heads are recorded for as long as the unfoldings are compared, and the same two met again there are apart where both re-stick ([`restuck`]), and unfolded again where one still takes its match apart. One pair is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and [`rec_instances`] answers them before and after the unfolding, so a retry is granted only to heads it does not decide.
 fn unfolded_retry(
     certifier: &mut ByValue,
     pairs: &mut Pairs,
@@ -1170,6 +1170,13 @@ fn unfolded_retry(
             }
 
             if !pair {
+                return ground(certifier, pairs, &left, &right);
+            }
+            // Met again inside its own unfolding, the pair is apart where both unfoldings re-stick ([`restuck`]): the second unfolding poses what the first posed one binder further in. Where one takes its match apart, its unfolding is compared as the first was.
+            let held = [(this.call_root().clone(), that.call_root().clone())];
+            if pairs.unfolding_any(&held)
+                && !(restuck(certifier, this, &left)? && restuck(certifier, that, &right)?)
+            {
                 return ground(certifier, pairs, &left, &right);
             }
             if !pairs.unfold(this.call_root(), that.call_root()) {
