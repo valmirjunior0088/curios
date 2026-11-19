@@ -23,11 +23,11 @@ use {
         Context, Error, HeldFrames, WrittenLiteral, check, expect_as, pending, reduce_with,
         resolved_for_display, stuck_on_metavar,
     },
-    curios_common::{Plicity, Sign, recurse},
+    curios_common::{Plicity, recurse},
     curios_core::{
         Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, Keyed, Keys, Matrix,
-        Mention, Nat, NumLit, Pattern, Row, Slot, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, WrittenPlace,
+        Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, WrittenPlace,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -115,9 +115,9 @@ impl<'m> Shape<'m> {
             Shape::Peeled(pattern, peeled) => (pattern, peeled),
             Shape::Remains(..) | Shape::Text(_) => return None,
         };
-        // A column reads a value only once its rows have been realized at its type, a signed numeral being no natural's ([`Compiler::naturals`]), so a numeral's value is its magnitude and a character's its code point.
+        // A column reads a value only once its rows have been realized at its type, a signed numeral being no natural's ([`Compiler::naturals`]), so a numeral's value is the natural it spells and a character's its code point.
         let written = match pattern {
-            Pattern::Literal(NumLit::Number { magnitude, .. }) => magnitude.clone(),
+            Pattern::Literal(NumLit::Number(Numeral::Natural(natural))) => natural.clone(),
             Pattern::Literal(NumLit::Character(character)) => Natural::from(*character as u32),
             _ => return None,
         };
@@ -199,10 +199,9 @@ fn byte_pattern(byte: u8) -> &'static Pattern {
     &BYTES.get_or_init(|| {
         (0..=u8::MAX)
             .map(|byte| {
-                Pattern::Literal(NumLit::Number {
-                    magnitude: Natural::from(u32::from(byte)),
-                    sign: Sign::Unmarked,
-                })
+                Pattern::Literal(NumLit::Number(Numeral::Natural(Natural::from(u32::from(
+                    byte,
+                )))))
             })
             .collect()
     })[usize::from(byte)]
@@ -211,7 +210,7 @@ fn byte_pattern(byte: u8) -> &'static Pattern {
 /// What a literal pattern or a successor writes, which says the carriers it takes apart ([`Error::MatrixLiteralColumn`]).
 fn written_literal(pattern: &Pattern) -> WrittenLiteral {
     match pattern {
-        Pattern::Literal(NumLit::Number { sign, .. }) if sign.is_marked() => WrittenLiteral::Signed,
+        Pattern::Literal(NumLit::Number(Numeral::Integer(_))) => WrittenLiteral::Signed,
         Pattern::Literal(NumLit::Character(_)) => WrittenLiteral::Character,
         Pattern::Succ { .. } => WrittenLiteral::Successor,
         _ => WrittenLiteral::Numeral,
@@ -1491,7 +1490,7 @@ impl<'m> Compiler<'m> {
         let peels = first(|pattern| matches!(pattern, Pattern::Succ { .. }));
         // A literal past `0`, or a character, makes the column a dispatch where no successor makes it a case split.
         let dispatches = first(|pattern| match pattern {
-            Pattern::Literal(NumLit::Number { magnitude, .. }) => !magnitude.is_zero(),
+            Pattern::Literal(NumLit::Number(numeral)) => !numeral.magnitude().is_zero(),
             Pattern::Literal(NumLit::Character(_)) => true,
             _ => false,
         });
@@ -2357,8 +2356,8 @@ impl<'m> Compiler<'m> {
                         // A `0` written alone is induction's zero case, as a column whose rows write no literal past it reads it; a byte has no successor, so its `0` is a literal's case.
                         let zero = matches!(
                             shape,
-                            Shape::Pattern(Pattern::Literal(NumLit::Number { magnitude, .. }))
-                                if magnitude.is_zero()
+                            Shape::Pattern(Pattern::Literal(NumLit::Number(Numeral::Natural(natural))))
+                                if natural.is_zero()
                         );
                         if zero && !scrutinee.is_byte() {
                             let split = NatSplit::resolve(context, scrutinee, &goal, &mode)?;

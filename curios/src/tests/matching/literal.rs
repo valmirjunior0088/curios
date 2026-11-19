@@ -29,8 +29,8 @@ fn a_numeral_pattern_is_refused_where_its_column_has_no_value_it_spells() {
             "`+1` takes an `Int` apart by its value",
         ),
         (
-            "let f(b: Byte) -> Nat = match b | -0 => 1 | _ => 0 end;",
-            "`-0` takes an `Int` apart by its value",
+            "let f(b: Byte) -> Nat = match b | -1 => 1 | _ => 0 end;",
+            "`-1` takes an `Int` apart by its value",
         ),
         (
             "let f(b: Bool) -> Nat = match b | +1 => 1 | _ => 0 end;",

@@ -5,14 +5,20 @@
 use {
     crate::*,
     curios_common::{Sign, Source},
+    curios_core::Numeral,
+    curios_num::Integer,
 };
 
 // The radix carries the written width, so a fixture numeral takes the width its own decimal spelling has — which is what the parser reads back for it.
 pub fn num_lit(magnitude: u32, sign: Sign) -> Term {
+    let integer = Integer::from(magnitude);
     Subterm::NumLit(NumLit {
-        magnitude: magnitude.into(),
+        value: match sign {
+            Sign::Unmarked => Numeral::Natural(magnitude.into()),
+            Sign::Positive => Numeral::Integer(integer),
+            Sign::Negative => Numeral::Integer(-integer),
+        },
         radix: Radix::Dec(magnitude.to_string().len()),
-        sign,
     })
     .into()
 }

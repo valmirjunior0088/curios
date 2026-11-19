@@ -173,7 +173,7 @@ pub use term::{
     ArchivedFuncType, ArchivedGuard, ArchivedInductArm, ArchivedInductType, ArchivedInfix,
     ArchivedInstance, ArchivedKeyed, ArchivedKeys, ArchivedLet, ArchivedLetBinding, ArchivedMatch,
     ArchivedMatrix, ArchivedMetavar, ArchivedMetavarId, ArchivedMetavarOrigin, ArchivedMethod,
-    ArchivedNumLit, ArchivedPattern, ArchivedProj, ArchivedRec, ArchivedRecGroup,
+    ArchivedNumLit, ArchivedNumeral, ArchivedPattern, ArchivedProj, ArchivedRec, ArchivedRecGroup,
     ArchivedRecMemberScopes, ArchivedRow, ArchivedSlot, ArchivedSort, ArchivedStruct,
     ArchivedStructEntry, ArchivedStructType, ArchivedSubterm, ArchivedTerm, ArchivedTransient,
     ArchivedTuple, ArchivedTupleType, ArchivedVariant, ArchivedWantedPremise,
@@ -181,11 +181,11 @@ pub use term::{
     Bang, Carrier, Cases, Elements, Ending, Field, Foreign, FormerEta, Func, FuncType,
     GeneralizedLevels, Guard, HeadTag, InductArm, InductType, Infix, Instance, Inward, Keyed, Keys,
     Let, LetBinding, LevelDifferences, Match, Matrix, MentionCache, Mentions, MentionsIter,
-    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired,
-    Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort,
-    SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType,
-    Variant, WantedPremise, WitnessOrigin, WitnessRole, WrittenPlace, former_eta, goal_at,
-    keys_paired, paired,
+    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Numeral,
+    Paired, Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot,
+    Sort, SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple,
+    TupleType, Variant, WantedPremise, WitnessOrigin, WitnessRole, WrittenPlace, former_eta,
+    goal_at, keys_paired, paired,
 };
 
 mod walk;

@@ -5,10 +5,10 @@
 use {
     super::{
         Apply, Ascribed, Bang, Declared, Func, Global, Infix, Intrinsic, Level, Matrix, NumLit,
-        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
+        Numeral, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
     },
-    curios_common::{InfixOp, Sign, StringSyntax, SyntaxName},
-    curios_num::{Binary, Natural, Rounding},
+    curios_common::{InfixOp, StringSyntax, SyntaxName},
+    curios_num::{Binary, Rounding},
 };
 
 /// A registered function or constructor, written and applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names, whose instance elaboration chooses.
@@ -254,11 +254,10 @@ impl Term {
     }
 
     /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit`.
-    pub fn num_lit(magnitude: Natural, sign: Sign) -> Self {
-        Self::from(Subterm::Transient(Transient::NumLit(NumLit::Number {
-            magnitude,
-            sign,
-        })))
+    pub fn num_lit(numeral: Numeral) -> Self {
+        Self::from(Subterm::Transient(Transient::NumLit(NumLit::Number(
+            numeral,
+        ))))
     }
 
     /// A character-spelled polymorphic literal ([`NumLit::Character`]) — elaboration-transient like the numeral form, defaulting to `/std/Char`.

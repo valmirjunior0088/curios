@@ -1,6 +1,6 @@
 //! List and binary literals and the spread and atom segments inside them.
 
-use {crate::parse::test_support::*, crate::*, curios_common::Sign};
+use {crate::parse::test_support::*, crate::*, curios_common::Sign, curios_core::Numeral};
 
 #[test]
 fn spread_entries_are_struct_literal_only() {
@@ -38,9 +38,8 @@ fn list_literal_spread_entries() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
     let nat = |n: usize| -> Term {
         Subterm::NumLit(NumLit {
-            magnitude: n.into(),
+            value: Numeral::Natural(n.into()),
             radix: Radix::Dec(n.to_string().len()),
-            sign: Sign::Unmarked,
         })
         .into()
     };

@@ -19,7 +19,7 @@ use {
         TupleType,
     },
     curios_abi::ForeignFunction,
-    curios_common::{Plicity, Qualifier, Sign, Span, recurse},
+    curios_common::{Plicity, Qualifier, Span, recurse},
     curios_core::{Free, Global, Intrinsic, Nat, Quality, QualityParam},
     std::{
         collections::{HashMap, hash_map::Entry},
@@ -449,10 +449,9 @@ pub fn value_number(value: &CoreValue) -> Result<u64, ReadError> {
 pub fn term_number(term: &Term<CoreText>) -> Option<u64> {
     match term.as_subterm() {
         Subterm::NumLit(NumLit {
-            magnitude,
-            sign: Sign::Unmarked,
+            value: curios_core::Numeral::Natural(natural),
             ..
-        }) => u64::try_from(magnitude).ok(),
+        }) => u64::try_from(natural).ok(),
         _ => None,
     }
 }
@@ -617,11 +616,10 @@ fn form_read(
         }
         Subterm::Literal(Literal::Bytes(segments)) => packed_read(segments, span),
         Subterm::NumLit(NumLit {
-            magnitude,
-            sign: Sign::Unmarked,
+            value: curios_core::Numeral::Natural(natural),
             ..
         }) => Ok(curios_core::Term::intrinsic(Intrinsic::Nat(Nat::new(
-            magnitude.clone(),
+            natural.clone(),
         )))),
         Subterm::FuncType(function) => function_type_read(function, reader),
         Subterm::Func(function) => function_read(function, reader),

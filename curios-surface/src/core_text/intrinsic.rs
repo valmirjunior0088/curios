@@ -6,13 +6,13 @@ use {
     super::{
         ReadError, Reader, Refusal, bracketed, core_form, core_read, hexadecimal, malformed,
         numeral, term_word, tree, universes_read, universes_written, value, value_list, value_term,
-        value_word, verbatim, word,
+        value_word, verbatim, word, written_numeral,
     },
     crate::{
         BytesSegment, CoreForm, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
         NumLit, Rendered, Writer, intrinsic_form, sub, written_intrinsic,
     },
-    curios_common::{Sign, Span},
+    curios_common::Span,
     curios_core::{Intrinsic, Nat, Subterm, Term, Universes},
     curios_num::{Binary, Floating, Integer, Rounding},
 };
@@ -25,11 +25,11 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
     match intrinsic {
         Intrinsic::Bool(value) => tree(crate::Subterm::Literal(Literal::Bool(value))),
         Intrinsic::Nat(nat) => nat_written(nat, frame),
-        Intrinsic::Byte(byte) => called("Byte", vec![value(numeral(byte, Sign::Unmarked))]),
+        Intrinsic::Byte(byte) => called("Byte", vec![value(numeral(byte))]),
         Intrinsic::Int(integer) => called("Int", vec![value(integer_written(&integer))]),
         Intrinsic::Flt(flt) => called("Flt", vec![value(flt_literal(flt))]),
         Intrinsic::Bytes(bytes) => bracketed_packed(bytes.as_bytes()),
-        Intrinsic::Handle(handle) => called("Handle", vec![value(numeral(handle, Sign::Unmarked))]),
+        Intrinsic::Handle(handle) => called("Handle", vec![value(numeral(handle))]),
         Intrinsic::BoolType => called("BoolType", Vec::new()),
         Intrinsic::BoolAnd(operand0, operand1) => called(
             "BoolAnd",
@@ -667,14 +667,14 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
 /// A `Nat`: a numeral where it is one, and its variant over the term it offsets otherwise.
 fn nat_written<D: Rendered>(nat: Nat, frame: Frame<'_, D>) -> crate::Term<D> {
     match nat {
-        Nat::Zero => numeral(0u32, Sign::Unmarked),
+        Nat::Zero => numeral(0u32),
         Nat::Succ(offset, tail) => match &*tail {
-            Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => numeral(offset, Sign::Unmarked),
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => numeral(offset),
             _ => called(
                 "Nat",
                 vec![value(super::called(
                     word("Succ"),
-                    vec![numeral(offset, Sign::Unmarked), sub(tail, frame)],
+                    vec![numeral(offset), sub(tail, frame)],
                 ))],
             ),
         },
@@ -683,12 +683,10 @@ fn nat_written<D: Rendered>(nat: Nat, frame: Frame<'_, D>) -> crate::Term<D> {
 
 /// An `Int` as its numeral, signed where it is below zero.
 fn integer_written<D: Rendered>(integer: &Integer) -> crate::Term<D> {
-    let sign = match *integer < Integer::from(0i32) {
-        true => Sign::Negative,
-        false => Sign::Unmarked,
-    };
-
-    numeral(integer.magnitude(), sign)
+    match *integer < Integer::from(0i32) {
+        true => written_numeral(curios_core::Numeral::Integer(integer.clone())),
+        false => numeral(integer.magnitude()),
+    }
 }
 
 /// A `Flt` as the literal that reads back as it, or its bits in hexadecimal where none does: a NaN other than the default one of either sign.
@@ -1482,10 +1480,9 @@ fn rounding(value: &CoreValue) -> Result<Rounding, ReadError> {
 fn unsigned(value: &CoreValue) -> Option<curios_num::Natural> {
     match value_term(value).ok()?.as_subterm() {
         crate::Subterm::NumLit(NumLit {
-            magnitude,
-            sign: Sign::Unmarked,
+            value: curios_core::Numeral::Natural(natural),
             ..
-        }) => Some(magnitude.clone()),
+        }) => Some(natural.clone()),
         _ => None,
     }
 }
@@ -1511,15 +1508,10 @@ fn nat_read(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Nat, ReadError
 /// An `Int`'s value, a numeral under its sign.
 fn int_read(value: &CoreValue) -> Result<Integer, ReadError> {
     match value_term(value)?.as_subterm() {
-        crate::Subterm::NumLit(NumLit {
-            magnitude, sign, ..
-        }) => {
-            let integer = Integer::from(magnitude.clone());
-            Ok(match sign {
-                Sign::Negative => -integer,
-                Sign::Unmarked | Sign::Positive => integer,
-            })
-        }
+        crate::Subterm::NumLit(NumLit { value, .. }) => Ok(match value {
+            curios_core::Numeral::Natural(natural) => Integer::from(natural.clone()),
+            curios_core::Numeral::Integer(integer) => integer.clone(),
+        }),
         _ => Err(malformed("an integer", value)),
     }
 }
@@ -1529,10 +1521,9 @@ fn flt_read(value: &CoreValue) -> Result<Floating, ReadError> {
     match value_term(value)?.as_subterm() {
         crate::Subterm::Literal(Literal::Flt(flt)) => Ok(flt.value),
         crate::Subterm::NumLit(NumLit {
-            magnitude,
-            sign: Sign::Unmarked,
+            value: curios_core::Numeral::Natural(natural),
             ..
-        }) => u64::try_from(magnitude)
+        }) => u64::try_from(natural)
             .map(Floating::from_bits)
             .map_err(|_| malformed("a float's bits", value)),
         _ => Err(malformed("a float", value)),

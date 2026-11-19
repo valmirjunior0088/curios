@@ -19,12 +19,12 @@ use {
     crate::{is_prop_to, sort_of_in},
     curios_common::{
         ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
-        Qualifier, Sign, SpellDerivation, StringSyntax, Symbol, SyntaxRegistry,
+        Qualifier, SpellDerivation, StringSyntax, Symbol, SyntaxRegistry,
     },
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Mention,
-        MetavarOrigin, Method, StructDecl, StructEntry, StructType, Subterm, Term, WantedPremise,
-        WitnessOrigin, WitnessRole, str_literal, syn_call,
+        MetavarOrigin, Method, Numeral, StructDecl, StructEntry, StructType, Subterm, Term,
+        WantedPremise, WitnessOrigin, WitnessRole, str_literal, syn_call,
     },
     curios_num::Natural,
     std::rc::Rc,
@@ -647,7 +647,7 @@ fn hash_body(
         )),
     };
 
-    let ordinal = |index: usize| Term::num_lit(Natural::from(index), Sign::Unmarked);
+    let ordinal = |index: usize| Term::num_lit(Numeral::Natural(Natural::from(index)));
 
     let encoded = match subject {
         Subject::Struct { name, decl, params } => {
@@ -922,7 +922,7 @@ fn order(
                             .into_iter()
                             .zip(binders)
                             .collect::<Vec<_>>(),
-                        Term::num_lit(Natural::from(index), Sign::Unmarked),
+                        Term::num_lit(Numeral::Natural(Natural::from(index))),
                     ));
                 }
 

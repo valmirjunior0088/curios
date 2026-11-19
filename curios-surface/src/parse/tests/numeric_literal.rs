@@ -1,6 +1,9 @@
 //! Numeric literals: polymorphic numerals, signs and the non-finite values, radixes and padded widths, and a float that overflows.
 
-use {crate::parse::test_support::*, crate::*, curios_common::Sign, curios_num::Floating};
+use {
+    crate::parse::test_support::*, crate::*, curios_common::Sign, curios_core::Numeral,
+    curios_num::Floating,
+};
 
 #[test]
 fn integer_literals_are_polymorphic_num_lits() {
@@ -8,6 +11,14 @@ fn integer_literals_are_polymorphic_num_lits() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, Sign::Unmarked));
     assert_eq!("+42".parse::<Term>().unwrap(), num_lit(42, Sign::Positive));
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, Sign::Negative));
+    // The integer zero is `+0`, which prints back as written; a float's negative zero is a decimal.
+    let zero = "+0".parse::<Term>().unwrap();
+    assert_eq!(zero, num_lit(0, Sign::Positive));
+    assert_eq!(zero.to_string(), "+0");
+    assert!(matches!(
+        "-0.0".parse::<Term>().unwrap().as_subterm(),
+        Subterm::Literal(Literal::Flt(_))
+    ));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
         Term::from(Subterm::Literal(Literal::Flt(Floating::from(42.0).into())))
@@ -143,20 +154,22 @@ fn the_non_finite_values_are_signed_literals() {
     assert!("+nan.0x".parse::<Term>().is_err());
 }
 
-/// A sign is read once, by the number it leads, so one that touches no magnitude is told what a sign leads. Read by each magnitude for itself, it failed three alternatives at one offset and the report was the first one's word, `expected: `inf.0``.
+/// A sign is read once, by the number it leads, so one that touches no magnitude is told what a sign leads. Read by each magnitude for itself, it failed three alternatives at one offset and the report was the first one's word, `expected: `inf.0``. A `-` leads a numeral past zero, since an integer has no negative zero, so `-0` in any radix is no numeral and is told so where its digits begin.
 #[test]
 fn a_sign_that_touches_no_magnitude_is_told_what_a_sign_leads() {
-    for source in [
-        "let x : Int = - ;\nx",
-        "let x : Int = -y;\nx",
-        "let x : Int = +;\nx",
+    let minus = "expected a numeral past zero, `inf.0` or `nan.0` after the `-`";
+    let plus = "expected a numeral, `inf.0` or `nan.0` after the `+`";
+    for (source, leads) in [
+        ("let x : Int = - ;\nx", minus),
+        ("let x : Int = -y;\nx", minus),
+        ("let x : Int = -0;\nx", minus),
+        ("let x : Int = -0x00;\nx", minus),
+        ("let x : Int = -0b0;\nx", minus),
+        ("let x : Int = +;\nx", plus),
     ] {
         let error = source.parse::<Entrypoint>().unwrap_err();
         let report = error.format();
-        assert!(
-            report.contains("expected a numeral, `inf.0` or `nan.0` after the sign"),
-            "{source:?} reported {report}"
-        );
+        assert!(report.contains(leads), "{source:?} reported {report}");
         assert_eq!(
             error.report().span().map(|span| span.start),
             source.find(['-', '+']).map(|sign| sign + 1),
@@ -194,9 +207,8 @@ fn hex_literal_is_num_lit() {
     assert_eq!(
         "0xC2".parse::<Term>().unwrap(),
         Subterm::NumLit(NumLit {
-            magnitude: 194usize.into(),
+            value: Numeral::Natural(194usize.into()),
             radix: Radix::Hex(2),
-            sign: Sign::Unmarked,
         })
         .into()
     );
@@ -207,9 +219,8 @@ fn bytes_literal_is_num_lit() {
     assert_eq!(
         "0b1010".parse::<Term>().unwrap(),
         Subterm::NumLit(NumLit {
-            magnitude: 10usize.into(),
+            value: Numeral::Natural(10usize.into()),
             radix: Radix::Bin(4),
-            sign: Sign::Unmarked,
         })
         .into()
     );

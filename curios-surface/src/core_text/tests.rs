@@ -5,12 +5,12 @@ use {
     crate::{
         CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term, to_core,
     },
-    curios_common::{Qualifier, Sign, Source},
+    curios_common::{Qualifier, Source},
     curios_core::{
         Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
         Elements, Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam,
         Intrinsic, Item, Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
-        Nominals, NumLit, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort,
+        Nominals, NumLit, Numeral, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort,
         StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
         WitnessId, WitnessKey, WitnessOrigin,
     },
@@ -20,10 +20,7 @@ use {
 
 /// The pattern of the unsigned numeral `value`.
 fn unsigned(value: usize) -> Pattern {
-    Pattern::Literal(NumLit::Number {
-        magnitude: value.into(),
-        sign: Sign::Unmarked,
-    })
+    Pattern::Literal(NumLit::Number(Numeral::Natural(value.into())))
 }
 
 /// The term `term` writes, read on its own.

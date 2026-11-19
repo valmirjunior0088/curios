@@ -20,9 +20,9 @@ use {
         MatrixArm, Name, NatLiteral, NumLit, Pattern, Program, Proj, ProofLiteral, Radix, StrLit,
         StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
     },
-    curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
+    curios_common::{InfixOp, Plicity, Qualifier, recurse},
     curios_core::Bound,
-    curios_num::{Floating, Integer, Natural},
+    curios_num::{Floating, Natural},
     std::{cell::Cell, rc::Rc},
 };
 
@@ -176,11 +176,10 @@ fn global(name: &curios_core::Global, frame: Frame) -> Option<Term> {
 }
 
 /// A numeral nobody wrote, at its natural width.
-fn numeral<D: Dialect>(magnitude: Natural, sign: Sign) -> Term<D> {
+fn numeral<D: Dialect>(value: curios_core::Numeral) -> Term<D> {
     Subterm::NumLit(NumLit {
-        magnitude,
+        value,
         radix: Radix::Dec(0),
-        sign,
     })
     .into()
 }
@@ -188,9 +187,8 @@ fn numeral<D: Dialect>(magnitude: Natural, sign: Sign) -> Term<D> {
 /// A natural's key as the pattern a reader writes it as: an unsigned numeral nobody wrote, at its natural width.
 pub fn natural_pattern<D: Dialect>(magnitude: Natural) -> MatchPattern<D> {
     MatchPattern::Numeral(NumLit {
-        magnitude,
+        value: curios_core::Numeral::Natural(magnitude),
         radix: Radix::Dec(0),
-        sign: Sign::Unmarked,
     })
 }
 
@@ -474,8 +472,8 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             named(&frame.word(name))
         }
         curios_core::Subterm::Transient(curios_core::Transient::NumLit(
-            curios_core::NumLit::Number { magnitude, sign },
-        )) => numeral(magnitude, sign),
+            curios_core::NumLit::Number(value),
+        )) => numeral(value),
         curios_core::Subterm::Transient(curios_core::Transient::NumLit(
             curios_core::NumLit::Character(character),
         )) => Subterm::ProofLiteral(ProofLiteral::Char(character.into())).into(),
@@ -633,11 +631,10 @@ pub fn written_pattern<D: Dialect>(
             pred_label: written_slot(*predecessor, names, own),
             step: NatLiteral(step.clone(), Radix::Dec(0)),
         },
-        curios_core::Pattern::Literal(curios_core::NumLit::Number { magnitude, sign }) => {
+        curios_core::Pattern::Literal(curios_core::NumLit::Number(value)) => {
             MatchPattern::Numeral(NumLit {
-                magnitude: magnitude.clone(),
+                value: value.clone(),
                 radix: Radix::Dec(0),
-                sign: *sign,
             })
         }
         curios_core::Pattern::Literal(curios_core::NumLit::Character(character)) => {
@@ -976,26 +973,18 @@ pub fn written_intrinsic<T, D: Dialect>(
             infix(op, writer.operand(left)?, writer.operand(right)?)
         }
         IntrinsicForm::Bool(value) => Subterm::Literal(Literal::Bool(value)).into(),
-        IntrinsicForm::Nat(value) => numeral(value, Sign::Unmarked),
+        IntrinsicForm::Nat(value) => numeral(curios_core::Numeral::Natural(value)),
         IntrinsicForm::NatAbove { tail, floor } => infix(
             InfixOp::Add,
             writer.operand(tail)?,
-            numeral(floor, Sign::Unmarked),
+            numeral(curios_core::Numeral::Natural(floor)),
         ),
         IntrinsicForm::Byte(value) => Subterm::NumLit(NumLit {
-            magnitude: Natural::from(value),
+            value: curios_core::Numeral::Natural(Natural::from(value)),
             radix: Radix::Hex(2),
-            sign: Sign::Unmarked,
         })
         .into(),
-        IntrinsicForm::Int(value) => {
-            let sign = match value < Integer::from(0i32) {
-                true => Sign::Negative,
-                false => Sign::Positive,
-            };
-
-            numeral(value.magnitude(), sign)
-        }
+        IntrinsicForm::Int(value) => numeral(curios_core::Numeral::Integer(value)),
         IntrinsicForm::Flt(value) => written_flt(value, writer)?,
         IntrinsicForm::Bytes(entries) => {
             let segments = entries
@@ -1043,9 +1032,8 @@ fn written_segment<T, D: Dialect>(
 fn written_byte<D: Dialect>(byte: u8) -> BytesSegment<D> {
     BytesSegment::Atom(
         Subterm::NumLit(NumLit {
-            magnitude: Natural::from(byte),
+            value: curios_core::Numeral::Natural(Natural::from(byte)),
             radix: Radix::Hex(0),
-            sign: Sign::Unmarked,
         })
         .into(),
     )

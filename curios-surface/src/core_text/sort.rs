@@ -13,7 +13,7 @@ use {
     crate::{
         Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Rendered, Spelling, Subterm,
     },
-    curios_common::{InfixOp, Plicity, Sign},
+    curios_common::{InfixOp, Plicity},
     curios_core::{
         Level, LevelHead, Quality, QualityMetaId, QualityParam, Sort, Term, UniverseConstraint,
         UniverseContext, UniverseMetaId, UniverseParam, Universes,
@@ -129,8 +129,8 @@ fn quality_written<D: Rendered>(quality: &Quality) -> crate::Term<D> {
     match quality {
         Quality::Type => word("Type"),
         Quality::Prop => word("Prop"),
-        Quality::Param(param) => called(word("Param"), vec![numeral(param.0, Sign::Unmarked)]),
-        Quality::Meta(meta) => called(word("Meta"), vec![numeral(meta.0, Sign::Unmarked)]),
+        Quality::Param(param) => called(word("Param"), vec![numeral(param.0)]),
+        Quality::Meta(meta) => called(word("Meta"), vec![numeral(meta.0)]),
     }
 }
 
@@ -138,22 +138,21 @@ fn quality_written<D: Rendered>(quality: &Quality) -> crate::Term<D> {
 pub fn level_written<D: Rendered>(level: &Level) -> crate::Term<D> {
     let mut parts = Vec::new();
     if level.constant != 0 || level.atoms.is_empty() {
-        parts.push(numeral(level.constant, Sign::Unmarked));
+        parts.push(numeral(level.constant));
     }
     for (head, offset) in &level.atoms {
         let atom = match head {
             LevelHead::Param(param) => word(parameter_letter(param.0)),
-            LevelHead::Meta(meta) => decorated(
-                vec![("id", value(numeral(meta.0, Sign::Unmarked)))],
-                tree(Subterm::Goal),
-            ),
+            LevelHead::Meta(meta) => {
+                decorated(vec![("id", value(numeral(meta.0)))], tree(Subterm::Goal))
+            }
         };
         parts.push(match offset {
             0 => atom,
             offset => tree(Subterm::Infix(Infix {
                 op: InfixOp::Add,
                 left: atom,
-                right: numeral(*offset, Sign::Unmarked),
+                right: numeral(*offset),
             })),
         });
     }
@@ -238,16 +237,10 @@ pub fn universes_written<D: Rendered>(
 pub fn universe_context_written<D: Rendered>(context: &UniverseContext) -> Option<CoreValue<D>> {
     let mut fields = Vec::<Decoration<D>>::new();
     if context.parameter_count != 0 {
-        fields.push((
-            "parameter_count",
-            value(numeral(context.parameter_count, Sign::Unmarked)),
-        ));
+        fields.push(("parameter_count", value(numeral(context.parameter_count))));
     }
     if context.quality_count != 0 {
-        fields.push((
-            "quality_count",
-            value(numeral(context.quality_count, Sign::Unmarked)),
-        ));
+        fields.push(("quality_count", value(numeral(context.quality_count))));
     }
     if !context.constraints.is_empty() {
         fields.push((

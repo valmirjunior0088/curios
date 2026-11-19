@@ -9,7 +9,7 @@ use {
         word,
     },
     crate::{CoreText, Frame, Rendered, TupleField, TupleTypeParam, sub},
-    curios_common::{Plicity, Sign},
+    curios_common::Plicity,
     curios_core::{Field, Proj, Subterm, Term, Tuple, TupleType},
     std::iter,
 };
@@ -83,10 +83,7 @@ pub fn projection_written<D: Rendered>(
         Field::Position(index) => frame.decorated(
             vec![(
                 "field",
-                value(called(
-                    word("Position"),
-                    vec![numeral(index, Sign::Unmarked)],
-                )),
+                value(called(word("Position"), vec![numeral(index)])),
             )],
             read(crate::Field::Index(index)),
         ),
@@ -95,7 +92,7 @@ pub fn projection_written<D: Rendered>(
                 "field",
                 value(called(
                     word("Struct"),
-                    vec![frame.global(&record), numeral(index, Sign::Unmarked)],
+                    vec![frame.global(&record), numeral(index)],
                 )),
             )],
             read(crate::Field::Index(index)),

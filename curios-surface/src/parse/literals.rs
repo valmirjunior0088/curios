@@ -5,7 +5,8 @@ use {
         StrLit, Subterm, Term, Written, parse_term, parse_whitespace,
     },
     curios_common::{Keyword, Sign, Span},
-    curios_num::{Floating, Natural},
+    curios_core::Numeral,
+    curios_num::{Floating, Integer, Natural},
     curios_parse::{
         Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
         mark, not_ahead, pure, sep_by0_trailing, spanned, take_exact, take_n, take_while,
@@ -33,8 +34,12 @@ pub fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, T
         .parse(state)
 }
 
-/// What a sign with no magnitude behind it is told.
-const SIGN_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after the sign";
+/// What a `+` with no magnitude behind it is told.
+const PLUS_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after the `+`";
+
+/// What a `-` with no magnitude behind it is told: a negative numeral is past zero, since an integer has no negative zero ([`Numeral`]).
+const MINUS_LEADS_A_LITERAL: &str =
+    "expected a numeral past zero, `inf.0` or `nan.0` after the `-`";
 
 /// What a decimal with nothing before its dot is told.
 const NO_WHOLE_PART: &[&str] = &[
@@ -60,32 +65,42 @@ pub fn parse_number<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D
                 .map(flt)
                 .or(parse_num_lit(sign));
 
-            match sign {
-                Sign::Unmarked => finite.boxed(),
-                Sign::Negative | Sign::Positive => expecting(
-                    SIGN_LEADS_A_LITERAL,
-                    parse_non_finite_flt(sign == Sign::Negative)
-                        .map(FltLit::from)
-                        .map(flt)
-                        .or(finite),
-                )
-                .boxed(),
-            }
+            let leads = match sign {
+                Sign::Unmarked => return finite.boxed(),
+                Sign::Positive => PLUS_LEADS_A_LITERAL,
+                Sign::Negative => MINUS_LEADS_A_LITERAL,
+            };
+
+            expecting(
+                leads,
+                parse_non_finite_flt(sign == Sign::Negative)
+                    .map(FltLit::from)
+                    .map(flt)
+                    .or(finite),
+            )
+            .boxed()
         })
         .parse(state)
 }
 
-// A polymorphic integer literal's magnitude (decimal, `0x`, or `0b`) under the sign it was written with. Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`.
+// A polymorphic integer literal's magnitude (decimal, `0x`, or `0b`) under the sign it was written with: the natural it spells under none, and the integer under one. Under a `-` the magnitude is past zero, since an integer has no negative zero: a zero there declines where its digits begin, so `-0` is no numeral and the sign before it is told what it leads. Its concrete type (`Nat`/`Int`/`Flt`) is chosen by elaboration — a written sign rules out `Nat`.
 fn parse_num_lit<'a, D: Grammar>(sign: Sign) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
-        parse_nat_digits
-            .map(move |lit| {
-                let NatLiteral(magnitude, radix) = lit;
-                Subterm::NumLit(NumLit {
-                    magnitude,
-                    radix,
-                    sign,
-                })
+        look_ahead(parse_nat_digits)
+            .flat_map(move |NatLiteral(magnitude, _)| {
+                match sign == Sign::Negative && magnitude.is_zero() {
+                    true => fail(MINUS_LEADS_A_LITERAL).boxed(),
+                    false => pure(()).boxed(),
+                }
+            })
+            .and_keep(parse_nat_digits)
+            .map(move |NatLiteral(magnitude, radix)| {
+                let value = match sign {
+                    Sign::Unmarked => Numeral::Natural(magnitude),
+                    Sign::Positive => Numeral::Integer(Integer::from(magnitude)),
+                    Sign::Negative => Numeral::Integer(-Integer::from(magnitude)),
+                };
+                Subterm::NumLit(NumLit { value, radix })
             })
             .map(Into::into)
             .parse(state)
@@ -208,17 +223,20 @@ fn not_ahead_word<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 /// A finite `Flt` literal past its sign: a decimal with a digit on each side of its dot, optionally scaled by an exponent, kept with the text it was written as. `start` is where the literal began, its sign included.
 fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, FltLit> {
     move |state: ParserState<'a>| {
-        take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
-            .flat_map::<FltLit, _>(move |digits| {
-                let Some((whole, fraction)) = digits.split_once('.') else {
-                    return fail("expected: a floating-point literal with a dot and a decimal")
-                        .boxed();
-                };
-
-                if !fraction.starts_with(|char: char| char.is_ascii_digit()) {
-                    return fail("expected: a floating-point literal with a dot and a decimal")
-                        .boxed();
+        let decimal = |char: char| ".-+eE".contains(char) || char.is_ascii_digit();
+        // A run with no dot before a digit is no decimal, declined where it begins so the production around it says what stands there: under a sign, `-0` and `+e5` are told what the sign leads.
+        look_ahead(take_while(decimal))
+            .flat_map(|run| match run.split_once('.') {
+                Some((_, fraction)) if fraction.starts_with(|char: char| char.is_ascii_digit()) => {
+                    pure(()).boxed()
                 }
+                _ => fail("expected: a floating-point literal with a dot and a decimal").boxed(),
+            })
+            .and_keep(take_while(decimal))
+            .flat_map::<FltLit, _>(move |digits| {
+                let (whole, _) = digits
+                    .split_once('.')
+                    .expect("a decimal's dot is read ahead");
 
                 // Committed where the literal opens with its dot, since nothing else the grammar spells opens with a dot and a digit: uncommitted, the report would be the enclosing form's word on the dot. A name the character class admits, the `e` of `e.0`, is a projection's head and falls through.
                 if whole.is_empty() {

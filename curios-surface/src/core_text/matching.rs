@@ -400,7 +400,10 @@ pub fn match_read(
 
 /// The natural a key spelled as a numeral is: an unsigned numeral's value, and none for a signed one, which is no natural's.
 fn natural_key(numeral: &NumLit) -> Option<Natural> {
-    (!numeral.sign.is_marked()).then(|| numeral.magnitude.clone())
+    match &numeral.value {
+        curios_core::Numeral::Natural(natural) => Some(natural.clone()),
+        curios_core::Numeral::Integer(_) => None,
+    }
 }
 
 /// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.

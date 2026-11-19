@@ -10,7 +10,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_common::{ConceptField, InfixOp, Mint, Plicity, Sign, Symbol},
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
     std::{
         convert::Infallible,
         fmt,
@@ -35,10 +35,47 @@ pub struct Infix {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum NumLit {
-    /// A numeral: candidates `Nat`/`Bool`/`Byte`/`Int`/`Flt`, defaulting by [`Sign`] — `Int` when marked, else `Nat`.
-    Number { magnitude: Natural, sign: Sign },
+    /// A numeral: candidates `Nat`/`Bool`/`Byte`/`Int`/`Flt`, defaulting `Int` where it is signed and `Nat` where it is not.
+    Number(Numeral),
     /// A character-spelled scalar value: candidates `Char` (the default), `Nat`, `Byte`, `Int`.
     Character(char),
+}
+
+/// A numeral as it is written: the natural it spells where no sign is written, and the integer where one is, `+` from zero up and `-` below. The written sign is the integer's own, so a negative zero is no numeral, and a numeral with a sign is an `Int`'s pattern where one without is a natural's.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum Numeral {
+    Natural(Natural),
+    Integer(Integer),
+}
+
+impl Numeral {
+    /// Whether a sign is written.
+    pub fn is_signed(&self) -> bool {
+        matches!(self, Numeral::Integer(_))
+    }
+
+    /// Whether the value is below zero, which only a signed numeral's is.
+    pub fn is_negative(&self) -> bool {
+        matches!(self, Numeral::Integer(integer) if *integer < Integer::from(0i32))
+    }
+
+    /// The value's distance from zero.
+    pub fn magnitude(&self) -> Natural {
+        match self {
+            Numeral::Natural(natural) => natural.clone(),
+            Numeral::Integer(integer) => integer.magnitude(),
+        }
+    }
+
+    /// The sign as it is written: none, `+` for zero and up, and `-` below.
+    pub fn sign(&self) -> Sign {
+        match self {
+            Numeral::Natural(_) => Sign::Unmarked,
+            Numeral::Integer(_) if self.is_negative() => Sign::Negative,
+            Numeral::Integer(_) => Sign::Positive,
+        }
+    }
 }
 
 /// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/std/Monad/bind` application — built at elaboration rather than by the lowerer, so the sequencing survives to the stage that can make type-directed decisions about it.

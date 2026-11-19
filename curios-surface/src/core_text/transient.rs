@@ -6,13 +6,13 @@ use {
     super::{
         Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, core_read,
         decoration_fields, numeral, term_global, tree, value, value_list, value_number, value_term,
-        value_word, word, word_value,
+        value_word, word, word_value, written_numeral,
     },
     crate::{
         Alternative, CoreText, Frame, MatchPattern, MatrixArm, ProofLiteral, Rendered, sub,
         written_pattern,
     },
-    curios_common::{Plicity, Sign},
+    curios_common::Plicity,
     curios_core::{
         Arm, Ascribed, Atom, Bang, Elements, Func, Global, Infix, Matrix, Method, NumLit, Pattern,
         Row, Slot, Subterm, Term, Transient,
@@ -62,8 +62,8 @@ fn transient_written_as_core<D: Rendered>(
                 right: sub(right, frame),
             })),
         ),
-        Transient::NumLit(NumLit::Number { magnitude, sign }) => {
-            frame.decorated(node("NumLit"), numeral(magnitude, sign))
+        Transient::NumLit(NumLit::Number(value)) => {
+            frame.decorated(node("NumLit"), written_numeral(value))
         }
         Transient::NumLit(NumLit::Character(character)) => frame.decorated(
             node("NumLit"),
@@ -108,7 +108,7 @@ fn transient_written_as_core<D: Rendered>(
                 let counts = matrix
                     .arms
                     .iter()
-                    .map(|arm| value(numeral(arm.alternatives.len(), Sign::Unmarked)))
+                    .map(|arm| value(numeral(arm.alternatives.len())))
                     .collect();
                 fields.push(("arms", bracketed(counts)));
             }
@@ -328,15 +328,9 @@ pub fn node_transient_read(
 ) -> Result<Term, ReadError> {
     let refused = |what: &'static str| ReadError::at(Refusal::Malformed(what), operand.span());
     let transient = match (node, operand.as_subterm()) {
-        (
-            "NumLit",
-            crate::Subterm::NumLit(crate::NumLit {
-                magnitude, sign, ..
-            }),
-        ) => Transient::NumLit(NumLit::Number {
-            magnitude: magnitude.clone(),
-            sign: *sign,
-        }),
+        ("NumLit", crate::Subterm::NumLit(crate::NumLit { value, .. })) => {
+            Transient::NumLit(NumLit::Number(value.clone()))
+        }
         ("NumLit", crate::Subterm::ProofLiteral(ProofLiteral::Char(character))) => {
             Transient::NumLit(NumLit::Character(character.value))
         }
@@ -503,10 +497,7 @@ fn pattern_read(
         MatchPattern::Bool(value) => Pattern::Bool(*value),
         MatchPattern::Char(character) => Pattern::Literal(NumLit::Character(character.value)),
         MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
-        MatchPattern::Numeral(numeral) => Pattern::Literal(NumLit::Number {
-            magnitude: numeral.magnitude.clone(),
-            sign: numeral.sign,
-        }),
+        MatchPattern::Numeral(numeral) => Pattern::Literal(NumLit::Number(numeral.value.clone())),
         MatchPattern::Successor { pred_label, step } => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,
             step: step.0.clone(),

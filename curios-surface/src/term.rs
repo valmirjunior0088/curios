@@ -6,8 +6,9 @@ use {
         Dialect, FlatMatch, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix,
         parse_whole_term, print_match_pattern, print_term,
     },
-    curios_common::{InfixOp, Plicity, Sign, Source, Span, recurse},
-    curios_num::{Floating, Natural},
+    curios_common::{InfixOp, Plicity, Source, Span, recurse},
+    curios_core::Numeral,
+    curios_num::Floating,
     curios_parse::ParserError,
     curios_print::run_printer,
     std::{fmt, mem, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
@@ -701,12 +702,11 @@ pub struct Infix<D: Dialect = Program> {
     pub right: Term<D>,
 }
 
-/// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Literal::Flt`.
+/// A surface polymorphic numeric literal: the numeral as written, a natural where no sign is written and an integer where one is ([`Numeral`]). Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Literal::Flt`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumLit {
-    pub magnitude: Natural,
+    pub value: Numeral,
     pub radix: Radix,
-    pub sign: Sign,
 }
 
 /// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below.

@@ -286,10 +286,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
             MatchPattern::Str(literal) => curios_core::Pattern::Str(literal.value.clone()),
             MatchPattern::Numeral(numeral) => {
-                curios_core::Pattern::Literal(curios_core::NumLit::Number {
-                    magnitude: numeral.magnitude.clone(),
-                    sign: numeral.sign,
-                })
+                curios_core::Pattern::Literal(curios_core::NumLit::Number(numeral.value.clone()))
             }
             MatchPattern::Successor { pred_label, step } => curios_core::Pattern::Succ {
                 predecessor: self.slot(pred_label, binders),

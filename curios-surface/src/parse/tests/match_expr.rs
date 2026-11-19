@@ -1,10 +1,6 @@
 //! Inductive and matrix matches, and patterns.
 
-use {
-    crate::*,
-    curios_common::{Plicity, Sign},
-    curios_num::Natural,
-};
+use {crate::*, curios_common::Plicity, curios_core::Numeral, curios_num::Natural};
 
 #[test]
 fn inductive_match_nullary_and_unary() {
@@ -391,9 +387,10 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
     assert_eq!(
         first.alternatives[0].pattern,
         MatchPattern::Numeral(NumLit {
-            magnitude: Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral"),
+            value: Numeral::Natural(
+                Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral")
+            ),
             radix: Radix::Dec(10),
-            sign: Sign::Unmarked,
         })
     );
 }

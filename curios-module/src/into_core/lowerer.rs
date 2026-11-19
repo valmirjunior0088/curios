@@ -652,9 +652,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Intrinsic(intrinsic) => {
                 curios_core::Term::intrinsic(intrinsic.try_map(&mut |operand| self.term(operand))?)
             }
-            Subterm::NumLit(num_lit) => {
-                curios_core::Term::num_lit(num_lit.magnitude.clone(), num_lit.sign)
-            }
+            Subterm::NumLit(num_lit) => curios_core::Term::num_lit(num_lit.value.clone()),
             Subterm::Infix(infix) => curios_core::Term::infix(
                 infix.op,
                 self.term(&infix.left)?,
@@ -1552,11 +1550,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         match term.as_subterm() {
             Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(*byte),
             Subterm::NumLit(NumLit {
-                magnitude, sign, ..
-            }) => match sign.is_marked() {
-                true => None,
-                false => u8::try_from(magnitude).ok(),
-            },
+                value: curios_core::Numeral::Natural(natural),
+                ..
+            }) => u8::try_from(natural).ok(),
             // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
             Subterm::ProofLiteral(ProofLiteral::Char(character)) => {
                 u8::try_from(u32::from(character.value)).ok()

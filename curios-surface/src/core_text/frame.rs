@@ -6,7 +6,7 @@ use {
         FuncParam, FuncTypeParam, Literal, Minting, Name, Occurrence, Pattern, ProofLiteral, Radix,
         Rendered, Shown, Spelling, StrLit, StructLit, StructLitEntry, TupleField, core_written,
     },
-    curios_common::{Plicity, Qualifier, Sign, is_identifier_char, recurse},
+    curios_common::{Plicity, Qualifier, is_identifier_char, recurse},
     curios_core::{
         Argument, Cursor, Free, Global, Intrinsic, Label, One, Scope, Subterm, Term, Two,
     },
@@ -140,7 +140,7 @@ fn named<D: Rendered>(key: u64, written: crate::Term<D>) -> crate::Term<D> {
 
 /// A shared node's key, as a decorator writes it.
 fn shared_key<D: Rendered>(key: u64) -> CoreValue<D> {
-    value(numeral(key, Sign::Unmarked))
+    value(numeral(key))
 }
 
 /// `node` as a tree.
@@ -185,21 +185,24 @@ pub fn word<D: Rendered>(text: impl Into<String>) -> crate::Term<D> {
     }
 }
 
-/// A numeral nobody wrote, at its natural width, under `sign`.
-pub fn numeral<D: Rendered>(magnitude: impl Into<Natural>, sign: Sign) -> crate::Term<D> {
+/// The unsigned numeral nobody wrote that spells `magnitude`, at its natural width.
+pub fn numeral<D: Rendered>(magnitude: impl Into<Natural>) -> crate::Term<D> {
+    written_numeral(curios_core::Numeral::Natural(magnitude.into()))
+}
+
+/// The numeral nobody wrote that spells `value`, at its natural width: unsigned for a natural, and signed for an integer.
+pub fn written_numeral<D: Rendered>(value: curios_core::Numeral) -> crate::Term<D> {
     tree(crate::Subterm::NumLit(crate::NumLit {
-        magnitude: magnitude.into(),
+        value,
         radix: Radix::Dec(0),
-        sign,
     }))
 }
 
 /// A numeral in hexadecimal, at `digits` digits.
 pub fn hexadecimal<D: Rendered>(magnitude: impl Into<Natural>, digits: usize) -> crate::Term<D> {
     tree(crate::Subterm::NumLit(crate::NumLit {
-        magnitude: magnitude.into(),
+        value: curios_core::Numeral::Natural(magnitude.into()),
         radix: Radix::Hex(digits),
-        sign: Sign::Unmarked,
     }))
 }
 
@@ -301,7 +304,7 @@ impl<D: Rendered> Frame<'_, D> {
         };
         let mut fields = Vec::new();
         if let Some(written) = label.written() {
-            fields.push(("written", value(numeral(written, Sign::Unmarked))));
+            fields.push(("written", value(numeral(written))));
         }
         if label.binds_proof() {
             fields.push((

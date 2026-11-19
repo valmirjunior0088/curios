@@ -12,8 +12,8 @@ use {
     curios_common::{InfixOp, Plicity, Symbol, recurse},
     curios_core::{
         Advance, ArgumentSite, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey,
-        Infix, Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm,
-        Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole, method_labels,
+        Infix, Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Numeral, Probe, Proj, Rec,
+        Subterm, Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole, method_labels,
     },
     curios_num::{Floating, Integer, Rounding},
     std::collections::BTreeMap,
@@ -339,11 +339,11 @@ pub fn elaborate_num_lit(
     let intrinsic = match (realize(num_lit, &target)?, num_lit) {
         (Some(intrinsic), _) => intrinsic,
         // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report would name the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` would refuse `1` against `?`.
-        (None, NumLit::Number { sign, .. }) => {
+        (None, NumLit::Number(numeral)) => {
             let Mode::Check(expected) = &mode else {
                 unreachable!("Infer-mode target is always the Nat/Int shape default");
             };
-            let inferred = if sign.is_negative() {
+            let inferred = if numeral.is_negative() {
                 int_type
             } else {
                 default_type
@@ -371,20 +371,22 @@ pub fn elaborate_num_lit(
 /// A numeral realizes at a `Nat` and a `Byte` unless it is negative, at a `Bool` as `0` or `1`, since a bit is a `Bool` in this language, and at an `Int` and a `Flt` with either sign; a character realizes as its code point at a `Nat`, a `Byte` and an `Int`.
 pub fn realize(num_lit: &NumLit, carrier: &Subterm) -> Result<Option<Intrinsic>, Error> {
     Ok(Some(match num_lit {
-        NumLit::Number { magnitude, sign } => match carrier {
-            Subterm::Intrinsic(Intrinsic::NatType) if !sign.is_negative() => {
-                Intrinsic::Nat(Nat::new(magnitude.clone()))
+        NumLit::Number(numeral) => match carrier {
+            Subterm::Intrinsic(Intrinsic::NatType) if !numeral.is_negative() => {
+                Intrinsic::Nat(Nat::new(numeral.magnitude()))
             }
-            Subterm::Intrinsic(Intrinsic::ByteType) if !sign.is_negative() => {
-                let Some(value) = u8::try_from(magnitude).ok() else {
+            Subterm::Intrinsic(Intrinsic::ByteType) if !numeral.is_negative() => {
+                let magnitude = numeral.magnitude();
+                let Some(value) = u8::try_from(&magnitude).ok() else {
                     return Err(Error::ByteLiteralOutOfRange {
                         value: magnitude.to_string(),
                     });
                 };
                 Intrinsic::Byte(value)
             }
-            Subterm::Intrinsic(Intrinsic::BoolType) if !sign.is_negative() => {
-                match u8::try_from(magnitude).ok() {
+            Subterm::Intrinsic(Intrinsic::BoolType) if !numeral.is_negative() => {
+                let magnitude = numeral.magnitude();
+                match u8::try_from(&magnitude).ok() {
                     Some(0) => Intrinsic::Bool(false),
                     Some(1) => Intrinsic::Bool(true),
                     _ => {
@@ -394,22 +396,20 @@ pub fn realize(num_lit: &NumLit, carrier: &Subterm) -> Result<Option<Intrinsic>,
                     }
                 }
             }
-            Subterm::Intrinsic(Intrinsic::IntType) => {
-                let magnitude = Integer::from(magnitude.clone());
-                Intrinsic::Int(match sign.is_negative() {
-                    true => -magnitude,
-                    false => magnitude,
-                })
-            }
+            Subterm::Intrinsic(Intrinsic::IntType) => Intrinsic::Int(match numeral {
+                Numeral::Natural(natural) => Integer::from(natural.clone()),
+                Numeral::Integer(integer) => integer.clone(),
+            }),
             Subterm::Intrinsic(Intrinsic::FltType) => {
                 // Rounded by the model, as the decimal literal in `curios-module` is, so what a numeral means as a binary64 is stated once in this repository. A magnitude past the largest finite value rounds to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
-                let value = Floating::of_natural(magnitude, Rounding::TiesToEven);
+                let magnitude = numeral.magnitude();
+                let value = Floating::of_natural(&magnitude, Rounding::TiesToEven);
                 if !value.is_finite() {
                     return Err(Error::FltLiteralOutOfRange {
                         value: magnitude.to_string(),
                     });
                 }
-                Intrinsic::Flt(match sign.is_negative() {
+                Intrinsic::Flt(match numeral.is_negative() {
                     true => -value,
                     false => value,
                 })
@@ -459,8 +459,8 @@ pub fn numeral_default<'a>(
     let (mut signed, mut number) = (false, false);
     for literal in literals {
         match literal {
-            NumLit::Number { sign, .. } if sign.is_marked() => signed = true,
-            NumLit::Number { .. } => number = true,
+            NumLit::Number(numeral) if numeral.is_signed() => signed = true,
+            NumLit::Number(_) => number = true,
             NumLit::Character(_) => {}
         }
     }

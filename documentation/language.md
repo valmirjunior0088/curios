@@ -108,6 +108,8 @@ A numeral takes its type from where it stands: `Nat`, `Int`, `Byte`, `Bool` or `
 
 `-42` is one literal. `- 42` is none: between two operands it is a subtraction, and with no operand before it it is refused. The space is load-bearing.
 
+A `-` leads a numeral past zero: a signed numeral is the integer its sign and digits spell, and an integer has no negative zero, so `-0` is no numeral in any radix. The zero of an `Int` is `+0`, and a float's negative zero is the decimal `-0.0`.
+
 A floating-point literal has a decimal point with at least one digit on each side, and may have a sign and an `e` or `E` exponent. Its type is `Flt`.
 
 ```text

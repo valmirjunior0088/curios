@@ -546,14 +546,12 @@ fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
 }
 
 /// A numeral as it is written: its sign, then its magnitude in the radix it was written in, the one spelling a term's numeral and a pattern's share.
-fn spelled_numeral(
-    NumLit {
-        magnitude,
-        radix,
-        sign,
-    }: &NumLit,
-) -> String {
-    format!("{}{}", sign.symbol(), format_radix(magnitude, *radix))
+fn spelled_numeral(NumLit { value, radix }: &NumLit) -> String {
+    format!(
+        "{}{}",
+        value.sign().symbol(),
+        format_radix(&value.magnitude(), *radix)
+    )
 }
 
 // Zero-padded to the width the literal was written at. A `digits` of `0` — a numeral the compiler minted — asks for no minimum, which is the natural width.

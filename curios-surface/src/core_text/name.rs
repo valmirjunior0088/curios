@@ -10,7 +10,7 @@ use {
         value_list, value_number, value_term, value_variant, verbatim, word, word_value,
     },
     crate::{Apply, CoreText, CoreValue, Frame, Minting, Rendered, sub},
-    curios_common::{InfixOp, Plicity, Sign, Span, Symbol},
+    curios_common::{InfixOp, Plicity, Span, Symbol},
     curios_core::{
         ArgumentSite, Binding, CalleeId, Free, Global, Instance, Mention, Metavar, MetavarId,
         MetavarOrigin, Subterm, Term, Universes, Var, WantedPremise, WitnessOrigin, WitnessRole,
@@ -53,10 +53,7 @@ pub fn var_written<D: Rendered>(var: Var, frame: Frame<'_, D>) -> crate::Term<D>
         Binding::Bound(index) => frame.decorated(
             vec![(
                 "binding",
-                value(called(
-                    word("Bound"),
-                    vec![super::numeral(*index, curios_common::Sign::Unmarked)],
-                )),
+                value(called(word("Bound"), vec![super::numeral(*index)])),
             )],
             super::tree(crate::Subterm::Held),
         ),
@@ -74,10 +71,7 @@ pub fn var_written<D: Rendered>(var: Var, frame: Frame<'_, D>) -> crate::Term<D>
             .decorated(
                 vec![(
                     "binding",
-                    value(called(
-                        word("Free"),
-                        vec![super::numeral(free.index(), curios_common::Sign::Unmarked)],
-                    )),
+                    value(called(word("Free"), vec![super::numeral(free.index())])),
                 )],
                 frame.variable(free),
             ),
@@ -93,10 +87,7 @@ pub fn metavar_written<D: Rendered>(metavar: Metavar, frame: Frame<'_, D>) -> cr
     if let Some(leave) = frame.reader() {
         return reader_metavar(metavar, frame, leave);
     }
-    let mut fields = Vec::<Decoration<D>>::from([(
-        "id",
-        value(super::numeral(metavar.id.0, curios_common::Sign::Unmarked)),
-    )]);
+    let mut fields = Vec::<Decoration<D>>::from([("id", value(super::numeral(metavar.id.0)))]);
     if metavar.origin != MetavarOrigin::Goal {
         fields.push(("origin", value(origin_written(&metavar.origin, frame))));
     }
@@ -155,7 +146,7 @@ fn origin_written<D: Rendered>(origin: &MetavarOrigin, frame: Frame<'_, D>) -> c
                 ("callee", callee_written(&site.callee, frame)),
                 ("parameter", optional_symbol(site.parameter)),
                 ("plicity", word(plicity_word(site.plicity))),
-                ("position", super::numeral(site.position, Sign::Unmarked)),
+                ("position", super::numeral(site.position)),
             ],
         ),
         MetavarOrigin::Witness(witness) => literal_of(
@@ -186,10 +177,7 @@ fn plicity_word(plicity: Plicity) -> &'static str {
 /// What a witness slot is to its callee, as Core names it.
 fn role_written<D: Rendered>(role: &WitnessRole, frame: Frame<'_, D>) -> crate::Term<D> {
     match role {
-        WitnessRole::Premise(position) => called(
-            word("Premise"),
-            vec![super::numeral(*position, Sign::Unmarked)],
-        ),
+        WitnessRole::Premise(position) => called(word("Premise"), vec![super::numeral(*position)]),
         WitnessRole::Superclass(concept) => called(word("Superclass"), vec![frame.global(concept)]),
         WitnessRole::Implementation(field) => {
             called(word("Implementation"), vec![string(field.as_str())])
@@ -202,7 +190,7 @@ fn role_written<D: Rendered>(role: &WitnessRole, frame: Frame<'_, D>) -> crate::
             "Payload",
             vec![
                 ("label", optional_symbol(*label)),
-                ("ordinal", super::numeral(*ordinal, Sign::Unmarked)),
+                ("ordinal", super::numeral(*ordinal)),
                 (
                     "premise",
                     match premise {
