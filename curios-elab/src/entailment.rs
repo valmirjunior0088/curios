@@ -12,6 +12,7 @@
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them. A case a split opens multiplies its own facts by them and by one another ([`case_products`]), so the fact a case adds — each order the disequality an equality goal is refuted through makes — enters a product as an order's negated goal does.
 //! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
 //! - An empty proposition the facts refute: a bound at `False`, which is what a contradiction arm's `proved(@False)` asks for.
+//! - A conjunction of any of these, conjunct by conjunct, the proofs joined by `and/both` ([`conjoined`]).
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
@@ -37,7 +38,7 @@ mod tests;
 use {
     crate::{
         Context, Error, Expectation, Mode, elaborate, named_members, reduce_with, same_uncommitted,
-        zonk_solved_term_metas,
+        trivially_inhabited, zonk_solved_term_metas,
     },
     curios_algebra::{LinearForm, Monomial},
     curios_analysis::Classes,
@@ -105,6 +106,12 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
     let goal = goal_of(context, reduced)?;
     // The decision as the bound spells it, which the proof is written over where the bound's reduct is only read.
     let stated = held(context, bound)?;
+    // A conjunction is proved conjunct by conjunct, each by this procedure, and the proofs joined as a reader would join them.
+    if let Some(Goal::Decision(decision)) = &goal
+        && let Some((first, second)) = conjunction(context, stated.as_ref().unwrap_or(decision))?
+    {
+        return conjoined(context, bound, reduced, &first, &second);
+    }
 
     let entailed = context.with_entailing(|context| {
         if let Some(proof) = stated_by_a_fact(context, bound)? {
@@ -152,6 +159,63 @@ fn stated_by_a_fact(context: &mut Context, bound: &Term) -> Result<Option<Term>,
         }
     }
     Ok(None)
+}
+
+/// A bound that is a conjunction, proved by a fact that states it whole or by a proof of each conjunct joined with `and/both` — the proof a reader writes, `Bool/and/both(a, b, proved(), proved())`. Each conjunct is a bound of its own, stated as `bound` states its decision where that opens to `Holds`, and otherwise as `reduced` is, the match `Holds` reduces to, over the conjunct. A conjunct not proved refuses the whole with its own refusal, which names it; with `and/both` out of scope the bound is refused as it would be with no procedure.
+fn conjoined(
+    context: &mut Context,
+    bound: &Term,
+    reduced: &Term,
+    first: &Term,
+    second: &Term,
+) -> Result<Entailed, Error> {
+    let both = context.syntax().entailment.and_both;
+    let proof = match context.with_entailing(|context| stated_by_a_fact(context, bound))? {
+        Some(proof) => proof,
+        None => {
+            if !in_scope(context, &[both]) {
+                return Ok(Entailed::Refused(Refusal::default()));
+            }
+            let mut proofs = Vec::with_capacity(2);
+            for conjunct in [first, second] {
+                let stated = match holding(context, bound, conjunct)? {
+                    Some(stated) => stated,
+                    None => over(reduced, conjunct),
+                };
+                // A conjunct is a bound of its own, asked of the fill first as every bound is: conversion may decide it, as it decides `9216 <= 9216 + c`, where the conjunction it stands in was decided by neither.
+                let (reduct, inhabitant) = trivially_inhabited(context, &stated)?;
+                if let Some(inhabitant) = inhabitant {
+                    proofs.push(inhabitant);
+                    continue;
+                }
+                match entail(context, &stated, &reduct)? {
+                    Entailed::Proved(proof) => proofs.push(proof),
+                    Entailed::Refused(refusal) => {
+                        let conjunct = zonk_solved_term_metas(context, conjunct);
+                        return Ok(Entailed::Refused(refusal.of_conjunct(&conjunct)));
+                    }
+                }
+            }
+            let joined = [first.clone(), second.clone()].into_iter().chain(proofs);
+            match check(context, &Term::apply(global(both), joined), bound)? {
+                Some(proof) => proof,
+                None => return Ok(Entailed::Refused(Refusal::rejected())),
+            }
+        }
+    };
+    context.credit(&proof);
+    Ok(Entailed::Proved(proof))
+}
+
+/// `reduced`, the match `Holds` reduces to, over `decision` in place of the one it decided.
+fn over(reduced: &Term, decision: &Term) -> Term {
+    match &**reduced {
+        Subterm::Match(matched) => Term::from(Subterm::Match(Match {
+            head: decision.clone(),
+            ..matched.clone()
+        })),
+        _ => reduced.clone(),
+    }
 }
 
 /// The linear half: the goal and the facts read by one reader, the search over them and the negated goal, and the proof the certificate stands for. An absurd goal has no target and no negation: the facts must refute each other alone.

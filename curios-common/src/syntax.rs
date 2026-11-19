@@ -370,6 +370,8 @@ pub struct EntailmentSyntax {
     pub and_first: SyntaxName,
     /// Its second conjunct, read the same way.
     pub and_second: SyntaxName,
+    /// Two decisions that hold, as their conjunction: how a bound that is a conjunction is proved from a proof of each conjunct.
+    pub and_both: SyntaxName,
     /// The order vocabulary at `Nat`.
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
@@ -390,18 +392,21 @@ impl EntailmentSyntax {
             in_range,
             and_first,
             and_second,
+            and_both,
             nat,
             int,
             natural,
             integer,
         } = self;
 
-        [equality, sym, range, in_range, and_first, and_second]
-            .into_iter()
-            .chain(nat.targets())
-            .chain(int.targets())
-            .chain(natural.targets())
-            .chain(integer.targets())
+        [
+            equality, sym, range, in_range, and_first, and_second, and_both,
+        ]
+        .into_iter()
+        .chain(nat.targets())
+        .chain(int.targets())
+        .chain(natural.targets())
+        .chain(integer.targets())
     }
 }
 

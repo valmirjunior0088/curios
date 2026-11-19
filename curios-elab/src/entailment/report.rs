@@ -23,6 +23,8 @@ pub struct Refusal {
     absurd: bool,
     /// Whether the counterexample is one no program takes (`refuted`): a report then states it, with the heading above it, as what the search found, each atom read as a number of its own.
     refuted: bool,
+    /// Of a bound that is a conjunction, the conjunct the rest of the refusal is about: the first one not proved, at the depth its conjunction nests it.
+    conjunct: Option<Term>,
 }
 
 /// The search's conclusion, as the report states it.
@@ -70,11 +72,30 @@ impl Refusal {
         self.refuted
     }
 
-    /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it would with no procedure.
+    pub fn conjunct(&self) -> Option<&Term> {
+        self.conjunct.as_ref()
+    }
+
+    /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it would with no procedure. A conjunction's refusal names the conjunct it is about, so it says that much.
     pub fn is_silent(&self) -> bool {
         self.considered.is_empty()
             && self.unread.is_empty()
             && self.conclusion == Conclusion::Unsearched
+            && self.conjunct.is_none()
+    }
+
+    /// A refusal of a proof that was written and did not check, with nothing else to say.
+    pub(super) fn rejected() -> Self {
+        Refusal {
+            conclusion: Conclusion::Rejected,
+            ..Refusal::default()
+        }
+    }
+
+    /// This refusal, of the conjunct `conjunct`, as the refusal of a conjunction holding it: a conjunct it already names, nested deeper, is kept.
+    pub(super) fn of_conjunct(mut self, conjunct: &Term) -> Self {
+        self.conjunct.get_or_insert_with(|| conjunct.clone());
+        self
     }
 
     /// Every term the refusal spells, for the reader's spelling to cover.
@@ -88,6 +109,7 @@ impl Refusal {
             .chain(&self.unread)
             .flat_map(|(from, statement)| from.named().into_iter().chain([statement]))
             .chain(values.iter().map(|(atom, _)| atom))
+            .chain(&self.conjunct)
     }
 
     /// [`Refusal::terms`], each to be written over.
@@ -96,6 +118,7 @@ impl Refusal {
             considered,
             unread,
             conclusion,
+            conjunct,
             ..
         } = self;
         let values: &mut [(Term, String)] = match conclusion {
@@ -107,6 +130,7 @@ impl Refusal {
             .chain(unread)
             .flat_map(|(from, statement)| from.named_mut().into_iter().chain([statement]))
             .chain(values.iter_mut().map(|(atom, _)| atom))
+            .chain(conjunct)
     }
 
     /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it, in one pass ([`respelled`]): an outer reduct is replaced before one inside it, whichever reading found either.
@@ -164,6 +188,7 @@ impl Refusal {
             conclusion: outcome,
             absurd,
             refuted,
+            conjunct: None,
         }
     }
 }

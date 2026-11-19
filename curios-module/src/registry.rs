@@ -118,6 +118,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         in_range: name(&["std", "Nat", "in_range"]),
         and_first: name(&["std", "Bool", "and", "first"]),
         and_second: name(&["std", "Bool", "and", "second"]),
+        and_both: name(&["std", "Bool", "and", "both"]),
         nat: OrderSyntax {
             add: name(&["std", "Nat", "le", "add"]),
             scale: name(&["std", "Nat", "le", "mul_mono_r"]),

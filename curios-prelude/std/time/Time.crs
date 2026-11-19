@@ -61,21 +61,7 @@ pub let of_seconds(
     let hour = seconds / 3600;
     let minute = seconds % 3600 / 60;
     let second = seconds % 60;
-    Time {
-        hour = hour,
-        minute = minute,
-        second = second,
-        nanosecond = nanosecond,
-        @ok =
-            Bool/and/both(
-                hour <= 23 && minute <= 59 && second <= 60,
-                nanosecond <= 999999999,
-                Bool/and/both(
-                    hour <= 23 && minute <= 59,
-                    second <= 60,
-                    Bool/and/both(hour <= 23, minute <= 59, proved(), proved()),
-                    proved()),
-                proved()) };
+    Time { hour = hour, minute = minute, second = second, nanosecond = nanosecond, @ok = proved() };
 
 --- The time of day as ISO 8601's extended format writes it: `08:49:37`, and the fraction where there is one, trimmed of trailing zeros.
 pub let to_str(t: Time) -> Str =

@@ -57,6 +57,12 @@ const ROWS: &[Row] = &[
         "Nat",
         "needs(n)",
     ),
+    // A conjunction of bounds, proved conjunct by conjunct and joined, at any nesting: a time of day's fields from a count of seconds below a day's.
+    claim("x: Nat, p: Holds(x < 10)", "Holds(x < 11 && x < 12)"),
+    claim(
+        "s: Nat, p: Holds(s < 86400)",
+        "Holds(s / 3600 <= 23 && s % 3600 / 60 <= 59 && s % 60 <= 60)",
+    ),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))",
@@ -684,6 +690,8 @@ const CONTROLS: &[Row] = &[
     ),
     // No fact in scope.
     claim("i: Nat, n: Nat", "Holds(i < n)"),
+    // A conjunction one of whose conjuncts does not follow.
+    claim("x: Nat, p: Holds(x < 10)", "Holds(x < 11 && x < 5)"),
     // A fact too weak for the goal.
     claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i < n)"),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.
@@ -1013,6 +1021,18 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
         "{weak}"
     );
     assert!(weak.contains("it fails at"), "{weak}");
+
+    // A conjunction: the conjunct not proved, named at any depth, and what its own search found.
+    let conjunct = refusal(
+        "x: Nat, p: Holds(x < 10)",
+        "Holds(x < 11 && (x < 12 && 5 <= x))",
+    );
+    assert!(
+        conjunct.contains(
+            "its conjunct `5 <= x` is not proved\n│  it does not follow from the facts in scope:\n│    a hypothesis, `p`: `x < 10`"
+        ) && conjunct.contains("it fails at `x = "),
+        "{conjunct}"
+    );
 
     // A contradiction only the integers see: the counterexample is a fraction, which no natural is, so the report says what the search found and nothing of the facts.
     let rational = refusal(

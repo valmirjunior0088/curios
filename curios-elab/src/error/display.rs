@@ -226,6 +226,13 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
     if refusal.is_silent() {
         return;
     }
+    // A conjunction is proved conjunct by conjunct, and what follows is about the one not proved.
+    if let Some(conjunct) = refusal.conjunct() {
+        said.stating(format_args!(
+            "its conjunct `{}` is not proved",
+            conjunct.spelled(spelling)
+        ));
+    }
     let origin = |origin: &Origin| match origin {
         Origin::Hypothesis(name) => format!("a hypothesis, `{}`", name.spelled(spelling)),
         Origin::Field(name, label) => {

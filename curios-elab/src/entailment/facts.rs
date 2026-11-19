@@ -2211,6 +2211,34 @@ pub fn held(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error>
     })
 }
 
+/// `Holds(decision)` at the instance of `Holds` `stated` opens to, so a part of the decision `stated` holds is stated as `stated` is; `None` where opening reaches no `Holds`.
+pub fn holding(
+    context: &mut Context,
+    stated: &Term,
+    decision: &Term,
+) -> Result<Option<Term>, Error> {
+    let holds = Global::Authored(context.syntax().proof.holds.qualifier());
+    open_until(context, stated, |term| match &**term {
+        Subterm::Apply(Apply { head, arguments }) if names(head, holds) && arguments.len() == 1 => {
+            Some(Term::apply(head.clone(), [decision.clone()]))
+        }
+        _ => None,
+    })
+}
+
+/// The two conjuncts of `decision`, where it is a conjunction: as its spelling states them where opening its heads reaches one, and as its reduct does otherwise, as a `Bool` function unfolding to one is.
+pub fn conjunction(context: &mut Context, decision: &Term) -> Result<Option<(Term, Term)>, Error> {
+    if let Some(Opened::Conjunction(first, second)) = opened(context, decision)? {
+        return Ok(Some((first, second)));
+    }
+    Ok(match &*reduce_with(context, decision)? {
+        Subterm::Intrinsic(Intrinsic::BoolAnd(first, second)) => {
+            Some((first.clone(), second.clone()))
+        }
+        _ => None,
+    })
+}
+
 /// Whether `head` is `name` at any instance, as an elaborated statement writes a declaration.
 fn names(head: &Term, name: Global) -> bool {
     matches!(&**head, Subterm::Instance(instance) if instance.name == name)
