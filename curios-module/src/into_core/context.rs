@@ -748,6 +748,7 @@ impl Shared {
         }
         for body in removed {
             imports.hold(*body, Vec::new());
+            imports.hold_lines(*body, Vec::new());
         }
     }
 }
@@ -765,6 +766,8 @@ pub struct Context<'a> {
     shared: &'a Shared,
     // The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context, and an item records how much of it stands before it.
     in_scope: Vec<curios_core::Import>,
+    // What this body's `use` and `mod` lines name, where they write it, in the order they are written: the body's alone, as its scope is.
+    lines: Vec<curios_core::LineName>,
     // Per lexical scope, the site each imported label came through — a reference resolving through a label marks its site used. Declarations enter `bindings` and `qualifiers` without a site, so nothing marks for them.
     current_site: Option<usize>,
     binding_sites: HashMap<String, usize>,
@@ -792,6 +795,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             shared,
             in_scope: Vec::new(),
+            lines: Vec::new(),
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
@@ -811,6 +815,7 @@ impl<'a> Context<'a> {
             bindings: HashMap::new(),
             shared: self.shared,
             in_scope: Vec::new(),
+            lines: Vec::new(),
             current_site: None,
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
@@ -1381,16 +1386,9 @@ impl<'a> Context<'a> {
         Ok(reached)
     }
 
-    // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`).
+    // Resolve the module each of `name`'s first `upto` segments reaches, in order: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`).
     //
     // **What is guarded is the reach the author spelled, not where the name they wrote happens to live.** An absolute path names its root outright, and a relative one whose head is a module of this scope reaches the same place by another spelling — both are guarded at the head, so `sys/Nat/add` is refused exactly as `/sys/Nat/add` is. A head an *import* put in scope is not: that `use` was vetted where it was written, against the facade the standard library offers, and a type re-exported out of an internal root carries its constructors with it. Walking into them is reaching through the facade rather than past it, so `True/qed` under `use /std/{True}` is the consumer's to write even though the declaration sits in `/sys`.
-    fn resolve_module_prefix(&self, name: &Name, upto: usize) -> Result<Qualifier, Error> {
-        let reached = self.resolve_module_steps(name, upto)?;
-
-        Ok(reached.last().copied().unwrap_or_else(Qualifier::empty))
-    }
-
-    // The module each of `name`'s first `upto` segments reaches, in order, as [`Context::resolve_module_prefix`] walks them.
     fn resolve_module_steps(&self, name: &Name, upto: usize) -> Result<Vec<Qualifier>, Error> {
         let segments = name.qualifier().segments();
 
@@ -1456,11 +1454,12 @@ impl<'a> Context<'a> {
         ))
     }
 
-    // The module that should contain `name`'s final segment, plus that segment.
-    fn resolve_parent_path(&self, name: &Name) -> Result<(Qualifier, String), Error> {
+    // The module each segment of `name` before its last reaches, in order, and that last segment.
+    fn resolve_parent_steps(&self, name: &Name) -> Result<(Vec<Qualifier>, String), Error> {
         let last = name.qualifier().segments().len() - 1;
-        let parent = self.resolve_module_prefix(name, last)?;
-        Ok((parent, name.last().to_string()))
+        let reached = self.resolve_module_steps(name, last)?;
+
+        Ok((reached, name.last().to_string()))
     }
 
     // Import the module child `label` out of `parent`, registering it as a qualifier in the current lexical scope.
@@ -1554,6 +1553,10 @@ impl<'a> Context<'a> {
             .imports
             .borrow_mut()
             .hold(self.prefix, self.in_scope.clone());
+        self.shared
+            .imports
+            .borrow_mut()
+            .hold_lines(self.prefix, self.lines.clone());
         self.shared.closed.borrow_mut().insert(self.prefix);
     }
 
@@ -1583,27 +1586,43 @@ impl<'a> Context<'a> {
 
     pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
-            let (parent, label) = self.resolve_parent_path(name)?;
+            let (reached, label) = self.resolve_parent_steps(name)?;
+            let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
             let target = self.import_module_label(&parent, &label)?;
             self.note_written(name);
-            Ok(target)
+            Ok((reached, target))
         })();
-        result.map_err(|e| attach(e, name))
+        let (reached, target) = result.map_err(|e| attach(e, name))?;
+        let selected = self.line_named(target);
+        self.note_line(name, &reached, &[selected]);
+
+        Ok(target)
     }
 
     pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
-            let (parent, label) = self.resolve_parent_path(name)?;
+            let (reached, label) = self.resolve_parent_steps(name)?;
+            let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
             let target = self.import_binding_label(&parent, &label)?;
             self.note_written(name);
-            Ok(target)
+            Ok((reached, target))
         })();
-        result.map_err(|e| attach(e, name))
+        let (reached, target) = result.map_err(|e| attach(e, name))?;
+        self.note_line(
+            name,
+            &reached,
+            &[curios_core::LineNamed::Declaration(
+                curios_core::Global::Authored(target),
+            )],
+        );
+
+        Ok(target)
     }
 
     pub fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
         let result = (|| {
-            let (parent, label) = self.resolve_parent_path(name)?;
+            let (reached, label) = self.resolve_parent_steps(name)?;
+            let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
             let has_module = self.step(&parent, &label, false).is_some();
             let has_binding = self.step(&parent, &label, true).is_some();
 
@@ -1618,15 +1637,24 @@ impl<'a> Context<'a> {
 
             let resolved = self.import_dual_label(&parent, &label)?;
             self.note_written(name);
-            Ok(resolved)
+            Ok((reached, resolved))
         })();
-        result.map_err(|e| attach(e, name))
+        let (reached, resolved) = result.map_err(|e| attach(e, name))?;
+        let declaration = resolved.binding.map(|binding| {
+            curios_core::LineNamed::Declaration(curios_core::Global::Authored(binding))
+        });
+        let module = resolved.module.map(|module| self.line_named(module));
+        let selected = declaration.into_iter().chain(module).collect::<Vec<_>>();
+        self.note_line(name, &reached, &selected);
+
+        Ok(resolved)
     }
 
     // A glob `use a/b/*` names a module directly and imports every public child and binding it exposes (including its re-exports), each under its own label.
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
-            let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
+            let reached = self.resolve_module_steps(name, name.qualifier().segments().len())?;
+            let module = reached.last().copied().unwrap_or_else(Qualifier::empty);
             let interface = self.exports(&module).ok_or_else(|| Error::ModuleNotFound {
                 path: module.join(),
             })?;
@@ -1651,9 +1679,73 @@ impl<'a> Context<'a> {
             if !imported.is_empty() {
                 self.note_written(name);
             }
-            Ok(imported)
+            Ok((reached, imported))
         })();
-        result.map_err(|e| attach(e, name))
+        let (reached, imported) = result.map_err(|e| attach(e, name))?;
+        self.note_line(name, &reached, &[]);
+
+        Ok(imported)
+    }
+
+    // What a line names where it names the module `module`: the family or the concept whose namespace it is, or the module.
+    fn line_named(&self, module: Qualifier) -> curios_core::LineNamed {
+        match self.reached_kind(module) {
+            Reached::Namespace(namespace) => {
+                curios_core::LineNamed::Declaration(curios_core::Global::Authored(namespace))
+            }
+            Reached::Module(module) => curios_core::LineNamed::Module(module),
+        }
+    }
+
+    // Record what the `use` line being resolved writes of the path `name`, `reached` being the module each segment before the last reaches: each such segment, and the last naming each of `selected`, where the line writes it.
+    fn note_line(
+        &mut self,
+        name: &Name,
+        reached: &[Qualifier],
+        selected: &[curios_core::LineNamed],
+    ) {
+        let line = self
+            .current_site
+            .and_then(|site| self.shared.sites.borrow()[site].line.clone());
+        let Some(line) = line else {
+            return;
+        };
+        let spans = name.segment_spans();
+        let mut written = spans
+            .iter()
+            .zip(reached)
+            .map(|(span, module)| (span.clone(), self.line_named(*module)))
+            .collect::<Vec<_>>();
+        if let Some(last) = spans.get(reached.len()) {
+            written.extend(selected.iter().map(|names| (last.clone(), *names)));
+        }
+        for (span, names) in written {
+            if let Some(at) =
+                span.and_then(|span| self.shared.anchoring.line(self.prefix, &line, &span))
+            {
+                self.lines.push(curios_core::LineName {
+                    at,
+                    names,
+                    declares: false,
+                });
+            }
+        }
+    }
+
+    /// Record that this body's `mod` line written `label` declares the module of that name, where the line writes it.
+    pub fn note_mod_line(&mut self, label: &Label) {
+        let module = self.prefixed(label);
+        let Some(at) = label
+            .span()
+            .and_then(|span| self.shared.anchoring.line(self.prefix, span, span))
+        else {
+            return;
+        };
+        self.lines.push(curios_core::LineName {
+            at,
+            names: curios_core::LineNamed::Module(module),
+            declares: true,
+        });
     }
 
     // Record what each segment `name` writes before its last reaches, `reached` being the module each reaches: a module a `mod` line declares, or the declaration whose namespace it is — a family's, which holds its constructors, or a concept's, which holds its methods. What the segment reaches is read as resolution reads a member, the read recorded, so a namespace that changes kind lowers the declaration again.

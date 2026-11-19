@@ -590,6 +590,26 @@ pub struct Imports {
     /// The public bindings of each module an entry imports: each label with what it resolves to, by label.
     #[archived_with(curios_archive::Skip)]
     members: Sorted<Qualifier, Rc<Filed<Offer>>>,
+    /// What each module body's `use` and `mod` lines name, where they write it ([`LineName`]), by the body: an object of its own, apart from the body's imports, so a line's place moving moves nothing a scope reads. A body whose lines name nothing holds none.
+    #[archived_with(curios_archive::Skip)]
+    lines: Sorted<Qualifier, Rc<Filed<Vec<LineName>>>>,
+}
+
+/// A name a `use` or a `mod` line of a module body writes, where it stands in the line's text ([`Imports::lines`]): what it names, and whether the line declares it there, as a `mod` line declares its module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct LineName {
+    pub at: Extent,
+    pub names: LineNamed,
+    pub declares: bool,
+}
+
+/// What a name a line writes names ([`LineName`]): a declaration — a binding a selector imports, or the family or the concept whose namespace a segment reaches — or a module.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum LineNamed {
+    Declaration(Global),
+    Module(Qualifier),
 }
 
 /// What an imported module offers: each public label with what it resolves to, by label.
@@ -600,6 +620,7 @@ pub type Offer = Vec<(String, Global)>;
 pub enum ImportsEntry {
     Body(Qualifier, Vec<Import>),
     Members(Qualifier, Offer),
+    Lines(Qualifier, Vec<LineName>),
 }
 
 impl ImportsEntry {
@@ -624,6 +645,11 @@ impl Records for Imports {
                     imports
                         .members
                         .insert(module, Rc::new(Filed::stored(offered, object.digest)));
+                }
+                ImportsEntry::Lines(body, lines) => {
+                    imports
+                        .lines
+                        .insert(body, Rc::new(Filed::stored(lines, object.digest)));
                 }
             }
         }
@@ -695,8 +721,15 @@ impl Imports {
                     .map(|object| object.digest)
             })
         });
+        let lines = self.lines.iter().map(|(body, held)| {
+            held.digest(|lines| {
+                ImportsEntry::Lines(*body, lines.clone())
+                    .object()
+                    .map(|object| object.digest)
+            })
+        });
 
-        bodies.chain(members).collect()
+        bodies.chain(members).chain(lines).collect()
     }
 
     /// The entries `wanted` asks for, as the objects a store keeps them as, each archived now.
@@ -710,6 +743,11 @@ impl Imports {
                 self.members
                     .iter()
                     .map(|(module, held)| ImportsEntry::Members(*module, Vec::clone(held))),
+            )
+            .chain(
+                self.lines
+                    .iter()
+                    .map(|(body, held)| ImportsEntry::Lines(*body, Vec::clone(held))),
             );
 
         digests
@@ -725,6 +763,28 @@ impl Imports {
         self.bodies
             .get(body)
             .map_or(&[][..], |body| body.as_slice())
+    }
+
+    /// What the `use` and `mod` lines of the module body `body` name, in the order they are written.
+    pub fn lines(&self, body: &Qualifier) -> &[LineName] {
+        self.lines
+            .get(body)
+            .map_or(&[][..], |lines| lines.as_slice())
+    }
+
+    /// Every name some body's lines write, body by body.
+    pub fn every_line(&self) -> impl Iterator<Item = &LineName> {
+        self.lines.iter().flat_map(|(_, lines)| lines.iter())
+    }
+
+    /// Record that the `use` and `mod` lines of the module body `body` name `lines`, in place of what they named.
+    pub fn hold_lines(&mut self, body: Qualifier, lines: Vec<LineName>) {
+        match lines.is_empty() {
+            true => {
+                self.lines.remove(&body);
+            }
+            false => self.lines.insert(body, Rc::new(Filed::new(lines))),
+        }
     }
 
     /// Forget what `module` offers, no body importing it any longer.

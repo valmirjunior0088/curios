@@ -803,6 +803,15 @@ impl PreparedText {
             .map(|_| curios_core::Declared::Method)
     }
 
+    /// Where the `mod` line declaring `module` names it, where this unit's body holding the line wrote one: what a module answers it is declared at.
+    pub fn module_place(&self, module: &Qualifier) -> Option<curios_core::Extent> {
+        self.imports()
+            .lines(&module.without_last())
+            .iter()
+            .find(|line| line.declares && line.names == curios_core::LineNamed::Module(*module))
+            .map(|line| line.at)
+    }
+
     /// The declaration the absolute `path` names for a reader at the root, outside every module, over `predecessors` — the units this one was lowered over — and this unit: the walk a written path takes (`visible_path`), so a path some module exports a declaration at names that declaration. `None` where the path names nothing such a reader sees.
     pub fn named_by(&self, predecessors: &[&PreparedText], path: &Qualifier) -> Option<Qualifier> {
         let tables = predecessors
@@ -1541,6 +1550,7 @@ fn process_items(
                 continue;
             }
             Head::Mod { label, inline, .. } => {
+                context.note_mod_line(label);
                 let path = context.prefixed(label);
                 if lowered.passes(&path) {
                     continue;
@@ -2840,12 +2850,20 @@ fn into_core_unit_within(
     };
 
     // Each line a lint stands in is kept, and every other namespace text goes: one a lint this lowering no longer finds was sited for, or one a baseline held of a line since gone. A zero stands in a declaration's text, never on a line.
+    // So is each line a `use` or a `mod` line names something on, which a place there answers.
+    let named = shared
+        .imports
+        .borrow()
+        .every_line()
+        .map(|line| line.at)
+        .collect::<Vec<_>>();
     shared.anchoring.keep_lines(
         body_lints
             .iter()
             .flat_map(|(_, lints)| lints.iter())
             .chain(&dead)
-            .filter_map(|lint| lint.at),
+            .filter_map(|lint| lint.at)
+            .chain(named),
     );
     let lints = body_lints
         .iter()

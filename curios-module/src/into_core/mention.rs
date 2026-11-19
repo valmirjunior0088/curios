@@ -98,6 +98,16 @@ impl PreparedText {
                 keys.push((key, names));
             }
         }
+        // Each `use` and `mod` line of those bodies, a text of its body's namespace.
+        for module in &written {
+            let namespace = curios_core::Anchor::of(curios_core::Anchored::Namespace(*module));
+            keys.extend(
+                anchors
+                    .texts_of(namespace)
+                    .into_iter()
+                    .map(|(stamp, _)| ((namespace, stamp), Vec::new())),
+            );
+        }
         let closing = curios_core::Anchor::of(curios_core::Anchored::Entry);
         keys.extend(
             anchors
@@ -205,6 +215,11 @@ impl Text<'_> {
                 }
             }
         }
+        for line in self.lines() {
+            if let curios_core::LineNamed::Declaration(name) = line.names {
+                written.insert((line.at.start, line.at.end, name));
+            }
+        }
 
         // A definition's own name may stand in a term the lowering built around it, which is no use of it.
         let declared = self
@@ -230,12 +245,20 @@ impl Text<'_> {
 
     /// Every segment of a path this text writes that reaches a module, where it is written and the module, in the order they are written ([`curios_core::Mints::modules`]).
     pub fn modules(&self) -> Vec<(Span, Qualifier)> {
+        let lines = self
+            .lines()
+            .into_iter()
+            .filter_map(|line| match line.names {
+                curios_core::LineNamed::Module(module) => Some((line.at, module)),
+                curios_core::LineNamed::Declaration(_) => None,
+            });
         let mut modules = self
             .mints()
             .into_iter()
-            .flat_map(|mints| &mints.modules)
+            .flat_map(|mints| mints.modules.iter().copied())
+            .chain(lines)
             .filter(|(extent, _)| (extent.anchor, extent.stamp) == self.key)
-            .filter_map(|(extent, module)| Some((self.placed(extent.start, extent.end)?, *module)))
+            .filter_map(|(extent, module)| Some((self.placed(extent.start, extent.end)?, module)))
             .collect::<Vec<_>>();
         modules.sort_by_key(|(span, _)| (span.start, span.end));
         modules.dedup_by(|(this, _), (that, _)| (this.start, this.end) == (that.start, that.end));
@@ -311,6 +334,29 @@ impl Text<'_> {
             }
             curios_core::Anchored::Namespace(_) => Vec::new(),
         }
+    }
+
+    /// Where each written binder of the declarations written here, or of the term a program closes with, stands ([`curios_core::Mints::written`]): none on a `use` or a `mod` line, which binds nothing.
+    pub fn binders(&self) -> Vec<(curios_core::WrittenBinder, curios_core::Extent)> {
+        self.mints()
+            .into_iter()
+            .flat_map(|mints| mints.written.iter().copied())
+            .collect()
+    }
+
+    /// What this text names, where it is a `use` or a `mod` line: of what its body's lines name, the names placed in this one.
+    fn lines(&self) -> Vec<&curios_core::LineName> {
+        let lines = match self.key.0.anchored() {
+            curios_core::Anchored::Namespace(module) => self.unit.imports().lines(module),
+            curios_core::Anchored::Declaration(_)
+            | curios_core::Anchored::Unnamed(_)
+            | curios_core::Anchored::Entry => &[],
+        };
+
+        lines
+            .iter()
+            .filter(|line| (line.at.anchor, line.at.stamp) == self.key)
+            .collect()
     }
 
     /// The span of the text's bytes from `start` to `end`. `None` for a range that does not lie in it.

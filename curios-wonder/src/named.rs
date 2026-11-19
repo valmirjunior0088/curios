@@ -155,11 +155,13 @@ pub struct Local {
     pub declares: bool,
 }
 
-/// What a check left of one file: each of its texts with what it writes, and what each declaration they name is answered with, but for its type, which each text spells for its own reader.
+/// What a check left of one file: each of its texts with what it writes, what each declaration they name is answered with, but for its type, which each text spells for its own reader, and where each module they name is declared.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Placed {
     pub texts: Vec<Written>,
     pub declarations: BTreeMap<Global, Described>,
+    /// Where the `mod` line declaring each module the texts name names it, in the subject or a unit in scope: none for a module no such line declares, a mount's root, and for one whose line no file holds.
+    pub modules: BTreeMap<Qualifier, Option<Span>>,
 }
 
 /// What stands at a place: the range it covers, and what it is.
@@ -258,7 +260,7 @@ impl Placed {
                 range: span.clone(),
                 stands: Stands::Module {
                     path: module.join(),
-                    place: None,
+                    place: self.modules.get(module).cloned().flatten(),
                 },
             });
         }
@@ -580,14 +582,10 @@ impl Reading {
 
                 // Where each written binder of the declaration written here is bound, read off what its lowering minted.
                 let anchors = [text.anchors()];
-                let minted = match passage.owner() {
-                    Some(owner) => text.minted().of(&owner),
-                    None => &text.minted().entry,
-                };
-                let bound = minted
-                    .written
-                    .iter()
-                    .filter_map(|(binder, at)| Some((*binder, at.resolved(&anchors)?)))
+                let bound = passage
+                    .binders()
+                    .into_iter()
+                    .filter_map(|(binder, at)| Some((binder, at.resolved(&anchors)?)))
                     .collect::<BTreeMap<_, _>>();
                 let locals = bound
                     .iter()
@@ -612,11 +610,36 @@ impl Reading {
                     modules: passage.modules(),
                 }
             })
+            .collect::<Vec<_>>();
+
+        // Where each module the file names is declared: by its `mod` line, in the subject or in a unit in scope.
+        let scoped = std::iter::once(text.anchors())
+            .chain(scope.iter().map(|unit| unit.anchors()))
+            .collect::<Vec<_>>();
+        let modules = texts
+            .iter()
+            .flat_map(|written| &written.modules)
+            .map(|(_, module)| *module)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|module| {
+                let place = text
+                    .module_place(&module)
+                    .or_else(|| {
+                        scope
+                            .iter()
+                            .find_map(|unit| unit.text()?.module_place(&module))
+                    })
+                    .and_then(|at| at.resolved(&scoped));
+
+                (module, place)
+            })
             .collect();
 
         Placed {
             texts,
             declarations,
+            modules,
         }
     }
 

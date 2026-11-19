@@ -256,6 +256,55 @@ print(\"\")
     }
 }
 
+/// A `use` and a `mod` line's names answer one record through both transports: a segment, a selector and the module a `mod` line declares.
+#[test]
+fn a_lines_names_answer_alike_through_both_transports() {
+    const PROGRAM: &str = "\
+pub mod Shapes
+    pub induct Colour: pub Type
+    | red()
+    end
+end
+use /Shapes/{Colour};
+let picked: Colour = Colour/red();
+/std/print(\"\")
+";
+    let held = checked(PROGRAM);
+
+    for written in ["Shapes\n", "Shapes/{", "Colour}"] {
+        let offset = PROGRAM.find(written).expect("the program writes it");
+        let before = &PROGRAM[..offset];
+        let line = before.matches('\n').count() + 1;
+        let column = offset - before.rfind('\n').map_or(0, |at| at + 1) + 1;
+        let asked = crate::placed(
+            DEFAULT_BUDGET,
+            Subject::Entry {
+                units: Vec::new(),
+                origin: Origin::Text {
+                    text: PROGRAM.to_string(),
+                    written: WrittenIn::Program,
+                },
+                declares: None,
+                package: None,
+            },
+            Path::new("<stdin>"),
+            (line, column),
+            &Overlay::default(),
+            None,
+            &mut |_| {},
+        )
+        .expect("the program lowers");
+        let rendered = |answer: &Answer| (answer.range.start, answer.range.end, markup(answer));
+
+        assert!(asked.is_some(), "nothing stands at `{written}`");
+        assert_eq!(
+            answered_at(PROGRAM, &held, offset).map(|(answer, _)| rendered(&answer)),
+            asked.as_ref().map(rendered),
+            "at `{written}`"
+        );
+    }
+}
+
 /// A buffer that is the text its check read answers every place of it.
 #[test]
 fn a_buffer_as_it_was_checked_answers_every_name() {

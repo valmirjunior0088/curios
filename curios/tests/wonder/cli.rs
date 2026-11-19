@@ -283,7 +283,7 @@ fn a_place_answers_the_name_written_there() {
     let again = curios(&root, &["wonder", "--at", "app.crs:1:22"], "");
     assert_eq!(stdout(&again), answer);
 
-    // A segment of the path answers the module it reaches, with the command that lists what it exposes.
+    // A segment of the path answers the module it reaches, closed where the library's `mod` line declares it, with the command that lists what it exposes.
     let module = curios(&root, &["wonder", "--at", "app.crs:1:18"], "");
     assert_eq!(
         stdout(&module),
@@ -291,7 +291,7 @@ fn a_place_answers_the_name_written_there() {
             "/app/util\n",
             "│  module\n",
             "├─ try; curios wonder --name /app/util --exports app.crs\n",
-            "└─ [module] /app/util\n",
+            "└─ [module] lib.crs:1:9\n",
         )
     );
 }

@@ -1,13 +1,13 @@
 //! What a text names, held over one program that writes a name in every position the lowering resolves one.
 //!
-//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves, or one on a `use` line — and is read with the marks taken out. Every path it writes is then held to what its text mentions, where it stands in no mark: one that ends in a declaration's name is a mention of that declaration over the whole path, each segment before its last that is a declaration's name — the family or the concept whose namespace it reaches — a mention of that declaration over the segment, and nothing else is one.
+//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves — and is read with the marks taken out. Every path it writes is then held to what its text mentions, where it stands in no mark: one that ends in a declaration's name is a mention of that declaration over the whole path, each segment before its last that is a declaration's name — the family or the concept whose namespace it reaches — a mention of that declaration over the segment, and nothing else is one.
 
 use {
     super::super::{test_support::*, *},
     std::{collections::BTreeMap, ops::Range},
 };
 
-/// A name in each position: a signature and a body, a module's member by its path and through a `use`, a type's parameter, payload, field and index, a concept's field, a witness's head and body, a literal's head bare and applied, a pattern's, a group whose members name one another, a definition that names itself, a test, and the term the program closes with.
+/// A name in each position: a signature and a body, a module's member by its path and through a `use`, each of two `use` lines of one body, a type's parameter, payload, field and index, a concept's field, a witness's head and body, a literal's head bare and applied, a pattern's, a group whose members name one another, a definition that names itself, a test, and the term the program closes with.
 const PROGRAM: &str = r#"
 pub mod Shapes
     pub induct Colour: pub Type
@@ -18,7 +18,8 @@ pub mod Shapes
     pub let favourite: Colour = Colour/red();
 end
 
-use /Shapes/{«Colour», «favourite»};
+use /Shapes/{Colour};
+use /Shapes/{favourite};
 
 induct Tree(Leafy: Type): pub Type
 | tip()

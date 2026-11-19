@@ -831,7 +831,7 @@ fn a_field_of_a_structure_in_scope_answers_where_its_unit_writes_it() {
     }
 }
 
-/// A segment of a path answers what it reaches: a module a `mod` line declares, as a module, and a family's namespace, as the family.
+/// A segment of a path answers what it reaches: a module a `mod` line declares, as a module placed at that line, and a family's namespace, as the family.
 #[test]
 fn a_paths_segment_answers_the_module_or_the_family_it_reaches() {
     const PROGRAM: &str = "\
@@ -845,15 +845,44 @@ let picked: /Shapes/Colour = /Shapes/Colour/red();
     let module = at(PROGRAM, "Shapes/Colour/red", 0, 0).expect("a module stands there");
     let family = at(PROGRAM, "Colour/red", 0, 0).expect("a name stands there");
 
-    assert_eq!(
-        module.stands,
-        Stands::Module {
-            path: "/Shapes".to_string(),
-            place: None,
-        }
-    );
+    assert_eq!(moduled(module), ("/Shapes".to_string(), Some((1, 9))));
     assert_eq!(
         said(&family),
+        ("/Shapes/Colour", Declared::Inductive, false, Some((2, 16)))
+    );
+}
+
+/// A program writing a module's `mod` line, and a `use` line through it.
+const LINES: &str = "\
+pub mod Shapes
+    pub induct Colour: pub Type
+    | red()
+    end
+end
+use /Shapes/{Colour};
+let picked: Colour = Colour/red();
+/std/print(\"\")";
+
+/// What a module answers: its path, and the line and column its `mod` line names it at.
+fn moduled(answer: Answer) -> (String, Option<(usize, usize)>) {
+    match answer.stands {
+        Stands::Module { path, place } => (path, place.map(|place| place.line_column())),
+        stands => panic!("no module stands there: {stands:?}"),
+    }
+}
+
+/// A `use` line answers what it names, and a `mod` line the module it declares: a segment its module, placed at its `mod` line, a selector the declaration it imports.
+#[test]
+fn a_use_and_a_mod_lines_names_answer_what_they_name() {
+    let shapes = ("/Shapes".to_string(), Some((1, 9)));
+    let segment = at(LINES, "Shapes/{", 0, 0).expect("a module stands there");
+    let declared = at(LINES, "Shapes\n", 0, 0).expect("a module stands there");
+    let selector = at(LINES, "Colour}", 0, 0).expect("a name stands there");
+
+    assert_eq!(moduled(segment), shapes);
+    assert_eq!(moduled(declared), shapes);
+    assert_eq!(
+        said(&selector),
         ("/Shapes/Colour", Declared::Inductive, false, Some((2, 16)))
     );
 }
