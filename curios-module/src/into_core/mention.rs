@@ -20,6 +20,7 @@ use {
     std::{
         cmp::Reverse,
         collections::{BTreeSet, HashSet},
+        ptr,
     },
 };
 
@@ -189,7 +190,7 @@ impl Text<'_> {
         }
     }
 
-    /// Every name this text writes, in the order they are written: the definitions it declares, and each use of a declaration the lowering resolved, read off the lowered items of the declaration written here. A use may stand inside a definition's name, as the concept a `satisfy` names stands in the head that declares its witness.
+    /// Every name this text writes, in the order they are written: the definitions it declares, and each use of a declaration the lowering resolved, read off the lowered items of the declaration written here and the names it resolved into a node no term places ([`curios_core::Mints::named`]). A use may stand inside a definition's name, as the concept a `satisfy` names stands in the head that declares its witness.
     pub fn mentions(&self) -> Vec<Mention> {
         let mut written = BTreeSet::new();
         self.each_placed(|node, extent| {
@@ -197,6 +198,13 @@ impl Text<'_> {
                 written.insert((extent.start, extent.end, name));
             }
         });
+        for mints in self.mints() {
+            for (extent, name) in &mints.named {
+                if (extent.anchor, extent.stamp) == self.key {
+                    written.insert((extent.start, extent.end, *name));
+                }
+            }
+        }
 
         // A definition's own name may stand in a term the lowering built around it, which is no use of it.
         let declared = self
@@ -268,6 +276,25 @@ impl Text<'_> {
             }
             // A `use` or `mod` line lowers to no item, so no lowered term holds what it writes.
             curios_core::Anchored::Namespace(_) => {}
+        }
+    }
+
+    /// What the lowering minted for the declarations written here, or for the term a program closes with: once each, though a declaration's names share it.
+    fn mints(&self) -> Vec<&curios_core::Mints> {
+        let minted = self.unit.minted();
+        match self.key.0.anchored() {
+            curios_core::Anchored::Entry => vec![&minted.entry],
+            curios_core::Anchored::Declaration(_) | curios_core::Anchored::Unnamed(_) => {
+                let mut mints = Vec::<&curios_core::Mints>::new();
+                for (name, _) in &self.labels {
+                    let of = minted.of(name);
+                    if !mints.iter().any(|seen| ptr::eq(*seen, of)) {
+                        mints.push(of);
+                    }
+                }
+                mints
+            }
+            curios_core::Anchored::Namespace(_) => Vec::new(),
         }
     }
 

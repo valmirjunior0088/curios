@@ -190,6 +190,8 @@ pub struct Mints {
     pub written: Vec<(WrittenBinder, Extent)>,
     /// Every use of a written binder that hides what the module's scope binds under its name ([`Hiding`]): what a mismatch at the use names beside its report. Held here, as `written` is.
     pub hides: Vec<Hiding>,
+    /// Every name the lowering resolved into a node rather than into a term, where it is written: a literal's or a structure pattern's head, which no lowered term holds at its place. What a place's answer reads beside the names its terms write. Held here, as `written` is.
+    pub named: Vec<(Extent, Global)>,
     /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
     pub lints: Vec<Lint>,
 }
@@ -258,6 +260,7 @@ impl Minted {
             unread: Vec::new(),
             written: Vec::new(),
             hides: Vec::new(),
+            named: Vec::new(),
             lints: Vec::new(),
         };
 

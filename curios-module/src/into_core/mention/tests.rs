@@ -54,12 +54,12 @@ let depth(grown: Tree(Colour)) -> Colour =
     | «fork»(_, here, _) => Painted/paint(here)
     end;
 
-let wrapped: Pairing(Colour) = «Pairing» { first = chosen, shade = /Shapes/favourite };
+let wrapped: Pairing(Colour) = Pairing { first = chosen, shade = /Shapes/favourite };
 
 let stated: Pairing(Colour) = Pairing(Colour) { first = chosen, shade = favourite };
 
 let opened(held: Pairing(Colour)) -> Colour =
-    let «Pairing» { first = inner, shade = _ } = held;
+    let Pairing { first = inner, shade = _ } = held;
     inner;
 
 let again(count: Colour) -> Colour = again(count);

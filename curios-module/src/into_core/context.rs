@@ -623,6 +623,8 @@ pub struct Declaring {
     written: RefCell<Vec<(curios_core::WrittenBinder, curios_core::Extent)>>,
     // Every use of a written binder of the declaration being lowered that hides what the module's scope binds under its name. The declaration's, as its written binders are.
     hides: RefCell<Vec<curios_core::Hiding>>,
+    // Every name the declaration being lowered resolved into a node rather than a term, where it is written. The declaration's, as its written binders are.
+    named: RefCell<Vec<(curios_core::Extent, curios_core::Global)>>,
     // The lints the lowering of the declaration being lowered decided, its last fact being the text as written. The declaration's, as its unread sites are.
     lints: RefCell<Vec<curios_core::Lint>>,
 }
@@ -641,6 +643,7 @@ impl Declaring {
             unread,
             written,
             hides,
+            named,
             lints,
         } = self;
 
@@ -654,6 +657,7 @@ impl Declaring {
         unread.borrow_mut().clear();
         written.borrow_mut().clear();
         hides.borrow_mut().clear();
+        named.borrow_mut().clear();
         lints.borrow_mut().clear();
     }
 }
@@ -673,6 +677,7 @@ impl Shared {
                 unread: RefCell::default(),
                 written: RefCell::default(),
                 hides: RefCell::default(),
+                named: RefCell::default(),
                 lints: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
@@ -813,6 +818,11 @@ impl<'a> Context<'a> {
     /// Record `hiding`, a use of a written binder of the declaration being lowered that hides what the module's scope binds under its name, beside what it minted.
     pub fn hiding(&self, hiding: curios_core::Hiding) {
         self.shared.declaring.hides.borrow_mut().push(hiding);
+    }
+
+    /// Record that the declaration being lowered names `name` at `at` by a node no lowered term holds the place of ([`curios_core::Mints::named`]).
+    pub fn named(&self, at: curios_core::Extent, name: curios_core::Global) {
+        self.shared.declaring.named.borrow_mut().push((at, name));
     }
 
     /// Record `lint`, which the lowering decided of the declaration being lowered ([`curios_core::Mints::lints`]).
@@ -1011,6 +1021,7 @@ impl<'a> Context<'a> {
             unread: self.shared.declaring.unread.borrow().clone(),
             written: self.shared.declaring.written.borrow().clone(),
             hides: self.shared.declaring.hides.borrow().clone(),
+            named: self.shared.declaring.named.borrow().clone(),
             lints: self.shared.declaring.lints.borrow().clone(),
         }
     }

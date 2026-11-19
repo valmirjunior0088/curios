@@ -1273,7 +1273,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<Result<curios_core::Global, curios_core::Free>, Error> {
         let resolved = match self.resolve_name(name)? {
             // A method names no structure, and its path is the head the elaborator refuses as one.
-            Ok(found) => return Ok(Ok(curios_core::Global::Authored(found.target()))),
+            Ok(found) => {
+                let named = curios_core::Global::Authored(found.target());
+                // No lowered term stands where the head is written, so its place is recorded beside what the declaration minted.
+                if let Some(at) = name.span().and_then(|span| self.context.extent(span)) {
+                    self.context.named(at, named);
+                }
+                return Ok(Ok(named));
+            }
             Err(binder) => binder,
         };
         if self.context.is_unbound(&resolved) {
