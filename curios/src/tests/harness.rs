@@ -116,8 +116,8 @@ fn spelled_strings_are_quoted_and_escaped() {
 }
 
 #[test]
-fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
-    // `Test/all` at every rung: passing verdicts conjoin to a passing verdict, the empty conjunction included; the first failure is the report, positioned; an action performs before what follows it is consulted, and a failure before an action leaves the action unrun.
+fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
+    // `Test/all` at every rung: passing verdicts conjoin to a passing verdict, the empty conjunction included; every failing case is reported, each by its position; an action performs before what follows it is consulted, and a case after a failing one still runs, its action with it.
     assert_eq!(
         run_tests_program(
             r#"
@@ -133,7 +133,7 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
         ()
         "#
         ),
-        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    expected: `3`\n    obtained: `2`\nperformed\n/action_then_verdict: passed\n/failure_before_action: failed\n  case 0: the condition was false\n"
+        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    expected: `3`\n    obtained: `2`\n  case 2: not equal\n    expected: `5`\n    obtained: `4`\nperformed\n/action_then_verdict: passed\nperformed\n/failure_before_action: failed\n  case 0: the condition was false\n"
     );
 }
 
