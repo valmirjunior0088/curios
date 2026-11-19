@@ -15,7 +15,11 @@ use {
         Atom, CallAnalysis, Callee, FunctionId, Lattice, Literal, Module, Node, NodeId, Scopes,
         Slot, Solver, ValueExpr, ValueId, resolve_atom,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 #[derive(Clone, PartialEq)]
@@ -67,7 +71,7 @@ impl Lattice for Knowledge {
 pub fn scc_invariant_knowns(
     module: &Module,
     analysis: &CallAnalysis,
-    scopes: &Scopes,
+    scopes: &OnceCell<Rc<Scopes>>,
     known_literals: &BTreeMap<ValueId, Atom>,
 ) -> BTreeMap<ValueId, Atom> {
     let mut params_of: BTreeMap<FunctionId, Vec<ValueId>> = BTreeMap::new();
@@ -104,6 +108,7 @@ pub fn scc_invariant_knowns(
         .into_iter()
         .filter(|(param, atom)| match atom {
             Atom::Fun(function) => scopes
+                .get_or_init(|| module.scopes())
                 .functions
                 .get(&owner_of_param[param])
                 .is_some_and(|scope| scope.contains(function)),

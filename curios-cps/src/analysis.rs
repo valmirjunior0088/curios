@@ -4,7 +4,10 @@ use {
         Solver, ValueExpr, ValueId, atoms, invariant_fixpoint, merge_inputs, record_known_literals,
         scc_invariant_knowns,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet},
+    },
 };
 
 #[derive(Default, PartialEq)]
@@ -237,7 +240,7 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
     analysis
 }
 
-/// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where they start and by no other reader of the call analysis.
+/// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where one of them first meets a function a call hands, and by no other reader of the call analysis.
 #[derive(PartialEq)]
 pub struct Scopes {
     /// Each function's: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
@@ -494,7 +497,8 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
 
     let analysis = module.calls();
     let recursive_functions = &analysis.recursive;
-    let scopes = module.scopes();
+    // Read only where a call hands a function, so built only there.
+    let scopes = OnceCell::new();
 
     let mut function_inputs = BTreeMap::<FunctionId, Vec<Knowledge>>::new();
     for (function, definition) in module.live_functions() {
@@ -528,10 +532,15 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         let params = &module.function(function).unwrap().params;
         record_known_literals(params, &inputs, &mut known);
         // A function every call hands one function is substituted where its body may name it, so its call through the parameter becomes a known call, and a recursive callee it hands the parameter on to receives one function at every entry, which `scc_invariant_knowns` then substitutes.
-        let scope = scopes.functions.get(&function);
+        let scope = || {
+            scopes
+                .get_or_init(|| module.scopes())
+                .functions
+                .get(&function)
+        };
         for (&param, input) in params.iter().zip(&inputs) {
             if let Knowledge::Known(Atom::Fun(passed)) = input
-                && scope.is_some_and(|scope| scope.contains(passed))
+                && scope().is_some_and(|scope| scope.contains(passed))
             {
                 known.insert(param, Atom::Fun(*passed));
             }
@@ -581,7 +590,6 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     }
 
     // A loop's parameter is forwarded by its own back edges, which the flat join above reads as a conflict, so a function its entry hands it and every back edge passes on is recovered by the fixpoint the recursive members' parameters take below, over every transfer into a continuation: an edge hands its arguments, and an operation delivering into its `return_to` a value nothing sees, which is a conflict. Only a function is taken from it, where the continuation's body may name it, so a loop over a combinator a caller hands its step calls the step directly; what it finds of literals the flat join already answers where it may.
-    let continuation_scopes = &scopes.continuations;
     let mut continuation_params = BTreeMap::<ContinuationId, Vec<ValueId>>::new();
     for (continuation, definition) in module.live_continuations() {
         continuation_params.insert(continuation, definition.params.clone());
@@ -614,7 +622,9 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         .collect::<BTreeMap<_, _>>();
     for (param, knowledge) in invariant_fixpoint(&continuation_params, &transfers, &known) {
         if let Knowledge::Known(Atom::Fun(passed)) = knowledge
-            && continuation_scopes
+            && scopes
+                .get_or_init(|| module.scopes())
+                .continuations
                 .get(&owner_of_param[&param])
                 .is_some_and(|scope| scope.contains(&passed))
         {
