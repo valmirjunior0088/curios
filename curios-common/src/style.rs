@@ -20,6 +20,8 @@ pub enum Kind {
     Declaration,
     /// A module asked about by its path, the names it exposes following the block.
     Module,
+    /// A term asked about by its place, where no name stands.
+    Term,
 }
 
 impl Kind {
@@ -32,10 +34,11 @@ impl Kind {
             Kind::Format => "format",
             Kind::Declaration => "declaration",
             Kind::Module => "module",
+            Kind::Term => "term",
         }
     }
 
-    /// Whether a report of this kind shows the code at its own place: every kind but a declaration's, whose whole text follows the block, and a module's, whose names do.
+    /// Whether a report of this kind shows the code at its own place: every kind but a declaration's, whose whole text follows the block, and a module's, whose names do. A term's place is the term.
     pub fn quotes_its_place(self) -> bool {
         !matches!(self, Kind::Declaration | Kind::Module)
     }

@@ -6,6 +6,8 @@
 //!
 //! **A path is one name with one place.** `Io/Reader/line` is a mention of `line` over the whole path, and no segment of it is a mention of the module it names.
 //!
+//! **A place no name stands at is a term's.** Every term written with a span lowers to a node placed by its extent, whatever it lowers to, so the terms a text writes are read off the walk its names are ([`Text::terms`]).
+//!
 //! **What no term holds at its own place has no mention.** A bare literal's head and a struct pattern's are resolved into the node they open; a pattern's constructor, a projection's label, a field written in a literal and a method reached through a witness are the elaborator's to resolve; a `use` line's names are held by the import table under no place; and a binder is no declaration.
 
 #[cfg(test)]
@@ -15,7 +17,10 @@ use {
     super::{Head, Headed},
     crate::PreparedText,
     curios_common::{Qualifier, Source, Span},
-    std::collections::{BTreeSet, HashSet},
+    std::{
+        cmp::Reverse,
+        collections::{BTreeSet, HashSet},
+    },
 };
 
 /// One name a text writes: where, and the declaration it names.
@@ -175,25 +180,23 @@ impl Text<'_> {
             .collect()
     }
 
+    /// The definition a reader of this text stands in: the declaration written here, a witness by the one its head declares, and none for the term a program closes with, which stands in no definition.
+    pub fn owner(&self) -> Option<curios_core::Global> {
+        match self.key.0.anchored() {
+            curios_core::Anchored::Declaration(path) => Some(curios_core::Global::Authored(*path)),
+            curios_core::Anchored::Unnamed(_) => self.labels.first().map(|(name, _)| *name),
+            curios_core::Anchored::Namespace(_) | curios_core::Anchored::Entry => None,
+        }
+    }
+
     /// Every name this text writes, in the order they are written: the definitions it declares, and each use of a declaration the lowering resolved, read off the lowered items of the declaration written here. A use may stand inside a definition's name, as the concept a `satisfy` names stands in the head that declares its witness.
     pub fn mentions(&self) -> Vec<Mention> {
-        let mut found = (HashSet::new(), BTreeSet::new());
-        let mut read = |term: &curios_core::Term| self.named(term, &mut found);
-        match self.key.0.anchored() {
-            curios_core::Anchored::Entry => self.entry.iter().for_each(|entry| read(&entry.body)),
-            curios_core::Anchored::Declaration(_) | curios_core::Anchored::Unnamed(_) => {
-                let items = self
-                    .labels
-                    .iter()
-                    .filter_map(|(name, _)| Some(self.unit.places().place(name)?.item()))
-                    .collect::<BTreeSet<_>>();
-                for item in items {
-                    self.unit.lowered_item(item).each_term(&mut read);
-                }
+        let mut written = BTreeSet::new();
+        self.each_placed(|node, extent| {
+            if let Some(name) = written_name(node) {
+                written.insert((extent.start, extent.end, name));
             }
-            // A `use` or `mod` line lowers to no item, so no lowered term holds what it writes.
-            curios_core::Anchored::Namespace(_) => {}
-        }
+        });
 
         // A definition's own name may stand in a term the lowering built around it, which is no use of it.
         let declared = self
@@ -201,8 +204,7 @@ impl Text<'_> {
             .iter()
             .map(|(name, label)| (label.start, label.end, *name))
             .collect::<BTreeSet<_>>();
-        let uses = found
-            .1
+        let uses = written
             .difference(&declared)
             .filter_map(|&(start, end, name)| {
                 Some(Mention {
@@ -218,6 +220,57 @@ impl Text<'_> {
         mentions
     }
 
+    /// Where each term this text writes stands, once a place and in the order they are written, a term holding another before it: every lowered node placed in this text, whatever it lowered to — what a place no name stands at answers.
+    pub fn terms(&self) -> Vec<Span> {
+        let mut placed = BTreeSet::new();
+        self.each_placed(|_, extent| {
+            placed.insert((extent.start, Reverse(extent.end)));
+        });
+
+        placed
+            .into_iter()
+            .filter_map(|(start, Reverse(end))| self.placed(start, end))
+            .collect()
+    }
+
+    /// Hand `met` every lowered node written in this text with the extent it was written at, read off the lowered items of the declaration written here or the term a program closes with. A node is walked once however many terms share it, and met at each occurrence: an occurrence holds the place, and the node what stands under it.
+    fn each_placed(&self, mut met: impl FnMut(&curios_core::Term, curios_core::Extent)) {
+        let mut walked = HashSet::new();
+        let mut read = |term: &curios_core::Term| {
+            term.walk(
+                &mut walked,
+                |walked, node| {
+                    if let Some(extent) = node.extent()
+                        && (extent.anchor, extent.stamp) == self.key
+                    {
+                        met(node, extent);
+                    }
+
+                    match walked.insert(node.identity()) {
+                        true => curios_core::Enter::Descend,
+                        false => curios_core::Enter::Skip(()),
+                    }
+                },
+                |_, _, _| (),
+            );
+        };
+        match self.key.0.anchored() {
+            curios_core::Anchored::Entry => self.entry.iter().for_each(|entry| read(&entry.body)),
+            curios_core::Anchored::Declaration(_) | curios_core::Anchored::Unnamed(_) => {
+                let items = self
+                    .labels
+                    .iter()
+                    .filter_map(|(name, _)| Some(self.unit.places().place(name)?.item()))
+                    .collect::<BTreeSet<_>>();
+                for item in items {
+                    self.unit.lowered_item(item).each_term(&mut read);
+                }
+            }
+            // A `use` or `mod` line lowers to no item, so no lowered term holds what it writes.
+            curios_core::Anchored::Namespace(_) => {}
+        }
+    }
+
     /// The span of the text's bytes from `start` to `end`. `None` for a range that does not lie in it.
     fn placed(&self, start: u32, end: u32) -> Option<Span> {
         let (start, end) = (start as usize, end as usize);
@@ -230,31 +283,6 @@ impl Text<'_> {
                 self.span.start + end,
             )
         })
-    }
-
-    /// Record in `found` every variable of `term` that names a declaration and was written in this text, by its extent there. A node is walked once however many terms share it, and recorded at each occurrence: an occurrence holds the place, and the node what stands under it.
-    fn named(
-        &self,
-        term: &curios_core::Term,
-        found: &mut (HashSet<usize>, BTreeSet<(u32, u32, curios_core::Global)>),
-    ) {
-        term.walk(
-            found,
-            |(walked, names), node| {
-                if let Some(extent) = node.extent()
-                    && (extent.anchor, extent.stamp) == self.key
-                    && let Some(name) = written_name(node)
-                {
-                    names.insert((extent.start, extent.end, name));
-                }
-
-                match walked.insert(node.identity()) {
-                    true => curios_core::Enter::Descend,
-                    false => curios_core::Enter::Skip(()),
-                }
-            },
-            |_, _, _| (),
-        );
     }
 }
 

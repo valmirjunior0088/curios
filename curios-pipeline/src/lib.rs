@@ -19,7 +19,7 @@ use compile::*;
 pub use compile::{
     After, Cache, Checked, CheckedProgram, CompileError, Earlier, EntryTail, Examined, Findings,
     Listeners, Obligation, Progress, Refused, Refuted, TestModule, TestProgram, compile_units,
-    declared_test_paths, examine_entrypoint, globals, spelling_at,
+    declared_test_paths, examine_entrypoint, globals, spelling_at, spelling_for,
 };
 
 mod recompile;

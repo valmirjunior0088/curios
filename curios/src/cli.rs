@@ -447,7 +447,7 @@ pub enum Query {
     Tests,
     /// A rung of the pipeline, by its name ([`Stage::NAMES`]).
     Stage(String),
-    /// The place a report closed on, whose file is the subject: asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
+    /// The place a report closed on, whose file is the subject: what stands there, a name with the declaration it names or the term written there, asked of the subject's lowering, which resolves a written name, so a file that does not check answers as one that does.
     At(Place),
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),
@@ -543,7 +543,7 @@ impl Args for Query {
                     .value_name("FILE:LINE:COLUMN")
                     .value_parser(value_parser!(Place))
                     .conflicts_with("subject")
-                    .help("The name written at a place, written as a report closes on one: its declaration, what it is declared as, and where; takes no subject"),
+                    .help("What stands at a place, written as a report closes on one: the declaration a name names, with what it is declared as, its type and where, or the term written there; takes no subject"),
             )
             .arg(
                 Arg::new("name")

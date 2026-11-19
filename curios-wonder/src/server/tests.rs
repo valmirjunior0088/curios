@@ -108,18 +108,21 @@ fn check(program: &str) -> Diagnosed {
 }
 
 /// What a check of `program` leaves for a place to be answered from.
-fn checked(program: &str) -> Vec<Written> {
-    check(program).written
+fn checked(program: &str) -> Placed {
+    check(program).placed.expect("the program lowers")
 }
 
-/// The declaration named at the `nth` occurrence of `written` in `buffer`, by what a check of `program` left.
+/// The declaration named at the `nth` occurrence of `written` in `buffer`, by what a check of `program` left: by the path it is answered by.
 fn named(program: &str, buffer: &str, written: &str, nth: usize) -> Option<String> {
     let (offset, _) = buffer
         .match_indices(written)
         .nth(nth)
         .expect("the buffer writes it");
 
-    named_at(buffer, &checked(program), offset).map(|named| named.name.clone())
+    match answered_at(buffer, &checked(program), offset)?.0.stands {
+        Stands::Declaration { described, .. } => Some(described.asked),
+        Stands::Term { .. } => None,
+    }
 }
 
 /// An outline as its names, each with the line its label stands on and the names under it.
@@ -144,6 +147,53 @@ let two: /std/Nat = one;
 let three: /std/Nat = two;
 /std/print(\"\")
 ";
+
+/// Every place of a program answers one record through both transports: the server's, off what the document's check left, and `wonder --at`'s, off its own question of the place, a name, a literal and the term holding them among them.
+#[test]
+fn a_place_answers_alike_through_both_transports() {
+    const PROGRAM: &str =
+        "use /std/{Nat, print};\nlet one: Nat = 1;\nlet two: Nat = one + 1;\nprint(\"\")\n";
+    let held = checked(PROGRAM);
+
+    for (line, text) in PROGRAM.lines().enumerate() {
+        for (column, _) in text.char_indices() {
+            let offset = PROGRAM
+                .lines()
+                .take(line)
+                .map(|text| text.len() + 1)
+                .sum::<usize>()
+                + column;
+            let asked = crate::placed(
+                DEFAULT_BUDGET,
+                Subject::Entry {
+                    units: Vec::new(),
+                    origin: Origin::Text {
+                        text: PROGRAM.to_string(),
+                        written: WrittenIn::Program,
+                    },
+                    declares: None,
+                    package: None,
+                },
+                Path::new("<stdin>"),
+                (line + 1, column + 1),
+                &Overlay::default(),
+                None,
+                &mut |_| {},
+            )
+            .expect("the program lowers");
+
+            // Each answer as a hover renders it over the range it covers: the two checks read two allocations of the one text, which spans tell apart.
+            let rendered = |answer: &Answer| (answer.range.start, answer.range.end, markup(answer));
+            assert_eq!(
+                answered_at(PROGRAM, &held, offset).map(|(answer, _)| rendered(&answer)),
+                asked.as_ref().map(rendered),
+                "at {}:{}",
+                line + 1,
+                column + 1
+            );
+        }
+    }
+}
 
 /// A buffer that is the text its check read answers every place of it.
 #[test]

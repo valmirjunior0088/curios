@@ -6,15 +6,15 @@
 
 use {
     crate::{
-        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Origin, Refusal,
-        Rendering, Row, Severity, Subject, Unfooted, Unput, checked, declared_tests, described,
-        diagnostics, exported, falsified, footprint, named_stage, placed, stage, unit_stage,
+        Answer, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Fact, Origin,
+        Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted, Unput, checked, declared_as,
+        declared_tests, described, diagnostics, exported, falsified, footprint, named_stage,
+        placed, stage, unit_stage,
     },
     curios_common::{
-        About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
+        About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
         SourceName, Style,
     },
-    curios_core::{Declared, Totality},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress, Put, Stage},
@@ -249,7 +249,7 @@ impl Asked {
         diagnosed
     }
 
-    /// [`Asked::diagnosed`], with what `file` writes read off the same fold's lowering of the subject ([`Diagnosed::written`]).
+    /// [`Asked::diagnosed`], with what the same check leaves of `file` ([`Diagnosed::placed`]).
     pub fn checked(
         self,
         budget: u64,
@@ -384,7 +384,7 @@ impl Asked {
         put
     }
 
-    /// What the name written at `place` of `file` of the subject names ([`placed`]).
+    /// What stands at `place` of `file` of the subject ([`placed`]).
     pub fn placed(
         self,
         budget: u64,
@@ -392,7 +392,7 @@ impl Asked {
         file: &Path,
         place: &Place,
         telling: &mut dyn Telling,
-    ) -> Result<Option<Described>, Vec<Diagnosis>> {
+    ) -> Result<Option<Answer>, Vec<Diagnosis>> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let placed = placed(
@@ -828,7 +828,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at FILE:LINE:COLUMN`: the declaration the name written at `place` names, `staged` being what its file is admitted as, to stdout — the block `--name` answers with but for the type and the totality, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, opened on the path it is exposed at, then its prose and head as its author wrote them, where its text is held; for a term no name stands at, a block of what is written there, quoted at its place — and nothing where nothing stands there. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -840,35 +840,51 @@ pub fn wonder_at(
     let (asked, file) = asked_about(staged)?;
 
     let placed = asked.placed(budget, &overlay, &file, place, telling);
-    let described = match placed {
-        Ok(described) => {
+    let answered = match placed {
+        Ok(answered) => {
             telling.answering();
-            described
+            answered
         }
         Err(diagnostics) => return Err(stopped(diagnostics)),
     };
-    if let Some(described) = described {
-        answer(format_args!(
-            "{}\n",
-            block(
-                &described,
-                Some(listing(&described.path, Some(place.subject())))
-            )
-            .rendered(Kind::Declaration, &reader)
-        ));
-        if let Some(heading) = described
-            .declaration
-            .as_ref()
-            .and_then(Declaration::heading)
-        {
-            answer("\n");
-            for line in &heading.prose {
-                match line.is_empty() {
-                    true => answer("---\n"),
-                    false => answer(format_args!("--- {line}\n")),
+    match answered {
+        None => {}
+        Some(Answer {
+            stands: Stands::Declaration { described, .. },
+            ..
+        }) => {
+            answer(format_args!(
+                "{}\n",
+                block(
+                    &described,
+                    Some(listing(&described.asked, Some(place.subject())))
+                )
+                .rendered(Kind::Declaration, &reader)
+            ));
+            if let Some(heading) = described
+                .declaration
+                .as_ref()
+                .and_then(Declaration::heading)
+            {
+                answer("\n");
+                for line in &heading.prose {
+                    match line.is_empty() {
+                        true => answer("---\n"),
+                        false => answer(format_args!("--- {line}\n")),
+                    }
                 }
+                answer(format_args!("{}\n", heading.head));
             }
-            answer(format_args!("{}\n", heading.head));
+        }
+        Some(Answer {
+            range,
+            stands: Stands::Term { written },
+        }) => {
+            answer(format_args!(
+                "{}\n",
+                Report::about(About::Place(range), Said::line(opening(&written)))
+                    .rendered(Kind::Term, &reader)
+            ));
         }
     }
 
@@ -1034,60 +1050,42 @@ fn unknown_declaration(path: &Qualifier) -> CompileError {
         .into()
 }
 
-/// What `wonder --name` and its `--witnesses` view say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its totality, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
+/// What `wonder --name`, its `--witnesses` view and `wonder --at` say of `described` first, a block: the path it is answered by, then each fact stated of it ([`Described::facts`]), a fact of several values laid over as many lines as keep each within a block's width, then `listing`, the command that lists its witnesses, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
 fn block(described: &Described, listing: Option<String>) -> Report {
-    let declared = declared_as(described.declared);
-    let mut kind = match described.public {
-        Some(true) => format!("public {declared}"),
-        Some(false) => format!("private {declared}"),
-        None => declared.to_string(),
-    };
-    if described.path != described.asked {
-        kind.push_str(&format!(", declared at {}", Code(&described.path)));
-    }
     let about = match described.declaration.as_ref().and_then(Declaration::place) {
         Some(place) => About::Place(place.clone()),
         None => About::Named(described.path.clone()),
     };
-    let mut report = Report::about(about, Said::line(&described.asked)).stating(kind);
+    let mut report = Report::about(about, Said::line(&described.asked));
 
-    if let Some(type_) = &described.type_ {
-        report = report.stating(format!("type: {}", Code(type_)));
+    for Fact { lead, values } in described.facts() {
+        report = report.stating(match values.as_slice() {
+            [] => lead,
+            [value] => format!("{lead} {value}"),
+            _ => listed(&lead, &values),
+        });
     }
-    match described.totality {
-        Some(Totality::Total) => report = report.stating("totality: total"),
-        Some(Totality::Partial) => {
-            report = report.stating("totality: partial, not known to terminate");
-        }
-        None => {}
-    }
-    let members = match described.declared {
-        Declared::Inductive => Some("constructors"),
-        Declared::Struct => Some("fields"),
-        Declared::Concept => Some("methods"),
-        _ => None,
-    };
-    if let Some(members) = members.filter(|_| !described.members.is_empty()) {
-        let quoted = described
-            .members
-            .iter()
-            .map(|member| Code(member).to_string())
-            .collect::<Vec<_>>();
-        report = report.stating(listed(&format!("{members}:"), &quoted));
-    }
-    if let Some(witnesses) = &described.witnesses {
-        match witnesses.len() {
-            0 => report = report.stating("witnesses: none in scope"),
-            count => {
-                report = report.stating(format!("witnesses: {count} in scope"));
-                if let Some(listing) = listing {
-                    report = report.trying(listing);
-                }
-            }
-        }
+    if let Some(listing) = listing.filter(|_| {
+        described
+            .witnesses
+            .as_ref()
+            .is_some_and(|witnesses| !witnesses.is_empty())
+    }) {
+        report = report.trying(listing);
     }
 
     report
+}
+
+/// What a block about a term opens on: its first line as written, and an ellipsis where more follow.
+fn opening(written: &str) -> String {
+    let mut lines = written.lines();
+    let first = lines.next().unwrap_or_default().trim_end();
+
+    match lines.next() {
+        Some(_) => format!("{first} …"),
+        None => first.to_string(),
+    }
 }
 
 /// `items` after `lead`, a comma between each, run over as many lines as keep each within what a fact's line holds beside the trunk, each line after the first indented under the first.
@@ -1128,20 +1126,6 @@ fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
 
             Ok((Asked::about_library(library), file))
         }
-    }
-}
-
-/// The word a declaration is said to be declared as by.
-fn declared_as(declared: Declared) -> &'static str {
-    match declared {
-        Declared::Function | Declared::Value | Declared::Type => "definition",
-        Declared::Inductive => "inductive",
-        Declared::Struct => "structure",
-        Declared::Concept => "concept",
-        Declared::Constructor => "constructor",
-        Declared::Method => "method",
-        Declared::Witness => "witness",
-        Declared::Test => "test",
     }
 }
 

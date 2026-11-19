@@ -1,4 +1,4 @@
-//! What `wonder --at` and the server's document symbols answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --at`, `wonder --name` and `wonder --witnesses` answer of the declaration a place or a path names.
+//! What `wonder --at` and the server's requests answer — what stands at each place of a file, read off its subject as its check's fold left it: a name with the declaration it names, or a term — and what `wonder --name` and `wonder --witnesses` answer of the declaration a path names.
 
 use {
     crate::*,
@@ -12,8 +12,8 @@ use {
     std::path::Path,
 };
 
-/// Every text of `program`, read as the editor's check reads a document, of standard input, through `overlay`.
-fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
+/// What a check of `program` leaves of it, read as the editor's check reads a document, of standard input, through `overlay`.
+fn asked(program: &str, overlay: &Overlay) -> Placed {
     crate::checked(
         DEFAULT_BUDGET,
         Subject::Entry {
@@ -30,32 +30,44 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
         Path::new("<stdin>"),
         &mut |_| {},
     )
-    .written
+    .placed
+    .expect("the program lowers")
 }
 
-/// The name standing at the `nth` occurrence of `written` in `program`, `within` bytes into it.
-fn at(program: &str, written: &str, nth: usize, within: usize) -> Option<Named> {
-    let texts = asked(program, &Overlay::default());
+/// What stands at the `nth` occurrence of `written` in `program`, `within` bytes into it.
+fn at(program: &str, written: &str, nth: usize, within: usize) -> Option<Answer> {
+    let placed = asked(program, &Overlay::default());
     let (offset, _) = program
         .match_indices(written)
         .nth(nth)
         .expect("the program writes it");
 
-    Named::at(texts.iter().flat_map(|text| &text.names), offset + within).cloned()
+    placed.at(offset + within)
 }
 
-/// What a row says of `named`: the declaration, what it is declared as, whether this is where it is named, and the line and column its name is written at.
-fn said(named: &Named) -> (&str, Declared, bool, Option<(usize, usize)>) {
+/// What a row says of the declaration a name stands for: the path it is answered by, or a witness's head as written, what it is declared as, whether the name is where it is named, and the line and column its name is written at.
+fn row(described: &Described, declares: bool) -> (&str, Declared, bool, Option<(usize, usize)>) {
     (
-        named.name.as_str(),
-        named.declared,
-        named.declares,
-        named
+        described.asked.as_str(),
+        described.declared,
+        declares,
+        described
             .declaration
             .as_ref()
             .and_then(Declaration::place)
             .map(|place| place.line_column()),
     )
+}
+
+/// What a row says of the declaration the name `answer` stands at names.
+fn said(answer: &Answer) -> (&str, Declared, bool, Option<(usize, usize)>) {
+    match &answer.stands {
+        Stands::Declaration {
+            declares,
+            described,
+        } => row(described, *declares),
+        Stands::Term { written } => panic!("a term stands there, `{written}`, and no name"),
+    }
 }
 
 const REFUSED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\n/std/print(\"\")";
@@ -80,10 +92,25 @@ fn a_declarations_own_name_answers_itself() {
 #[test]
 fn a_name_is_answered_through_its_end_and_no_further() {
     let ended = at(REFUSED, "one", 1, 3).expect("the offset after a name's last byte is at it");
-    assert_eq!(ended.name, "/one");
+    assert_eq!(said(&ended).0, "/one");
 
     assert_eq!(at(REFUSED, "let", 0, 1), None);
-    assert_eq!(at(REFUSED, "true", 0, 1), None);
+}
+
+/// A place no name stands at answers the narrowest term written there, as it is written: the literal a refusal stands at.
+#[test]
+fn a_place_no_name_stands_at_answers_the_narrowest_term() {
+    let literal = at(REFUSED, "true", 0, 1).expect("a term stands there");
+
+    assert_eq!(
+        (literal.stands, literal.range.line_column()),
+        (
+            Stands::Term {
+                written: "true".to_string()
+            },
+            (1, 21)
+        )
+    );
 }
 
 const WITNESSED: &str = "\
@@ -126,12 +153,13 @@ fn the_narrowest_name_stands_at_an_offset() {
 /// What a file declares is each definition its texts name, in the order they are written: a type with its constructors, a concept with its methods, a witness by its head.
 #[test]
 fn a_files_declarations_are_listed_in_the_order_they_are_written() {
-    let texts = asked(WITNESSED, &Overlay::default());
-    let declared = texts
+    let placed = asked(WITNESSED, &Overlay::default());
+    let declared = placed
+        .texts
         .iter()
         .flat_map(|text| &text.names)
         .filter(|named| named.declares)
-        .map(said)
+        .map(|named| row(&placed.declarations[&named.named], true))
         .collect::<Vec<_>>();
 
     assert_eq!(
@@ -151,11 +179,13 @@ const LIBRARY_USE: &str = "/std/print(\"\")";
 /// A declaration of the library a compiler carries is read and left unplaced: its sources hold their names and no file of the machine, whichever checkout the compiler was built in, and its head and prose are read off the text its unit holds.
 #[test]
 fn a_declaration_of_the_compilers_own_library_is_read_and_left_unplaced() {
-    let texts = asked(LIBRARY_USE, &Overlay::default());
-    let named = Named::at(texts.iter().flat_map(|text| &text.names), 6)
-        .cloned()
+    let placed = asked(LIBRARY_USE, &Overlay::default());
+    let named = Named::at(placed.texts.iter().flat_map(|text| &text.names), 6)
         .expect("the program names the library's `print`");
-    let declaration = named.declaration.expect("the library's `print` is written");
+    let declaration = placed.declarations[&named.named]
+        .declaration
+        .clone()
+        .expect("the library's `print` is written");
 
     assert_eq!(declaration.place(), None);
     let label = &declaration.label;
@@ -190,7 +220,7 @@ fn a_library_is_asked_through_one_of_its_files() {
     let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
         .expect("the text is written as a module");
 
-    let texts = crate::checked(
+    let placed = crate::checked(
         DEFAULT_BUDGET,
         Subject::Unit {
             units: vec![library],
@@ -200,13 +230,13 @@ fn a_library_is_asked_through_one_of_its_files() {
         file,
         &mut |_| {},
     )
-    .written;
+    .placed
+    .expect("the library lowers");
     let offset = LIBRARY.rfind("answer").expect("the library writes it");
-    let named = Named::at(texts.iter().flat_map(|text| &text.names), offset)
-        .expect("a name stands at the use");
+    let answer = placed.at(offset).expect("a name stands at the use");
 
     assert_eq!(
-        said(named),
+        said(&answer),
         ("/answers/answer", Declared::Value, false, Some((2, 9)))
     );
 }
@@ -367,14 +397,14 @@ fn a_path_that_names_nothing_answers_nothing() {
     assert_eq!(described(POINT, "/std/Bool/nope"), None);
 }
 
-/// A place answers the declaration its name names as a path does, its type aside, which no checker is asked: a use of `/std/Bool/not` answers the library's definition.
+/// A place answers the declaration its name names as a path does, its type spelled where the name is written: a use of `/std/Bool/not` answers the library's definition, which the library's check typed and judged total.
 #[test]
 fn a_place_answers_the_declaration_its_name_names() {
     const PROGRAM: &str =
         "use /std/{Bool, print};\nlet flipped: Bool = Bool/not(true);\nprint(\"\")";
     let offset = PROGRAM.find("not").expect("the program writes it");
     let column = offset - PROGRAM[..offset].rfind('\n').expect("on the second line");
-    let described = crate::placed(
+    let answer = crate::placed(
         DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
@@ -393,16 +423,52 @@ fn a_place_answers_the_declaration_its_name_names() {
     )
     .expect("the program lowers")
     .expect("a name stands there");
+    let Stands::Declaration { described, .. } = answer.stands else {
+        panic!("a name stands there");
+    };
 
     assert_eq!(
         (
             described.path.as_str(),
             described.declared,
             described.public,
-            described.type_,
+            described.type_.as_deref(),
+            described.totality,
             described.witnesses,
         ),
-        ("/std/Bool/not", Declared::Function, Some(true), None, None),
+        (
+            "/std/Bool/not",
+            Declared::Function,
+            Some(true),
+            Some("(b: Bool) -> Bool"),
+            Some(Totality::Total),
+            None
+        ),
+    );
+}
+
+/// A file one declaration of which is refused answers a dependency's name with what the dependency's check established, its type and its totality, beside the path it is exposed at and the one it is declared at.
+#[test]
+fn a_dependency_named_in_a_refused_file_answers_its_type_and_totality() {
+    const PROGRAM: &str = "use /std/{List, Nat, print};\nlet doubled(xs: List(Nat)) -> List(Nat) = List/map(xs, (x) => x + x);\nlet broken: Nat = true;\nprint(\"\")";
+    let mapped = at(PROGRAM, "List/map", 0, 5).expect("a name stands there");
+    let Stands::Declaration { described, .. } = mapped.stands else {
+        panic!("a name stands there");
+    };
+
+    assert_eq!(
+        (
+            described.asked.as_str(),
+            described.path.as_str(),
+            described.type_.as_deref(),
+            described.totality,
+        ),
+        (
+            "/std/List/map",
+            "/sys/List/map",
+            Some("(@A: Sort, @B: Sort, a: List(A), f: (A) -> B) -> List(B)"),
+            Some(Totality::Total)
+        ),
     );
 }
 

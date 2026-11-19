@@ -16,14 +16,14 @@
 //!
 //! **Formatting is `curios format` over the overlay, on the protocol thread.** The same `Formatted` the CLI runs, on the text the editor holds, within the width the document's package states, answered as one whole-document edit — the formatter is pure and cheap, parse and print with no prelude, and its output is verified by reparse before it is handed back, so nothing here can hand an editor text the compiler would read differently.
 //!
-//! **A name's head and prose are parsed where they are asked for.** A hover reads the one declaration the name stands for, off the text a check left it written in (`Declaration::heading`): a parse of one declaration, on the protocol thread as formatting's parse of a document is, and of nothing where no hover is asked.
+//! **A hover renders what stands at a place whole, as `wonder --at` does** (`Placed::answer`): a name by its declaration's head, or its path where it states none, then each fact a block states of it, then its prose; a term by its text; each over the range it covers. A declaration's head and prose are parsed where they are asked for, off the text a check left it written in (`Declaration::heading`): a parse of one declaration, on the protocol thread as formatting's parse of a document is, and of nothing where no hover is asked.
 //!
-//! **A place is answered from what the last check left, by the protocol thread.** The check reads what each text of the document names off the subject's lowering in its own fold, as the `at` query reads it (`checked`, `Fold::reading`), so a check is one fold and a refused subject answers as one that elaborates; once the check has published, the analyst leaves the records where the protocol thread finds them ([`Answers`]): plain data, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
+//! **A place is answered from what the last check left, by the protocol thread.** The check reads what each text of the document writes off the subject's lowering in its own fold, as the `at` query reads it (`checked`, `Fold::reading`), so a check is one fold and a refused subject answers as one that elaborates; once the check has published, the analyst leaves the records where the protocol thread finds them ([`Answers`]): plain data, each type already spelled, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
 //!
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Silent, Written},
+    crate::{Answer, Asked, Diagnosed, Diagnosis, Placed, Severity, Silent, Stands},
     curios_common::{Source, Span, Style},
     curios_core::Declared,
     curios_module::Overlay,
@@ -216,10 +216,10 @@ enum Raised {
     Warming,
 }
 
-/// What the last check of each document left to answer a place from: every text of the document, with the names written in it.
+/// What the last check of each document left to answer a place from: every text of the document, with the names and terms written in it, and what each declaration they name is answered with ([`Placed`]).
 ///
 /// Written by the analyst once a check has published and read by the protocol thread, each holding the lock for an insertion or a pointer's copy. Bounded by the documents a session has open: an entry is replaced by the next check of its document and dropped when the document closes, and a check that ends after its document closed leaves one until the document is opened again.
-type Answers = Arc<Mutex<BTreeMap<PathBuf, Arc<Vec<Written>>>>>;
+type Answers = Arc<Mutex<BTreeMap<PathBuf, Arc<Placed>>>>;
 
 /// The protocol thread's state: the overlay, what the last checks left, and the channel to the analyst.
 struct Server {
@@ -387,7 +387,7 @@ impl Server {
     }
 
     /// The document `uri` names as the editor holds it, beside what its last check left. `None` for a document that is not open, and for one nothing has checked yet.
-    fn held(&self, uri: &Uri) -> Option<(&str, Arc<Vec<Written>>)> {
+    fn held(&self, uri: &Uri) -> Option<(&str, Arc<Placed>)> {
         let path = path_of(uri)?;
         let buffer = self.documents.get(&path)?;
         let checked = self
@@ -404,33 +404,33 @@ impl Server {
     fn definition(&self, params: &GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
         let asked = &params.text_document_position_params;
         let (buffer, checked) = self.held(&asked.text_document.uri)?;
-        let named = named_at(buffer, &checked, offset_of(buffer, asked.position))?;
+        let (answer, _) = answered_at(buffer, &checked, offset_of(buffer, asked.position))?;
+        let Stands::Declaration { described, .. } = answer.stands else {
+            return None;
+        };
 
-        self.located(named.declaration.as_ref()?.place()?)
+        self.located(described.declaration.as_ref()?.place()?)
             .map(GotoDefinitionResponse::Scalar)
     }
 
-    /// What the name at a position of a document names, as its declaration states it: the head, shown as source, and the prose above it. Nothing where [`Server::definition`] has no name to answer for, and for a declaration whose text states none.
+    /// What stands at a position of a document, as `wonder --at` answers it ([`markup`]), over the range it covers in the buffer. Nothing where nothing stands there, and where the declaration it stands in was edited since the document's last check.
     ///
-    /// **The one declaration's text is parsed here, where it is asked for.** A check leaves where each declaration is written and no head, since a head for every name of a document is a parse for each and a reader asks for few: what a request pays is one declaration's, which is no document's.
+    /// **A declaration's text is parsed here, where its head is asked for.** A check leaves where each declaration is written and no head, since a head for every name of a document is a parse for each and a reader asks for few: what a request pays is one declaration's, which is no document's.
     fn hover(&self, params: &HoverParams) -> Option<Hover> {
         let asked = &params.text_document_position_params;
         let (buffer, checked) = self.held(&asked.text_document.uri)?;
-        let named = named_at(buffer, &checked, offset_of(buffer, asked.position))?;
-        let heading = named.declaration.as_ref()?.heading()?;
-
-        let mut value = format!("```curios\n{}\n```", heading.head);
-        if !heading.prose.is_empty() {
-            value.push_str("\n\n");
-            value.push_str(&heading.prose.join("\n"));
-        }
+        let (answer, moved) = answered_at(buffer, &checked, offset_of(buffer, asked.position))?;
+        let range = &answer.range;
 
         Some(Hover {
             contents: HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,
-                value,
+                value: markup(&answer),
             }),
-            range: None,
+            range: Some(Range {
+                start: position_of(buffer, range.start.checked_add_signed(moved)?),
+                end: position_of(buffer, range.end.checked_add_signed(moved)?),
+            }),
         })
     }
 
@@ -552,26 +552,64 @@ impl<'a> Standing<'a> {
     }
 }
 
-/// The name standing at `offset` of `buffer`, by what the buffer's last check left: the name [`Named::at`] finds in the text that holds the offset, where that text stands in the buffer as it was checked.
-fn named_at<'a>(buffer: &str, checked: &'a [Written], offset: usize) -> Option<&'a Named> {
-    let standing = Standing::of(checked.first()?.text.source.text(), buffer);
+/// What stands at `offset` of `buffer`, by what the buffer's last check left, beside how far the text it stands in has moved since: what [`Placed::answer`] finds in the text that holds the offset, where that text stands in the buffer as it was checked.
+fn answered_at(buffer: &str, checked: &Placed, offset: usize) -> Option<(Answer, isize)> {
+    let standing = Standing::of(checked.texts.first()?.text.source.text(), buffer);
 
-    checked.iter().find_map(|written| {
+    checked.texts.iter().find_map(|written| {
         let moved = standing.moved(&written.text)?;
+        let answer = checked.answer(written, offset.checked_add_signed(-moved)?)?;
 
-        Named::at(&written.names, offset.checked_add_signed(-moved)?)
+        Some((answer, moved))
     })
 }
 
+/// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, then each fact a block states of it a line ([`Described::facts`](crate::Described::facts)), then the prose above it; a term by its text as source.
+fn markup(answer: &Answer) -> String {
+    let fenced = |source: &str| format!("```curios\n{source}\n```");
+
+    match &answer.stands {
+        Stands::Term { written } => fenced(written),
+        Stands::Declaration { described, .. } => {
+            let heading = described
+                .declaration
+                .as_ref()
+                .and_then(|declaration| declaration.heading());
+            let facts = described
+                .facts()
+                .into_iter()
+                .map(|fact| match fact.values.as_slice() {
+                    [] => fact.lead,
+                    values => format!("{} {}", fact.lead, values.join(", ")),
+                })
+                .collect::<Vec<_>>();
+
+            let mut parts = vec![
+                fenced(
+                    heading
+                        .as_ref()
+                        .map_or(described.asked.as_str(), |heading| heading.head.as_str()),
+                ),
+                facts.join("  \n"),
+            ];
+            if let Some(heading) = heading.filter(|heading| !heading.prose.is_empty()) {
+                parts.push(heading.prose.join("\n"));
+            }
+
+            parts.join("\n\n")
+        }
+    }
+}
+
 /// What `buffer` declares, by what its last check left: each definition of each text that stands in the buffer as it was checked, a constructor under its type and a method under its concept.
-fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
-    let Some(first) = checked.first() else {
+fn outline(buffer: &str, checked: &Placed) -> Vec<DocumentSymbol> {
+    let Some(first) = checked.texts.first() else {
         return Vec::new();
     };
     let standing = Standing::of(first.text.source.text(), buffer);
 
     let mut symbols = Vec::<DocumentSymbol>::new();
-    for written in checked {
+    for written in &checked.texts {
         let Some(moved) = standing.moved(&written.text) else {
             continue;
         };
@@ -582,8 +620,13 @@ fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
 
         // The definition of this text the members after it are shown under.
         let mut owner = None;
-        for named in written.names.iter().filter(|named| named.declares) {
-            let (kind, member) = match named.declared {
+        for (named, described) in written
+            .names
+            .iter()
+            .filter(|named| named.declares)
+            .filter_map(|named| Some((named, checked.declarations.get(&named.named)?)))
+        {
+            let (kind, member) = match described.declared {
                 Declared::Function | Declared::Test => (SymbolKind::FUNCTION, false),
                 Declared::Value => (SymbolKind::CONSTANT, false),
                 Declared::Type => (SymbolKind::TYPE_PARAMETER, false),
@@ -595,9 +638,9 @@ fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
                 Declared::Method => (SymbolKind::METHOD, true),
             };
             // A witness is known by its head as written, and every other definition by the last segment of its path.
-            let name = match named.declared {
-                Declared::Witness => named.name.as_str(),
-                _ => named.name.rsplit('/').next().unwrap_or_default(),
+            let name = match described.declared {
+                Declared::Witness => described.asked.as_str(),
+                _ => described.path.rsplit('/').next().unwrap_or_default(),
             };
             let label = range(&named.written);
 
@@ -709,7 +752,7 @@ impl Analyst {
                     let asked = asked.reusing(session);
                     let Diagnosed {
                         diagnostics,
-                        written: texts,
+                        placed: texts,
                         ..
                     } = match raised {
                         Raised::Warming => asked.diagnosed(budget, overlay, &mut Silent),
@@ -758,7 +801,7 @@ impl Analyst {
             .unwrap_or_else(PoisonError::into_inner)
             .insert(
                 document.to_path_buf(),
-                Arc::new(written.unwrap_or_default()),
+                Arc::new(written.flatten().unwrap_or_default()),
             );
 
         Ok(())

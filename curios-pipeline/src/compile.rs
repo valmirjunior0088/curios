@@ -381,6 +381,25 @@ pub fn spelling_at(
     })
 }
 
+/// How a term of `definitions`, a unit's module kept under `kept` where it keeps one, is spelled for a reader of that unit before the reader is placed ([`Spelling::for_reader`]): every name as resolution reaches it from where the reader will stand, through what `spellings` say each of the unit's names is written as and where ([`Reading::spelling`]), each unit of `scope` read by the lexicon it keeps. What a question about a place prints a type in, its reader placed in the text the place stands in.
+pub fn spelling_for(
+    definitions: &curios_core::Definitions,
+    kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
+    scope: &[&curios_core::Lexicon],
+    spellings: &Rc<curios_core::Spellings>,
+    syntax: &SyntaxRegistry,
+) -> Spelling {
+    Reading {
+        definitions,
+        kept,
+        scope,
+        syntax,
+        spellings: Some(spellings),
+        anchors: &[],
+    }
+    .spelling()
+}
+
 /// The certifier's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
 pub fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
     globals_after(predecessors, &vec![false; predecessors.units().len()])

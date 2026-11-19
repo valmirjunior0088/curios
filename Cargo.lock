@@ -1017,6 +1017,7 @@ dependencies = [
  "curios-module",
  "curios-package",
  "curios-pipeline",
+ "curios-profile",
  "curios-surface",
  "curios-unit",
  "curios-verdict",

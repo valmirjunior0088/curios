@@ -713,7 +713,7 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         "{library}"
     );
 
-    // What each names, as its declaration states it: the head as source, then the prose above it where there is any.
+    // What stands at each, as `--at` answers it: the declaration's head as source, then each fact stated of it, then the prose above it where there is any, over the range the name covers.
     let stated = editor.asked(
         "textDocument/hover",
         &fill!(
@@ -722,10 +722,29 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         ),
     );
     assert!(
-        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```""#),
+        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```\n\nprivate definition""#),
         "{stated}"
     );
     assert!(stated.contains(r#""kind":"markdown""#), "{stated}");
+    assert!(
+        stated.contains(
+            r#""range":{"end":{"character":23,"line":1},"start":{"character":20,"line":1}}"#
+        ),
+        "{stated}"
+    );
+
+    // A declaration of the library the document is compiled against answers what the library's check established of it, its type and its totality.
+    let typed = editor.asked(
+        "textDocument/hover",
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":0,"character":30}}"#,
+            uri
+        ),
+    );
+    assert!(
+        typed.contains(r#""value":"```curios\npub let word: /std/Str\n```\n\npublic definition  \ntype: `/std/Str`  \ntotality: total""#),
+        "{typed}"
+    );
 
     let outline = editor.asked(
         "textDocument/documentSymbol",

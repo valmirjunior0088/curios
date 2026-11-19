@@ -211,6 +211,32 @@ fn a_declaration_kept_from_an_earlier_text_answers_where_it_now_stands() {
     );
 }
 
+/// The term a program closes with writes three, each placed where it is written, a term before the ones it holds: the application, the name it applies and the literal it applies it to.
+#[test]
+fn a_texts_terms_are_each_place_it_writes_one() {
+    const WRITTEN: &str = "let pick(given: Type) -> Type = given;\npick(7)\n";
+    let entrypoint = WRITTEN.parse::<Entrypoint>().unwrap();
+    let loader = fixture_loader();
+    let (unit, entry) = into_core_entry(
+        &UnitSource::entry(&entrypoint, &loader),
+        &[],
+        syntax(),
+        None,
+    )
+    .unwrap();
+
+    let texts = unit.texts(Some(&entry), |_| true);
+    let closing = texts.last().expect("the program closes with a term");
+    let terms = closing
+        .terms()
+        .into_iter()
+        .map(|span| &WRITTEN[span.start..span.end])
+        .collect::<Vec<_>>();
+
+    assert_eq!(closing.owner(), None);
+    assert_eq!(terms, ["pick(7)", "pick", "7"]);
+}
+
 #[test]
 fn a_witness_is_declared_by_its_head_and_a_member_by_its_name() {
     let (text, _) = unmarked(PROGRAM);

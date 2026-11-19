@@ -1,7 +1,7 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
+    crate::{Diagnosis, Placed, Reading, STDIN_MOUNT, Severity},
     curios_common::{
         About, OsError, Qualifier, Report, Said, Source, SourceName, Span, is_identifier,
     },
@@ -26,8 +26,8 @@ use {
 pub struct Diagnosed {
     pub diagnostics: Vec<Diagnosis>,
     pub reached: BTreeSet<Qualifier>,
-    /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold (`checked`): every text of the file the subject was lowered from, with the names each writes. Empty where no file was asked about, or the subject did not lower.
-    pub written: Vec<Written>,
+    /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold (`checked`): every text of the file the subject was lowered from with the names and terms each writes, and what each declaration they name is answered with. None where no file was asked about, or the subject did not lower.
+    pub placed: Option<Placed>,
 }
 
 /// What a question is about.
@@ -223,7 +223,7 @@ pub fn diagnostics(
     diagnosed_reading(budget, subject, overlay, cache, None, progress)
 }
 
-/// [`diagnostics`](diagnostics()), with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::written`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
+/// [`diagnostics`](diagnostics()), with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::placed`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
 pub fn checked(
     budget: u64,
     subject: Subject,
@@ -251,16 +251,16 @@ fn diagnosed_reading(
         return Diagnosed {
             diagnostics: vec![refusal],
             reached: BTreeSet::new(),
-            written: Vec::new(),
+            placed: None,
         };
     }
 
     // The subject's lowering, as the fold makes or restores it, read for what `file` writes.
     let reading = file.map(Reading::of);
-    let written = RefCell::new(Vec::new());
+    let placed = RefCell::new(None);
     let read = |scope: &[&Unit], text: &PreparedText, entry: Option<&curios_core::Entrypoint>| {
         if let Some(reading) = &reading {
-            *written.borrow_mut() = reading.read(scope, text, entry);
+            *placed.borrow_mut() = Some(reading.read(scope, text, entry));
         }
     };
     let fold = |units| {
@@ -305,7 +305,7 @@ fn diagnosed_reading(
             Err(refusal) => Diagnosed {
                 diagnostics: refusal,
                 reached: BTreeSet::new(),
-                written: Vec::new(),
+                placed: None,
             },
         },
         // Core text is lowered by nothing: the check reads it through the pipeline's door.
@@ -323,7 +323,7 @@ fn diagnosed_reading(
             Err(refusal) => Diagnosed::unread(*refusal),
         },
     };
-    diagnosed.written = written.take();
+    diagnosed.placed = placed.take();
 
     diagnosed
 }
@@ -346,7 +346,7 @@ impl Diagnosed {
         Self {
             diagnostics,
             reached,
-            written: Vec::new(),
+            placed: None,
         }
     }
 
@@ -355,7 +355,7 @@ impl Diagnosed {
         Self {
             diagnostics: of_error(error),
             reached: BTreeSet::new(),
-            written: Vec::new(),
+            placed: None,
         }
     }
 
@@ -364,7 +364,7 @@ impl Diagnosed {
         Self {
             diagnostics: vec![refusal],
             reached: BTreeSet::new(),
-            written: Vec::new(),
+            placed: None,
         }
     }
 }

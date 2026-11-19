@@ -247,7 +247,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     assert_eq!(named, "");
 }
 
-/// A place answers the name written there on stdout as `--name` answers a declaration, a block — its path, what it is declared as, and where its name is written — then the prose and head its author wrote.
+/// A place answers the name written there on stdout as `--name` answers a declaration, a block — its path, what it is declared as, the type and totality the library's check established of it, and where its name is written — then the prose and head its author wrote.
 #[test]
 fn a_place_answers_the_name_written_there() {
     let root = project("at");
@@ -270,6 +270,8 @@ fn a_place_answers_the_name_written_there() {
         concat!(
             "/app/util/word\n",
             "│  public definition\n",
+            "│  type: `/std/Str`\n",
+            "│  totality: total\n",
             "└─ [declaration] util.crs:2:9\n",
             "\n",
             "--- The word a run prints.\n",
