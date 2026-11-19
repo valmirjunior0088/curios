@@ -135,7 +135,7 @@ impl Named {
             | Rhs::Operation { .. }
             | Rhs::Sequence { .. }
             | Rhs::SwitchBool { .. }
-            | Rhs::SwitchNat { .. }
+            | Rhs::Switch { .. }
             | Rhs::UnconsSequence { .. }
             | Rhs::Intrinsic { .. }
             | Rhs::Suspension { .. } => {}

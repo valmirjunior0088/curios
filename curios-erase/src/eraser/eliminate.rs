@@ -1,6 +1,6 @@
 //! Eliminations: the semantic identity each Core elimination selects.
 //!
-//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat` (a `Nat` case split's too, one key and a default), first-class `UnconsSequence` over the sequence itself, one peel, and schema-carrying `MatchVariant` whose arms bind the payload directly. A sequence's peel names no read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
+//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `Switch` (a `Nat` case split's too, one key and a default), first-class `UnconsSequence` over the sequence itself, one peel, and schema-carrying `MatchVariant` whose arms bind the payload directly. A sequence's peel names no read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
 //!
 //! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop peels its list as a case split does, aliasing its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — so its step reads each once. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
@@ -145,10 +145,9 @@ impl Eraser<'_> {
                 false_case,
                 true_case,
             } => self.erase_bool(context, site, false_case, true_case),
-            curios_core::Cases::Switch {
-                keys: curios_core::Keys::Nat(keyed),
-                default,
-            } => self.erase_switch(context, site, keyed.arms(), default),
+            curios_core::Cases::Switch { keys, default } => {
+                self.erase_switch(context, site, keys, default)
+            }
             // The instance a match states is a type, which erasure reads nothing of.
             curios_core::Cases::Induct { cases, default, .. } => {
                 self.erase_induct(context, site, cases, default.as_ref())
@@ -272,39 +271,35 @@ impl Eraser<'_> {
         ))
     }
 
-    /// A sparse `Nat` dispatch — `SwitchNat`: each case refines the scrutinee to its key; the default sees the unrefined head.
+    /// A sparse dispatch — `Switch`, keyed by its carrier as Core's is: each case refines the scrutinee to its key; the default sees the unrefined head.
     fn erase_switch(
         &mut self,
         context: &mut Reader,
         site: Site<'_>,
-        cases: &[(Natural, curios_core::Term)],
+        keys: &curios_core::Keys,
         default: &curios_core::Term,
     ) -> Result<Outcome, Error> {
         let Site { head, goal, hint } = site;
-        let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
-        let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
+        let scrutinee = emitted!(self.walk(context, head, &keys.carrier(), Some("scrutinee"))?);
 
-        // A key crosses whole, as the value it is compared with does: Core dispatches on a `Natural` and so does `curios-anf`'s `NatCase`, and which keys a branch table indexes is decided where the table is built.
-        let mut nat_cases = Vec::with_capacity(cases.len());
-        for (value, body) in cases {
-            let literal = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-                curios_core::Nat::new(value.clone()),
-            ));
-            let block = self.refined_arm(context, head, &literal, goal, body)?;
-            nat_cases.push(curios_anf::NatCase {
-                key: value.clone(),
-                block,
-            });
+        let mut blocks = Vec::new();
+        for (literal, body) in keys.literals() {
+            blocks.push(self.refined_arm(context, head, &literal, goal, body)?);
         }
+        // A key crosses whole, as the value it is compared with does: Core dispatches on a `Natural` or an `Integer` and so does `curios-anf`'s switch, and which keys a branch table indexes is decided where the table is built.
+        let keys = match keys {
+            curios_core::Keys::Nat(keyed) => curios_anf::Keys::Nat(cases(keyed.arms(), blocks)),
+            curios_core::Keys::Int(keyed) => curios_anf::Keys::Int(cases(keyed.arms(), blocks)),
+        };
 
         let default_expected = goal.clone();
         let default = self.open_arm(context, &default_expected, default)?;
 
         Ok(self.bind(
             hint,
-            curios_anf::Rhs::SwitchNat {
+            curios_anf::Rhs::Switch {
                 scrutinee,
-                cases: nat_cases,
+                keys,
                 default,
             },
         ))
@@ -373,12 +368,12 @@ impl Eraser<'_> {
 
         Ok(self.bind(
             hint,
-            curios_anf::Rhs::SwitchNat {
+            curios_anf::Rhs::Switch {
                 scrutinee,
-                cases: vec![curios_anf::NatCase {
+                keys: curios_anf::Keys::Nat(vec![curios_anf::Case {
                     key: Natural::zero(),
                     block: zero,
-                }],
+                }]),
                 default,
             },
         ))
@@ -822,4 +817,18 @@ fn refine_arm(
         &entered.targets,
         &entered.value,
     )))
+}
+
+/// Each of `arms`' keys beside the block its arm erased to, `blocks` being those blocks in key order.
+fn cases<K: Clone>(
+    arms: &[(K, curios_core::Term)],
+    blocks: Vec<curios_anf::BlockId>,
+) -> Vec<curios_anf::Case<K>> {
+    arms.iter()
+        .zip(blocks)
+        .map(|((key, _), block)| curios_anf::Case {
+            key: key.clone(),
+            block,
+        })
+        .collect()
 }

@@ -81,5 +81,12 @@ pub fn keys_paired<'c>(
             || None,
         )
         .map(|compared| compared.iter().map(Paired::bodies).collect()),
+        (Keys::Int(this_keys), Keys::Int(that_keys)) => paired(
+            (this_keys.arms(), Some(this_default)),
+            (that_keys.arms(), Some(that_default)),
+            || None,
+        )
+        .map(|compared| compared.iter().map(Paired::bodies).collect()),
+        (Keys::Nat(_), Keys::Int(_)) | (Keys::Int(_), Keys::Nat(_)) => None,
     }
 }

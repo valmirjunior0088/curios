@@ -29,7 +29,7 @@ impl Rhs {
             Self::Project { product, .. } => vec![*product],
             Self::MatchVariant { scrutinee, .. }
             | Self::SwitchBool { scrutinee, .. }
-            | Self::SwitchNat { scrutinee, .. }
+            | Self::Switch { scrutinee, .. }
             | Self::UnconsSequence { scrutinee, .. } => vec![*scrutinee],
         }
     }
@@ -55,11 +55,7 @@ impl Rhs {
             Self::SwitchBool {
                 if_false, if_true, ..
             } => vec![*if_false, *if_true],
-            Self::SwitchNat { cases, default, .. } => cases
-                .iter()
-                .map(|case| case.block)
-                .chain([*default])
-                .collect(),
+            Self::Switch { keys, default, .. } => keys.blocks().chain([*default]).collect(),
             Self::UnconsSequence { empty, cons, .. } => vec![*empty, cons.block],
         }
     }

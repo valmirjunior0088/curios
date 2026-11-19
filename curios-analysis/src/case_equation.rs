@@ -37,6 +37,7 @@ pub fn records_case_equation(spelling: &Term) -> bool {
 pub fn catch_all_tests<'c>(head: &'c Term, keys: &'c Keys) -> impl Iterator<Item = Term> + 'c {
     keys.literals().map(|(literal, _)| match keys {
         Keys::Nat(_) => Term::intrinsic(Intrinsic::NatEql(head.clone(), literal)),
+        Keys::Int(_) => Term::intrinsic(Intrinsic::IntEql(head.clone(), literal)),
     })
 }
 

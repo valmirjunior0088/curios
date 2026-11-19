@@ -3,6 +3,7 @@
 use {
     crate::{test_support::*, *},
     curios_common::{Plicity, Qualifier},
+    curios_num::Integer,
     std::collections::BTreeMap,
 };
 
@@ -372,7 +373,7 @@ fn a_nat_match_peels_to_a_dispatch() {
         curios_anf::test_support::shape(&erased),
         "\
 entry
-  Let ~v1 = SwitchNat Nat(5)
+  Let ~v1 = Switch Nat(5)
     case 0
       Return Nat(0)
     default
@@ -663,5 +664,40 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     assert_eq!(
         payload(&erased, "/Selfy"),
         vec![("x", curios_anf::FieldShape::Opaque)]
+    );
+}
+
+#[test]
+fn an_integers_switch_erases_to_a_switch_keyed_by_integers() {
+    let keys = curios_core::Keyed::new(vec![
+        (Integer::from(-1i32), nat_lit(10)),
+        (Integer::from(2i32), nat_lit(20)),
+    ])
+    .expect("ascending keys");
+    let body = curios_core::Term::from(curios_core::Subterm::Match(curios_core::Match {
+        head: curios_core::Term::intrinsic(curios_core::Intrinsic::Int(Integer::from(7i32))),
+        goal: curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+        cases: curios_core::Cases::Switch {
+            keys: curios_core::Keys::Int(keys),
+            default: nat_lit(99),
+        },
+    }));
+    let erased = erase(
+        &module(Vec::new(), body),
+        curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+    );
+    assert_eq!(
+        curios_anf::test_support::shape(&erased),
+        "\
+entry
+  Let ~v0 = Switch Int(7)
+    case -1
+      Return Nat(10)
+    case +2
+      Return Nat(20)
+    default
+      Return Nat(99)
+  Return ~v0
+"
     );
 }

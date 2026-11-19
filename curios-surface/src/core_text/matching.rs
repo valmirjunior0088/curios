@@ -9,7 +9,7 @@ use {
     },
     crate::{
         Binder, CoreText, DecoratorField, Elements, Frame, Label, MatchPattern, MatrixArm,
-        NatLiteral, NumLit, Radix, Rendered, label_terms, natural_pattern, sub,
+        NatLiteral, Radix, Rendered, label_terms, numeral_pattern, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -38,13 +38,9 @@ pub fn match_written<D: Rendered>(
             arm(MatchPattern::Bool(false), false_case, frame),
             arm(MatchPattern::Bool(true), true_case, frame),
         ],
-        Cases::Switch {
-            keys: Keys::Nat(keyed),
-            default,
-        } => keyed
-            .arms()
-            .iter()
-            .map(|(key, body)| arm(natural_pattern(key.clone()), body.clone(), frame))
+        Cases::Switch { keys, default } => keys
+            .numerals()
+            .map(|(key, body)| arm(numeral_pattern(key), body.clone(), frame))
             .chain(iter::once_with(|| {
                 arm(binder(Vec::new(), "_"), default, frame)
             }))
@@ -75,7 +71,11 @@ pub fn match_written<D: Rendered>(
                 let [predecessor_core] = cores(cons_case.label_iter(), frame);
                 let (predecessor, step) = frame.open_one(cons_case);
                 vec![
-                    arm(natural_pattern(Natural::zero()), empty_case, frame),
+                    arm(
+                        numeral_pattern(curios_core::Numeral::Natural(Natural::zero())),
+                        empty_case,
+                        frame,
+                    ),
                     arm(
                         MatchPattern::Successor {
                             pred_label: decorated(predecessor_core, &predecessor, frame),
@@ -266,7 +266,7 @@ pub fn match_read(
         [
             MatchPattern::Numeral(zero),
             MatchPattern::Successor { pred_label, step },
-        ] if natural_key(zero).is_some_and(|zero| zero.is_zero())
+        ] if matches!(&zero.value, curios_core::Numeral::Natural(zero) if zero.is_zero())
             && step.0 == Natural::one() =>
         {
             let labels = [LabelRead::binder(pred_label)?];
@@ -319,36 +319,36 @@ pub fn match_read(
         }
         [.., MatchPattern::Binder(default)]
             if is_bare_wildcard(default)
-                && patterns[..patterns.len() - 1].iter().all(|pattern| {
-                    matches!(pattern, MatchPattern::Numeral(numeral) if natural_key(numeral).is_some())
-                })
+                && patterns[..patterns.len() - 1]
+                    .iter()
+                    .all(|pattern| matches!(pattern, MatchPattern::Numeral(_)))
                 && patterns.len() > 1 =>
         {
             let (keyed, default) = arms.split_at(arms.len() - 1);
-            let cases = keyed
-                .iter()
-                .zip(&patterns)
-                .map(|(arm, pattern)| {
-                    let MatchPattern::Numeral(numeral) = pattern else {
-                        unreachable!("every arm before a dispatch's catch-all is a key");
-                    };
-                    let key = natural_key(numeral).expect("a dispatch's key is a natural");
-                    Ok((key, core_read(&arm.body, reader)?))
-                })
-                .collect::<Result<Vec<_>, ReadError>>()?;
-            // A switch's keys are what reads them, so one written out of order, or twice, is no switch and refused where it is written ([`Keyed`]).
-            let disordered = cases
-                .windows(2)
-                .position(|pair| pair[0].0 >= pair[1].0)
-                .map(|at| at + 1);
-            if let Some(at) = disordered {
-                return Err(ReadError::at(
-                    Refusal::DisorderedKey(cases[at].0.to_string()),
-                    keyed[at].body.span(),
-                ));
+            let mut cases = Vec::with_capacity(keyed.len());
+            for (arm, pattern) in keyed.iter().zip(&patterns) {
+                let MatchPattern::Numeral(numeral) = pattern else {
+                    unreachable!("every arm before a dispatch's catch-all is a key");
+                };
+                cases.push((numeral.value.clone(), core_read(&arm.body, reader)?));
             }
+            // The first key's carrier is the dispatch's, an unsigned key a natural's and a signed one an integer's, and a key of the other is no key of it.
+            let keys = match &cases[0].0 {
+                curios_core::Numeral::Natural(_) => {
+                    Keys::Nat(keyed_read(keyed, cases, |key| match key {
+                        curios_core::Numeral::Natural(natural) => Some(natural),
+                        curios_core::Numeral::Integer(_) => None,
+                    })?)
+                }
+                curios_core::Numeral::Integer(_) => {
+                    Keys::Int(keyed_read(keyed, cases, |key| match key {
+                        curios_core::Numeral::Integer(integer) => Some(integer),
+                        curios_core::Numeral::Natural(_) => None,
+                    })?)
+                }
+            };
             Cases::Switch {
-                keys: Keys::Nat(Keyed::new(cases).expect("a dispatch's keys are read ascending")),
+                keys,
                 default: core_read(&default[0].body, reader)?,
             }
         }
@@ -398,12 +398,33 @@ pub fn match_read(
     })))
 }
 
-/// The natural a key spelled as a numeral is: an unsigned numeral's value, and none for a signed one, which is no natural's.
-fn natural_key(numeral: &NumLit) -> Option<Natural> {
-    match &numeral.value {
-        curios_core::Numeral::Natural(natural) => Some(natural.clone()),
-        curios_core::Numeral::Integer(_) => None,
+/// A dispatch's keys of one carrier, each read off its numeral by `key`, under the arms `keyed` they are written by. A switch's keys are what reads them, so a key of another carrier, or one written out of order or twice, is no switch and is refused where it is written ([`Keyed`]).
+fn keyed_read<K: Ord>(
+    keyed: &[MatrixArm<CoreText>],
+    cases: Vec<(curios_core::Numeral, Term)>,
+    key: impl Fn(curios_core::Numeral) -> Option<K>,
+) -> Result<Keyed<K>, ReadError> {
+    let mut read: Vec<(K, Term)> = Vec::with_capacity(cases.len());
+    for (at, (numeral, body)) in cases.into_iter().enumerate() {
+        let written = format!("{}{}", numeral.sign().symbol(), numeral.magnitude());
+        let Some(value) = key(numeral) else {
+            return Err(ReadError::at(
+                Refusal::Malformed(
+                    "a dispatch's keys, each unsigned for a natural or each signed for an integer",
+                ),
+                keyed[at].body.span(),
+            ));
+        };
+        if read.last().is_some_and(|(before, _)| *before >= value) {
+            return Err(ReadError::at(
+                Refusal::DisorderedKey(written),
+                keyed[at].body.span(),
+            ));
+        }
+        read.push((value, body));
     }
+
+    Ok(Keyed::new(read).expect("a dispatch's keys are read ascending"))
 }
 
 /// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.

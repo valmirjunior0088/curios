@@ -188,12 +188,12 @@ fn a_deep_module_analyzes_without_native_stack() {
         builder.open_block();
         let switched = builder.let_value(
             None,
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee: Atom::Value(scrutinee),
-                cases: vec![NatCase {
+                keys: Keys::Nat(vec![Case {
                     key: Natural::zero(),
                     block: leaf,
-                }],
+                }]),
                 default: chain,
             },
         );

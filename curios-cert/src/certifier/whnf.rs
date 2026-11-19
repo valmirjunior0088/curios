@@ -710,6 +710,30 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
             }
         }
 
+        // An `Int` literal takes its key's case, or the default when no key names it; an integer that is no literal is stuck whatever its sum, since no floor bounds it.
+        Cases::Switch {
+            keys: Keys::Int(keyed),
+            default,
+        } => match &*forced {
+            Subterm::Intrinsic(Intrinsic::Int(value)) => Step::Continue(
+                keyed
+                    .arms()
+                    .iter()
+                    .find(|(key, _)| key == value)
+                    .map(|(_, body)| body)
+                    .unwrap_or(&default)
+                    .clone(),
+            ),
+            _ => Step::Stop(Term::from(Subterm::Match(Match {
+                head: forced,
+                goal,
+                cases: Cases::Switch {
+                    keys: Keys::Int(keyed),
+                    default,
+                },
+            }))),
+        },
+
         Cases::Induct {
             cases,
             default,

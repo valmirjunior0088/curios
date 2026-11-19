@@ -92,12 +92,12 @@ fn optimized(peel: Peel, step: impl FnOnce(&mut Builder, &Arm) -> Atom) -> Strin
     let arm = builder.seal_block(Terminator::Return(answer));
     builder.open_block();
     let rhs = match head {
-        None => Rhs::SwitchNat {
+        None => Rhs::Switch {
             scrutinee: Atom::Value(x),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::zero(),
                 block: base,
-            }],
+            }]),
             default: arm,
         },
         Some(element) => Rhs::UnconsSequence {

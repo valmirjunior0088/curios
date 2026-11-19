@@ -459,3 +459,40 @@ fn a_match_or_a_projection_forces_what_an_intrinsic_answers() {
         "the match took no arm"
     );
 }
+
+/// A dispatch on an integer's keys: a literal takes its key's arm, one no key names the catch-all, and an integer that is no literal, `NatToInt` of an opaque call, stays stuck, under the machine as under the strategy.
+#[test]
+fn the_closed_machine_takes_an_integers_dispatch_as_the_strategy_does() {
+    for (scrutinee, expected) in [
+        ("-1", Some(term("10"))),
+        ("+2", Some(term("20"))),
+        ("+7", Some(term("99"))),
+        ("#NatToInt(/g(0))", None),
+    ] {
+        let dispatch = term(&fill!(
+            "#{goal = #NatType} match ${scrutinee} | -1 => 10 | +2 => 20 | _ => 99 end",
+            scrutinee
+        ));
+
+        let mut machined = certifier();
+        declare_g(&mut machined);
+        let mut strategy = strategy_certifier();
+        declare_g(&mut strategy);
+
+        let reduct = machined
+            .reduce_forced(dispatch.clone())
+            .expect("the machine reduces");
+        assert_eq!(
+            Some(reduct.clone()),
+            strategy.reduce_forced(dispatch.clone()).ok(),
+            "{scrutinee}: the machine and the strategy disagreed on {dispatch:?}",
+        );
+        match expected {
+            Some(expected) => assert_eq!(reduct, expected, "{scrutinee}"),
+            None => assert!(
+                matches!(&*reduct, Subterm::Match(_)),
+                "{scrutinee}: an integer that is no literal leaves the dispatch stuck: {reduct:?}"
+            ),
+        }
+    }
+}

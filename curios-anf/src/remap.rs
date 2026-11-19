@@ -9,8 +9,8 @@
 use {
     crate::{
         Atom, Block, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
-        ForeignId, Function, FunctionId, NatCase, ProductId, RecGroup, RecGroupId, RecValue, Rhs,
-        Statement, StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        ForeignId, Function, FunctionId, ProductId, RecGroup, RecGroupId, RecValue, Rhs, Statement,
+        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     std::collections::BTreeMap,
 };
@@ -200,19 +200,13 @@ impl Remap<'_> {
                 if_false: self.block(*if_false),
                 if_true: self.block(*if_true),
             },
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee,
-                cases,
+                keys,
                 default,
-            } => Rhs::SwitchNat {
+            } => Rhs::Switch {
                 scrutinee: self.atom(*scrutinee),
-                cases: cases
-                    .iter()
-                    .map(|case| NatCase {
-                        key: case.key.clone(),
-                        block: self.block(case.block),
-                    })
-                    .collect(),
+                keys: keys.with_blocks(|block| self.block(block)),
                 default: self.block(*default),
             },
             Rhs::UnconsSequence {

@@ -25,9 +25,9 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, Keyed, Keys, Matrix,
-        Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, WrittenPlace,
+        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, IntrinsicHead, Keyed, Keys,
+        Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, WrittenPlace,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -1611,7 +1611,13 @@ impl<'m> Compiler<'m> {
             let goal = Term::hole(context.mint_metavar());
 
             return context.awaiting(|context| {
-                let split = Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?);
+                let split = Rc::new(SwitchSplit::resolve(
+                    context,
+                    scrutinee,
+                    IntrinsicHead::Nat,
+                    &goal,
+                    &mode,
+                )?);
                 self.resolved(top, || {
                     (
                         Outermost::Switch(Rc::clone(&split)),
@@ -2372,7 +2378,13 @@ impl<'m> Compiler<'m> {
 
                         let scrutinee = dispatched(context, scrutinee);
 
-                        Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?)
+                        Rc::new(SwitchSplit::resolve(
+                            context,
+                            scrutinee,
+                            IntrinsicHead::Nat,
+                            &goal,
+                            &mode,
+                        )?)
                     }
                 };
 

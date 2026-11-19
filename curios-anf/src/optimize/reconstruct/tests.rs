@@ -298,12 +298,12 @@ fn recursive_unit_fixture(mixed: bool) -> Module {
     builder.open_block();
     let result = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::zero(),
                 block: base,
-            }],
+            }]),
             default: recursive,
         },
     );
@@ -327,7 +327,7 @@ fn a_recursive_return_establishes_its_retained_unit_field() {
         .flatten()
         .find_map(|statement| match statement {
             Statement::Let {
-                rhs: Rhs::SwitchNat { default, .. },
+                rhs: Rhs::Switch { default, .. },
                 ..
             } => module.block(*default),
             _ => None,
@@ -502,16 +502,18 @@ fn many_returns(count: usize) -> Module {
     builder.open_block();
     let result = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: blocks
-                .into_iter()
-                .enumerate()
-                .map(|(i, block)| NatCase {
-                    key: Natural::from(i),
-                    block,
-                })
-                .collect(),
+            keys: Keys::Nat(
+                blocks
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, block)| Case {
+                        key: Natural::from(i),
+                        block,
+                    })
+                    .collect(),
+            ),
             default,
         },
     );

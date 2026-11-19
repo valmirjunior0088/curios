@@ -447,6 +447,7 @@ macro_rules! shown_terms {
             }
             Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
+            | Self::NotIntType { head_type }
             | Self::NotBoolType { head_type }
             | Self::NotListType { head_type }
             | Self::NotBytesType { head_type, .. }
@@ -697,6 +698,9 @@ pub enum Error {
         position: usize,
     },
     NotNatType {
+        head_type: Box<Term>,
+    },
+    NotIntType {
         head_type: Box<Term>,
     },
     NotBoolType {
@@ -1386,6 +1390,12 @@ impl Error {
 
     pub fn not_nat_type<U: Into<Term>>(head_type: U) -> Self {
         Self::NotNatType {
+            head_type: Box::new(head_type.into()),
+        }
+    }
+
+    pub fn not_int_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotIntType {
             head_type: Box::new(head_type.into()),
         }
     }

@@ -236,9 +236,9 @@ impl ValueFacts {
                     copy!(Source::Key(Key::Block(*if_false)));
                     copy!(Source::Key(Key::Block(*if_true)));
                 }
-                Rhs::SwitchNat { cases, default, .. } => {
-                    for case in cases {
-                        copy!(Source::Key(Key::Block(case.block)));
+                Rhs::Switch { keys, default, .. } => {
+                    for block in keys.blocks() {
+                        copy!(Source::Key(Key::Block(block)));
                     }
                     copy!(Source::Key(Key::Block(*default)));
                 }

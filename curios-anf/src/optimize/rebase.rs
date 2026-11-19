@@ -617,7 +617,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Ro
                 result,
                 rhs:
                     rhs @ (Rhs::SwitchBool { .. }
-                    | Rhs::SwitchNat { .. }
+                    | Rhs::Switch { .. }
                     | Rhs::MatchVariant { .. }
                     | Rhs::UnconsSequence { .. }),
             },

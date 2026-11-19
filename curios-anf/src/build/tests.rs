@@ -53,12 +53,12 @@ fn a_recursive_function_builds_through_reserve_and_define() {
     builder.open_block();
     let result = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::zero(),
                 block: zero_case,
-            }],
+            }]),
             default,
         },
     );

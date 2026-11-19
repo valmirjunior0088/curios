@@ -18,7 +18,7 @@ mod tests;
 use {
     super::{
         Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
-        FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation,
+        FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Keys, Module, Operation,
         ProductFields, ProductId, RecValue, RegisterShape, Rhs, SequenceGrain, SequenceOp,
         Statement, StatementId, SuspensionOperation, Terminator, ValueId,
     },
@@ -173,7 +173,7 @@ impl Reach {
             | Rhs::Operation { .. }
             | Rhs::Sequence { .. }
             | Rhs::SwitchBool { .. }
-            | Rhs::SwitchNat { .. }
+            | Rhs::Switch { .. }
             | Rhs::UnconsSequence { .. }
             | Rhs::Intrinsic { .. }
             | Rhs::Suspension { .. } => {}
@@ -869,14 +869,24 @@ impl Printer<'_, '_, '_, '_> {
                         self.arm(inner, "false".into(), *if_false)?;
                         return self.line(inner, "end;");
                     }
-                    Rhs::SwitchNat {
+                    Rhs::Switch {
                         scrutinee,
-                        cases,
+                        keys,
                         default,
                     } => {
                         self.scrutinized(indent, &bound, *scrutinee)?;
-                        for case in cases {
-                            self.arm(inner, format!("{}", case.key), case.block)?;
+                        // An integer's key is written with its sign, as a program writes one.
+                        match keys {
+                            Keys::Nat(cases) => {
+                                for case in cases {
+                                    self.arm(inner, format!("{}", case.key), case.block)?;
+                                }
+                            }
+                            Keys::Int(cases) => {
+                                for case in cases {
+                                    self.arm(inner, format!("{:+}", case.key), case.block)?;
+                                }
+                            }
                         }
                         self.arm(inner, "_".into(), *default)?;
                         return self.line(inner, "end;");

@@ -967,3 +967,18 @@ fn a_dispatch_key_out_of_order_is_refused_where_its_arm_stands() {
         );
     }
 }
+
+/// An integer's dispatch writes each key as the signed numeral it is, and reads back as the switch it was: its carrier read off its keys with no type at hand.
+#[test]
+fn an_integers_dispatch_writes_its_keys_signed() {
+    let text = "#{goal = #NatType} match +7 | -1 => 10 | +0 => 20 | +2 => 30 | _ => 99 end";
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let read = term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"));
+
+    assert_eq!(
+        written(&read),
+        "#{goal = #NatType} match +7\n| -1 => 10\n| +0 => 20\n| +2 => 30\n| _ => 99\nend"
+    );
+    assert_eq!(read_back(&read), read);
+}

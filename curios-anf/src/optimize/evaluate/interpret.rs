@@ -9,9 +9,9 @@
 use {
     super::{Bail, Budget, Closure, ListWindow, MAX_FOLD_BITS, MAX_FOLD_ELEMENTS, Value},
     crate::{
-        Atom, BlockId, Constant, FoldOutcome, ForeignId, FreeValues, FunctionId, Intrinsic, Module,
-        Operation, Rhs, Semantics, SequenceGrain, SequenceOp, Statement, SuspensionOperation,
-        Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        Atom, BlockId, Constant, FoldOutcome, ForeignId, FreeValues, FunctionId, Intrinsic, Keys,
+        Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp, Statement,
+        SuspensionOperation, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_num::Natural,
     std::{
@@ -353,20 +353,27 @@ impl<'m> Evaluator<'m> {
                 Ok(chosen) => self.eval_block(if chosen { *if_true } else { *if_false }, frame, at),
                 Err(bail) => Outcome::Bail(bail),
             },
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee,
-                cases,
+                keys,
                 default,
-            } => match self.eval_atom(*scrutinee, frame) {
-                Ok(Value::Nat(key)) => {
+            } => match (self.eval_atom(*scrutinee, frame), keys) {
+                (Ok(Value::Nat(key)), Keys::Nat(cases)) => {
                     let block = cases
                         .iter()
                         .find(|case| case.key == key)
                         .map_or(*default, |case| case.block);
                     self.eval_block(block, frame, at)
                 }
-                Ok(_) => Outcome::Bail(Bail::Unsupported),
-                Err(bail) => Outcome::Bail(bail),
+                (Ok(Value::Int(key)), Keys::Int(cases)) => {
+                    let block = cases
+                        .iter()
+                        .find(|case| case.key == key)
+                        .map_or(*default, |case| case.block);
+                    self.eval_block(block, frame, at)
+                }
+                (Ok(_), _) => Outcome::Bail(Bail::Unsupported),
+                (Err(bail), _) => Outcome::Bail(bail),
             },
             Rhs::UnconsSequence {
                 grain,

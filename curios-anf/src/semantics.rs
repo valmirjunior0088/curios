@@ -213,7 +213,7 @@ impl Semantics {
             | Rhs::Project { .. }
             | Rhs::MatchVariant { .. }
             | Rhs::SwitchBool { .. }
-            | Rhs::SwitchNat { .. } => LocalBehavior::pure(),
+            | Rhs::Switch { .. } => LocalBehavior::pure(),
             Rhs::Operation { operation, .. } => Self::operation(*operation),
             Rhs::Sequence { operation, .. } => Self::sequence(*operation),
             Rhs::Cell { operation, .. } => Self::cell(*operation),

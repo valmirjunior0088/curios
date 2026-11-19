@@ -8,7 +8,7 @@ use {
         RecGroupId, SequenceGrain, SequenceOp, StatementId, ValueId,
     },
     curios_common::Lineage,
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
 };
 
 /// The single computation a `Let` statement evaluates and binds.
@@ -52,16 +52,16 @@ pub enum Rhs {
         arms: Vec<VariantArm>,
         default: Option<BlockId>,
     },
-    /// Dispatch on a `Bool` scrutinee. A semantic identity distinct from [`Rhs::SwitchNat`]; the carrier is the lowering's decision.
+    /// Dispatch on a `Bool` scrutinee. A semantic identity distinct from [`Rhs::Switch`]; the carrier is the lowering's decision.
     SwitchBool {
         scrutinee: Atom,
         if_false: BlockId,
         if_true: BlockId,
     },
-    /// Dispatch on a `Nat` scrutinee by literal key, falling through to `default`. Binder-free: a zero/successor match's predecessor is an explicit subtraction in the default block.
-    SwitchNat {
+    /// Dispatch on a scalar scrutinee by literal key, falling through to `default`, keyed by its carrier as Core's switch is ([`Keys`]). Binder-free: a zero/successor match's predecessor is an explicit subtraction in the default block.
+    Switch {
         scrutinee: Atom,
-        cases: Vec<NatCase>,
+        keys: Keys,
         default: BlockId,
     },
     /// Sequence elimination as a *case split*: `empty` computes the result for the empty sequence, and `cons` sees the head element and the suffix after it.
@@ -118,7 +118,7 @@ impl Rhs {
             | Self::Project { .. }
             | Self::MatchVariant { .. }
             | Self::SwitchBool { .. }
-            | Self::SwitchNat { .. }
+            | Self::Switch { .. }
             | Self::UnconsSequence { .. } => false,
         }
     }
@@ -133,14 +133,57 @@ pub struct VariantArm {
     pub block: BlockId,
 }
 
-/// One case of a [`Rhs::SwitchNat`]: a literal key and the block it selects.
+/// The keys of a [`Rhs::Switch`], each with the block it selects, by the carrier they are values of: a natural's or an integer's.
 ///
-/// The key is the natural Core dispatches on, whole: a key is as unbounded as the value it is compared with, and which keys a branch table indexes is the lowering's to decide, where the table is built.
+/// A key is the value Core dispatches on, whole: a key is as unbounded as the value it is compared with, and which keys a branch table indexes is the lowering's to decide, where the table is built.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-pub struct NatCase {
-    pub key: Natural,
+pub enum Keys {
+    Nat(Vec<Case<Natural>>),
+    Int(Vec<Case<Integer>>),
+}
+
+impl Keys {
+    /// The block each key selects, in key order.
+    pub fn blocks(&self) -> impl Iterator<Item = BlockId> + '_ {
+        let (naturals, integers): (&[Case<Natural>], &[Case<Integer>]) = match self {
+            Keys::Nat(cases) => (cases, &[]),
+            Keys::Int(cases) => (&[], cases),
+        };
+
+        naturals
+            .iter()
+            .map(|case| case.block)
+            .chain(integers.iter().map(|case| case.block))
+    }
+
+    /// The same keys, each selecting the block `block` maps its own to.
+    pub fn with_blocks(&self, mut block: impl FnMut(BlockId) -> BlockId) -> Self {
+        match self {
+            Keys::Nat(cases) => Keys::Nat(Case::with_blocks(cases, &mut block)),
+            Keys::Int(cases) => Keys::Int(Case::with_blocks(cases, &mut block)),
+        }
+    }
+}
+
+/// One case of a [`Rhs::Switch`]: a literal key and the block it selects.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct Case<K> {
+    pub key: K,
     pub block: BlockId,
+}
+
+impl<K: Clone> Case<K> {
+    fn with_blocks(cases: &[Self], block: &mut impl FnMut(BlockId) -> BlockId) -> Vec<Self> {
+        cases
+            .iter()
+            .map(|case| Case {
+                key: case.key.clone(),
+                block: block(case.block),
+            })
+            .collect()
+    }
 }
 
 /// The cons arm of a [`Rhs::UnconsSequence`]: binds the head element and the suffix after it in `block`.

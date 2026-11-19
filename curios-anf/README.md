@@ -12,7 +12,7 @@ The Curios erased IR, in A-normal form: the flat, explicit, first-order stage be
 
 ### Shapes stay distinct
 
-**Decision.** The erased alphabet keeps erased Core's semantic identities — distinct scalar shapes, schema-carrying products and variants, dedicated `Bool` and `Nat` switches, a sequence's case split. One shape's operations are never reused for another, and conversions between shapes are explicit operations.
+**Decision.** The erased alphabet keeps erased Core's semantic identities — distinct scalar shapes, schema-carrying products and variants, a dedicated `Bool` switch and a switch keyed by its carrier, `Nat` or `Int`, a sequence's case split. One shape's operations are never reused for another, and conversions between shapes are explicit operations.
 
 **Rationale.** Every encoding decision — carriers, tag layouts, dispatch, the reads a peel makes — belongs to the lowering into CPS. Collapsing shapes early discards information the backend cannot recover, and an operation reused across shapes acquires a per-context meaning no node-local classification can read.
 

@@ -612,12 +612,12 @@ fn define_walk(builder: &mut Builder) -> FunctionId {
     builder.open_block();
     let switched = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::from(0u32),
                 block: base,
-            }],
+            }]),
             default: step,
         },
     );
@@ -662,12 +662,12 @@ fn define_climb(builder: &mut Builder) -> FunctionId {
     builder.open_block();
     let switched = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::from(0u32),
                 block: base,
-            }],
+            }]),
             default: step,
         },
     );
@@ -824,12 +824,12 @@ fn an_effect_past_a_walk_of_tail_calls_is_left_as_the_call_that_reached_it() {
         builder.open_block();
         let switched = builder.let_value(
             None,
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee: Atom::Value(n),
-                cases: vec![NatCase {
+                keys: Keys::Nat(vec![Case {
                     key: Natural::from(0u32),
                     block: base,
-                }],
+                }]),
                 default: step,
             },
         );

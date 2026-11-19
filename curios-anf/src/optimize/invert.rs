@@ -6,7 +6,7 @@
 //!                  go(0, z(a))
 //! ```
 //!
-//! **The envelope, structural in ANF.** The function's body is one dispatch it returns: a `SwitchNat` on a parameter whose one case is `0`, or an `UnconsSequence` on a parameter. Among the step arm's own statements is a self-call handed, in the peeled parameter's place, the predecessor the arm computes ahead of it (`n - 1`) or the suffix the peel binds, and every other parameter in its own place, or anything where the function never reads the parameter, as an erased type or proof is handed on as `unit`. It is the only reference the function's region makes to itself, every run of the arm reads its answer, and the dispatch and the predecessor are the only reads of the peeled parameter, which the loop leaves at its outermost value. Outside the envelope the pass is a no-op, never a miscompile.
+//! **The envelope, structural in ANF.** The function's body is one dispatch it returns: a natural's `Switch` on a parameter whose one case is `0`, or an `UnconsSequence` on a parameter. Among the step arm's own statements is a self-call handed, in the peeled parameter's place, the predecessor the arm computes ahead of it (`n - 1`) or the suffix the peel binds, and every other parameter in its own place, or anything where the function never reads the parameter, as an erased type or proof is handed on as `unit`. It is the only reference the function's region makes to itself, every run of the arm reads its answer, and the dispatch and the predecessor are the only reads of the peeled parameter, which the loop leaves at its outermost value. Outside the envelope the pass is a no-op, never a miscompile.
 //!
 //! **Every run reads the answer.** A call whose answer only some runs of the arm read is one the lowering places where it is read ([`curios-cps`'s README](../../../curios-cps/README.md#a-droppable-computation-runs-where-it-is-read)), so the recursion stops at the first level that does not read it, as `x == y && eql(xs, ys)` stops at the first unequal pair; its loop would run every level. So the arm's answer is read, and so is what the definition of a value read reads, chased across the arm's statements and its arms alike ([`Demand`]); the call's answer must be among it.
 //!
@@ -17,9 +17,9 @@ mod tests;
 
 use {
     crate::{
-        Analysis, Atom, Block, BlockId, Constant, Function, FunctionId, Module, NatCase, Operation,
-        Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Summary, Terminator,
-        ValueId, control_blocks, self_references,
+        Analysis, Atom, Block, BlockId, Case, Constant, Function, FunctionId, Keys, Module,
+        Operation, Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Summary,
+        Terminator, ValueId, control_blocks, self_references,
     },
     curios_common::recurse,
     curios_num::Natural,
@@ -99,9 +99,9 @@ impl Inversion {
 
         // The peel: the parameter, the base arm, the step arm, and what a sequence's binds.
         let (parameter, base, step, sequence) = match rhs {
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee: Atom::Value(parameter),
-                cases,
+                keys: Keys::Nat(cases),
                 default,
             } => match cases.as_slice() {
                 [case] if case.key == Natural::zero() => (*parameter, case.block, *default, None),
@@ -378,12 +378,12 @@ impl Inversion {
             Peel::Sequence { .. } => {
                 let (switched, switching) = module.let_value(
                     None,
-                    Rhs::SwitchNat {
+                    Rhs::Switch {
                         scrutinee: Atom::Value(counter),
-                        cases: vec![NatCase {
+                        keys: Keys::Nat(vec![Case {
                             key: Natural::zero(),
                             block: done,
-                        }],
+                        }]),
                         default: step,
                     },
                 );

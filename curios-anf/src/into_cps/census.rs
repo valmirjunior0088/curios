@@ -274,7 +274,7 @@ fn rhs_atoms(rhs: &Rhs) -> Vec<&Atom> {
         Rhs::Project { product, .. } => vec![product],
         Rhs::MatchVariant { scrutinee, .. }
         | Rhs::SwitchBool { scrutinee, .. }
-        | Rhs::SwitchNat { scrutinee, .. }
+        | Rhs::Switch { scrutinee, .. }
         | Rhs::UnconsSequence { scrutinee, .. } => vec![scrutinee],
     }
 }

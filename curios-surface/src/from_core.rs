@@ -184,10 +184,10 @@ fn numeral<D: Dialect>(value: curios_core::Numeral) -> Term<D> {
     .into()
 }
 
-/// A natural's key as the pattern a reader writes it as: an unsigned numeral nobody wrote, at its natural width.
-pub fn natural_pattern<D: Dialect>(magnitude: Natural) -> MatchPattern<D> {
+/// A key as the pattern a reader writes it as: the numeral nobody wrote that spells it, at its natural width.
+pub fn numeral_pattern<D: Dialect>(value: curios_core::Numeral) -> MatchPattern<D> {
     MatchPattern::Numeral(NumLit {
-        value: curios_core::Numeral::Natural(magnitude),
+        value,
         radix: Radix::Dec(0),
     })
 }
@@ -1229,7 +1229,7 @@ fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> 
 
 /// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by. Its goal is what the position it stands in supplies, so it is not written.
 fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> {
-    use curios_core::{Carrier, Cases, Keys};
+    use curios_core::{Carrier, Cases};
 
     let curios_core::Match { head, cases, .. } = elimination;
     let open = |labels: &[curios_core::Free]| {
@@ -1249,14 +1249,11 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             MatrixArm::of(MatchPattern::Bool(false), sub(false_case, frame)?),
         ],
         // A dispatch by value: a numeral an arm, and the fallthrough it is required to have.
-        Cases::Switch {
-            keys: Keys::Nat(keyed),
-            default,
-        } => {
-            let mut arms = Vec::with_capacity(keyed.arms().len() + 1);
-            for (value, body) in keyed.arms() {
+        Cases::Switch { keys, default } => {
+            let mut arms = Vec::new();
+            for (value, body) in keys.numerals() {
                 arms.push(MatrixArm::of(
-                    natural_pattern(value.clone()),
+                    numeral_pattern(value),
                     sub(body.clone(), frame)?,
                 ));
             }
@@ -1320,7 +1317,10 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 };
 
                 vec![
-                    MatrixArm::of(natural_pattern(Natural::zero()), sub(empty_case, frame)?),
+                    MatrixArm::of(
+                        numeral_pattern(curios_core::Numeral::Natural(Natural::zero())),
+                        sub(empty_case, frame)?,
+                    ),
                     MatrixArm::of(succ, sub(body, frame)?),
                 ]
             }

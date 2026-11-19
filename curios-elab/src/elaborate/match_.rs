@@ -128,6 +128,7 @@ impl Scrutinee {
         if stuck_on_metavar(context, &type_) {
             let carrier: Term = Subterm::Intrinsic(match expected {
                 IntrinsicHead::Nat => Intrinsic::NatType,
+                IntrinsicHead::Int => Intrinsic::IntType,
                 IntrinsicHead::Bool => Intrinsic::BoolType,
                 IntrinsicHead::Bytes => Intrinsic::BytesType,
             })
@@ -138,6 +139,7 @@ impl Scrutinee {
         }
         let carrier = match expected {
             IntrinsicHead::Nat => matches!(&*type_, Subterm::Intrinsic(Intrinsic::NatType)),
+            IntrinsicHead::Int => matches!(&*type_, Subterm::Intrinsic(Intrinsic::IntType)),
             IntrinsicHead::Bool => matches!(&*type_, Subterm::Intrinsic(Intrinsic::BoolType)),
             IntrinsicHead::Bytes => {
                 matches!(&*type_, Subterm::Intrinsic(Intrinsic::BytesType))
@@ -157,6 +159,8 @@ pub enum Eliminator {
     Bool,
     /// The case split of a natural and the dispatch on one alike.
     Nat,
+    /// The dispatch on an integer.
+    Int,
     List,
     Bytes,
     /// `vacuous` where the match writes no arm and no default: what it eliminates is then said to be empty.
@@ -172,6 +176,7 @@ fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term
         match eliminator {
             Eliminator::Bool => Error::not_bool_type(type_),
             Eliminator::Nat => Error::not_nat_type(type_),
+            Eliminator::Int => Error::not_int_type(type_),
             Eliminator::List => Error::not_list_type(type_),
             Eliminator::Bytes => Error::not_bytes_type(type_),
             Eliminator::Nominal { vacuous } => Error::not_a_induct_type(type_, vacuous),
@@ -545,20 +550,28 @@ fn elaborate_sequence_match(
     Ok(split.rebuild(empty, &binders, cons))
 }
 
-/// A `Nat` dispatch with its scrutinee and its result resolved: a case for each literal written, and the default any other value takes.
+/// A dispatch with its scrutinee and its result resolved: a case for each literal written, and the default any other value takes.
 pub struct SwitchSplit {
     head: Term,
     goal: Term,
 }
 
 impl SwitchSplit {
+    /// The dispatch on `scrutinee` held to `carrier`, its keys' type: a natural's or an integer's.
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
+        carrier: IntrinsicHead,
         goal: &Term,
         mode: &Mode,
     ) -> Result<Self, Error> {
-        let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Nat, IntrinsicHead::Nat)?;
+        let eliminator = match carrier {
+            IntrinsicHead::Nat => Eliminator::Nat,
+            IntrinsicHead::Int => Eliminator::Int,
+            IntrinsicHead::Bool => Eliminator::Bool,
+            IntrinsicHead::Bytes => Eliminator::Bytes,
+        };
+        let (head, _) = scrutinee.of_intrinsic(context, eliminator, carrier)?;
 
         let goal = resolve_goal(context, goal, mode)?;
 
@@ -625,7 +638,11 @@ fn elaborate_switch(
     default: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let split = SwitchSplit::resolve(context, scrutinee, goal, &mode)?;
+    let carrier = match keys {
+        Keys::Nat(_) => IntrinsicHead::Nat,
+        Keys::Int(_) => IntrinsicHead::Int,
+    };
+    let split = SwitchSplit::resolve(context, scrutinee, carrier, goal, &mode)?;
 
     // Elaborating an arm rewrites its body, never its key.
     let keys = keys.try_map_at(|literal, body| {

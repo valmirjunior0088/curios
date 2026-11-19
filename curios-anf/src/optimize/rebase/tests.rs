@@ -40,12 +40,12 @@ fn optimized_where(
     builder.open_block();
     let switched = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::zero(),
                 block: zero_arm,
-            }],
+            }]),
             default,
         },
     );

@@ -571,20 +571,51 @@ impl Cases {
 #[curios_archive::archived]
 pub enum Keys {
     Nat(Keyed<Natural>),
+    Int(Keyed<Integer>),
 }
 
 impl Keys {
     /// The arms, in the order of their keys.
     pub fn bodies(&self) -> impl Iterator<Item = &Term> {
-        match self {
-            Keys::Nat(keyed) => keyed.arms.iter().map(|(_, arm)| arm),
-        }
+        self.naturals()
+            .iter()
+            .map(|(_, arm)| arm)
+            .chain(self.integers().iter().map(|(_, arm)| arm))
     }
 
     /// Each key as the literal it is, beside its arm, in key order: the value an arm is typed at.
     pub fn literals(&self) -> impl Iterator<Item = (Term, &Term)> {
+        self.naturals()
+            .iter()
+            .map(|(key, arm)| (natural(key), arm))
+            .chain(self.integers().iter().map(|(key, arm)| (integer(key), arm)))
+    }
+
+    /// Each key as the numeral a reader writes it as, beside its arm, in key order: unsigned for a natural's key and signed for an integer's.
+    pub fn numerals(&self) -> impl Iterator<Item = (Numeral, &Term)> {
+        self.naturals()
+            .iter()
+            .map(|(key, arm)| (Numeral::Natural(key.clone()), arm))
+            .chain(
+                self.integers()
+                    .iter()
+                    .map(|(key, arm)| (Numeral::Integer(key.clone()), arm)),
+            )
+    }
+
+    /// A natural's arms, and none for another carrier's keys: with [`Keys::integers`], one walk over every carrier's arms, with no iterator boxed.
+    fn naturals(&self) -> &[(Natural, Term)] {
         match self {
-            Keys::Nat(keyed) => keyed.arms.iter().map(|(key, arm)| (natural(key), arm)),
+            Keys::Nat(keyed) => &keyed.arms,
+            Keys::Int(_) => &[],
+        }
+    }
+
+    /// An integer's arms, and none for another carrier's keys.
+    fn integers(&self) -> &[(Integer, Term)] {
+        match self {
+            Keys::Int(keyed) => &keyed.arms,
+            Keys::Nat(_) => &[],
         }
     }
 
@@ -592,6 +623,7 @@ impl Keys {
     pub fn carrier(&self) -> Term {
         match self {
             Keys::Nat(_) => Term::intrinsic(Intrinsic::NatType),
+            Keys::Int(_) => Term::intrinsic(Intrinsic::IntType),
         }
     }
 
@@ -599,6 +631,7 @@ impl Keys {
     pub fn names_zero(&self) -> bool {
         match self {
             Keys::Nat(keyed) => keyed.arms.iter().any(|(key, _)| key.is_zero()),
+            Keys::Int(_) => false,
         }
     }
 
@@ -613,6 +646,7 @@ impl Keys {
     pub fn try_map<E>(&self, mut arm: impl FnMut(&Term) -> Result<Term, E>) -> Result<Self, E> {
         Ok(match self {
             Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|_, body| arm(body))?),
+            Keys::Int(keyed) => Keys::Int(keyed.try_map(|_, body| arm(body))?),
         })
     }
 
@@ -630,6 +664,7 @@ impl Keys {
     ) -> Result<Self, E> {
         Ok(match self {
             Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|key, body| arm(natural(key), body))?),
+            Keys::Int(keyed) => Keys::Int(keyed.try_map(|key, body| arm(integer(key), body))?),
         })
     }
 }
@@ -672,6 +707,11 @@ impl<K: Clone> Keyed<K> {
 /// A natural's key as the literal it is.
 fn natural(key: &Natural) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone())))
+}
+
+/// An integer's key as the literal it is.
+fn integer(key: &Integer) -> Term {
+    Term::intrinsic(Intrinsic::Int(key.clone()))
 }
 
 /// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two arms: a case split, which peels one generator and binds what the peel leaves. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<One>` for `Nat` (the predecessor), `Scope<Two>` for `Bytes`/`List` (head, tail). A recursion over the carrier is a call on what the peel left, which totality grades.

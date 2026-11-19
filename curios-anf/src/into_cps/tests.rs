@@ -2,7 +2,7 @@ use {
     crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_common::{Lineage, Qualifier},
-    curios_num::{Binary, Natural},
+    curios_num::{Binary, Integer, Natural},
     std::{collections::BTreeSet, sync::Arc},
 };
 
@@ -1477,4 +1477,48 @@ fn forcing_captures_only_the_cell_and_channel() {
         used.difference(&bound).copied().collect::<BTreeSet<_>>(),
         storage
     );
+}
+
+/// An integer's switch is decided by one `IntEql` test a key, since no signed narrowing of the scrutinee indexes a table.
+#[test]
+fn an_integers_switch_lowers_to_one_equality_test_a_key() {
+    let mut builder = Builder::new();
+    builder.open_block();
+    let ten = nat(&mut builder, 10);
+    let below = builder.seal_block(Terminator::Return(ten));
+    builder.open_block();
+    let twenty = nat(&mut builder, 20);
+    let above = builder.seal_block(Terminator::Return(twenty));
+    builder.open_block();
+    let rest = nat(&mut builder, 99);
+    let default = builder.seal_block(Terminator::Return(rest));
+    builder.open_block();
+    let seven = builder.constant(Constant::Int(Integer::from(7i32)));
+    let switched = builder.let_value(
+        None,
+        Rhs::Switch {
+            scrutinee: Atom::Constant(seven),
+            keys: Keys::Int(vec![
+                Case {
+                    key: Integer::from(-1i32),
+                    block: below,
+                },
+                Case {
+                    key: Integer::from(2i32),
+                    block: above,
+                },
+            ]),
+            default,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(switched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let cps = lowered(&module);
+    let tests = intrinsics(&cps)
+        .into_iter()
+        .filter(|op| *op == curios_cps::Intrinsic::IntEql)
+        .count();
+    assert_eq!(tests, 2, "{cps}");
 }

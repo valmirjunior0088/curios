@@ -19,14 +19,14 @@ mod tests;
 
 use {
     super::{
-        Atom, Block, BlockId, CellOperation, ChannelOperation, Constructor, ConstructorId,
-        FamilyId, Function, FunctionId, Intrinsic, Module, ProductId, ProductSchema, RecGroup,
-        RecGroupId, Rhs, SequenceArity, Statement, StatementId, Terminator, ValueId, VariantFamily,
-        spell_function, spell_value,
+        Atom, Block, BlockId, Case, CellOperation, ChannelOperation, Constructor, ConstructorId,
+        FamilyId, Function, FunctionId, Intrinsic, Keys, Module, ProductId, ProductSchema,
+        RecGroup, RecGroupId, Rhs, SequenceArity, Statement, StatementId, Terminator, ValueId,
+        VariantFamily, spell_function, spell_value,
     },
     curios_abi::Namespace,
     curios_common::{grown, recurse},
-    std::collections::HashSet,
+    std::{collections::HashSet, hash::Hash},
 };
 
 /// A recursion rule a program broke: what forcing computed members by need could not make right. Members and calls are named by their source names, resolved while the module is still in hand, because a refused module does not survive the refusal; each member also carries the identity it was minted as, which is what the producer that minted it can still look it up by.
@@ -161,6 +161,16 @@ pub enum StructuralRule {
 
 fn fault(rule: StructuralRule, detail: String) -> StructuralFault {
     StructuralFault { rule, detail }
+}
+
+/// A key two of `cases` select, where one does.
+fn repeated_key<K: Eq + Hash>(cases: &[Case<K>]) -> Option<&K> {
+    let mut keys = HashSet::new();
+
+    cases
+        .iter()
+        .map(|case| &case.key)
+        .find(|key| !keys.insert(*key))
 }
 
 impl Module {
@@ -629,23 +639,24 @@ impl<'m> Verifier<'m> {
                 self.enter_block(if_false)?;
                 self.enter_block(if_true)?;
             }
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee,
-                cases,
+                keys,
                 default,
             } => {
                 self.check_atom(id, scrutinee)?;
-                let mut keys = HashSet::new();
-                for case in &cases {
-                    if !keys.insert(&case.key) {
-                        return Err(fault(
-                            StructuralRule::DuplicateCaseKey,
-                            format!("statement {id} has two cases for key {}", case.key),
-                        ));
-                    }
+                let repeated = match &keys {
+                    Keys::Nat(cases) => repeated_key(cases).map(ToString::to_string),
+                    Keys::Int(cases) => repeated_key(cases).map(|key| format!("{key:+}")),
+                };
+                if let Some(key) = repeated {
+                    return Err(fault(
+                        StructuralRule::DuplicateCaseKey,
+                        format!("statement {id} has two cases for key {key}"),
+                    ));
                 }
-                for case in cases {
-                    self.enter_block(case.block)?;
+                for block in keys.blocks() {
+                    self.enter_block(block)?;
                 }
                 self.enter_block(default)?;
             }

@@ -242,7 +242,7 @@ fn head(module: &Module, rhs: &Rhs) -> String {
             family, scrutinee, ..
         } => format!("MatchVariant {family} {}", atom_(module, scrutinee)),
         Rhs::SwitchBool { scrutinee, .. } => format!("SwitchBool {}", atom_(module, scrutinee)),
-        Rhs::SwitchNat { scrutinee, .. } => format!("SwitchNat {}", atom_(module, scrutinee)),
+        Rhs::Switch { scrutinee, .. } => format!("Switch {}", atom_(module, scrutinee)),
         Rhs::UnconsSequence {
             grain, scrutinee, ..
         } => format!("UnconsSequence {grain:?} {}", atom_(module, scrutinee)),
@@ -295,10 +295,20 @@ fn bodies(module: &Module, out: &mut String, depth: usize, rhs: &Rhs) {
             line(out, depth, "true");
             block(module, out, depth + 1, *if_true);
         }
-        Rhs::SwitchNat { cases, default, .. } => {
-            for case in cases {
-                line(out, depth, &format!("case {}", case.key));
-                block(module, out, depth + 1, case.block);
+        Rhs::Switch { keys, default, .. } => {
+            let cases: Vec<(String, BlockId)> = match keys {
+                Keys::Nat(cases) => cases
+                    .iter()
+                    .map(|case| (case.key.to_string(), case.block))
+                    .collect(),
+                Keys::Int(cases) => cases
+                    .iter()
+                    .map(|case| (format!("{:+}", case.key), case.block))
+                    .collect(),
+            };
+            for (key, case) in cases {
+                line(out, depth, &format!("case {key}"));
+                block(module, out, depth + 1, case);
             }
             line(out, depth, "default");
             block(module, out, depth + 1, *default);

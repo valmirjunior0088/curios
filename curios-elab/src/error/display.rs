@@ -876,6 +876,7 @@ impl Displayed<'_> {
                 }
             }
             Error::NotNatType { head_type } => carried(f, head_type, "Nat"),
+            Error::NotIntType { head_type } => carried(f, head_type, "Int"),
             Error::NotBoolType { head_type } => carried(f, head_type, "Bool"),
             Error::NotListType { head_type } => carried(f, head_type, "a List"),
             Error::NotBytesType { head_type } => carried(f, head_type, "Bytes"),

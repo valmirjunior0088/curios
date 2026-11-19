@@ -2175,6 +2175,7 @@ fn try_binary<T, U, E>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicHead {
     Nat,
+    Int,
     Bool,
     Bytes,
 }

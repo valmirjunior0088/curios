@@ -274,18 +274,18 @@ fn duplicate_switch_keys_are_rejected() {
     let default = builder.seal_block(Terminator::Return(zero));
     let switched = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: zero,
-            cases: vec![
-                NatCase {
+            keys: Keys::Nat(vec![
+                Case {
                     key: Natural::from(3u32),
                     block: first,
                 },
-                NatCase {
+                Case {
                     key: Natural::from(3u32),
                     block: second,
                 },
-            ],
+            ]),
             default,
         },
     );
@@ -426,7 +426,7 @@ fn a_deep_malformed_module_diagnoses_without_native_stack() {
     );
 }
 
-/// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed` the innermost block references a value that is never bound.
+/// Build a `depth`-deep chain of nested `Switch` defaults. With `malformed` the innermost block references a value that is never bound.
 fn deep_switch_chain(depth: usize, malformed: bool) -> Builder {
     let mut builder = Builder::new();
     let zero = nat_atom(&mut builder, 0);
@@ -445,12 +445,12 @@ fn deep_switch_chain(depth: usize, malformed: bool) -> Builder {
         builder.open_block();
         let switched = builder.let_value(
             None,
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee: Atom::Value(scrutinee),
-                cases: vec![NatCase {
+                keys: Keys::Nat(vec![Case {
                     key: Natural::zero(),
                     block: leaf,
-                }],
+                }]),
                 default: chain,
             },
         );

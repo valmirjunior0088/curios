@@ -94,12 +94,12 @@ fn a_recursive_module_prints_exactly() {
     builder.open_block();
     let switched = builder.let_value(
         None,
-        Rhs::SwitchNat {
+        Rhs::Switch {
             scrutinee: Atom::Value(n),
-            cases: vec![NatCase {
+            keys: Keys::Nat(vec![Case {
                 key: Natural::zero(),
                 block: zero_case,
-            }],
+            }]),
             default,
         },
     );
@@ -208,12 +208,12 @@ fn a_deep_module_prints_on_a_stack_that_grows_for_it() {
         builder.open_block();
         let switched = builder.let_value(
             None,
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee: Atom::Value(scrutinee),
-                cases: vec![NatCase {
+                keys: Keys::Nat(vec![Case {
                     key: Natural::zero(),
                     block: leaf,
-                }],
+                }]),
                 default: chain,
             },
         );

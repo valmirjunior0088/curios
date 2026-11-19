@@ -712,3 +712,41 @@ fn a_guard_over_an_inversions_solutions_answers_nothing_after_the_split() {
         "{verdicts:?}"
     );
 }
+
+/// `/f`'s goal `/M(i == -1, i == +2)` reduces only where both tests are decided: in each arm of an integer's dispatch, whose scrutinee is its key there, and in the catch-all, where each key's test failed. `qed` checks in all three, so `/f` is admitted, and the term the module closes with is refused at `False` alone.
+const AN_INTEGERS_DISPATCH_UNDER_ITS_KEYS: &str = r#"
+let /M : (a: #BoolType, b: #BoolType) -> Prop =
+    (a: #BoolType, b: #BoolType) =>
+        #{goal = Prop}
+        match a
+        | false =>
+            #{goal = Prop}
+            match b
+            | false => #{node = InductType} /std/Bool/True()
+            | true => #{node = InductType} /std/Bool/True()
+            end
+        | true => #{node = InductType} /std/Bool/True()
+        end;
+let /f : (i: #IntType) -> /M(#IntEql(i, -1), #IntEql(i, +2)) =
+    (i: #IntType) =>
+        #{goal = /M(#IntEql(i, -1), #IntEql(i, +2))} match i
+        | -1 => /std/Bool/True/qed()
+        | +2 => /std/Bool/True/qed()
+        | _ => /std/Bool/True/qed()
+        end;
+/std/Bool/True/qed()
+"#;
+
+#[test]
+fn an_integers_dispatch_types_each_arm_at_its_key_and_its_catch_all_past_them() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${AN_INTEGERS_DISPATCH_UNDER_ITS_KEYS}",
+        PROPOSITIONS,
+        AN_INTEGERS_DISPATCH_UNDER_ITS_KEYS
+    ));
+
+    assert!(
+        matches!(&verdicts[..], [Verdict { name: None, .. }]),
+        "{verdicts:?}"
+    );
+}

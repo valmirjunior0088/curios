@@ -10,7 +10,9 @@ use {
         VariantArm, cell_op, operation_intrinsic, sequence_census, sequence_intrinsic,
         sequence_len_op,
     },
-    crate::{CellOperation, ChannelOperation, Intrinsic, SuspensionOperation, droppable_functions},
+    crate::{
+        CellOperation, ChannelOperation, Intrinsic, Keys, SuspensionOperation, droppable_functions,
+    },
     curios_abi::ForeignFunction,
     curios_common::recurse,
     curios_num::Natural,
@@ -640,21 +642,30 @@ impl Lowerer<'_> {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
                 self.lower_switch(
                     scrutinee,
-                    vec![(Natural::zero(), *if_false), (Natural::one(), *if_true)],
+                    vec![
+                        (curios_cps::Literal::Nat(Natural::zero()), *if_false),
+                        (curios_cps::Literal::Nat(Natural::one()), *if_true),
+                    ],
                     None,
                     site,
                 )
             }
-            Rhs::SwitchNat {
+            Rhs::Switch {
                 scrutinee,
-                cases,
+                keys,
                 default,
             } => {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
-                let arms = cases
-                    .iter()
-                    .map(|case| (case.key.clone(), case.block))
-                    .collect();
+                let arms = match keys {
+                    Keys::Nat(cases) => cases
+                        .iter()
+                        .map(|case| (curios_cps::Literal::Nat(case.key.clone()), case.block))
+                        .collect(),
+                    Keys::Int(cases) => cases
+                        .iter()
+                        .map(|case| (curios_cps::Literal::Int(case.key.clone()), case.block))
+                        .collect(),
+                };
                 self.lower_switch(scrutinee, arms, Some(*default), site)
             }
             Rhs::UnconsSequence {
@@ -1098,11 +1109,11 @@ impl Lowerer<'_> {
 
     /// Lower a scalar switch: each `(key, block)` arm and the optional default becomes a parameterless continuation into the join, selected by one `Switch`.
     ///
-    /// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly only below the i31, saturating past it — so a key the i31 does not hold is not a table slot at all. Each such key is decided by an equality test on the default path instead, in key order, which leaves the table indexing only words and the saturated value matching no key.
+    /// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly only below the i31, saturating past it — so a key the i31 does not hold is not a table slot at all. Each such key is decided by an equality test on the default path instead, in key order, which leaves the table indexing only words and the saturated value matching no key. An integer's keys are each such a test, since no signed narrowing of the scrutinee indexes a table; where every key is one, the tests are entered with no `Switch` at all.
     fn lower_switch(
         &mut self,
         scrutinee: curios_cps::Atom,
-        arms: Vec<(Natural, BlockId)>,
+        arms: Vec<(curios_cps::Literal, BlockId)>,
         default: Option<BlockId>,
         site: Site<'_>,
     ) -> curios_cps::NodeId {
@@ -1113,17 +1124,17 @@ impl Lowerer<'_> {
         for (key, block) in arms {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            match curios_cps::nat_is_small(&key) {
-                true => {
+            match &key {
+                curios_cps::Literal::Nat(natural) if curios_cps::nat_is_small(natural) => {
                     cases.insert(
-                        u32::try_from(&key).expect("a small natural is a word"),
+                        u32::try_from(natural).expect("a small natural is a word"),
                         curios_cps::Edge {
                             target: continuation,
                             args: Vec::new(),
                         },
                     );
                 }
-                false => tested.push((key, continuation)),
+                _ => tested.push((key, continuation)),
             }
         }
         let mut default = default.map(|block| {
@@ -1142,25 +1153,32 @@ impl Lowerer<'_> {
                 args: Vec::new(),
             });
         }
-        let switch = self.emitter.add_node(curios_cps::Node::Switch {
-            scrutinee,
-            cases,
-            default,
-        });
+        let switch = match (cases.is_empty(), default) {
+            (true, Some(first)) => self.emitter.add_node(curios_cps::Node::ApplyCont(first)),
+            (_, default) => self.emitter.add_node(curios_cps::Node::Switch {
+                scrutinee,
+                cases,
+                default,
+            }),
+        };
         self.emitter.add_node(curios_cps::Node::LetCont {
             continuations,
             body: switch,
         })
     }
 
-    /// A parameterless continuation deciding one switch key by equality: `arm` when `scrutinee` is `key`, and `otherwise` — the next test or the switch's own default — when it is not.
+    /// A parameterless continuation deciding one switch key by its carrier's equality, `NatEql` for a natural and `IntEql` for an integer: `arm` when `scrutinee` is `key`, and `otherwise` — the next test or the switch's own default — when it is not.
     fn key_test(
         &mut self,
         scrutinee: &curios_cps::Atom,
-        key: Natural,
+        key: curios_cps::Literal,
         arm: curios_cps::ContinuationId,
         otherwise: Option<curios_cps::Edge>,
     ) -> curios_cps::ContinuationId {
+        let op = match &key {
+            curios_cps::Literal::Int(_) => curios_cps::Intrinsic::IntEql,
+            _ => curios_cps::Intrinsic::NatEql,
+        };
         let equal = self.emitter.add_value(None);
         let switch = self.emitter.add_node(curios_cps::Node::Switch {
             scrutinee: curios_cps::Atom::Value(equal),
@@ -1175,11 +1193,8 @@ impl Lowerer<'_> {
         });
         let body = self.emitter.add_node(curios_cps::Node::LetIntrinsic {
             result: equal,
-            op: curios_cps::Intrinsic::NatEql,
-            args: vec![
-                scrutinee.clone(),
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(key)),
-            ],
+            op,
+            args: vec![scrutinee.clone(), curios_cps::Atom::Literal(key)],
             next: switch,
         });
         let continuation = self.emitter.reserve_continuation();
