@@ -543,7 +543,7 @@ not canonical
 
 It is no lint, since no compilation finds it, so [`lint`](#lint) says nothing of it and no exit code turns on it: `format --check` is the question whose answer is a code. A text the formatter refuses is not reported here, since the check's own report says why.
 
-`--at` is asked about the file its place names, read as every command reads a file it is named. It is answered by the subject's lowering, which is where a written name is resolved, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build; a declaration of a unit the subject stands on answers its type and totality as that unit was compiled.
+`--at` is asked about the file its place names, read as every command reads a file it is named. It is answered off the check of the subject, as the editor's hover is: the lowering answers every place whatever the check concludes, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build; a declaration elaboration established answers its type, and its totality where the certifier judged it, a declaration of a unit the subject stands on always and one of the subject's own where it elaborated.
 
 A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder.
 

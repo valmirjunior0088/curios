@@ -263,10 +263,19 @@ fn diagnosed_reading(
             *placed.borrow_mut() = Some(reading.read(scope, text, entry));
         }
     };
+    // What elaboration established of the subject's own declarations, told once it has, completing what the lowering answered of them.
+    let elaborated = |scope: &[&Unit],
+                      text: &PreparedText,
+                      definitions: &curios_core::Definitions,
+                      certification: Option<&curios_core::Certification>| {
+        if let Some(placed) = placed.borrow_mut().as_mut() {
+            placed.establish(scope, text, definitions, certification);
+        }
+    };
     let fold = |units| {
         let fold = Fold::new(budget, units, through);
         match reading {
-            Some(_) => fold.reading(&read),
+            Some(_) => fold.reading(&read).elaborating(&elaborated),
             None => fold,
         }
     };

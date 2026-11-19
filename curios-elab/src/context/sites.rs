@@ -10,17 +10,19 @@ use {
         Context, LINT_ALLOWANCE, Mode, SiteClass, Traces, binder_lints, elaborate, reduce_with,
         zonk_solved_term_metas,
     },
-    curios_core::{Global, HeadKey, Lint, Subterm, Term, WitnessKey},
+    curios_core::{Definitions, Global, HeadKey, Lint, Subterm, Term, WitnessKey},
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
     },
 };
 
-/// The binder lints an elaboration that ran holds, whatever it concluded: those of every declaration its walk's traces hold — elaborated now, adopted from a store or kept from a baseline — and those of an entry's final term, which no record holds, decided once it has run. What a unit is made with, and what a refused one is reported with.
+/// What an elaboration that ran holds, whatever it concluded: the binder lints of every declaration its walk's traces hold — elaborated now, adopted from a store or kept from a baseline — and those of an entry's final term, which no record holds, decided once it has run, which a unit is made with and a refused one is reported with; and where the walk refused, the declarations that elaborated, which a question about the refused unit answers them from.
 #[derive(Debug, Clone, Default)]
 pub struct Observed {
     pub lints: Vec<Lint>,
+    /// The declarations that elaborated, where the walk refused: each as it was published, zonked, a refused declaration and every one reaching it left out, and over a baseline the ones it kept beside them. None where the walk did not refuse, whose module is what it hands back, and where elaboration never ran.
+    pub elaborated: Option<Definitions>,
 }
 
 /// How many structs of one field a class reads through to the action one holds: `Try(Io, E, A)` holds `Io(Result(E, A))` one deep.
@@ -165,6 +167,11 @@ impl Context<'_> {
         .collect()
     }
 
+    /// Hold `elaborated`, the declarations a refused walk elaborated, for [`Context::observed`] to hand out.
+    pub(crate) fn hold_elaborated(&mut self, elaborated: Definitions) {
+        self.underway.elaborated = Some(elaborated);
+    }
+
     /// Hold the binder lints of every declaration `traces` holds, the walk's as it ends, for [`Context::observed`] to hand out whatever the walk concluded.
     pub(crate) fn hold_lints(&mut self, traces: &Traces) {
         self.underway.held = traces
@@ -201,6 +208,7 @@ impl Context<'_> {
                 .chain(entry)
                 .chain(minted.entry.lints.iter().cloned())
                 .collect(),
+            elaborated: self.underway.elaborated.take(),
         }
     }
 

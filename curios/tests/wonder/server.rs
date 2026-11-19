@@ -722,7 +722,7 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         ),
     );
     assert!(
-        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```\n\nprivate definition""#),
+        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```\n\nprivate definition  \ntype: `/std/Str`  \ntotality: total""#),
         "{stated}"
     );
     assert!(stated.contains(r#""kind":"markdown""#), "{stated}");

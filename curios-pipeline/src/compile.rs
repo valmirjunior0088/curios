@@ -1042,6 +1042,7 @@ where
     let Told {
         observe,
         read,
+        elaborated: told_elaborated,
         progress,
     } = told;
     let tested = matches!(tail, EntryTail::Test { .. });
@@ -1095,6 +1096,14 @@ where
     let mut findings = None;
     let closed = match (hit, baseline) {
         (Some(unit), _) => {
+            if let (Some(tell), Some(text)) = (told_elaborated, unit.text()) {
+                tell(
+                    predecessors.units(),
+                    text,
+                    unit.core(),
+                    Some(unit.certification()),
+                );
+            }
             // Decided where the unit was made, of a compile that elaborated this term beside its declarations: the proofs it writes now read what they read then.
             findings = Some(Findings::of_unit(&unit));
             let closed = close_over(budget, predecessors, syntax, &unit, &lowered, closing);
@@ -1114,6 +1123,9 @@ where
                 };
             let mut refused = |lowered: &PreparedText, observed: &Observed| {
                 findings = Some(Findings::of_text(lowered, observed));
+                if let (Some(tell), Some(elaborated)) = (told_elaborated, &observed.elaborated) {
+                    tell(predecessors.units(), lowered, elaborated, None);
+                }
             };
             let closing = Some(Closing {
                 tail: closing,
@@ -1152,6 +1164,14 @@ where
             };
 
             compiled.map(|(unit, entry)| {
+                if let (Some(tell), Some(text)) = (told_elaborated, unit.text()) {
+                    tell(
+                        predecessors.units(),
+                        text,
+                        unit.core(),
+                        Some(unit.certification()),
+                    );
+                }
                 // Handed over where its declarations are judged and erased, whatever is then said of the term that closes the program.
                 if let Some(cache) = cache {
                     curios_profile::profile!("cache::put" => cache.put(source, &unit));
@@ -1535,15 +1555,15 @@ pub fn compile_lowered(
         }),
     );
     // Whatever elaboration said: a lint is no part of its verdict.
-    let observed = context.observed();
-    let mut refuse = |lowered: &PreparedText, error: CompileError| {
+    let mut observed = context.observed();
+    let mut refuse = |lowered: &PreparedText, observed: &Observed, error: CompileError| {
         if let Some(refused) = &mut refused {
-            refused(lowered, &observed);
+            refused(lowered, observed);
         }
 
         error
     };
-    let (core, entry, traces) = walked.map_err(|error| refuse(&lowered, error))?;
+    let (core, entry, traces) = walked.map_err(|error| refuse(&lowered, &observed, error))?;
     if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
         elaborated(&core, entry);
     }
@@ -1562,7 +1582,9 @@ pub fn compile_lowered(
                 &anchors_of(&lowered, predecessors),
                 syntax,
             );
-            return Err(refuse(&lowered, refusal));
+            // What elaboration established stands, the certifier's verdict on it being the refusal.
+            observed.elaborated = Some(core);
+            return Err(refuse(&lowered, &observed, refusal));
         }
     };
 
@@ -1579,8 +1601,12 @@ pub fn compile_lowered(
             predecessors,
             syntax,
         );
+        let erasing = Observed {
+            elaborated: Some(core.as_definitions().clone()),
+            ..observed.clone()
+        };
 
-        refuse(&lowered, refusal)
+        refuse(&lowered, &erasing, refusal)
     })?;
 
     Ok((Unit::new(lowered, core, anf, traces, &observed), entry))
@@ -1672,6 +1698,7 @@ where
         // The last unit is the fold's subject, and the one whose lowering and findings are told.
         let subject = index + 1 == sources.len();
         let read = listeners.read.filter(|_| subject);
+        let told_elaborated = listeners.elaborated.filter(|_| subject);
         let predecessors = base
             .units()
             .iter()
@@ -1691,6 +1718,9 @@ where
             // A unit read from Core text holds no lowering to tell of.
             if let Some(text) = unit.text() {
                 told(text);
+                if let Some(tell) = told_elaborated {
+                    tell(&predecessors, text, unit.core(), Some(unit.certification()));
+                }
             }
             answered(source, &unit)?;
             produced.push(unit);
@@ -1707,6 +1737,9 @@ where
         let mut findings = None;
         let mut refused = |text: &PreparedText, observed: &Observed| {
             findings = Some(Findings::of_text(text, observed));
+            if let (Some(tell), Some(elaborated)) = (told_elaborated, &observed.elaborated) {
+                tell(&predecessors, text, elaborated, None);
+            }
         };
         let compiled = match &baseline {
             Some(Earlier {
@@ -1739,7 +1772,13 @@ where
             ),
         };
         let unit = match compiled {
-            Ok(unit) => unit,
+            Ok(unit) => {
+                if let (Some(tell), Some(text)) = (told_elaborated, unit.text()) {
+                    tell(&predecessors, text, unit.core(), Some(unit.certification()));
+                }
+
+                unit
+            }
             Err(error) => {
                 if let (Some(tell), Some(findings), true) = (listeners.refused, findings, subject) {
                     tell(findings);
@@ -1897,10 +1936,19 @@ pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_c
 /// Told the findings of a fold's subject where its compile is refused: its lowering's lints, and the binder lints its elaboration held whatever it concluded — what a question about a refused library reports beside the refusal, as a refused program's are reported beside its verdict ([`Checked`]).
 pub type ReadRefusal<'a> = &'a dyn Fn(Findings);
 
-/// What a fold's units are compiled telling of its subject, the last of them: its lowering as soon as it is made or restored, and its findings where it is refused.
+/// Told a subject's declarations as elaboration established them, beside the units it was compiled against and its lowering: the module of the unit made or restored, with the record the certifier filed of it, or where its compile is refused, the declarations that elaborated, with none ([`Observed::elaborated`]) — what a question about a place answers a declaration of the subject's own from, whatever its compile concluded. Told nothing where elaboration established nothing: a subject refused before it, or one whose refusal left no module.
+pub type ReadElaborated<'a> = &'a dyn Fn(
+    &[&Unit],
+    &PreparedText,
+    &curios_core::Definitions,
+    Option<&curios_core::Certification>,
+);
+
+/// What a fold's units are compiled telling of its subject, the last of them: its lowering as soon as it is made or restored, its declarations as elaboration established them, and its findings where it is refused.
 #[derive(Clone, Copy, Default)]
 pub struct Listeners<'a> {
     pub read: Option<ReadLowering<'a>>,
+    pub elaborated: Option<ReadElaborated<'a>>,
     pub refused: Option<ReadRefusal<'a>>,
 }
 
@@ -1930,6 +1978,7 @@ pub enum Progress<'a> {
 pub struct Told<'a, O> {
     pub observe: &'a mut O,
     pub read: Option<ReadLowering<'a>>,
+    pub elaborated: Option<ReadElaborated<'a>>,
     pub progress: &'a mut dyn FnMut(Progress<'_>),
 }
 
@@ -1977,6 +2026,7 @@ where
     let Told {
         observe,
         read,
+        elaborated,
         progress,
     } = told;
     let answer = tail.answer();
@@ -1991,6 +2041,7 @@ where
         Told {
             observe: &mut *observe,
             read,
+            elaborated,
             progress,
         },
     )?;

@@ -447,7 +447,7 @@ pub enum Query {
     Tests,
     /// A rung of the pipeline, by its name ([`Stage::NAMES`]).
     Stage(String),
-    /// The place a report closed on, whose file is the subject: what stands there, a name with the declaration it names or the term written there, asked of the subject's lowering, which resolves a written name, so a file that does not check answers as one that does.
+    /// The place a report closed on, whose file is the subject: what stands there, a name with the declaration it names or the term written there, answered off the check of the subject, whose lowering answers whatever the check concludes, so a file that does not check answers as one that does.
     At(Place),
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),

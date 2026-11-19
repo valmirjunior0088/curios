@@ -105,6 +105,7 @@ fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
         Told {
             observe: &mut |_: Stage<'_>| {},
             read: None,
+            elaborated: None,
             progress: &mut |_| {},
         },
     )

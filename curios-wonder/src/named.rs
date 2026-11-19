@@ -2,7 +2,7 @@
 //!
 //! **A place answers an occurrence, and what it refers to is stated once** ([`Placed`]): each text of a file with the names and the terms it writes, and what each declaration they name is answered with, made once a check by the function a declaration asked about by its path is answered by, however often the file names it. A type is spelled for the reader of each text, where the name is written, so it pastes back there.
 //!
-//! **The lowering's answer always, and the check's where it established more.** The fold tells its reader the subject's lowering as soon as it is made or restored (`Fold::reading`), so a subject that is refused answers as one that compiles; a declaration of a unit in scope, compiled and certified before the subject, answers its type and its totality whatever the subject is. Only a subject that does not lower has nothing to read.
+//! **The lowering's answer always, and the check's where it established more.** The fold tells its reader the subject's lowering as soon as it is made or restored (`Fold::reading`), so a subject that is refused answers as one that compiles; a declaration of a unit in scope, compiled and certified before the subject, answers its type and its totality whatever the subject is; and once elaboration has established the subject's own declarations, the fold tells that too (`Fold::elaborating`), each answering its type, and its totality where the certifier judged it ([`Placed::establish`]). A declaration elaboration refused, or withheld for reaching one it refused, answers the lowering's facts and no type. Only a subject that does not lower has nothing to read.
 //!
 //! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a store's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. A unit the compiler was built with was read in a checkout no question names, or on another machine, so its sources hold their names and no file, and a declaration of one is left unplaced: it is answered by its path, its head and its prose read off its text all the same.
 //!
@@ -16,7 +16,8 @@
 
 use {
     crate::{
-        Diagnosis, Origin, Overlaid, Severity, Subject, of_error, open, overlaid, tested_last,
+        Diagnosed, Diagnosis, Origin, Overlaid, Severity, Subject, checked, of_error, open,
+        overlaid, tested_last,
     },
     curios_common::{Code, Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
@@ -111,6 +112,8 @@ impl Named {
 pub struct Written {
     /// Where the text lies in the file.
     pub text: Span,
+    /// The definition a reader of the text stands in, which each type it names is spelled for: none for the term a program closes with.
+    pub owner: Option<Global>,
     pub names: Vec<Named>,
     /// Where each term the text writes stands, a term before the ones it holds (`curios_module::Text::terms`).
     pub terms: Vec<Span>,
@@ -173,6 +176,42 @@ impl Placed {
         })
     }
 
+    /// Complete what the lowering answered of the subject's own declarations with what elaboration established of them: `definitions`, the subject's module or, where it was refused, the declarations that elaborated, each named one's type spelled for each text's reader; and `certification`, where the certifier judged the module, each definition's totality. `scope` and `own` are the units the subject was compiled against and its lowering. A declaration `definitions` holds nothing of — refused, or withheld for reaching one refused — keeps the lowering's facts alone.
+    pub fn establish(
+        &mut self,
+        scope: &[&Unit],
+        own: &PreparedText,
+        definitions: &Definitions,
+        certification: Option<&Certification>,
+    ) {
+        let saying = Saying::over(scope, own);
+        let places = Places::of(definitions);
+        let owned = |name: &Global| own.declared_as(name).is_some();
+        for written in &mut self.texts {
+            let reader = saying.reader(written.owner);
+            let named = written
+                .names
+                .iter()
+                .map(|named| named.named)
+                .filter(owned)
+                .collect::<BTreeSet<_>>();
+            for name in named {
+                if let Some(type_) = declared_type(definitions, &places, &name) {
+                    written
+                        .types
+                        .insert(name, type_.spelled(&reader).to_string());
+                }
+            }
+        }
+        if let Some(certification) = certification {
+            for (name, described) in &mut self.declarations {
+                if owned(name) && described.declared.is_defined() {
+                    described.totality = certification.totality(name);
+                }
+            }
+        }
+    }
+
     /// What stands at `offset` of the file: what [`Placed::answer`] finds in the text that holds it.
     pub fn at(&self, offset: usize) -> Option<Answer> {
         self.texts
@@ -182,7 +221,7 @@ impl Placed {
     }
 }
 
-/// What stands at `line` and `column` of `file`: a name and the declaration it names, as [`described`] answers one, its type and totality where a unit in scope declares it, or the narrowest term written there, read off the subject as the lowering left it, so a file that does not check answers as one that does. `None` where nothing stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
+/// What stands at `line` and `column` of `file`: a name and the declaration it names, as [`described`] answers one, or the narrowest term written there, read off the check of the subject as the server's is (`checked`), so a file that does not check answers as one that does, and a declaration of its own that elaborated answers its type. `None` where nothing stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
 ///
 /// The refusal is a subject that has nothing to read: one that does not parse or lower, or whose scope could not be compiled.
 pub fn placed(
@@ -194,61 +233,24 @@ pub fn placed(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Answer>, Vec<Diagnosis>> {
-    let reading = Reading::of(file);
-
-    lowering(
-        budget,
-        subject,
-        overlay,
-        cache,
-        progress,
-        |scope, own, entry| {
-            let placed = reading.read(scope, own, entry);
-            let offset = placed.texts.first()?.text.source.offset_of(line, column)?;
-
-            placed.at(offset)
-        },
-    )
-}
-
-/// `subject` lowered, no further, handed to `then` with the units in scope, its own lowering and the term its program closes with where it is one: what a question about what a file writes reads, asked of no checker.
-fn lowering<T>(
-    budget: u64,
-    subject: Subject,
-    overlay: &Overlay,
-    cache: Option<&Verdicts>,
-    progress: &mut dyn FnMut(Progress<'_>),
-    then: impl FnOnce(&[&Unit], &PreparedText, Option<&Entrypoint>) -> T,
-) -> Result<T, Vec<Diagnosis>> {
-    let store = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = store.as_ref().map(|store| store as &dyn Cache);
-
-    match subject.formed(overlay) {
-        Subject::Unit { units } => {
-            let units = tested_last(overlaid(units, overlay));
-
-            Fold::new(budget, &units, through)
-                .lowered_unit(&mut *progress, |scope, own| then(scope, own, None))
-        }
-        Subject::Entry {
-            units,
-            origin,
-            declares,
-            package,
-        } => {
-            let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
-            let units = overlaid(units, overlay);
-
-            Fold::new(budget, &units, through).lowered(
-                &entrypoint,
-                &loader.tested(),
-                &mut *progress,
-                |scope, own, entry| then(scope, own, Some(entry)),
-            )
-        }
-        Subject::CoreText { .. } => return Err(unlowered()),
+    let subject = subject.formed(overlay);
+    if let Subject::CoreText { .. } = subject {
+        return Err(unlowered());
     }
-    .map_err(of_error)
+    let Diagnosed {
+        diagnostics,
+        placed,
+        ..
+    } = checked(budget, subject, overlay, cache, file, progress);
+    let Some(placed) = placed else {
+        return Err(diagnostics);
+    };
+    let offset = placed
+        .texts
+        .first()
+        .and_then(|written| written.text.source.offset_of(line, column));
+
+    Ok(offset.and_then(|offset| placed.at(offset)))
 }
 
 /// The refusal of a question answered off a lowering, asked of Core text, which is lowered by nothing.
@@ -332,6 +334,7 @@ impl Reading {
 
                 Written {
                     text: passage.span().clone(),
+                    owner: passage.owner(),
                     names,
                     terms: passage.terms(),
                     types,

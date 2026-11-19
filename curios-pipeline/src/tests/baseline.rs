@@ -190,6 +190,7 @@ fn program_through(source: &str, cache: &dyn Cache) -> String {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                elaborated: None,
                 progress: &mut |_| {},
             },
         )
@@ -276,6 +277,7 @@ fn compiled_through(source: &str, cache: &dyn Cache) -> Result<(), String> {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                elaborated: None,
                 progress: &mut |_| {},
             },
         )
@@ -334,6 +336,7 @@ let wrong: Nat = \"a\";
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                elaborated: None,
                 progress: &mut |_| {},
             },
         )

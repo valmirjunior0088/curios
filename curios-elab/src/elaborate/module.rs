@@ -2015,6 +2015,10 @@ fn elaborate_and_zonk<'s>(
             minted,
             tail,
         )?;
+        // Taken before finalizing consumes them: where the walk refused, the declarations that elaborated are what a question about the unit answers them from.
+        if !elaborated.refusals.is_empty() {
+            context.hold_elaborated(elaborated.definitions.clone());
+        }
         let finalized = finalize_and_check(
             context,
             elaborated.definitions,
@@ -2137,6 +2141,24 @@ fn elaborate_and_zonk_over<'s>(
             minted,
             tail,
         )?;
+        // Taken before finalizing consumes them, as the whole walk takes its own: the declarations elaborated now, and the ones the baseline holds that this walk kept — every one it did not hold, refused or withheld among those it held, and the new text still declares.
+        if !elaborated.refusals.is_empty() {
+            let kept = recompile.baseline.items.iter().filter(|item| {
+                item.declared_names().iter().all(|name| {
+                    !elaborated.made.contains(name) && !recompile.dropped.contains(name)
+                })
+            });
+            let items = elaborated
+                .definitions
+                .items
+                .iter()
+                .chain(kept)
+                .cloned()
+                .collect::<Vec<_>>();
+            context.hold_elaborated(Definitions {
+                items: items.into(),
+            });
+        }
         let finalized = finalize_and_check(
             context,
             elaborated.definitions,

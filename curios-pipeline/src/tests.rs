@@ -9,6 +9,7 @@ mod budget;
 mod candidate;
 mod certification;
 mod diagnostic;
+mod elaborated;
 mod erasure;
 mod foreign;
 mod goal;

@@ -101,6 +101,7 @@ pub fn checked_through(source: &str, cache: &dyn Cache) -> Checked {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                elaborated: None,
                 progress: &mut |_| {},
             },
         )
@@ -265,6 +266,7 @@ pub fn compile_with_units(
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                elaborated: None,
                 progress: &mut |_| {},
             },
         )

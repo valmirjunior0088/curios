@@ -7,8 +7,8 @@ mod tests;
 
 use {
     crate::{
-        Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadLowering, ReadRefusal,
-        Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
+        Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadElaborated, ReadLowering,
+        ReadRefusal, Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
         declared_test_paths, enter_core_text, lower_from_anf, lower_subject,
     },
     curios_abi::ForeignStore,
@@ -47,6 +47,8 @@ pub struct Fold<'a> {
     cache: Option<&'a dyn Cache>,
     /// Told the subject's lowering — the last unit's, or the program's on top — as soon as it is made or restored. See [`Fold::reading`].
     read: Option<ReadLowering<'a>>,
+    /// Told the subject's declarations as elaboration established them. See [`Fold::elaborating`].
+    elaborated: Option<ReadElaborated<'a>>,
     /// Told the subject's findings where it is a unit and its compile is refused. See [`Fold::refusing`].
     refused: Option<ReadRefusal<'a>>,
 }
@@ -59,6 +61,7 @@ impl<'a> Fold<'a> {
             units,
             cache,
             read: None,
+            elaborated: None,
             refused: None,
         }
     }
@@ -69,6 +72,16 @@ impl<'a> Fold<'a> {
     pub fn reading(self, read: ReadLowering<'a>) -> Self {
         Self {
             read: Some(read),
+            ..self
+        }
+    }
+
+    /// This fold, telling `elaborated` its subject's declarations as elaboration established them, whatever its compile concluded (`ReadElaborated`): the unit's module made or restored, with its certifier's record, or where it is refused the declarations that elaborated.
+    ///
+    /// **The check that answers a file answers what its elaboration established.** A question about a place reads a declaration of the subject's own off it, its type and, where the subject was judged, its totality, as a unit in scope is read off its own.
+    pub fn elaborating(self, elaborated: ReadElaborated<'a>) -> Self {
+        Self {
+            elaborated: Some(elaborated),
             ..self
         }
     }
@@ -106,6 +119,7 @@ impl<'a> Fold<'a> {
                 Told {
                     observe: &mut observe,
                     read: self.read,
+                    elaborated: self.elaborated,
                     progress,
                 },
             )
@@ -139,6 +153,7 @@ impl<'a> Fold<'a> {
                 Told {
                     observe: &mut observe,
                     read: self.read,
+                    elaborated: self.elaborated,
                     progress,
                 },
             )
@@ -168,6 +183,7 @@ impl<'a> Fold<'a> {
                 Told {
                     observe: &mut |_: Stage<'_>| {},
                     read: self.read,
+                    elaborated: self.elaborated,
                     progress,
                 },
             )
@@ -456,6 +472,7 @@ impl<'a> Fold<'a> {
             0,
             Listeners {
                 read: self.read,
+                elaborated: self.elaborated,
                 refused: self.refused,
             },
             progress,
@@ -484,6 +501,7 @@ impl<'a> Fold<'a> {
             units,
             cache,
             read: _,
+            elaborated: _,
             refused: _,
         } = self;
 

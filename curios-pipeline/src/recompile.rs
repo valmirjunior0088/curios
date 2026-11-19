@@ -13,7 +13,7 @@ use {
     curios_common::{Candidates, SyntaxRegistry},
     curios_core::{Definitions, Entrypoint, Places},
     curios_elab::{
-        Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
+        Context, Established, Observed, Recompile, Recompiled, elaborate_and_zonk_entry_over,
         elaborate_and_zonk_unit_over,
     },
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
@@ -149,10 +149,10 @@ pub fn compile_lowered_over(
         }),
     );
     // What the proofs written now read, whatever elaboration said: a lint is no part of its verdict.
-    let observed = context.observed();
-    let mut refuse = |lowered: &PreparedText, error: CompileError| {
+    let mut observed = context.observed();
+    let mut refuse = |lowered: &PreparedText, observed: &Observed, error: CompileError| {
         if let Some(refused) = &mut refused {
-            refused(lowered, &observed);
+            refused(lowered, observed);
         }
 
         error
@@ -166,7 +166,7 @@ pub fn compile_lowered_over(
             made,
         },
         entry,
-    ) = walked.map_err(|error| refuse(&lowered, error))?;
+    ) = walked.map_err(|error| refuse(&lowered, &observed, error))?;
     if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
         elaborated(&core, entry);
     }
@@ -198,7 +198,9 @@ pub fn compile_lowered_over(
                 &anchors_of(&lowered, predecessors),
                 syntax,
             );
-            return Err(refuse(&lowered, refusal));
+            // What elaboration established stands, the certifier's verdict on it being the refusal.
+            observed.elaborated = Some(core);
+            return Err(refuse(&lowered, &observed, refusal));
         }
     };
 
@@ -233,8 +235,12 @@ pub fn compile_lowered_over(
             predecessors,
             syntax,
         );
+        let erasing = Observed {
+            elaborated: Some(core.as_definitions().clone()),
+            ..observed.clone()
+        };
 
-        refuse(&lowered, refusal)
+        refuse(&lowered, &erasing, refusal)
     })?;
 
     Ok((

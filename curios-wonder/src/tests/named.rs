@@ -113,6 +113,51 @@ fn a_place_no_name_stands_at_answers_the_narrowest_term() {
     );
 }
 
+/// The declaration named at `written`'s first occurrence in `program`, `within` bytes into it.
+fn declared_at(program: &str, written: &str, within: usize) -> Described {
+    match at(program, written, 0, within).map(|answer| answer.stands) {
+        Some(Stands::Declaration { described, .. }) => described,
+        stands => panic!("no name stands at `{written}`: {stands:?}"),
+    }
+}
+
+const TYPED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\nlet three: /std/Nat = 3;\n/std/print(\"\")";
+
+/// A declaration of the file's own that elaborated answers its type, spelled where it is written, in a file elaboration refused; and no totality, which the certifier never judged.
+#[test]
+fn a_declaration_of_the_files_own_that_elaborated_answers_its_type() {
+    let three = declared_at(TYPED, "three", 0);
+
+    assert_eq!(
+        (three.type_.as_deref(), three.totality),
+        (Some("/std/Nat"), None)
+    );
+}
+
+/// A refused declaration answers what the lowering says of it and no type, and so does one reaching it, which elaboration withheld.
+#[test]
+fn a_refused_declaration_and_one_reaching_it_answer_the_lowerings_facts() {
+    let one = declared_at(TYPED, "one", 0);
+    let two = declared_at(TYPED, "two", 0);
+
+    assert_eq!(
+        (one.declared, one.type_, two.declared, two.type_),
+        (Declared::Value, None, Declared::Value, None)
+    );
+}
+
+/// Once the file checks, a declaration of its own answers the totality the certifier recorded beside its type.
+#[test]
+fn a_declaration_of_the_files_own_answers_its_totality_once_the_file_checks() {
+    let checked = TYPED.replace("= true;", "= 1;");
+    let one = declared_at(&checked, "one", 0);
+
+    assert_eq!(
+        (one.type_.as_deref(), one.totality),
+        (Some("/std/Nat"), Some(Totality::Total))
+    );
+}
+
 const WITNESSED: &str = "\
 concept Painted(Canvas: Type): pub Type {
     paint(Canvas) -> Canvas,
