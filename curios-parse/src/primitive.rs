@@ -1,6 +1,6 @@
 use {
     super::{Mark, Parsed, Parser, ParserError, ParserState, Stated},
-    curios_common::is_identifier_char,
+    curios_common::{Span, is_identifier_char},
     curios_unicode::is_default_ignorable,
 };
 
@@ -32,6 +32,21 @@ where
     let start = start.offset();
     move |state: ParserState<'a>| -> Parsed<'a, A> {
         Err(ParserError::new(state, message).from(start))
+    }
+}
+
+/// Always fails with `message` where `span` ends, a place the parse has read past: for a token owed right after the text before it, which the parse misses only once it has read on over the blanks and comments that follow, refused where it is owed rather than at the word that stands next. The failure sits where it is reported, so in [`Parser::or`]'s tie-break it ranks behind an alternative that read further, and a caller that owes the token commits it.
+pub fn fail_after<'a, A, S>(span: &Span, message: S) -> impl Parser<'a, A> + use<'a, A, S>
+where
+    S: Into<Stated>,
+{
+    let end = span.end;
+    move |state: ParserState<'a>| -> Parsed<'a, A> {
+        debug_assert!(
+            end <= state.offset(),
+            "a failure is placed where the parse read"
+        );
+        Err(ParserError::new(state.jump_to(end), message))
     }
 }
 

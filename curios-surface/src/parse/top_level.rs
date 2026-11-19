@@ -5,7 +5,8 @@ use {
         parse_apply_argument, parse_bound_word, parse_field_equals, parse_field_member,
         parse_func_pattern_param, parse_func_sugar_param, parse_func_type_param, parse_identifier,
         parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_prop, parse_type, parse_word_raw, raised, refusing,
+        parse_named_premise, parse_prop, parse_terminator, parse_type, parse_word_raw, raised,
+        refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
@@ -113,7 +114,8 @@ pub fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, T
             commit(
                 parse_literal("=")
                     .and_keep(parse_term::<D>)
-                    .and_drop(parse_literal(";")),
+                    .and_drop(parse_terminator("a `test`"))
+                    .and_drop(parse_whitespace),
             ),
         )
         .map(|((core, label), body)| TopTest { core, label, body })
@@ -151,7 +153,9 @@ pub fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, Top
                     })
                     // Committed for the body's reason: a first member read to the end of its body is a declaration and nothing else, the local reading being the same text failing the same way, so the `;` it owes is the item's own to report and the loop recovers past it.
                     .and_drop(commit(
-                        refusing("=>", LAMBDA_TAKES_PARENTHESES).and_keep(parse_literal(";")),
+                        refusing("=>", LAMBDA_TAKES_PARENTHESES)
+                            .and_keep(parse_terminator("a `let`"))
+                            .and_drop(parse_whitespace),
                     )),
                 )
                 .map(move |rest| (first, rest))
@@ -411,15 +415,19 @@ pub fn parse_foreign_member<'a, D: Grammar>(
     fields: D::Fields,
     vis_pub: bool,
 ) -> impl Parser<'a, TopForeign<D>> {
-    D::declaring(fields, parse_wire_signature.and_drop(parse_literal(";"))).map(
-        move |((core, label), signature)| TopForeign {
-            doc: doc.clone(),
-            core,
-            vis_pub,
-            label,
-            signature,
-        },
+    D::declaring(
+        fields,
+        parse_wire_signature
+            .and_drop(parse_terminator("a `foreign` declaration"))
+            .and_drop(parse_whitespace),
     )
+    .map(move |((core, label), signature)| TopForeign {
+        doc: doc.clone(),
+        core,
+        vis_pub,
+        label,
+        signature,
+    })
 }
 
 pub fn parse_top_mod<'a>(doc: Option<Doc>, vis_pub: bool, start: Mark) -> impl Parser<'a, TopItem> {
@@ -521,7 +529,7 @@ pub fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> impl Parser<'a, TopItem>
     move |state: ParserState<'a>| {
         parse_use_path
             .and(parse_use_group)
-            .and_drop(take_exact(";"))
+            .and_drop(parse_terminator("a `use`"))
             .and(mark)
             .and_drop(parse_whitespace)
             .map(move |((name, group), end)| {

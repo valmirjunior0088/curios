@@ -187,3 +187,51 @@ fn a_missed_literal_names_the_token_in_its_place() {
         assert!(report.contains(expected), "{source:?} reported {report}");
     }
 }
+
+/// A `;` an item owes is refused where it is missing, just past the item's last character, naming what it ends, and not at the word that stands next: a blank line and a comment between the two leave the caret where the `;` is written. A local `let` owes its `;` alike. A `;` written on a later line, after a comment, is still read.
+#[test]
+fn a_missing_semicolon_is_refused_where_it_is_written() {
+    for (source, at, item) in [
+        (
+            "pub let a: Nat = 1\n\n-- next\npub let b: Nat = 2;\nb",
+            (1, 19),
+            "a `let`",
+        ),
+        ("use /std/{Nat}\n\n-- next\n()", (1, 15), "a `use`"),
+        (
+            "test t = Test/assert(true)\n\n-- next\nlet b: Nat = 2;\nb",
+            (1, 27),
+            "a `test`",
+        ),
+        (
+            "foreign clock() -> Nat\n\n-- next\n()",
+            (1, 23),
+            "a `foreign` declaration",
+        ),
+        (
+            "let f(n: Nat) -> Nat =\n    let m = n + 1\n\n    -- next\n    m;\nf(1)",
+            (2, 18),
+            "a `let`",
+        ),
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+
+        assert_eq!(
+            error.report().span().expect("located").line_column(),
+            at,
+            "{source:?}: {report}"
+        );
+        assert!(
+            report.contains(&format!("{item} ends with `;`")),
+            "{source:?}: {report}"
+        );
+    }
+
+    for source in [
+        "pub let a: Nat = 1\n-- the end\n;\na",
+        "use /std/{Nat} -- one name\n;\n()",
+    ] {
+        source.parse::<Entrypoint>().unwrap();
+    }
+}

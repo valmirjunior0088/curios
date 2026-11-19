@@ -4,8 +4,8 @@ use {
         comment_ending_at, members, parse_caller_sort, parse_func, parse_func_type,
         parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
         parse_name, parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
-        parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type, parse_type,
-        parse_unreadable_binder, parse_usize_raw, refused,
+        parse_qualified_name, parse_struct_lit, parse_terminator, parse_tuple, parse_tuple_type,
+        parse_type, parse_unreadable_binder, parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
@@ -81,7 +81,8 @@ fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGrou
                 })
         }))
         .and_drop(refusing("=>", LAMBDA_TAKES_PARENTHESES))
-        .and_drop(parse_literal(";"))
+        .and_drop(parse_terminator("a `let`"))
+        .and_drop(parse_whitespace)
         .map(|(first, rest)| LetGroup {
             members: iter::once(first).chain(rest).collect(),
         })

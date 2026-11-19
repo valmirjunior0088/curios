@@ -7,7 +7,8 @@ use {
         Grammar, clear_comments, one_of, parse_and_head, parse_atomic_term, parse_concept_member,
         parse_file_head, parse_foreign_member, parse_held, parse_identifier_raw, parse_keyword,
         parse_label, parse_let_member, parse_literal, parse_name, parse_sort, parse_struct_member,
-        parse_term, parse_test_member, parse_top_induct_body, take_comments, trimmed, with_span,
+        parse_term, parse_terminator, parse_test_member, parse_top_induct_body, take_comments,
+        trimmed, with_span,
     },
     crate::{
         CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreNominals, CoreText,
@@ -388,7 +389,8 @@ fn parse_lets<'a>(fields: Vec<DecoratorField>) -> impl Parser<'a, Vec<TopLet<Cor
             parse_and_head::<CoreText>
                 .flat_map(|(_, fields, _)| parse_let_member(None, fields, false))
         }))
-        .and_drop(parse_literal(";"))
+        .and_drop(parse_terminator("a `let`"))
+        .and_drop(parse_whitespace)
         .map(|(first, rest)| std::iter::once(first).chain(rest).collect())
 }
 

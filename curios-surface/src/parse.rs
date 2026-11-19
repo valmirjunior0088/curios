@@ -36,9 +36,9 @@ use {
         is_reserved,
     },
     curios_parse::{
-        Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_from, is_blank,
-        look_ahead, many0, mark, not_ahead, obtained, pure, run_parser, spanned, tagging, take_eof,
-        take_exact, take_n, take_while,
+        Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_after, fail_from,
+        is_blank, look_ahead, many0, mark, not_ahead, obtained, pure, run_parser, spanned, tagging,
+        take_eof, take_exact, take_n, take_while,
     },
     std::{cell::RefCell, collections::BTreeMap, iter, sync::Arc},
 };
@@ -322,6 +322,24 @@ pub fn parse_doc<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Doc>> {
 
 fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     move |state: ParserState<'a>| take_exact(expected).and_drop(parse_whitespace).parse(state)
+}
+
+/// The `;` that ends `item`, consuming nothing after it. It is read where it stands, past the blanks and comments after the item's last character, and refused where it is missing just past that character, where it is written, naming what it ends, rather than at the word that stands next, lines below. The refusal is committed: the item is read whole, so its `;` is owed and nothing reads the text another way.
+fn parse_terminator<'a>(item: &'static str) -> impl Parser<'a, ()> {
+    move |state: ParserState<'a>| {
+        take_exact(";")
+            .or(mark().flat_map(move |here| {
+                // Back over what the item's last token read past it, comments included ([`trimmed`]).
+                let read = here.to(&here);
+                let item_end = trimmed(Span::new(read.source.clone(), 0, read.end));
+
+                commit(fail_after(
+                    &item_end,
+                    vec!["expected: `;`".to_string(), format!("{item} ends with `;`")],
+                ))
+            }))
+            .parse(state)
+    }
 }
 
 // A word: a non-empty run of the identifier characters, consuming no whitespace. An identifier is one, and so are a keyword and a word that begins with a digit, which whoever reads a name refuses by its own rule.

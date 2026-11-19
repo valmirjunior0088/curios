@@ -19,8 +19,8 @@ pub use memo::{memoize, run_parser};
 
 mod primitive;
 pub use primitive::{
-    ahead, fail, fail_from, is_blank, not_ahead, obtained, preceded_by_space, pure, raise, refusal,
-    settled, shown, take_eof, take_exact, take_n, take_while, unseen,
+    ahead, fail, fail_after, fail_from, is_blank, not_ahead, obtained, preceded_by_space, pure,
+    raise, refusal, settled, shown, take_eof, take_exact, take_n, take_while, unseen,
 };
 
 mod span;
