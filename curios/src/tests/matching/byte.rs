@@ -70,7 +70,8 @@ fn a_literal_over_an_integer_names_what_a_literal_takes_apart() {
 
     let error = error(source);
     assert!(
-        error.contains("no literal pattern") && error.contains("takes a `Nat` or a `Byte` apart"),
+        error.contains("no literal pattern")
+            && error.contains("takes a `Nat`, a `Byte` or a `Bool` apart"),
         "unexpected error: {error}"
     );
 }

@@ -46,8 +46,17 @@ impl Scrutinee {
 
     /// Whether the scrutinee is a natural, or of a type nothing has decided yet, which a literal decides as one.
     pub fn takes_naturals(&self, context: &Context) -> bool {
-        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::NatType))
-            || stuck_on_metavar(context, &self.type_)
+        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::NatType)) || self.is_undecided(context)
+    }
+
+    /// Whether the scrutinee is a `Bool`, whose numerals `0` and `1` are its two cases.
+    pub fn is_bool(&self) -> bool {
+        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::BoolType))
+    }
+
+    /// Whether the scrutinee is of a type nothing has decided yet.
+    pub fn is_undecided(&self, context: &Context) -> bool {
+        stuck_on_metavar(context, &self.type_)
     }
 
     /// The byte as the natural it is, `Byte/to_nat` of it: a dispatch on a byte's literals is a natural's, so Core and the certifier hold nothing new for it.

@@ -1,6 +1,10 @@
 //! Inductive and matrix matches, and patterns.
 
-use {crate::*, curios_common::Plicity, curios_num::Natural};
+use {
+    crate::*,
+    curios_common::{Plicity, Sign},
+    curios_num::Natural,
+};
 
 #[test]
 fn inductive_match_nullary_and_unary() {
@@ -163,7 +167,7 @@ fn matrix_match_round_trips() {
     }
 }
 
-// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at all — it falls through to a plain `Binder("n")`, leaving `+1` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
+// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `MatchPattern::Successor` at all — it falls through to a plain `Binder("n")`, leaving `+1` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
 #[test]
 fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
     assert!(
@@ -246,32 +250,34 @@ fn a_qualified_constructor_pattern_is_refused_by_name() {
     }
 }
 
-/// A signed numeral and a floating-point literal take nothing apart, and each is refused by what it is, where it starts, with the guard that tests it — rather than as the binder the fall-through fails to read at its first character, the natural `1.5` opens with, or the constructor a payload written as one is read as the binder of.
+/// A numeral is a pattern with its sign and its radix, as the term it spells is a numeral, at the top of an arm and inside a payload, and each prints back as written; what takes it apart is its column's to say.
 #[test]
-fn a_numeral_no_pattern_takes_is_refused_by_name_where_it_starts() {
-    for (source, literal, what) in [
-        ("match i | -1 => 0 | _ => 1 end", "-1", "a signed numeral"),
-        ("match i | +1 => 0 | _ => 1 end", "+1", "a signed numeral"),
-        (
-            "match o | some(-1) => 0 | _ => 1 end",
-            "-1",
-            "a signed numeral",
-        ),
-        (
-            "match x | 1.5 => 0 | _ => 1 end",
-            "1.5",
-            "a floating-point literal",
-        ),
-        (
-            "match x | -inf.0 => 0 | _ => 1 end",
-            "-inf.0",
-            "a floating-point literal",
-        ),
+fn a_numeral_pattern_keeps_its_sign_and_radix() {
+    for source in [
+        "match i | -1 => 0 | +1 => 2 | 3 => 4 | _ => 1 end",
+        "match o | some(-0x10) => 0 | some(+0) => 2 | _ => 1 end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "{source:?} printed back as {term}"
+        );
+    }
+}
+
+/// A floating-point literal takes nothing apart, and is refused by what it is, where it starts, with the guard that tests it — rather than as the binder the fall-through fails to read at its first character, the natural `1.5` opens with, or the constructor a payload written as one is read as the binder of.
+#[test]
+fn a_floating_point_pattern_is_refused_by_name_where_it_starts() {
+    for (source, literal) in [
+        ("match x | 1.5 => 0 | _ => 1 end", "1.5"),
+        ("match x | -inf.0 => 0 | _ => 1 end", "-inf.0"),
+        ("match o | some(+2.5) => 0 | _ => 1 end", "+2.5"),
     ] {
         let error = source.parse::<Term>().unwrap_err();
         let report = error.format();
         assert!(
-            report.contains(&format!("{what} is no pattern")),
+            report.contains("a floating-point literal is no pattern"),
             "{source:?} reported {report}"
         );
         assert!(
@@ -384,10 +390,11 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
     };
     assert_eq!(
         first.alternatives[0].pattern,
-        MatchPattern::Nat(NatPattern::Lit(NatLiteral(
-            Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral"),
-            Radix::Dec(10)
-        )))
+        MatchPattern::Numeral(NumLit {
+            magnitude: Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral"),
+            radix: Radix::Dec(10),
+            sign: Sign::Unmarked,
+        })
     );
 }
 

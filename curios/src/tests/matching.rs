@@ -9,6 +9,7 @@ mod guard;
 mod headless;
 mod instance;
 mod let_refinement;
+mod literal;
 mod matrix;
 mod order;
 mod pattern;

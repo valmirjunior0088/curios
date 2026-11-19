@@ -9,7 +9,7 @@ use {
     },
     crate::{
         Binder, CoreText, DecoratorField, Elements, Frame, Label, MatchPattern, MatrixArm,
-        NatLiteral, NatPattern, Radix, Rendered, label_terms, sub,
+        NatLiteral, NumLit, Radix, Rendered, label_terms, natural_pattern, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -39,13 +39,7 @@ pub fn match_written<D: Rendered>(
         ],
         Cases::Switch { cases, default } => cases
             .into_iter()
-            .map(|(key, body)| {
-                arm(
-                    MatchPattern::Nat(NatPattern::Lit(NatLiteral(key, Radix::Dec(0)))),
-                    body,
-                    frame,
-                )
-            })
+            .map(|(key, body)| arm(natural_pattern(key), body, frame))
             .chain(iter::once_with(|| {
                 arm(binder(Vec::new(), "_"), default, frame)
             }))
@@ -76,12 +70,12 @@ pub fn match_written<D: Rendered>(
                 let [predecessor_core] = cores(cons_case.label_iter(), frame);
                 let (predecessor, step) = frame.open_one(cons_case);
                 vec![
-                    arm(MatchPattern::Nat(NatPattern::Zero), empty_case, frame),
+                    arm(natural_pattern(Natural::zero()), empty_case, frame),
                     arm(
-                        MatchPattern::Nat(NatPattern::Succ {
+                        MatchPattern::Successor {
                             pred_label: decorated(predecessor_core, &predecessor, frame),
                             step: NatLiteral(Natural::one(), Radix::Dec(0)),
-                        }),
+                        },
                         step,
                         frame,
                     ),
@@ -265,9 +259,11 @@ pub fn match_read(
             true_case: core_read(&arms[1].body, reader)?,
         },
         [
-            MatchPattern::Nat(NatPattern::Zero),
-            MatchPattern::Nat(NatPattern::Succ { pred_label, step }),
-        ] if step.0 == Natural::one() => {
+            MatchPattern::Numeral(zero),
+            MatchPattern::Successor { pred_label, step },
+        ] if natural_key(zero).is_some_and(|zero| zero.is_zero())
+            && step.0 == Natural::one() =>
+        {
             let labels = [LabelRead::binder(pred_label)?];
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
@@ -319,10 +315,7 @@ pub fn match_read(
         [.., MatchPattern::Binder(default)]
             if is_bare_wildcard(default)
                 && patterns[..patterns.len() - 1].iter().all(|pattern| {
-                    matches!(
-                        pattern,
-                        MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_))
-                    )
+                    matches!(pattern, MatchPattern::Numeral(numeral) if natural_key(numeral).is_some())
                 })
                 && patterns.len() > 1 =>
         {
@@ -332,10 +325,10 @@ pub fn match_read(
                     .iter()
                     .zip(&patterns)
                     .map(|(arm, pattern)| {
-                        let key = match pattern {
-                            MatchPattern::Nat(NatPattern::Lit(literal)) => literal.0.clone(),
-                            _ => Natural::zero(),
+                        let MatchPattern::Numeral(numeral) = pattern else {
+                            unreachable!("every arm before a dispatch's catch-all is a key");
                         };
+                        let key = natural_key(numeral).expect("a dispatch's key is a natural");
                         Ok((key, core_read(&arm.body, reader)?))
                     })
                     .collect::<Result<_, ReadError>>()?,
@@ -386,6 +379,11 @@ pub fn match_read(
         goal,
         cases,
     })))
+}
+
+/// The natural a key spelled as a numeral is: an unsigned numeral's value, and none for a signed one, which is no natural's.
+fn natural_key(numeral: &NumLit) -> Option<Natural> {
+    (!numeral.sign.is_marked()).then(|| numeral.magnitude.clone())
 }
 
 /// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.

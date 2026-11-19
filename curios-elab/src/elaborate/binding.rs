@@ -314,12 +314,7 @@ pub fn elaborate_num_lit(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let nat_type: Term = Subterm::Intrinsic(Intrinsic::NatType).into();
-    let bool_type: Term = Subterm::Intrinsic(Intrinsic::BoolType).into();
-    let byte_type: Term = Subterm::Intrinsic(Intrinsic::ByteType).into();
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
-    let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
-
     let default_type = numeral_default(context, [num_lit]);
 
     let target = match &mode {
@@ -341,10 +336,44 @@ pub fn elaborate_num_lit(
         Mode::Infer => Term::unwrap_or_clone(default_type.clone()),
     };
 
-    let (intrinsic, type_) = match num_lit {
-        NumLit::Number { magnitude, sign } => match &target {
+    let intrinsic = match (realize(num_lit, &target)?, num_lit) {
+        (Some(intrinsic), _) => intrinsic,
+        // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report would name the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` would refuse `1` against `?`.
+        (None, NumLit::Number { sign, .. }) => {
+            let Mode::Check(expected) = &mode else {
+                unreachable!("Infer-mode target is always the Nat/Int shape default");
+            };
+            let inferred = if sign.is_negative() {
+                int_type
+            } else {
+                default_type
+            };
+            return Err(mismatch(context, term, &inferred, &expected.type_, None)
+                .checked_as(expected.site.as_ref()));
+        }
+        // Everything else — the `Char` default, an expected `/std/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has.
+        (None, NumLit::Character(character)) => {
+            let value = character_value(context, *character);
+            return elaborate(context, &value, mode);
+        }
+    };
+    let type_ = Term::from(target);
+
+    if let Mode::Check(expected) = &mode {
+        expect_as(context, term, &type_, expected)?;
+    }
+
+    Ok((Term::intrinsic(intrinsic), type_))
+}
+
+/// What a literal realizes as at `carrier`: the carrier's value it spells, `None` where the carrier takes no literal of its kind, and a refusal where it spells a value past the carrier's range. The one table a literal term is realized by at its expected type and a literal pattern at its column's.
+///
+/// A numeral realizes at a `Nat` and a `Byte` unless it is negative, at a `Bool` as `0` or `1`, since a bit is a `Bool` in this language, and at an `Int` and a `Flt` with either sign; a character realizes as its code point at a `Nat`, a `Byte` and an `Int`.
+pub fn realize(num_lit: &NumLit, carrier: &Subterm) -> Result<Option<Intrinsic>, Error> {
+    Ok(Some(match num_lit {
+        NumLit::Number { magnitude, sign } => match carrier {
             Subterm::Intrinsic(Intrinsic::NatType) if !sign.is_negative() => {
-                (Intrinsic::Nat(Nat::new(magnitude.clone())), nat_type)
+                Intrinsic::Nat(Nat::new(magnitude.clone()))
             }
             Subterm::Intrinsic(Intrinsic::ByteType) if !sign.is_negative() => {
                 let Some(value) = u8::try_from(magnitude).ok() else {
@@ -352,29 +381,25 @@ pub fn elaborate_num_lit(
                         value: magnitude.to_string(),
                     });
                 };
-                (Intrinsic::Byte(value), byte_type)
+                Intrinsic::Byte(value)
             }
-            // A bit is a `Bool` in this language, so `0` and `1` realize where a `Bool` is expected.
             Subterm::Intrinsic(Intrinsic::BoolType) if !sign.is_negative() => {
-                let value = match u8::try_from(magnitude).ok() {
-                    Some(0) => false,
-                    Some(1) => true,
+                match u8::try_from(magnitude).ok() {
+                    Some(0) => Intrinsic::Bool(false),
+                    Some(1) => Intrinsic::Bool(true),
                     _ => {
                         return Err(Error::BoolLiteralOutOfRange {
                             value: magnitude.to_string(),
                         });
                     }
-                };
-                (Intrinsic::Bool(value), bool_type)
+                }
             }
             Subterm::Intrinsic(Intrinsic::IntType) => {
                 let magnitude = Integer::from(magnitude.clone());
-                let value = if sign.is_negative() {
-                    -magnitude
-                } else {
-                    magnitude
-                };
-                (Intrinsic::Int(value), int_type)
+                Intrinsic::Int(match sign.is_negative() {
+                    true => -magnitude,
+                    false => magnitude,
+                })
             }
             Subterm::Intrinsic(Intrinsic::FltType) => {
                 // Rounded by the model, as the decimal literal in `curios-module` is, so what a numeral means as a binary64 is stated once in this repository. A magnitude past the largest finite value rounds to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
@@ -384,54 +409,31 @@ pub fn elaborate_num_lit(
                         value: magnitude.to_string(),
                     });
                 }
-                let value = if sign.is_negative() { -value } else { value };
-                (Intrinsic::Flt(value), flt_type)
+                Intrinsic::Flt(match sign.is_negative() {
+                    true => -value,
+                    false => value,
+                })
             }
-            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report would name the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` would refuse `1` against `?`.
-            _ => {
-                let Mode::Check(expected) = &mode else {
-                    unreachable!("Infer-mode target is always the Nat/Int shape default");
-                };
-                let inferred = if sign.is_negative() {
-                    int_type
-                } else {
-                    default_type
-                };
-                return Err(mismatch(context, term, &inferred, &expected.type_, None)
-                    .checked_as(expected.site.as_ref()));
-            }
+            _ => return Ok(None),
         },
         NumLit::Character(character) => {
             let code = *character as u32;
-            match &target {
-                Subterm::Intrinsic(Intrinsic::NatType) => {
-                    (Intrinsic::Nat(Nat::new(code)), nat_type)
-                }
+            match carrier {
+                Subterm::Intrinsic(Intrinsic::NatType) => Intrinsic::Nat(Nat::new(code)),
+                // Refused as the character it is written as, which is what its reader wrote.
                 Subterm::Intrinsic(Intrinsic::ByteType) => {
                     let Ok(value) = u8::try_from(code) else {
                         return Err(Error::ByteLiteralOutOfRange {
-                            value: code.to_string(),
+                            value: format!("{character:?}"),
                         });
                     };
-                    (Intrinsic::Byte(value), byte_type)
+                    Intrinsic::Byte(value)
                 }
-                Subterm::Intrinsic(Intrinsic::IntType) => {
-                    (Intrinsic::Int(Integer::from(code)), int_type)
-                }
-                // Everything else — the `Char` default, an expected `/std/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has.
-                _ => {
-                    let value = character_value(context, *character);
-                    return elaborate(context, &value, mode);
-                }
+                Subterm::Intrinsic(Intrinsic::IntType) => Intrinsic::Int(Integer::from(code)),
+                _ => return Ok(None),
             }
         }
-    };
-
-    if let Mode::Check(expected) = &mode {
-        expect_as(context, term, &type_, expected)?;
-    }
-
-    Ok((Term::intrinsic(intrinsic), type_))
+    }))
 }
 
 /// The certified `/std/Char` value a character literal denotes: the code point beside the one inhabitant of `True`. `Char`'s `Valid` is decided and a Rust `char` is already a Unicode scalar, so `qed` checks against `Valid(code)` by reduction — the compiler decides nothing about the code point.

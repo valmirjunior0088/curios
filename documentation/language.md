@@ -672,6 +672,8 @@ pub let name(tag: Nat) -> Str =
 
 A literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value.
 
+A numeral pattern takes its type from its column as a [numeral](#numeric-literals) does from where it stands, so a `Bool` is taken apart by `0` and `1` as well as by `false` and `true`. A numeral pattern written with a sign is an `Int`'s, which no `Nat`, `Byte` or `Bool` takes: `| +1 =>` is refused where `| 1 =>` is taken.
+
 A `Byte` is dispatched on literals as a `Nat` is, a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are. Its `0` is a literal like any other, and a byte takes no successor pattern.
 
 ```crs

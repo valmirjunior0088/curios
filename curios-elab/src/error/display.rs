@@ -1422,7 +1422,15 @@ impl Displayed<'_> {
                 f.text("no literal pattern");
                 f.stating(match literal {
                     WrittenLiteral::Numeral => {
-                        format!("`{pattern}` takes a `Nat` or a `Byte` apart by its value")
+                        format!(
+                            "`{pattern}` takes a `Nat`, a `Byte` or a `Bool` apart by its value"
+                        )
+                    }
+                    WrittenLiteral::Signed => {
+                        format!("`{pattern}` takes an `Int` apart by its value")
+                    }
+                    WrittenLiteral::Successor => {
+                        format!("`{pattern}` takes a `Nat` apart by its predecessor")
                     }
                     WrittenLiteral::Character => {
                         format!(

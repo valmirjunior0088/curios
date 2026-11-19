@@ -17,9 +17,8 @@ use {
         Alternative, Apply, Argument, Binder, BytesSegment, Dialect, Elements, Field, Func,
         FuncParam, FuncType, FuncTypeParam, Guard, HeadlessMatch, Infix, Label, Let, LetBinding,
         LetGroup, LetSignature, ListEntry, Literal, Match, MatchPattern, MatchPatternField,
-        MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Program, Proj, ProofLiteral,
-        Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType,
-        TupleTypeParam,
+        MatrixArm, Name, NatLiteral, NumLit, Pattern, Program, Proj, ProofLiteral, Radix, StrLit,
+        StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -184,6 +183,15 @@ fn numeral<D: Dialect>(magnitude: Natural, sign: Sign) -> Term<D> {
         sign,
     })
     .into()
+}
+
+/// A natural's key as the pattern a reader writes it as: an unsigned numeral nobody wrote, at its natural width.
+pub fn natural_pattern<D: Dialect>(magnitude: Natural) -> MatchPattern<D> {
+    MatchPattern::Numeral(NumLit {
+        magnitude,
+        radix: Radix::Dec(0),
+        sign: Sign::Unmarked,
+    })
 }
 
 fn apply<D: Dialect>(head: Term<D>, arguments: Vec<Argument<D>>) -> Term<D> {
@@ -621,15 +629,20 @@ pub fn written_pattern<D: Dialect>(
             fields: written_fields(fields, names, own),
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
-        curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
-        curios_core::Pattern::Succ { predecessor, step } => MatchPattern::Nat(NatPattern::Succ {
+        curios_core::Pattern::Succ { predecessor, step } => MatchPattern::Successor {
             pred_label: written_slot(*predecessor, names, own),
             step: NatLiteral(step.clone(), Radix::Dec(0)),
-        }),
-        curios_core::Pattern::Literal(value) => {
-            MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
+        },
+        curios_core::Pattern::Literal(curios_core::NumLit::Number { magnitude, sign }) => {
+            MatchPattern::Numeral(NumLit {
+                magnitude: magnitude.clone(),
+                radix: Radix::Dec(0),
+                sign: *sign,
+            })
         }
-        curios_core::Pattern::Character(character) => MatchPattern::Char((*character).into()),
+        curios_core::Pattern::Literal(curios_core::NumLit::Character(character)) => {
+            MatchPattern::Char((*character).into())
+        }
         curios_core::Pattern::Str(value) => MatchPattern::Str(StrLit::line(value.clone())),
         curios_core::Pattern::List(elements) => {
             MatchPattern::List(written_elements(elements, names, own))
@@ -1251,11 +1264,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
         Cases::Switch { cases, default } => {
             let mut arms = Vec::with_capacity(cases.len() + 1);
             for (value, body) in cases {
-                let pattern = match value.is_zero() {
-                    true => NatPattern::Zero,
-                    false => NatPattern::Lit(NatLiteral(value, Radix::Dec(0))),
-                };
-                arms.push(MatrixArm::of(MatchPattern::Nat(pattern), sub(body, frame)?));
+                arms.push(MatrixArm::of(natural_pattern(value), sub(body, frame)?));
             }
             arms.push(MatrixArm::of(
                 MatchPattern::Binder("_".into()),
@@ -1311,14 +1320,14 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     return None;
                 };
                 let body = cons_case.open(&[opened]);
-                let succ = NatPattern::Succ {
+                let succ = MatchPattern::Successor {
                     pred_label: binder(predecessor, &body, frame),
                     step: NatLiteral(Natural::one(), Radix::Dec(0)),
                 };
 
                 vec![
-                    MatrixArm::of(MatchPattern::Nat(NatPattern::Zero), sub(empty_case, frame)?),
-                    MatrixArm::of(MatchPattern::Nat(succ), sub(body, frame)?),
+                    MatrixArm::of(natural_pattern(Natural::zero()), sub(empty_case, frame)?),
+                    MatrixArm::of(succ, sub(body, frame)?),
                 ]
             }
             Carrier::Bytes {

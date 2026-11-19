@@ -9,8 +9,8 @@ use {
         value_word, word, word_value,
     },
     crate::{
-        Alternative, CoreText, Frame, MatchPattern, MatrixArm, NatPattern, ProofLiteral, Rendered,
-        sub, written_pattern,
+        Alternative, CoreText, Frame, MatchPattern, MatrixArm, ProofLiteral, Rendered, sub,
+        written_pattern,
     },
     curios_common::{Plicity, Sign},
     curios_core::{
@@ -501,14 +501,16 @@ fn pattern_read(
         ),
         MatchPattern::Struct { .. } => return Err(unresolved(at)),
         MatchPattern::Bool(value) => Pattern::Bool(*value),
-        MatchPattern::Char(character) => Pattern::Character(character.value),
+        MatchPattern::Char(character) => Pattern::Literal(NumLit::Character(character.value)),
         MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
-        MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
-        MatchPattern::Nat(NatPattern::Succ { pred_label, step }) => Pattern::Succ {
+        MatchPattern::Numeral(numeral) => Pattern::Literal(NumLit::Number {
+            magnitude: numeral.magnitude.clone(),
+            sign: numeral.sign,
+        }),
+        MatchPattern::Successor { pred_label, step } => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,
             step: step.0.clone(),
         },
-        MatchPattern::Nat(NatPattern::Lit(literal)) => Pattern::Literal(literal.0.clone()),
         MatchPattern::List(elements) => Pattern::List(elements_read(elements, at, places)?),
         MatchPattern::Bytes(elements) => Pattern::Bytes(elements_read(elements, at, places)?),
     })

@@ -474,8 +474,15 @@ pub enum MatchPattern<D: Dialect = Program> {
     Char(CharLit),
     /// A string literal leaf — a `Str` taken apart by its bytes — printed back in the spelling it was written in.
     Str(StrLit),
-    /// A nested `Nat` literal leaf — the `0`/`n + 1` (case split) or bare literal (dispatch) shapes a headed `Nat` match takes.
-    Nat(NatPattern<D>),
+    /// A numeral leaf, the numeral a term writes with its sign and its radix, printed back as written: realized at its column's type as the term is at its expected one, a signed numeral naming an `Int` (`curios-elab`'s matrix compiler).
+    ///
+    /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`).
+    Numeral(NumLit),
+    /// The `pred + step` leaf, `step` successors over `pred_label`: one at least, and kept with the radix it was written in so it prints back as written. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
+    Successor {
+        pred_label: Binder<D>,
+        step: NatLiteral,
+    },
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
     List(Elements<D>),
     /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
@@ -483,31 +490,13 @@ pub enum MatchPattern<D: Dialect = Program> {
 }
 
 impl<D: Dialect> MatchPattern<D> {
-    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections). The matrix compiler (`into_core::match_compile`) reads a final `_` after arms that each dispatch as their default.
+    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Numeral`/`Successor`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections). The matrix compiler (`into_core::match_compile`) reads a final `_` after arms that each dispatch as their default.
     pub fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
             MatchPattern::Binder(_) | MatchPattern::Tuple(_) | MatchPattern::Struct { .. }
         )
     }
-}
-
-/// The two shapes a nested `Nat` leaf can take — see [`MatchPattern::Nat`].
-#[derive(Debug, Clone, PartialEq)]
-pub enum NatPattern<D: Dialect = Program> {
-    /// The `0` leaf.
-    Zero,
-    /// The `pred + step` leaf, `step` successors over `pred_label`: one at least, and kept with the radix it was written in so it prints back as written. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
-    Succ {
-        pred_label: Binder<D>,
-        step: NatLiteral,
-    },
-    /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, compiled to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (`curios-elab`'s matrix compiler).
-    ///
-    /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`). Narrowed here, a numeral past a machine word would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one.
-    ///
-    /// The radix it was written in rides along, as a term's numeral keeps it, so `| 0x10 =>` prints back as written; dispatch reads the value alone.
-    Lit(NatLiteral),
 }
 
 /// A sequence pattern's elements as the literal that builds the value writes them, each a pattern taken from the front — see [`MatchPattern::List`] and [`MatchPattern::Bytes`]. An open run writes one element at least: one of none would be the binder its rest is, so the tree holds no `[..rest]`.

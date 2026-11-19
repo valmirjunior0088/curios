@@ -5,18 +5,26 @@ use {
     crate::{
         CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term, to_core,
     },
-    curios_common::{Qualifier, Source},
+    curios_common::{Qualifier, Sign, Source},
     curios_core::{
         Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
         Elements, Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam,
         Intrinsic, Item, Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
-        Nominals, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl,
-        Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId,
-        WitnessKey, WitnessOrigin,
+        Nominals, NumLit, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort,
+        StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
+        WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Natural},
     std::rc::Rc,
 };
+
+/// The pattern of the unsigned numeral `value`.
+fn unsigned(value: usize) -> Pattern {
+    Pattern::Literal(NumLit::Number {
+        magnitude: value.into(),
+        sign: Sign::Unmarked,
+    })
+}
 
 /// The term `term` writes, read on its own.
 fn term_to_core(term: &crate::Term<CoreText>) -> Result<Term, ReadError> {
@@ -412,12 +420,12 @@ fn every_node_written_reads_back_as_itself() {
                 Arm {
                     alternatives: vec![
                         Row {
-                            pattern: Pattern::Literal(3usize.into()),
+                            pattern: unsigned(3),
                             guards: Vec::new(),
                             body: Term::func(Vec::<(Free, Term)>::new(), one()),
                         },
                         Row {
-                            pattern: Pattern::Zero,
+                            pattern: unsigned(0),
                             guards: Vec::new(),
                             body: Term::func(Vec::<(Free, Term)>::new(), one()),
                         },
@@ -437,7 +445,7 @@ fn every_node_written_reads_back_as_itself() {
             arms: vec![
                 Arm {
                     alternatives: vec![Row {
-                        pattern: Pattern::Zero,
+                        pattern: unsigned(0),
                         guards: Vec::new(),
                         body: Term::func(Vec::<(Free, Term)>::new(), one()),
                     }],
@@ -461,7 +469,7 @@ fn every_node_written_reads_back_as_itself() {
                         guards: vec![
                             Guard::Holds(over(Free::local(1, Some("m")), one())),
                             Guard::Binds {
-                                pattern: Pattern::Zero,
+                                pattern: unsigned(0),
                                 value: over(Free::local(1, Some("m")), one()),
                             },
                         ],

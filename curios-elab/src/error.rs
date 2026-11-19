@@ -796,7 +796,7 @@ pub enum Error {
         written: usize,
         scrutinee: Box<Term>,
     },
-    /// A literal or a successor pattern over a column whose type takes none of its kind: a numeral or a successor takes a `Nat` or a `Byte` apart, a character a `Nat`, a `Byte` or a `Char`, and a string a `Str`. `pattern` is the arm as written, `literal` what it writes at the column, and `scrutinee` the column's type.
+    /// A literal or a successor pattern over a column whose type takes none of its kind: a numeral without a sign takes a `Nat`, a `Byte` or a `Bool` apart, one with its sign an `Int`, a successor a `Nat`, a character a `Nat`, a `Byte` or a `Char`, and a string a `Str`. `pattern` is the arm as written, `literal` what it writes at the column, and `scrutinee` the column's type.
     MatrixLiteralColumn {
         pattern: String,
         literal: WrittenLiteral,
@@ -2532,8 +2532,11 @@ impl fmt::Display for Error {
 /// What a literal pattern writes, which says the types it takes apart ([`Error::MatrixLiteralColumn`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WrittenLiteral {
-    /// A numeral, or a successor pattern.
+    /// A numeral without a sign.
     Numeral,
+    /// A numeral with its sign, which names an `Int`'s key.
+    Signed,
+    Successor,
     Character,
     String,
 }

@@ -4,7 +4,7 @@ use {
     curios_common::{Said, Span},
     curios_surface::{
         Alternative, Elements, Guard, HeadlessArm, HeadlessMatch, Label, Match, MatchPattern,
-        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Subterm, Term,
+        MatchPatternField, MatrixArm, Subterm, Term,
     },
     std::collections::BTreeSet,
 };
@@ -281,18 +281,20 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 fields: self.fields(fields, binders)?,
             },
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
-            MatchPattern::Char(character) => curios_core::Pattern::Character(character.value),
+            MatchPattern::Char(character) => {
+                curios_core::Pattern::Literal(curios_core::NumLit::Character(character.value))
+            }
             MatchPattern::Str(literal) => curios_core::Pattern::Str(literal.value.clone()),
-            MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
-            MatchPattern::Nat(NatPattern::Succ { pred_label, step }) => {
-                curios_core::Pattern::Succ {
-                    predecessor: self.slot(pred_label, binders),
-                    step: step.0.clone(),
-                }
+            MatchPattern::Numeral(numeral) => {
+                curios_core::Pattern::Literal(curios_core::NumLit::Number {
+                    magnitude: numeral.magnitude.clone(),
+                    sign: numeral.sign,
+                })
             }
-            MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
-                curios_core::Pattern::Literal(value.clone())
-            }
+            MatchPattern::Successor { pred_label, step } => curios_core::Pattern::Succ {
+                predecessor: self.slot(pred_label, binders),
+                step: step.0.clone(),
+            },
             MatchPattern::List(elements) => {
                 curios_core::Pattern::List(self.elements(elements, binders)?)
             }
@@ -394,7 +396,8 @@ fn takes_apart(pattern: &MatchPattern) -> bool {
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
         | MatchPattern::Str(_)
-        | MatchPattern::Nat(_)
+        | MatchPattern::Numeral(_)
+        | MatchPattern::Successor { .. }
         | MatchPattern::List(_)
         | MatchPattern::Bytes(_) => true,
     }

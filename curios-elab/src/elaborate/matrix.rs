@@ -17,16 +17,16 @@
 use {
     super::{
         BoolSplit, Expectation, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit,
-        SwitchSplit, elaborate, payload_fills,
+        SwitchSplit, elaborate, payload_fills, realize,
     },
     crate::{
         Context, Error, HeldFrames, WrittenLiteral, check, expect_as, pending, reduce_with,
         resolved_for_display, stuck_on_metavar,
     },
-    curios_common::{Plicity, recurse},
+    curios_common::{Plicity, Sign, recurse},
     curios_core::{
-        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
+        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, Matrix, Mention, NumLit,
+        Pattern, Row, Slot, StructType, Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -114,10 +114,10 @@ impl<'m> Shape<'m> {
             Shape::Peeled(pattern, peeled) => (pattern, peeled),
             Shape::Remains(..) | Shape::Text(_) => return None,
         };
+        // A column reads a value only once its rows have been realized at its type, a signed numeral being no natural's ([`Compiler::naturals`]), so a numeral's value is its magnitude and a character's its code point.
         let written = match pattern {
-            Pattern::Zero => Natural::zero(),
-            Pattern::Literal(value) => value.clone(),
-            Pattern::Character(character) => Natural::from(*character as u32),
+            Pattern::Literal(NumLit::Number { magnitude, .. }) => magnitude.clone(),
+            Pattern::Literal(NumLit::Character(character)) => Natural::from(*character as u32),
             _ => return None,
         };
 
@@ -197,9 +197,35 @@ fn byte_pattern(byte: u8) -> &'static Pattern {
 
     &BYTES.get_or_init(|| {
         (0..=u8::MAX)
-            .map(|byte| Pattern::Literal(Natural::from(u32::from(byte))))
+            .map(|byte| {
+                Pattern::Literal(NumLit::Number {
+                    magnitude: Natural::from(u32::from(byte)),
+                    sign: Sign::Unmarked,
+                })
+            })
             .collect()
     })[usize::from(byte)]
+}
+
+/// What a literal pattern or a successor writes, which says the carriers it takes apart ([`Error::MatrixLiteralColumn`]).
+fn written_literal(pattern: &Pattern) -> WrittenLiteral {
+    match pattern {
+        Pattern::Literal(NumLit::Number { sign, .. }) if sign.is_marked() => WrittenLiteral::Signed,
+        Pattern::Literal(NumLit::Character(_)) => WrittenLiteral::Character,
+        Pattern::Succ { .. } => WrittenLiteral::Successor,
+        _ => WrittenLiteral::Numeral,
+    }
+}
+
+/// The pattern of the truth value `value`, which a numeral realized at a `Bool` is read as.
+fn truth_pattern(value: bool) -> &'static Pattern {
+    const FALSE: &Pattern = &Pattern::Bool(false);
+    const TRUE: &Pattern = &Pattern::Bool(true);
+
+    match value {
+        false => FALSE,
+        true => TRUE,
+    }
 }
 
 /// Whether the cells a row writes for a case's parts are what a split left of a literal, which states no case of the row's ([`Shape::is_peeled_literal`]).
@@ -487,28 +513,36 @@ impl<'m> Compiler<'m> {
 
                 self.fields(context, columns, lines, top, mode)
             }
+            // A numeral is realized at its column's type, so `0` and `1` share a `Bool`'s column with its truth values.
             Pattern::Bool(_) => {
-                if !every(|_, other| matches!(other, Pattern::Bool(_))) {
+                if !every(|_, other| matches!(other, Pattern::Bool(_) | Pattern::Literal(_))) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
                 self.booleans(context, columns, lines, top, mode)
             }
             // A character is a dispatch case spelled by its scalar value, so it shares a column with the numerals.
-            Pattern::Zero | Pattern::Succ { .. } | Pattern::Literal(_) | Pattern::Character(_) => {
+            Pattern::Succ { .. } | Pattern::Literal(_) => {
                 if !every(|_, other| {
                     matches!(
                         other,
-                        Pattern::Zero
-                            | Pattern::Succ { .. }
-                            | Pattern::Literal(_)
-                            | Pattern::Character(_)
+                        Pattern::Succ { .. } | Pattern::Literal(_) | Pattern::Bool(_)
                     )
                 }) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
-                self.naturals(context, columns, lines, top, mode)
+                let truths = written
+                    .iter()
+                    .any(|other| matches!(other, Pattern::Bool(_)));
+                let peels = written
+                    .iter()
+                    .any(|other| matches!(other, Pattern::Succ { .. }));
+                match (truths, peels) {
+                    (true, true) => Err(Error::MatrixInconsistentShape),
+                    (true, false) => self.booleans(context, columns, lines, top, mode),
+                    (false, _) => self.naturals(context, columns, lines, top, mode),
+                }
             }
             Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
                 unreachable!("a run is read above")
@@ -1320,6 +1354,49 @@ impl<'m> Compiler<'m> {
         (binders, slots)
     }
 
+    /// The numerals the rows write at a `Bool` column as the truth values they realize as, `0` and `1` its `false` and `true`, as a numeral term is realized where a `Bool` is expected ([`realize`]). A column whose type is no `Bool` takes no numeral beside a truth value, and a numeral past `1`, a signed one and a character are refused where their row is written.
+    fn truths(
+        &self,
+        context: &mut Context,
+        lines: &mut [Line<'m>],
+        column: &Column,
+    ) -> Result<(), Error> {
+        let literal = |line: &Line<'m>| {
+            matches!(
+                line.cells[0],
+                Some((Shape::Pattern(Pattern::Literal(_)), _))
+            )
+        };
+        if !lines.iter().any(literal) {
+            return Ok(());
+        }
+        // A truth value beside the numerals decides a column of a type nothing has decided yet as a `Bool`, which its split then holds it to.
+        let scrutinee = Scrutinee::read(context, &column.term)?;
+        if !scrutinee.is_bool() && !scrutinee.is_undecided(context) {
+            return Err(Error::MatrixInconsistentShape);
+        }
+        let carrier = Subterm::Intrinsic(Intrinsic::BoolType);
+        for line in lines.iter_mut() {
+            let Some((Shape::Pattern(pattern @ Pattern::Literal(literal)), place)) = line.cells[0]
+            else {
+                continue;
+            };
+            let written = written_literal(pattern);
+            match (written, realize(literal, &carrier)) {
+                (WrittenLiteral::Signed, _) | (_, Ok(None)) => {
+                    return Err(self.literal_refused(context, &scrutinee, line.row, written));
+                }
+                (_, Err(error)) => return Err(error.at_opt(self.row(line.row).body.extent())),
+                (_, Ok(Some(Intrinsic::Bool(value)))) => {
+                    line.cells[0] = Some((Shape::Pattern(truth_pattern(value)), place));
+                }
+                (_, Ok(Some(_))) => unreachable!("a literal realized at a `Bool` is a truth value"),
+            }
+        }
+
+        Ok(())
+    }
+
     /// Rows split by the `Bool` they write, a row that writes a binder under both.
     fn booleans(
         &mut self,
@@ -1332,6 +1409,7 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         let rest = columns;
         self.joined(context, &mut lines, &column);
+        self.truths(context, &mut lines, &column)?;
         let reached = self.reached(
             &lines,
             |shape| match shape.pattern()? {
@@ -1410,29 +1488,54 @@ impl<'m> Compiler<'m> {
                 .map(|line| line.row)
         };
         let peels = first(|pattern| matches!(pattern, Pattern::Succ { .. }));
-        let dispatches =
-            first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
+        // A literal past `0`, or a character, makes the column a dispatch where no successor makes it a case split.
+        let dispatches = first(|pattern| match pattern {
+            Pattern::Literal(NumLit::Number { magnitude, .. }) => !magnitude.is_zero(),
+            Pattern::Literal(NumLit::Character(_)) => true,
+            _ => false,
+        });
         let place = |row: usize| self.row(row).body.extent();
 
-        // What a column's literals are is its type's: a byte's are dispatched as the natural it is, a character's as its code point, which only a character's literal names, and a type that is none of these takes none.
         let scrutinee = Scrutinee::read(context, &column.term)?;
+        // A literal is realized at its column's type, so a `Bool`'s numerals are its two cases.
+        if scrutinee.is_bool() && peels.is_none() {
+            let mut columns = rest;
+            columns.insert(0, column);
+
+            return self.booleans(context, columns, lines, top, mode);
+        }
+        // What a column's literals are is its type's: a byte's are its values, dispatched as the natural it is, a character's its code point, which only a character's literal names, a natural's its values, and a type that is none of these takes none.
         let byte = scrutinee.is_byte();
         let character = scrutinee.is_char(context);
-        let refused = lines.iter().find_map(|line| {
-            let (shape, _) = line.cells[0]?;
-            let written = match shape {
-                Shape::Pattern(Pattern::Character(_)) => WrittenLiteral::Character,
-                _ => WrittenLiteral::Numeral,
+        let natural = byte || character || scrutinee.takes_naturals(context);
+        let carrier = match () {
+            () if byte => Some(Subterm::Intrinsic(Intrinsic::ByteType)),
+            () if natural => Some(Subterm::Intrinsic(Intrinsic::NatType)),
+            // A `Bool` column reaches here only where a row peels a successor, which is what is refused.
+            () if scrutinee.is_bool() => Some(Subterm::Intrinsic(Intrinsic::BoolType)),
+            () => None,
+        };
+        for line in &lines {
+            let Some((shape, _)) = line.cells[0] else {
+                continue;
             };
+            let Some(pattern) = shape.pattern() else {
+                continue;
+            };
+            let written = written_literal(pattern);
             let taken = match written {
-                WrittenLiteral::Character => character || byte || scrutinee.takes_naturals(context),
-                _ => !character && (byte || scrutinee.takes_naturals(context)),
+                WrittenLiteral::Numeral => carrier.is_some() && !character,
+                WrittenLiteral::Successor => natural && !character,
+                WrittenLiteral::Character => natural,
+                WrittenLiteral::Signed | WrittenLiteral::String => false,
             };
-
-            (!taken).then_some((line.row, written))
-        });
-        if let Some((row, literal)) = refused {
-            return Err(self.literal_refused(context, &scrutinee, row, literal));
+            if !taken {
+                return Err(self.literal_refused(context, &scrutinee, line.row, written));
+            }
+            // A literal is realized where it is first read, at the column it is written at; what a split peels off it is the same value less what was peeled.
+            if let (Some(carrier), Shape::Pattern(Pattern::Literal(literal))) = (&carrier, shape) {
+                realize(literal, carrier).map_err(|error| error.at_opt(place(line.row)))?;
+            }
         }
         if byte && let Some(successor) = peels {
             return Err(Error::MatrixByteSuccessor {
@@ -1447,22 +1550,6 @@ impl<'m> Compiler<'m> {
                     .value()
                     .expect("every row of a dispatch writes a literal")
             };
-            // A byte's literals are its values, as a packed literal's constant entries are.
-            if byte {
-                let past = lines.iter().find_map(|line| {
-                    let (shape, _) = line.cells[0]?;
-                    (literal(shape) > Natural::from(u32::from(u8::MAX)))
-                        .then_some((shape, line.row))
-                });
-                if let Some((shape, row)) = past {
-                    let value = match shape {
-                        Shape::Pattern(Pattern::Character(character)) => format!("{character:?}"),
-                        _ => literal(shape).to_string(),
-                    };
-
-                    return Err(Error::ByteLiteralOutOfRange { value }.at_opt(place(row)));
-                }
-            }
             let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = lines
                 .iter()
                 .filter_map(|line| line.cells[0].map(|(shape, _)| (literal(shape), Vec::new())))
@@ -1474,7 +1561,7 @@ impl<'m> Compiler<'m> {
                     spelled
                         .entry(literal(shape))
                         .or_insert_with(|| match shape {
-                            Shape::Pattern(Pattern::Character(character)) => {
+                            Shape::Pattern(Pattern::Literal(NumLit::Character(character))) => {
                                 format!("{character:?}")
                             }
                             _ => literal(shape).to_string(),
@@ -2204,10 +2291,23 @@ impl<'m> Compiler<'m> {
                     })
                 })?;
             }
-            Pattern::Literal(_) | Pattern::Character(_) => {
+            Pattern::Literal(_) => {
                 let value = shape.value().expect("a literal has a value");
+                // A numeral at a `Bool` is the truth value it realizes as, which the tree held to `0` or `1` where it read the column ([`Compiler::truths`]).
+                let mut truth = |context: &mut Context, split: &BoolSplit, line, columns| {
+                    walk_awaited(context, awaits, |context| {
+                        split.arm(context, !value.is_zero(), |context, expected| {
+                            arm(self, context, columns, line, expected)
+                        })
+                    })
+                };
                 let split = match shared {
                     Some(Outermost::Switch(split)) => split,
+                    Some(Outermost::Bool(split)) => {
+                        truth(context, &split, line, columns)?;
+
+                        return Ok(walked.expect("the arm of a row's case is its walk"));
+                    }
                     // The tree peels successors at this column, so a literal is the successors it builds over zero there: `0` the zero case, and one past it the successor case, one less at the predecessor, which states no case of the row's.
                     Some(Outermost::Nat(split)) => {
                         match value.is_zero() {
@@ -2242,6 +2342,28 @@ impl<'m> Compiler<'m> {
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let goal = Term::hole(context.mint_metavar());
+                        if scrutinee.is_bool() {
+                            let split = BoolSplit::resolve(context, scrutinee, &goal, &mode)?;
+                            truth(context, &split, line, columns)?;
+
+                            return Ok(walked.expect("the arm of a row's case is its walk"));
+                        }
+                        // A `0` written alone is induction's zero case, as a column whose rows write no literal past it reads it; a byte has no successor, so its `0` is a literal's case.
+                        let zero = matches!(
+                            shape,
+                            Shape::Pattern(Pattern::Literal(NumLit::Number { magnitude, .. }))
+                                if magnitude.is_zero()
+                        );
+                        if zero && !scrutinee.is_byte() {
+                            let split = NatSplit::resolve(context, scrutinee, &goal, &mode)?;
+                            walk_awaited(context, awaits, |context| {
+                                split.zero(context, |context, expected| {
+                                    arm(self, context, columns, line, expected)
+                                })
+                            })?;
+
+                            return Ok(walked.expect("the arm of a row's case is its walk"));
+                        }
 
                         let scrutinee = dispatched(context, scrutinee);
 
@@ -2255,66 +2377,33 @@ impl<'m> Compiler<'m> {
                     })
                 })?;
             }
-            Pattern::Zero | Pattern::Succ { .. } => {
+            // What is left of a step past one is read at the predecessor, as a column of its own.
+            Pattern::Succ { .. } => {
                 let split = match shared {
-                    // The tree's dispatch is in the form its rows chose: a `0` is a literal's case where a row writes a literal past it.
-                    Some(Outermost::Switch(split)) => {
-                        walk_awaited(context, awaits, |context| {
-                            split.arm(context, &Natural::zero(), |context, expected| {
-                                arm(self, context, columns, line, expected)
-                            })
-                        })?;
-
-                        return Ok(walked.expect("the arm of a row's case is its walk"));
-                    }
                     Some(Outermost::Nat(split)) => split,
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let goal = Term::hole(context.mint_metavar());
-                        // A byte has no successor, so its `0` is a literal's case, as the tree read it.
-                        if scrutinee.is_byte() {
-                            let split =
-                                SwitchSplit::resolve(context, scrutinee.of_byte(), &goal, &mode)?;
-                            walk_awaited(context, awaits, |context| {
-                                split.arm(context, &Natural::zero(), |context, expected| {
-                                    arm(self, context, columns, line, expected)
-                                })
-                            })?;
-
-                            return Ok(walked.expect("the arm of a row's case is its walk"));
-                        }
 
                         Rc::new(NatSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
                 };
 
-                match pattern {
-                    // What is left of a step past one is read at the predecessor, as a column of its own.
-                    Pattern::Succ { .. } => {
-                        let cells = vec![Some((shape.peel(), place))];
-                        let (binders, slots) = self.alone(context, &mut line, cells);
-                        let predecessor = binders[0];
-                        let mut parts = slots
-                            .into_iter()
-                            .map(|slot| Term::free_var(&binders[slot]))
-                            .collect::<Vec<_>>();
-                        parts.extend(columns);
+                let cells = vec![Some((shape.peel(), place))];
+                let (binders, slots) = self.alone(context, &mut line, cells);
+                let predecessor = binders[0];
+                let mut parts = slots
+                    .into_iter()
+                    .map(|slot| Term::free_var(&binders[slot]))
+                    .collect::<Vec<_>>();
+                parts.extend(columns);
 
-                        walk_awaited(context, awaits, |context| {
-                            split.successor(context, &predecessor, |context, expected| {
-                                arm(self, context, parts, line, expected)
-                            })
-                        })?;
-                    }
-                    _ => {
-                        walk_awaited(context, awaits, |context| {
-                            split.zero(context, |context, expected| {
-                                arm(self, context, columns, line, expected)
-                            })
-                        })?;
-                    }
-                }
+                walk_awaited(context, awaits, |context| {
+                    split.successor(context, &predecessor, |context, expected| {
+                        arm(self, context, parts, line, expected)
+                    })
+                })?;
             }
         }
 
@@ -2501,11 +2590,7 @@ fn refutations(pattern: &Pattern) -> usize {
         Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
             fields.iter().map(|(_, field)| refutations(field)).sum()
         }
-        Pattern::Bool(_)
-        | Pattern::Zero
-        | Pattern::Succ { .. }
-        | Pattern::Literal(_)
-        | Pattern::Character(_) => 1,
+        Pattern::Bool(_) | Pattern::Succ { .. } | Pattern::Literal(_) => 1,
         // A split for each byte, and one for the end.
         Pattern::Str(value) => value.len() + 1,
         // A split for each element, and one for a closed run's end.

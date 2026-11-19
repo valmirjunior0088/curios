@@ -5,8 +5,10 @@ use {
     super::*,
     crate::ELIDED,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::Sign,
     curios_core::{
-        Arm, Guard, Matrix, Pattern, Row, Telescope, TupleType, UniverseMetaId, UniverseParam,
+        Arm, Guard, Matrix, NumLit, Pattern, Row, Telescope, TupleType, UniverseMetaId,
+        UniverseParam,
     },
     std::sync::Arc,
 };
@@ -500,7 +502,10 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
                 vec![
                     Guard::Holds(over(x, flag.clone())),
                     Guard::Binds {
-                        pattern: Pattern::Zero,
+                        pattern: Pattern::Literal(NumLit::Number {
+                            magnitude: Natural::zero(),
+                            sign: Sign::Unmarked,
+                        }),
                         value: over(x, Term::free_var(&x)),
                     },
                 ],

@@ -82,11 +82,11 @@ fn a_text_dispatch_refuses_what_its_type_does_not_take() {
     for (declaration, refusal) in [
         (
             "let f(c: Char) -> Nat = match c | 97 => 1 | _ => 0 end;",
-            "takes a `Nat` or a `Byte` apart",
+            "takes a `Nat`, a `Byte` or a `Bool` apart",
         ),
         (
             "let f(c: Char) -> Nat = match c | 'a' => 1 | p + 1 => 0 end;",
-            "takes a `Nat` or a `Byte` apart",
+            "takes a `Nat` apart by its predecessor",
         ),
         (
             "let f(i: Int) -> Nat = match i | 'a' => 1 | _ => 0 end;",

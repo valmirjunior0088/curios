@@ -3,7 +3,7 @@
 //! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its rows' guards and their bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, and each guard a function over the binders written before it, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them, and a bind guard's pattern after them.
 
 use {
-    crate::{Atom, Mention, Term},
+    crate::{Atom, Mention, NumLit, Term},
     curios_common::Plicity,
     curios_num::Natural,
     std::{hash, iter},
@@ -147,17 +147,13 @@ pub enum Pattern {
         fields: Vec<(Option<String>, Pattern)>,
     },
     Bool(bool),
-    /// `0`.
-    Zero,
     /// `predecessor + step`, `step` successors over the predecessor: one at least, since `p + 0` is the binder `p`, which the parser and Core text's reader refuse to spell this way.
     Succ {
         predecessor: Slot,
         step: Natural,
     },
-    /// A dispatch literal spelled as a numeral.
-    Literal(Natural),
-    /// A dispatch literal spelled as the character whose scalar value it is.
-    Character(char),
+    /// A literal, a numeral with its sign or a character, as the term it spells is held: realized at its column's type as that term is at its expected one, so its key is what the column's carrier makes of it.
+    Literal(NumLit),
     /// A string literal, which takes a `Str` apart by its bytes.
     Str(String),
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
@@ -272,11 +268,7 @@ impl Pattern {
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()
             }
-            Pattern::Bool(_)
-            | Pattern::Zero
-            | Pattern::Literal(_)
-            | Pattern::Character(_)
-            | Pattern::Str(_) => 0,
+            Pattern::Bool(_) | Pattern::Literal(_) | Pattern::Str(_) => 0,
             Pattern::Succ { predecessor, .. } => predecessor.binders(),
             Pattern::List(elements) | Pattern::Bytes(elements) => elements.binders(),
         }

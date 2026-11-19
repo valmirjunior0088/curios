@@ -17,11 +17,11 @@ use {
         CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Elements, Field, FltLit,
         Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
         HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
-        ListEntry, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
-        NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm,
-        StrLit, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept,
-        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        ListEntry, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NumLit,
+        Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StrLit,
+        StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign,
+        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple,
+        TupleField, TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField,
         intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, FlatMatch, Writer, op_precedence, written_intrinsic},
@@ -495,18 +495,15 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Bool(true) => keyword(Keyword::True),
             MatchPattern::Char(character) => print_char_literal(character),
             MatchPattern::Str(literal) => print_string_literal(&literal),
-            MatchPattern::Nat(NatPattern::Zero) => pure("0"),
-            MatchPattern::Nat(NatPattern::Succ {
+            MatchPattern::Numeral(numeral) => pure(spelled_numeral(&numeral)),
+            MatchPattern::Successor {
                 pred_label,
                 step: NatLiteral(step, radix),
-            }) => flat([
+            } => flat([
                 self.binder(pred_label),
                 pure(" + "),
                 pure(format_radix(&step, radix)),
             ]),
-            MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => {
-                pure(format_radix(&n, radix))
-            }
             MatchPattern::List(elements) => self.run("[", elements),
             MatchPattern::Bytes(elements) => self.run("x[", elements),
         }
@@ -536,16 +533,27 @@ fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
         MatchPattern::Binder(_)
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
-        | MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_)) => true,
+        | MatchPattern::Numeral(_) => true,
         MatchPattern::Str(literal) => !literal.block,
         MatchPattern::Variant { args, .. } => args.is_empty(),
         MatchPattern::List(elements) | MatchPattern::Bytes(elements) => {
             matches!(elements, Elements::Closed(elements) if elements.is_empty())
         }
-        MatchPattern::Tuple(_)
-        | MatchPattern::Struct { .. }
-        | MatchPattern::Nat(NatPattern::Succ { .. }) => false,
+        MatchPattern::Tuple(_) | MatchPattern::Struct { .. } | MatchPattern::Successor { .. } => {
+            false
+        }
     }
+}
+
+/// A numeral as it is written: its sign, then its magnitude in the radix it was written in, the one spelling a term's numeral and a pattern's share.
+fn spelled_numeral(
+    NumLit {
+        magnitude,
+        radix,
+        sign,
+    }: &NumLit,
+) -> String {
+    format!("{}{}", sign.symbol(), format_radix(magnitude, *radix))
 }
 
 // Zero-padded to the width the literal was written at. A `digits` of `0` — a numeral the compiler minted — asks for no minimum, which is the natural width.
@@ -1361,15 +1369,7 @@ impl<D: Layout> TreePrinter<D> {
                     ])),
                 ]))
             }
-            Subterm::NumLit(NumLit {
-                magnitude,
-                radix,
-                sign,
-            }) => pure(format!(
-                "{}{}",
-                sign.symbol(),
-                format_radix(&magnitude, radix)
-            )),
+            Subterm::NumLit(numeral) => pure(spelled_numeral(&numeral)),
         };
         flat([body, suffix])
     }
