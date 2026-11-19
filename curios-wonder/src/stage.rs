@@ -7,15 +7,19 @@ use {
         Described, Diagnosis, Overlaid, Severity, Subject, declared_where, described_entry,
         described_unit, of_error, open, overlaid, tested_last,
     },
-    curios_common::Qualifier,
+    curios_common::{MAX_LINE_WIDTH, Qualifier},
     curios_core::{Anchors, Definitions, Global, Item},
+    curios_cps::held,
+    curios_emit::emitted_functions,
     curios_module::{Overlay, PreparedText, RootSource, SYNTAX, read_module},
     curios_pipeline::{Cache, EntryTail, Fold, Progress, Stage},
     curios_surface::{Entrypoint, FormScope, Module, Spellable, Spelling},
     curios_unit::Unit,
     curios_verdict::Verdicts,
+    curios_wasm::FuncName,
     std::{
-        collections::BTreeSet,
+        collections::{BTreeSet, HashSet},
+        iter,
         path::{Path, PathBuf},
         rc::Rc,
     },
@@ -39,8 +43,6 @@ pub enum Refusal {
     Diagnostics(Vec<Diagnosis>),
     /// A declaration's part at `core` is asked of a unit in scope, which keeps no lowering: asked of `file`, the one that holds it where one does, it is the subject's own.
     Kept { file: Option<PathBuf> },
-    /// A declaration's part is asked at a rung past a unit's, which the view does not reach yet.
-    PastCore,
 }
 
 /// `subject`'s representation at the rung `name`, compiled against its units and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
@@ -179,7 +181,7 @@ fn last_unit(
         .map_err(of_error)
 }
 
-/// What `wonder --name PATH --stage RUNG` reprints: the declaration `asked` names in `subject`'s scope, as `--name` describes it, and its part at the rung `name`, one a unit has ([`Stage::of_a_unit`]). `None` where nothing in scope is declared at `asked`.
+/// What `wonder --name PATH --stage RUNG` reprints: the declaration `asked` names in `subject`'s scope, as `--name` describes it, and its part at the rung `name`. `None` where nothing in scope is declared at `asked`.
 ///
 /// **A declaration's part is what its text holds at the rung**, the items a type's constructors and methods lower to among them. `text` is that text parsed and reprinted. `core` is the items it lowered to in the subject's own lowering, which only the subject keeps: a unit in scope keeps none, so a declaration of one is refused with the file that holds it ([`Refusal::Kept`]). `core-elab` is its items in the elaborated module of the unit that declares it, the subject's own compiled as the subject is. A part is printed by the printer that prints a whole module, narrowed to its items ([`Spelling::narrowed_to`]), so each reads as it reads in the whole.
 pub fn named_stage(
@@ -196,11 +198,11 @@ pub fn named_stage(
             asked: name.to_string(),
         });
     };
-    if !Stage::of_a_unit(name) {
-        return Err(Refusal::PastCore);
-    }
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = reached.as_ref().map(|cache| cache as &dyn Cache);
+    if !Stage::of_a_unit(name) {
+        return program_part(budget, subject, asked, name, overlay, through, progress);
+    }
 
     match subject.formed(overlay) {
         Subject::Unit { units } => {
@@ -321,6 +323,100 @@ impl Lowered<'_> {
             .map_err(of_error)
             .map_err(Refusal::Diagnostics)?
     }
+}
+
+/// The declaration's part of a rung past a unit's, read off the program `subject` compiles to, built as a build compiles it: from `anf` to `cps-optm`, what the rung holds of the declaration's lineages, each outermost function or continuation under the chain it stands in (`curios_anf::Part`, `curios_cps::Part`); at `wasm`, the Wasm functions the emitter made of them, named off the graph it was handed. Only a program has these rungs.
+fn program_part(
+    budget: u64,
+    subject: Subject,
+    asked: &Qualifier,
+    name: &str,
+    overlay: &Overlay,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<(Described, String)>, Refusal> {
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+        package,
+    } = subject.formed(overlay)
+    else {
+        return Err(Refusal::Unit);
+    };
+    let (entrypoint, loader) =
+        open(origin, declares, package.as_ref(), overlay).map_err(Refusal::Diagnostics)?;
+    let units = overlaid(units, overlay);
+    // Asked as a question reads the program, with its tests, then compiled as a build compiles it.
+    let loader = loader.tested();
+    let Some(described) = described_entry(
+        budget,
+        &units,
+        &entrypoint,
+        &loader,
+        asked,
+        through,
+        &mut *progress,
+    )
+    .map_err(Refusal::Diagnostics)?
+    else {
+        return Ok(None);
+    };
+    let loader = loader.built();
+    let declaration = Qualifier::from(
+        described
+            .path
+            .trim_start_matches('/')
+            .split('/')
+            .collect::<Vec<_>>(),
+    );
+
+    let mut part = None;
+    let mut names = HashSet::new();
+    let compiled = Fold::new(budget, &units, through).compile(
+        &entrypoint,
+        &loader,
+        |stage| match (stage, name) {
+            (Stage::Anf(module), "anf") | (Stage::AnfOptm(module), "anf-optm") => {
+                part = Some(module.part(declaration).to_string());
+            }
+            (Stage::Cps(module), "cps") | (Stage::CpsOptm(module), "cps-optm") => {
+                part = Some(module.part(declaration).to_string());
+            }
+            (Stage::CpsOptm(module), "wasm") => names = emitted_names(module, &declaration),
+            (Stage::Wasm(module), "wasm") => {
+                part = Some(module.part_within(&names, MAX_LINE_WIDTH).to_string());
+            }
+            _ => {}
+        },
+        &mut *progress,
+    );
+
+    // A rung reached is an answer whatever stops the program after it, as a whole rung is.
+    match (part, compiled) {
+        (Some(part), _) => Ok(Some((described, part))),
+        (None, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
+        (None, Ok(_)) => unreachable!("a compile that ends emits every rung"),
+    }
+}
+
+/// The Wasm functions the emitter makes of what `module` holds of the declaration at `declaration`: each function of its lineages, each heap twin with what the frame bound lifted into it, and each function a continuation of it stands in.
+fn emitted_names(module: &curios_cps::Module, declaration: &Qualifier) -> HashSet<FuncName> {
+    held(module)
+        .into_iter()
+        .filter(|(lineage, _)| lineage.declaration == *declaration)
+        .flat_map(|(_, held)| {
+            let twins = held
+                .twins
+                .into_iter()
+                .flat_map(|twin| iter::once(twin.function).chain(twin.lifted));
+            held.functions
+                .into_iter()
+                .chain(twins)
+                .chain(held.standing_in)
+        })
+        .flat_map(|function| emitted_functions(module, function))
+        .collect()
 }
 
 /// The declaration's text as its author wrote it, parsed and reprinted.

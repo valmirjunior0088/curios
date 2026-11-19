@@ -50,6 +50,7 @@ mod build;
 pub use build::{Builder, Declaring};
 
 mod print;
+pub use print::Part;
 use print::*;
 
 mod walk;

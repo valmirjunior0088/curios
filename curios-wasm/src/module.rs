@@ -10,10 +10,11 @@ mod test_support;
 use {
     super::{
         DataName, ElemName, Expr, FuncName, GlobalName, GlobalType, LocalName, MemName, MemType,
-        RecType, RefType, SubType, TableName, TableType, TypeName, ValType, print_module,
+        RecType, RefType, SubType, TableName, TableType, TypeName, ValType, print_func,
+        print_module,
     },
     curios_print::{run_printer, run_printer_within},
-    std::fmt,
+    std::{collections::HashSet, fmt},
 };
 
 /// An imported item: a function (typed by reference to a declared func type), a table, a memory, or a global. The name bound here is how the rest of the module refers to the item; the encoder gives imports the leading indices of their respective index spaces.
@@ -333,5 +334,30 @@ impl Module {
             }
         }
         Within(self, width)
+    }
+
+    /// The functions of this module `names` names, in the module's order, each printed as [`Module::display_within`] prints it within `width` columns and closed on a line of its own: a part of the module, whose types and the rest are read beside it in the whole.
+    pub fn part_within<'a>(
+        &'a self,
+        names: &'a HashSet<FuncName>,
+        width: usize,
+    ) -> impl fmt::Display + 'a {
+        struct Part<'a>(&'a Module, &'a HashSet<FuncName>, usize);
+        impl fmt::Display for Part<'_> {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let named = self
+                    .0
+                    .funcs()
+                    .iter()
+                    .filter(|(name, _)| self.1.contains(name));
+                for (name, func) in named {
+                    run_printer_within(print_func(self.0, name, func), formatter, 4, self.2)?;
+                    writeln!(formatter)?;
+                }
+
+                Ok(())
+            }
+        }
+        Part(self, names, width)
     }
 }

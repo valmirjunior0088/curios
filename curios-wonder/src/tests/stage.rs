@@ -199,10 +199,45 @@ fn a_declaration_in_scope_is_its_units_elaborated_part_and_has_no_core() {
     ));
 }
 
+/// A program reading `n` from its arguments, so nothing folds away: `count` a tail recursion the optimizer makes a loop of in its caller, and `fib` a recursion of two calls, which stays a function of its own.
+const RECURSIONS: &str = "use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
+
+let count(k: Nat, acc: Nat) -> Nat =
+    match k | 0 => acc | p + 1 => count(p, acc + p) end;
+
+let fib(n: Nat) -> Nat =
+    match n | 0 => 0 | p + 1 => match p | 0 => 1 | q + 1 => fib(p) + fib(q) end end;
+
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Proc/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), \"no input\")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => \"invalid utf-8\")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), \"bad input\")!;
+    let () = Fmt/print(\"%\\n\")(count(n, 0))!;
+    let () = Fmt/print(\"%\\n\")(fib(n))!;
+    Try/pure(());
+
+execute()
+";
+
+/// Past a unit's rungs, a declaration's part is what the rung holds of its lineages: a function kept on every rung prints on each, and a neighbour's code does not.
 #[test]
-fn a_declarations_part_is_not_asked_past_a_units_rungs() {
-    assert!(matches!(
-        part("anf", TWO, &["twice"]),
-        Err(crate::Refusal::PastCore)
-    ));
+fn each_rung_past_core_prints_the_declarations_part_and_nothing_else() {
+    for name in ["anf", "anf-optm", "cps", "cps-optm", "wasm"] {
+        let printed =
+            part(name, RECURSIONS, &["fib"]).unwrap_or_else(|_| panic!("{name} is answered"));
+
+        assert!(printed.contains("/fib"), "{name}: {printed}");
+        assert!(!printed.contains("/count"), "{name}: {printed}");
+    }
+}
+
+/// A declaration the optimizer made a loop of in its caller is answered at `cps-optm` with that loop, under the header of the function it stands in, and `…` for what that function's body holds besides.
+#[test]
+fn a_loop_made_of_a_declaration_is_answered_under_the_function_it_stands_in() {
+    let printed = part("cps-optm", RECURSIONS, &["count"]).expect("cps-optm is answered");
+
+    assert!(printed.contains("cont ~k"), "{printed}");
+    assert!(printed.contains("$/count("), "{printed}");
+    assert!(printed.contains("…"), "{printed}");
 }

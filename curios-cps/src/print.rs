@@ -8,6 +8,8 @@
 //!
 //! **Two deliberate spellings.** Every function owns a bodyless return continuation, and that sentinel is not printed: an edge to it is `return x` and a call whose `return_to` is it is `return ~f7(x)`, which is what makes a tail call legible where `-> ~k11` against a header forty lines away is not. And hints repeat at every reference, not only at definition sites — the scheme in `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md` requires them at definitions and does not forbid more, and a dump nobody scrolls back through is better off self-describing.
 //!
+//! **A part prints as the whole does, narrowed** ([`Module::part`]): the functions and continuations of one declaration's lineages, each outermost one as the binding it is, under the chain of functions and continuations it stands in, each of those by its header and a `…` for what its body holds besides — so a capture still reads as bound by the binder printed above it — and the header declaring the rows the part reaches.
+//!
 //! Equal modules print byte-identically. The renderer follows a chain of bindings in a loop and recurses, under `recurse`, into what a node binds, so a deep module is printed on a stack that grows for it; indentation saturates at a fixed depth so output stays linear in module size rather than quadratic in nesting.
 
 #[cfg(test)]
@@ -20,7 +22,7 @@ use {
         ValueId,
     },
     curios_abi::Namespace,
-    curios_common::{grown, recurse},
+    curios_common::{Qualifier, grown, recurse},
     curios_num::Rounding,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -30,7 +32,7 @@ use {
 
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let reach = Reach::of(self);
+        let reach = Reach::of(self, self.live_nodes().map(|(_, node)| node));
         let uses = self.value_use_counts();
         grown(|| {
             Printer {
@@ -57,12 +59,13 @@ struct Reach {
 }
 
 impl Reach {
-    fn of(module: &Module) -> Self {
+    /// The rows `nodes` reach, and those the rows they name reach in turn.
+    fn of<'n>(module: &Module, nodes: impl Iterator<Item = &'n Node>) -> Self {
         let mut rows = BTreeSet::new();
         let mut work = Vec::new();
 
         // Exhaustive rather than a wildcard, so a node variant that learns to name a row cannot reach the printer while silently missing this walk.
-        for (_, node) in module.live_nodes() {
+        for node in nodes {
             match node {
                 Node::LetValue { value, .. } => match value {
                     ValueExpr::Row(row, _) | ValueExpr::Rebuilt { row, .. } => work.push(*row),
@@ -106,6 +109,168 @@ impl Reach {
     }
 }
 
+// === A part ==================================================================
+
+/// What a module holds of one declaration's text, printed as the module prints, narrowed: see the module documentation.
+pub struct Part<'m> {
+    module: &'m Module,
+    declaration: Qualifier,
+}
+
+impl Module {
+    /// What this module holds of the text of the declaration at `declaration`, by the lineage each function and continuation carries, as a printable part of it.
+    pub fn part(&self, declaration: Qualifier) -> Part<'_> {
+        Part {
+            module: self,
+            declaration,
+        }
+    }
+}
+
+impl fmt::Display for Part<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let module = self.module;
+        let shown = Shown::of(module, &self.declaration);
+        let reached = shown.reached(module);
+        let reach = Reach::of(module, reached.iter().filter_map(|&node| module.node(node)));
+        let uses = module.value_use_counts();
+        grown(|| {
+            Printer {
+                module,
+                reach: &reach,
+                uses: &uses,
+                out: f,
+            }
+            .part(&shown)
+        })
+    }
+}
+
+/// A function or a continuation: what the lexical tree binds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Bound {
+    Function(FunctionId),
+    Continuation(ContinuationId),
+}
+
+/// Which bindings a part prints whole, its roots, and which by their header alone, the chain each root stands in.
+struct Shown {
+    roots: BTreeSet<Bound>,
+    chain: BTreeSet<Bound>,
+}
+
+impl Shown {
+    fn of(module: &Module, declaration: &Qualifier) -> Self {
+        // What binds each binding: the function or continuation whose own body holds the group it is bound in.
+        let mut binders = BTreeMap::new();
+        for (id, function) in module.live_functions() {
+            let mut work = vec![(function.body, Bound::Function(id))];
+            while let Some((node, holder)) = work.pop() {
+                match module.node(node) {
+                    Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => {
+                        work.push((*next, holder));
+                    }
+                    Some(Node::LetFun { functions, body }) => {
+                        binders.extend(
+                            functions
+                                .iter()
+                                .map(|&bound| (Bound::Function(bound), holder)),
+                        );
+                        work.push((*body, holder));
+                    }
+                    Some(Node::LetCont {
+                        continuations,
+                        body,
+                    }) => {
+                        for &continuation in continuations {
+                            binders.insert(Bound::Continuation(continuation), holder);
+                            if let Some(definition) = module.continuation(continuation) {
+                                work.push((definition.body, Bound::Continuation(continuation)));
+                            }
+                        }
+                        work.push((*body, holder));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let lineage = |bound: Bound| match bound {
+            Bound::Function(id) => module.function(id).and_then(|function| function.lineage),
+            Bound::Continuation(id) => module
+                .continuation(id)
+                .and_then(|continuation| continuation.lineage),
+        };
+        let of_part = |bound: Bound| {
+            lineage(bound).is_some_and(|lineage| lineage.declaration == *declaration)
+        };
+        let above = |bound: Bound| {
+            std::iter::successors(binders.get(&bound).copied(), |up| binders.get(up).copied())
+        };
+
+        let bound = module
+            .live_functions()
+            .map(|(id, _)| Bound::Function(id))
+            .chain(
+                module
+                    .live_continuations()
+                    .map(|(id, _)| Bound::Continuation(id)),
+            );
+        let roots = bound
+            .filter(|&bound| of_part(bound) && !above(bound).any(of_part))
+            .collect::<BTreeSet<_>>();
+        let chain = roots.iter().flat_map(|&root| above(root)).collect();
+
+        Self { roots, chain }
+    }
+
+    /// Every node a root holds, nested bindings and all: what the part's header is declared for.
+    fn reached(&self, module: &Module) -> BTreeSet<NodeId> {
+        let mut reached = BTreeSet::new();
+        let mut work = self
+            .roots
+            .iter()
+            .filter_map(|root| match *root {
+                Bound::Function(id) => module.function(id).map(|function| function.body),
+                Bound::Continuation(id) => module
+                    .continuation(id)
+                    .map(|continuation| continuation.body),
+            })
+            .collect::<Vec<_>>();
+        while let Some(node) = work.pop() {
+            if !reached.insert(node) {
+                continue;
+            }
+            match module.node(node) {
+                Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => {
+                    work.push(*next)
+                }
+                Some(Node::LetFun { functions, body }) => {
+                    work.extend(
+                        functions
+                            .iter()
+                            .filter_map(|&id| Some(module.function(id)?.body)),
+                    );
+                    work.push(*body);
+                }
+                Some(Node::LetCont {
+                    continuations,
+                    body,
+                }) => {
+                    work.extend(
+                        continuations
+                            .iter()
+                            .filter_map(|&id| Some(module.continuation(id)?.body)),
+                    );
+                    work.push(*body);
+                }
+                _ => {}
+            }
+        }
+
+        reached
+    }
+}
+
 // === The walk ================================================================
 
 /// What the lexical walk has already printed. A well-formed module leaves nothing out, and what is left over is printed anyway rather than dropped, because this printer is read while debugging modules that do not verify.
@@ -124,6 +289,116 @@ struct Printer<'m, 'a, 'f, 'o> {
 }
 
 impl Printer<'_, '_, '_, '_> {
+    /// A part: the header the part reaches, then, from the entry down, each root whole under the headers of its chain.
+    fn part(&mut self, shown: &Shown) -> fmt::Result {
+        let declared = self.header()?;
+        let mut seen = Seen::default();
+
+        if let Some(entry) = self.module.entry() {
+            if declared && !shown.roots.is_empty() {
+                writeln!(self.out)?;
+            }
+            self.part_function("entry", entry, ";", shown, &mut seen, 0)?;
+        }
+
+        Ok(())
+    }
+
+    /// `id`'s binding in a part: whole where it is a root, its header and the part of its body where it is on a root's chain, and nothing otherwise.
+    fn part_function(
+        &mut self,
+        keyword: &str,
+        id: FunctionId,
+        suffix: &'static str,
+        shown: &Shown,
+        seen: &mut Seen,
+        indent: usize,
+    ) -> fmt::Result {
+        let bound = Bound::Function(id);
+        if shown.roots.contains(&bound) {
+            return self.binding(keyword, id, suffix, seen, indent);
+        }
+        let Some(definition) = self
+            .module
+            .function(id)
+            .filter(|_| shown.chain.contains(&bound))
+        else {
+            return Ok(());
+        };
+        let head = format!(
+            "{keyword} {}{}{} =",
+            id,
+            hint(&definition.debug_name),
+            self.params(None, &definition.params)
+        );
+        self.line(indent, head)?;
+        self.part_chain(
+            definition.body,
+            Some(definition.return_cont),
+            shown,
+            seen,
+            indent + 1,
+        )
+    }
+
+    /// The part of the chain of bindings from `id`: each binding the part prints, then `…` for the rest, which holds at least the transfer that closes the chain.
+    fn part_chain(
+        &mut self,
+        mut id: NodeId,
+        ret: Option<ContinuationId>,
+        shown: &Shown,
+        seen: &mut Seen,
+        indent: usize,
+    ) -> fmt::Result {
+        let module = self.module;
+
+        loop {
+            id = match module.node(id) {
+                Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => *next,
+                Some(Node::LetFun { functions, body }) => {
+                    for &function in functions {
+                        self.part_function("let", function, ";", shown, seen, indent)?;
+                    }
+                    *body
+                }
+                Some(Node::LetCont {
+                    continuations,
+                    body,
+                }) => {
+                    for &continuation in continuations {
+                        let bound = Bound::Continuation(continuation);
+                        if shown.roots.contains(&bound) {
+                            self.continuation_binding(
+                                "cont",
+                                continuation,
+                                ";",
+                                ret,
+                                seen,
+                                indent,
+                            )?;
+                        } else if let Some(definition) = module
+                            .continuation(continuation)
+                            .filter(|_| shown.chain.contains(&bound))
+                        {
+                            let head = format!(
+                                "cont {}{}{} =",
+                                continuation,
+                                hint(&definition.debug_name),
+                                self.params(Some(continuation), &definition.params)
+                            );
+                            self.line(indent, head)?;
+                            self.part_chain(definition.body, ret, shown, seen, indent + 1)?;
+                        }
+                    }
+                    *body
+                }
+                _ => break,
+            };
+        }
+
+        self.line(indent, "…")
+    }
+
     fn print(&mut self) -> fmt::Result {
         let declared = self.header()?;
         let mut seen = Seen::default();
@@ -315,23 +590,14 @@ impl Printer<'_, '_, '_, '_> {
                         let keyword = if index == 0 { "cont" } else { "and" };
                         let last = index + 1 == continuations.len();
                         let closing = if last { ";" } else { "" };
-                        seen.continuations.insert(continuation);
-                        match module.continuation(continuation) {
-                            Some(definition) => {
-                                let head = format!(
-                                    "{keyword} {}{}{} =",
-                                    continuation,
-                                    hint(&definition.debug_name),
-                                    self.params(Some(continuation), &definition.params)
-                                );
-                                self.line(indent, head)?;
-                                self.node(seen, definition.body, ret, closing, indent + 1)?;
-                            }
-                            None => self.line(
-                                indent,
-                                format!("{keyword} <missing {continuation}>{closing}"),
-                            )?,
-                        }
+                        self.continuation_binding(
+                            keyword,
+                            continuation,
+                            closing,
+                            ret,
+                            seen,
+                            indent,
+                        )?;
                     }
                     *body
                 }
@@ -440,6 +706,34 @@ impl Printer<'_, '_, '_, '_> {
                 Node::Unreachable => return self.line(indent, format!("unreachable{suffix}")),
             };
         }
+    }
+
+    /// One continuation's definition at `indent`, headed by `keyword`, `cont` or `and`.
+    fn continuation_binding(
+        &mut self,
+        keyword: &str,
+        continuation: ContinuationId,
+        closing: &'static str,
+        ret: Option<ContinuationId>,
+        seen: &mut Seen,
+        indent: usize,
+    ) -> fmt::Result {
+        seen.continuations.insert(continuation);
+        let Some(definition) = self.module.continuation(continuation) else {
+            return self.line(
+                indent,
+                format!("{keyword} <missing {continuation}>{closing}"),
+            );
+        };
+        let head = format!(
+            "{keyword} {}{}{} =",
+            continuation,
+            hint(&definition.debug_name),
+            self.params(Some(continuation), &definition.params)
+        );
+        self.line(indent, head)?;
+
+        self.node(seen, definition.body, ret, closing, indent + 1)
     }
 
     /// The return this edge is, if it is one. The single statement of what an edge to the sentinel prints as, so the transfer and the switch arm cannot drift apart about it.

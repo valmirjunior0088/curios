@@ -6,6 +6,8 @@
 //!
 //! **The dump is faithful**, which fixes the boundary the rule stops at: faithful forbids *hiding*, not *not repeating*. Nothing here inlines a single-use binding, folds a constant, reorders a statement or drops dead code — a binding nothing reads prints as `let _ = …;`, which is how dead code announces itself rather than how it disappears. Two things are not printed, and both are absences rather than elisions: `Function::role` says where a function came from, read by one optimizer pass's copy budget and by the marks a sealed program is given, by no verifier, by no semantics and by no lowering (it does not exist in `curios-cps`), so it is not part of the program; and a `_` binder is what a hintless value with no uses *is*, following `curios-core`'s own rule for an unreferenced unnameable binder.
 //!
+//! **A part prints as the whole does, narrowed** ([`Module::part`]): the functions of one declaration's lineages, each outermost one as the binding it is, under the chain of functions it stands in — an item, the entry or a function — each of those by its header and a `…` for what its body holds besides, and the header declaring what the part reaches.
+//!
 //! Identities are spelled by the naming scheme shared with `curios-cps` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md` — `~{kind}{index}`, with the stored debug name appended as `$hint`. The scheme requires the hint at definition sites; this printer also repeats it at every reference, deliberately, so a use far from its binder stays self-describing in a dump nobody scrolls back through. Constants print inline as literals, carrier and all (`2`, `2:int`, `7:byte`), for the reason scalar operations print named (`Nat/add`, never `+`): ANF keeps its shapes distinct and has no types left to recover a carrier from, so the spelling is where the carrier lives.
 //!
 //! Equal modules print byte-identically, so a diff reads without cross-referencing arenas. The renderer recurses as the blocks nest, under `recurse`, so a deep module is printed on a stack that grows for it; indentation saturates at a fixed depth so the output stays linear in module size instead of quadratic in nesting depth.
@@ -21,7 +23,7 @@ use {
         Statement, StatementId, SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
-    curios_common::{grown, recurse},
+    curios_common::{Qualifier, grown, recurse},
     curios_num::Rounding,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -31,7 +33,11 @@ use {
 
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let reach = Reach::of(self);
+        let reach = Reach::of(
+            self,
+            self.entry().into_iter().collect(),
+            self.items().to_vec(),
+        );
         let uses = Analysis::analyze(self);
         grown(|| {
             Printer {
@@ -64,7 +70,8 @@ struct Reach {
 }
 
 impl Reach {
-    fn of(module: &Module) -> Self {
+    /// What `blocks` and `statements` reach, and what the shapes they name reach in turn.
+    fn of(module: &Module, mut blocks: Vec<BlockId>, mut statements: Vec<StatementId>) -> Self {
         let mut reach = Self {
             products: BTreeSet::new(),
             families: BTreeSet::new(),
@@ -73,8 +80,6 @@ impl Reach {
             ambiguous_fields: BTreeSet::new(),
         };
 
-        let mut blocks: Vec<BlockId> = module.entry().into_iter().collect();
-        let mut statements: Vec<StatementId> = module.items().to_vec();
         let mut seen_blocks = BTreeSet::new();
         loop {
             if let Some(id) = statements.pop() {
@@ -253,6 +258,209 @@ impl Reach {
 
 // === The renderer ============================================================
 
+// === A part ==================================================================
+
+/// What a module holds of one declaration's text, printed as the module prints, narrowed: see the module documentation.
+pub struct Part<'m> {
+    module: &'m Module,
+    declaration: Qualifier,
+}
+
+impl Module {
+    /// What this module holds of the text of the declaration at `declaration`, by the lineage each function carries, as a printable part of it.
+    pub fn part(&self, declaration: Qualifier) -> Part<'_> {
+        Part {
+            module: self,
+            declaration,
+        }
+    }
+}
+
+impl fmt::Display for Part<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let module = self.module;
+        let shown = Shown::of(module, &self.declaration);
+        let roots = shown
+            .roots
+            .iter()
+            .filter_map(|&root| Some(module.function(root)?.body))
+            .collect();
+        let reach = Reach::of(module, roots, Vec::new());
+        let uses = Analysis::analyze(module);
+        grown(|| {
+            Printer {
+                module,
+                reach: &reach,
+                uses: &uses,
+                out: f,
+            }
+            .part(&shown)
+        })
+    }
+}
+
+/// What a function is bound under: a module item, the entry, or another function's body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Holder {
+    Item,
+    Entry,
+    Function(FunctionId),
+}
+
+/// Which functions a part prints whole, its roots, and which by their header alone, the chain each root stands in, with what each is bound under.
+struct Shown {
+    roots: BTreeSet<FunctionId>,
+    chain: BTreeSet<FunctionId>,
+    under: BTreeSet<Holder>,
+}
+
+impl Shown {
+    fn of(module: &Module, declaration: &Qualifier) -> Self {
+        let mut binders = BTreeMap::new();
+        let mut work = module
+            .items()
+            .iter()
+            .map(|&item| (Some(item), None, Holder::Item))
+            .chain(
+                module
+                    .entry()
+                    .map(|entry| (None, Some(entry), Holder::Entry)),
+            )
+            .collect::<Vec<_>>();
+        for (id, function) in module.functions().iter().enumerate() {
+            if let Some(function) = function {
+                work.push((
+                    None,
+                    Some(function.body),
+                    Holder::Function(FunctionId(id as u32)),
+                ));
+            }
+        }
+        while let Some((statement, block, holder)) = work.pop() {
+            if let Some(block) = block.and_then(|block| module.block(block)) {
+                work.extend(
+                    block
+                        .statements
+                        .iter()
+                        .map(|&statement| (Some(statement), None, holder)),
+                );
+            }
+            let functions = match statement.and_then(|statement| module.statement(statement)) {
+                Some(Statement::Functions { functions }) => functions.clone(),
+                Some(Statement::Rec { group }) => module
+                    .rec_group(*group)
+                    .map(|group| {
+                        work.extend(
+                            group
+                                .values
+                                .iter()
+                                .map(|member| (None, Some(member.init), holder)),
+                        );
+                        group.functions.clone()
+                    })
+                    .unwrap_or_default(),
+                Some(Statement::Let { rhs, .. }) => {
+                    work.extend(
+                        rhs.sub_blocks()
+                            .into_iter()
+                            .map(|block| (None, Some(block), holder)),
+                    );
+                    Vec::new()
+                }
+                None => Vec::new(),
+            };
+            binders.extend(functions.into_iter().map(|function| (function, holder)));
+        }
+        let of_part = |function: FunctionId| {
+            module
+                .function(function)
+                .and_then(|function| function.lineage)
+                .is_some_and(|lineage| lineage.declaration == *declaration)
+        };
+        let above = |function: FunctionId| {
+            std::iter::successors(binders.get(&function).copied(), |holder| match holder {
+                Holder::Function(up) => binders.get(up).copied(),
+                Holder::Item | Holder::Entry => None,
+            })
+        };
+
+        let roots = binders
+            .keys()
+            .copied()
+            .filter(|&function| {
+                of_part(function)
+                    && !above(function)
+                        .any(|holder| matches!(holder, Holder::Function(up) if of_part(up)))
+            })
+            .collect::<BTreeSet<_>>();
+        let held = roots
+            .iter()
+            .flat_map(|&root| above(root))
+            .collect::<Vec<_>>();
+        let chain = held
+            .iter()
+            .filter_map(|holder| match holder {
+                Holder::Function(function) => Some(*function),
+                Holder::Item | Holder::Entry => None,
+            })
+            .collect();
+        let under = roots
+            .iter()
+            .filter_map(|root| binders.get(root).copied())
+            .chain(held)
+            .collect::<Vec<_>>();
+
+        Self {
+            roots,
+            chain,
+            under: under
+                .into_iter()
+                .filter(|holder| !matches!(holder, Holder::Function(_)))
+                .collect(),
+        }
+    }
+
+    fn printed(&self, function: FunctionId) -> bool {
+        self.roots.contains(&function) || self.chain.contains(&function)
+    }
+}
+
+/// Whether `id`, or a block it holds, binds a function the part prints.
+fn binds_printed(module: &Module, id: StatementId, shown: &Shown) -> bool {
+    let mut statements = vec![id];
+    while let Some(id) = statements.pop() {
+        let functions = match module.statement(id) {
+            Some(Statement::Functions { functions }) => functions.clone(),
+            Some(Statement::Rec { group }) => module
+                .rec_group(*group)
+                .map(|group| group.functions.clone())
+                .unwrap_or_default(),
+            Some(Statement::Let { rhs, .. }) => {
+                for block in rhs.sub_blocks() {
+                    statements.extend(
+                        module
+                            .block(block)
+                            .into_iter()
+                            .flat_map(|block| block.statements.iter().copied()),
+                    );
+                }
+                Vec::new()
+            }
+            None => Vec::new(),
+        };
+        if functions
+            .into_iter()
+            .any(|function| shown.printed(function))
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+// === The walk ================================================================
+
 struct Printer<'m, 'a, 'f, 'o> {
     module: &'m Module,
     reach: &'a Reach,
@@ -261,7 +469,89 @@ struct Printer<'m, 'a, 'f, 'o> {
 }
 
 impl Printer<'_, '_, '_, '_> {
-    fn print(&mut self) -> fmt::Result {
+    /// A part: the declarations the part reaches, then each root whole under the headers of its chain — the items, then the entry.
+    fn part(&mut self, shown: &Shown) -> fmt::Result {
+        self.declarations()?;
+        if shown.under.contains(&Holder::Item) {
+            for &item in self.module.items() {
+                self.part_statement(item, shown, 0)?;
+            }
+        }
+        if let Some(entry) = self
+            .module
+            .entry()
+            .filter(|_| shown.under.contains(&Holder::Entry))
+        {
+            self.line(0, "entry =")?;
+            self.part_body(entry, shown, 0)?;
+        }
+
+        Ok(())
+    }
+
+    /// The functions `id` binds, or a block it holds binds, that a part prints: each root whole, and each function on a chain by its header, then the part of its body.
+    fn part_statement(&mut self, id: StatementId, shown: &Shown, indent: usize) -> fmt::Result {
+        let module = self.module;
+        let functions = match module.statement(id) {
+            Some(Statement::Functions { functions }) => functions.clone(),
+            Some(Statement::Rec { group }) => module
+                .rec_group(*group)
+                .map(|group| group.functions.clone())
+                .unwrap_or_default(),
+            Some(Statement::Let { rhs, .. }) => {
+                for block in rhs.sub_blocks() {
+                    self.part_blocks(block, shown, indent)?;
+                }
+                return Ok(());
+            }
+            None => return Ok(()),
+        };
+        for function in functions {
+            if shown.roots.contains(&function) {
+                self.group(indent, "let", &[function], &[])?;
+            } else if let Some(definition) = module
+                .function(function)
+                .filter(|_| shown.chain.contains(&function))
+            {
+                let head = format!(
+                    "let {}{} =",
+                    self.function(function),
+                    self.params(&definition.params)
+                );
+                self.line(indent, head)?;
+                self.part_body(definition.body, shown, indent)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The part of a block, one level deeper than `indent`, then `…` for its tail and whatever else it holds.
+    fn part_body(&mut self, block: BlockId, shown: &Shown, indent: usize) -> fmt::Result {
+        self.part_blocks(block, shown, indent + 1)?;
+
+        self.line(indent + 1, "…")
+    }
+
+    /// The functions a part prints that `block` and the blocks it holds bind, at `indent`.
+    fn part_blocks(&mut self, block: BlockId, shown: &Shown, indent: usize) -> fmt::Result {
+        let module = self.module;
+        recurse(|| {
+            let Some(contents) = module.block(block) else {
+                return Ok(());
+            };
+            for &id in &contents.statements {
+                if binds_printed(module, id, shown) {
+                    self.part_statement(id, shown, indent)?;
+                }
+            }
+
+            Ok(())
+        })
+    }
+
+    /// The nominal declarations, schemas, families and foreign rows, that what is printed reaches.
+    fn declarations(&mut self) -> fmt::Result {
         for (index, schema) in self.module.products().iter().enumerate() {
             let id = ProductId(index as u32);
             if !self.reach.products.contains(&id) {
@@ -322,6 +612,11 @@ impl Printer<'_, '_, '_, '_> {
             }
             self.line(0, format!("foreign {id} {}/{}", Namespace::Ffi, row.name()))?;
         }
+        Ok(())
+    }
+
+    fn print(&mut self) -> fmt::Result {
+        self.declarations()?;
 
         for &item in self.module.items() {
             self.statement(item, true, 0)?;

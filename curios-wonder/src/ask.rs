@@ -618,7 +618,7 @@ pub fn wonder_stage(
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-        Err(Refusal::Kept { .. } | Refusal::PastCore) => {
+        Err(Refusal::Kept { .. }) => {
             unreachable!("a whole program's rung is asked of no declaration")
         }
     }
@@ -633,6 +633,10 @@ pub fn wonder_named_stage(
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
+    let refusal = match &scope {
+        Scope::Program(program) => Some(not_a_program(program.entry())),
+        Scope::Library(_) | Scope::Prelude => None,
+    };
     let staged = scope
         .asked()?
         .named_staged(budget, &Overlay::default(), path, name, telling);
@@ -668,19 +672,10 @@ pub fn wonder_named_stage(
             }
             .into())
         }
-        Err(Refusal::PastCore) => Err(Refused::of("not a unit's rung")
-            .stating(format_args!(
-                "beside `--name`, `--stage` reaches {}",
-                Stage::NAMES
-                    .into_iter()
-                    .filter(|name| Stage::of_a_unit(name))
-                    .map(|name| format!("`{name}`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))
-            .about_named("--stage")
+        // Whoever admits a scope at a rung past a unit's admits a program alone.
+        Err(Refusal::Unit) => Err(refusal
+            .expect("a rung past a unit's is asked of a program")
             .into()),
-        Err(Refusal::Unit) => unreachable!("a declaration's part is asked of any scope"),
     }
 }
 
@@ -719,7 +714,7 @@ fn library_stage(
         // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
         Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-        Err(Refusal::Kept { .. } | Refusal::PastCore) => {
+        Err(Refusal::Kept { .. }) => {
             unreachable!("a whole library's rung is asked of no declaration")
         }
     }

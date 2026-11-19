@@ -44,6 +44,7 @@ mod sharing;
 use sharing::*;
 
 mod print;
+pub use print::Part;
 
 mod rebuild;
 pub use rebuild::rebuild_in_place;

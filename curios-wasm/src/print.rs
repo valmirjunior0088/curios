@@ -752,7 +752,7 @@ fn print_bindings<'a>(
     }
 }
 
-fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -> Printer {
+pub fn print_func<'a>(module: &'a Module, func_name: &'a FuncName, func: &'a Func) -> Printer {
     let func_type = module
         .get_type(&func.type_name)
         .and_then(|sub_type| sub_type.func_type())
