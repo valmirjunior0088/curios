@@ -20,12 +20,12 @@
 
 use {
     super::{
-        Certificate, Fact, Facts, Split, Target, add, eliminate, global, in_scope, literal,
-        multiply, order, qed, solved, split,
+        Certificate, Disjunction, Fact, Facts, Split, Target, add, eliminate, global, in_scope,
+        literal, multiply, order, qed, solved, split,
     },
     crate::{Context, answered_guard},
     curios_algebra::{Carrier, Operation},
-    curios_common::Plicity,
+    curios_common::{Plicity, recurse},
     curios_core::{Intrinsic, Subterm, Term},
     curios_num::{Integer, Natural},
 };
@@ -36,6 +36,67 @@ pub enum Written {
     Proof(Term),
     /// A name the proof applies is not in scope: inside `/std`, an item compiled before the vocabulary.
     Unwritten,
+}
+
+/// The proof of the disjunction `tree`, from `last`, a proof of its last side written where every other side fails: a split on each other side in turn, left to right, whose arm where the side holds proves the disjunction from it by `or/of_first` and `or/of_second` up the tree, and whose arm where it fails holds the next split, the last of them holding `last`.
+pub fn disjoined(context: &mut Context, tree: &Disjunction, last: Term) -> Term {
+    match tree {
+        Disjunction::Side(_) => last,
+        Disjunction::Or { left, right, .. } => {
+            let (first, second) = (left.decision().clone(), right.decision().clone());
+            let fails = Term::apply(
+                global(context.syntax().entailment.or_second),
+                [
+                    first.clone(),
+                    second.clone(),
+                    recurse(|| disjoined(context, right, last)),
+                ],
+            );
+            let or_first = context.syntax().entailment.or_first;
+            each_side(
+                context,
+                left,
+                &|proof: Term| {
+                    Term::apply(global(or_first), [first.clone(), second.clone(), proof])
+                },
+                fails,
+            )
+        }
+    }
+}
+
+/// `holds` of a proof of `tree` where one of its sides holds, split on each side left to right, and `fails` where every side fails.
+fn each_side(
+    context: &mut Context,
+    tree: &Disjunction,
+    holds: &dyn Fn(Term) -> Term,
+    fails: Term,
+) -> Term {
+    match tree {
+        Disjunction::Side(side) => {
+            let qed = qed(context);
+            split(context, side, fails, holds(qed))
+        }
+        Disjunction::Or { left, right, .. } => {
+            let entailment = context.syntax().entailment;
+            let (first, second) = (left.decision().clone(), right.decision().clone());
+            let (or_first, or_second) = (entailment.or_first, entailment.or_second);
+            let by_second = |proof: Term| {
+                holds(Term::apply(
+                    global(or_second),
+                    [first.clone(), second.clone(), proof],
+                ))
+            };
+            let fails = recurse(|| each_side(context, right, &by_second, fails));
+            let by_first = |proof: Term| {
+                holds(Term::apply(
+                    global(or_first),
+                    [first.clone(), second.clone(), proof],
+                ))
+            };
+            recurse(|| each_side(context, left, &by_first, fails))
+        }
+    }
 }
 
 /// The proof `certificate` stands for over `facts`, the goal where there is one, and what its negation states.

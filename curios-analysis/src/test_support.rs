@@ -125,6 +125,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         and_first: name(&["std", "Bool", "and", "first"]),
         and_second: name(&["std", "Bool", "and", "second"]),
         and_both: name(&["std", "Bool", "and", "both"]),
+        or_first: name(&["std", "Bool", "or", "of_first"]),
+        or_second: name(&["std", "Bool", "or", "of_second"]),
         nat: OrderSyntax {
             add: name(&["std", "Nat", "le", "add"]),
             scale: name(&["std", "Nat", "le", "mul_mono_r"]),

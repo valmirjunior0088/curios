@@ -13,6 +13,7 @@
 //! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
 //! - An empty proposition the facts refute: a bound at `False`, which is what a contradiction arm's `proved(@False)` asks for.
 //! - A conjunction of any of these, conjunct by conjunct, the proofs joined by `and/both` ([`conjoined`]).
+//! - A disjunction of comparisons, refuted whole: every side but the last read as failing and the last the goal, the proof split on each side in turn ([`disjoined`]).
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
@@ -60,6 +61,8 @@ enum Goal {
     Decision(Term),
     /// A proposition with no constructor: the facts must refute each other.
     Absurd,
+    /// `Holds(e)` of a disjunction `e`: refuted whole, its last side the goal and every other side's failure a fact.
+    Disjunction(Disjunction),
 }
 
 /// The goal `reduced` states, or `None` for a proposition the procedure reads nothing in.
@@ -112,6 +115,16 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
     {
         return conjoined(context, bound, reduced, &first, &second);
     }
+    // A disjunction is refuted whole, as `omega` refutes a goal's negation: the sides' failures are read together and the proof splits on each side in turn.
+    let goal = match goal {
+        Some(Goal::Decision(decision)) => {
+            match disjunction(context, stated.as_ref().unwrap_or(&decision))? {
+                Some(tree) => Some(Goal::Disjunction(tree)),
+                None => Some(Goal::Decision(decision)),
+            }
+        }
+        goal => goal,
+    };
 
     let entailed = context.with_entailing(|context| {
         if let Some(proof) = stated_by_a_fact(context, bound)? {
@@ -235,6 +248,26 @@ fn linear(
             None => return Ok(Entailed::Refused(Refusal::default())),
         },
         Goal::Absurd => None,
+        // Its last side is the goal and every other side's failure a fact, each read as a guard's false arm is; a side that is no comparison of the fragment leaves the disjunction no goal of it.
+        Goal::Disjunction(tree) => {
+            let entailment = context.syntax().entailment;
+            if !in_scope(context, &[entailment.or_first, entailment.or_second]) {
+                return Ok(Entailed::Refused(Refusal::default()));
+            }
+            let sides = tree.sides();
+            let Some((&last, others)) = sides.split_last() else {
+                return Ok(Entailed::Refused(Refusal::default()));
+            };
+            let Some(target) = reader.target(context, Some(last), last)? else {
+                return Ok(Entailed::Refused(Refusal::default()));
+            };
+            for side in others {
+                if !reader.failing(context, side)? {
+                    return Ok(Entailed::Refused(Refusal::default()));
+                }
+            }
+            Some(target)
+        }
     };
     let mut facts = reader.collect(context, target.as_ref())?;
     // What a refutation sums beside the facts: the other order of a `<` or a `<=`, the equation's two bounds of a `!=`, and of an `==` nothing, its disequality being the first split.
@@ -316,7 +349,15 @@ fn linear(
         Ok(certificate) => certificate,
         Err(outcome) => return refused(context, &views, outcome),
     };
-    let written = write(context, &facts, target.as_ref(), &negated, &certificate);
+    let written = match (
+        goal,
+        write(context, &facts, target.as_ref(), &negated, &certificate),
+    ) {
+        (Goal::Disjunction(tree), Written::Proof(last)) => {
+            Written::Proof(disjoined(context, tree, last))
+        }
+        (_, written) => written,
+    };
     let candidate = match written {
         // In one spelling: the operands a proof names come from the bound and the hypotheses as stated, where an operator's witness may still stand as the metavariable its resolution solved, and from the reducts the facts were read through, where it is the witness. A fold pairs by identity — Euclid's recombination pairs a quotient with a remainder of one dividend — so a proof naming one call both ways would not check.
         Written::Proof(candidate) => named_members(

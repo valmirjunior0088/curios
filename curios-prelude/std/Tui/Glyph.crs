@@ -69,12 +69,7 @@ pub let of_char(c: Char, @drawn: Bool/Holds(printable(c))) -> Glyph =
 -- The glyph of the character `code` of the Control Pictures block, which is printable: every code of the block lies past the C1 controls and below the surrogates. The block is drawn one column wide.
 let pictured(code: Nat, @block: Bool/Holds(0x2400 <= code && code < 0x2440)) -> Glyph =
     let shown = Char { code = code, @valid = Char/Valid/below_surrogates(code, proved()) };
-    let drawn: Bool/Holds(printable(shown)) =
-        Bool/and/both(
-            0x20 <= code,
-            code < 0x7F || 0x9F < code,
-            proved(),
-            Bool/or/of_second(code < 0x7F, 0x9F < code, proved()));
+    let drawn: Bool/Holds(printable(shown)) = proved();
     Glyph {
         chars = [shown],
         wide = false,

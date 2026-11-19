@@ -63,6 +63,17 @@ const ROWS: &[Row] = &[
         "s: Nat, p: Holds(s < 86400)",
         "Holds(s / 3600 <= 23 && s % 3600 / 60 <= 59 && s % 60 <= 60)",
     ),
+    // A disjunction of bounds, refuted whole: either side, three sides as `||` nests them, an equation among them, and one inside a conjunction — a code point past the controls, from the block it lies in.
+    claim("x: Nat, p: Holds(x < 10)", "Holds(x < 11 || x < 5)"),
+    claim("x: Nat, p: Holds(x < 10)", "Holds(x < 5 || x < 11)"),
+    claim(
+        "x: Nat, p: Holds(1 <= x)",
+        "Holds(x == 1 || x == 2 || 3 <= x)",
+    ),
+    claim(
+        "c: Nat, p: Holds(0x2400 <= c && c < 0x2440)",
+        "Holds(0x20 <= c && (c < 0x7F || 0x9F < c))",
+    ),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))",
@@ -690,8 +701,9 @@ const CONTROLS: &[Row] = &[
     ),
     // No fact in scope.
     claim("i: Nat, n: Nat", "Holds(i < n)"),
-    // A conjunction one of whose conjuncts does not follow.
+    // A conjunction one of whose conjuncts does not follow, and a disjunction neither of whose sides does.
     claim("x: Nat, p: Holds(x < 10)", "Holds(x < 11 && x < 5)"),
+    claim("x: Nat", "Holds(x < 3 || 7 < x)"),
     // A fact too weak for the goal.
     claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i < n)"),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.
@@ -1032,6 +1044,15 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
             "its conjunct `5 <= x` is not proved\n│  it does not follow from the facts in scope:\n│    a hypothesis, `p`: `x < 10`"
         ) && conjunct.contains("it fails at `x = "),
         "{conjunct}"
+    );
+
+    // A disjunction: what the facts say, and a value at which every side fails.
+    let sides = refusal("x: Nat, p: Holds(x <= 9)", "Holds(x < 3 || 7 < x)");
+    assert!(
+        sides.contains(
+            "it does not follow from the facts in scope:\n│    a hypothesis, `p`: `x <= 9`"
+        ) && sides.contains("it fails at `x = "),
+        "{sides}"
     );
 
     // A contradiction only the integers see: the counterexample is a fraction, which no natural is, so the report says what the search found and nothing of the facts.

@@ -120,6 +120,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         and_first: registry_name(&["std", "Bool", "and", "first"]),
         and_second: registry_name(&["std", "Bool", "and", "second"]),
         and_both: registry_name(&["std", "Bool", "and", "both"]),
+        or_first: registry_name(&["std", "Bool", "or", "of_first"]),
+        or_second: registry_name(&["std", "Bool", "or", "of_second"]),
         nat: OrderSyntax {
             add: registry_name(&["std", "Nat", "le", "add"]),
             scale: registry_name(&["std", "Nat", "le", "mul_mono_r"]),

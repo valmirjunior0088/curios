@@ -242,9 +242,11 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
         Origin::Guard(written, false) => {
             format!("a guard's false arm, `{}`", written.spelled(spelling))
         }
-        Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => {
-            String::new()
-        }
+        Origin::Natural
+        | Origin::Definition
+        | Origin::Product(..)
+        | Origin::Negated
+        | Origin::Disjunct => String::new(),
     };
     // A guard read as it was written states itself, and its line names it once.
     let fact = |from: &Origin, statement: &Term| {

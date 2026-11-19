@@ -372,6 +372,10 @@ pub struct EntailmentSyntax {
     pub and_second: SyntaxName,
     /// Two decisions that hold, as their conjunction: how a bound that is a conjunction is proved from a proof of each conjunct.
     pub and_both: SyntaxName,
+    /// A disjunction from its first side, which a bound that is a disjunction is proved by in the case the side holds.
+    pub or_first: SyntaxName,
+    /// A disjunction from its second side, in the case every side before it fails.
+    pub or_second: SyntaxName,
     /// The order vocabulary at `Nat`.
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
@@ -393,6 +397,8 @@ impl EntailmentSyntax {
             and_first,
             and_second,
             and_both,
+            or_first,
+            or_second,
             nat,
             int,
             natural,
@@ -400,7 +406,7 @@ impl EntailmentSyntax {
         } = self;
 
         [
-            equality, sym, range, in_range, and_first, and_second, and_both,
+            equality, sym, range, in_range, and_first, and_second, and_both, or_first, or_second,
         ]
         .into_iter()
         .chain(nat.targets())

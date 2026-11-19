@@ -29,7 +29,7 @@ use {
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
-    curios_common::{OrderSyntax, Plicity, SyntaxName},
+    curios_common::{OrderSyntax, Plicity, SyntaxName, recurse},
     curios_core::{
         Aligned, Apply, Cases, Extremum, Free, Global, InductType, Instance, Intrinsic,
         LinearViews, Match, Nat, Probe, StructType, Subterm, Term, TupleType,
@@ -55,6 +55,8 @@ pub enum Origin {
     Product(Box<Origin>, Box<Origin>),
     /// The goal, negated.
     Negated,
+    /// A side of the disjunction the goal is, other than the side the search proves, taken as failing: true in the arm of the proof's split on that side where it fails, which is where the rest of the proof stands.
+    Disjunct,
 }
 
 impl Origin {
@@ -64,7 +66,11 @@ impl Origin {
             Origin::Hypothesis(name) | Origin::Field(name, _) | Origin::Guard(name, _) => {
                 Some(name)
             }
-            Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => None,
+            Origin::Natural
+            | Origin::Definition
+            | Origin::Product(..)
+            | Origin::Negated
+            | Origin::Disjunct => None,
         }
     }
 
@@ -74,15 +80,19 @@ impl Origin {
             Origin::Hypothesis(name) | Origin::Field(name, _) | Origin::Guard(name, _) => {
                 Some(name)
             }
-            Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => None,
+            Origin::Natural
+            | Origin::Definition
+            | Origin::Product(..)
+            | Origin::Negated
+            | Origin::Disjunct => None,
         }
     }
 
-    /// Whether a report names the fact: one a reader can act on, which a natural's sign, an operation's definition and a product of two facts are not.
+    /// Whether a report names the fact: one a reader can act on, which a natural's sign, an operation's definition, a product of two facts and the failure of a side of the goal are not.
     pub(super) fn is_reported(&self) -> bool {
         !matches!(
             self,
-            Origin::Natural | Origin::Definition | Origin::Product(..)
+            Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Disjunct
         )
     }
 
@@ -658,6 +668,23 @@ impl<'a> Reader<'a> {
             |lemma| Term::apply(global(lemma), [first.clone(), second.clone(), qed.clone()]);
         self.decision(context, first, first, conjunct(and_first), origin.clone())?;
         self.decision(context, second, second, conjunct(and_second), origin)
+    }
+
+    /// A side of the goal's disjunction, read as failing: what it states where it came back `false`, as a guard's false arm is read, in the arm of the proof's split on it where it fails. Whether it is a comparison the fragment reads, as its spelling opens to one or its reduct is.
+    pub fn failing(&mut self, context: &mut Context, side: &Term) -> Result<bool, Error> {
+        let comparison = match opened(context, side)? {
+            Some(Opened::Comparison(comparison)) => comparison,
+            _ => match &*reduce_with(context, side)? {
+                Subterm::Intrinsic(comparison)
+                    if sides(comparison).is_some() || negated_equality(comparison).is_some() =>
+                {
+                    comparison.clone()
+                }
+                _ => return Ok(false),
+            },
+        };
+        self.guard(context, &comparison, false, side, Origin::Disjunct)?;
+        Ok(true)
     }
 
     /// One comparison guard, by the case it took.
@@ -2237,6 +2264,69 @@ pub fn conjunction(context: &mut Context, decision: &Term) -> Result<Option<(Ter
         }
         _ => None,
     })
+}
+
+/// A decision that is a disjunction, as the tree of its sides its `||`s make, each side as the disjunction's spelling states it.
+pub enum Disjunction {
+    Side(Term),
+    Or {
+        whole: Term,
+        left: Box<Disjunction>,
+        right: Box<Disjunction>,
+    },
+}
+
+impl Disjunction {
+    /// The decision this part of the tree is.
+    pub fn decision(&self) -> &Term {
+        match self {
+            Disjunction::Side(side) => side,
+            Disjunction::Or { whole, .. } => whole,
+        }
+    }
+
+    /// The sides, left to right.
+    pub fn sides(&self) -> Vec<&Term> {
+        match self {
+            Disjunction::Side(side) => vec![side],
+            Disjunction::Or { left, right, .. } => {
+                let mut sides = left.sides();
+                sides.extend(right.sides());
+                sides
+            }
+        }
+    }
+}
+
+/// `decision` as the tree of its sides, where it is a disjunction: opened by its heads to a `||` and otherwise read reduced, as [`conjunction`] reads a conjunction, each side read the same way in turn.
+pub fn disjunction(context: &mut Context, decision: &Term) -> Result<Option<Disjunction>, Error> {
+    let opened = open_until(context, decision, |term| match &**term {
+        Subterm::Intrinsic(Intrinsic::BoolOr(left, right)) => Some((left.clone(), right.clone())),
+        _ => None,
+    })?;
+    let parts = match opened {
+        Some(parts) => Some(parts),
+        None => match &*reduce_with(context, decision)? {
+            Subterm::Intrinsic(Intrinsic::BoolOr(left, right)) => {
+                Some((left.clone(), right.clone()))
+            }
+            _ => None,
+        },
+    };
+    let Some((left, right)) = parts else {
+        return Ok(None);
+    };
+    let side = |context: &mut Context, side: Term| -> Result<Disjunction, Error> {
+        Ok(match recurse(|| disjunction(context, &side))? {
+            Some(tree) => tree,
+            None => Disjunction::Side(side),
+        })
+    };
+    Ok(Some(Disjunction::Or {
+        whole: decision.clone(),
+        left: Box::new(side(context, left)?),
+        right: Box::new(side(context, right)?),
+    }))
 }
 
 /// Whether `head` is `name` at any instance, as an elaborated statement writes a declaration.
