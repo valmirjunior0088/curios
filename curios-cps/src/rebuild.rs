@@ -4,7 +4,7 @@ use {
     super::{
         Atom, Callee, CopyBudget, CopyPlan, FunctionId, Intrinsic, Module, Node, NodeId,
         REBUILD_CLONE_NODE_LIMIT, REBUILD_COPY_NODE_LIMIT, ValueExpr, World, copy_bodies,
-        function_nodes, in_place, routes, rows_reaching,
+        function_nodes, in_place, routes,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -14,11 +14,11 @@ pub fn rebuild_in_place(module: &mut Module) {
     curios_profile::profile!("rebuild_in_place");
     copy_reuse_versions(module, CopyBudget::new(REBUILD_COPY_NODE_LIMIT));
     // A rebuild writes its value as a row some flow reaching the value builds, which is what the verifier holds it to; one that no flow builds the row for stands in an arm no run takes, behind a row test that flow rules out.
-    let rows = rows_reaching(module);
+    let flow = module.value_flow();
     let written = in_place(module);
     for rebuild in written.rows {
-        if !rows
-            .get(&rebuild.of)
+        if !flow
+            .rows(rebuild.of)
             .is_some_and(|rows| rows.may_be(rebuild.row))
         {
             continue;

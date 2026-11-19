@@ -124,8 +124,8 @@ fn a_call_resumes_with_the_rows_its_callee_returns() {
         let row = row.expect("the producer built its row");
 
         assert_eq!(
-            rows_reaching(&module)[&received],
-            Rows::Of(Ids::one(row)),
+            module.value_flow().rows(received),
+            Some(Rows::Of(Ids::one(row))),
             "tail: {tail}"
         );
     }
@@ -146,7 +146,13 @@ fn a_number_a_callee_computes_is_no_row() {
     });
     let row = one_slot_row(&mut module);
 
-    assert!(!rows_reaching(&module)[&received].may_be(row));
+    assert_eq!(
+        module
+            .value_flow()
+            .rows(received)
+            .map(|rows| rows.may_be(row)),
+        Some(false)
+    );
 }
 
 #[test]
@@ -184,8 +190,8 @@ fn a_reference_read_out_of_a_value_is_the_rows_its_construction_stores() {
         };
 
         assert_eq!(
-            rows_reaching(&module)[&received],
-            Rows::Of(rows),
+            module.value_flow().rows(received),
+            Some(Rows::Of(rows)),
             "stores a row: {stores_a_row}"
         );
     }
@@ -229,5 +235,5 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
     );
     module.set_entry(entry);
 
-    assert_eq!(rows_reaching(&module)[&received], Rows::Any);
+    assert_eq!(module.value_flow().rows(received), Some(Rows::Any));
 }

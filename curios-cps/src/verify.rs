@@ -409,7 +409,7 @@ impl Module {
 
     /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, or one no flow reaches, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on, and so does an overwrite of a list. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
     fn verify_rebuilds(&self) -> Result<(), VerifyError> {
-        let mut rows = None;
+        let mut flow = None;
         for (function, _) in self.live_functions() {
             for node_id in function_nodes(self, function) {
                 // An overwrite writes into the list it is handed, which goes by its result from there on.
@@ -461,10 +461,10 @@ impl Module {
                         definition.width(),
                     )));
                 }
-                let rows = rows.get_or_insert_with(|| self.value_flow().rows());
+                let flow = flow.get_or_insert_with(|| self.value_flow());
                 // A value no flow reaches is held by no run, so a rebuild of it stands where no run goes and casts nothing: where every construction of a row was itself rewritten into a rebuild, none is left for the flow to start from.
-                if !rows
-                    .get(of)
+                if !flow
+                    .rows(*of)
                     .is_none_or(|rows| rows.is_nothing() || rows.may_be(*row))
                 {
                     return Err(VerifyError(format!(

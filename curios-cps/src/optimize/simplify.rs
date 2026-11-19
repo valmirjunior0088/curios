@@ -1,7 +1,7 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, Intrinsic, Literal, Module, Node, NodeId,
-        ValueExpr, ValueId, demand_of, rows_reaching, visit_atoms_mut,
+        ValueExpr, ValueId, demand_of, visit_atoms_mut,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
@@ -666,7 +666,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
     changed
 }
 
-/// Answer no for every row test whose operand no flow reaching it builds that row for ([`rows_reaching`]), in one sweep.
+/// Answer no for every row test whose operand no flow reaching it builds that row for ([`ValueFlow::rows`](crate::ValueFlow::rows)), in one sweep.
 ///
 /// A module with no row test pays nothing: the analysis is whole-module, so it runs only where a test stands for it to answer.
 ///
@@ -685,7 +685,7 @@ pub fn answer_row_tests(module: &mut Module) -> bool {
         return false;
     }
 
-    let rows = rows_reaching(module);
+    let flow = module.value_flow();
     let mut answered = BTreeMap::<ValueId, Atom>::new();
     let mut redirect = BTreeMap::<NodeId, NodeId>::new();
     for (id, node) in module.live_nodes() {
@@ -701,7 +701,7 @@ pub fn answer_row_tests(module: &mut Module) -> bool {
         let [Atom::Value(value)] = args.as_slice() else {
             continue;
         };
-        if rows.get(value).is_some_and(|rows| !rows.may_be(*row)) {
+        if flow.rows(*value).is_some_and(|rows| !rows.may_be(*row)) {
             answered.insert(*result, Atom::Literal(Literal::Nat(Natural::zero())));
             redirect.insert(id, *next);
         }

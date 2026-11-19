@@ -307,21 +307,12 @@ impl ValueFlow {
     }
 }
 
-/// The rows each value may be a struct of.
-pub fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
-    module.value_flow().rows()
-}
-
 impl ValueFlow {
-    /// The rows each value may be a struct of.
-    pub fn rows(&self) -> BTreeMap<ValueId, Rows> {
+    /// The rows `value` may be a struct of, `None` where the module holds no such value. A reader asks it of the values it reads: a module's values are tens of thousands and a fact hundreds of constructions wide, where the readers ask a few hundred.
+    pub fn rows(&self, value: ValueId) -> Option<Rows> {
         self.facts
-            .iter()
-            .filter_map(|(key, fact)| match key {
-                FlowKey::Value(value) => Some((*value, self.rows_of(fact))),
-                _ => None,
-            })
-            .collect()
+            .get(&FlowKey::Value(value))
+            .map(|fact| self.rows_of(fact))
     }
 }
 

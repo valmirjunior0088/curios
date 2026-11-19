@@ -56,7 +56,6 @@ mod survey;
 pub use survey::{Held, Twin, held, rebuilds};
 
 mod value_flow;
-use value_flow::*;
 pub use value_flow::{Ids, MayBe, ValueFlow};
 
 mod verify;
