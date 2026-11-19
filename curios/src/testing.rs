@@ -18,7 +18,7 @@ use {
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
-    curios_surface::{Entrypoint, Form},
+    curios_surface::{Entrypoint, Form, WrittenIn},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_MOUNT, not_a_program},
     std::{
@@ -113,7 +113,7 @@ pub fn test_subjects(
                         },
                     ])
                 }
-                Entry::Stdin => {
+                Entry::Stdin(_) => {
                     let text = stdin()?;
                     // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
                     let invoked = Path::new(Spelling::STDIN);
@@ -469,7 +469,7 @@ pub fn opened(
 /// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file when it is written as a module.
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     supply_entrypoint(text).map_err(|error| match Form::of(Path::new(STDIN_NAME), text) {
-        Form::Module => not_a_program(&Entry::Stdin).into(),
+        Form::Module => not_a_program(&Entry::Stdin(WrittenIn::Program)).into(),
         Form::Program => CompileError::Failure(vec![error.report()]),
     })
 }

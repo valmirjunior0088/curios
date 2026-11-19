@@ -36,12 +36,12 @@ fn a_module_is_admitted_at_a_type_its_term_has() {
         body: zero(),
         type_: Some(nat_type),
     };
+    let program = Program {
+        definitions: Definitions::default(),
+        entrypoint: entry,
+    };
     let rechecked = History::new()
-        .built(|scope| {
-            put_over(scope, |put| {
-                put.module(&Definitions::default(), Some(&entry))
-            })
-        })
+        .built(|scope| certify_program(&program, DEFAULT_BUDGET, &globals(scope), SYNTAX).0)
         .expect("a history of no step builds");
 
     assert_eq!(rechecked.verdicts(), Vec::new());
@@ -91,13 +91,25 @@ fn core_text_that_does_not_parse_is_read_by_no_checker() {
     assert!(matches!(answer.refusals(), [refusal] if refusal.by().is_none()));
 }
 
+/// The board puts the term at `False`, so a text stating another type for it is refused by the reader, as the product's door refuses it, and one stating `False` is put as one stating nothing is.
 #[test]
-fn core_text_that_states_the_type_of_its_term_is_refused_by_the_reader() {
+fn core_text_that_states_another_type_for_its_term_is_refused_by_the_reader() {
     let answer = Proof::Module("0\n: #NatType".to_string()).answer();
 
     assert!(!answer.certifier_asked());
     assert!(
-        matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.contains("states the type"))
+        matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.contains("states a type"))
+    );
+
+    let stated = Proof::Module("0\n: /sys/Bool/False".to_string()).answer();
+    assert!(stated.certifier_asked());
+    assert!(
+        !stated.refusals().is_empty()
+            && stated.refusals().iter().all(
+                |refusal| matches!(refusal, Refusal::Certifier(verdict) if verdict.name.is_none())
+            ),
+        "{:?}",
+        stated.refusals()
     );
 }
 

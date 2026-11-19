@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Closing, CompileError, OnRefusal, certifier_refusal, compile_unit, erasure_refusal,
-        globals_after, lowering_refusal, with_broken,
+        Closing, CompileError, OnRefusal, anchors_of, certifier_refusal, compile_unit,
+        erasure_refusal, globals_after, lowering_refusal, with_broken,
     },
     curios_cert::{Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
@@ -191,7 +191,13 @@ pub fn compile_lowered_over(
     let core = match rechecked {
         Rechecked::Accepted(accepted) => accepted,
         Rechecked::Refused(verdicts) => {
-            let refusal = certifier_refusal(&verdicts[0], &core, &predecessors.lexicons(), syntax);
+            let refusal = certifier_refusal(
+                &verdicts[0],
+                &core,
+                &predecessors.lexicons(),
+                &anchors_of(&lowered, predecessors),
+                syntax,
+            );
             return Err(refuse(&lowered, refusal));
         }
     };

@@ -12,7 +12,7 @@ use {
     },
     crate::{
         CoreFile, CoreHead, CoreItem, CoreNominals, CoreText, CoreValue, FormScope, LetSignature,
-        TopConcept, TopForeign, TopLet, TopTest, concept_supers_read_off,
+        Spellable, Spelling, TopConcept, TopForeign, TopLet, TopTest, concept_supers_read_off,
     },
     curios_abi::ForeignFunction,
     curios_common::{Qualifier, Span},
@@ -20,7 +20,7 @@ use {
         ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item, Nominal,
         Nominals, RecItem, Term, UniverseContext,
     },
-    std::sync::Arc,
+    std::{rc::Rc, sync::Arc},
 };
 
 /// The module `file` writes, and the entry it closes with where it is a program's: read over `scope` where it is handed one, which a test's and a foreign row's forms are made against and a call across the wire is made through.
@@ -74,6 +74,32 @@ pub fn to_core(
                     .map(|type_| core_read(type_, &mut reader))
                     .transpose()?,
             })
+        })
+        .transpose()?;
+
+    Ok((definitions, entry))
+}
+
+/// [`to_core`], the closing term put at `at`, the type a question puts it at: where the text states a type for it, that type held to `at` by Core's equality, which reads no position, and refused at the place it is written where it is another.
+pub fn to_core_at(
+    file: &CoreFile,
+    scope: Option<&FormScope>,
+    at: &Term,
+) -> Result<(Definitions, Option<Entrypoint>), ReadError> {
+    let (definitions, entry) = to_core(file, scope)?;
+    let entry = entry
+        .map(|entry| match entry.type_ {
+            Some(stated) if stated != *at => Err(ReadError::at(
+                Refusal::PutElsewhere(at.spelled(&Rc::new(Spelling::default())).to_string()),
+                file.entry
+                    .as_ref()
+                    .and_then(|written| written.type_.as_ref())
+                    .and_then(crate::Term::span),
+            )),
+            _ => Ok(Entrypoint {
+                body: entry.body,
+                type_: Some(at.clone()),
+            }),
         })
         .transpose()?;
 

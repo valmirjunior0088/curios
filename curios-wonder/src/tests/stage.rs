@@ -6,6 +6,7 @@ use {
     curios_common::Source,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
+    curios_surface::WrittenIn,
     std::path::Path,
 };
 
@@ -18,6 +19,7 @@ fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Ref
             units: Vec::new(),
             origin: Origin::Text {
                 text: text.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,
@@ -134,6 +136,7 @@ fn part(name: &str, program: &str, path: &[&str]) -> Result<String, crate::Refus
             units: Vec::new(),
             origin: Origin::Text {
                 text: program.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,

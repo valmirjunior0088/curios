@@ -18,8 +18,8 @@ curios-common = { workspace = true, features = ["test-support"] }
 curios-cert = { workspace = true, features = ["test-support"] }
 # The error a witness expects of the elaborator, and every one's name.
 curios-elab = { workspace = true, features = ["test-support"] }
-# A program put to both checkers as a compilation puts it, and a module built by hand to the certifier, over the units in scope.
-curios-pipeline = { workspace = true, features = ["test-support"] }
+# A program put to both checkers as a compilation puts it, and a module built by hand read through the product's door and put to the certifier, over the units in scope.
+curios-pipeline = { workspace = true }
 # A witness's history: its steps walked over a store of their own, and the units in scope its proof is put over.
 curios-verdict = { workspace = true, features = ["test-support"] }
 # The units in scope, as the history hands them to the proof's put.

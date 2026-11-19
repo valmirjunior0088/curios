@@ -9,14 +9,15 @@ use {
     crate::{
         Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadLowering, ReadRefusal,
         Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
-        declared_test_paths, lower_subject,
+        declared_test_paths, enter_core_text, lower_subject,
     },
     curios_abi::ForeignStore,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, Source},
     curios_document::Documentation,
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
     curios_prelude::with_prelude,
     curios_unit::{Predecessors, Unit},
+    std::sync::Arc,
 };
 
 /// Compile `entrypoint` against the fixed prelude — the two units every product path puts in scope, `/sys` then `/std`.
@@ -170,6 +171,22 @@ impl<'a> Fold<'a> {
                     progress,
                 },
             )
+        })
+    }
+
+    /// The Core text `source` holds checked on top of the fold, as [`Fold::check`] checks a program: read over the units in scope, compiled as a unit — claiming `module` where the text closes with no term — and the term it closes with judged at the program contract and erased (`enter_core_text`). Nothing is taken from the cache or handed to it: a text of Core text is loose, compiled against the prelude alone and filed nowhere.
+    pub fn check_core_text<P>(
+        self,
+        source: &Arc<Source>,
+        module: Qualifier,
+        progress: P,
+    ) -> Result<(), CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.under_entry(progress, |predecessors, _, progress| {
+            enter_core_text(self.budget, predecessors, &SYNTAX, source, module, progress)
+                .map(|_| ())
         })
     }
 

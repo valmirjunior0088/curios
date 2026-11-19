@@ -247,7 +247,7 @@ pub fn with_broken<T>(
 }
 
 /// Where a report about the unit lowered as `text` is placed: the unit's own declarations first, then those of the units in its scope.
-fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec<&'a Anchors> {
+pub fn anchors_of<'a>(text: &'a PreparedText, predecessors: Predecessors<'a>) -> Vec<&'a Anchors> {
     std::iter::once(text.anchors())
         .chain(predecessors.anchors())
         .collect()
@@ -397,11 +397,12 @@ pub fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Glob
     globals
 }
 
-/// The compile error a certifier verdict is reported as: the refusal, named for the item it is about where there is one.
+/// The compile error a certifier verdict is reported as: the refusal, named for the item it is about where there is one, and placed where `anchors`, the refused unit's own and then those of the units in its scope, say its name is written.
 pub fn certifier_refusal(
     verdict: &Verdict,
     definitions: &curios_core::Definitions,
     scope: &[&curios_core::Lexicon],
+    anchors: &[&Anchors],
     syntax: &SyntaxRegistry,
 ) -> CompileError {
     let refusal = verdict.rendered(
@@ -415,16 +416,56 @@ pub fn certifier_refusal(
             None => "a unit".to_string(),
         },
         refusal,
+        refused_at(anchors, verdict.name.as_ref()),
     )
 }
 
-/// The compile error that says the certifier refused `refused`, in the certifier's own words.
-fn certifier_refused(refused: String, refusal: impl fmt::Display) -> CompileError {
+/// The compile error that says the certifier refused `refused`, in the certifier's own words, at `at`.
+fn certifier_refused(
+    refused: String,
+    refusal: impl fmt::Display,
+    at: Option<curios_common::Span>,
+) -> CompileError {
     let mut said = Said::line("certifier refusal");
     said.stating(format_args!("refused: {refused}"));
     said.stating(refusal);
 
-    CompileError::Failure(vec![Report::of(None, said)])
+    CompileError::Failure(vec![Report::of(at, said)])
+}
+
+/// Where a refusal of `name` stands, as `anchors` say: where its name is written, or, for the term a program closes with, which no name stands for, where that term is.
+///
+/// **A kernel's refusal stands at the declaration it refuses**, as Lean's elaborator reports a kernel exception at the declaration it was adding: the certifier judges a term and names the declaration it judged, and the place is the reader's to find, by the declaration's name.
+fn refused_at(anchors: &[&Anchors], name: Option<&Global>) -> Option<curios_common::Span> {
+    match name {
+        Some(name) => Anchors::label(anchors, name),
+        None => anchors.first().and_then(|own| {
+            own.texts_of(curios_core::Anchor::of(curios_core::Anchored::Entry))
+                .into_iter()
+                .next()
+                .map(|(_, span)| span)
+        }),
+    }
+}
+
+/// What erasure refused a unit read from Core text with, as the one report each of its refusals is: in erasure's words, placed by `anchors` alone, since no lowering's tables spell its names.
+pub fn erasure_reported(
+    error: &curios_erase::Error,
+    definitions: &curios_core::Definitions,
+    lexicons: &[&curios_core::Lexicon],
+    anchors: &[&Anchors],
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    let reading = Reading {
+        definitions,
+        kept: None,
+        scope: lexicons,
+        syntax,
+        spellings: None,
+        anchors,
+    };
+
+    CompileError::Failure(error.reports(reading.spelling(), reading.anchors))
 }
 
 /// What type-checking refused a program with: the elaborator's own error where it was the elaborator that refused, beside the refusal as a compilation reports it.
@@ -1097,14 +1138,17 @@ where
                     .copied()
                     .chain([&unit])
                     .collect::<Vec<_>>();
-                let text = lowered.as_ref().or(unit.text());
+                let text = lowered
+                    .as_ref()
+                    .or(unit.text())
+                    .expect("a program's declarations are a unit written as a program");
 
                 judged(
                     budget,
                     (Predecessors::over(&units), predecessors),
                     syntax,
                     entry,
-                    text.filter(|_| erases),
+                    (Placing::Lowered(text), erases),
                 )
             };
 
@@ -1172,15 +1216,34 @@ fn close_over(
     })
 }
 
-/// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the certifier; and, where `erasing` holds the program's lowering, erased and linked through the certifier that judged it, with what erasing it refused it for reported against that lowering and `predecessors`, the units before the program's own.
+/// What a refusal of the term a program closes with, or of the unit of its declarations, is spelled and placed by: the program's lowering, whose tables spell a name and place a declaration, or, for a program read from Core text, where its text writes each declaration and that term, with no lowering to spell a name by.
+#[derive(Clone, Copy)]
+pub enum Placing<'a> {
+    Lowered(&'a PreparedText),
+    Read(&'a Anchors),
+}
+
+impl<'a> Placing<'a> {
+    /// Where a report is placed: the program's own declarations first, then those of `predecessors`, the units before it.
+    fn anchors(self, predecessors: Predecessors<'a>) -> Vec<&'a Anchors> {
+        match self {
+            Placing::Lowered(text) => anchors_of(text, predecessors),
+            Placing::Read(anchors) => std::iter::once(anchors)
+                .chain(predecessors.anchors())
+                .collect(),
+        }
+    }
+}
+
+/// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the certifier; and, where it `erases`, erased and linked through the certifier that judged it, every refusal placed by `placing` over `predecessors`, the units before the program's own.
 ///
 /// **One walk.** The certifier that judged the term is the one erasure reads it through, as a unit's is (`compile_lowered`): its environment borrows the scope built here, so it cannot leave this call, and what it erased can. The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
-fn judged(
+pub fn judged(
     budget: u64,
     (scope, predecessors): (Predecessors<'_>, Predecessors<'_>),
     syntax: &SyntaxRegistry,
     entry: curios_core::Entrypoint,
-    erasing: Option<&PreparedText>,
+    (placing, erases): (Placing<'_>, bool),
 ) -> Result<(Accepted<Program>, Option<Erasure>), CompileError> {
     let program = Program {
         definitions: nothing(),
@@ -1209,12 +1272,13 @@ fn judged(
                     None => "the entrypoint".to_string(),
                 },
                 refusal,
+                refused_at(&placing.anchors(predecessors), verdict.name.as_ref()),
             ));
         }
     };
 
     // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
-    let erased = erasing.map(|text| {
+    let erased = erases.then(|| {
         let (cores, places, certifications, forms) = (
             scope.cores(),
             scope.places(),
@@ -1227,14 +1291,24 @@ fn judged(
             &program,
         )
         .map_err(|error| {
-            erasure_refusal(
-                &error,
-                &program.as_program().definitions,
-                &scope.lexicons(),
-                text,
-                predecessors,
-                syntax,
-            )
+            let definitions = &program.as_program().definitions;
+            match placing {
+                Placing::Lowered(text) => erasure_refusal(
+                    &error,
+                    definitions,
+                    &scope.lexicons(),
+                    text,
+                    predecessors,
+                    syntax,
+                ),
+                Placing::Read(_) => erasure_reported(
+                    &error,
+                    definitions,
+                    &scope.lexicons(),
+                    &placing.anchors(predecessors),
+                    syntax,
+                ),
+            }
         })?;
         for unit in scope.units() {
             linked.mark_total(unit.certification());
@@ -1420,7 +1494,13 @@ pub fn compile_lowered(
     let core = match rechecked {
         Rechecked::Accepted(accepted) => accepted,
         Rechecked::Refused(verdicts) => {
-            let refusal = certifier_refusal(&verdicts[0], &core, &predecessors.lexicons(), syntax);
+            let refusal = certifier_refusal(
+                &verdicts[0],
+                &core,
+                &predecessors.lexicons(),
+                &anchors_of(&lowered, predecessors),
+                syntax,
+            );
             return Err(refuse(&lowered, refusal));
         }
     };

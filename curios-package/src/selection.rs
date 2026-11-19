@@ -74,6 +74,14 @@ pub enum Selection {
 }
 
 impl Selection {
+    /// This selection, a program on standard input read as written in `written` ([`Program::read_stdin_as`]).
+    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
+        match self {
+            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
+            selection => selection,
+        }
+    }
+
     /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks.
     pub fn of(
         spelling: Spelling,
@@ -90,7 +98,7 @@ impl Selection {
                         .stating(format_args!("drop `--manifest {}`", manifest.display()))
                         .about_named("--manifest"));
                 }
-                None => Self::Program(Program::loose(Entry::Stdin)),
+                None => Self::Program(Program::loose(Entry::Stdin(WrittenIn::Program))),
             },
             Spelling::File(path) => placed(path, manifest, overlay)?,
             Spelling::Name(name) => {
@@ -191,8 +199,8 @@ impl Library {
 /// Where a program's text comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
-    /// Standard input, drained to end — anonymous, so it has no entry path.
-    Stdin,
+    /// Standard input, drained to end — anonymous, so it has no entry path, and written in what the command line says it is, having no name to say it by.
+    Stdin(WrittenIn),
     /// A file on disk.
     File(PathBuf),
 }
@@ -280,12 +288,23 @@ impl Program {
         &self.entry
     }
 
+    /// This program, its text on standard input read as written in `written`, where it is on standard input: what a command reading Core text is told by `--core`.
+    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
+        match self.entry {
+            Entry::Stdin(_) => Self {
+                entry: Entry::Stdin(written),
+                ..self
+            },
+            Entry::File(_) => self,
+        }
+    }
+
     /// The program, as a report names it: the executable its package declares it as, the file it was given as, or standard input.
     pub fn named(&self) -> Named {
         match (self.entry(), self.home()) {
             (_, Some(home)) => Named::Executable(home.executable.clone()),
             (Entry::File(path), None) => Named::File(path.clone()),
-            (Entry::Stdin, None) => Named::Stdin,
+            (Entry::Stdin(_), None) => Named::Stdin,
         }
     }
 

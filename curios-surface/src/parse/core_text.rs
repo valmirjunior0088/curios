@@ -431,16 +431,6 @@ fn concept_form<'a>(fields: Vec<DecoratorField>) -> curios_parse::Boxed<'a, TopC
     parse_concept_member(None, fields, false).boxed()
 }
 
-/// A file of Core text: its items, then the entry a program closes with and the type it states, then the end of the input.
-fn parse_core_file<'a>(state: ParserState<'a>) -> Parsed<'a, CoreFile> {
-    parse_file_head
-        .and_keep(many0(|| parse_core_item))
-        .and(parse_core_entry)
-        .and_drop(take_eof())
-        .map(|(items, entry)| CoreFile { items, entry })
-        .parse(state)
-}
-
 /// The entry a program closes with and the type it states on the line beneath it, where the file closes with one.
 fn parse_core_entry<'a>(state: ParserState<'a>) -> Parsed<'a, Option<CoreEntry>> {
     parse_term
@@ -465,17 +455,10 @@ pub struct CoreFormatInput {
 /// `source` read whole as a file of Core text, for the formatter: each item's span kept beside it, as a module's are ([`parse_for_format`](crate::parse_for_format)), and the comments the parse consumed.
 pub fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, ParserError> {
     clear_comments();
-    let (items, entry) = run_parser(
-        parse_file_head
-            .and_keep(many0(|| spanned(parse_core_item)))
-            .and(parse_core_entry)
-            .and_drop(take_eof()),
-        source,
-    )?;
-    let (item_spans, items) = items.into_iter().unzip();
+    let (file, item_spans) = CoreFile::parse_spanned(source)?;
 
     Ok(CoreFormatInput {
-        file: CoreFile { items, entry },
+        file,
         item_spans,
         comments: take_comments(),
     })
@@ -484,7 +467,21 @@ pub fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, Pa
 impl CoreFile {
     /// The file `source` holds, read whole.
     pub fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
-        run_parser(parse_core_file, source)
+        Self::parse_spanned(source).map(|(file, _)| file)
+    }
+
+    /// [`CoreFile::parse`], each item's span kept beside it in the order of the items: what the formatter lays a file out by, and a reader anchors the module it makes by.
+    pub fn parse_spanned(source: &Arc<Source>) -> Result<(Self, Vec<Span>), ParserError> {
+        let (items, entry) = run_parser(
+            parse_file_head
+                .and_keep(many0(|| spanned(parse_core_item)))
+                .and(parse_core_entry)
+                .and_drop(take_eof()),
+            source,
+        )?;
+        let (spans, items) = items.into_iter().unzip();
+
+        Ok((CoreFile { items, entry }, spans))
     }
 }
 

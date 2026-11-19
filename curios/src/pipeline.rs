@@ -46,7 +46,7 @@ pub fn payload_of(
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
     let entry = match program.entry() {
-        Entry::Stdin => None,
+        Entry::Stdin(_) => None,
         Entry::File(path) => Some(path.clone()),
     };
     let declared = program

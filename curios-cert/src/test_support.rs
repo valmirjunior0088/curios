@@ -11,7 +11,7 @@ use {
     curios_core::{
         Certification, Definitions, Entrypoint, Free, Global, Places, Subterm, Term, Universes,
     },
-    curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, to_core},
+    curios_surface::{CoreFile, FormScope, ReadError, to_core, to_core_at},
 };
 
 /// What a candidate is put to the certifier under: the forms its text is read against, the units in scope, the registry the walk judges under, and the budget each judgment is restored to.
@@ -45,32 +45,18 @@ impl Put<'_> {
         to_core(&file, self.scope).map_err(Unread::Read)
     }
 
-    /// What the walk says of `text` put as a proof of `False`: Core text closing with a term that states no type, put at the `False` the registry names.
+    /// What the walk says of `text` put as a proof of `False`: Core text closing with a term put at the `False` the registry names, which the text states no other type for, by the reader's rule ([`to_core_at`]).
     pub fn core_text(&self, text: &str) -> Result<Rechecked<Definitions>, Unread> {
         let file = text
             .parse::<CoreFile>()
             .map_err(|error| Unread::Text(error.format()))?;
-        match &file.entry {
-            Some(CoreEntry { type_: None, .. }) => {}
-            Some(CoreEntry { type_: Some(_), .. }) => {
-                return Err(Unread::Text(
-                    "the text states the type its term is put at, which is `False`".to_string(),
-                ));
-            }
-            None => {
-                return Err(Unread::Text(
-                    "the text closes with no term to put".to_string(),
-                ));
-            }
-        }
-        let (definitions, entry) = to_core(&file, self.scope).map_err(Unread::Read)?;
-        let entry = Entrypoint {
-            body: entry.expect("an entry the text writes is read").body,
-            type_: Some(Term::instance(
-                Global::Authored(self.syntax.proof.false_type.qualifier()),
-                Universes::default(),
-            )),
-        };
+        let empty = Term::instance(
+            Global::Authored(self.syntax.proof.false_type.qualifier()),
+            Universes::default(),
+        );
+        let (definitions, entry) = to_core_at(&file, self.scope, &empty).map_err(Unread::Read)?;
+        let entry =
+            entry.ok_or_else(|| Unread::Text("the text closes with no term to put".to_string()))?;
 
         Ok(self.module(&definitions, Some(&entry)))
     }

@@ -7,6 +7,7 @@ use {
     curios_document::ModuleDocumentation,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
+    curios_surface::WrittenIn,
     std::collections::BTreeSet,
     std::path::Path,
 };
@@ -19,6 +20,7 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
             units: Vec::new(),
             origin: Origin::Text {
                 text: program.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,
@@ -217,6 +219,7 @@ fn described(program: &str, path: &str) -> Option<Described> {
             units: Vec::new(),
             origin: Origin::Text {
                 text: program.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,
@@ -377,6 +380,7 @@ fn a_place_answers_the_declaration_its_name_names() {
             units: Vec::new(),
             origin: Origin::Text {
                 text: PROGRAM.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,

@@ -19,7 +19,6 @@ test-support = [
     "curios-common/test-support",
     "curios-module/test-support",
     "curios-package/test-support",
-    "curios-pipeline/test-support",
     "curios-unit/test-support",
 ]
 
@@ -38,7 +37,7 @@ curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 # For the `ffi` rows a payload's record carries beside it: a reused payload still has to be linked, and what its imports are typed by cannot be read back off the module.
 curios-abi = { workspace = true }
-# A history's: the prelude every step is compiled over, the reader its Core-text steps are read by, and the budget it compiles them with.
+# A history's: the prelude every step is compiled over, the scope its Core-text steps are read over through the pipeline's door and what each step is written in, and the budget it compiles them with.
 curios-prelude = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
 curios-surface = { workspace = true, optional = true }

@@ -63,7 +63,7 @@ Every command that takes a subject takes it one of four ways, so what a bare inv
 
 The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither an extension nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
 
-**A file's name says what it is written in:** a `.crsc` is Core text, the form `wonder --stage core` and `core-elab` print a program in, and any other file a program or a module. No `mod` line reaches a `.crsc`, so one is always loose, and every command but `wonder` and `format` reads no Core text, so it refuses a `.crsc` before reading it and names the commands that do. Standard input says what it is written in with [`--core`](#standard-input).
+**A file's name says what it is written in:** a `.crsc` is Core text, the form `wonder --stage core` and `core-elab` print a program in, and any other file a program or a module. No `mod` line reaches a `.crsc`, so one is always loose: `wonder` checks it, `format` formats it, and every other command reads no Core text, so it refuses a `.crsc` before reading it and names the commands that do. Standard input says what it is written in with [`--core`](#standard-input).
 
 **A file is placed the same way by every command:** it is an executable's when it is that executable's entry or a module the entry's `mod` lines reach, a library's when the `mod` lines of `lib.crs` reach it, and loose otherwise — compiled against the standard library alone. A file written as [a module](language.md#declarations-and-modules), items with no final term, has no program in it. The project is decided from the file's own location, not the working directory.
 
@@ -553,6 +553,8 @@ A declaration of the library the compiler was built with is placed where its sou
 
 A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise, as a file no manifest above it claims is. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-prelude/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 
+A `.crsc`, or standard input under `--core`, is Core text, the form `--stage core` and `core-elab` print a program in, and the check reads it as the program or module it writes, over the standard library alone, as a loose file is compiled: a text closing with a term is a program, its declarations a unit and that term judged at `Io({})` and erased over it, as it is written — Core text states every node, so its tails are not run through `/std/Program`, and a type it states for the term is one the check puts it at or is refused — and a text closing with none is a module, a unit mounted at its stem, or at `/stdin`. The check reports the reader's refusal where the text stands, and the certifier's and erasure's at the name of the declaration they refuse, or at the closing term, as a program's are placed at the declarations it writes. A module `--stage core-elab` printed reads back so and checks clean.
+
 `--footprint` says whether an optimization fired on the code a declaration holds. A function is `absorbed` when nothing in the compiled program was made of it — inlined whole into its callers as straight-line code, or pruned once something else was — so it costs nothing of its own, and `inlined into` names the functions a pass put it in where some of it still stands as code of its own there, as a loop does. What a function was made of is a fact the compiler keeps on every copy, never read off a name, so a function named after nothing is found, and two declarations' locals of one name are told apart. The rows are read off the program that ships, so a committed report diffs.
 
 The stages, in the order the compiler passes them:
@@ -722,7 +724,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | --- | --- | --- |
 | `--manifest <PATH>` | every command but `new` and `profile` | use this `curios.toml` as the governing package's, instead of the nearest one |
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
-| `--core` | `format` | read standard input as Core text, as a `.crsc` file is read; refused beside any subject but `-` |
+| `--core` | `wonder`, `format` | read standard input as Core text, as a `.crsc` file is read; refused beside any subject but `-` |
 | `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
@@ -744,7 +746,7 @@ It is loose in the same sense a file no unit declares is, and answers before any
 
 Standard input is asked for with `-`, and never read because a pipe is attached ([why](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)).
 
-It is read as a program. `--core` says it is Core text, as a `.crsc` file's name says it of a file, and is refused beside any subject but `-`; `format` takes it. What a text is written in is never guessed from the text: a closing term alone reads in both.
+It is read as a program. `--core` says it is Core text, as a `.crsc` file's name says it of a file, and is refused beside any subject but `-`; `wonder` and `format` take it. What a text is written in is never guessed from the text: a closing term alone reads in both.
 
 One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 

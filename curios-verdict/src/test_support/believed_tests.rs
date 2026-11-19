@@ -3,10 +3,12 @@
 use {
     super::*,
     crate::*,
+    curios_abi::ForeignStore,
     curios_cert::{Error, Verdict},
     curios_common::{Qualifier, RootKind, fill},
-    curios_core::{Entrypoint, Global, Program, Term, Universes},
-    curios_pipeline::{Earlier, test_support::*},
+    curios_core::{Anchors, Definitions, Entrypoint, Global, Program, Term, Universes},
+    curios_pipeline::{Earlier, Read, test_support::*},
+    curios_surface::{CoreFile, to_core},
 };
 
 /// The declaration `/<path>`.
@@ -742,11 +744,18 @@ fn a_proof_over_a_unit_a_session_kept_is_judged_again_where_what_it_read_moved()
             .expect("the item reads over the prelude");
         items.replace(place, replacing.items[0].clone());
 
+        let read = Read {
+            definitions: Definitions { items },
+            foreigns: ForeignStore::new(),
+            anchors: Anchors::default(),
+            entry: None,
+        };
         compile_read(
             DEFAULT_BUDGET,
             predecessors,
+            &SYNTAX,
             source.claims(),
-            (Definitions { items }, ForeignStore::new()),
+            &read,
             Some(&earlier),
         )
         .err()

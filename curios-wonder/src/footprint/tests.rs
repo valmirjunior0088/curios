@@ -1,4 +1,7 @@
-use {super::*, crate::*, curios_elab::DEFAULT_BUDGET, curios_module::Overlay};
+use {
+    super::*, crate::*, curios_elab::DEFAULT_BUDGET, curios_module::Overlay,
+    curios_surface::WrittenIn,
+};
 
 /// `text` as a loose subject, the way the one-shot transport forms one from standard input.
 fn loose(text: &str) -> Subject {
@@ -6,6 +9,7 @@ fn loose(text: &str) -> Subject {
         units: Vec::new(),
         origin: Origin::Text {
             text: text.to_string(),
+            written: WrittenIn::Program,
         },
         declares: None,
         package: None,

@@ -518,7 +518,7 @@ impl Contract {
     }
 
     /// What standard input is written in where `core` says it is Core text, refused beside any subject but standard input, whose text alone the flag speaks of: a file says what it is written in by its name.
-    fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
+    pub fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
         match (core, Spelling::of(subject)) {
             (false, _) => Ok(WrittenIn::Program),
             (true, Spelling::Stdin) => Ok(WrittenIn::CoreText),
@@ -657,7 +657,7 @@ impl Contract {
 
                 Err(match program.entry() {
                     Entry::File(path) => refused.about_path(path),
-                    Entry::Stdin => refused.about_named(STDIN_NAME),
+                    Entry::Stdin(_) => refused.about_named(STDIN_NAME),
                 })
             }
         }
@@ -779,7 +779,7 @@ fn homeless(command: &str, entry: &Entry) -> Box<Report> {
     };
 
     match entry {
-        Entry::Stdin => refused("standard input")
+        Entry::Stdin(_) => refused("standard input")
             .trying(format!("curios {command} - --output program"))
             .about_named(STDIN_NAME),
         Entry::File(path) => {

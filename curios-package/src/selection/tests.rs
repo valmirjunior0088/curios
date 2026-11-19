@@ -39,7 +39,7 @@ fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String>
 /// The entry file `argument` resolves to inside `directory`, or the refusal it earns.
 fn entry(argument: Option<&str>, directory: &Path) -> Result<PathBuf, String> {
     match selected(argument, directory)?.entry() {
-        Entry::Stdin => panic!("standard input has no entry file"),
+        Entry::Stdin(_) => panic!("standard input has no entry file"),
         Entry::File(path) => Ok(path.clone()),
     }
 }
@@ -268,7 +268,7 @@ fn a_dash_is_standard_input_everywhere() {
     for directory in [&*root, Path::new(".")] {
         let program = selected(Some("-"), directory).expect("standard input needs no project");
         assert!(
-            program.entry() == &Entry::Stdin && program.home().is_none(),
+            matches!(program.entry(), Entry::Stdin(WrittenIn::Program)) && program.home().is_none(),
             "`-` should dispatch as standard input in {}",
             directory.display()
         );
@@ -280,7 +280,7 @@ fn a_dash_is_standard_input_everywhere() {
 fn standard_input_has_no_entry_file() {
     let program = selected(Some("-"), Path::new(".")).expect("standard input");
 
-    assert_eq!(program.entry(), &Entry::Stdin);
+    assert_eq!(program.entry(), &Entry::Stdin(WrittenIn::Program));
 }
 
 /// Standard input is answered before any manifest is looked for, so naming one beside it is refused rather than ignored.

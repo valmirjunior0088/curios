@@ -285,6 +285,9 @@ pub enum Mode {
         subject: Option<String>,
 
         #[command(flatten)]
+        core: CoreFlag,
+
+        #[command(flatten)]
         elaboration: Elaboration,
     },
 

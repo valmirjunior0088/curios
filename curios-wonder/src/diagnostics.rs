@@ -2,13 +2,15 @@
 
 use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
-    curios_common::{Qualifier, Report, Said, Source, SourceName, Span, is_identifier},
+    curios_common::{
+        About, OsError, Qualifier, Report, Said, Source, SourceName, Span, is_identifier,
+    },
     curios_module::{
         Overlay, PackageRoot, PreparedText, RootSource, UnitSource, open_entrypoint,
         overlay_entrypoint, supply_entrypoint,
     },
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold, Progress},
-    curios_surface::{Entrypoint, Form},
+    curios_surface::{CoreFile, Entrypoint, Form, WrittenIn},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -16,6 +18,7 @@ use {
         collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
+        sync::Arc,
     },
 };
 
@@ -67,7 +70,12 @@ impl Subject {
             None => fs::read_to_string(path).ok()?,
         };
         let stem = path.file_stem()?.to_str()?;
-        if Form::of(path, &text) != Form::Module || is_identifier(stem) {
+        let module = match WrittenIn::of(path) {
+            WrittenIn::Program => Form::of(path, &text) == Form::Module,
+            WrittenIn::CoreText => CoreFile::parse(&Source::held(path, text.as_str()))
+                .is_ok_and(|file| file.entry.is_none()),
+        };
+        if !module || is_identifier(stem) {
             return None;
         }
 
@@ -95,9 +103,23 @@ impl Subject {
             units: Vec::new(),
             origin: Origin::Text {
                 text: String::new(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,
+        }
+    }
+
+    /// The text of a loose subject written as Core text, as its name or standard input says: what the check reads through the pipeline's door rather than lowering it ([`Fold::check_core_text`]).
+    fn core_text(&self) -> Option<&Origin> {
+        match self {
+            Subject::Entry {
+                units,
+                origin,
+                declares: None,
+                package: None,
+            } if units.is_empty() && origin.written() == WrittenIn::CoreText => Some(origin),
+            _ => None,
         }
     }
 
@@ -112,7 +134,7 @@ impl Subject {
             } if units.is_empty() => {
                 let module = match &origin {
                     Origin::File(path) => RootSource::loose_module(path, overlay),
-                    Origin::Text { text } => RootSource::supplied_module(
+                    Origin::Text { text, .. } => RootSource::supplied_module(
                         STDIN_MOUNT,
                         &Source::named(SourceName::stdin(), text.as_str()),
                     ),
@@ -138,7 +160,51 @@ impl Subject {
 /// A file an editor holds unsaved is not text — it is [`Origin::File`] with its path in the overlay, so its `mod` declarations still resolve where the saved file's would.
 pub enum Origin {
     File(PathBuf),
-    Text { text: String },
+    /// The text standard input held, written in what the command line said it is.
+    Text {
+        text: String,
+        written: WrittenIn,
+    },
+}
+
+impl Origin {
+    /// What the text is written in: a file's name says it, and standard input's text was told it.
+    pub fn written(&self) -> WrittenIn {
+        match self {
+            Origin::File(path) => WrittenIn::of(path),
+            Origin::Text { written, .. } => *written,
+        }
+    }
+
+    /// The text, as the source a report closes on, read through `overlay` for a file, with the prefix a unit of it claims where it is written as a module: a file's stem, and [`STDIN_MOUNT`] for standard input's text. A file that cannot be read is the one diagnosis.
+    fn read(&self, overlay: &Overlay) -> Result<(Arc<Source>, Qualifier), Box<Diagnosis>> {
+        match self {
+            Origin::File(path) => {
+                let text = match overlay.get(path) {
+                    Some(text) => text.to_string(),
+                    None => fs::read_to_string(path).map_err(|error| {
+                        let mut said = Said::line("unreadable file");
+                        said.stating(OsError(&error));
+
+                        Box::new(Diagnosis {
+                            severity: Severity::Error,
+                            report: Report::about(About::Path(path.clone()), said),
+                        })
+                    })?,
+                };
+                let stem = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .unwrap_or_default();
+
+                Ok((Source::held(path, text), Qualifier::from([stem])))
+            }
+            Origin::Text { text, .. } => Ok((
+                Source::named(SourceName::stdin(), text.as_str()),
+                Qualifier::from([STDIN_MOUNT]),
+            )),
+        }
+    }
 }
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles — with what the subject reached beside the records. `overlay` is consulted before the disk for every file read, the entry included.
@@ -191,6 +257,27 @@ fn diagnosed_reading(
             diagnostics: vec![refusal],
             reached: BTreeSet::new(),
             written: Vec::new(),
+        };
+    }
+
+    // Core text is lowered by nothing: the check reads it through the pipeline's door.
+    if let Some(origin) = subject.core_text() {
+        return match origin.read(overlay) {
+            Ok((source, module)) => {
+                match Fold::new(budget, &[], through).check_core_text(
+                    &source,
+                    module,
+                    &mut *progress,
+                ) {
+                    Ok(()) => Diagnosed::found(None, Findings::default()),
+                    Err(error) => Diagnosed::refused(error),
+                }
+            }
+            Err(refusal) => Diagnosed {
+                diagnostics: vec![*refusal],
+                reached: BTreeSet::new(),
+                written: Vec::new(),
+            },
         };
     }
 
@@ -297,7 +384,7 @@ pub fn open(
             Some(text) => overlay_entrypoint(&path, text, package).map_err(|error| error.report()),
             None => open_entrypoint(&path, package).map_err(|error| error.report()),
         },
-        Origin::Text { text } => supply_entrypoint(&text).map_err(|error| error.report()),
+        Origin::Text { text, .. } => supply_entrypoint(&text).map_err(|error| error.report()),
     };
 
     match opened {

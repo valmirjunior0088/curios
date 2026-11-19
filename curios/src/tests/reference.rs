@@ -5,6 +5,7 @@ use {
     curios_common::Style,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
+    curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},
     std::{fs, path::Path},
 };
@@ -20,7 +21,10 @@ fn every_crs_example_reports_nothing() {
     for (line, example) in examples {
         let subject = Subject::Entry {
             units: Vec::new(),
-            origin: Origin::Text { text: example },
+            origin: Origin::Text {
+                text: example,
+                written: WrittenIn::Program,
+            },
             declares: None,
             package: None,
         };

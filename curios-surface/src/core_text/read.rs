@@ -62,6 +62,8 @@ pub enum Refusal {
     NoScope(&'static str),
     /// A declaration a form implies from, which the text and its scope do not hold.
     Undeclared(String),
+    /// A closing term the text states a type for other than the one its question puts it at, spelled here.
+    PutElsewhere(String),
 }
 
 impl fmt::Display for ReadError {
@@ -106,6 +108,10 @@ impl fmt::Display for ReadError {
                 "{form} is made against the scope a reader is handed, and none was"
             ),
             Refusal::Undeclared(name) => write!(formatter, "`{name}` is declared nowhere in scope"),
+            Refusal::PutElsewhere(put) => write!(
+                formatter,
+                "the text states a type for its closing term, which is put at `{put}`"
+            ),
         }
     }
 }

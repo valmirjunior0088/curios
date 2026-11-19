@@ -2,7 +2,7 @@
 
 use {
     crate::*, curios_common::test_support::*, curios_elab::DEFAULT_BUDGET, curios_module::Overlay,
-    std::fs,
+    curios_surface::WrittenIn, std::fs,
 };
 
 /// One fact is reported once, however many subjects reach it.
@@ -19,6 +19,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
             package: None,
             origin: Origin::Text {
                 text: text.to_string(),
+                written: WrittenIn::Program,
             },
         },
         named: Some(curios_package::Named::Stdin),

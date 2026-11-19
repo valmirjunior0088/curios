@@ -47,7 +47,7 @@ pub use spelling::{
 
 mod core_text;
 use core_text::*;
-pub use core_text::{ReadError, Refusal, to_core};
+pub use core_text::{ReadError, Refusal, to_core, to_core_at};
 
 mod format;
 pub use format::{

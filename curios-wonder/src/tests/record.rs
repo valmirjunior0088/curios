@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*, crate::*, curios_common::Style, curios_elab::DEFAULT_BUDGET,
-    curios_module::Overlay,
+    curios_module::Overlay, curios_surface::WrittenIn,
 };
 
 fn of(text: &str) -> Vec<crate::Diagnosis> {
@@ -14,6 +14,7 @@ fn of(text: &str) -> Vec<crate::Diagnosis> {
             package: None,
             origin: Origin::Text {
                 text: text.to_string(),
+                written: WrittenIn::Program,
             },
         },
         &Overlay::default(),

@@ -26,6 +26,9 @@ mod recompile;
 pub use recompile::complete_records;
 use recompile::*;
 
+mod read;
+pub use read::{Read, Unmade, Unread, compile_read, enter_core_text, read_core_text};
+
 mod standard;
 pub use standard::{
     Fold, compile_with_prelude, granted_in_place, prelude_documentation, stood_in_for,

@@ -75,12 +75,9 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.places()).collect()
     }
 
-    /// Where the source declarations of each predecessor written as a program lie, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.
+    /// Where the declarations of each predecessor lie in its text, in dependency order: what a report placed in one of them is resolved against, after the anchors of the unit it is about.
     pub fn anchors(&self) -> Vec<&'a Anchors> {
-        self.units
-            .iter()
-            .filter_map(|unit| unit.text().map(PreparedText::anchors))
-            .collect()
+        self.units.iter().map(|unit| unit.anchors()).collect()
     }
 
     /// Whether each predecessor is the compiler's own ([`Unit::fixed`]), in dependency order: what each stage is told beside its view of them, so that nothing records a read of one.

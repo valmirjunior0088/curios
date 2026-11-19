@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/profile"]
-# `test_support`: what a reading through the certifier spends, which `curios-erase`'s suite measures, the certifier's errors by name, which the soundness board's records name a refusal by, a certifier and a walk with their memos off, which `curios-analysis`'s and `curios-prelude`'s suites reduce and measure under, and the one door a candidate is put to the certifier through, Core text read by `curios-surface`'s reader, which the board and this crate's suites share. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+# `test_support`: what a reading through the certifier spends, which `curios-erase`'s suite measures, the certifier's errors by name, which the soundness board's records name a refusal by, a certifier and a walk with their memos off, which `curios-analysis`'s and `curios-prelude`'s suites reduce and measure under, and the harness its suites put a candidate through, Core text read by `curios-surface`'s reader, the reader `curios-pipeline`'s door reads the board's tickets and a `.crsc` with. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
 test-support = ["curios-common/test-support", "dep:curios-surface"]
 
 [dev-dependencies]
@@ -24,7 +24,7 @@ curios-surface = { workspace = true }
 curios-common = { workspace = true, features = ["test-support"] }
 
 [dependencies]
-# The reader of Core text, behind `test-support` alone: what a candidate is written in, read where `test_support` puts it. No build that ships holds it, so the trusted base `cargo tree -p curios-cert --edges normal` enumerates does not reach it.
+# The reader of Core text, behind `test-support` alone: what a suite's candidate is written in, read where `test_support` puts it. The product reads Core text through `curios-pipeline`'s door, above this crate, so the trusted base `cargo tree -p curios-cert --edges normal` enumerates does not reach the reader.
 curios-surface = { workspace = true, optional = true }
 curios-archive = { workspace = true }
 curios-profile = { workspace = true }

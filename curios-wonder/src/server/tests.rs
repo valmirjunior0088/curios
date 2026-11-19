@@ -95,6 +95,7 @@ fn check(program: &str) -> Diagnosed {
             units: Vec::new(),
             origin: Origin::Text {
                 text: program.to_string(),
+                written: WrittenIn::Program,
             },
             declares: None,
             package: None,

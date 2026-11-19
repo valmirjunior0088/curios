@@ -9,17 +9,16 @@ mod tests;
 
 use {
     crate::Verdicts,
-    curios_abi::ForeignStore,
-    curios_common::{Qualifier, test_support::Temporary},
-    curios_core::Definitions,
+    curios_common::{Qualifier, Source, test_support::Temporary},
+    curios_core::{Intrinsic, Term},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_pipeline::{
-        Cache, CompileError, Listeners, compile_units, granted_in_place, stood_in_for,
-        test_support::*,
+        Cache, CompileError, Listeners, Unmade, Unread, compile_read, compile_units,
+        granted_in_place, read_core_text, stood_in_for,
     },
     curios_prelude::with_prelude,
-    curios_surface::{CoreFile, FormScope, ReadError, WrittenIn, to_core},
+    curios_surface::{FormScope, ReadError, WrittenIn},
     curios_unit::{Predecessors, Unit},
     std::{fs, path::PathBuf, slice},
 };
@@ -209,43 +208,32 @@ fn read(
         return Ok(unit);
     }
 
-    let file = text
-        .parse::<CoreFile>()
-        .map_err(|error| Unbuilt::Unparsed(error.format()))?;
+    // Read through the product's door, a closing term put where a program's is: a unit's text closes with none, which is refused below.
     let scope = FormScope::over(SYNTAX, predecessors.cores());
-    let (definitions, entry) =
-        to_core(&file, Some(&scope)).map_err(|error| Unbuilt::Read(Box::new(error)))?;
-    if entry.is_some() {
+    let contract = Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()));
+    let read =
+        read_core_text(&Source::inline(text), &scope, &contract).map_err(
+            |unread| match unread {
+                Unread::Parse(report) => Unbuilt::Unparsed(report.render()),
+                Unread::Read(error) => Unbuilt::Read(Box::new(error)),
+            },
+        )?;
+    if read.entry.is_some() {
         return Err(Unbuilt::Unparsed(
             "a unit's Core text closes with no term".to_string(),
         ));
     }
-    let foreigns = rows(&definitions);
     let baseline = verdicts.baseline(source, None);
     let unit = compile_read(
         DEFAULT_BUDGET,
         predecessors,
+        &SYNTAX,
         source.claims(),
-        (definitions, foreigns),
+        &read,
         baseline.as_ref(),
     )
     .map_err(Unbuilt::Unmade)?;
     verdicts.put(source, &unit);
 
     Ok(unit)
-}
-
-/// The foreign rows `definitions` declares, in the order it declares them.
-fn rows(definitions: &Definitions) -> ForeignStore {
-    let scope = FormScope::over(SYNTAX, [definitions]);
-    let mut rows = ForeignStore::new();
-    for item in definitions.items.iter() {
-        for name in item.declared_names() {
-            if let Some(row) = scope.rows.get(&name) {
-                rows.register((**row).clone());
-            }
-        }
-    }
-
-    rows
 }

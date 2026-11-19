@@ -169,8 +169,9 @@ impl Asked {
     /// A program, asked about as its entry — the one place the transport drains standard input on the engine's behalf.
     fn about_program(program: Program) -> Result<Self, Box<Report>> {
         let origin = match program.entry() {
-            Entry::Stdin => Origin::Text {
+            Entry::Stdin(written) => Origin::Text {
                 text: read_stdin()?,
+                written: *written,
             },
             Entry::File(path) => Origin::File(path.clone()),
         };
@@ -516,15 +517,15 @@ fn uncanonical(
         .iter()
         .filter_map(|asked| match &asked.subject {
             Subject::Entry {
-                origin: Origin::Text { text },
+                origin: Origin::Text { text, written },
                 ..
-            } => Some(text),
+            } => Some((text, *written)),
             _ => None,
         })
-        .filter(|text| {
+        .filter(|(text, written)| {
             moved(Formatted::from_source(
                 &Source::named(SourceName::stdin(), text.as_str()),
-                WrittenIn::Program,
+                *written,
                 format,
             ))
         })
@@ -574,7 +575,25 @@ pub enum Scope {
     Prelude,
 }
 
+impl Staged {
+    /// This subject, a program on standard input read as written in `written` (`Program::read_stdin_as`).
+    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
+        match self {
+            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
+            library => library,
+        }
+    }
+}
+
 impl Scope {
+    /// This scope, a program on standard input read as written in `written` (`Program::read_stdin_as`).
+    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
+        match self {
+            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
+            scope => scope,
+        }
+    }
+
     /// The question asked in this scope.
     fn asked(self) -> Result<Asked, Box<Report>> {
         Ok(match self {
@@ -1065,7 +1084,7 @@ fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
             let file = match (program.through(), program.entry()) {
                 (Some(module), _) => module.to_path_buf(),
                 (None, Entry::File(entry)) => entry.clone(),
-                (None, Entry::Stdin) => PathBuf::from(STDIN_NAME),
+                (None, Entry::Stdin(_)) => PathBuf::from(STDIN_NAME),
             };
 
             Ok((Asked::about_program(program)?, file))
@@ -1182,7 +1201,7 @@ pub fn not_a_program(entry: &Entry) -> Box<Report> {
 
     match entry {
         Entry::File(path) => refused("file").about_path(path),
-        Entry::Stdin => refused("text").about_named(STDIN_NAME),
+        Entry::Stdin(_) => refused("text").about_named(STDIN_NAME),
     }
 }
 

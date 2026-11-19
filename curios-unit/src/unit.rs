@@ -9,7 +9,7 @@ use {
     curios_archive::{Bytes, joined, parted},
     curios_cert::{Accepted, Filed},
     curios_common::{Digest, Mount, Object, Recorded},
-    curios_core::{Certification, Definitions, ItemRun, Lexicon, Lint, Places},
+    curios_core::{Anchors, Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_module::{PackageRoot, PreparedText},
@@ -27,9 +27,12 @@ enum Written {
         text: Rc<PreparedText>,
         lints: Rc<Vec<Lint>>,
     },
+    /// What a unit read from Core text claims and declares, and where its text writes each declaration: anchored as a lowered unit is, so a report about it is placed in its text. Never stored: a `.crsc` is loose and filed nowhere, and a soundness board's history names what its units declare rather than placing it, so a restored unit holds none.
     CoreText {
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
+        #[archived_with(curios_archive::Skip)]
+        anchors: Rc<Anchors>,
     },
 }
 
@@ -110,6 +113,14 @@ impl Produced {
         match &self.written {
             Written::Program { text, .. } => Some(text),
             Written::CoreText { .. } => None,
+        }
+    }
+
+    /// See [`Unit::anchors`].
+    pub fn anchors(&self) -> &Anchors {
+        match &self.written {
+            Written::Program { text, .. } => text.anchors(),
+            Written::CoreText { anchors, .. } => anchors,
         }
     }
 
@@ -395,17 +406,22 @@ impl Unit {
         }
     }
 
-    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module the one the certifier's walk accepted beside the record that walk filed of it, erased to `erased`. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
+    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module the one the certifier's walk accepted beside the record that walk filed of it, erased to `erased`, and its text writing each declaration where `anchors` say. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
     pub fn read(
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
         accepted: Accepted<Definitions>,
         erased: ErasedUnit,
+        anchors: Anchors,
     ) -> Self {
         let (core, certification) = accepted.into_parts();
         Self {
             unit: Produced::new(
-                Written::CoreText { mounts, foreigns },
+                Written::CoreText {
+                    mounts,
+                    foreigns,
+                    anchors: Rc::new(anchors),
+                },
                 core,
                 erased,
                 Traces::default(),
@@ -450,6 +466,11 @@ impl Unit {
     /// This unit's resolution state, as what a later unit's names resolve against: a program's lowering, and nothing for a unit read from Core text ([`Unit::read`]).
     pub fn text(&self) -> Option<&PreparedText> {
         self.unit.text()
+    }
+
+    /// Where this unit's text writes each of its declarations: a program's lowering's anchors, or those a unit read from Core text was read with, which a unit restored from a store holds none of ([`Unit::read`]).
+    pub fn anchors(&self) -> &Anchors {
+        self.unit.anchors()
     }
 
     /// This unit's lints, decided where it was made: none for a unit read from Core text, which no lowering made.

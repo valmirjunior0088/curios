@@ -5,15 +5,14 @@ mod tests;
 
 use {
     crate::{Proof, Step, Witness},
-    curios_cert::{
-        Verdict,
-        test_support::{Put, Unread},
-    },
-    curios_common::{Report, test_support::Variants},
-    curios_core::Global,
+    curios_cert::{Verdict, certify_program},
+    curios_common::{Report, Source, test_support::Variants},
+    curios_core::{Global, Program, Term, Universes},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{EntryTail, Examined, examine_entrypoint, globals, test_support::*},
+    curios_pipeline::{
+        EntryTail, Examined, Unmade, Unread, examine_entrypoint, globals, read_core_text,
+    },
     curios_surface::{FormScope, ReadError, Spelling},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
@@ -212,32 +211,33 @@ fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
     }
 }
 
-/// The door a module is put to the certifier through over `predecessors`, as this crate's suites put theirs: the forms its text is read against are theirs, and the units in scope are them.
-fn put_over<R>(predecessors: Predecessors<'_>, put: impl FnOnce(&Put) -> R) -> R {
-    let scope = FormScope::over(SYNTAX, predecessors.cores());
-    let globals = globals(predecessors);
-
-    put(&Put {
-        scope: Some(&scope),
-        globals: Some(&globals),
-        syntax: SYNTAX,
-        budget: DEFAULT_BUDGET,
-    })
-}
-
-/// Read `text` as Core text over `predecessors`, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it, and what elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
+/// Read `text` as Core text over `predecessors`, through the product's door, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term but `False`: the board states it, and what elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
 fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
-    match put_over(predecessors, |put| put.core_text(text)) {
-        Err(Unread::Text(reported)) => Answer::Unbuilt(Refusal::Unread(reported)),
-        Err(Unread::Read(error)) => Answer::Unbuilt(Refusal::Unread(located(&error))),
-        Ok(rechecked) => Answer::Judged(
-            rechecked
-                .into_verdicts()
-                .into_iter()
-                .map(Refusal::Certifier)
-                .collect(),
-        ),
-    }
+    let scope = FormScope::over(SYNTAX, predecessors.cores());
+    let empty = Term::instance(false_name(), Universes::default());
+    let read = match read_core_text(&Source::inline(text), &scope, &empty) {
+        Ok(read) => read,
+        Err(Unread::Parse(report)) => return Answer::Unbuilt(Refusal::Unread(report.render())),
+        Err(Unread::Read(error)) => return Answer::Unbuilt(Refusal::Unread(located(&error))),
+    };
+    let Some(entrypoint) = read.entry else {
+        return Answer::Unbuilt(Refusal::Unread(
+            "the text closes with no term to put".to_string(),
+        ));
+    };
+    let program = Program {
+        definitions: read.definitions,
+        entrypoint,
+    };
+    let (rechecked, _) = certify_program(&program, DEFAULT_BUDGET, &globals(predecessors), SYNTAX);
+
+    Answer::Judged(
+        rechecked
+            .into_verdicts()
+            .into_iter()
+            .map(Refusal::Certifier)
+            .collect(),
+    )
 }
 
 /// The reader's refusal, at the place in the text it stands where it names one.
@@ -282,9 +282,10 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Judged(vec![Refusal::Certifier(*verdict)])
         }
-        Unbuilt::Unmade(Unmade::Erased(reported)) => {
-            Answer::Judged(vec![Refusal::Stopped { mount, reported }])
-        }
+        Unbuilt::Unmade(Unmade::Erased(error)) => Answer::Judged(vec![Refusal::Stopped {
+            mount,
+            reported: format!("{error:?}"),
+        }]),
         Unbuilt::Compiled(error) => Answer::Unbuilt(Refusal::Stopped {
             mount,
             reported: error.to_string(),

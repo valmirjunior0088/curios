@@ -256,7 +256,7 @@ fn dispatch() -> Result<(), Failure> {
 
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/Proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
-                Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
+                Entry::Stdin(_) => Spelling::STDIN.as_bytes().to_vec(),
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
             let store = program.home().and_then(|home| {
@@ -776,98 +776,120 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Wonder {
-            query, elaboration, ..
-        } => match query {
-            Query::Check => {
-                let directory = here()?;
-                // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
-                let (files, format) = match contract.written_in(subject, manifest, &directory) {
-                    Ok(Rewritten::Files(files, format)) => (files, format),
-                    Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
-                    Err(_) => (Vec::new(), Format::default()),
-                };
+            query,
+            elaboration,
+            core,
+            ..
+        } => {
+            // What standard input is written in, said once for every query and refused beside any other subject.
+            let stdin = Contract::stdin_written_in(core.core, subject)?;
+            match query {
+                Query::Check => {
+                    let directory = here()?;
+                    // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
+                    let (files, format) = match contract.written_in(subject, manifest, &directory) {
+                        Ok(Rewritten::Files(files, format)) => (files, format),
+                        Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
+                        Err(_) => (Vec::new(), Format::default()),
+                    };
 
-                wonder_diagnostics(
+                    wonder_diagnostics(
+                        elaboration.budget,
+                        contract
+                            .admit_any(subject, manifest, &directory)?
+                            .read_stdin_as(stdin),
+                        &files,
+                        format,
+                        &mut Asking::checking(answered.clone()),
+                    )?
+                }
+                Query::Tests => wonder_tests(
                     elaboration.budget,
-                    contract.admit_any(subject, manifest, &directory)?,
-                    &files,
-                    format,
+                    contract
+                        .admit_any(subject, manifest, &here()?)?
+                        .read_stdin_as(stdin),
                     &mut Asking::checking(answered.clone()),
-                )?
+                )?,
+                Query::Stage(name) => wonder_stage(
+                    elaboration.budget,
+                    &name,
+                    // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
+                    match contract.accepts {
+                        Accepts::ProgramOrLibrary => {
+                            contract.admit_staged(subject, manifest, &here()?)?
+                        }
+                        _ => Staged::Program(contract.admit_program(
+                            subject,
+                            manifest,
+                            None,
+                            &here()?,
+                        )?),
+                    }
+                    .read_stdin_as(stdin),
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::At(place) => wonder_at(
+                    elaboration.budget,
+                    contract.admit_staged(subject, manifest, &here()?)?,
+                    &place,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Name(path, None) => wonder_name(
+                    elaboration.budget,
+                    contract
+                        .admit_scope(subject, manifest, &here()?)?
+                        .read_stdin_as(stdin),
+                    &path,
+                    subject,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Name(path, Some(View::Exports)) => wonder_exports(
+                    elaboration.budget,
+                    contract.admit_scope(subject, manifest, &here()?)?,
+                    &path,
+                    subject,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
+                    elaboration.budget,
+                    contract
+                        .admit_scope(subject, manifest, &here()?)?
+                        .read_stdin_as(stdin),
+                    &path,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Name(path, Some(View::Footprint)) => wonder_footprint(
+                    elaboration.budget,
+                    contract
+                        .admit_program(subject, manifest, None, &here()?)?
+                        .read_stdin_as(stdin),
+                    &path,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                // A unit's rung takes any scope `--name` takes, and a rung past them a program, as the contract the rung selected says.
+                Query::Name(path, Some(View::Stage(name))) => wonder_named_stage(
+                    elaboration.budget,
+                    match contract.accepts {
+                        Accepts::Program => Scope::Program(contract.admit_program(
+                            subject,
+                            manifest,
+                            None,
+                            &here()?,
+                        )?),
+                        _ => contract.admit_scope(subject, manifest, &here()?)?,
+                    }
+                    .read_stdin_as(stdin),
+                    &path,
+                    &name,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Server => serve(elaboration.budget, manifest).map_err(|words| {
+                    Refused::of("server failure")
+                        .stating(words)
+                        .about_named("--server")
+                })?,
             }
-            Query::Tests => wonder_tests(
-                elaboration.budget,
-                contract.admit_any(subject, manifest, &here()?)?,
-                &mut Asking::checking(answered.clone()),
-            )?,
-            Query::Stage(name) => wonder_stage(
-                elaboration.budget,
-                &name,
-                // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
-                match contract.accepts {
-                    Accepts::ProgramOrLibrary => {
-                        contract.admit_staged(subject, manifest, &here()?)?
-                    }
-                    _ => Staged::Program(contract.admit_program(
-                        subject,
-                        manifest,
-                        None,
-                        &here()?,
-                    )?),
-                },
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::At(place) => wonder_at(
-                elaboration.budget,
-                contract.admit_staged(subject, manifest, &here()?)?,
-                &place,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::Name(path, None) => wonder_name(
-                elaboration.budget,
-                contract.admit_scope(subject, manifest, &here()?)?,
-                &path,
-                subject,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::Name(path, Some(View::Exports)) => wonder_exports(
-                elaboration.budget,
-                contract.admit_scope(subject, manifest, &here()?)?,
-                &path,
-                subject,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
-                elaboration.budget,
-                contract.admit_scope(subject, manifest, &here()?)?,
-                &path,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::Name(path, Some(View::Footprint)) => wonder_footprint(
-                elaboration.budget,
-                contract.admit_program(subject, manifest, None, &here()?)?,
-                &path,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            // A unit's rung takes any scope `--name` takes, and a rung past them a program, as the contract the rung selected says.
-            Query::Name(path, Some(View::Stage(name))) => wonder_named_stage(
-                elaboration.budget,
-                match contract.accepts {
-                    Accepts::Program => {
-                        Scope::Program(contract.admit_program(subject, manifest, None, &here()?)?)
-                    }
-                    _ => contract.admit_scope(subject, manifest, &here()?)?,
-                },
-                &path,
-                &name,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            Query::Server => serve(elaboration.budget, manifest).map_err(|words| {
-                Refused::of("server failure")
-                    .stating(words)
-                    .about_named("--server")
-            })?,
-        },
+        }
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         #[cfg(feature = "profile")]
         Mode::Profile { stream } => {
