@@ -18,7 +18,7 @@ mod compile;
 use compile::*;
 pub use compile::{
     After, Cache, Checked, CheckedProgram, CompileError, Earlier, EntryTail, Examined, Findings,
-    Listeners, Obligation, Progress, Refused, TestModule, TestProgram, compile_units,
+    Listeners, Obligation, Progress, Refused, Refuted, TestModule, TestProgram, compile_units,
     declared_test_paths, examine_entrypoint, globals, spelling_at,
 };
 
@@ -28,6 +28,9 @@ use recompile::*;
 
 mod read;
 pub use read::{EnteredText, Read, Unmade, Unread, compile_read, enter_core_text, read_core_text};
+
+mod put;
+pub use put::{Answer, Checker, Put, Refusal, put_core_text, put_program, standing_at};
 
 mod standard;
 pub use standard::{

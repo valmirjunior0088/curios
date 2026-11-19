@@ -71,7 +71,7 @@ mod test_support;
 use {
     crate::{Filed, entails},
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, retyped},
-    curios_common::{Plicity, SyntaxRegistry},
+    curios_common::{Plicity, SyntaxRegistry, variants},
     curios_core::{
         Advance, Applications, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl,
         Level, LevelHead, Names, Notation, Polarity, Quality, Reads, ReduceError, StructDecl, Term,
@@ -223,6 +223,44 @@ pub enum Error {
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
 }
+
+// Each refusal by the name its variant is declared under, what `wonder --false` and the soundness board name a refusal of the certifier's by: exhaustive, so a variant added or removed does not compile until it is named here.
+variants!(Error {
+    Reduce,
+    Unbound,
+    NotClosed,
+    Undeclared,
+    UndeclaredCase,
+    Redeclared,
+    Unclassified,
+    NotASort,
+    OpenSort,
+    AtSorts,
+    TooManySorts,
+    NotAGoal,
+    Mismatch,
+    NotAFunction,
+    NotATuple,
+    NotASlotOf,
+    Arity,
+    Mark,
+    LargeElimination,
+    NotCore,
+    IndexedByItsGroup,
+    NeedsItsOwnTyping,
+    MissingArm,
+    NotDescending,
+    NotPositive,
+    HoldsItself,
+    VarianceDenied,
+    Oversized,
+    NotTotal,
+    Informative,
+    UntypedEntry,
+    UnclosedUniverses,
+    UnsatisfiableUniverses,
+    UniverseInstance,
+});
 
 impl Exhaustion for Error {
     fn refusal(&self) -> Option<&ReduceError> {

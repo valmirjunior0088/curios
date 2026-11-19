@@ -3,7 +3,7 @@
 use {
     crate::tests::test_support::*,
     curios_cert::Verdict,
-    curios_common::{Qualifier, test_support::Variants},
+    curios_common::{Qualifier, Variants},
     curios_core::{Global, Polarity, Term, WitnessKey},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -80,7 +80,10 @@ fn refused(source: &str) -> Refusals {
                 .into_iter()
                 .map(|obligation| obligation.error)
                 .collect(),
-            certifier: verdicts,
+            certifier: verdicts
+                .into_iter()
+                .map(|refuted| refuted.verdict)
+                .collect(),
             judged: true,
         },
     };

@@ -6,10 +6,9 @@ The next step is stage 1, a delivery.
 
 ## What is missing
 
-Each verified once `wonder` answers a `.crsc`.
+Verified once `wonder --false` has landed.
 
-- **No command of the product asks whether the checkers admit a term at `False`.** `cargo xboard probe` alone asks it, a tool of this tree's built over the board.
-- **`curios-pipeline` ships the board's route, and the board keeps what it answers.** `EntryTail::False` and `examine_entrypoint`, which reports the elaborator's erasure obligations rather than raising them so that a program only the elaborator refuses still yields a module the certifier judges, ship; the board and `examine_with_prelude`, which `curios`'s rule suites read, are their callers. What a witness answers (`Answer`, `Refusal`, `Checker`, `xboard/src/put.rs`) is the board's, and the words it names an error by — `curios_common::test_support::Variants` and its `variants!`, each checker's list, `curios_elab::Error::raised` and `declared_in` — are behind `test-support`.
+- **The board answers a witness with a put of its own.** `xboard/src/put.rs` states `Answer`, `Refusal` and `Checker` again, and `xboard/src/probe.rs` its text, beside the pipeline's put that `wonder --false` asks through ([`curios-pipeline`](../../../curios-pipeline/README.md#a-term-put-at-false-is-answered-here)), so what a ticket says of a witness and what a release says of the same text are two functions' answers.
 
 ## Prior art
 
@@ -26,23 +25,18 @@ Each verified once `wonder` answers a `.crsc`.
 
 ## Decided
 
-- **`--false <SUBJECT>` puts the subject's closing term at `False`.** A program meets both checkers as a compilation does, through `examine_entrypoint` over the units the fold compiled, the elaborator's erasure obligations reported beside the certifier's verdicts over what it built; Core text meets the certifier alone, through the door, its closing term put at `False` by the reader's rule ([`curios-pipeline`'s door](../../../curios-pipeline/README.md#core-text-is-read-here-outside-the-trusted-base)). Standard input is a program, or Core text under `--core`. The put and what it answers ship in `curios-pipeline` beside `examine_entrypoint`: refused while the module was built, or judged, each refusal its checker's own error with where it stood, and its text — the verdict as the answer's first word, `ADMITTED` or `REFUSED`, what each checker the subject meets made of it beneath, then every refusal as its checker reports it, placed — rendered once, for the query and the board's probe. A subject that does not lower, or a text that does not read, was put to no checker: the question stops there as any query stops on a subject that does not compile, its report on standard error and exit 1. Units in scope are believed as every build believes them.
-- **`--false` exits as every query does** ([`wonder`](../../usage.md#wonder)): 0 once the question is answered, whichever way the checkers went, so a script reads the verdict off the first word. **Rejected** (2026-11-18): a search's exit, 0 where a proof was admitted, and a check's, 0 where both checkers refused, as `coqchk` exits, each making `--false` the one query whose exit reports its answer.
-- **An error is named by its checker's crate.** `Variants` and `variants!` leave `test-support` for `curios-common`'s root, and each checker states its list, and `curios-elab` what located an error and where it was raised, beside its errors: the board's words are `--false`'s, so renaming an error renames it in a ticket's expectation and in the answer alike, as it renames it in the board today. **Rejected:** opaque codes beside the words, as rustc's and GHC's diagnostics carry, a second name for each error that nothing here reads.
 - **The board asks through the product.** The board's puts — a witness's proof, a probe's candidate — are the pipeline's put at `False`, and its probe prints the answer's text; its tickets, budget, histories and report stay its own, and its probe keeps exiting as a search does, 0 admitted, 1 refused and 2 not put, a text that does not read among the last. Probe decision's **Rejected** paragraph is restated ([`xboard`](../../../xboard/README.md#a-probe-asks-the-boards-question-of-a-proof-on-no-ticket)): the `False` route ships as `wonder`'s query, as peers ship theirs, and a history stays the board's — over program units it is what a user's builds over their store already are, which the product's own commands reproduce, and over a unit written as Core text it puts the certifier alone where no build does, which is the board's question.
-- **The puts the product asks ship; the instruments only suites read stay scaffolding.** [`curios-pipeline`'s puts decision](../../../curios-pipeline/README.md#the-puts-are-this-crates-behind-test-support) is restated so: the put at `False` ships beside the door and `compile_read`, while `typecheck_with_prelude`, `recheck_with_prelude` and `examine_with_prelude` stay behind `test-support`.
 
 ## Stages
 
-Each one commit, each with the workspace lint and its tests by name.
+One commit, with the workspace lint and its tests by name.
 
-1. **`--false`.** The put at `False` and its answer in the pipeline, with `Variants` and the elaborator's `raised` and `declared_in` leaving `test-support`; the query over a program, a `.crsc` and standard input; `usage.md`'s row. Check: a fixed ticket's program witness refused by both checkers — the elaborator's `PartialInErasedPosition` and the certifier's `NotDescending` — each named; a witness the elaborator refuses while building, the certifier not asked; a fixed ticket's `.crsc` witness refused by the certifier; a text that does not read stopped with exit 1; exit 0 for an answer either way.
-2. **The board asks through the product.** The board's puts and probe through the pipeline's put and its text; the probe's decision restated. Check: `cargo xtask tools test` passing; the probe's answer over each ticket's witness unchanged; a candidate that does not read exiting 2.
+1. **The board asks through the product.** The board's puts and probe through the pipeline's put and its text; the probe's decision restated. Check: `cargo xtask tools test` passing; the probe's answer over each ticket's witness unchanged; a candidate that does not read exiting 2.
 
 ## Verification
 
-`cargo xtask workspace lint` and each stage's tests by name, `cargo xtask tools lint` and `cargo xtask tools test`, which puts the board, at stage 2, and the whole workspace's tests once stage 2 has landed. Through a release build: `wonder` over a hand-edited dump, `wonder --false` over a ticket's program and Core text witnesses, each answer shown.
+`cargo xtask workspace lint` and each stage's tests by name, `cargo xtask tools lint` and `cargo xtask tools test`, which puts the board, at stage 1, and the whole workspace's tests once it has landed. Through a release build: `wonder` over a hand-edited dump, `wonder --false` over a ticket's program and Core text witnesses, each answer shown.
 
 ## Retirement
 
-Once stage 2 lands, `documentation/usage.md` holds `--false`, `xboard/README.md` and `curios-pipeline/README.md` their restated decisions, and this file is deleted.
+Once stage 1 lands, `xboard/README.md` holds its restated probe decision, the prior art above stands in the decisions it informed, and this file is deleted.

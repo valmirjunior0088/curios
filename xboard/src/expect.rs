@@ -2,7 +2,7 @@
 
 use {
     crate::{Answer, Checker, Refusal, Witness, standing_at},
-    curios_common::{Qualifier, test_support::Variants},
+    curios_common::{Qualifier, Variants},
     curios_core::Global,
     std::fmt,
 };

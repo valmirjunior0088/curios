@@ -1,6 +1,6 @@
 //! What an enum's listed variants answer.
 
-use crate::{test_support::Variants, variants};
+use crate::{Variants, variants};
 
 /// One variant of each kind, holding nothing a test reads.
 enum Shapes {

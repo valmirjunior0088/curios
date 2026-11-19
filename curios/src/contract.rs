@@ -304,6 +304,16 @@ pub const NAMED_STAGE: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// A closing term is a program's, so the question takes a program, written as one or as Core text.
+pub const FALSE: Contract = Contract {
+    command: "wonder --false",
+    accepts: Accepts::Program,
+    own_file_only: false,
+    core_text: true,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 /// What a program holds of a declaration is a compiled program's, so the view takes a program where `--name` alone takes any scope.
 pub const FOOTPRINT: Contract = Contract {
     command: "wonder --name --footprint",
@@ -352,6 +362,7 @@ impl Mode {
                     &NAMED_STAGE_OF_A_UNIT
                 }
                 Query::Name(_, Some(View::Stage(_))) => &NAMED_STAGE,
+                Query::False => &FALSE,
                 Query::Server => &SERVER,
             },
             #[cfg(feature = "profile")]

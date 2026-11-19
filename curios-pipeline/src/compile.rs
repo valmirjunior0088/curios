@@ -420,6 +420,27 @@ pub fn certifier_refusal(
     )
 }
 
+/// The compile error a certifier verdict over a program is reported as: the refusal, named for the item it is about, or for the entrypoint where it names none, and placed where `anchors`, the program's own and then those of the units in its scope, say it is written.
+pub fn program_refusal(
+    verdict: &Verdict,
+    definitions: &curios_core::Definitions,
+    lexicons: &[&curios_core::Lexicon],
+    anchors: &[&Anchors],
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    certifier_refused(
+        match &verdict.name {
+            Some(name) => format!("`{}`", name.faithful()),
+            None => "the entrypoint".to_string(),
+        },
+        verdict.rendered(
+            definitions,
+            &Spelling::for_refusal(definitions, lexicons, syntax),
+        ),
+        refused_at(anchors, verdict.name.as_ref()),
+    )
+}
+
 /// The compile error that says the certifier refused `refused`, in the certifier's own words, at `at`.
 fn certifier_refused(
     refused: String,
@@ -493,6 +514,13 @@ impl fmt::Display for Refused {
 #[derive(Debug)]
 pub struct Obligation {
     pub error: curios_elab::Error,
+    pub reported: Vec<Report>,
+}
+
+/// One refusal the certifier reached over a program put whole: its verdict, and the reports a compilation makes of it, placed where the refused declaration is written.
+#[derive(Debug)]
+pub struct Refuted {
+    pub verdict: Verdict,
     pub reported: Vec<Report>,
 }
 
@@ -1260,19 +1288,12 @@ pub fn judged(
     let program = match rechecked {
         Rechecked::Accepted(accepted) => accepted,
         Rechecked::Refused(verdicts) => {
-            let verdict = &verdicts[0];
-            let definitions = &program.definitions;
-            let refusal = verdict.rendered(
-                definitions,
-                &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
-            );
-            return Err(certifier_refused(
-                match &verdict.name {
-                    Some(name) => format!("`{}`", name.faithful()),
-                    None => "the entrypoint".to_string(),
-                },
-                refusal,
-                refused_at(&placing.anchors(predecessors), verdict.name.as_ref()),
+            return Err(program_refusal(
+                &verdicts[0],
+                &program.definitions,
+                &scope.lexicons(),
+                &placing.anchors(predecessors),
+                syntax,
             ));
         }
     };
@@ -1326,7 +1347,7 @@ pub struct Examined {
     /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised.
     pub obligations: Vec<Obligation>,
     /// Every refusal the certifier reached over the same program.
-    pub verdicts: Vec<Verdict>,
+    pub verdicts: Vec<Refuted>,
 }
 
 /// Put `entrypoint` to both checkers at what `tail` judges it at — the program contract, as a suite guarding a rule puts a program, or `False`, as the soundness board puts a witness — and hand back what each said rather than stopping at the first refusal: lowering, elaboration, the certifier.
@@ -1347,6 +1368,7 @@ pub fn examine_entrypoint(
                 reported,
             }
         })?;
+    let own = lowered.anchors.clone();
     let (_, elaborated) =
         elaborate_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
     let (program, obligations) = elaborated?;
@@ -1357,9 +1379,29 @@ pub fn examine_entrypoint(
         certify_program(&program, budget, &globals(predecessors), *syntax).0
     };
 
+    let anchors = std::iter::once(&own)
+        .chain(predecessors.anchors())
+        .collect::<Vec<_>>();
+    let lexicons = predecessors.lexicons();
+
     Ok(Examined {
         obligations,
-        verdicts: rechecked.into_verdicts(),
+        verdicts: rechecked
+            .into_verdicts()
+            .into_iter()
+            .map(|verdict| Refuted {
+                reported: program_refusal(
+                    &verdict,
+                    &program.definitions,
+                    &lexicons,
+                    &anchors,
+                    syntax,
+                )
+                .reports()
+                .to_vec(),
+                verdict,
+            })
+            .collect(),
     })
 }
 

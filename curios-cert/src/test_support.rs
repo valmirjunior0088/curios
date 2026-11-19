@@ -4,10 +4,10 @@
 
 use {
     crate::{
-        Certifier, Error, Filed, Globals, Rechecked, Verdict, certify_definitions_over,
+        Certifier, Filed, Globals, Rechecked, Verdict, certify_definitions_over,
         recheck::verdicts_from,
     },
-    curios_common::{Candidates, SyntaxRegistry, fill, variants},
+    curios_common::{Candidates, SyntaxRegistry, fill},
     curios_core::{
         Certification, Definitions, Entrypoint, Free, Global, Places, Subterm, Term, Universes,
     },
@@ -280,43 +280,6 @@ pub fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
         )
     })
 }
-
-variants!(Error {
-    Reduce,
-    Unbound,
-    NotClosed,
-    Undeclared,
-    UndeclaredCase,
-    Redeclared,
-    Unclassified,
-    NotASort,
-    OpenSort,
-    AtSorts,
-    TooManySorts,
-    NotAGoal,
-    Mismatch,
-    NotAFunction,
-    NotATuple,
-    NotASlotOf,
-    Arity,
-    Mark,
-    LargeElimination,
-    NotCore,
-    IndexedByItsGroup,
-    NeedsItsOwnTyping,
-    MissingArm,
-    NotDescending,
-    NotPositive,
-    HoldsItself,
-    VarianceDenied,
-    Oversized,
-    NotTotal,
-    Informative,
-    UntypedEntry,
-    UnclosedUniverses,
-    UnsatisfiableUniverses,
-    UniverseInstance,
-});
 
 /// [`certify_definitions`](crate::certify_definitions)'s verdicts with the certifier's evaluation memos off.
 ///

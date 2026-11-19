@@ -6,7 +6,7 @@ mod tests;
 use {
     crate::{Proof, Step, Witness},
     curios_cert::{Verdict, certify_program},
-    curios_common::{Report, Source, test_support::Variants},
+    curios_common::{Report, Source, Variants},
     curios_core::{Global, Program, Term, Universes},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
@@ -205,7 +205,11 @@ fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
                     error: obligation.error,
                     reported: Report::render_all(&obligation.reported),
                 })
-                .chain(verdicts.into_iter().map(Refusal::Certifier))
+                .chain(
+                    verdicts
+                        .into_iter()
+                        .map(|refuted| Refusal::Certifier(refuted.verdict)),
+                )
                 .collect(),
         ),
     }

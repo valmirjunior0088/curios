@@ -7,8 +7,8 @@
 use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Origin, Refusal,
-        Rendering, Row, Severity, Subject, Unfooted, checked, declared_tests, described,
-        diagnostics, exported, footprint, named_stage, placed, stage, unit_stage,
+        Rendering, Row, Severity, Subject, Unfooted, Unput, checked, declared_tests, described,
+        diagnostics, exported, falsified, footprint, named_stage, placed, stage, unit_stage,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -17,7 +17,7 @@ use {
     curios_core::{Declared, Totality},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
-    curios_pipeline::{CompileError, Progress, Stage},
+    curios_pipeline::{CompileError, Progress, Put, Stage},
     curios_surface::{Format, Formatted, WrittenIn},
     curios_verdict::{Session, Verdicts},
     std::{
@@ -362,6 +362,26 @@ impl Asked {
         });
 
         footprint
+    }
+
+    /// What the checkers say of the subject's closing term put at `False` ([`falsified`](falsified())), `telling` told of the compile as it goes.
+    pub fn falsified(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        telling: &mut dyn Telling,
+    ) -> Result<Put, Unput> {
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let put = falsified(budget, subject, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &put {
+            Err(Unput::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+            _ => Ended::Done,
+        });
+
+        put
     }
 
     /// What the name written at `place` of `file` of the subject names ([`placed`]).
@@ -1170,6 +1190,26 @@ pub fn wonder_footprint(
         Ok(None) => Err(unknown_declaration(path)),
         Err(Unfooted::Unit) => Err(refusal.into()),
         Err(Unfooted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+    }
+}
+
+/// `wonder --false [SUBJECT]`: whether the checkers admit the program's closing term at `False`, to stdout — the verdict as the first word, `ADMITTED` or `REFUSED` and by whom, what each checker the subject meets made of it beneath, then every refusal as its checker reports it. Exit 0 once the question is answered, whichever way it went; a subject that does not lower or read was put to no checker, and stops the question as it stops a build.
+pub fn wonder_false(
+    budget: u64,
+    program: Program,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let refusal = not_a_program(program.entry());
+    let asked = Asked::about_program(program)?;
+
+    match asked.falsified(budget, &Overlay::default(), telling) {
+        Ok(put) => {
+            telling.answering();
+            answer(put);
+            Ok(())
+        }
+        Err(Unput::Unit) => Err(refusal.into()),
+        Err(Unput::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }
 }
 

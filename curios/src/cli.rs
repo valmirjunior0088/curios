@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN, STAGE,
-        TEST, TESTS, WITNESSES,
+        COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FALSE, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN,
+        STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -451,6 +451,8 @@ pub enum Query {
     At(Place),
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),
+    /// Whether the checkers admit the subject's closing term at `False`: the soundness board's question, asked of a program or a text of Core text by the put the board asks it through.
+    False,
     /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
     Server,
 }
@@ -460,7 +462,7 @@ impl Query {
     const GROUP: &str = "query";
 
     /// The query options, the group's members.
-    const QUERIES: [&str; 4] = ["tests", "at", "name", "server"];
+    const QUERIES: [&str; 5] = ["tests", "at", "name", "false", "server"];
 
     /// The group the views of a selection form, which holds them to one.
     const VIEWS: &str = "view";
@@ -552,6 +554,12 @@ impl Args for Query {
                         "The declaration an absolute path names in the subject's scope: what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text",
                     )),
             )
+            .arg(flag(
+                "false",
+                FALSE.query_help(
+                    "Whether the checkers admit the closing term at `False`: ADMITTED or REFUSED first, what each checker made of it, then every refusal; exit 0 either way",
+                ),
+            ))
             // A view stands beside `--name` and in no query's group, which would refuse it there.
             .arg(Self::view(flag(
                 "witnesses",
@@ -619,6 +627,8 @@ impl FromArgMatches for Query {
             Query::Name(*path, view)
         } else if let Some(name) = stage {
             Query::Stage(name.clone())
+        } else if matches.get_flag("false") {
+            Query::False
         } else if matches.get_flag("server") {
             Query::Server
         } else {

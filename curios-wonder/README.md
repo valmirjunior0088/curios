@@ -28,6 +28,14 @@ What the compiler knows about a program, handed out as records: the `wonder` eng
 
 **Rationale.** One source of truth that consumers walk, on the `Intrinsic::signature` principle, so what this crate says and what the compiler did cannot disagree.
 
+### Whether the checkers admit a proof of `False` is answered as any question is
+
+**Decision.** `--false` asks of a subject the question the soundness board asks of every witness, through the pipeline's put ([`curios-pipeline`](../curios-pipeline/README.md#a-term-put-at-false-is-answered-here)), and exits as every query does: 0 once the question is answered, whichever way the checkers went, the verdict the answer's first word.
+
+**Rationale.** A query's exit says whether it was answered, and its answer is on standard output ([`wonder`](../documentation/usage.md#wonder)); a script reads `REFUSED` or `ADMITTED` there as it reads any answer.
+
+**Rejected.** A search's exit, 0 where a proof was admitted, and a check's, 0 where both checkers refused, as `coqchk` exits: either makes `--false` the one query whose exit reports its answer.
+
 ### A change on disk is the editor's to watch, and it asks again about every open document
 
 **Decision.** Where the client states `workspace.didChangeWatchedFiles.dynamicRegistration`, the server registers, once the session is initialized and before it reads a notification, one watcher over every module under the workspace, `**/*.crs`, and one over every manifest, `**/curios.toml`, and answers `workspace/didChangeWatchedFiles` as it answers a save: one check of every open document against the overlay as it stands. A client that does not watch on request is asked for nothing, and a save stays the gesture for the disk having moved. A `source = "path"` dependency outside the workspace folder, which neither glob reaches, is answered by the next save.

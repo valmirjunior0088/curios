@@ -89,6 +89,9 @@ pub use nearest::nearest;
 mod keyed;
 pub use keyed::Keyed;
 
+mod variants;
+pub use variants::Variants;
+
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_common::test_support::Temporary` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(feature = "test-support")]
 pub mod test_support;

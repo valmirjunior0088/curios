@@ -7,7 +7,9 @@ mod tests;
 use {
     super::{Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
-    curios_common::{Code, InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
+    curios_common::{
+        Code, InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry, variants,
+    },
     curios_core::{
         Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
         Extent, Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError,
@@ -1171,6 +1173,158 @@ pub enum Error {
     },
     /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — `Error::batch` flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
     Batch(Vec<Error>),
+}
+
+// Each refusal by the name its variant is declared under, what `wonder --false` and the soundness board name a refusal of the elaborator's by: exhaustive, so a variant added or removed does not compile until it is named here.
+variants!(Error {
+    ReduceExhausted,
+    ConvertExhausted,
+    UniverseInconsistency,
+    UniverseInvariant,
+    ByteLiteralOutOfRange,
+    BoolLiteralOutOfRange,
+    FltLiteralOutOfRange,
+    TypeMismatch,
+    RejectedCandidate,
+    StrandedSequencing,
+    UnembeddedAction,
+    NotAFunction,
+    NotAFunctionType,
+    NotATuple,
+    NotATupleType,
+    TupleArityMismatch,
+    TupleIndexOutOfBounds,
+    UnknownTupleLabel,
+    DuplicateTupleLabel,
+    DuplicateInduct,
+    DuplicateStruct,
+    DuplicateConcept,
+    TupleFieldNameMismatch,
+    NotNatType,
+    NotIntType,
+    NotByteType,
+    NotBoolType,
+    NotListType,
+    NotBytesType,
+    WrongNumberOfArguments,
+    SurplusFuncBinders,
+    BinderPlicityMismatch,
+    UnknownMatchConstructor,
+    MatchCaseMissing,
+    CtorArityMismatch,
+    MatrixInconsistentShape,
+    MatrixDefaultNamesAConstructor,
+    MatrixDuplicateRow,
+    MatrixUncovered,
+    MatrixGuarded,
+    MatrixGuardedBeforeCase,
+    MatrixArmsMeet,
+    MatrixAlternativesMeet,
+    MatrixStructHead,
+    MatrixTupleArity,
+    MatrixLiteralColumn,
+    MatrixByteSuccessor,
+    NotAInductType,
+    LargeElimOfProp,
+    SortDecided,
+    SortDecidedTwice,
+    TooManySorts,
+    RecordOverTwoSorts,
+    InformativePropStruct,
+    NotStrictlyPositive,
+    HoldsItself,
+    PartialInErasedPosition,
+    NotAStructType,
+    StructArityMismatch,
+    WrongNumberOfFields,
+    UnknownDeclaration,
+    UnknownStructField,
+    UseEntryOutsideConcept,
+    SpreadNotFirst,
+    MultipleSpreads,
+    SpreadBaseTypeMismatch,
+    UnlabeledSpreadOverride,
+    SpreadOverrideOutOfOrder,
+    PrivateField,
+    PrivateRepresentation,
+    NoDerivation,
+    Underivable,
+    DeriveOutsideWitness,
+    UnboundVariable,
+    CannotInfer,
+    PostponedCheck,
+    PostponedConversion,
+    AmbiguousSpines,
+    BangRegionUndetermined,
+    BangRegionNotAMonad,
+    OperatorUndefined,
+    UninferredImplicit,
+    ImplicitAtOtherSort,
+    DomainNeverDetermined,
+    WitnessMemberNeverStated,
+    HiddenMemberOutOfOrder,
+    HiddenMemberWithoutSlot,
+    NoWitness,
+    DeclarationCycle,
+    GroupApart,
+    IndexedByItsGroup,
+    Goal,
+    Goals,
+    DuplicateWitness,
+    OrphanWitness,
+    AmbiguousWitness,
+    CyclicSuperclass,
+    UnknownSuperclass,
+    InvalidWitnessHead,
+    WitnessKeyNotSpelled,
+    ParameterlessWitnessConcept,
+    WitnessNotAConcept,
+    UseParameterNotAConcept,
+    ImplicitConceptMemberUnfillable,
+    NonRegularWitnessPremise,
+    ExplicitWitnessParam,
+    MissingArmNotImpossible,
+    Poisoned,
+    Unfinished,
+    Pending,
+    Located,
+    InDeclaration,
+    InUnreachableArm,
+    InAlternative,
+    CheckedAs,
+    InScope,
+    Batch,
+});
+
+impl Error {
+    /// The error beneath what located it, where it was raised: what a refusal is named by, in `wonder --false`'s answer and the soundness board's records.
+    pub fn raised(&self) -> &Error {
+        let mut error = self;
+        while let Error::Located { error: inner, .. }
+        | Error::InDeclaration { error: inner, .. }
+        | Error::InUnreachableArm { error: inner, .. }
+        | Error::InAlternative { error: inner, .. }
+        | Error::CheckedAs { error: inner, .. }
+        | Error::InScope { error: inner, .. } = error
+        {
+            error = inner;
+        }
+
+        error
+    }
+
+    /// The declaration the error was raised in, read beneath what located it: the innermost one a wrapper names, and none where it was raised at a program's closing term.
+    pub fn declared_in(&self) -> Option<&Global> {
+        match self {
+            Error::InDeclaration { names, error } => error.declared_in().or(names.first()),
+            Error::Located { error, .. }
+            | Error::InUnreachableArm { error, .. }
+            | Error::InAlternative { error, .. }
+            | Error::CheckedAs { error, .. }
+            | Error::InScope { error, .. } => error.declared_in(),
+            _ => None,
+        }
+    }
 }
 
 impl Error {
