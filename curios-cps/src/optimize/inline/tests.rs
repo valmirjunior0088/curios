@@ -529,6 +529,59 @@ fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
     }
 }
 
+/// A callee between the floor and the limit, and the most sites whose copies beside the original fit the single-site allowance together.
+fn growth_boundary() -> (usize, usize) {
+    let nodes = MULTI_SITE_INLINE_FLOOR + 4;
+    (nodes, SCC_CLONE_NODE_LIMIT / nodes + 1)
+}
+
+#[test]
+fn a_callee_past_the_floor_is_copied_where_all_its_copies_fit() {
+    let (nodes, most) = growth_boundary();
+    for (sites, admitted) in [(most, true), (most + 1, false)] {
+        let (mut module, callee, calls) = sized_calls(nodes, sites, false);
+        assert_eq!(
+            inline_known_calls(&mut module, &mut known_function_allowance()),
+            admitted
+        );
+        for call in calls {
+            assert_eq!(
+                calls_callee(&module, call, callee),
+                !admitted,
+                "sites={sites}"
+            );
+        }
+        module.verify().unwrap();
+    }
+}
+
+#[test]
+fn a_callee_at_the_floor_is_copied_however_many_sites_it_has() {
+    let (_, most) = growth_boundary();
+    let (mut module, callee, calls) = sized_calls(MULTI_SITE_INLINE_FLOOR, 2 * most, false);
+    assert!(inline_known_calls(
+        &mut module,
+        &mut known_function_allowance()
+    ));
+    for call in calls {
+        assert!(!calls_callee(&module, call, callee));
+    }
+    module.verify().unwrap();
+}
+
+#[test]
+fn an_escaping_callee_counts_a_copy_at_every_site() {
+    let (nodes, most) = growth_boundary();
+    let (mut module, callee, calls) = sized_calls(nodes, most, true);
+    assert!(!inline_known_calls(
+        &mut module,
+        &mut known_function_allowance()
+    ));
+    for call in calls {
+        assert!(calls_callee(&module, call, callee));
+    }
+}
+
 #[test]
 fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
     let (mut module, callee, calls) = sized_calls(1, 2, false);

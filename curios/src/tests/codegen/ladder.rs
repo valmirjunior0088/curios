@@ -234,6 +234,21 @@ fn walk_mirror_family_isolates_each_obligation() {
     }
 }
 
+/// `Nat/of_str`'s step is copied into each width of a UTF-8 scalar `Str/fold` calls it at, so no character pays a call to it: a step past the multi-site limit is a function of its own the fold calls per character, which is what `curios-cps`'s `MULTI_SITE_INLINE_LIMIT` is read against.
+#[test]
+fn a_fold_step_is_copied_into_each_width_the_fold_calls_it_at() {
+    let wat = wat(PARSE_DIGITS);
+    let standing = functions(&wat)
+        .iter()
+        .map(|function| function.name)
+        .filter(|name| name.ends_with("/std/Nat/of_str/1"))
+        .collect::<Vec<_>>();
+    assert!(
+        standing.is_empty(),
+        "`Nat/of_str`'s step stands as a function the fold calls: {standing:?}"
+    );
+}
+
 /// The walk reads a character whole at its lead byte, so no scan state is carried from one turn to the next: the obligations the mirror family attributes to a per-byte walk — the returned scan state, the scan argument rebuilt — have nothing to stand on here.
 ///
 /// The fold does not call `step`. `classify` names how many bytes continue a character and the range of the first, and the fold reads each in a line, its validity stepped through every byte as `step` would step it, so no call and no returned scan remain in the loop. Nothing else on this program's path calls `step` either: `Str/trim` reads forward through the walk under `Str/span`, which reads a character whole at its lead byte as the fold does, and back by position through `Str/At/prev`, which decides a character's width from its lead byte, so the module holds no copy of `step` at all.

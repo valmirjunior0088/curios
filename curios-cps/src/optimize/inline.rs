@@ -1,16 +1,16 @@
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, CopyBudget, CopyPlan, Function, FunctionId,
-        MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId,
-        clone_node, prune_unreachable,
+        MULTI_SITE_INLINE_FLOOR, MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId,
+        SCC_CLONE_NODE_LIMIT, ValueId, clone_node, prune_unreachable,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Inline known calls, a callee with several call sites only below [`MULTI_SITE_INLINE_LIMIT`], unless the call hands it a known function its body applies: then the callee is copied into the call up to the single-site allowance, out of `budget`, so the call through the closure becomes a call of the function, which the next sweep can take in turn. A copy for a known function serves the one call it is made at, as a copy for one call site does.
+/// Inline known calls. A callee with several call sites, or one that escapes, is copied into each where it holds at most [`MULTI_SITE_INLINE_FLOOR`], or at most [`MULTI_SITE_INLINE_LIMIT`] with the copies made beside the original holding at most [`SCC_CLONE_NODE_LIMIT`] together — unless the call hands it a known function its body applies: then the callee is copied into the call up to the single-site allowance, out of `budget`, so the call through the closure becomes a call of the function, which the next sweep can take in turn. A copy for a known function serves the one call it is made at, as a copy for one call site does.
 pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
+    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, and give every site of a callee one verdict, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
     for _ in 0..10_000 {
         let analysis = module.calls();
         let mut inlined_any = false;
@@ -36,7 +36,14 @@ pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool 
                 continue;
             }
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
-            let duplicated = sites > 1 || analysis.escaping.contains(&callee);
+            let escapes = analysis.escaping.contains(&callee);
+            let duplicated = sites > 1 || escapes;
+            // The copies made beside the original: one a site but the one the original's body becomes, and one a site where an escape keeps the original.
+            let copies = if escapes {
+                sites
+            } else {
+                sites.saturating_sub(1)
+            };
             let passes_function = args.iter().any(|arg| matches!(arg, Atom::Fun(_)));
             let limit = if !duplicated || (passes_function && budget.admits(1)) {
                 SCC_CLONE_NODE_LIMIT
@@ -50,17 +57,18 @@ pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool 
                 continue;
             };
             let args = args.clone();
-            let charged = duplicated && plan.nodes().len() > MULTI_SITE_INLINE_LIMIT;
+            let size = plan.nodes().len();
+            let fits = size <= MULTI_SITE_INLINE_FLOOR
+                || (size <= MULTI_SITE_INLINE_LIMIT && copies * size <= SCC_CLONE_NODE_LIMIT);
+            let charged = duplicated && !fits;
             if charged
-                && !(applies_a_passed_function(module, &plan, callee, &args)
-                    && budget.admits(plan.nodes().len()))
+                && !(applies_a_passed_function(module, &plan, callee, &args) && budget.admits(size))
             {
                 continue;
             }
-            let copied = plan.nodes().len();
             if inline_call(module, node_id, callee, &args, return_to, plan) {
                 if charged {
-                    budget.charge(copied);
+                    budget.charge(size);
                 }
                 changed = true;
                 inlined_any = true;

@@ -55,12 +55,14 @@ pub use uncurry::*;
 
 use super::{Module, known_values};
 
-/// How many live nodes a callee with more than one call site may have and still be inlined into each of them.
+/// How many nodes one copy of a callee with more than one call site may hold, past [`MULTI_SITE_INLINE_FLOOR`], and still be made at each site, where all its copies together fit [`SCC_CLONE_NODE_LIMIT`].
 ///
-/// `/std/State/bind` is a nine-node extent — two of its own and seven in the `bind/1` it nests — so under a limit of eight a monadic step keeps a shared generic `bind` that receives both the action and the continuation as arguments and reaches each through a closure call, an indirect call per step that the hand-threaded control never pays.
+/// A fold's step is what it is read against: `/std/Nat/of_str`'s, which `/std/Str/fold` calls at each width of a UTF-8 scalar, holds seventeen or eighteen nodes, and under a limit of sixteen the fold calls it as a function of its own, a call `programs/parse_digits.crs` pays at every character it decodes.
 ///
-/// That argues for nine. The value is sixteen instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
-pub const MULTI_SITE_INLINE_LIMIT: usize = 16;
+/// That argues for eighteen. The value is twenty instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching. What keeps the larger limit from copying a callee of many sites into each, `/std/Map/insert` into every test that builds a map, is the bound on all its copies, not this one.
+pub const MULTI_SITE_INLINE_LIMIT: usize = 20;
+/// How many nodes a callee with more than one call site may hold and be copied into every one of them, however many: the helpers a walk calls per byte, `/std/Nat/in_range` among them, which a large program reaches from hundreds of sites.
+pub const MULTI_SITE_INLINE_FLOOR: usize = 8;
 pub const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 /// How many parameters a continuation may hold after a fields split. The widest admitted aggregate `curios`'s programs hold is the four-field scan state a walk reading UTF-8 a byte a turn carries beside its loop state (`programs/walk_mirror_baseline.crs`), and its corpus census finds pairs, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
