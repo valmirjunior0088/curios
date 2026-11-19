@@ -16,7 +16,7 @@ mod tests;
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module,
-        Node, NodeId, ValueExpr, ValueId, atoms, collect_control_targets,
+        Node, NodeId, ValueExpr, ValueId, atoms, collect_control_targets, function_nodes,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet, btree_map::Entry},
@@ -74,6 +74,10 @@ struct Sink<'m> {
     held: BTreeMap<ContinuationId, NodeId>,
     /// The `LetFun` binding each function defined inside another.
     bound: BTreeMap<FunctionId, NodeId>,
+    /// The function whose own body holds each node, its continuations' bodies included: fixed through the pass, since every move stays within the function being placed and every node the pass adds is added there.
+    owner: BTreeMap<NodeId, FunctionId>,
+    /// The function being placed in, which owns every node the pass adds.
+    placing: Option<FunctionId>,
     /// What binds each value: the node computing it, or the continuation or function whose parameter it is.
     binder: BTreeMap<ValueId, Holder>,
     /// The nodes naming each value, a closure call's callee among them.
@@ -100,6 +104,8 @@ impl<'m> Sink<'m> {
             parent: BTreeMap::new(),
             held: BTreeMap::new(),
             bound: BTreeMap::new(),
+            owner: BTreeMap::new(),
+            placing: None,
             binder: BTreeMap::new(),
             uses: BTreeMap::new(),
             references: BTreeMap::new(),
@@ -135,6 +141,9 @@ impl<'m> Sink<'m> {
             .map(|(id, definition)| (id, definition.body, definition.params.clone()))
             .collect::<Vec<_>>();
         for (id, body, params) in functions {
+            for node in function_nodes(pass.module, id) {
+                pass.owner.insert(node, id);
+            }
             pass.parent.insert(body, Holder::Function(id));
             for param in params {
                 pass.binder.insert(param, Holder::Function(id));
@@ -259,6 +268,10 @@ impl<'m> Sink<'m> {
     fn add(&mut self, node: Node) -> NodeId {
         let id = self.module.add_node(node);
         self.file(id);
+        let placing = self
+            .placing
+            .expect("a node is added while a function is placed");
+        self.owner.insert(id, placing);
         id
     }
 
@@ -322,20 +335,15 @@ impl<'m> Sink<'m> {
         }
     }
 
-    /// Where the node at `node` reads within `function`'s own body: itself, or the `LetFun` binding the outermost function defined in that body that holds it.
+    /// Where the node at `node` reads within `function`'s own body: itself, or the `LetFun` binding the outermost function defined in that body that holds it, found by the functions it is defined in and not by the chain before it.
     fn site_in(&self, node: NodeId, function: FunctionId) -> Option<NodeId> {
         let mut site = node;
-        let mut at = Holder::Node(node);
-        loop {
-            match at {
-                Holder::Function(owner) if owner == function => return Some(site),
-                Holder::Function(owner) => {
-                    site = *self.bound.get(&owner)?;
-                    at = Holder::Node(site);
-                }
-                holder => at = self.above(holder)?,
-            }
+        let mut owner = *self.owner.get(&node)?;
+        while owner != function {
+            site = *self.bound.get(&owner)?;
+            owner = *self.owner.get(&site)?;
         }
+        Some(site)
     }
 
     /// The continuations holding `site` below `region`, outermost first; `None` where `region` does not hold it within one function.
@@ -382,6 +390,7 @@ impl<'m> Sink<'m> {
 
     /// Place every computation in `function`'s own body, the last first, so that what a computation feeds has moved before it is placed.
     fn place_in(&mut self, function: FunctionId) {
+        self.placing = Some(function);
         let Some(body) = self
             .module
             .function(function)
