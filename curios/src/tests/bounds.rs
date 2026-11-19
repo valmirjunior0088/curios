@@ -385,6 +385,11 @@ const ROWS: &[Row] = &[
         "x: Nat, d: Nat, p: Holds(d <= x % 16), q: Holds(x % 16 != d)",
         "Holds(d < x % 16)",
     ),
+    // Two truncated subtractions of one minuend, whose cases' products exhaust a stage's cap: the products are passed over, and the disequality read after them proves the bound.
+    claim(
+        "b: Nat, d: Nat, p: Holds(d <= b), q: Holds(b != d)",
+        "Holds(b - (d + 1) + 1 <= b - d)",
+    ),
     // A truncated subtraction of a remainder, under a guard on it: `Char/hex_digit`'s shape.
     body(
         "n: Nat",
@@ -903,6 +908,27 @@ fn a_split_opens_nearest_guard_first_and_the_cap_bounds_the_rest() {
     let refused = typecheck(&guarded(10, false)).expect_err("the cap is reached");
     assert!(
         refused.contains("ran out of its bound of 4096 derived rows"),
+        "{refused}"
+    );
+}
+
+/// A bound whose cases' products run out of a stage's cap is answered by the stages around them: with a disequality in scope it is proved by the stage that reads it, and with none it is refused at the assignment the linear search found, `d = b`, rather than for the cap. Mutation-checked: with one cap for every stage, the first is refused and the second answers that the cap ran out.
+#[test]
+fn a_stage_that_runs_out_is_passed_over() {
+    let goal = "Holds(b - (d + 1) + 1 <= b - d)";
+    let program = |binders: &str| {
+        format!("{HEADER}\nlet row({binders}) -> {goal} = proved(@{goal});\nIo/pure(())")
+    };
+    assert_eq!(
+        typecheck(&program(
+            "b: Nat, d: Nat, p: Holds(d <= b), q: Holds(b != d)"
+        )),
+        Ok(())
+    );
+    let refused = typecheck(&program("b: Nat, d: Nat, p: Holds(d <= b)"))
+        .expect_err("`d = b` falsifies the bound");
+    assert!(
+        refused.contains("it fails at") && !refused.contains("ran out"),
         "{refused}"
     );
 }

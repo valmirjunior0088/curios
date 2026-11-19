@@ -137,6 +137,7 @@ pub struct Target {
 }
 
 /// What the scope states: the facts read, the case splits their operations define, the remainders lifted out of them, the comparisons kept for the last reading, and the propositions stating a decision the view does not read.
+#[derive(Clone)]
 pub struct Facts {
     facts: Vec<Fact>,
     splits: Vec<Split>,
@@ -153,6 +154,7 @@ pub struct Facts {
 /// A comparison the scope states that is read only where a search over the facts and their products leaves an assignment: a disequality, and the equation a `!=` guard's false arm gives.
 ///
 /// **Kept, and not read where it is met.** A reading hands out atoms, classes and spellings that every search over the scope then shares, so a comparison read where the guards are would have a proof that takes no part of it written another way. What is kept touches none of them.
+#[derive(Clone)]
 struct Kept {
     carrier: Carrier,
     left: Term,
@@ -245,6 +247,7 @@ pub fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
 }
 
 /// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`. Operations whose guards are one comparison to conversion share one split ([`Reader::open`]).
+#[derive(Clone)]
 pub struct Split {
     /// The comparison the proof splits on.
     guard: Term,
@@ -2072,6 +2075,7 @@ impl Division {
 }
 
 /// A remainder lifted out of the facts: a fact over it is raised by a multiple of its quotient's multiple on both sides, which conversion reads as a fact over the dividend, and its form has the remainder replaced by what it denotes.
+#[derive(Clone)]
 pub struct Lift {
     remainder: Monomial,
     /// `x - d * (x / d)`.

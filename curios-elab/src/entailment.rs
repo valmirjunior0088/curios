@@ -180,31 +180,40 @@ fn linear(
     };
     let absurd = target.is_none();
 
-    let mut budget = DERIVED_ROWS;
-    let searched = match search(&facts, &negated, &mut budget) {
+    // Each stage searches under a cap of its own: the facts and their splits, their products, the disequalities. A stage asked where the one before it left an assignment says nothing of the bound by running out, so one that does is passed over, and the next reads what the stage before it read.
+    let mut derived = 0;
+    let searched = match staged(&facts, &negated, &mut derived) {
         Plan::Certified(certificate) => Ok(certificate),
         Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
-        // Where linear arithmetic finds an assignment, the facts' products are asked, under what is left of the cap. The linear assignment is the one reported: a product search reads a product as an unknown, so its own assignment may be no values of the atoms at all.
+        // Where linear arithmetic finds an assignment, the facts' products are asked. The linear assignment is the one reported: a product search reads a product as an unknown, so its own assignment may be no values of the atoms at all.
         Plan::Satisfied(assignment) => {
             let linear = SearchOutcome::Counterexample(assignment);
+            // The facts as the linear search read them, which the disequalities are read over where the products run out.
+            let unmultiplied = facts.clone();
             let products = products(context, &mut views, &mut classes, &facts, &negated)?;
             let cased = case_products(context, &mut views, &mut classes, &mut facts, &negated)?;
-            let multiplied = !products.is_empty() || cased;
-            let with_products = match multiplied {
+            let with_products = match !products.is_empty() || cased {
                 true => {
                     facts.extend(products);
-                    Some(search(&facts, &negated, &mut budget))
+                    Some(staged(&facts, &negated, &mut derived))
                 }
                 false => None,
             };
+            let multiplied = match with_products {
+                Some(Plan::Exhausted) => {
+                    facts = unmultiplied;
+                    false
+                }
+                Some(Plan::Certified(_) | Plan::Satisfied(_)) => true,
+                None => false,
+            };
             match with_products {
                 Some(Plan::Certified(certificate)) => Ok(certificate),
-                Some(Plan::Exhausted) => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
                 // Last, what the scope's disequalities add: read only where nothing above settles the search, so a bound the facts prove is proved as it was before a disequality was read at all.
-                Some(Plan::Satisfied(_)) | None => {
+                Some(Plan::Satisfied(_) | Plan::Exhausted) | None => {
                     let target = target.as_ref();
                     match disequalities(context, &mut views, &mut classes, &mut facts, target)? {
-                        true => match search(&facts, &negated, &mut budget) {
+                        true => match staged(&facts, &negated, &mut derived) {
                             Plan::Certified(certificate) => Ok(certificate),
                             Plan::Exhausted => Err(SearchOutcome::Exhausted(DERIVED_ROWS)),
                             Plan::Satisfied(assignment) if !multiplied => {
@@ -214,7 +223,7 @@ fn linear(
                             Plan::Satisfied(_) => Err(SearchOutcome::Counterexample(valued(
                                 &facts,
                                 &negated,
-                                &mut budget,
+                                &mut derived,
                             ))),
                         },
                         false => Err(linear),
@@ -223,8 +232,8 @@ fn linear(
             }
         }
     };
-    // What the cap is set against: the rows one bound's search derived, products and cases included.
-    curios_profile::sample!("entailment::derived", DERIVED_ROWS - budget);
+    // What the cap is set against: the rows one bound's stages derived, products and cases included.
+    curios_profile::sample!("entailment::derived", derived);
     // A counterexample's atoms named in one pass through every spelling the report has, so an outer reduct is replaced before one inside it whichever reading found either: the operands as stated, and the operands written beneath them, which are asked only now the search is over. A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and what the solution states is read here, for the report alone, since the proof is written over what the search read and one written over the solution does not check. A reading that runs out leaves its spellings out.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
         let refuted = refuted(context, views, &outcome);
@@ -272,6 +281,14 @@ fn linear(
     }
 }
 
+/// One stage of a bound's search: `facts`, their splits and the negated goal's, under a cap of its own, the rows it derived added to `derived`.
+fn staged(facts: &Facts, negated: &[Fact], derived: &mut usize) -> Plan {
+    let mut budget = DERIVED_ROWS;
+    let plan = search(facts, negated, &mut budget);
+    *derived += DERIVED_ROWS - budget;
+    plan
+}
+
 /// Search `facts`, their splits and the negated goal's, spending from `budget`.
 fn search(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Plan {
     plan(
@@ -283,8 +300,8 @@ fn search(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Plan {
     )
 }
 
-/// The values a search over `facts` less their products leaves the atoms at, spending from `budget`: what a refusal reports where the search over the products left an assignment, a product being an unknown of its own there. Nothing where the cap runs out first.
-fn valued(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Vec<(Monomial, Rational)> {
+/// The values a search over `facts` less their products leaves the atoms at, under a cap of its own, the rows it derived added to `derived`: what a refusal reports where the search over the products left an assignment, a product being an unknown of its own there. Nothing where the cap runs out first.
+fn valued(facts: &Facts, negated: &[Fact], derived: &mut usize) -> Vec<(Monomial, Rational)> {
     let linear = facts
         .facts()
         .iter()
@@ -292,13 +309,16 @@ fn valued(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Vec<(Monomial,
         .map(|fact| fact.form.clone())
         .collect::<Vec<_>>();
     let common = forms_of(facts.common());
-    match plan(
+    let mut budget = DERIVED_ROWS;
+    let searched = plan(
         &linear,
         &forms_of(negated),
         &common,
         &arms_of(facts),
-        budget,
-    ) {
+        &mut budget,
+    );
+    *derived += DERIVED_ROWS - budget;
+    match searched {
         Plan::Satisfied(assignment) => assignment,
         Plan::Certified(_) | Plan::Exhausted => Vec::new(),
     }

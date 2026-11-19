@@ -14,7 +14,7 @@ use {
     std::{cmp::Ordering, fmt},
 };
 
-/// The rows one search may derive before it refuses: a count in the theory's units, never the host's.
+/// The rows one stage of a bound's search may derive before it is passed over, or refuses where it is the last: a count in the theory's units, never the host's.
 pub const DERIVED_ROWS: usize = 4096;
 
 /// What one search over `<= 0` rows concluded.
