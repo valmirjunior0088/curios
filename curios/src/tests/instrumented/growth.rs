@@ -229,6 +229,7 @@ const HELD_FRONT: &[Growth] = &[
     Growth::Matches,
     Growth::Lists,
     Growth::LetsSummed,
+    Growth::Loops,
 ];
 
 /// The steepest slope a held growth's stage may show: two is linear and four quadratic, so three tells them apart with room on both sides — for a logarithm's factor, and for the instructions a run's drawn hash keys move in a stage that grows little.
@@ -246,48 +247,50 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// # What it last printed
 ///
-/// Over the compiler of `e1945ebc6`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
+/// Over the compiler of `ba7b9b9fc`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 2.34 binaryen | 2.00 erase | 2.23 cps-optm | 2.11 cps |
-/// | LetCall | 25 | 2.37 binaryen | 2.00 erase | 2.23 cps-optm | 2.73 parse |
-/// | Statements | 100 | 2.19 elaborate | 2.00 erase | 2.03 erase | 2.26 binaryen |
-/// | Definitions | 250 | 2.03 parse | 2.00 erase | 2.00 erase | 2.58 parse |
-/// | Functions | 250 | 3.37 binaryen | 2.00 erase | 2.09 cranelift | 2.74 cranelift |
-/// | Strings | 250 | 2.00 parse | 2.00 lower | 2.00 parse | 2.00 binaryen |
-/// | List | 1000 | 1.98 erase | 2.00 erase | 2.00 elaborate | 2.00 binaryen |
-/// | ListOpen | 400 | 3.80 binaryen | 2.00 erase | 2.11 cps | 2.83 cps |
-/// | Arms | 250 | 6.15 binaryen | 2.00 erase | 2.03 cranelift | 2.56 cranelift |
-/// | Parameters | 400 | 2.20 anf-optm | 2.00 erase | 2.08 cps | 2.24 anf-optm |
-/// | ParametersSummed | 100 | 2.84 binaryen | 2.00 erase | 2.06 cranelift | 2.37 cranelift |
-/// | LetsSummed | 250 | 3.94 cranelift | 2.00 erase | 2.17 cps | 3.49 cranelift |
-/// | ProductCommuted | 128 | 3.21 cps | 2.00 erase | 2.03 elaborate | 2.82 cps |
-/// | Tuple | 250 | 2.05 lower | 2.00 erase | 2.00 parse | 2.03 elaborate |
-/// | Fields | 250 | 2.07 elaborate | 2.00 erase | 2.00 erase | 2.01 elaborate |
-/// | StructReaders | 250 | 2.16 elaborate | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | Constructors | 250 | 2.18 anf-optm | 2.00 erase | 2.02 anf-optm | 2.46 anf-optm |
-/// | Values | 250 | 2.15 lower | 2.00 erase | 2.00 erase | 2.00 erase |
-/// | DefaultedMatches | 250 | 2.20 binaryen | 2.00 erase | 2.00 binaryen | 3.00 parse |
-/// | ComparedConstructions | 250 | 2.07 binaryen | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | AliasReaders | 250 | 2.02 elaborate | 2.00 erase | 2.00 elaborate | 2.00 erase |
-/// | ArrowAliasReaders | 250 | 2.02 parse | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | Methods | 250 | 2.54 cps-optm | 2.00 erase | 2.02 cps | 2.19 cps |
-/// | Calls | 250 | 2.01 erase | 2.00 erase | 2.05 cps | 2.75 cps |
-/// | Parentheses | 1000 | 2.01 parse | - | 2.00 parse | 2.00 parse |
-/// | RightPlus | 250 | 3.47 cranelift | 2.00 erase | 2.07 cranelift | 3.57 cranelift |
-/// | LeftPlus | 250 | 3.37 binaryen | 2.00 erase | 2.07 cranelift | 2.71 cps |
-/// | Matches | 200 | 3.36 binaryen | 2.00 erase | 2.01 cranelift | 2.80 cranelift |
-/// | ChainedMatches | 100 | 2.93 binaryen | 2.00 erase | 2.09 cps-optm | 2.29 cranelift |
-/// | Lambdas | 100 | 2.06 cps | 2.47 elaborate | 2.07 erase | 2.52 cps |
-/// | Lists | 400 | 3.70 binaryen | 2.00 erase | 2.01 emit | 2.68 anf-optm |
-/// | Lets | 100 | 2.13 erase | 2.00 erase | 2.00 elaborate | 2.33 erase |
-/// | Arrow | 1000 | 2.06 elaborate | 2.00 erase | 2.08 elaborate | 2.05 elaborate |
-/// | StringLiteral | 2000 | 2.01 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |
+/// | LetPlus | 25 | 2.49 cps | 2.00 erase | 2.04 elaborate | 4.71 cps |
+/// | LetCall | 25 | 2.36 binaryen | 2.00 erase | 2.03 emit | 4.71 cps |
+/// | Statements | 100 | 2.85 erase | 2.00 erase | 2.05 cps | 2.21 elaborate |
+/// | Definitions | 250 | 2.09 lower | 2.00 erase | 2.00 elaborate | 2.52 parse |
+/// | Functions | 250 | 3.36 binaryen | 2.00 erase | 2.16 cranelift | 3.07 cps-optm |
+/// | Strings | 250 | 2.16 lower | 2.00 lower | 2.00 parse | 2.10 lower |
+/// | List | 1000 | 2.00 parse | 2.00 erase | 2.00 parse | 2.00 anf-optm |
+/// | ListOpen | 400 | 3.79 binaryen | 2.00 erase | 2.10 cranelift | 2.82 cps |
+/// | Arms | 250 | 3.26 binaryen | 2.00 erase | 2.10 cranelift | 2.98 cranelift |
+/// | Parameters | 400 | 3.68 erase | 2.00 erase | 2.01 anf-optm | 2.26 anf-optm |
+/// | ParametersSummed | 100 | 2.84 binaryen | 2.00 erase | 2.08 cranelift | 2.24 cps-optm |
+/// | CodomainSummed | 100 | 2.69 elaborate | 2.98 elaborate | 2.56 elaborate | 2.88 elaborate |
+/// | LetsSummed | 250 | 3.97 cranelift | 2.00 erase | 2.16 cps | 3.48 cranelift |
+/// | ProductCommuted | 128 | 3.65 erase | 3.70 erase | 3.62 erase | 3.68 erase |
+/// | Tuple | 250 | 2.04 erase | 2.00 erase | 2.00 parse | 2.02 elaborate |
+/// | Fields | 250 | 2.11 parse | 2.00 erase | 2.00 parse | 2.03 binaryen |
+/// | StructReaders | 250 | 2.18 elaborate | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
+/// | Constructors | 250 | 3.81 erase | 2.00 erase | 2.01 anf-optm | 2.80 erase |
+/// | Values | 250 | 4.27 erase | 3.92 erase | 3.95 erase | 7.43 erase |
+/// | DefaultedMatches | 250 | 2.07 erase | 2.00 erase | 2.00 elaborate | 2.88 parse |
+/// | ComparedConstructions | 250 | 2.02 erase | 2.00 erase | 2.00 elaborate | 2.00 erase |
+/// | AliasReaders | 250 | 2.16 lower | 2.00 erase | 2.00 elaborate | 2.13 lower |
+/// | ArrowAliasReaders | 250 | 3.54 erase | 2.00 erase | 3.26 erase | 3.64 erase |
+/// | Methods | 250 | 2.34 elaborate | 2.00 erase | 2.01 cps-optm | 2.71 elaborate |
+/// | Calls | 250 | 2.22 cps-optm | 2.00 erase | 2.03 cps-optm | 2.72 cps |
+/// | Parentheses | 1000 | 3.87 parse | - | 2.10 parse | 3.95 parse |
+/// | RightPlus | 250 | 3.64 cranelift | 2.00 erase | 2.13 cranelift | 3.54 cranelift |
+/// | LeftPlus | 250 | 3.37 binaryen | 2.00 erase | 2.17 cranelift | 3.18 cps-optm |
+/// | Matches | 200 | 3.46 elaborate | 2.00 erase | 2.06 cranelift | 3.14 cranelift |
+/// | ChainedMatches | 100 | 2.92 binaryen | 2.00 erase | 2.22 cranelift | 2.30 cranelift |
+/// | Loops | 128 | 6.30 binaryen | 2.00 erase | 2.09 cranelift | 2.94 cranelift |
+/// | Lambdas | 100 | 4.84 anf-optm | 3.20 erase | 4.07 anf-optm | 3.47 erase |
+/// | Lists | 400 | 3.68 binaryen | 2.00 erase | 2.08 parse | 3.75 parse |
+/// | Lets | 100 | 3.34 erase | 2.00 erase | 2.00 parse | 2.42 erase |
+/// | Arrow | 1000 | 2.06 parse | 2.00 erase | 2.08 elaborate | 2.03 elaborate |
+/// | StringLiteral | 2000 | 2.02 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
 ///
-/// A product commuted's instructions at `cps` read 3.21 here, above [`HELD_SLOPE`], and 2.38 and 2.16 in two more runs of the same compiler: the hash keys a run draws move them.
+/// Held growths read past [`HELD_SLOPE`] here, in erasure, parsing, the ANF optimizer, the CPS lowering and elaboration, and the optimizer's bytes over functions and over additions nested either way, which the workspace's and compilation's findings hold (`documentation/roadmap/000-findings.md`, `documentation/roadmap/compilation/000-findings.md`); the hash keys a run draws move some readings, a product commuted's instructions having read 3.21, 2.38 and 2.16 over one compiler.
 ///
-/// **Twenty-one growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas, matches each on the `let` before it, a product of two spines commuted, a structure's readers, a family's values, its constructions compared, and a tuple alias's and a function-type alias's readers, the ones [`HELD`] lists. **Twelve more are held through emission**, the ones [`HELD_FRONT`] lists. A family's defaulted matches are held in neither: their parse stage's bytes read 3.00, at the bound. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cps` do.
+/// **Twenty-one growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas, matches each on the `let` before it, a product of two spines commuted, a structure's readers, a family's values, its constructions compared, and a tuple alias's and a function-type alias's readers, the ones [`HELD`] lists. **Thirteen more are held through emission**, the ones [`HELD_FRONT`] lists, self-tail loops among them, whose instructions grow at Binaryen. A family's defaulted matches and a codomain's sums are held in neither. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cps` do.
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {
