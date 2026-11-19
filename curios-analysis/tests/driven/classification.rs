@@ -9,8 +9,8 @@ use {
     curios_cert::{Certifier, convert},
     curios_common::Qualifier,
     curios_core::{
-        Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Reducer, Subterm, Term,
-        Totality,
+        Cases, Exhaustion, Free, Global, Intrinsic, Keyed, Keys, Level, Match, Nat, Reducer,
+        Subterm, Term, Totality,
     },
     curios_num::{Integer, Natural, Rounding},
 };
@@ -322,7 +322,7 @@ fn an_elimination_reads_its_scrutinee_as_the_algebra_decides_it() {
         nat(20),
     ));
     let switch = Cases::Switch {
-        cases: vec![(Natural::from(0usize), nat(10))],
+        keys: Keys::Nat(Keyed::new(vec![(Natural::from(0usize), nat(10))]).expect("one key")),
         default: nat(20),
     };
     // The scrutinee as the certifier forces it, and what the rule reads it as.

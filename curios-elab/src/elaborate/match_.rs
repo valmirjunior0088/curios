@@ -14,10 +14,10 @@ use {
     curios_common::Plicity,
     curios_core::{
         Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, Nat, One, Quality, Scope, StructType, Subterm, Telescope, Term,
-        Two, Universes, goal_at,
+        IntrinsicHead, Keys, Many, Match, Nat, One, Quality, Scope, StructType, Subterm, Telescope,
+        Term, Two, Universes, goal_at,
     },
-    curios_num::{Binary, Natural},
+    curios_num::Binary,
     std::collections::{HashMap, HashSet},
 };
 
@@ -565,15 +565,13 @@ impl SwitchSplit {
         Ok(Self { head, goal })
     }
 
-    /// The case at the literal `value`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
+    /// The case at `literal`, a key's: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
     pub fn arm(
         &self,
         context: &mut Context,
-        value: &Natural,
+        literal: Term,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
-        let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(value.clone()))).into();
-
         context
             .with_frame(|context| {
                 open_arm(context, &self.head, &literal)?;
@@ -583,16 +581,16 @@ impl SwitchSplit {
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
 
-    /// What any other value takes, past every key of `cases`. It refines nothing, so it is typed at the result at the scrutinee itself, in a frame where each key's test failed, as the certifier types it (`curios_analysis::catch_all_tests`).
+    /// What any other value takes, past every one of `keys`. It refines nothing, so it is typed at the result at the scrutinee itself, in a frame where each key's test failed, as the certifier types it (`curios_analysis::catch_all_tests`).
     pub fn default(
         &self,
         context: &mut Context,
-        cases: &[(Natural, Term)],
+        keys: &Keys,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
         context.with_frame(|context| {
             let failed = Term::intrinsic(Intrinsic::Bool(false));
-            for test in catch_all_tests(&self.head, cases) {
+            for test in catch_all_tests(&self.head, keys) {
                 refine_head(context, &test, &failed)?;
             }
 
@@ -605,13 +603,13 @@ impl SwitchSplit {
         self.goal.clone()
     }
 
-    /// The match over `cases`, which arrive strictly ascending as `Cases::Switch` states them, and the default.
-    pub fn rebuild(&self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
+    /// The match over `keys` and the default.
+    pub fn rebuild(&self, keys: Keys, default: Term) -> (Term, Term) {
         let result_type = self.goal.clone();
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
             goal: self.goal.clone(),
-            cases: Cases::Switch { cases, default },
+            cases: Cases::Switch { keys, default },
         })
         .into();
 
@@ -623,25 +621,23 @@ fn elaborate_switch(
     context: &mut Context,
     scrutinee: Scrutinee,
     goal: &Term,
-    cases: &[(Natural, Term)],
+    keys: &Keys,
     default: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let split = SwitchSplit::resolve(context, scrutinee, goal, &mode)?;
 
-    // The arms keep the order they arrived in, which `Cases::Switch` states is strictly ascending — elaborating an arm rewrites its body, never its key.
-    let mut cases_elaborated = Vec::with_capacity(cases.len());
-    for (n, body) in cases {
-        let body = split.arm(context, n, |context, expected| {
+    // Elaborating an arm rewrites its body, never its key.
+    let keys = keys.try_map_at(|literal, body| {
+        split.arm(context, literal, |context, expected| {
             check_as(context, body, mode.at(expected))
-        })?;
-        cases_elaborated.push((n.clone(), body));
-    }
-    let default = split.default(context, &cases_elaborated, |context, expected| {
+        })
+    })?;
+    let default = split.default(context, &keys, |context, expected| {
         check_as(context, default, mode.at(expected))
     })?;
 
-    Ok(split.rebuild(cases_elaborated, default))
+    Ok(split.rebuild(keys, default))
 }
 
 /// Whether a rebuilt match's `goal` is the type it is now checked at, as far as conversion says with nothing committed: a pair that would need a metavariable solved is left to the checked type.
@@ -692,8 +688,8 @@ fn eliminate(
             false_case,
             true_case,
         } => elaborate_bool_match(context, scrutinee, goal, false_case, true_case, mode),
-        Cases::Switch { cases, default } => {
-            elaborate_switch(context, scrutinee, goal, cases, default, mode)
+        Cases::Switch { keys, default } => {
+            elaborate_switch(context, scrutinee, goal, keys, default, mode)
         }
         // The instance a match states is this elaboration's to write, off the type its scrutinee is elaborated at: one read back is written again.
         Cases::Induct { cases, default, .. } => elaborate_induct_match(

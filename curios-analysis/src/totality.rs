@@ -48,9 +48,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
-        Foreign, Free, Func, FuncType, InductType, Intrinsic, Many, Match, Nat, One,
-        PartApplications, Probe, Proj, RecGroup, Scope, Size, Struct, StructType, Subterm,
-        Telescope, Term, Totality, Tuple, TupleType, Two, Variant,
+        Foreign, Free, Func, FuncType, InductType, Intrinsic, Many, Match, One, PartApplications,
+        Probe, Proj, RecGroup, Scope, Size, Struct, StructType, Subterm, Telescope, Term, Totality,
+        Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     std::{
@@ -736,14 +736,13 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            Cases::Switch { cases, default } => {
-                for (value, body) in cases {
-                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
+            Cases::Switch { keys, default } => {
+                for (literal, body) in keys.literals() {
                     let shape = self.grader().shape_of(&literal)?;
                     self.scoped(refine(scrutinee, shape), None, Vec::new(), body)?;
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
-                let atom = scrutinee.filter(|_| cases.iter().any(|(key, _)| key.is_zero()));
+                let atom = scrutinee.filter(|_| keys.names_zero());
                 self.scoped(None, atom, Vec::new(), default)?;
             }
 

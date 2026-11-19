@@ -768,12 +768,12 @@ fn reduce_match(forced: Term, goal: Term, cases: Cases) -> Reduce {
             }))),
         },
 
-        Cases::Switch { cases, default } => match switch_arm(&cases, &default, &forced) {
+        Cases::Switch { keys, default } => match switch_arm(&keys, &default, &forced) {
             Some(arm) => Reduce::Continue(arm.clone()),
             None => Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced,
                 goal,
-                cases: Cases::Switch { cases, default },
+                cases: Cases::Switch { keys, default },
             }))),
         },
 

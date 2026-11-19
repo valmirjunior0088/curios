@@ -1241,7 +1241,7 @@ fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> 
 
 /// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by. Its goal is what the position it stands in supplies, so it is not written.
 fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> {
-    use curios_core::{Carrier, Cases};
+    use curios_core::{Carrier, Cases, Keys};
 
     let curios_core::Match { head, cases, .. } = elimination;
     let open = |labels: &[curios_core::Free]| {
@@ -1261,10 +1261,16 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             MatrixArm::of(MatchPattern::Bool(false), sub(false_case, frame)?),
         ],
         // A dispatch by value: a numeral an arm, and the fallthrough it is required to have.
-        Cases::Switch { cases, default } => {
-            let mut arms = Vec::with_capacity(cases.len() + 1);
-            for (value, body) in cases {
-                arms.push(MatrixArm::of(natural_pattern(value), sub(body, frame)?));
+        Cases::Switch {
+            keys: Keys::Nat(keyed),
+            default,
+        } => {
+            let mut arms = Vec::with_capacity(keyed.arms().len() + 1);
+            for (value, body) in keyed.arms() {
+                arms.push(MatrixArm::of(
+                    natural_pattern(value.clone()),
+                    sub(body.clone(), frame)?,
+                ));
             }
             arms.push(MatrixArm::of(
                 MatchPattern::Binder("_".into()),

@@ -267,9 +267,9 @@ fn reduces_to_no_function(
                     reduces_to_no_function(context, false_case, fresh, depth - 1)?
                         && reduces_to_no_function(context, true_case, fresh, depth - 1)?
                 }
-                curios_core::Cases::Switch { cases, default } => {
+                curios_core::Cases::Switch { keys, default } => {
                     let mut every = reduces_to_no_function(context, default, fresh, depth - 1)?;
-                    for (_, arm) in cases {
+                    for arm in keys.bodies() {
                         every = every && reduces_to_no_function(context, arm, fresh, depth - 1)?;
                     }
                     every

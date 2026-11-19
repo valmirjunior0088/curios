@@ -48,6 +48,8 @@ pub enum Refusal {
     RepeatedLevelPart(String),
     /// A case of a family whose tag a case before it has: a family's cases are under distinct tags ([`curios_core::Constructors`]).
     RepeatedCase(String),
+    /// A dispatch's key at or below a key before it: a dispatch's keys are written ascending, each once ([`curios_core::Keyed`]).
+    DisorderedKey(String),
     /// A `node` no form of this shape fills.
     UnknownNode(String),
     /// A value of a shape its field does not take.
@@ -84,6 +86,10 @@ impl fmt::Display for ReadError {
             Refusal::RepeatedCase(tag) => {
                 write!(formatter, "the family has a case `{tag}` already")
             }
+            Refusal::DisorderedKey(key) => write!(
+                formatter,
+                "the dispatch's key `{key}` follows one at or past it, and a dispatch writes its keys ascending"
+            ),
             Refusal::UnknownNode(node) => {
                 write!(formatter, "`node = {node}` names no node this form fills")
             }

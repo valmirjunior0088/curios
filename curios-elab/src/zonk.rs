@@ -505,11 +505,8 @@ impl<'a> Zonk<'a> {
                             },
                         },
                     },
-                    Cases::Switch { cases, default } => Cases::Switch {
-                        cases: cases
-                            .iter()
-                            .map(|(n, body)| Ok((n.clone(), self.zonk_term(body)?)))
-                            .collect::<Result<_, Error>>()?,
+                    Cases::Switch { keys, default } => Cases::Switch {
+                        keys: keys.try_map(|body| self.zonk_term(body))?,
                         default: self.zonk_term(default)?,
                     },
                     Cases::Induct {

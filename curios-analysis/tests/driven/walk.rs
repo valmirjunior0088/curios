@@ -11,10 +11,10 @@ use {
     curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
         Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, Guard, InductArm,
-        InductType, Infix, Instance, Intrinsic, Level, Many, Match, Matrix, Metavar, MetavarId,
-        MetavarOrigin, MetavarSpine, Nat, One, Pattern, Proj, Row, Scope, Struct, StructEntry,
-        StructType, Subterm, Term, Totality, Transient, Tuple, Two, UniverseContext, Universes,
-        Variant,
+        InductType, Infix, Instance, Intrinsic, Keyed, Keys, Level, Many, Match, Matrix, Metavar,
+        MetavarId, MetavarOrigin, MetavarSpine, Nat, One, Pattern, Proj, Row, Scope, Struct,
+        StructEntry, StructType, Subterm, Term, Totality, Transient, Tuple, Two, UniverseContext,
+        Universes, Variant,
     },
     curios_num::Natural,
     std::{collections::BTreeMap, slice, sync::Arc},
@@ -375,7 +375,9 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }),
         Specimen::of(&mut markers, |markers| {
             let cases = Cases::Switch {
-                cases: vec![(Natural::from(0usize), markers.visited())],
+                keys: Keys::Nat(
+                    Keyed::new(vec![(Natural::from(0usize), markers.visited())]).expect("one key"),
+                ),
                 default: markers.visited(),
             };
             matching(markers, cases)

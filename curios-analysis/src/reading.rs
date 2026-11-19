@@ -35,8 +35,8 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
             false_case,
             true_case,
         } => opened.arms.extend([false_case.clone(), true_case.clone()]),
-        Cases::Switch { cases, default } => {
-            opened.arms.extend(cases.iter().map(|(_, arm)| arm.clone()));
+        Cases::Switch { keys, default } => {
+            opened.arms.extend(keys.bodies().cloned());
             opened.arms.push(default.clone());
         }
         Cases::Induct {

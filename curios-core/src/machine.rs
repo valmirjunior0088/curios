@@ -1157,12 +1157,12 @@ impl Machine {
                 })))),
             },
 
-            Cases::Switch { cases, default } => match switch_arm(&cases, &default, &scrutinee) {
+            Cases::Switch { keys, default } => match switch_arm(&keys, &default, &scrutinee) {
                 Some(arm) => Ok(Step::Eval(arm.clone(), demand)),
                 None => Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
                     goal,
-                    cases: Cases::Switch { cases, default },
+                    cases: Cases::Switch { keys, default },
                 })))),
             },
 

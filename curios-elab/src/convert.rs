@@ -43,7 +43,7 @@ use {
         Instance, Intrinsic, Level, Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin,
         Paired, Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError,
-        Universes, Variance, Variant, paired,
+        Universes, Variance, Variant, keys_paired, paired,
     },
     std::{
         collections::{HashMap, HashSet, VecDeque},
@@ -1427,26 +1427,23 @@ impl Convert {
                 Ok(true)
             }
 
-            // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`paired`]).
+            // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`keys_paired`]).
             (
                 Cases::Switch {
-                    cases: this_cases,
+                    keys: this_keys,
                     default: this_default,
                 },
                 Cases::Switch {
-                    cases: that_cases,
+                    keys: that_keys,
                     default: that_default,
                 },
             ) => {
-                let Some(compared) = paired(
-                    (&this_cases, Some(&this_default)),
-                    (&that_cases, Some(&that_default)),
-                    || None,
-                ) else {
+                let Some(compared) =
+                    keys_paired((&this_keys, &this_default), (&that_keys, &that_default))
+                else {
                     return Ok(false);
                 };
-                for pair in compared {
-                    let (this, that) = pair.bodies();
+                for (this, that) in compared {
                     self.enqueue(Term::type_ground(), this.clone(), that.clone());
                 }
 

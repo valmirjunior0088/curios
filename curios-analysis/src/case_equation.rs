@@ -11,10 +11,9 @@ use {
     curios_algebra::{Carrier, Operation},
     curios_common::SyntaxRegistry,
     curios_core::{
-        Cases, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
+        Cases, Cost, Declaration, Free, Intrinsic, Keys, Nat, ReduceError, Reducer, Subterm, Term,
         bool_value, is_bool_connective,
     },
-    curios_num::Natural,
     std::{mem, slice},
 };
 
@@ -32,18 +31,12 @@ pub fn records_case_equation(spelling: &Term) -> bool {
     spelling.has_local_free()
 }
 
-/// The tests a natural's dispatch on `head` over `cases` is reached past at its catch-all, one a key: `head == key`. Each is false wherever the catch-all is taken, at a literal no key names or at a successor floor past every key, so the catch-all is typed under each at `false`, as a lone guard's `false` arm is typed under its test.
+/// The tests a dispatch on `head` over `keys` is reached past at its catch-all, one a key: `head == key`, by its carrier's equality. Each is false wherever the catch-all is taken, at a literal no key names or, for a natural, at a successor floor past every key, so the catch-all is typed under each at `false`, as a lone guard's `false` arm is typed under its test.
 ///
 /// **Both checkers read it.** A test one checker assumed and the other did not would read the catch-all two ways; each is recorded by [`records_case_equation`], as every equation is.
-pub fn catch_all_tests<'c>(
-    head: &'c Term,
-    cases: &'c [(Natural, Term)],
-) -> impl Iterator<Item = Term> + 'c {
-    cases.iter().map(|(key, _)| {
-        Term::intrinsic(Intrinsic::NatEql(
-            head.clone(),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone()))),
-        ))
+pub fn catch_all_tests<'c>(head: &'c Term, keys: &'c Keys) -> impl Iterator<Item = Term> + 'c {
+    keys.literals().map(|(literal, _)| match keys {
+        Keys::Nat(_) => Term::intrinsic(Intrinsic::NatEql(head.clone(), literal)),
     })
 }
 

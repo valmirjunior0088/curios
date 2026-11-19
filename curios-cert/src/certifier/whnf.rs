@@ -32,8 +32,8 @@ use {
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
-        FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, Nat, Probe, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var, Variant,
+        FreeMonoid, Func, Global, Instance, Intrinsic, Keys, Layer, Let, Match, Nat, Probe, Proj,
+        Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var, Variant,
         Visit, accelerable, instantiate_universes, probe_spellings, reduce_closed,
         reduce_intrinsic, weak_head_value,
     },
@@ -680,16 +680,19 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
         },
 
         // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`": it takes its case, or the default when no case names it. A symbolic inner over a floor past every key is no key whatever it stands for, so it takes the default too; anything else rebuilds the neutral switch. Stated apart from `curios_core::switch_arm`, which the closed machine and the elaborator read.
-        Cases::Switch { cases, default } => {
+        Cases::Switch {
+            keys: Keys::Nat(keyed),
+            default,
+        } => {
+            let arms = keyed.arms();
             let (floor, inner) = Nat::decompose(&forced);
 
             match (
                 Nat::is_zero(&inner),
-                cases.iter().all(|(key, _)| *key < floor),
+                arms.iter().all(|(key, _)| *key < floor),
             ) {
                 (true, _) => Step::Continue(
-                    cases
-                        .iter()
+                    arms.iter()
                         .find(|(key, _)| *key == floor)
                         .map(|(_, body)| body)
                         .unwrap_or(&default)
@@ -699,7 +702,10 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
                 (false, false) => Step::Stop(Term::from(Subterm::Match(Match {
                     head: forced,
                     goal,
-                    cases: Cases::Switch { cases, default },
+                    cases: Cases::Switch {
+                        keys: Keys::Nat(keyed),
+                        default,
+                    },
                 }))),
             }
         }

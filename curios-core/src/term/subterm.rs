@@ -284,10 +284,9 @@ impl Subterm {
                         false_case.collect_construction_names(names);
                         true_case.collect_construction_names(names);
                     }
-                    Cases::Switch { cases, default } => {
-                        cases
-                            .iter()
-                            .for_each(|(_, b)| b.collect_construction_names(names));
+                    Cases::Switch { keys, default } => {
+                        keys.bodies()
+                            .for_each(|b| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
                     Cases::Induct {
@@ -393,8 +392,8 @@ impl Subterm {
                             false_case,
                             true_case,
                         } => pred(false_case) || pred(true_case),
-                        Cases::Switch { cases, default } => {
-                            cases.iter().any(|(_, b)| pred(b)) || pred(default)
+                        Cases::Switch { keys, default } => {
+                            keys.bodies().any(&mut *pred) || pred(default)
                         }
                         Cases::Induct {
                             cases,
@@ -714,11 +713,8 @@ impl Bound for Subterm {
                         false_case: visit.visit_subterm(false_case),
                         true_case: visit.visit_subterm(true_case),
                     },
-                    Cases::Switch { cases, default } => Cases::Switch {
-                        cases: cases
-                            .iter()
-                            .map(|(n, body)| (n.clone(), visit.visit_subterm(body)))
-                            .collect(),
+                    Cases::Switch { keys, default } => Cases::Switch {
+                        keys: keys.map(|body| visit.visit_subterm(body)),
                         default: visit.visit_subterm(default),
                     },
                     Cases::Induct {
@@ -865,8 +861,8 @@ impl Bound for Subterm {
                         false_case,
                         true_case,
                     } => false_case.reach().max(true_case.reach()),
-                    Cases::Switch { cases, default } => {
-                        max_reach(cases.iter().map(|(_, b)| b)).max(default.reach())
+                    Cases::Switch { keys, default } => {
+                        max_reach(keys.bodies()).max(default.reach())
                     }
                     Cases::Induct {
                         cases,

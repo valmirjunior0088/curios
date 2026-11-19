@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_core::{
-        Applications, Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Size,
+        Applications, Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Nat, Polarity, Size,
         StructDecl, Subterm, Term,
     },
     curios_num::Binary,

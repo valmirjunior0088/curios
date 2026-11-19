@@ -683,13 +683,12 @@ fn check_cases(
             at(certifier, Term::intrinsic(Intrinsic::Bool(true)), true_case)
         }
 
-        Cases::Switch { cases, default } => {
-            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::NatType)) {
+        Cases::Switch { keys, default } => {
+            if *scrutinee_type != keys.carrier() {
                 return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
-            for (key, body) in cases {
-                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone())));
+            for (literal, body) in keys.literals() {
                 at(certifier, literal, body)?;
             }
 
@@ -698,11 +697,11 @@ fn check_cases(
             certifier.scoped(|certifier| {
                 if let Subterm::Var(var) = &**sized
                     && let Some(binder) = var.as_free()
-                    && cases.iter().any(|(key, _)| key.is_zero())
+                    && keys.names_zero()
                 {
                     certifier.assume_nonzero(*binder)?;
                 }
-                for test in catch_all_tests(scrutinee, cases) {
+                for test in catch_all_tests(scrutinee, keys) {
                     certifier.refine(test, Term::intrinsic(Intrinsic::Bool(false)))?;
                 }
 

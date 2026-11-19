@@ -13,7 +13,8 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, One, Scope, Term, Two,
+        Arity, Atom, Carrier, Cases, Free, InductArm, Keyed, Keys, Many, Match, One, Scope, Term,
+        Two,
     },
     curios_num::Natural,
     std::{array, iter},
@@ -37,9 +38,13 @@ pub fn match_written<D: Rendered>(
             arm(MatchPattern::Bool(false), false_case, frame),
             arm(MatchPattern::Bool(true), true_case, frame),
         ],
-        Cases::Switch { cases, default } => cases
-            .into_iter()
-            .map(|(key, body)| arm(natural_pattern(key), body, frame))
+        Cases::Switch {
+            keys: Keys::Nat(keyed),
+            default,
+        } => keyed
+            .arms()
+            .iter()
+            .map(|(key, body)| arm(natural_pattern(key.clone()), body.clone(), frame))
             .chain(iter::once_with(|| {
                 arm(binder(Vec::new(), "_"), default, frame)
             }))
@@ -320,18 +325,30 @@ pub fn match_read(
                 && patterns.len() > 1 =>
         {
             let (keyed, default) = arms.split_at(arms.len() - 1);
+            let cases = keyed
+                .iter()
+                .zip(&patterns)
+                .map(|(arm, pattern)| {
+                    let MatchPattern::Numeral(numeral) = pattern else {
+                        unreachable!("every arm before a dispatch's catch-all is a key");
+                    };
+                    let key = natural_key(numeral).expect("a dispatch's key is a natural");
+                    Ok((key, core_read(&arm.body, reader)?))
+                })
+                .collect::<Result<Vec<_>, ReadError>>()?;
+            // A switch's keys are what reads them, so one written out of order, or twice, is no switch and refused where it is written ([`Keyed`]).
+            let disordered = cases
+                .windows(2)
+                .position(|pair| pair[0].0 >= pair[1].0)
+                .map(|at| at + 1);
+            if let Some(at) = disordered {
+                return Err(ReadError::at(
+                    Refusal::DisorderedKey(cases[at].0.to_string()),
+                    keyed[at].body.span(),
+                ));
+            }
             Cases::Switch {
-                cases: keyed
-                    .iter()
-                    .zip(&patterns)
-                    .map(|(arm, pattern)| {
-                        let MatchPattern::Numeral(numeral) = pattern else {
-                            unreachable!("every arm before a dispatch's catch-all is a key");
-                        };
-                        let key = natural_key(numeral).expect("a dispatch's key is a natural");
-                        Ok((key, core_read(&arm.body, reader)?))
-                    })
-                    .collect::<Result<_, ReadError>>()?,
+                keys: Keys::Nat(Keyed::new(cases).expect("a dispatch's keys are read ascending")),
                 default: core_read(&default[0].body, reader)?,
             }
         }

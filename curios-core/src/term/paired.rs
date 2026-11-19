@@ -2,7 +2,7 @@
 //!
 //! A catch-all stands for every case its own arms do not write, so at a case one side writes an arm for and the other does not, the arm is compared with the other's catch-all, and where a case neither writes is left, the two catch-alls with each other. Each side's arm for a case is the first it writes, the one reduction takes; one written after it for the same case is read by nothing.
 
-use crate::Term;
+use crate::{Keys, Term};
 
 /// One comparison two eliminations of one scrutinee owe at a case: the two arms they write for it, an arm and the catch-all the other takes there, or their two catch-alls.
 pub enum Paired<'c, K, A> {
@@ -66,4 +66,20 @@ pub fn paired<'c, K: PartialEq, A>(
     }
 
     Some(paired)
+}
+
+/// The comparisons two dispatches of one scrutinee owe, each given as its keys and its catch-all, as the two bodies compared at each case ([`paired`]); `None` where the two are apart, as two of different carriers are.
+pub fn keys_paired<'c>(
+    this: (&'c Keys, &'c Term),
+    that: (&'c Keys, &'c Term),
+) -> Option<Vec<(&'c Term, &'c Term)>> {
+    let ((this_keys, this_default), (that_keys, that_default)) = (this, that);
+    match (this_keys, that_keys) {
+        (Keys::Nat(this_keys), Keys::Nat(that_keys)) => paired(
+            (this_keys.arms(), Some(this_default)),
+            (that_keys.arms(), Some(that_default)),
+            || None,
+        )
+        .map(|compared| compared.iter().map(Paired::bodies).collect()),
+    }
 }

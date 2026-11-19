@@ -5,13 +5,14 @@
 use {
     crate::{
         ArgumentSite, Atom, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix,
-        MetavarSpine, One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
-        project_erased_universes,
+        MetavarSpine, Nat, One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var,
+        Visit, project_erased_universes,
     },
     curios_abi::ForeignFunction,
     curios_common::{ConceptField, InfixOp, Mint, Plicity, Sign, Symbol},
     curios_num::Natural,
     std::{
+        convert::Infallible,
         fmt,
         hash::{Hash, Hasher},
         rc::Rc,
@@ -471,15 +472,8 @@ impl InductArm {
 pub enum Cases {
     /// Dependent elimination of `Bool`: a false arm and a true arm.
     Bool { false_case: Term, true_case: Term },
-    /// Sparse dispatch on specific `Nat` values with a default arm.
-    ///
-    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and a dispatch *key* narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md). A `u32` here would write `curios-anf`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
-    ///
-    /// A sequence rather than a `BTreeMap`, for the reason [`Cases::Induct`]'s arms are one: this enum is archived, and `Natural`'s archived form is its little-endian bytes, whose collation is not its numeric order. Rather than teach the archived form an ordering it does not have, the keys are held **strictly ascending** — the invariant every constructor establishes and every rebuild preserves, and the one that makes term identity independent of the order arms were written in.
-    Switch {
-        cases: Vec<(Natural, Term)>,
-        default: Term,
-    },
+    /// Sparse dispatch on a scalar's values: an arm for each of its [`Keys`], and the catch-all every other value takes.
+    Switch { keys: Keys, default: Term },
     /// The intrinsic eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.
     Induct {
         /// The enumerated arms, in the owning inductive's *declaration order* — the same order `InductDecl::constructor_order` reports, which is what makes this a canonical form: two matches whose arms are written in different source order elaborate to the same sequence, so arm order never enters term identity. Elaboration establishes that by building the arms from `constructor_order` rather than from the written order (`elaborate_induct_match`). A subsequence is legal — an arm may be absent under a `default`, or where index inversion prunes it.
@@ -531,6 +525,116 @@ impl Cases {
         let unread = Term::prop();
         Some(arm.open(&vec![&unread; arm.arity()]))
     }
+}
+
+/// The keys a [`Cases::Switch`] dispatches on, each with its arm, by the carrier they are values of, so a dispatch has one form over every carrier and each carrier's keys are of its own type.
+///
+/// **A natural's key is a [`Natural`], not the erased carrier's `u32`.** `Nat` is unbounded here and a key narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md). A `u32` here would write `curios-anf`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum Keys {
+    Nat(Keyed<Natural>),
+}
+
+impl Keys {
+    /// The arms, in the order of their keys.
+    pub fn bodies(&self) -> impl Iterator<Item = &Term> {
+        match self {
+            Keys::Nat(keyed) => keyed.arms.iter().map(|(_, arm)| arm),
+        }
+    }
+
+    /// Each key as the literal it is, beside its arm, in key order: the value an arm is typed at.
+    pub fn literals(&self) -> impl Iterator<Item = (Term, &Term)> {
+        match self {
+            Keys::Nat(keyed) => keyed.arms.iter().map(|(key, arm)| (natural(key), arm)),
+        }
+    }
+
+    /// The type the keys are values of, which the scrutinee is.
+    pub fn carrier(&self) -> Term {
+        match self {
+            Keys::Nat(_) => Term::intrinsic(Intrinsic::NatType),
+        }
+    }
+
+    /// Whether the keys are a natural's with `0` among them, which rules zero out of the catch-all.
+    pub fn names_zero(&self) -> bool {
+        match self {
+            Keys::Nat(keyed) => keyed.arms.iter().any(|(key, _)| key.is_zero()),
+        }
+    }
+
+    /// The same keys over the arms `arm` rebuilds, each from its own.
+    pub fn map(&self, mut arm: impl FnMut(&Term) -> Term) -> Self {
+        let Ok(keys) = self.try_map(|body| Ok::<_, Infallible>(arm(body)));
+
+        keys
+    }
+
+    /// The same keys over the arms `arm` rebuilds, each from its own, or the first refusal.
+    pub fn try_map<E>(&self, mut arm: impl FnMut(&Term) -> Result<Term, E>) -> Result<Self, E> {
+        Ok(match self {
+            Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|_, body| arm(body))?),
+        })
+    }
+
+    /// The same keys over the arms `arm` rebuilds, each from its key's literal and its own ([`Keys::literals`]).
+    pub fn map_at(&self, mut arm: impl FnMut(Term, &Term) -> Term) -> Self {
+        let Ok(keys) = self.try_map_at(|literal, body| Ok::<_, Infallible>(arm(literal, body)));
+
+        keys
+    }
+
+    /// The same keys over the arms `arm` rebuilds, each from its key's literal and its own, or the first refusal.
+    pub fn try_map_at<E>(
+        &self,
+        mut arm: impl FnMut(Term, &Term) -> Result<Term, E>,
+    ) -> Result<Self, E> {
+        Ok(match self {
+            Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|key, body| arm(natural(key), body))?),
+        })
+    }
+}
+
+/// A switch's arms under their keys: one key at least, strictly ascending, which [`Keyed::new`] establishes and a rebuild keeps, since it replaces arms and never keys. Ascending keys make term identity independent of the order arms were written in, and a switch of no key, which no match builds, is unrepresentable.
+///
+/// A sequence rather than a `BTreeMap`, for the reason [`Cases::Induct`]'s arms are one: this type is archived, and `Natural`'s archived form is its little-endian bytes, whose collation is not its numeric order.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Keyed<K> {
+    arms: Vec<(K, Term)>,
+}
+
+impl<K: Ord> Keyed<K> {
+    /// `arms` under their keys, where they are one at least and strictly ascending, and `None` otherwise.
+    pub fn new(arms: Vec<(K, Term)>) -> Option<Self> {
+        let ascending = arms.windows(2).all(|pair| pair[0].0 < pair[1].0);
+
+        (!arms.is_empty() && ascending).then_some(Self { arms })
+    }
+}
+
+impl<K: Clone> Keyed<K> {
+    /// Each key beside its arm, ascending.
+    pub fn arms(&self) -> &[(K, Term)] {
+        &self.arms
+    }
+
+    fn try_map<E>(&self, mut arm: impl FnMut(&K, &Term) -> Result<Term, E>) -> Result<Self, E> {
+        Ok(Self {
+            arms: self
+                .arms
+                .iter()
+                .map(|(key, body)| Ok((key.clone(), arm(key, body)?)))
+                .collect::<Result<_, E>>()?,
+        })
+    }
+}
+
+/// A natural's key as the literal it is.
+fn natural(key: &Natural) -> Term {
+    Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone())))
 }
 
 /// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two arms: a case split, which peels one generator and binds what the peel leaves. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<One>` for `Nat` (the predecessor), `Scope<Two>` for `Bytes`/`List` (head, tail). A recursion over the carrier is a call on what the peel left, which totality grades.

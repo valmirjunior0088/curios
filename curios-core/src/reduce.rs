@@ -1,10 +1,7 @@
 mod intrinsic;
 pub use intrinsic::*;
 
-use {
-    super::{Apply, Category, Cost, Field, Free, Func, Nat, Subterm, Term, UniverseError},
-    curios_num::Natural,
-};
+use super::{Apply, Category, Cost, Field, Free, Func, Keys, Nat, Subterm, Term, UniverseError};
 
 /// The failure mode of type-level evaluation: the declaration's step budget ran out (`Exhausted`), or a universe instance did not fit its scheme. A partial intrinsic folded outside its domain is no failure: its bound is false there, so only a hypothesis stating the impossible reaches it, and the fold leaves it stuck. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,24 +135,24 @@ pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
     }
 }
 
-/// The arm a natural's dispatch over `cases` and `default` takes at `scrutinee`, a term in weak-head normal form: a key's arm where the scrutinee is that literal, the catch-all where it is a literal no key names or a successor floor past every key, and `None` where it may yet be a key, so the dispatch stays stuck.
+/// The arm a dispatch over `keys` and `default` takes at `scrutinee`, a term in weak-head normal form: a key's arm where the scrutinee is that literal, the catch-all where it is a literal no key names or, for a natural, a successor floor past every key, and `None` where it may yet be a key, so the dispatch stays stuck.
 ///
 /// A floor past every key decides the dispatch whatever stands under it: `k + 2` is no `0` and no `1` for any `k`. The closed machine and the elaborator take a dispatch's arm through here; the certifier states the rule for itself, as it does a projection's ([`project_literal`]).
-pub fn switch_arm<'c>(
-    cases: &'c [(Natural, Term)],
-    default: &'c Term,
-    scrutinee: &Term,
-) -> Option<&'c Term> {
-    let (floor, inner) = Nat::decompose(scrutinee);
+pub fn switch_arm<'c>(keys: &'c Keys, default: &'c Term, scrutinee: &Term) -> Option<&'c Term> {
+    match keys {
+        Keys::Nat(keyed) => {
+            let arms = keyed.arms();
+            let (floor, inner) = Nat::decompose(scrutinee);
 
-    match Nat::is_zero(&inner) {
-        true => Some(
-            cases
-                .iter()
-                .find(|(key, _)| *key == floor)
-                .map_or(default, |(_, arm)| arm),
-        ),
-        false => cases.iter().all(|(key, _)| *key < floor).then_some(default),
+            match Nat::is_zero(&inner) {
+                true => Some(
+                    arms.iter()
+                        .find(|(key, _)| *key == floor)
+                        .map_or(default, |(_, arm)| arm),
+                ),
+                false => arms.iter().all(|(key, _)| *key < floor).then_some(default),
+            }
+        }
     }
 }
 

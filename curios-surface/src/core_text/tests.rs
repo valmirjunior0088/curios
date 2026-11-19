@@ -946,3 +946,18 @@ fn a_max_naming_one_part_twice_is_refused_where_the_repeat_stands() {
         );
     }
 }
+
+/// A dispatch's keys are written ascending, each once, as the switch they read as holds them ([`curios_core::Keyed`]), so a key at or below one before it is refused where its arm stands rather than read as a switch other than the one written.
+#[test]
+fn a_dispatch_key_out_of_order_is_refused_where_its_arm_stands() {
+    for text in [
+        "#{goal = #NatType} match 5 | 3 => 0 | 1 => 1 | _ => 2 end",
+        "#{goal = #NatType} match 5 | 1 => 0 | 1 => 1 | _ => 2 end",
+    ] {
+        assert_eq!(
+            refused(text),
+            (Refusal::DisorderedKey("1".to_string()), Some(43)),
+            "{text}"
+        );
+    }
+}

@@ -25,8 +25,9 @@ use {
     },
     curios_common::{Plicity, Sign, recurse},
     curios_core::{
-        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, Matrix, Mention, NumLit,
-        Pattern, Row, Slot, StructType, Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
+        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, Keyed, Keys, Matrix,
+        Mention, Nat, NumLit, Pattern, Row, Slot, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, WrittenPlace,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -1623,16 +1624,21 @@ impl<'m> Compiler<'m> {
                 let mut cases = Vec::with_capacity(groups.len());
                 for (value, group) in groups {
                     self.seen[column.seen] = Seen::Leaf(spelled[&value].clone());
-                    let arm = split.arm(context, &value, |context, expected| {
+                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
+                    let arm = split.arm(context, literal, |context, expected| {
                         self.case(context, rest.clone(), group, expected)
                     })?;
                     cases.push((value, arm));
                 }
                 self.seen[column.seen] = Seen::Any;
-                let default = split.default(context, &cases, |context, expected| {
+                let keys = Keys::Nat(
+                    Keyed::new(cases)
+                        .expect("a dispatch's keys are its groups', one at least, ascending"),
+                );
+                let default = split.default(context, &keys, |context, expected| {
                     self.case(context, rest, others, expected)
                 })?;
-                let (rebuilt, type_) = split.rebuild(cases, default);
+                let (rebuilt, type_) = split.rebuild(keys, default);
 
                 self.settled(context, top, rebuilt, type_)
             });
@@ -2371,8 +2377,9 @@ impl<'m> Compiler<'m> {
                     }
                 };
 
+                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
                 walk_awaited(context, awaits, |context| {
-                    split.arm(context, &value, |context, expected| {
+                    split.arm(context, literal, |context, expected| {
                         arm(self, context, columns, line, expected)
                     })
                 })?;

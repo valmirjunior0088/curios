@@ -39,7 +39,7 @@ use {
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
         Instance, Lockstep, Match, Paired, Probe, Proj, Quality, ReduceError, Reducer, Step,
         Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Variant,
-        instantiate_universes, paired,
+        instantiate_universes, keys_paired, paired,
     },
 };
 
@@ -1302,26 +1302,22 @@ fn ground_cases(
         ) => Ok(ground(certifier, pairs, this_false, that_false)?
             && ground(certifier, pairs, this_true, that_true)?),
 
-        // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`paired`]).
+        // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`keys_paired`]).
         (
             Cases::Switch {
-                cases: this_cases,
+                keys: this_keys,
                 default: this_default,
             },
             Cases::Switch {
-                cases: that_cases,
+                keys: that_keys,
                 default: that_default,
             },
         ) => {
-            let Some(compared) = paired(
-                (this_cases, Some(this_default)),
-                (that_cases, Some(that_default)),
-                || None,
-            ) else {
+            let Some(compared) = keys_paired((this_keys, this_default), (that_keys, that_default))
+            else {
                 return Ok(false);
             };
-            for pair in compared {
-                let (this, that) = pair.bodies();
+            for (this, that) in compared {
                 if !ground(certifier, pairs, this, that)? {
                     return Ok(false);
                 }

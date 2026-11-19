@@ -145,9 +145,10 @@ impl Eraser<'_> {
                 false_case,
                 true_case,
             } => self.erase_bool(context, site, false_case, true_case),
-            curios_core::Cases::Switch { cases, default } => {
-                self.erase_switch(context, site, cases, default)
-            }
+            curios_core::Cases::Switch {
+                keys: curios_core::Keys::Nat(keyed),
+                default,
+            } => self.erase_switch(context, site, keyed.arms(), default),
             // The instance a match states is a type, which erasure reads nothing of.
             curios_core::Cases::Induct { cases, default, .. } => {
                 self.erase_induct(context, site, cases, default.as_ref())

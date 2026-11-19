@@ -639,14 +639,8 @@ impl Writing {
                     true_case,
                 ),
             },
-            Cases::Switch { cases, default } => Cases::Switch {
-                cases: cases
-                    .iter()
-                    .map(|(value, body)| {
-                        let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
-                        (value.clone(), self.case(context, &opened, &literal, body))
-                    })
-                    .collect(),
+            Cases::Switch { keys, default } => Cases::Switch {
+                keys: keys.map_at(|literal, body| self.case(context, &opened, &literal, body)),
                 default: self.term(context, default),
             },
             Cases::Induct {

@@ -1126,7 +1126,7 @@ impl Term {
         )
     }
 
-    /// Build a [`Cases::Switch`] match at `goal`: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], whose successor arm binds its predecessor.
+    /// Build a [`Cases::Switch`] match at `goal`: sparse dispatch on specific literal `Nat` values, one at least and each once, with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], whose successor arm binds its predecessor.
     pub fn switch<H, G, I, K, B, D>(head: H, goal: G, cases: I, default: D) -> Self
     where
         H: Into<Term>,
@@ -1140,13 +1140,18 @@ impl Term {
             head.into(),
             goal.into(),
             Cases::Switch {
-                // Through a `BTreeMap` so the arms come out strictly ascending whatever order the caller enumerated them in — the canonical form [`Cases::Switch`] states.
-                cases: cases
-                    .into_iter()
-                    .map(|(n, b)| (n.into(), b.into()))
-                    .collect::<BTreeMap<_, _>>()
-                    .into_iter()
-                    .collect(),
+                // Through a `BTreeMap` so the arms come out strictly ascending whatever order the caller enumerated them in — the canonical form [`Keyed`] states.
+                keys: Keys::Nat(
+                    Keyed::new(
+                        cases
+                            .into_iter()
+                            .map(|(n, b)| (n.into(), b.into()))
+                            .collect::<BTreeMap<_, _>>()
+                            .into_iter()
+                            .collect(),
+                    )
+                    .expect("a switch writes a key"),
+                ),
                 default: default.into(),
             },
         )

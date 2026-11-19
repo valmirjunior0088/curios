@@ -930,7 +930,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         };
         let head_type = match &matched.cases {
             Cases::Bool { .. } => Some(Term::intrinsic(Intrinsic::BoolType)),
-            Cases::Switch { .. } => Some(Term::intrinsic(Intrinsic::NatType)),
+            Cases::Switch { keys, .. } => Some(keys.carrier()),
             Cases::FreeMonoid { carrier } => Some(match carrier {
                 Carrier::Nat { .. } => Term::intrinsic(Intrinsic::NatType),
                 Carrier::Bytes { .. } => Term::intrinsic(Intrinsic::BytesType),
