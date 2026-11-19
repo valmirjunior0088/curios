@@ -7,7 +7,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub struct CallAnalysis {
     pub call_sites: BTreeMap<FunctionId, Vec<NodeId>>,
     pub call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
@@ -19,6 +19,7 @@ pub struct CallAnalysis {
 }
 /// Strongly-connected components of a graph, the known-callee call graph's by default, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its nodes in their order.
 pub type SccId = usize;
+#[derive(PartialEq)]
 pub struct SccAnalysis<K = FunctionId> {
     pub component_of: BTreeMap<K, SccId>,
     pub members: Vec<Vec<K>>,
@@ -237,6 +238,7 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
 }
 
 /// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where they start and by no other reader of the call analysis.
+#[derive(PartialEq)]
 pub struct Scopes {
     /// Each function's: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
     pub functions: BTreeMap<FunctionId, InScope<FunctionId>>,
@@ -248,7 +250,7 @@ impl Scopes {
     /// `module`'s scopes, a function the walk does not reach placed by the owners `calls` read.
     pub fn of(module: &Module, calls: &CallAnalysis) -> Self {
         // Reading a function's scope off the `LetFun` nodes alone — a member's own group, then everything its owner's group holds, up to the entry — would miss the third of the three things `scope_step` admits: a group bound *earlier along the same body chain*. Every group the lowering emits is a singleton, so that is precisely a body's siblings, which is nearly every function reference a program makes.
-        let (mut functions, continuations) = module.scopes();
+        let (mut functions, continuations) = module.scope_walk();
 
         // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
         let mut group_of: BTreeMap<FunctionId, (FunctionId, Vec<FunctionId>)> = BTreeMap::new();
@@ -490,9 +492,9 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         }
     }
 
-    let analysis = analyze_calls(module);
+    let analysis = module.calls();
     let recursive_functions = &analysis.recursive;
-    let scopes = Scopes::of(module, &analysis);
+    let scopes = module.scopes();
 
     let mut function_inputs = BTreeMap::<FunctionId, Vec<Knowledge>>::new();
     for (function, definition) in module.live_functions() {

@@ -14,7 +14,7 @@ mod tests;
 use {
     crate::{
         Atom, Callee, ContinuationId, Droppable, Edge, FunctionId, Intrinsic, Literal, Module,
-        Node, NodeId, ValueExpr, ValueId, analyze_calls, atoms, collect_control_targets, evaluate,
+        Node, NodeId, ValueExpr, ValueId, atoms, collect_control_targets, evaluate,
         visit_atoms_mut,
     },
     curios_num::{Integer, Natural},
@@ -272,7 +272,7 @@ struct Shrink<'m> {
     module: &'m mut Module,
     census: Census,
     pending: Pending,
-    /// The functions on a cycle of the call graph closed under definition where the pass begins ([`analyze_calls`]). A reduction makes no cycle that was not there — a substitution turns into a call only a reference the closed graph already counts as one, and a moved body brings its edges into the function that called it — so a function outside this set never comes to call itself, and moving its body into its one call never moves it into itself.
+    /// The functions on a cycle of the call graph closed under definition where the pass begins ([`analyze_calls`](crate::analyze_calls)). A reduction makes no cycle that was not there — a substitution turns into a call only a reference the closed graph already counts as one, and a moved body brings its edges into the function that called it — so a function outside this set never comes to call itself, and moving its body into its one call never moves it into itself.
     recursive: BTreeSet<FunctionId>,
     /// The continuations a jump from within their own body may enter, where the pass begins. Put in place at a jump within its own body, a continuation would hold itself, so one of these is put in place only once its one jump is found outside it.
     looping: BTreeSet<ContinuationId>,
@@ -313,7 +313,7 @@ impl<'m> Shrink<'m> {
                 }
             }
         }
-        let recursive = analyze_calls(module).recursive;
+        let recursive = module.calls().recursive.clone();
         let looping = looping_continuations(module);
         Self {
             module,

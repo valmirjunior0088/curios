@@ -2,8 +2,7 @@
 
 use {
     crate::{
-        Atom, ContinuationId, Intrinsic, Literal, Module, Node, NodeId, ValueId,
-        continuation_transfers, visit_atoms_mut,
+        Atom, ContinuationId, Intrinsic, Literal, Module, Node, NodeId, ValueId, visit_atoms_mut,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -25,7 +24,7 @@ pub fn answer_window_guards(module: &mut Module) -> bool {
         })
         .collect::<BTreeMap<_, _>>();
     let enclosing = enclosing_continuations(module);
-    let transfers = continuation_transfers(module);
+    let transfers = module.continuation_transfers();
 
     // Each answered guard: its node, the count its uses read instead, and the node that follows it.
     let mut answered = Vec::<(NodeId, ValueId, Atom, NodeId)>::new();

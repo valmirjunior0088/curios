@@ -1,7 +1,7 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, Intrinsic, Literal, Module, Node, NodeId,
-        ValueExpr, ValueId, demand_of, demands, rows_reaching, visit_atoms_mut,
+        ValueExpr, ValueId, demand_of, rows_reaching, visit_atoms_mut,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
@@ -612,7 +612,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
     }
 
     // Then the demand rule, over what remains.
-    let demands = demands(module);
+    let demands = module.demands();
     let roots: Vec<NodeId> = module
         .live_nodes()
         .filter_map(|(id, node)| match node {
@@ -725,7 +725,7 @@ pub fn answer_row_tests(module: &mut Module) -> bool {
 ///
 /// The jump retains the resume's arity with fillers: the emitter supplies null or the receiving register's zero, and no result reads either. Taking one demand snapshot is sufficient because deleting these calls can only remove demands; newly dead results are found in the next optimizer round.
 pub fn eliminate_dead_calls(module: &mut Module) -> bool {
-    let demands = demands(module);
+    let demands = module.demands();
     let mut replacements = Vec::new();
     for (id, node) in module.live_nodes() {
         let Node::ApplyFun {
@@ -765,7 +765,7 @@ pub fn eliminate_dead_calls(module: &mut Module) -> bool {
 
 /// Drop a loop nothing reads the answer of: a continuation marked terminating — the loop contification made of a recursion the checkers proved total ([`Continuation::terminates`](crate::Continuation::terminates)) — entered from outside only by jumps, where every way out of the loop is one continuation none of whose parameters is read and the loop's body, as the optimizer has left it, does nothing a run observes ([`DeadLoop`]). Each jump in goes to that exit instead, its arity kept with fillers as [`eliminate_dead_calls`] keeps a dropped call's, and what the loop no longer reaches is pruned. Termination is the checkers' verdict, carried with the code, and what the body does is judged here, on the code that would run, as LLVM's loop deletion reads a loop `mustprogress` marks; the body is admitted under the rule a dead call's claim is (`droppable_functions`), a trap among what it may do.
 pub fn eliminate_dead_loops(module: &mut Module) -> bool {
-    let demands = demands(module);
+    let demands = module.demands();
     let mut replacements = Vec::new();
     for (id, continuation) in module.live_continuations() {
         if !continuation.terminates {

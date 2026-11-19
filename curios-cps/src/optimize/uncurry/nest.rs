@@ -9,7 +9,7 @@ use {
     super::values_bound_in,
     crate::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Module, Node, NodeId, ValueId, atoms,
-        continuation_entries, function_nodes, nodes_from, retarget_transfers,
+        function_nodes, nodes_from, retarget_transfers,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -19,7 +19,7 @@ use {
 /// Nests are independent: a level is bound inside the one before it, a call's resumes are entered by calls of its function alone, and a collapse moves bodies without rewriting them, so one snapshot admits them all.
 pub fn uncurry_nests(module: &mut Module) -> bool {
     let facts = Facts::of(module);
-    let entries = continuation_entries(module);
+    let entries = module.continuation_entries();
     let nests = module
         .function_ids()
         .filter_map(|function| plan(module, &facts, &entries, function))

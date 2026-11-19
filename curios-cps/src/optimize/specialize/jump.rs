@@ -5,7 +5,7 @@ use {
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, ContinuationId, CopyBudget, CopyPlan,
         CopyPriority, Edge, Intrinsic, Literal, Module, Node, NodeId, ValueExpr,
-        collect_control_targets, continuation_transfers, copy_bodies, nodes_from,
+        collect_control_targets, copy_bodies, nodes_from,
     },
     curios_common::ArenaId,
     curios_num::Natural,
@@ -40,7 +40,7 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
     if constructors.is_empty() {
         return false;
     }
-    let transfers = continuation_transfers(module);
+    let transfers = module.continuation_transfers();
     // Shared joins with no constructor input cannot specialize; discover their incoming patterns before walking copied extents.
     let mut grouped = BTreeMap::<(ContinuationId, ConstructorPattern), BTreeSet<NodeId>>::new();
     for (id, node) in module.live_nodes() {

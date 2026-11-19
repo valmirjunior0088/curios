@@ -84,7 +84,7 @@ pub const ENTRY_CLONE_LIMIT: usize = 64;
 /// A limit in the tens would truncate real programs for pure loss rather than a tradeoff anything depends on, so the value is set far above any round count the corpus reaches: a backstop that a real program can reach is indistinguishable from a budget nobody documented.
 pub const ROUND_LIMIT: usize = 1024;
 
-/// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
+/// Run the verifier-delimited, FIFO high-CPS simplifier. What a pass reads off the module whole is the module's, filed with the generation it was read at (`Module::calls` and its siblings), so a fact asked again over a module no pass has written since is not built again, and nothing outlives a write.
 pub fn optimize(module: &mut Module) {
     curios_profile::profile!("cps_optimize");
     module

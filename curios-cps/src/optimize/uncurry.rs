@@ -11,8 +11,7 @@ pub use nest::*;
 use {
     crate::{
         Atom, CallAnalysis, Callee, ContinuationId, Droppable, Edge, FunctionId, Module, Node,
-        NodeId, ValueId, analyze_calls, atoms, collect_control_targets, continuation_entries,
-        function_nodes, nodes_from,
+        NodeId, ValueId, atoms, collect_control_targets, function_nodes, nodes_from,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -285,8 +284,8 @@ struct ClassPlan {
 
 /// Absorb every independent tail class admitted by one call/entry snapshot. A class whose body, caller or resume an earlier rewrite touches waits for the next round; in particular a retargeted caller can introduce a tail edge joining previously separate classes.
 pub fn uncurry_returns(module: &mut Module) -> bool {
-    let calls = analyze_calls(module);
-    let entries = continuation_entries(module);
+    let calls = module.calls();
+    let entries = module.continuation_entries();
     let observed = calls
         .call_sites
         .values()

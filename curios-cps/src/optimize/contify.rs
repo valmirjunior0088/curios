@@ -2,7 +2,7 @@ use {
     super::{SCC_CLONE_NODE_LIMIT, copy_bodies, introducing_letfun},
     crate::{
         CallAnalysis, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
-        analyze_calls, function_nodes,
+        function_nodes,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -17,7 +17,7 @@ use {
 ///
 /// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves the reachability condition that reads it: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. What does go stale — which function the snapshot says owns a site — nothing below reads. One contification per call would set a `Toml/decode` compile's round count, as `fixpoint_pass_measurements` shows.
 pub fn contify_calls(module: &mut Module) -> bool {
-    let analysis = analyze_calls(module);
+    let analysis = module.calls();
     let mut admitted = Vec::new();
     // Which function's body introduces each function a `LetFun` binds.
     let definers = analysis
@@ -150,7 +150,7 @@ impl LoopEntryPlan {
         *callee = Callee::Known(copy);
         #[cfg(debug_assertions)]
         {
-            let analysis = analyze_calls(module);
+            let analysis = module.calls();
             let external = analysis.call_sites[&copy]
                 .iter()
                 .copied()
@@ -172,7 +172,7 @@ pub fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
-    let analysis = analyze_calls(module);
+    let analysis = module.calls();
     let loops = module
         .live_functions()
         .map(|(callee, _)| callee)

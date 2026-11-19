@@ -28,12 +28,7 @@ use {
     },
     curios_surface::{Entrypoint, ReaderPosition, Spelling},
     curios_unit::{Predecessors, Unit},
-    std::{
-        cell::{LazyCell, OnceCell},
-        collections::BTreeSet,
-        fmt,
-        rc::Rc,
-    },
+    std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
 
 /// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it was written under — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
@@ -1478,12 +1473,11 @@ where
     curios_cps::optimize(&mut cps_optm_module);
     curios_cps::rebuild_in_place(&mut cps_optm_module);
     // One solve of the value flow over the module the rebuild left holds its rebuilds to the flow, reads the entry's turns and routes the frame bound's closure calls. After the rebuild, whose proof reads the native code exactly: putting a recursion's frames on the heap moves no read and adds no reader, so every rebuild it copies into a twin keeps the conditions it was proved under, and no value an entry returns changes.
-    let flow = OnceCell::new();
     cps_optm_module
-        .verify_reading(&flow)
+        .verify()
         .expect("invalid high CPS after the rebuild in place");
-    let turns = cps_optm_module.entry_suspension_reading(&flow);
-    curios_cps::bound_frames(&mut cps_optm_module, &flow);
+    let turns = cps_optm_module.entry_suspension();
+    curios_cps::bound_frames(&mut cps_optm_module);
 
     observe(Stage::CpsOptm(&cps_optm_module));
 

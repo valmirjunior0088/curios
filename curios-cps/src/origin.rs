@@ -13,10 +13,7 @@
 //! Boundaries are stated by injection rather than by omission: a resume parameter receives whatever an unsplit return interface delivers, an escaping function's parameters receive whatever unknown callers pass, the entry's parameters belong to the host, and a knot-tied value is a closure — each is seeded `Opaque` so a bottom that survives the solve means *unreached*, never *assumed constructed*.
 
 use {
-    super::{
-        Atom, Callee, Edge, Lattice, Module, Node, RowId, Solver, ValueExpr, ValueId,
-        escaping_in_bodies,
-    },
+    super::{Atom, Callee, Edge, Lattice, Module, Node, RowId, Solver, ValueExpr, ValueId},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -119,7 +116,7 @@ fn flow_edge(module: &Module, solver: &mut Solver<Origin>, edge: &Edge) {
 
 /// What flows into every value, to its least fixpoint.
 pub fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
-    let escaping = escaping_in_bodies(module);
+    let escaping = module.escaping_in_bodies();
     let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |rules| {

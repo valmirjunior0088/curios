@@ -1,6 +1,12 @@
 //! Arena-backed high CPS.
 //!
-//! The surface of this module is intentionally small: ANF lowering constructs a [`Module`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`Module::value_use_counts`]) rather than maintained as a shadow arena.
+//! The surface of this module is intentionally small: ANF lowering constructs a [`Module`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`Module::value_use_counts`]) rather than maintained as a shadow arena, and what a pass reads off the module whole is filed with the generation it was read at, which every write through the module's one door advances, so it is handed again only to a reader of the module it was read off.
+
+mod readings;
+use readings::*;
+
+mod written;
+use written::*;
 
 use {
     super::{
@@ -22,9 +28,17 @@ pub struct FieldGroup {
     pub width: usize,
 }
 
-/// The production CPS representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
+/// The production CPS representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit. Every write passes one door, `Written::write`, which counts it, so what is read off a module can be filed with the generation it was read at.
 #[derive(Debug, Clone, Default)]
 pub struct Module {
+    graph: Written<Graph>,
+    /// What passes asked of the module, at the generation it was read at.
+    readings: Readings,
+}
+
+/// What a [`Module`] holds, reached for writing through its one door.
+#[derive(Debug, Clone, Default)]
+struct Graph {
     nodes: Arena<NodeId, Node>,
     values: Arena<ValueId, ValueDef>,
     functions: Arena<FunctionId, Function>,
@@ -100,45 +114,47 @@ impl Module {
     }
 
     pub fn entry(&self) -> Option<FunctionId> {
-        self.entry
+        self.graph.entry
     }
 
     /// Keep `function` out of line: no pass copies its body into a caller.
     pub fn keep_out_of_line(&mut self, function: FunctionId) {
-        self.out_of_line.insert(function);
+        self.graph.write().out_of_line.insert(function);
     }
 
     /// Whether `function` is kept out of line.
     pub fn is_out_of_line(&self, function: FunctionId) -> bool {
-        self.out_of_line.contains(&function)
+        self.graph.out_of_line.contains(&function)
     }
 
     /// Record `twin` as the function that runs `original` on the heap.
     pub(crate) fn record_twin(&mut self, original: FunctionId, twin: FunctionId) {
-        self.twins.insert(original, twin);
+        self.graph.write().twins.insert(original, twin);
     }
 
     /// Forget each twin whose function or twin is not among `live`.
     pub(crate) fn retain_twins(&mut self, live: &BTreeSet<FunctionId>) {
-        self.twins
+        self.graph
+            .write()
+            .twins
             .retain(|original, twin| live.contains(original) && live.contains(twin));
     }
 
     /// The function that runs `function` on the heap, taking its parameters and then the continuation its answer goes to, where one was written.
     pub fn twin(&self, function: FunctionId) -> Option<FunctionId> {
-        self.twins.get(&function).copied()
+        self.graph.twins.get(&function).copied()
     }
 
     /// The registered suspension representation, independent of the entry capability [`Self::entry_suspension`] derives.
     pub fn suspension(&self) -> Option<RowId> {
-        self.suspension
+        self.graph.suspension
     }
 
     /// The suspension's row, registered on first use: the handles and the cells waited on, the cancel, what runs first on resuming and the frames, in that order.
     ///
     /// The handles, the cells and the frames are lists, so their slots name the rope base the readers take. The other two stay uniform: what runs first is a description or a nested suspension, and nothing on the suspended path is hot enough to pay for typing the cancel.
     pub fn suspension_row(&mut self) -> RowId {
-        if let Some(row) = self.suspension {
+        if let Some(row) = self.graph.suspension {
             return row;
         }
         let row = self.add_row(Row {
@@ -151,13 +167,13 @@ impl Module {
                 Slot::List,
             ],
         });
-        self.suspension = Some(row);
+        self.graph.write().suspension = Some(row);
         row
     }
 
     /// The recorded fields representations, by continuation.
     pub fn field_groups(&self) -> &BTreeMap<ContinuationId, Vec<FieldGroup>> {
-        &self.field_groups
+        &self.graph.field_groups
     }
 
     /// Register a nominal row and hand back its identity. The ANF door is the only caller; see [`ValueExpr::Row`].
@@ -171,24 +187,24 @@ impl Module {
     ///
     /// A row's slots may name other rows, and a self-referential declaration names its own — so the identity has to exist before the slots are computed, or computing them would not terminate. An undefined row is a compiler bug, and [`Module::row`] says so rather than carrying an `Option` every caller would unwrap.
     pub fn reserve_row(&mut self) -> RowId {
-        let id = RowId::from_index(self.rows.len());
-        self.rows.push(None);
+        let id = RowId::from_index(self.graph.write().rows.len());
+        self.graph.write().rows.push(None);
         id
     }
 
     pub fn define_row(&mut self, id: RowId, row: Row) {
-        self.rows[id.index()] = Some(row);
+        self.graph.write().rows[id.index()] = Some(row);
     }
 
     pub fn row(&self, id: RowId) -> &Row {
-        self.rows[id.index()]
+        self.graph.rows[id.index()]
             .as_ref()
             .unwrap_or_else(|| panic!("{id} was reserved and never defined"))
     }
 
     /// The row at `id`, where one was defined. [`Module::row`] is the reading of everything that trusts the module; this is the verifier's and the printer's, which meet a module that may name a row nothing defined.
     pub(crate) fn defined_row(&self, id: RowId) -> Option<&Row> {
-        self.rows.get(id.index()).and_then(Option::as_ref)
+        self.graph.rows.get(id.index()).and_then(Option::as_ref)
     }
 
     /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`Atom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
@@ -217,18 +233,18 @@ impl Module {
 
     /// Register the name of a computed member and hand back its identity. The ANF door is the only caller; see [`Panic::Cycle`](crate::Panic::Cycle).
     pub fn add_member(&mut self, name: String) -> MemberId {
-        let id = MemberId::from_index(self.members.len());
-        self.members.push(name);
+        let id = MemberId::from_index(self.graph.write().members.len());
+        self.graph.write().members.push(name);
         id
     }
 
     /// The names of the computed members, each at its identity's place.
     pub fn members(&self) -> &[String] {
-        &self.members
+        &self.graph.members
     }
 
     pub fn rows(&self) -> impl Iterator<Item = (RowId, &Row)> {
-        (0..self.rows.len())
+        (0..self.graph.rows.len())
             .map(RowId::from_index)
             .map(|id| (id, self.row(id)))
     }
@@ -237,7 +253,12 @@ impl Module {
     ///
     /// Recording and shifting are one operation because they are one fact: a caller recording without shifting would leave stale starts, reachable as soon as two parameters of one continuation are split in the same pass. Groups are kept sorted by start; [`Module::verify`] holds them to the parameter list.
     pub fn record_split(&mut self, continuation: ContinuationId, start: usize, width: usize) {
-        let groups = self.field_groups.entry(continuation).or_default();
+        let groups = self
+            .graph
+            .write()
+            .field_groups
+            .entry(continuation)
+            .or_default();
         for group in groups.iter_mut() {
             if group.start > start {
                 group.start += width - 1;
@@ -253,7 +274,7 @@ impl Module {
         continuation: ContinuationId,
         removed: &BTreeSet<usize>,
     ) {
-        let Some(groups) = self.field_groups.get_mut(&continuation) else {
+        let Some(groups) = self.graph.write().field_groups.get_mut(&continuation) else {
             return;
         };
         for group in groups.iter_mut() {
@@ -267,36 +288,36 @@ impl Module {
         }
         groups.retain(|group| group.width > 0);
         if groups.is_empty() {
-            self.field_groups.remove(&continuation);
+            self.graph.write().field_groups.remove(&continuation);
         }
     }
 
     pub fn set_entry(&mut self, entry: FunctionId) {
-        self.entry = Some(entry);
+        self.graph.write().entry = Some(entry);
     }
 
     pub fn nodes(&self) -> &[Option<Node>] {
-        self.nodes.slots()
+        self.graph.nodes.slots()
     }
 
     pub fn values(&self) -> &[Option<ValueDef>] {
-        self.values.slots()
+        self.graph.values.slots()
     }
 
     pub fn functions(&self) -> &[Option<Function>] {
-        self.functions.slots()
+        self.graph.functions.slots()
     }
 
     pub fn continuations(&self) -> &[Option<Continuation>] {
-        self.continuations.slots()
+        self.graph.continuations.slots()
     }
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
-        self.nodes.get(id)
+        self.graph.nodes.get(id)
     }
 
     pub fn function(&self, id: FunctionId) -> Option<&Function> {
-        self.functions.get(id)
+        self.graph.functions.get(id)
     }
 
     /// Whether a call of `callee` handing `arguments`, its result unread, may simply not happen: [`Function::droppable`] names what it must be handed, each a parameter handed a function droppable at every call. A value named that is no parameter is one this call cannot hand, so the call is kept: a name a pass renamed without the claim, or a capture no copy or substitution has put a function in place of yet.
@@ -356,42 +377,42 @@ impl Module {
     }
 
     pub fn continuation(&self, id: ContinuationId) -> Option<&Continuation> {
-        self.continuations.get(id)
+        self.graph.continuations.get(id)
     }
 
     pub fn value(&self, id: ValueId) -> Option<&ValueDef> {
-        self.values.get(id)
+        self.graph.values.get(id)
     }
 
     /// The live nodes, in identity order.
     pub fn live_nodes(&self) -> impl Iterator<Item = (NodeId, &Node)> {
-        self.nodes.iter_live()
+        self.graph.nodes.iter_live()
     }
 
     /// The live functions, in identity order.
     pub fn live_functions(&self) -> impl Iterator<Item = (FunctionId, &Function)> {
-        self.functions.iter_live()
+        self.graph.functions.iter_live()
     }
 
     /// The live continuations, in identity order.
     pub fn live_continuations(&self) -> impl Iterator<Item = (ContinuationId, &Continuation)> {
-        self.continuations.iter_live()
+        self.graph.continuations.iter_live()
     }
 
     pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
-        self.nodes.live_ids()
+        self.graph.nodes.live_ids()
     }
 
     pub fn value_ids(&self) -> impl Iterator<Item = ValueId> {
-        self.values.live_ids()
+        self.graph.values.live_ids()
     }
 
     pub fn function_ids(&self) -> impl Iterator<Item = FunctionId> {
-        self.functions.live_ids()
+        self.graph.functions.live_ids()
     }
 
     pub fn continuation_ids(&self) -> impl Iterator<Item = ContinuationId> {
-        self.continuations.live_ids()
+        self.graph.continuations.live_ids()
     }
 
     /// The values that may be constant data: a literal, and a construction every slot of which is a literal, a filler, a function or such a value. Every binding `curios-emit` hoists into a global is one, interned structurally so equal constants share it, and a value named by many uses whatever reads it; a closure some construction holds counts whatever it captures, which only widens the set.
@@ -400,7 +421,7 @@ impl Module {
         // Constructions are visited until nothing joins, since one may name a constant bound later in identity order.
         loop {
             let before = constant.len();
-            for (_, node) in self.nodes.iter_live() {
+            for (_, node) in self.graph.nodes.iter_live() {
                 let Node::LetValue { result, value, .. } = node else {
                     continue;
                 };
@@ -428,7 +449,7 @@ impl Module {
     /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetIntrinsic` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
     pub(crate) fn value_use_counts(&self) -> BTreeMap<ValueId, usize> {
         let mut counts = BTreeMap::new();
-        for (_, node) in self.nodes.iter_live() {
+        for (_, node) in self.graph.nodes.iter_live() {
             for atom in atoms(node) {
                 if let Atom::Value(value) = atom {
                     *counts.entry(*value).or_insert(0) += 1;
@@ -450,7 +471,7 @@ impl Module {
     /// Read over every node of the arena rather than those a live body reaches, because the wrapper set and the representation decided around it must be the same set: a function one counted as escaping and the other did not would be tail-called by a wrapper at a signature it no longer has.
     pub fn escaping_functions(&self) -> BTreeSet<FunctionId> {
         let mut escaping = BTreeSet::new();
-        for node in self.nodes.slots().iter().flatten() {
+        for node in self.graph.nodes.slots().iter().flatten() {
             for atom in atoms(node) {
                 if let Atom::Fun(function) = atom {
                     escaping.insert(*function);
@@ -469,7 +490,7 @@ impl Module {
         let mut settled = BTreeMap::<FunctionId, usize>::new();
         let mut inherits = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
 
-        for (function, definition) in self.functions.iter_live() {
+        for (function, definition) in self.graph.functions.iter_live() {
             let sentinel = definition.return_cont;
             let mut edges = None;
             let mut operation = None;
@@ -547,7 +568,7 @@ impl Module {
     }
 
     pub fn reserve_node(&mut self) -> NodeId {
-        self.nodes.reserve()
+        self.graph.write().nodes.reserve()
     }
 
     pub fn add_node(&mut self, node: Node) -> NodeId {
@@ -557,7 +578,7 @@ impl Module {
     }
 
     pub fn define_node(&mut self, id: NodeId, node: Node) {
-        self.nodes.define(id, node);
+        self.graph.write().nodes.define(id, node);
     }
 
     pub fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
@@ -569,105 +590,107 @@ impl Module {
 
     /// Mint a value from a whole definition: a copy of another value carries everything that value states, and the ANF door states what erasure recorded.
     pub fn add_value_def(&mut self, definition: ValueDef) -> ValueId {
-        self.values.mint(definition)
+        self.graph.write().values.mint(definition)
     }
 
     pub fn reserve_function(&mut self) -> FunctionId {
-        self.functions.reserve()
+        self.graph.write().functions.reserve()
     }
 
     pub fn define_function(&mut self, id: FunctionId, function: Function) {
-        self.functions.define(id, function);
+        self.graph.write().functions.define(id, function);
     }
 
     pub fn add_function(&mut self, function: Function) -> FunctionId {
-        self.functions.mint(function)
+        self.graph.write().functions.mint(function)
     }
 
     pub fn reserve_continuation(&mut self) -> ContinuationId {
-        self.continuations.reserve()
+        self.graph.write().continuations.reserve()
     }
 
     pub fn define_continuation(&mut self, id: ContinuationId, continuation: Continuation) {
-        self.continuations.define(id, continuation);
+        self.graph.write().continuations.define(id, continuation);
     }
 
     pub fn add_continuation(&mut self, continuation: Continuation) -> ContinuationId {
-        self.continuations.mint(continuation)
+        self.graph.write().continuations.mint(continuation)
     }
 
     pub fn remove_node(&mut self, id: NodeId) -> Option<Node> {
-        self.nodes.remove(id)
+        self.graph.write().nodes.remove(id)
     }
 
     /// Replace a live node in place, where [`Module::define_node`] fills a reserved one.
     pub(crate) fn set_node(&mut self, id: NodeId, node: Node) {
-        self.nodes.set(id, node);
+        self.graph.write().nodes.set(id, node);
     }
 
     pub(crate) fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
-        self.nodes.get_mut(id)
+        self.graph.write().nodes.get_mut(id)
     }
 
     pub(crate) fn function_mut(&mut self, id: FunctionId) -> Option<&mut Function> {
-        self.functions.get_mut(id)
+        self.graph.write().functions.get_mut(id)
     }
 
     pub(crate) fn continuation_mut(&mut self, id: ContinuationId) -> Option<&mut Continuation> {
-        self.continuations.get_mut(id)
+        self.graph.write().continuations.get_mut(id)
     }
 
     pub(crate) fn live_nodes_mut(&mut self) -> impl Iterator<Item = (NodeId, &mut Node)> {
-        self.nodes.iter_live_mut()
+        self.graph.write().nodes.iter_live_mut()
     }
 
     pub(crate) fn live_functions_mut(
         &mut self,
     ) -> impl Iterator<Item = (FunctionId, &mut Function)> {
-        self.functions.iter_live_mut()
+        self.graph.write().functions.iter_live_mut()
     }
 
     pub(crate) fn live_continuations_mut(
         &mut self,
     ) -> impl Iterator<Item = (ContinuationId, &mut Continuation)> {
-        self.continuations.iter_live_mut()
+        self.graph.write().continuations.iter_live_mut()
     }
 
     pub(crate) fn remove_value(&mut self, id: ValueId) {
-        self.values.remove(id);
+        self.graph.write().values.remove(id);
     }
 
     pub(crate) fn remove_function(&mut self, id: FunctionId) {
-        self.functions.remove(id);
+        self.graph.write().functions.remove(id);
     }
 
     /// Tombstone a continuation, and with it the fields record of its parameters, which describes nothing once they are gone.
     pub(crate) fn remove_continuation(&mut self, id: ContinuationId) {
-        self.continuations.remove(id);
-        self.field_groups.remove(&id);
+        self.graph.write().continuations.remove(id);
+        self.graph.write().field_groups.remove(&id);
     }
 
     pub(crate) fn retain_nodes(&mut self, keep: &BTreeSet<NodeId>) {
-        self.nodes.retain(keep);
+        self.graph.write().nodes.retain(keep);
     }
 
     pub(crate) fn retain_values(&mut self, keep: &BTreeSet<ValueId>) {
-        self.values.retain(keep);
+        self.graph.write().values.retain(keep);
     }
 
     pub(crate) fn retain_functions(&mut self, keep: &BTreeSet<FunctionId>) {
-        self.functions.retain(keep);
+        self.graph.write().functions.retain(keep);
     }
 
     /// Tombstone every continuation outside `keep`, and drop the fields record of each one that goes.
     pub(crate) fn retain_continuations(&mut self, keep: &BTreeSet<ContinuationId>) {
-        self.continuations.retain(keep);
-        self.field_groups
+        self.graph.write().continuations.retain(keep);
+        self.graph
+            .write()
+            .field_groups
             .retain(|continuation, _| keep.contains(continuation));
     }
 
     pub fn replace_atom(&mut self, from: UseTarget, replacement: Atom) {
-        for (_, node) in self.nodes.iter_live_mut() {
+        for (_, node) in self.graph.write().nodes.iter_live_mut() {
             visit_atoms_mut(node, &mut |atom| {
                 let matches = match (&from, &*atom) {
                     (UseTarget::Value(a), Atom::Value(b)) => a == b,
@@ -686,7 +709,7 @@ impl Module {
         if replacements.is_empty() {
             return;
         }
-        for (_, node) in self.nodes.iter_live_mut() {
+        for (_, node) in self.graph.write().nodes.iter_live_mut() {
             visit_atoms_mut(node, &mut |atom| {
                 if let Atom::Value(value) = atom
                     && let Some(replacement) = replacements.get(value)
@@ -699,15 +722,17 @@ impl Module {
 
     pub fn tombstones(&self) -> (usize, usize, usize, usize) {
         let return_continuations = self
+            .graph
             .functions
             .iter_live()
             .map(|(_, function)| function.return_cont)
             .collect::<BTreeSet<_>>();
         (
-            self.nodes.tombstone_count(),
-            self.values.tombstone_count(),
-            self.functions.tombstone_count(),
-            self.continuations
+            self.graph.nodes.tombstone_count(),
+            self.graph.values.tombstone_count(),
+            self.graph.functions.tombstone_count(),
+            self.graph
+                .continuations
                 .slots()
                 .iter()
                 .enumerate()

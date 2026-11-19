@@ -7,7 +7,7 @@ use {
     },
     crate::{
         Atom, Callee, CopyBudget, CopyPlan, CopyPriority, FunctionId, Literal, Module, Node,
-        NodeId, SCC_CLONE_NODE_LIMIT, Scopes, ValueId, analyze_calls, copy_bodies,
+        NodeId, SCC_CLONE_NODE_LIMIT, Scopes, ValueId, copy_bodies,
     },
     curios_common::ArenaId,
     std::{
@@ -151,8 +151,8 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
     if !budget.admits(1) {
         return false;
     }
-    let analysis = analyze_calls(module);
-    let scopes = Scopes::of(module, &analysis);
+    let analysis = module.calls();
+    let scopes = module.scopes();
     let mut seeds = literal_value_map(module);
     let global = scc_invariant_knowns(module, &analysis, &scopes, &seeds);
     seeds.extend(global);

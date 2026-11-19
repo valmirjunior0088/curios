@@ -3,11 +3,10 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, Panic, RowId, ValueExpr, ValueFlow, ValueId, atoms, function_nodes,
+        Node, NodeId, Panic, RowId, ValueExpr, ValueId, atoms, function_nodes,
     },
     curios_common::Sorted,
     std::{
-        cell::OnceCell,
         collections::{BTreeMap, BTreeSet},
         fmt,
         hash::Hash,
@@ -15,7 +14,7 @@ use {
 };
 
 /// The names a region may use: what encloses it, with what it binds, persistent, so a region's set is its parent's with the names it adds and shares every node of it. A region nested n deep sees every function, value and continuation bound above it, so a set copied into each region would cost the square of the nesting.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InScope<T>(Sorted<T, ()>);
 
 impl<T> Default for InScope<T> {
@@ -175,23 +174,18 @@ impl ScopeVerifier {
 
 /// The clauses a verification checks beside the structural ones.
 #[derive(Clone, Copy)]
-enum Clauses<'a> {
+enum Clauses {
     /// None: a round's close.
     Structure,
     /// The row vocabulary, but no rebuild's flow.
     Vocabulary,
-    /// The row vocabulary, and every rebuild held to the value flow `flow` holds.
-    Flowing(&'a OnceCell<ValueFlow>),
+    /// The row vocabulary, and every rebuild held to the module's value flow.
+    Flowing,
 }
 
 impl Module {
     pub fn verify(&self) -> Result<(), VerifyError> {
-        self.verify_reading(&OnceCell::new())
-    }
-
-    /// [`Module::verify`], reading the value flow a rebuild is held to from `flow`, solved there where nothing has solved it yet: one solve serves the verifier and every other reader of the module as it stands.
-    pub fn verify_reading(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
-        self.verify_with(Clauses::Flowing(flow))
+        self.verify_with(Clauses::Flowing)
     }
 
     /// Every clause of [`Module::verify`] but the one a rebuild is held to by the value flow: what a module the frame bound rewrote is held to, its rebuilds verified over the module before it, which its twins keep, since a twin moves no read and adds no reader ([`bound_frames`](crate::bound_frames)).
@@ -207,7 +201,7 @@ impl Module {
     }
 
     /// The structural clauses, and the row-vocabulary ones `clauses` asks for.
-    fn verify_with(&self, clauses: Clauses<'_>) -> Result<(), VerifyError> {
+    fn verify_with(&self, clauses: Clauses) -> Result<(), VerifyError> {
         let entry = self
             .entry()
             .ok_or_else(|| VerifyError("module has no entry function".into()))?;
@@ -257,11 +251,11 @@ impl Module {
             self.verify_function_body(id, function, &facts, &mut bound_continuations)?;
         }
         self.verify_lexical_scopes(entry)?;
-        if let Clauses::Vocabulary | Clauses::Flowing(_) = clauses {
+        if let Clauses::Vocabulary | Clauses::Flowing = clauses {
             self.verify_rows()?;
         }
-        if let Clauses::Flowing(flow) = clauses {
-            self.verify_rebuilds(flow)?;
+        if let Clauses::Flowing = clauses {
+            self.verify_rebuilds()?;
         }
 
         let live_nodes = self.node_ids().collect::<BTreeSet<_>>();
@@ -414,7 +408,7 @@ impl Module {
     }
 
     /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, or one no flow reaches, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on, and so does an overwrite of a list. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
-    fn verify_rebuilds(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
+    fn verify_rebuilds(&self) -> Result<(), VerifyError> {
         let mut rows = None;
         for (function, _) in self.live_functions() {
             for node_id in function_nodes(self, function) {
@@ -467,8 +461,7 @@ impl Module {
                         definition.width(),
                     )));
                 }
-                let rows =
-                    rows.get_or_insert_with(|| flow.get_or_init(|| ValueFlow::of(self)).rows());
+                let rows = rows.get_or_insert_with(|| self.value_flow().rows());
                 // A value no flow reaches is held by no run, so a rebuild of it stands where no run goes and casts nothing: where every construction of a row was itself rewritten into a rebuild, none is left for the flow to start from.
                 if !rows
                     .get(of)
@@ -623,7 +616,7 @@ impl Module {
     /// The functions each function's body may name, and each continuation's, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
     ///
     /// A function or continuation the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
-    pub(crate) fn scopes(
+    pub(crate) fn scope_walk(
         &self,
     ) -> (
         BTreeMap<FunctionId, InScope<FunctionId>>,

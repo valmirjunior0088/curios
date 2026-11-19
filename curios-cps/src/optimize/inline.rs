@@ -2,7 +2,7 @@ use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, CopyBudget, CopyPlan, Function, FunctionId,
         MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId,
-        analyze_calls, clone_node, prune_unreachable,
+        clone_node, prune_unreachable,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -12,7 +12,7 @@ pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool 
     let mut changed = false;
     // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline would make this quadratic on a large unoptimized module. Each call and its complete copy extent are read from the current graph: an earlier inline inside a callee can enlarge its body in this sweep. Snapshot site counts only tighten the size budget as calls disappear, so deferred work is picked up by the next sweep's fresh analysis. New calls inside a copied body likewise wait for the following sweep.
     for _ in 0..10_000 {
-        let analysis = analyze_calls(module);
+        let analysis = module.calls();
         let mut inlined_any = false;
         for index in 0..module.nodes().len() {
             let node_id = NodeId(index as u32);

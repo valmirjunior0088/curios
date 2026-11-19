@@ -17,7 +17,7 @@ use {
     crate::{
         Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal,
         Module, Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr,
-        ValueId, analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
+        ValueId, atoms, demand_of, rewire_node, visit_atoms_mut,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
@@ -62,7 +62,7 @@ fn projection_of(row: Option<RowId>, index: usize) -> Intrinsic {
 
 /// Every admissible split, in deterministic order: continuations by identity, positions ascending within each.
 fn admit(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Vec<Split> {
-    let demands = demands(module);
+    let demands = module.demands();
 
     // A resume's parameters are the call interface the return protocol owns, whatever their demand says.
     let resumes = resume_targets(module);
@@ -157,7 +157,7 @@ fn still_admissible(
 ///
 /// One split per call would leave region-wide convergence to the optimizer's own fixpoint at one round of every pass per split — this pass firing on nearly every round of a `Toml/decode` compile, with most of the fixpoint's time going to passes that rewrite nothing on any of them, as `fixpoint_pass_measurements` shows. A sweep applies what one snapshot admits and [`still_admissible`] declines what an earlier split in the sweep has since touched, so the rounds that remain are the ones a split genuinely depends on. Determinism is the order below; termination is unchanged, since every split still consumes an unrecorded aggregate parameter under the growth ceiling.
 pub fn split_parameters(module: &mut Module) -> bool {
-    let origins = origins(module);
+    let origins = module.origins();
     let mut admitted = admit(module, &origins);
     // Highest position first within a continuation, so an earlier position's index survives a later one's splice — the order `split_windows` applies its positions in, for the same reason.
     admitted.sort_by_key(|split| (split.continuation, std::cmp::Reverse(split.position)));
@@ -458,9 +458,9 @@ impl WorkerEdits {
 
 /// Split every independent known-function parameter admitted by one snapshot. Earlier positions survive descending splices; a newly rebuilt argument waits for fresh origins. Caller projections and parameter substitutions commit together, so a sweep scans the module once to redirect them.
 pub fn split_workers(module: &mut Module) -> bool {
-    let origins = origins(module);
-    let demands = demands(module);
-    let calls = analyze_calls(module);
+    let origins = module.origins();
+    let demands = module.demands();
+    let calls = module.calls();
     let mut workers = admit_workers(module, &origins, &demands, &calls);
     workers.sort_by_key(|worker| (worker.function, std::cmp::Reverse(worker.position)));
     let mut edits = WorkerEdits::default();

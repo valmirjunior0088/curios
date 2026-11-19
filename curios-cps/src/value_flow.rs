@@ -8,7 +8,7 @@
 //!
 //! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`ValueFlow::rows`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
 //!
-//! **A solve serves every reader of the module as it stands.** Where several read one module, as the verifier of the rebuilds, the entry's capability and the frame bound do of the module the rebuild in place leaves, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`], [`bound_frames`](crate::bound_frames)).
+//! **A solve serves every reader of the module as it stands.** The module files its solve with the generation it was read at ([`Module::value_flow`]), so where several read one module, as the verifier of the rebuilds, the entry's capability and the frame bound do of the module the rebuild in place leaves, they read one solve.
 //!
 //! **A flow is a copy, and what turns on a value watches it.** A store, a jump, a known call and its return, and a container's contents are copies from one key to another ([`Solver::copy`]); a closure call, a list map, a read and a rebuild are watches of the value they turn on ([`Rules::watch`]), handed each function or construction it gains, each stating the copies that one asks. A solve so carries each function and construction across each flow once, where a rule reading whole facts would copy every set it read each time it ran again.
 //!
@@ -28,10 +28,7 @@ use {
         Atom, Callee, CellOp, ChannelOp, ContinuationId, FunctionId, Intrinsic, IntrinsicCall,
         Lattice, Module, Node, NodeId, RowId, Rules, Solver, ValueExpr, ValueId,
     },
-    std::{
-        cell::OnceCell,
-        collections::{BTreeMap, BTreeSet},
-    },
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// What something may be: these, or any.
@@ -265,6 +262,7 @@ enum FlowKey {
 }
 
 /// What each value of a module may be, solved over the module as it stands.
+#[derive(PartialEq)]
 pub struct ValueFlow {
     facts: BTreeMap<FlowKey, ValueFact>,
     /// The row each construction of a row builds.
@@ -311,7 +309,7 @@ impl ValueFlow {
 
 /// The rows each value may be a struct of.
 pub fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
-    ValueFlow::of(module).rows()
+    module.value_flow().rows()
 }
 
 impl ValueFlow {
@@ -332,14 +330,9 @@ impl Module {
     ///
     /// This reads the current graph without caching or changing its row vocabulary. A result the module does not see retains the row; a computation that never returns contributes no returned row and need not be proved terminating.
     pub fn entry_suspension(&self) -> Option<RowId> {
-        self.entry_suspension_reading(&OnceCell::new())
-    }
-
-    /// [`Module::entry_suspension`], reading the value flow from `flow`, solved there where nothing has solved it yet ([`Module::verify_reading`]).
-    pub fn entry_suspension_reading(&self, flow: &OnceCell<ValueFlow>) -> Option<RowId> {
         let entry = self.entry()?;
         let row = self.suspension()?;
-        let flow = flow.get_or_init(|| ValueFlow::of(self));
+        let flow = self.value_flow();
         let mut returned = flow
             .facts
             .iter()

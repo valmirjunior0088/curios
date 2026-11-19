@@ -5,10 +5,7 @@
 //! Each phase filters signatures by their original-position masks, repairs every incoming argument vector and fills remaining inert occurrences in one walk, then tombstones the removed bindings. Different targets own different vectors, and filtering commutes with filling, so the batched repair agrees with sequential edits. The walk covers the entire live arena, including nested bodies and nodes awaiting pruning. Result receivers and escaping function signatures stay intact.
 
 use {
-    crate::{
-        Atom, Callee, Demand, Edge, Module, Node, ValueId, atoms, demand_of, demands,
-        visit_atoms_mut,
-    },
+    crate::{Atom, Callee, Demand, Edge, Module, Node, ValueId, atoms, demand_of, visit_atoms_mut},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -18,7 +15,7 @@ use {
 ///
 /// One snapshot of the lattice serves every entity, because removing a parameter only ever removes uses: a verdict of `Unused` cannot be falsified by an earlier removal in the same sweep, and each entity's edit touches its own parameter list and the edges or calls into it alone. One entity per call would fire on nearly every round of a `Toml/decode` compile, each round of every pass buying one continuation's cleanup.
 pub fn eliminate_dead_parameters(module: &mut Module) -> bool {
-    let demands = demands(module);
+    let demands = module.demands();
     let dead_value = |value: &ValueId| demand_of(&demands, *value) == Demand::Unused;
     let dead_indices = |params: &[ValueId]| {
         params

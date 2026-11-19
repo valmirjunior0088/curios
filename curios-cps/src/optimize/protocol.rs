@@ -21,8 +21,7 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, FunctionId, Lattice, Module, Node, RowId,
-        TailClasses, ValueExpr, ValueId, continuation_entries, demand_of, demands,
-        escaping_in_bodies, function_nodes, return_edges,
+        TailClasses, ValueExpr, ValueId, demand_of, function_nodes, return_edges,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -45,14 +44,14 @@ pub enum ReturnShape {
 
 /// What every live function's return protocol may be, total over the module's functions.
 pub fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
-    let escaping = escaping_in_bodies(module);
+    let escaping = module.escaping_in_bodies();
     let classes = TailClasses::of(module, &escaping);
-    let demands = demands(module);
+    let demands = module.demands();
     let constructions = constructions(module);
     let mut pinned = BTreeSet::<FunctionId>::new();
     let mut demanded = BTreeMap::<FunctionId, Demand>::new();
     let mut resumes = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
-    let entries = continuation_entries(module);
+    let entries = module.continuation_entries();
 
     for owner in module.function_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
