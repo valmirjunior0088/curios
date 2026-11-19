@@ -5,6 +5,7 @@ use {
     crate::*,
     curios_anf::{Analysis, Rhs, Statement, test_support::*},
     curios_elab::DEFAULT_BUDGET,
+    curios_erase::Part,
     curios_module::RootSource,
     curios_wasm::to_bytes,
 };
@@ -185,5 +186,67 @@ fn a_method_call_erases_to_the_projection_it_is() {
     assert!(
         named.is_empty(),
         "the method is named as a definition: {named:#?}"
+    );
+}
+
+/// A unit of two values its erasure gives up on: `counted`, a count down by a definition the certifier judges total, and `climbed`, a count up to a bound by one it does not, reached through `outer`.
+const COUNTS: &str = "use /std/{Nat};
+
+let count(n: Nat, acc: Nat) -> Nat =
+    match n
+    | 0 => acc
+    | p + 1 => count(p, acc + 1)
+    end;
+
+let up(i: Nat, n: Nat) -> Nat =
+    match i < n
+    | true => up(i + 1, n)
+    | false => i
+    end;
+
+let outer(i: Nat) -> Nat = up(i, 10000000);
+
+pub let counted: Nat = count(10000000, 0);
+
+pub let climbed: Nat = outer(0);
+";
+
+/// A program links of its scope the values whose initialization is observable, whether or not it names them, and of the others what it names: an entry naming neither of `/lib`'s values links `climbed`, which may not end and so runs as the program starts, and not `counted`, which its prune would drop.
+///
+/// Mutation-checked against linking every value that still computes: `count` is linked.
+#[test]
+fn a_program_links_the_scope_values_whose_initialization_is_observable() {
+    let anf = anf_with_units(&[("lib", COUNTS)], r#"/std/print("done")"#);
+
+    assert!(anf.contains("$/lib/up("), "`climbed` is not linked:\n{anf}");
+    assert!(
+        !anf.contains("$/lib/count("),
+        "`counted` is linked though nothing names it:\n{anf}"
+    );
+}
+
+/// Whether what a value's evaluation left is observable reads the totality of what it runs, so its record names the signature of each name it read: `climbed` reaches `up` only through `outer`, whose signature its erasure reads, and reads `up`'s verdict alone where it is decided.
+///
+/// Mutation-checked against deciding it without noting the names read.
+#[test]
+fn a_value_left_computing_records_the_verdicts_that_decided_it() {
+    let unit = unit_of(COUNTS);
+    let asked = unit
+        .erased()
+        .recorded()
+        .get()
+        .expect("the unit's records are held");
+    let (_, record) = asked
+        .records()
+        .find(|(name, _)| name.faithful().to_string() == "/lib/climbed")
+        .expect("`climbed` has a record");
+
+    assert!(
+        record
+            .reads()
+            .any(|(name, part)| name.faithful().to_string() == "/lib/up"
+                && part == Part::Signature),
+        "{:?}",
+        record.reads().collect::<Vec<_>>()
     );
 }

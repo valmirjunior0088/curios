@@ -2,7 +2,7 @@
 //!
 //! **A program links what it reaches.** Its own items, its entry, and of its scope the items those import, transitively. An item of the scope the program never names is no part of the module the back half lowers, so a program is not handed a library to drop.
 //!
-//! **And what computes at initialization, whether or not it is named.** A top-level value whose evaluation is observable runs before the entry in every program its unit is in scope of, which is the language's meaning and not this pass's to change. What one computes was computed where its unit was erased, wherever that could be finished (`evaluate`), and an item it was finished for computes nothing; here every item whose top-level statement still computes is linked with what it reaches, and the optimizer's prune, which holds the summaries, keeps or drops each exactly as it does an item of the program's own.
+//! **And what initializes observably, whether or not it is named.** A top-level value whose evaluation is observable runs before the entry in every program its unit is in scope of, which is the language's meaning and not this pass's to change. What one computes was computed where its unit was erased, wherever that could be finished, and where it could not, whether what is left is observable was decided there too, by the rule a program's prune keeps an item by (`evaluate`); here every item whose initialization is observable is linked with what it reaches. One that still computes and is not observable is linked by a program that names it, as any item is, and by no other, whose prune would drop it.
 //!
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
@@ -205,6 +205,21 @@ impl Linking {
         self.module.mark()
     }
 
+    /// Mark total every function of a linked form's evaluation that `certification` classifies so, as a program's are ([`ErasedProgram::mark_total`]).
+    pub fn mark_total(&mut self, certification: &curios_core::Certification) {
+        mark_evaluations_total(&mut self.module, &self.evaluating, certification);
+    }
+
+    /// The names whose totality marking the module reads: those of every linked item with a function of its evaluation.
+    pub fn evaluated_names(&self) -> BTreeSet<curios_core::Global> {
+        self.evaluating.values().flatten().copied().collect()
+    }
+
+    /// Whether a prune would keep what the module holds past `mark` for its effect ([`curios_anf::observable_since`]): asked once its functions are marked, as a program's prune asks.
+    pub fn observable_since(&self, mark: &curios_anf::Mark) -> bool {
+        curios_anf::observable_since(&self.module, mark)
+    }
+
     /// Run what the module holds past `mark` ([`curios_anf::evaluate_since`]), answering whether that finished.
     pub fn evaluate_since(&mut self, mark: &curios_anf::Mark) -> bool {
         curios_anf::evaluate_since(&mut self.module, mark)
@@ -362,11 +377,34 @@ fn places<'n>(
         .collect()
 }
 
-/// What `roots` take of each of `units`: the items they import, transitively, and, where `computing`, every item that computes at initialization with what it imports; and, of the declarations whose rows any of those import, the rows.
+/// Mark total in `module` each function `evaluating` holds whose item's every declared definition `certification` classifies `Total`. A group's members are judged as one, so a function of the group's item is marked only where all of them are total; a name the record does not classify, another unit's, leaves its function as it was, for that unit's record to mark.
+pub fn mark_evaluations_total(
+    module: &mut curios_anf::Module,
+    evaluating: &BTreeMap<curios_anf::FunctionId, Vec<curios_core::Global>>,
+    certification: &curios_core::Certification,
+) {
+    let total = evaluating
+        .iter()
+        .filter(|(_, names)| {
+            !names.is_empty()
+                && names.iter().all(|name| {
+                    certification
+                        .totality(name)
+                        .is_some_and(|totality| totality.is_total())
+                })
+        })
+        .map(|(function, _)| *function)
+        .collect::<Vec<_>>();
+    for id in total {
+        module.mark_total(id);
+    }
+}
+
+/// What `roots` take of each of `units`: the items they import, transitively, and, where `observable`, every item whose initialization is observable with what it imports; and, of the declarations whose rows any of those import, the rows.
 pub fn reached<'a>(
     units: &[&ErasedUnit],
     roots: impl Iterator<Item = &'a ErasedItem>,
-    computing: bool,
+    observable: bool,
 ) -> Reached {
     let mut reached = Reached {
         items: vec![BTreeSet::new(); units.len()],
@@ -379,9 +417,9 @@ pub fn reached<'a>(
         items.extend(places(units, root.values().iter().chain(root.functions())));
         rows.extend(places(units, root.environment().imported_rows()));
     }
-    if computing {
+    if observable {
         for (unit, erased) in units.iter().enumerate() {
-            for place in erased.computing() {
+            for place in erased.observable() {
                 let forms = erased.item(place).forms().count();
                 items.extend((0..forms).map(|form| (unit, (place, form))));
             }
@@ -421,11 +459,11 @@ pub fn link(
         true,
     );
     curios_profile::sample!(
-        "link::computing",
+        "link::observable",
         scope
             .units()
             .iter()
-            .map(|unit| unit.computing().count())
+            .map(|unit| unit.observable().count())
             .sum::<usize>()
     );
     curios_profile::sample!(

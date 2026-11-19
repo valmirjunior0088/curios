@@ -83,4 +83,4 @@ mod link;
 pub use link::{Linked, Mark, Resolution, Taken};
 
 mod optimize;
-pub use optimize::{evaluate_since, optimize};
+pub use optimize::{evaluate_since, observable_since, optimize};

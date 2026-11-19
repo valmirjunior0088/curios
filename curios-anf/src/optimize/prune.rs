@@ -1,6 +1,6 @@
 //! Reachability and eager-effect pruning — the shrink-before-lower pass.
 //!
-//! A linked program's item chain carries every item of its scope that computes as the program is initialized, with what each reaches, whether or not its evaluation can be observed; lowering them and running CPS's whole-module fixpoint over them is this stage's dominant cost, and CPS cannot recover the loss: item granularity and effect summaries dissolve into the entry's initialization code at CPS conversion. A top-level item is kept when it is **reachable** — it binds something the entry block (or a kept item) transitively references — or **effectful** — its eager evaluation is observable under the effect summary (a trap, exit, host call, state access, observable allocation, or a call reaching one), so top-level initialization runs it even unused.
+//! A linked program's item chain carries every item of its scope whose initialization is observable, with what each reaches, besides what its entry names, and every item of its own whether or not its evaluation can be observed; lowering them and running CPS's whole-module fixpoint over them is this stage's dominant cost, and CPS cannot recover the loss: item granularity and effect summaries dissolve into the entry's initialization code at CPS conversion. A top-level item is kept when it is **reachable** — it binds something the entry block (or a kept item) transitively references — or **effectful** — its eager evaluation is observable under the effect summary (a trap, exit, host call, state access, observable allocation, or a call reaching one), so top-level initialization runs it even unused.
 //!
 //! Function and value reachability are mutually dependent, so both close together over the item reference graph, seeded by the entry block's free references and the effectful items. Kept items retain their original order (definition before use), everything owned only by dropped items is tombstoned, and the pruned module re-verifies. Deterministic: identity order everywhere.
 
@@ -9,8 +9,8 @@ mod tests;
 
 use {
     crate::{
-        Analysis, Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Summary,
-        Terminator, ValueId,
+        Analysis, Atom, BlockId, FunctionId, Mark, Module, RecGroupId, Statement, StatementId,
+        Summary, Terminator, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -37,6 +37,25 @@ impl Subtree {
     fn free_values(&self) -> impl Iterator<Item = ValueId> + '_ {
         self.used_values.difference(&self.bound_values).copied()
     }
+}
+
+/// Whether any of `module`'s items at or past `mark` is one a prune keeps for its effect (`prune_unreachable`'s root rule): what an item's evaluation where its unit is erased leaves, asked in the module it was evaluated in, so a value every program would run as it starts is told from one each drops where nothing reads it. The module's functions are marked total as a program's are before it is asked.
+pub fn observable_since(module: &Module, mark: &Mark) -> bool {
+    let analysis = Analysis::analyze(module);
+    let summary = Summary::analyze(module, &analysis);
+
+    module.items()[mark.items()..]
+        .iter()
+        .any(|&item| kept_for_effect(module, &summary, item))
+}
+
+/// Whether a prune keeps `item`, a top-level statement, for its effect: its eager evaluation is observable under `summary` — a trap, an exit, a host call, a state access, an observable allocation, a call that may not end, or a call reaching one — so initialization runs it even unread.
+fn kept_for_effect(module: &Module, summary: &Summary, item: StatementId) -> bool {
+    module.statement(item).is_some_and(|statement| {
+        summary
+            .statement_behavior(module, statement)
+            .is_observable()
+    })
 }
 
 /// Drop the items the program neither reaches nor runs for observable effect. A recursive group is never seeded as observable: its members are forced by need and its initializers perform nothing, so a dead group drops, carrying its web with it.
@@ -92,13 +111,7 @@ pub fn prune_unreachable(module: &mut Module, analysis: &Analysis) {
     let observable = items
         .iter()
         .enumerate()
-        .filter(|&(_, &item)| {
-            module.statement(item).is_some_and(|statement| {
-                summary
-                    .statement_behavior(module, statement)
-                    .is_observable()
-            })
-        })
+        .filter(|&(_, &item)| kept_for_effect(module, &summary, item))
         .map(|(index, _)| index)
         .collect::<Vec<_>>();
     curios_profile::sample!("prune::items", items.len());

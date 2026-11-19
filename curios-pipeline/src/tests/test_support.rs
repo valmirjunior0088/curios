@@ -220,6 +220,28 @@ pub fn compile_with_units(
     sources: &[(&str, &str)],
     entrypoint: &str,
 ) -> Result<curios_wasm::Module, String> {
+    compile_with_units_observed(sources, entrypoint, &mut |_| {})
+}
+
+/// The erased program `entrypoint` links over `sources`, compiled as units in order, as `wonder --stage anf` prints it.
+pub fn anf_with_units(sources: &[(&str, &str)], entrypoint: &str) -> String {
+    let mut printed = None;
+    compile_with_units_observed(sources, entrypoint, &mut |stage| {
+        if let Stage::Anf(module) = stage {
+            printed = Some(module.to_string());
+        }
+    })
+    .expect("the program compiles");
+
+    printed.expect("the pipeline observes the erased program")
+}
+
+/// [`compile_with_units`], each stage of the entry's compilation handed to `observe`.
+fn compile_with_units_observed(
+    sources: &[(&str, &str)],
+    entrypoint: &str,
+    mut observe: &mut dyn FnMut(Stage<'_>),
+) -> Result<curios_wasm::Module, String> {
     let parsed = sources
         .iter()
         .map(|(prefix, source)| {
@@ -264,7 +286,7 @@ pub fn compile_with_units(
             None,
             EntryTail::Program,
             Told {
-                observe: &mut |_: Stage<'_>| {},
+                observe: &mut observe,
                 read: None,
                 elaborated: None,
                 progress: &mut |_| {},
