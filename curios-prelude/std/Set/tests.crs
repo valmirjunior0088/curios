@@ -8,8 +8,8 @@ test a_set_stores_its_keys_typed_and_unions =
     let u = Set/union(s, Set/insert(Set/of_list(["d"]), "a"));
     Test/all([
         Test/equal(Set/len(s), 3),
-        Test/assert(Set/has(s, "a")),
-        Test/assert(Bool/not(Set/has(s, "z"))),
+        Test/assert("`\"a\"` is a member", Set/has(s, "a")),
+        Test/assert("`\"z\"` is no member", Bool/not(Set/has(s, "z"))),
         Test/equal(Set/to_list(Set/remove(s, "b")), ["a", "c"]),
         Test/equal(u, Set/of_list(["a", "b", "c", "d"])),
         Test/equal(

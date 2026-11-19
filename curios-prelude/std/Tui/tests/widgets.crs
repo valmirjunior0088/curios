@@ -145,7 +145,9 @@ test the_focus_rings_round_its_labels =
         Test/equal(Focus/current(tab(f)), 2),
         Test/equal(Focus/current(tab(tab(tab(f)))), 1),
         Test/equal(Focus/current(back(f)), 3),
-        Test/assert(Focus/holds(back(tab(f)), 1))]);
+        Test/assert(
+            "focus moved forward and back stands where it stood",
+            Focus/holds(back(tab(f)), 1))]);
 
 -- A window is a part of a larger view, blank past its edge.
 test a_window_shows_part_of_a_larger_view =

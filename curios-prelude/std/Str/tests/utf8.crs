@@ -11,20 +11,21 @@ let rejected(bytes: Bytes) -> Bool =
 test of_bytes_accepts_multibyte_utf8 =
     match Str/of_bytes(x[0xC3, 0xA9])
     | success(s) => Test/equal(s, "é")
-    | failure(_) => Test/assert(false)
+    | failure(_) => Test/fail("the bytes of `é` are refused")
     end;
 
 -- An invalid lead byte fails `is_utf8`, so `of_bytes` answers `none`.
 test of_bytes_rejects_an_invalid_lead_byte =
-    Test/assert(rejected(x[0xFF]));
+    Test/assert("an invalid lead byte is rejected", rejected(x[0xFF]));
 
 -- A truncated sequence — a two-byte lead with no continuation — fails the continuation check.
 test of_bytes_rejects_a_truncated_multibyte =
-    Test/assert(rejected(x[0xC3]));
+    Test/assert("a truncated sequence is rejected", rejected(x[0xC3]));
 
 -- Overlong encodings, a surrogate, a scalar past `U+10FFFF`, a bare continuation byte, and three truncations: every shape the automaton must refuse.
 test of_bytes_rejects_every_invalid_shape =
     Test/assert(
+        "every invalid shape is rejected",
         List/fold(
             [
                 x[0xC0, 0xAF],

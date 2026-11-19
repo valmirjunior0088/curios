@@ -15,9 +15,9 @@ test a_character_s_classes_are_the_database_s =
         Test/equal(EastAsianWidth/of_char('日'), EastAsianWidth/wide()),
         Test/equal(EastAsianWidth/of_char('🚀'), EastAsianWidth/wide()),
         Test/equal(EastAsianWidth/of_char('€'), EastAsianWidth/ambiguous()),
-        Test/assert(Char/is_emoji_presentation('🚀')),
-        Test/assert(Bool/not(Char/is_emoji_presentation('☀'))),
-        Test/assert(Char/is_extended_pictographic('☀'))]);
+        Test/assert("🚀 is presented as an emoji", Char/is_emoji_presentation('🚀')),
+        Test/assert("☀ is not presented as an emoji", Bool/not(Char/is_emoji_presentation('☀'))),
+        Test/assert("☀ is extended pictographic", Char/is_extended_pictographic('☀'))]);
 
 -- A letter and its mark, an emoji sequence joined by ZWJs, a flag and a carriage return before a line feed are each one cluster, where every character is one scalar.
 test what_a_reader_sees_as_one_character_is_one_cluster =
@@ -28,7 +28,7 @@ test a_cluster_is_stepped_over_whole_either_way =
     let s = "éx";
     let start = Str/At/start(s);
     match Str/At/try_next_grapheme(s, start)
-    | none() => Test/assert(false)
+    | none() => Test/fail("the text has no first cluster")
     | some(cluster) =>
         Test/all([
             Test/equal(Str/At/to_offset(cluster.past), 3),

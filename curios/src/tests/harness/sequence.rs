@@ -10,11 +10,11 @@ fn a_function_returning_test_sequences_assertions_and_io() {
             r#"
         use /std/{Io, Test, print};
         let check() -> Test({}) =
-            let _ = Test/assert(true)!;
+            let _ = Test/assert("the first check holds", true)!;
             let _ = print("before|")!;
             let _ = Io/yield()!;
-            let _ = Test/assert(true)!;
-            Test/assert(true);
+            let _ = Test/assert("the check after the yield holds", true)!;
+            Test/assert("the last check holds", true);
         test checked = check();
         ()
     "#
@@ -30,15 +30,15 @@ fn a_failed_assertion_skips_the_remaining_test_continuations() {
             r#"
         use /std/{Test, print};
         test sequence =
-            let _ = Test/assert(true)!;
-            let _ = Test/assert(false)!;
+            let _ = Test/assert("the first step holds", true)!;
+            let _ = Test/assert("the second step fails", false)!;
             let _ = print("unreached")!;
-            Test/assert(true);
-        test afterward = Test/assert(true);
+            Test/assert("the step past the failure holds", true);
+        test afterward = Test/assert("it holds", true);
         ()
     "#
         ),
-        b"/sequence: failed\n  the condition was false\n/afterward: passed\n"
+        b"/sequence: failed\n  the second step fails\n/afterward: passed\n"
     );
 }
 
@@ -87,7 +87,7 @@ fn successful_payloads_flow_through_binding_and_identity_lifting() {
         let check() -> Test({}) =
             let value = answer()!;
             let _ = Test/equal(value, 21)!;
-            Test/assert(value * 2 == 42);
+            Test/assert("the value doubles to forty-two", value * 2 == 42);
         test checked = check();
         ()
         "#

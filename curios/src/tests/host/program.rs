@@ -84,8 +84,9 @@ fn a_failure_of_the_programs_own_type_is_written_as_that_type_is_shown() {
 /// A description of a test closes no program: its runner is its one presenter, so the refusal says where a test is declared and what runs it.
 #[test]
 fn a_test_closes_no_program_and_is_told_where_one_is_declared() {
-    let error = typecheck("use /std/{Nat, Test};\nTest/assert(1 + 1 == 2)\n")
-        .expect_err("nothing executes a test");
+    let error =
+        typecheck("use /std/{Nat, Test};\nTest/assert(\"one and one are two\", 1 + 1 == 2)\n")
+            .expect_err("nothing executes a test");
 
     assert!(
         error.contains(

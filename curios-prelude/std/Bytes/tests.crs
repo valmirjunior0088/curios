@@ -52,11 +52,13 @@ test packed_orders_compare_by_prefix_then_by_atom =
 -- Two runs part at a byte where a byte decides their order, and not where one runs out or they are one run.
 test runs_part_at_a_byte_only_where_a_byte_decides =
     Test/all([
-        Test/assert(Bytes/ord/below(x[1, 2], x[1, 3])),
-        Test/assert(Bytes/ord/below(x[1, 2, 9], x[2])),
-        Test/assert(Bool/not(Bytes/ord/below(x[1], x[1, 0]))),
-        Test/assert(Bool/not(Bytes/ord/below(x[1, 3], x[1, 2]))),
-        Test/assert(Bool/not(Bytes/ord/below(x[1, 2], x[1, 2])))]);
+        Test/assert("`x[1, 2]` is below `x[1, 3]`", Bytes/ord/below(x[1, 2], x[1, 3])),
+        Test/assert("`x[1, 2, 9]` is below `x[2]`", Bytes/ord/below(x[1, 2, 9], x[2])),
+        Test/assert("`x[1]` is not below `x[1, 0]`", Bool/not(Bytes/ord/below(x[1], x[1, 0]))),
+        Test/assert(
+            "`x[1, 3]` is not below `x[1, 2]`",
+            Bool/not(Bytes/ord/below(x[1, 3], x[1, 2]))),
+        Test/assert("a run is not below itself", Bool/not(Bytes/ord/below(x[1, 2], x[1, 2])))]);
 
 -- A run below another at a byte is before it behind any prefix and ahead of any two suffixes.
 let _a_run_below_another_is_before_it_wherever_the_two_stand(

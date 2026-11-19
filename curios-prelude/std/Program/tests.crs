@@ -19,10 +19,10 @@ test a_description_that_yields_nothing_is_executed_as_itself =
     let ends = Channel/new(@Nat, 1)!;
     let () = Program/execute(leave(ends.0, 7))!;
     let held = left(ends.1, 7)!;
-    Test/assert(held);
+    Test/assert("the description left its value", held);
 
 test a_description_that_may_fail_and_does_not_runs_to_its_end =
     let ends = Channel/new(@Nat, 1)!;
     let () = Program/execute(leave_or_fail(ends.0, 7))!;
     let held = left(ends.1, 7)!;
-    Test/assert(held);
+    Test/assert("the description that may fail left its value", held);

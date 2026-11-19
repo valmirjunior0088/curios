@@ -354,8 +354,10 @@ test payloads_are_set_and_read =
                     Flt/quiet_nan(+0.5)],
                 show),
             ["+5", "+1", "-1", "+0", "+0"]),
-        Test/assert(Flt/is_signaling(Flt/signaling_nan(+1.0))),
-        Test/assert(Bool/not(Flt/is_signaling(Flt/quiet_nan(+1.0))))]);
+        Test/assert("a signaling NaN is signaling", Flt/is_signaling(Flt/signaling_nan(+1.0))),
+        Test/assert(
+            "a quiet NaN is not signaling",
+            Bool/not(Flt/is_signaling(Flt/quiet_nan(+1.0))))]);
 
 -- Every class IEEE names, and the predicates that answer it.
 test the_ten_classes =

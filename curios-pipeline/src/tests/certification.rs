@@ -381,9 +381,9 @@ fn a_refused_test_stops_its_test_program_whatever_is_selected() {
         match c
         | big() => x + 0
         end;
-    /std/Test/assert(true);
+    /std/Test/assert(\"it holds\", true);
 
-test held = /std/Test/assert(true);
+test held = /std/Test/assert(\"it holds\", true);
 
 /std/print(\"\")
 "

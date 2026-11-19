@@ -157,7 +157,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     unit.insert_root(
         "lib",
         RootKind::Ordinary,
-        "use /std/{Nat, Test};\n\ntest addition_passes =\n    Test/assert(1 + 1 == 2);\n"
+        "use /std/{Nat, Test};\n\ntest addition_passes =\n    Test/assert(\"one and one are two\", 1 + 1 == 2);\n"
             .parse()
             .expect("the unit parses"),
     );

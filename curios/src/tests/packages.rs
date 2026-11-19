@@ -413,7 +413,7 @@ fn a_library_test_declaration_rides_through_the_store() {
             ("base/curios.toml", "name = \"base\"\n"),
             (
                 "base/lib.crs",
-                "use /std/{Nat, Test};\npub let answer: Nat = 42;\ntest answer_holds =\n    Test/assert(answer == 42);\n",
+                "use /std/{Nat, Test};\npub let answer: Nat = 42;\ntest answer_holds =\n    Test/assert(\"the answer is forty-two\", answer == 42);\n",
             ),
             (
                 "app/curios.toml",

@@ -16,6 +16,7 @@ let is(s: Str, code: Nat, body: Str) -> Test({}) =
 
 let malformed(s: Str) -> Test({}) =
     Test/assert(
+        "the reply is refused as malformed",
         match read(Method/get(), s)
         | failure(why) => match why | malformed(_) => true | _ => false end
         | success(_) => false

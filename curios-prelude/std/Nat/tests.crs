@@ -41,9 +41,13 @@ test of_str_reads_digits_and_nothing_else =
 -- A decision of every number below a bound holds where each number meets it, and of no bound one number fails.
 test a_decision_of_every_number_below_a_bound_is_decided_at_each =
     Test/all([
-        Test/assert(Nat/all_below(10, (n) => n < 10)),
-        Test/assert(Bool/not(Nat/all_below(10, (n) => n < 9))),
-        Test/assert(Nat/all_below(0, (_) => false))]);
+        Test/assert("every number below 10 is below 10", Nat/all_below(10, (n) => n < 10)),
+        Test/assert(
+            "not every number below 10 is below 9",
+            Bool/not(Nat/all_below(10, (n) => n < 9))),
+        Test/assert(
+            "every number below 0 holds whatever is asked",
+            Nat/all_below(0, (_) => false))]);
 
 -- A fact the logic reads of no operation is had of every byte by running it: the low bit of a number, which no law of `and` states, is at most one.
 let _a_fact_of_every_byte_is_decided_by_running_it(

@@ -936,7 +936,7 @@ A `test` declaration names a check: a description of type `/std/Test({})`, built
 use /std/{Nat, Eq, Test};
 
 test the_answer_holds =
-    Test/assert(21 * 2 == 42);
+    Test/assert("twenty-one doubled is forty-two", 21 * 2 == 42);
 
 let _right_identity(n: Nat) -> Eq()(n + 0, n) =
     Eq/refl();

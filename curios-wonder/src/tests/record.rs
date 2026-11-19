@@ -232,7 +232,7 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
     write(
         &root,
         "b/lib.crs",
-        "use /std/{Test};\n\ntest broken =\n    Test/assert(\"no\");\n",
+        "use /std/{Test};\n\ntest broken =\n    Test/assert(\"it holds\", \"no\");\n",
     );
     let diagnostics = diagnostics(
         DEFAULT_BUDGET,
@@ -250,7 +250,7 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report.rendered(&Style::plain()).contains("lib.crs:4:17"),
+        report.rendered(&Style::plain()).contains("lib.crs:4:29"),
         "{}",
         report.rendered(&Style::plain())
     );

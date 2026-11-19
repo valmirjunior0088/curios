@@ -128,7 +128,7 @@ test a_made_reply_reads_back =
                 (
                     Option/some(Field/Value/lit("5")),
                     Option/some(Field/Value/lit("text/plain; charset=utf-8")))))),
-        Test/assert(Response/ok(r)),
+        Test/assert("the response is ok", Response/ok(r)),
         Test/equal(Response/not_found.status.code, 404),
         Test/equal(
             Response/header(Response/of_html(200, Html/text("x")), "Content-Type"),
@@ -165,8 +165,12 @@ test a_field_met_at_run_time_is_read_or_refused =
         Test/equal(Field/Name/of_str("one\r\nX-Injected"), Option/none()),
         Test/equal(Field/Value/of_str("one\r\nX-Injected: two"), Option/none()),
         Test/equal(Field/Value/of_bytes(x['o', 0, 'k']), Option/none()),
-        Test/assert(Option/is_some(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
-        Test/assert(Option/is_some(Field/Value/of_str(Str/repeat("x", 65536)))),
+        Test/assert(
+            "a value holding a byte past ASCII, a tab and a space is a value",
+            Option/is_some(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
+        Test/assert(
+            "a value of 65536 octets is a value",
+            Option/is_some(Field/Value/of_str(Str/repeat("x", 65536)))),
         Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("X-A", "one"))),
         Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
         Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);

@@ -45,7 +45,9 @@ test over_clips_a_patch_at_the_edge =
 -- A tile is read under the bounds the frame's own type decides, which a literal discharges.
 test a_tile_is_read_under_the_frame_s_own_bounds =
     let f = Frame/of_view(View/above(row("ab", 2), row("cd", 2)));
-    Test/assert(Frame/get(f, 1, 1) == Frame/get(Frame/of_view(row("d", 1)), 0, 0));
+    Test/assert(
+        "the tile at the frame's corner is the one placed there",
+        Frame/get(f, 1, 1) == Frame/get(Frame/of_view(row("d", 1)), 0, 0));
 
 -- A cursor asked for inside a view stands where the view is placed: shifted past what stands beside it and above it, carried over a patch's offset, and lost where a fit crops it away.
 test a_cursor_stands_where_its_view_is_placed =

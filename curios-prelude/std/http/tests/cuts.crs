@@ -93,24 +93,30 @@ test a_head_reads_whole_at_every_cut =
     let wire = Str/to_bytes(Str/flatten(["\r\n", lines, "\r\n\r\nthe body"]));
     Test/all([
         Test/assert(
+            "the head reads whole at every cut",
             whole_at_every_cut(
                 head,
                 read/unsearched,
                 wire,
                 Fed/whole(Str/to_bytes(lines), Str/to_bytes("the body")))),
-        Test/assert(wanting_at_every_stop(head, read/unsearched, wire, Bytes/len(wire) - 8))]);
+        Test/assert(
+            "the head wants more at every stop short of its end",
+            wanting_at_every_stop(head, read/unsearched, wire, Bytes/len(wire) - 8))]);
 
 -- A body of a stated length is that many octets, wherever the bytes are cut, and wants more until it has them.
 test a_stated_length_reads_whole_at_every_cut =
     let wire = Str/to_bytes("hello world, and the next message");
     Test/all([
         Test/assert(
+            "a stated length reads whole at every cut",
             whole_at_every_cut(
                 stated(11),
                 (),
                 wire,
                 Fed/whole(Str/to_bytes("hello world"), Str/to_bytes(", and the next message")))),
-        Test/assert(wanting_at_every_stop(stated(11), (), wire, 11)),
+        Test/assert(
+            "a stated length wants more at every stop short of it",
+            wanting_at_every_stop(stated(11), (), wire, 11)),
         Test/equal(fed(stated(0), (), x[], []), Fed/whole(x[], x[]))]);
 
 -- A chunked body is its chunks joined, its extensions and its trailer section passed over, wherever the bytes are cut — inside a size line, inside a chunk, inside the trailer section — and wants more short of the empty line that ends it.
@@ -120,12 +126,15 @@ test a_chunked_body_reads_whole_at_every_cut =
     let wire = Str/to_bytes(Str/concat(chunks, "next"));
     Test/all([
         Test/assert(
+            "the chunks read whole at every cut",
             whole_at_every_cut(
                 chunked,
                 read/undecoded,
                 wire,
                 Fed/whole(Str/to_bytes("Wikipedia in\r\n\r\nchunks."), Str/to_bytes("next")))),
-        Test/assert(wanting_at_every_stop(chunked, read/undecoded, wire, Bytes/len(wire) - 4)),
+        Test/assert(
+            "the chunks want more at every stop short of their end",
+            wanting_at_every_stop(chunked, read/undecoded, wire, Bytes/len(wire) - 4)),
         Test/equal(
             fed(chunked, read/undecoded, x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
             Fed/whole(x[], x[]))]);
@@ -171,54 +180,63 @@ test a_bound_is_met_alike_at_every_cut =
     let next = Str/to_bytes("next");
     Test/all([
         Test/assert(
+            "a start line at its bound reads whole",
             whole_at_every_cut(
                 small_head,
                 read/unsearched,
                 Str/to_bytes(Str/concat(start, "\r\n\r\nnext")),
                 Fed/whole(Str/to_bytes(start), next))),
         Test/assert(
+            "a start line past its bound is refused as too long",
             whole_at_every_cut(
                 small_head,
                 read/unsearched,
                 Str/to_bytes("GET /aaaaaaa HTTP\r\n\r\nnext"),
                 Fed/refused(Refusal/line_too_long()))),
         Test/assert(
+            "a head at its bound reads whole",
             whole_at_every_cut(
                 small_head,
                 read/unsearched,
                 head_of(bees(19)),
                 Fed/whole(Str/to_bytes(Str/flatten([start, "\r\nX: ", bees(19)])), next))),
         Test/assert(
+            "a head past its bound is refused as too large",
             whole_at_every_cut(
                 small_head,
                 read/unsearched,
                 head_of(bees(20)),
                 Fed/refused(Refusal/head_too_large()))),
         Test/assert(
+            "an empty line before a head counts towards its bound",
             whole_at_every_cut(
                 small_head,
                 read/unsearched,
                 x[..Str/to_bytes("\r\n"), ..head_of(bees(19))],
                 Fed/refused(Refusal/head_too_large()))),
         Test/assert(
+            "a size line at its bound reads whole",
             whole_at_every_cut(
                 small_chunked,
                 read/undecoded,
                 Str/to_bytes("0004\r\nabcd\r\n0\r\n\r\nnext"),
                 Fed/whole(Str/to_bytes("abcd"), next))),
         Test/assert(
+            "a size line past its bound is refused",
             whole_at_every_cut(
                 small_chunked,
                 read/undecoded,
                 Str/to_bytes("00004\r\nabcd\r\n0\r\n\r\nnext"),
                 Fed/refused(Refusal/malformed("a chunk's size line is too long")))),
         Test/assert(
+            "a trailer section at its bound reads whole",
             whole_at_every_cut(
                 small_chunked,
                 read/undecoded,
                 trailers_of(bees(33)),
                 Fed/whole(x[], next))),
         Test/assert(
+            "a trailer section past its bound is refused as too large",
             whole_at_every_cut(
                 small_chunked,
                 read/undecoded,
@@ -234,12 +252,14 @@ test a_body_reads_as_its_framing_delimits_it =
     Test/all([
         Test/equal(fed(framed(Framing/none()), read/undecoded, next, []), Fed/whole(x[], next)),
         Test/assert(
+            "a stated length frames its body at every cut",
             whole_at_every_cut(
                 framed(Framing/length(5)),
                 read/undecoded,
                 Str/to_bytes("hellonext"),
                 Fed/whole(Str/to_bytes("hello"), next))),
         Test/assert(
+            "chunks frame their body at every cut",
             whole_at_every_cut(
                 framed(Framing/chunked()),
                 read/undecoded,

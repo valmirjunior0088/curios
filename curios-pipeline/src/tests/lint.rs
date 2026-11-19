@@ -160,7 +160,7 @@ fn a_test_bound_and_never_run_is_reported() {
         "use /std/{Test};
 
 pub let dropped() -> Test({}) =
-    let failed = Test/assert(false);
+    let failed = Test/assert(\"it fails\", false);
     Test/pure(());
 ",
     );

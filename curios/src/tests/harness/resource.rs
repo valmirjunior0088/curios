@@ -13,12 +13,12 @@ fn a_scope_releases_before_propagating_a_failure_reached_after_yielding() {
         let body() -> Test({}) =
             let _ = print("body|")!;
             let _ = Io/yield()!;
-            Test/assert(false);
+            Test/assert("the body fails after yielding", false);
         test protected = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body());
         ()
         "#
         ),
-        b"body|finished|/protected: failed\n  the condition was false\n"
+        b"body|finished|/protected: failed\n  the body fails after yielding\n"
     );
 }
 
@@ -56,7 +56,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
         let body() -> Test({}) =
             let _ = print("waiting|")!;
             let _ = Io/wait_filled([])!;
-            Test/assert(true);
+            Test/assert("it holds", true);
         let protected() -> Test({}) = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body());
         let competing() -> Io({}) =
             let _ = Io/yield()!;
@@ -90,12 +90,12 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
             let started = Signal/new()!;
             let _ = Io/Scope/spawn(s, child(started))!;
             let _ = Signal/wait(started)!;
-            Test/assert(false);
+            Test/assert("the scoped test fails", false);
         test scoped = Test/scope(body);
         ()
         "#
         ),
-        b"child-started|child-cancelled|/scoped: failed\n  the condition was false\n"
+        b"child-started|child-cancelled|/scoped: failed\n  the scoped test fails\n"
     );
 }
 
@@ -111,7 +111,7 @@ fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
         let waiting() -> Test({}) =
             let _ = Io/sleep(Duration/of_secs(50))!;
             let _ = print("unreached|")!;
-            Test/assert(true);
+            Test/assert("it holds", true);
         let protected() -> Test({}) = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; waiting());
         test expired = Test/timeout(Duration/of_secs(2), protected);
         ()

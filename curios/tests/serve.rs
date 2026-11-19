@@ -225,12 +225,12 @@ fn tested(root: &Path) {
     .unwrap();
     fs::write(
         root.join("lib.crs"),
-        "use /std/{Test};\n\ntest holds =\n    Test/assert(true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(true);\n",
+        "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(\"it holds\", true);\n",
     )
     .unwrap();
     fs::write(
         root.join("app.crs"),
-        "use /std/{Test};\n\ntest own =\n    Test/assert(true);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Test};\n\ntest own =\n    Test/assert(\"it holds\", true);\n\n/std/print(\"ran\\n\")\n",
     )
     .unwrap();
     fs::write(root.join("quiet.crs"), "/std/print(\"quiet\\n\")\n").unwrap();

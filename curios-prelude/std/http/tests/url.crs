@@ -1,11 +1,11 @@
 -- A URL read into its parts and written back, and its components encoded and decoded.
-use /std/{Str, Option, Result, Eq, Test};
+use /std/{Option, Result, Eq, Test};
 use /std/http/{Url};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
 test a_url_reads_into_its_parts =
     match Url/of_str("https://example.com:8443/a/b?x=1&y=two+words#frag")
-    | failure(why) => Test/assert(Str/is_empty(why.message))
+    | failure(why) => Test/fail(why.message)
     | success(u) =>
         Test/all([
             Test/equal(u.scheme, Url/Scheme/https()),
@@ -33,15 +33,31 @@ test a_url_takes_and_omits_its_default_port =
 -- A literal that does not read is refused where it is written; a string that does not read says why. A space, a control octet and an octet past ASCII have no place in a URL, each being written percent-encoded.
 test a_url_that_does_not_read_says_why =
     Test/all([
-        Test/assert(Result/is_failure(Url/of_str("ftp://example.com/"))),
-        Test/assert(Result/is_failure(Url/of_str("http:///nohost"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h:port/"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h:65536/"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h:80x/"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h/a b"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h/a\r\nX-Injected: two"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h/?q=café"))),
-        Test/assert(Result/is_failure(Url/of_str("http://h\u{1}/")))]);
+        Test/assert(
+            "a scheme other than http and https is refused",
+            Result/is_failure(Url/of_str("ftp://example.com/"))),
+        Test/assert("an empty host is refused", Result/is_failure(Url/of_str("http:///nohost"))),
+        Test/assert(
+            "a port that is no number is refused",
+            Result/is_failure(Url/of_str("http://h:port/"))),
+        Test/assert(
+            "a port past 65535 is refused",
+            Result/is_failure(Url/of_str("http://h:65536/"))),
+        Test/assert(
+            "a port with a trailing letter is refused",
+            Result/is_failure(Url/of_str("http://h:80x/"))),
+        Test/assert(
+            "a space in the path is refused",
+            Result/is_failure(Url/of_str("http://h/a b"))),
+        Test/assert(
+            "a line break in the path is refused",
+            Result/is_failure(Url/of_str("http://h/a\r\nX-Injected: two"))),
+        Test/assert(
+            "a byte past ASCII in the query is refused",
+            Result/is_failure(Url/of_str("http://h/?q=café"))),
+        Test/assert(
+            "a control character in the host is refused",
+            Result/is_failure(Url/of_str("http://h\u{1}/")))]);
 
 -- Percent-encoding leaves the unreserved characters and spells every other byte; decoding reads `+` as a space and refuses a broken escape.
 test components_encode_and_decode =

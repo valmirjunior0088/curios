@@ -551,7 +551,7 @@ fn slots(root: &Path) -> Vec<Vec<u8>> {
 #[test]
 fn a_unit_held_for_one_kind_is_the_baseline_of_the_other() {
     let tested = fill!(
-        "${library}\nuse /std/{Test};\n\ntest the_message_holds =\n    Test/assert(true);\n",
+        "${library}\nuse /std/{Test};\n\ntest the_message_holds =\n    Test/assert(\"it holds\", true);\n",
         library = library("first")
     );
 

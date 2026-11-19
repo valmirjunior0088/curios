@@ -92,12 +92,15 @@ test a_line_reads_whole_at_every_cut =
     let wire = Str/to_bytes("first\r\nsecond\nthird");
     Test/all([
         Test/assert(
+            "a line reads whole at every cut",
             alike_at_every_cut(
                 line(64),
                 0,
                 wire,
                 Fed/whole(Str/to_bytes("first"), Str/to_bytes("second\nthird")))),
-        Test/assert(wanting_at_every_stop(line(64), 0, wire, 7)),
+        Test/assert(
+            "a line wants more at every stop short of its end",
+            wanting_at_every_stop(line(64), 0, wire, 7)),
         Test/equal(
             fed(line(64), 0, Str/to_bytes("second\nthird"), []),
             Fed/whole(Str/to_bytes("second"), Str/to_bytes("third"))),
@@ -109,8 +112,11 @@ test a_line_reads_whole_at_every_cut =
 -- A line longer than its bound is refused wherever it is cut, its newline arrived or not, and one as long as its bound is read.
 test a_line_past_its_bound_is_refused_at_every_cut =
     Test/all([
-        Test/assert(alike_at_every_cut(line(4), 0, Str/to_bytes("abcde\nx"), Fed/refused())),
         Test/assert(
+            "a line past its bound is refused at every cut",
+            alike_at_every_cut(line(4), 0, Str/to_bytes("abcde\nx"), Fed/refused())),
+        Test/assert(
+            "a line at its bound reads whole at every cut",
             alike_at_every_cut(
                 line(4),
                 0,
@@ -122,25 +128,33 @@ test the_bytes_before_a_delimiter_read_whole_at_every_cut =
     let wire = Str/to_bytes("key,value,more");
     Test/all([
         Test/assert(
+            "the bytes before a delimiter read whole at every cut",
             alike_at_every_cut(
                 field(64),
                 0,
                 wire,
                 Fed/whole(Str/to_bytes("key"), Str/to_bytes("value,more")))),
-        Test/assert(wanting_at_every_stop(field(64), 0, wire, 4)),
-        Test/assert(alike_at_every_cut(field(2), 0, wire, Fed/refused()))]);
+        Test/assert(
+            "the bytes before a delimiter want more at every stop short of it",
+            wanting_at_every_stop(field(64), 0, wire, 4)),
+        Test/assert(
+            "the bytes before a delimiter past their bound are refused",
+            alike_at_every_cut(field(2), 0, wire, Fed/refused()))]);
 
 -- A stated count is that many bytes wherever they are cut, and wants more until it has them; none is the empty piece at once, and a count past its bound is refused before a byte is read.
 test a_stated_count_reads_whole_at_every_cut =
     let wire = Str/to_bytes("hello world");
     Test/all([
         Test/assert(
+            "a stated count reads whole at every cut",
             alike_at_every_cut(
                 counted(64, 5),
                 (),
                 wire,
                 Fed/whole(Str/to_bytes("hello"), Str/to_bytes(" world")))),
-        Test/assert(wanting_at_every_stop(counted(64, 5), (), wire, 5)),
+        Test/assert(
+            "a stated count wants more at every stop short of it",
+            wanting_at_every_stop(counted(64, 5), (), wire, 5)),
         Test/equal(fed(counted(64, 0), (), x[], []), Fed/whole(x[], x[])),
         Test/equal(fed(counted(4, 5), (), x[], []), Fed/refused())]);
 

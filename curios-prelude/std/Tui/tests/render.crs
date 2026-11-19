@@ -73,7 +73,9 @@ test text_holding_controls_writes_none_of_them =
     let written = Tui/render(Option/none(), f, Option/none(), true);
     Test/all([
         Test/equal(Frame/to_lines(f), ["a␛]0;x␇␊b"]),
-        Test/assert(Bytes/all(written, (b) => Byte/to_nat(b) != 0x07 && Byte/to_nat(b) != 0x0A)),
+        Test/assert(
+            "no bell and no line feed is written",
+            Bytes/all(written, (b) => Byte/to_nat(b) != 0x07 && Byte/to_nat(b) != 0x0A)),
         Test/equal(
             spelled(written),
             "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma␛^[[1;3H]0;x␇^[[1;8H␊^[[1;9Hb^[[0m^[[?2026l")]);

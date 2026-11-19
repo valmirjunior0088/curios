@@ -4,14 +4,19 @@ use /std/Tui/{Color, Style, Glyph, Tile};
 
 -- `ansi` carries an irrelevant proof beside its index, so the derived comparison is the index comparison and the named value agrees with the numbered spelling. A literal past the sixteen is refused where it is written, which no test here can state, since a test that does not compile is a library that does not.
 test a_named_colour_is_its_palette_index =
-    Test/assert(Color/bright_white == Color/ansi(15) && Color/red != Color/blue);
+    Test/assert(
+        "a named colour is its palette index, and colours apart differ",
+        Color/bright_white == Color/ansi(15) && Color/red != Color/blue);
 
 test a_style_compares_field_by_field =
     let bold = Style { ..Style/plain, bold = true };
-    Test/assert(Style/plain == Style { ..Style/plain } && Style/plain != bold);
+    Test/assert(
+        "a style equals its copy and differs from a bold one",
+        Style/plain == Style { ..Style/plain } && Style/plain != bold);
 
 test a_tile_compares_by_glyph_and_style =
     Test/assert(
+        "a blank tile is a plain space, apart from a bold space and a continuation",
         Tile/blank == Tile/glyph(Glyph/space, Style/plain)
             && Tile/blank != Tile/glyph(Glyph/space, Style { ..Style/plain, bold = true })
             && Tile/blank != Tile/continuation());

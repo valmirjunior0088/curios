@@ -124,6 +124,7 @@ let follows(prev: Date, next: Date) -> Bool =
 
 test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =
     Test/assert(
+        "every day of an era follows the one before and reads back its count",
         Nat/all_below(146097, (i) =>
             let n = Nat/to_int(i);
             let d = Date/of_days(n);

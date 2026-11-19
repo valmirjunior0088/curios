@@ -7,11 +7,11 @@ test predicates_and_searches_answer_over_the_elements =
     let l = [3, 1, 4, 1, 5];
     let empty: List(Nat) = [];
     Test/all([
-        Test/assert(List/any(l, (x: Nat) => x > 4)),
-        Test/assert(List/all(l, (x: Nat) => x > 0)),
-        Test/assert(Bool/not(List/all(l, (x: Nat) => x > 1))),
-        Test/assert(List/contains(l, 4)),
-        Test/assert(Bool/not(List/contains(l, 2))),
+        Test/assert("an element is past four", List/any(l, (x: Nat) => x > 4)),
+        Test/assert("every element is past zero", List/all(l, (x: Nat) => x > 0)),
+        Test/assert("not every element is past one", Bool/not(List/all(l, (x: Nat) => x > 1))),
+        Test/assert("four is an element", List/contains(l, 4)),
+        Test/assert("two is no element", Bool/not(List/contains(l, 2))),
         Test/equal(List/index_of(l, 1), Option/some(1)),
         Test/equal(List/index_of(l, 9), Option/none()),
         Test/equal(List/find_index(l, (x: Nat) => x > 3), Option/some(2)),
@@ -96,11 +96,19 @@ test ordered_decides_each_adjacent_pair =
     let by_text(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Str/ord(p.1, q.1);
     let tied = [(1, "b"), (1, "a"), (2, "a")];
     Test/all([
-        Test/assert(List/ordered(empty, Ord/le(Nat/ord))),
-        Test/assert(List/ordered([1, 2, 2, 5], Ord/le(Nat/ord))),
-        Test/assert(Bool/not(List/ordered([1, 3, 2], Ord/le(Nat/ord)))),
-        Test/assert(List/ordered(tied, Ord/le(by_number))),
-        Test/assert(Bool/not(List/ordered(tied, Ord/then(by_number, Ord/le(by_text)))))]);
+        Test/assert("the empty list is in order", List/ordered(empty, Ord/le(Nat/ord))),
+        Test/assert(
+            "a list rising with a tie is in order",
+            List/ordered([1, 2, 2, 5], Ord/le(Nat/ord))),
+        Test/assert(
+            "a list that falls is out of order",
+            Bool/not(List/ordered([1, 3, 2], Ord/le(Nat/ord)))),
+        Test/assert(
+            "a list tied in its key is in order by that key",
+            List/ordered(tied, Ord/le(by_number))),
+        Test/assert(
+            "the tie broken by text is out of order",
+            Bool/not(List/ordered(tied, Ord/then(by_number, Ord/le(by_text)))))]);
 
 -- A list in order at adjacent pairs is in order at every pair, where the relation carries across a middle element: stated over any relation and its law.
 let _adjacent_order_reaches_every_pair(
@@ -124,7 +132,7 @@ let whole_and_in_order(l: List(Nat)) -> Test({}) =
     let sorted = List/sort(l);
     Test/all([
         Test/equal(List/len(sorted), List/len(l)),
-        Test/assert(List/ordered(sorted, Ord/le(Nat/ord)))]);
+        Test/assert("the sorted list is in order", List/ordered(sorted, Ord/le(Nat/ord)))]);
 
 -- A hundred thousand elements, which a sort as deep as its input or as costly as its square does not answer for: already in order, in reverse, and scattered.
 test sort_answers_at_a_hundred_thousand_elements_in_any_order =

@@ -9,7 +9,7 @@ test a_cell_polls_empty_until_its_first_fill =
     let after = Cell/poll(cell)!;
     Test/all([
         Test/equal(before, Option/none()),
-        Test/assert(accepted),
+        Test/assert("the fill is accepted", accepted),
         Test/equal(after, Option/some(42))]);
 
 -- A later fill is refused, and the cell keeps its first value.
@@ -18,7 +18,10 @@ test a_later_fill_preserves_the_first_value =
     let first = Cell/fill(cell, 7)!;
     let later = Cell/fill(cell, 99)!;
     let held = Cell/poll(cell)!;
-    Test/all([Test/assert(first), Test/assert(Bool/not(later)), Test/equal(held, Option/some(7))]);
+    Test/all([
+        Test/assert("the first fill is accepted", first),
+        Test/assert("a later fill is refused", Bool/not(later)),
+        Test/equal(held, Option/some(7))]);
 
 -- Filling one cell leaves another empty.
 test filling_one_cell_leaves_another_empty =

@@ -178,7 +178,7 @@ let cut_anywhere(b: Bytes) -> Test({}) =
             List/range(0, Bytes/len(b) + 1),
             (at: Nat) =>
                 match Bool/holds(at <= Bytes/len(b))
-                | none() => Test/assert(false)
+                | none() => Test/fail("the cut stands past the bytes")
                 | some(_) =>
                     let first = Input/decode(Bytes/slice(b, 0, at));
                     let second = Input/decode(x[..first.rest, ..Bytes/drop(b, at)]);
@@ -217,9 +217,11 @@ let rest_is_a_suffix(b: Bytes) -> Test({}) =
     let read = Input/decode(b);
     let cut = Bytes/len(b) - Bytes/len(read.rest);
     match Bool/holds(cut <= Bytes/len(b))
-    | none() => Test/assert(false)
+    | none() => Test/fail("the rest stands past the bytes")
     | some(ok) =>
-        Test/assert(Bytes/len(read.rest) <= Bytes/len(b) && Bytes/drop(b, cut, @ok) == read.rest)
+        Test/assert(
+            "what the decoder leaves is the end of its input",
+            Bytes/len(read.rest) <= Bytes/len(b) && Bytes/drop(b, cut, @ok) == read.rest)
     end;
 
 -- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste, a scalar cut short, and an end marker cut in half.

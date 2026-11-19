@@ -28,7 +28,7 @@ fn a_foreign_row_is_written_in_its_form() {
 /// A test is written as its declaration states it, its value under its name, the thunk and the type its form makes left to it.
 #[test]
 fn a_test_is_written_in_its_form() {
-    let source = "test held = /std/Test/assert(true);
+    let source = "test held = /std/Test/assert(\"it holds\", true);
         /std/print(\"\")";
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none().tested())

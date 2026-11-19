@@ -86,8 +86,10 @@ let _a_reduced_fraction_is_the_only_one_with_its_cross_products(
 
 test coprimality_is_decided =
     Test/all([
-        Test/assert(Option/is_some(Coprime/try(9, 28))),
-        Test/assert(Option/is_none(Coprime/try(6, 9))),
-        Test/assert(Option/is_some(Coprime/try(1, 0))),
-        Test/assert(Option/is_none(Coprime/try(0, 0))),
-        Test/assert(Option/unwrap_or(Option/map(Coprime/try(9, 28), (_) => true), false))]);
+        Test/assert("9 and 28 are coprime", Option/is_some(Coprime/try(9, 28))),
+        Test/assert("6 and 9 are not coprime", Option/is_none(Coprime/try(6, 9))),
+        Test/assert("1 and 0 are coprime", Option/is_some(Coprime/try(1, 0))),
+        Test/assert("0 and 0 are not coprime", Option/is_none(Coprime/try(0, 0))),
+        Test/assert(
+            "the proof 9 and 28 are coprime maps as an option's value",
+            Option/unwrap_or(Option/map(Coprime/try(9, 28), (_) => true), false))]);

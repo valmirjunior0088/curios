@@ -207,6 +207,12 @@ test options_is_asked_of_a_resource_or_of_the_server =
         Test/equal(
             addressed("GET /x HTTP/1.1\r\nHost: h"),
             Result/success(Request/Address/resource(Url/lit("http://h/x")))),
-        Test/assert(Result/is_failure(addressed("GET * HTTP/1.1\r\nHost: h"))),
-        Test/assert(Result/is_failure(addressed("OPTIONS * HTTP/1.1"))),
-        Test/assert(Result/is_failure(read("OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n")))]);
+        Test/assert(
+            "`GET *` is refused",
+            Result/is_failure(addressed("GET * HTTP/1.1\r\nHost: h"))),
+        Test/assert(
+            "`OPTIONS *` with no `Host` is refused",
+            Result/is_failure(addressed("OPTIONS * HTTP/1.1"))),
+        Test/assert(
+            "`OPTIONS *` is no request with a URL",
+            Result/is_failure(read("OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n")))]);

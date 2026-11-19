@@ -72,8 +72,8 @@ test of_str_reads_a_signed_integer_and_nothing_else =
 
 test parity_the_extrema_and_the_sign_compute =
     Test/all([
-        Test/assert(Nat/is_even(0)),
-        Test/assert(Bool/not(Nat/is_even(7))),
+        Test/assert("0 is even", Nat/is_even(0)),
+        Test/assert("7 is not even", Bool/not(Nat/is_even(7))),
         Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
         Test/equal([Nat/min(7, 3), Nat/max(7, 3), Nat/min(4, 4)], [3, 7, 4]),
         Test/equal(
@@ -130,6 +130,7 @@ let _a_stated_split_is_the_computed_one: {
 -- Floored division at both signs, each split rejoined: the quotient's multiple of the divisor and the remainder are the dividend, and the remainder is below the divisor, where `/` and `%` leave a negative remainder.
 test floored_division_rejoins_every_dividend_with_a_remainder_below_its_divisor =
     Test/assert(
+        "floored division rejoins every dividend with a remainder below its divisor",
         List/all(
             [-7, -6, -5, -1, +0, +1, +5, +6, +7],
             (n: Int) =>

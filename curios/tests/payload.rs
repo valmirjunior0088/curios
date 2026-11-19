@@ -249,7 +249,7 @@ pub let f(X: Type, c: Code(X), x: X) -> X =
     | big() => x + 0
     end;
 
-test f_is_declared = /std/Test/assert(true);
+test f_is_declared = /std/Test/assert(\"it holds\", true);
 ";
 
 /// Every command that runs, builds, tests, documents, checks or asks about the package, and whether it exits 0 on a refusal, as a question answered with a list of refusals does.
@@ -370,7 +370,7 @@ fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
 fn a_test_run_names_only_what_the_executable_declares() {
     let (root, _a, b) = layered(
         "tested-undeclared",
-        "let shown : /std/Str = /a/word;\n\ntest shown_is_named = /std/Test/assert(true);\n\n/std/print(shown)\n",
+        "let shown : /std/Str = /a/word;\n\ntest shown_is_named = /std/Test/assert(\"it holds\", true);\n\n/std/print(shown)\n",
     );
     write(&root, "curios.toml", &app_manifest("app", &[("b", &b)]));
 

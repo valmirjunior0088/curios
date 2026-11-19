@@ -23,17 +23,17 @@ let heard(receiver: Channel/Receiver(Io/Ended), finished: Bool) -> Io(Bool) =
 
 test a_yield_at_the_top_of_a_program_goes_on =
     let () = Io/yield()!;
-    Test/assert(true);
+    Test/assert("the program goes on past the yield", true);
 
 test a_sleep_holds_only_its_own_branch =
     let n = Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
-    Test/assert(n == 2);
+    Test/assert("the branch that does not sleep wins", n == 2);
 
 test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
     let cell = Cell/new()!;
     let (waited, filled) =
         Io/both(Io/bind(Io/wait_filled([cell]), (()) => Io/pure(true)), Cell/fill(cell, ()))!;
-    Test/assert(waited && filled);
+    Test/assert("the wait goes on once the cell is filled", waited && filled);
 
 test a_scope_tells_its_release_a_body_ran_to_its_end =
     let ends = Channel/new(@Io/Ended, 1)!;
@@ -41,7 +41,7 @@ test a_scope_tells_its_release_a_body_ran_to_its_end =
         Io/scope((scope) =>
             Io/bind(Io/Scope/defer(scope, (ended) => told(ends.0, ended)), (()) => Io/pure(3)))!;
     let finished = heard(ends.1, true)!;
-    Test/assert(n == 3 && finished);
+    Test/assert("the body ran to its end and its release was told so", n == 3 && finished);
 
 test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
     let ends = Channel/new(@Io/Ended, 1)!;
@@ -53,7 +53,7 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
                 (()) => Io/bind(Io/wait_filled([never]), (()) => Io/pure(3))));
     let _ = Io/race([body, Io/pure(4)])!;
     let cancelled = heard(ends.1, false)!;
-    Test/assert(cancelled);
+    Test/assert("the release was told the body was dropped", cancelled);
 
 -- The value a take found, where it found one.
 let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
@@ -121,7 +121,11 @@ test a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it =
             let got = Channel/receive(messages.1)!;
             let acknowledged = match polled | none() => false | some(()) => true end;
             Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell({})}) => message.0))))!;
-    Test/all([Test/assert(Bool/not(acknowledged)), Test/equal(n, Option/some(7))]);
+    Test/all([
+        Test/assert(
+            "the message the losing offer left is not acknowledged",
+            Bool/not(acknowledged)),
+        Test/equal(n, Option/some(7))]);
 
 -- What a signal's offer finds without waiting.
 let tried(s: Signal) -> Io(Option({})) =
@@ -139,7 +143,9 @@ test signals_coalesce_and_futures_preserve_their_first_answer =
     let () = Future/fill(f, 7)!;
     let () = Future/fill(f, 99)!;
     let answer = Future/wait(f)!;
-    Test/all([Test/assert(coalesced), Test/equal(answer, 7)]);
+    Test/all([
+        Test/assert("the two notifications coalesced into one", coalesced),
+        Test/equal(answer, 7)]);
 
 -- A branch waiting on a cell is cancelled where it waits once another branch wins, and its bracket is released then, once: the cell filled afterwards wakes nothing.
 test a_waiter_cancelled_on_a_cell_is_released_once =
