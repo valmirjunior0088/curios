@@ -160,6 +160,8 @@ pub struct SolutionMark {
     checked_len: usize,
     /// How many questions reduction had put to conversion ([`Context::note_question`]).
     questions: u64,
+    /// How many reducts had been filed ([`Caches::filings`]): what a rollback keeps.
+    filed: u64,
 }
 
 /// The elaborator's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure, in two halves: what any judgment reads and the machine it runs on (`Typing`), and what exists because a unit is being elaborated (`Underway`), which a context that only reads finished terms holds empty. Two lifetimes coexist across them: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the stores coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].

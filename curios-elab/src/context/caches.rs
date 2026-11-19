@@ -6,7 +6,9 @@
 //!
 //! **Within it, an answer is what asking again would give, for as long as what it read stands**, as that decision states: how long a table keeps an answer is a cost, and never what a declaration elaborates to. Under [`Caches::wholesale`] every boundary clears every table, and `curios-pipeline`'s `std_memo_census` requires `/std` to elaborate to one module both ways.
 //!
-//! **A reduct has one of two lives within it**, as the certifier's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to a definition it may have read clears it: a redefinition, and a rollback, since a definition still being elaborated may hold a solution the rollback unwinds. Every other reduct goes at each boundary of the scope as well.
+//! **A reduct has one of two lives within it**, as the certifier's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to what it may have read clears it: a redefinition, and a rollback of a solution it read, which a definition still being elaborated may hold. Every other reduct goes at each boundary of the scope as well.
+//!
+//! **A reduct is filed with when it was filed** ([`Filed`]), of either life, so a rollback keeps every reduct filed before its mark ([`Caches::invalidate_for_rollback`]): the rollback unwinds what was committed after the mark — solutions, links among metavariables, level constraints — and undefines nothing, so a reduct filed before it read nothing it unwinds.
 //!
 //! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept for the next settlement made under the same refinements, for as long as the deepest frame it read still stands and what else it rests on does (`Frames::begin_reads`, `Frame::settled_windows`, [`Footing`]).
 //!
@@ -95,6 +97,13 @@ impl Footing {
     }
 }
 
+/// A reduct or forced value as its table holds it: the answer, and how many answers had been filed when it was ([`Caches::filings`]), which a rollback's mark is read against.
+#[derive(Debug)]
+struct Filed {
+    answer: Term,
+    filed: u64,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ElaborationStamp {
     terms: Entropy,
@@ -107,14 +116,14 @@ pub struct Caches {
     /// Reducts that may read the scope, for as long as it stands as it did: every boundary of the scope clears them. [`Caches::begin_declaration`] clears every table where the budget is restored, so every node one holds was built under that budget, a hit on it is free, and nothing charges an insertion; a table that outlived the declaration would carry across an item boundary what the work after finalization reduced — the witness goals retried and the parked ones drained — and whether a declaration could afford its reductions would depend on that.
     ///
     /// **One table for each of the two reductions**, as the certifier's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold, at a missed equation and at a stuck elimination's atoms, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
-    reduction: [HashMap<Term, Term>; 2],
+    reduction: [HashMap<Term, Filed>; 2],
     /// The reducts that stand for the declaration: a [`lasting`] term's, where its reduct is lasting too. See the module documentation for what clears them.
-    lasting: [HashMap<Term, Term>; 2],
+    lasting: [HashMap<Term, Filed>; 2],
     /// The second door into [`Caches::lasting`], as [`Caches::reduction_erased`] is into [`Caches::reduction`]: it lives with the table it indexes.
     lasting_erased: [HashMap<Term, Term>; 2],
     /// What a closed term is forced to (`reduce`'s `force_rec`), kept apart from its reduct as the certifier's memos and the closed machine's keep the two demands apart: forced, a recursive call is the value its fold computes, and plain, it is the folded call itself. Served to a plain probe, a forced value would answer a term the plain reduction leaves folded with its unfolding, as a forced reduction happened to have run first. Of the two lives as the reducts are, the scoped one first.
-    forced: [HashMap<Term, Term>; 2],
-    lasting_forced: [HashMap<Term, Term>; 2],
+    forced: [HashMap<Term, Filed>; 2],
+    lasting_forced: [HashMap<Term, Filed>; 2],
     /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it and whatever sorts its instances state, so two spellings differing only in those — two occurrences of one term, each at universe metavariables of its own, or one written with metavariables and read with them solved — are one computation; the exact table cannot see that, and every one of them re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`AcrossUniverses`], which rewrites the stored reduct's levels and sorts to the asking spelling's where the asking spelling is the stored one carried, or declines.
     reduction_erased: [HashMap<Term, Term>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]), one for each of the two reductions as the reducts have: each answer discarded and kept wherever a reduct of its life is.
@@ -159,6 +168,8 @@ pub struct Caches {
     redefinitions: usize,
     /// The canonical node of each lasting key the reducts and the sorts are filed and asked by, for the declaration ([`Caches::key`]).
     keys: Sharing,
+    /// How many reducts and forced values have been filed: each is filed with the count it raises ([`Filed`]).
+    filings: u64,
 }
 
 /// A bracket of the scope: a span in which the frames in view are not the ones around it, after which they are again.
@@ -209,9 +220,9 @@ impl Window {
 /// One reduction's scoped answers.
 #[derive(Debug, Default)]
 struct Scoped {
-    reduction: HashMap<Term, Term>,
+    reduction: HashMap<Term, Filed>,
     reduction_erased: HashMap<Term, Term>,
-    forced: HashMap<Term, Term>,
+    forced: HashMap<Term, Filed>,
     closed: AsideAnswers,
     sorts: HashMap<Term, Sort>,
     same: HashMap<(Term, Term), bool>,
@@ -230,11 +241,12 @@ impl Scoped {
     /// What [`Caches::retain_reductions_without`] keeps of the live window, kept of this one.
     fn retain_without(&mut self, name: &Mention) {
         self.reduction
-            .retain(|_, reduct| !reduct.mentions_name(name));
+            .retain(|_, reduct| !reduct.answer.mentions_name(name));
         let reduction = &self.reduction;
         self.reduction_erased
             .retain(|_, key| reduction.contains_key(key));
-        self.forced.retain(|_, value| !value.mentions_name(name));
+        self.forced
+            .retain(|_, value| !value.answer.mentions_name(name));
         self.closed.retain_without(name);
         self.sorts.clear();
         self.same.clear();
@@ -321,15 +333,15 @@ impl Caches {
             .get(&key)
             .or_else(|| self.reduction[plain].get(&key))
         {
-            return Some(reduct.clone());
+            return Some(reduct.answer.clone());
         }
         if term.has_local_free() {
             return None;
         }
         let erased = term.erased_universes();
-        let stored = |door: &HashMap<Term, Term>, table: &HashMap<Term, Term>| {
+        let stored = |door: &HashMap<Term, Term>, table: &HashMap<Term, Filed>| {
             let key = door.get(&erased)?;
-            Some((key.clone(), table.get(key)?.clone()))
+            Some((key.clone(), table.get(key)?.answer.clone()))
         };
         let (key, reduct) = stored(&self.reduction_erased[plain], &self.reduction[plain])
             .or_else(|| stored(&self.lasting_erased[plain], &self.lasting[plain]))?;
@@ -367,7 +379,19 @@ impl Caches {
             door.entry(term.erased_universes())
                 .or_insert_with(|| term.clone());
         }
-        table.insert(term, reduct);
+        self.filings += 1;
+        table.insert(
+            term,
+            Filed {
+                answer: reduct,
+                filed: self.filings,
+            },
+        );
+    }
+
+    /// How many reducts and forced values have been filed: what a rollback's mark records, to keep at the rollback what was filed before it ([`Caches::invalidate_for_rollback`]).
+    pub fn filings(&self) -> u64 {
+        self.filings
     }
 
     /// What `term` was forced to, as plain reduction forced it where `plain` and as a judgment's did otherwise ([`Caches::forced`]).
@@ -378,7 +402,7 @@ impl Caches {
         self.lasting_forced[plain]
             .get(&key)
             .or_else(|| self.forced[plain].get(&key))
-            .cloned()
+            .map(|forced| forced.answer.clone())
     }
 
     pub fn forced_insert(&mut self, term: Term, value: Term, plain: bool) {
@@ -388,7 +412,14 @@ impl Caches {
             true => &mut self.lasting_forced[plain],
             false => &mut self.forced[plain],
         };
-        table.insert(term, value);
+        self.filings += 1;
+        table.insert(
+            term,
+            Filed {
+                answer: value,
+                filed: self.filings,
+            },
+        );
     }
 
     /// What classifying the stuck operation `term` found, where it is remembered.
@@ -424,13 +455,11 @@ impl Caches {
 
     /// The reducts and forced values that stand for the declaration, their second doors, and every closed run's answer.
     fn clear_lasting(&mut self) {
-        let tables = self
-            .lasting
-            .iter_mut()
-            .chain(&mut self.lasting_erased)
-            .chain(&mut self.lasting_forced);
-        for table in tables {
+        for table in self.lasting.iter_mut().chain(&mut self.lasting_forced) {
             table.clear();
+        }
+        for door in &mut self.lasting_erased {
+            door.clear();
         }
         for closed in &mut self.closed {
             closed.clear();
@@ -439,13 +468,11 @@ impl Caches {
 
     /// The reducts and forced values that may read the scope, with the reducts' second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the certifier spells them.
     fn clear_scope(&mut self) {
-        let tables = self
-            .reduction
-            .iter_mut()
-            .chain(&mut self.reduction_erased)
-            .chain(&mut self.forced);
-        for table in tables {
+        for table in self.reduction.iter_mut().chain(&mut self.forced) {
             table.clear();
+        }
+        for door in &mut self.reduction_erased {
+            door.clear();
         }
         for closed in &mut self.closed {
             closed.clear_scoped();
@@ -675,12 +702,12 @@ impl Caches {
                 .zip(&mut self.reduction_erased)
                 .chain(self.lasting.iter_mut().zip(&mut self.lasting_erased));
             for (reduction, erased) in lives {
-                reduction.retain(|_, reduct| !reduct.mentions_name(name));
+                reduction.retain(|_, reduct| !reduct.answer.mentions_name(name));
                 // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
                 erased.retain(|_, key| reduction.contains_key(key));
             }
             for forced in self.forced.iter_mut().chain(&mut self.lasting_forced) {
-                forced.retain(|_, value| !value.mentions_name(name));
+                forced.retain(|_, value| !value.answer.mentions_name(name));
             }
             // A window set aside is handed back after the definition, which may outlive the bracket.
             for window in &mut self.windows {
@@ -813,21 +840,54 @@ impl Caches {
         self.clear_elaborations();
     }
 
-    /// Solutions were rolled back — the one *un*-monotonic store transition. Reducts may have been cached through the unwound solutions, a lasting one through a definition still being elaborated among them, so both caches clear whole and both stamps tick.
-    pub fn invalidate_for_rollback(&mut self) {
-        // How many reducts the clear throws away.
+    /// Solutions were rolled back to a mark taken when `filings` answers had been filed — the one *un*-monotonic store transition — and both stamps tick. A reduct or forced value filed since may have read what the rollback unwound, a solution, a link or a level constraint, a lasting one through a definition still being elaborated, and goes, with everything read through reducts: the closed runs' answers, the classifications the elaborator's conversion classed, the sorts, the verdicts and the spellings. One filed before the mark read nothing the rollback unwound, which undefines nothing, and stays ([`Filed`]).
+    pub fn invalidate_for_rollback(&mut self, filings: u64) {
+        if self.wholesale {
+            self.invalidate_for_restamp();
+            return;
+        }
+        self.note_write();
+        self.note_universe_write();
+        let stands = |filed: &Filed| filed.filed <= filings;
+        // How many reducts the rollback throws away.
         curios_profile::sample!(
             "caches::rollback_dropped",
             self.lasting
                 .iter()
                 .chain(&self.reduction)
-                .map(HashMap::len)
-                .sum::<usize>() as u64
+                .flat_map(HashMap::values)
+                .filter(|filed| !stands(filed))
+                .count() as u64
         );
+        for plain in 0..2 {
+            for table in [
+                &mut self.reduction[plain],
+                &mut self.lasting[plain],
+                &mut self.forced[plain],
+                &mut self.lasting_forced[plain],
+            ] {
+                table.retain(|_, filed| stands(filed));
+            }
+            // The second doors index exact keys, so each keeps exactly the ones its table kept.
+            let (reduction, lasting) = (&self.reduction[plain], &self.lasting[plain]);
+            self.reduction_erased[plain].retain(|_, key| reduction.contains_key(key));
+            self.lasting_erased[plain].retain(|_, key| lasting.contains_key(key));
+        }
+        for closed in &mut self.closed {
+            closed.clear();
+        }
+        self.classified.clear();
+        self.clear_sorts();
+        self.certifier_spellings.get_mut().clear();
+        // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
+        self.clear_elaborations();
+    }
+
+    /// Standing solutions were rewritten in place to terms they already denote: a reduct of either life may have gone through a spelling replaced, whenever it was filed, so both caches clear whole and both stamps tick.
+    pub fn invalidate_for_restamp(&mut self) {
         self.note_write();
         self.note_universe_write();
         self.clear_reductions();
-        // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
         self.clear_elaborations();
     }
 

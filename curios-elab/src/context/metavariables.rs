@@ -701,6 +701,7 @@ impl<'s> Context<'s> {
             sites_len: self.underway.sites.mark(),
             checked_len: self.underway.checked.mark(),
             questions: self.typing.asking.questions(),
+            filed: self.typing.caches.filings(),
         }
     }
 
@@ -714,7 +715,7 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.solved_since(watermark)
     }
 
-    /// Rewrite standing solutions in place to terms they already denote — what a recursive group does to its own members once its generalization has minted their instance — clearing every cache as a rollback does, since a cached reduct may have gone through a spelling replaced here.
+    /// Rewrite standing solutions in place to terms they already denote — what a recursive group does to its own members once its generalization has minted their instance — clearing every cache, since a cached reduct may have gone through a spelling replaced here whenever it was filed ([`Caches::invalidate_for_restamp`](super::Caches::invalidate_for_restamp)).
     pub(crate) fn restamp_solutions(&mut self, solutions: Vec<(MetavarId, Term)>) {
         if solutions.is_empty() {
             return;
@@ -723,12 +724,12 @@ impl<'s> Context<'s> {
         for (id, term) in solutions {
             self.underway.attempt.solutions.restamp(id, term);
         }
-        self.typing.caches.invalidate_for_rollback();
+        self.typing.caches.invalidate_for_restamp();
     }
 
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
     ///
-    /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so every cache clears. A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing: a witness probe rolls back after every trial — hundreds of times re-validating one `Str/split_once` stated in a type, few of which unwind a solution — and a clear at each would throw away the reducts and elaborations the next node needs.
+    /// **It invalidates what can rest on what it undid, and nothing more.** An unwound term solution can sit inside any reduct or elaboration cached since, so what was cached since goes: every elaboration, and the reducts filed since the mark, the ones filed before it being kept ([`Caches::invalidate_for_rollback`](super::Caches::invalidate_for_rollback)). A universe solver that moved without one — a constraint or a level solution withdrawn — is read by no reduct, reduction being parametric in levels, but an elaboration may have certified its purity against what was withdrawn, so the elaborations clear, as they do where a universe transaction closes. A rollback that undid nothing clears nothing: a witness probe rolls back after every trial — hundreds of times re-validating one `Str/split_once` stated in a type, few of which unwind a solution — and a clear at each would throw away the reducts and elaborations the next node needs.
     pub(crate) fn rollback_solutions(&mut self, mark: SolutionMark) {
         let unwinds_terms =
             self.underway.attempt.solutions.solved_len() > mark.term_solution_log_len;
@@ -751,7 +752,7 @@ impl<'s> Context<'s> {
         let universes_moved =
             self.underway.attempt.universe_solver.state_token() != universes_before;
         if unwinds_terms {
-            self.typing.caches.invalidate_for_rollback();
+            self.typing.caches.invalidate_for_rollback(mark.filed);
         } else if universes_moved {
             self.typing.caches.note_universe_write();
             self.typing.caches.invalidate_for_universe_transaction();

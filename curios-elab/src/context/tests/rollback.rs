@@ -209,9 +209,11 @@ fn a_witness_goal_on_a_flexible_key_is_refused_inside_an_oracle_and_parks_outsid
     assert_eq!(context.parked_len(), 1);
 }
 
-/// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and a clear at each would throw away the reducts the next node needs — while one that unwound a solution clears them, since a reduct cached since may have read it.
+/// A rollback invalidates what can rest on what it undid. One that unwound nothing keeps the cached reducts — a witness probe rolls back after every trial, and a clear at each would throw away the reducts the next node needs — and one that unwound a solution keeps what was filed before its mark, which read nothing it unwound, and drops what was filed since, which may have read what it unwound.
+///
+/// Mutation-checked both ways: with every reduct cleared where a solution was unwound, the one filed before the mark goes; with every one kept, the one filed since stays.
 #[test]
-fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {
+fn a_rollback_keeps_the_reducts_filed_before_its_mark() {
     let mut context = context();
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
@@ -225,9 +227,12 @@ fn a_rollback_keeps_the_reducts_unless_it_unwound_a_solution() {
     let mark = context.solution_mark();
     context.birth_metavar(MetavarId(0), Vec::new(), nat());
     context.solve_metavar(MetavarId(0), literal(0));
+    let since = Term::intrinsic(Intrinsic::nat_add(literal(2), literal(2)));
+    context.reduce(since.clone(), &literal(4));
     context.rollback_solutions(mark);
     context.end_solutions(mark);
-    assert_eq!(context.cached_reduced(&sum), None);
+    assert_eq!(context.cached_reduced(&sum), Some(literal(3)));
+    assert_eq!(context.cached_reduced(&since), None);
 }
 
 /// A reduct is remembered for the declaration that computed it and no longer. A hit on it is free, so an entry that outlived its declaration would let the declarations compiled first decide what a later one can afford.
