@@ -254,6 +254,14 @@ impl RootSource {
         }
     }
 
+    /// This source compiled without its tests, as a build compiles it: what a question that read it [`tested`](Self::tested) compiles it as when it goes on to build the program.
+    pub fn built(self) -> Self {
+        Self {
+            compiled: Compiled::Built,
+            ..self
+        }
+    }
+
     /// What this source is compiled for ([`RootSource::tested`]).
     pub(crate) fn compiled(&self) -> Compiled {
         self.compiled

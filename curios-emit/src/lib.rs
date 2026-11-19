@@ -18,6 +18,7 @@ mod symbols;
 use symbols::*;
 
 mod table;
+pub use table::emitted_functions;
 use table::*;
 
 mod frame;

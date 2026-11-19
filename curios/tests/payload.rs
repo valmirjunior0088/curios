@@ -262,7 +262,7 @@ const COMMANDS: &[(&[&str], bool)] = &[
     (&["document"], false),
     (&["wonder"], true),
     (&["wonder", "--tests"], false),
-    (&["wonder", "--cost"], false),
+    (&["wonder", "--name", "/app/f", "--footprint"], false),
     (&["wonder", "--stage", "wasm"], false),
 ];
 

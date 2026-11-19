@@ -52,7 +52,7 @@ mod represent;
 pub use represent::{Representation, Storage, representation};
 
 mod survey;
-pub use survey::{Counted, Fate, Outcome, descendants, fates};
+pub use survey::{Held, Twin, held, rebuilds};
 
 mod value_flow;
 use value_flow::*;

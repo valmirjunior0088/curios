@@ -31,6 +31,28 @@ fn exports_the_entry_and_defines_every_function() {
     );
 }
 
+/// A reader finds a function's code by the names the emitter gives it: each function's body is written under the first, and `target`, which escapes to `apply` as a closure, is entered through the second.
+#[test]
+fn every_function_is_found_under_the_names_the_emitter_gives_it() {
+    let source = indirect_apply();
+    let held = curios_wasm::code_sizes(&into_wasm(&source, source.entry_suspension()).0);
+
+    for function in source.function_ids() {
+        let [body, _, _] = emitted_functions(&source, function);
+        assert!(held.contains_key(&body), "{body:?} is written");
+    }
+    let target = source
+        .function_ids()
+        .find(|&function| {
+            source
+                .function(function)
+                .is_some_and(|function| function.debug_name.as_deref() == Some("target"))
+        })
+        .expect("the fixture defines `target`");
+    let [_, closure, _] = emitted_functions(&source, target);
+    assert!(held.contains_key(&closure), "{closure:?} is written");
+}
+
 #[test]
 fn a_single_entry_loop_needs_no_dispatcher() {
     let wat = wat(&reducible_loop());

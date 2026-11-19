@@ -312,8 +312,8 @@ fn a_line_that_does_not_parse_is_refused_as_a_report() {
             "surplus argument\n│  `extra` is no argument `curios curate` takes\n├─ try; curios curate --help\n└─ [error] extra",
         ),
         (
-            vec!["curios", "wonder", "--tests", "--cost"],
-            "conflicting flags\n│  `--tests` and `--cost` cannot stand together\n├─ try; curios wonder --help\n└─ [error] --tests",
+            vec!["curios", "wonder", "--tests", "--server"],
+            "conflicting flags\n│  `--tests` and `--server` cannot stand together\n├─ try; curios wonder --help\n└─ [error] --tests",
         ),
     ] {
         let words = words.into_iter().map(OsString::from).collect::<Vec<_>>();

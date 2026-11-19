@@ -22,7 +22,10 @@ use {
         RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
         TableType, TypeName, ValType,
     },
-    std::io::{Result, Write},
+    std::{
+        collections::HashMap,
+        io::{Result, Write},
+    },
 };
 
 #[derive(Debug)]
@@ -1146,6 +1149,14 @@ where
     }
 
     fn write_code(&mut self, func_name: &FuncName, func: &Func) -> Result<()> {
+        let bytes = self.code(func_name, func)?;
+        self.buffer.push_vec_bytes(&bytes)?;
+
+        Ok(())
+    }
+
+    /// A function's entry of the code section without the size it is written after: its locals, then its expression.
+    fn code(&self, func_name: &FuncName, func: &Func) -> Result<Vec<u8>> {
         let mut bytes = Vec::new();
 
         {
@@ -1164,9 +1175,7 @@ where
             writer.write_code_expr(func_name, &func.expr)?;
         }
 
-        self.buffer.push_vec_bytes(&bytes)?;
-
-        Ok(())
+        Ok(bytes)
     }
 
     fn write_type_section(&mut self, types: &[RecType]) -> Result<()> {
@@ -1620,6 +1629,24 @@ where
 
         Ok(())
     }
+}
+
+/// How many bytes each function of `module` takes in the code section [`to_bytes`] writes, by its name: its locals and its expression, encoded as `to_bytes` encodes them, without the size each is written after. An import has no body, so it has no entry.
+pub fn code_sizes(module: &Module) -> HashMap<FuncName, usize> {
+    let indices = Indices::new(module);
+    let mut unused = Vec::new();
+    let writer = Writer::new(&indices, &mut unused);
+
+    module
+        .funcs()
+        .iter()
+        .map(|(name, func)| {
+            let code = writer
+                .code(name, func)
+                .expect("encoding into memory does not fail");
+            (name.clone(), code.len())
+        })
+        .collect()
 }
 
 /// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: every index space is derived once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records every index space's names, so disassemblers and profilers show the same identifiers the compiler emitted.

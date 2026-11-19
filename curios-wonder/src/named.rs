@@ -18,7 +18,7 @@ use {
         Intrinsic, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths, WitnessKey,
     },
     curios_document::{Documentation, ModuleDocumentation},
-    curios_module::{Heading, Overlay, PreparedText, SYNTAX, heading, identity},
+    curios_module::{Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity},
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
     },
@@ -368,42 +368,12 @@ pub fn described(
 ) -> Result<Option<Described>, Vec<Diagnosis>> {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
-    // The subject lowered: the answer off the unit in scope that declares the name, or what the lowering says of the subject's own declaration, with the lexicons its scope keeps, for its elaboration to type.
-    let lowered = |scope: &[&Unit], own: &PreparedText| {
-        let (said, unit) = said_of(scope, own, resolved(scope, own, asked))?;
-
-        Some(match unit {
-            Some(unit) => {
-                let others = scope
-                    .iter()
-                    .filter(|other| !ptr::eq(**other, unit))
-                    .map(|other| other.lexicon())
-                    .collect::<Vec<_>>();
-
-                Ok(spelled(
-                    asked,
-                    said,
-                    unit.core(),
-                    Some((unit.lexicon(), unit.places())),
-                    &others,
-                    Some(unit.certification()),
-                ))
-            }
-            None => Err((
-                said,
-                scope
-                    .iter()
-                    .map(|unit| unit.lexicon().clone())
-                    .collect::<Vec<_>>(),
-            )),
-        })
-    };
 
     match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             let said = match Fold::new(budget, &units, through)
-                .lowered_unit(&mut *progress, lowered)
+                .lowered_unit(&mut *progress, |scope, own| said_by(asked, scope, own))
                 .map_err(of_error)?
             {
                 None => return Ok(None),
@@ -439,36 +409,91 @@ pub fn described(
             package,
         } => {
             let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
-            let loader = loader.tested();
-            let units = overlaid(units, overlay);
-            let (said, scope) = match Fold::new(budget, &units, through)
-                .lowered(&entrypoint, &loader, &mut *progress, |scope, own, _| {
-                    lowered(scope, own)
-                })
-                .map_err(of_error)?
-            {
-                None => return Ok(None),
-                Some(Ok(described)) => return Ok(Some(described)),
-                Some(Err(own)) => own,
-            };
-            let checked = Fold::new(budget, &units, through)
-                .check(&entrypoint, &loader, EntryTail::Program, |step| {
-                    progress(step)
-                })
-                .and_then(|checked| checked.verdict)
-                .map_err(of_error)?;
-            let scope = scope.iter().collect::<Vec<_>>();
 
-            Ok(Some(spelled(
+            described_entry(
+                budget,
+                &overlaid(units, overlay),
+                &entrypoint,
+                &loader.tested(),
                 asked,
-                said,
-                &checked.program.definitions,
-                None,
-                &scope,
-                Some(&checked.certification),
-            )))
+                through,
+                progress,
+            )
         }
     }
+}
+
+/// What `asked` names in the scope of the program `entrypoint`, compiled against `units` over `through` as [`described`] answers it: off the unit in scope that declares it, or off the program's own lowering, elaborated, where the program declares it. `loader` is the program's source as a question reads it, [`tested`](RootSource::tested).
+pub fn described_entry(
+    budget: u64,
+    units: &[RootSource],
+    entrypoint: &curios_surface::Entrypoint,
+    loader: &RootSource,
+    asked: &Qualifier,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Described>, Vec<Diagnosis>> {
+    let (said, scope) = match Fold::new(budget, units, through)
+        .lowered(entrypoint, loader, &mut *progress, |scope, own, _| {
+            said_by(asked, scope, own)
+        })
+        .map_err(of_error)?
+    {
+        None => return Ok(None),
+        Some(Ok(described)) => return Ok(Some(described)),
+        Some(Err(own)) => own,
+    };
+    let checked = Fold::new(budget, units, through)
+        .check(entrypoint, loader, EntryTail::Program, |step| {
+            progress(step)
+        })
+        .and_then(|checked| checked.verdict)
+        .map_err(of_error)?;
+    let scope = scope.iter().collect::<Vec<_>>();
+
+    Ok(Some(spelled(
+        asked,
+        said,
+        &checked.program.definitions,
+        None,
+        &scope,
+        Some(&checked.certification),
+    )))
+}
+
+/// What the lowering says of `asked` over `scope` and the subject's own lowering `own`: the answer off the unit in scope that declares it, or what the lowering says of the subject's own declaration with the lexicons its scope keeps, for its elaboration to type; `None` where nothing is declared at it.
+fn said_by(
+    asked: &Qualifier,
+    scope: &[&Unit],
+    own: &PreparedText,
+) -> Option<Result<Described, (Lowered, Vec<Lexicon>)>> {
+    let (said, unit) = said_of(scope, own, resolved(scope, own, asked))?;
+
+    Some(match unit {
+        Some(unit) => {
+            let others = scope
+                .iter()
+                .filter(|other| !ptr::eq(**other, unit))
+                .map(|other| other.lexicon())
+                .collect::<Vec<_>>();
+
+            Ok(spelled(
+                asked,
+                said,
+                unit.core(),
+                Some((unit.lexicon(), unit.places())),
+                &others,
+                Some(unit.certification()),
+            ))
+        }
+        None => Err((
+            said,
+            scope
+                .iter()
+                .map(|unit| unit.lexicon().clone())
+                .collect::<Vec<_>>(),
+        )),
+    })
 }
 
 /// What a consumer reaches through the module `asked` names, as the documentation record of the unit holding it states it ([`ModuleDocumentation`]): a unit in scope whose mount is the module's root, its record made over the units before it as `curios document` makes one ([`Fold::documentation`]), and otherwise the prelude's, which the image carries. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where no module a consumer reaches stands at the path. `overlay` and `cache` behave as they do for `diagnostics`.

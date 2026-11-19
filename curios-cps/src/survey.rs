@@ -1,102 +1,123 @@
-//! What became of each function of a source declaration's text, read off the CPS graph on either side of the optimizer.
+//! What a CPS module holds of each function of a declaration's text, read off the graph alone.
 //!
-//! A function carries the function of a declaration's text it was made of — its [`Lineage`], stamped by erasure and kept on every copy the optimizer makes — so the optimizer's effect on one is a difference of two counts: how many functions of its lineage there were before, and how many there are after. Code of no declaration's text, the runtime's and a crossing's machinery, carries none, and is counted by its hint, which is all that tells it apart; a hint is otherwise display only, so two locals of one name in two declarations are two rows.
+//! A function carries the function of a declaration's text it was made of — its [`Lineage`] — and so does every continuation the lowering made of its body, kept by every copy and moved with the code a pass moves. So what a module holds of one is read off the module: the functions of its lineage, the heap twin of each, and the functions of another lineage a continuation of its lineage stands in, where a pass put its code in another's body. What became of it under the optimizer is the difference between what the graphs either side of it hold.
 //!
-//! **Nothing here instruments a pass.** No rewrite records what it did, and none has to: `curios-pipeline` already observes the graph before and after optimization, so a caller that counts both sides learns every fate below without the optimizer knowing it is being watched. That is what keeps the measured program the shipped program — the failure GHC's `-fprof-late` exists to undo, avoided by not annotating rather than by annotating late.
+//! **Nothing here instruments a pass.** No rewrite records what it did, and none has to: `curios-pipeline` already observes the graph before and after optimization, so a caller that reads both sides learns what became of each function without the optimizer knowing it is being watched. That is what keeps the measured program the shipped program — the failure GHC's `-fprof-late` exists to undo, avoided by not annotating rather than by annotating late.
 //!
-//! **What a difference cannot tell apart** is named in [`Outcome::Absorbed`]: inlining and pruning both remove a function, and separating them needs the passes to say which, not the counts.
+//! **What a graph cannot tell apart:** straight-line code inlined into a caller leaves no continuation of its lineage behind, so a function inlined whole is held by nothing, as one pruned is; telling them apart needs the passes to say which.
 
 use {
-    crate::Module,
+    crate::{FunctionId, Module, Node, ValueExpr, function_nodes},
     curios_common::Lineage,
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// What the optimizer did to one function of a source declaration's text.
+/// What a module holds of one lineage.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Held {
+    /// The functions of the lineage, a pass's copies among them, in the module's order: what runs it, heap twins and what they hold aside.
+    pub functions: Vec<FunctionId>,
+    /// The heap twin the frame bound made of each of them that is on a recursion, which runs it on the heap and is no copy a pass made.
+    pub twins: Vec<Twin>,
+    /// The functions of another lineage, or of none, whose own body binds a continuation of this one, or within whose heap twin a function of it is bound: where a pass put its code.
+    pub standing_in: BTreeSet<FunctionId>,
+}
+
+/// A heap twin, with the functions of its lineage the frame bound lifted out of its continuations and binds within it, so a frame of it can wait on the heap.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Outcome {
-    /// As many functions are of its lineage as were before: it is in the compiled program once per way it was already written.
-    Survived,
-    /// More functions are of its lineage than were before, because a pass cloned it — specialization on a known argument, on a call pattern, or on a branch. `copies` is how many stand where one did.
-    Specialized {
-        /// Functions of its lineage after optimization, against one before.
-        copies: usize,
-    },
-    /// No function is of its lineage any more: it was inlined into its callers, or pruned as unreachable once something else was.
-    ///
-    /// **This is a finding, not a gap.** A function that is absorbed costs nothing of its own at run time — whatever it does is paid for wherever it went — and that is usually the answer someone profiling it was looking for.
-    Absorbed,
+pub struct Twin {
+    pub function: FunctionId,
+    pub lifted: Vec<FunctionId>,
 }
 
-/// One row: the function as a reader finds it, and what became of it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Fate {
-    /// The hint the first function counted under it bore before the optimizer: a declaration's own path, an anonymous function's derived `owner/n`, a local's binder, or the hint of the runtime's code a row of no lineage counts.
-    pub name: String,
-    /// What the optimizer did to it.
-    pub outcome: Outcome,
-}
-
-/// What a row of the survey counts: the functions of one lineage, or, for code of no declaration's text, the functions bearing one hint.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Counted {
-    Lineage(Lineage),
-    Hint(String),
-}
-
-/// How many functions in `module` each row counts, beside the hint the first of them bears.
-///
-/// A heap twin the frame bound makes runs its original on the heap and is no copy of it, so it is not counted. Nor is a function with no hint, whatever it was made of: a row is labelled by its hint, and an unnamed function — the stand-in `(_) => 0` erasure makes of a type, a compiler-minted shell — has none to be told by.
-pub fn descendants(module: &Module) -> BTreeMap<Counted, (String, usize)> {
+/// What `module` holds of every lineage it holds anything of.
+pub fn held(module: &Module) -> BTreeMap<Lineage, Held> {
     let twins = module
         .function_ids()
         .filter_map(|function| module.twin(function))
         .collect::<BTreeSet<_>>();
-    let mut counts = BTreeMap::new();
+    // The function whose own body binds each function a body binds.
+    let binders = module
+        .function_ids()
+        .flat_map(|binder| {
+            function_nodes(module, binder)
+                .into_iter()
+                .filter_map(|node| match module.node(node) {
+                    Some(Node::LetFun { functions, .. }) => Some(functions.clone()),
+                    _ => None,
+                })
+                .flatten()
+                .map(move |function| (function, binder))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let twin_binding = |mut function| loop {
+        let binder = *binders.get(&function)?;
+        if twins.contains(&binder) {
+            return Some(binder);
+        }
+        function = binder;
+    };
+    let mut held = BTreeMap::<Lineage, Held>::new();
+    let mut lifted = BTreeMap::<FunctionId, Vec<FunctionId>>::new();
 
     for id in module.function_ids() {
-        let Some(function) = module.function(id).filter(|_| !twins.contains(&id)) else {
+        let Some(function) = module.function(id) else {
             continue;
         };
-        let Some(name) = &function.debug_name else {
-            continue;
-        };
-        let counted = function
-            .lineage
-            .map_or_else(|| Counted::Hint(name.clone()), Counted::Lineage);
-
-        counts.entry(counted).or_insert((name.clone(), 0)).1 += 1;
+        match (function.lineage, twin_binding(id)) {
+            (Some(_), _) if twins.contains(&id) => {}
+            (Some(lineage), Some(twin))
+                if module.function(twin).and_then(|twin| twin.lineage) == Some(lineage) =>
+            {
+                lifted.entry(twin).or_default().push(id);
+            }
+            (Some(lineage), Some(twin)) => {
+                held.entry(lineage).or_default().standing_in.insert(twin);
+            }
+            (Some(lineage), None) => {
+                let held = held.entry(lineage).or_default();
+                held.functions.push(id);
+                held.twins.extend(module.twin(id).map(|function| Twin {
+                    function,
+                    lifted: Vec::new(),
+                }));
+            }
+            (None, _) => {}
+        }
+        for node in function_nodes(module, id) {
+            let Some(Node::LetCont { continuations, .. }) = module.node(node) else {
+                continue;
+            };
+            let standing = continuations
+                .iter()
+                .filter_map(|&continuation| module.continuation(continuation)?.lineage)
+                .filter(|&lineage| Some(lineage) != function.lineage);
+            for lineage in standing {
+                held.entry(lineage).or_default().standing_in.insert(id);
+            }
+        }
+    }
+    for twin in held.values_mut().flat_map(|held| &mut held.twins) {
+        twin.lifted = lifted.remove(&twin.function).unwrap_or_default();
     }
 
-    counts
+    held
 }
 
-/// What the optimizer did to every row counted before it, from the [`descendants`] counts on either side of it.
-///
-/// Ordered by name, because a profile that reproduces is the point and a map's order is not one; rows of one name stand in the order of what they count.
-pub fn fates(
-    before: &BTreeMap<Counted, (String, usize)>,
-    after: &BTreeMap<Counted, (String, usize)>,
-) -> Vec<Fate> {
-    let mut fates = before
-        .iter()
-        .map(|(counted, (name, was))| {
-            let now = after.get(counted).map_or(0, |(_, now)| *now);
-            let outcome = match now {
-                0 => Outcome::Absorbed,
-                now if now > *was => Outcome::Specialized { copies: now },
-                _ => Outcome::Survived,
-            };
-
-            Fate {
-                name: name.clone(),
-                outcome,
-            }
+/// How many values `function`'s own body builds in the memory of one it holds dead ([`ValueExpr::Rebuilt`]), a nested function's aside.
+pub fn rebuilds(module: &Module, function: FunctionId) -> usize {
+    function_nodes(module, function)
+        .into_iter()
+        .filter(|&node| {
+            matches!(
+                module.node(node),
+                Some(Node::LetValue {
+                    value: ValueExpr::Rebuilt { .. },
+                    ..
+                })
+            )
         })
-        .collect::<Vec<_>>();
-    fates.sort_by(|one, other| one.name.cmp(&other.name));
-
-    fates
+        .count()
 }
 
 #[cfg(test)]

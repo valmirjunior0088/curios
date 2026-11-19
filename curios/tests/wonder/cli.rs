@@ -480,7 +480,7 @@ fn an_unreached_stage_leaves_stdout_empty() {
     assert!(String::from_utf8_lossy(&refused.stderr).contains("type mismatch"));
 }
 
-/// A question stopped before it could answer exits as a build would, so written goals alone are the incomplete state that exits 2 — for `stage`, `cost` and `tests` alike — while `diagnostics`, whose answer the goals are, exits 0.
+/// A question stopped before it could answer exits as a build would, so written goals alone are the incomplete state that exits 2 — for `--stage`, `--footprint` and `--tests` alike — while the check, whose answer the goals are, exits 0.
 #[test]
 fn a_question_stopped_by_goals_alone_exits_two() {
     let root = temporary("goals");
@@ -489,7 +489,7 @@ fn a_question_stopped_by_goals_alone_exits_two() {
 
     for query in [
         &["wonder", "--stage", "wasm", "-"][..],
-        &["wonder", "--cost", "-"],
+        &["wonder", "--name", "/n", "--footprint", "-"],
         &["wonder", "--tests", "-"],
     ] {
         let stopped = curios(&root, query, program);
@@ -505,4 +505,30 @@ fn a_question_stopped_by_goals_alone_exits_two() {
 
     let answered = curios(&root, &["wonder", "-"], program);
     assert_eq!(answered.status.code(), Some(0));
+}
+
+/// `--footprint` answers the block `--name` answers with, then, a blank line before, a row a function of four tab-separated fields: here the one row of a declaration the program never reaches.
+#[test]
+fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
+    let root = temporary("footprint");
+    fs::create_dir_all(&root).unwrap();
+    let program = "let helper(x : /std/Nat) -> /std/Nat = x + 1;\n/std/print(\"hello\\n\")\n";
+
+    let answered = curios(
+        &root,
+        &["wonder", "--name", "/helper", "--footprint", "-"],
+        program,
+    );
+    assert_eq!(
+        answered.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&answered.stdout);
+    let (block, rows) = stdout
+        .split_once("\n\n")
+        .expect("a blank line parts the block from the rows");
+    assert!(block.starts_with("/helper\n"), "{stdout}");
+    assert_eq!(rows, "/helper\tnot linked\t-\t-\n");
 }

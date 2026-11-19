@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        COMPILE, COST, DIAGNOSTICS, DOCUMENT, EXPORTS, FORMAT, LINT, NAME, PORT, RUN, STAGE, TEST,
-        TESTS, WITNESSES,
+        COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN, STAGE,
+        TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -429,7 +429,6 @@ pub enum Query {
     /// Every diagnostic, goal and lint, located; exit 0 once answered, whatever the answer.
     Check,
     Tests,
-    Cost,
     /// A rung of the pipeline, by its name ([`Stage::NAMES`]).
     Stage(String),
     /// The place a report closed on, whose file is the subject: asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
@@ -445,7 +444,7 @@ impl Query {
     const GROUP: &str = "query";
 
     /// The query options, the group's members.
-    const QUERIES: [&str; 6] = ["tests", "cost", "stage", "at", "name", "server"];
+    const QUERIES: [&str; 5] = ["tests", "stage", "at", "name", "server"];
 
     /// The group the views of a selection form, which holds them to one.
     const VIEWS: &str = "view";
@@ -463,6 +462,8 @@ impl Query {
 pub enum View {
     /// What the module the path names exposes to a consumer.
     Exports,
+    /// What the program holds of each function of the declaration's text, and what each weighs.
+    Footprint,
     /// The witnesses in scope the declaration the path names takes part in.
     Witnesses,
 }
@@ -498,12 +499,6 @@ impl Args for Query {
                 "tests",
                 TESTS.query_help(
                     "Every test the subject declares, one path per line; nothing executes",
-                ),
-            ))
-            .arg(flag(
-                "cost",
-                COST.query_help(
-                    "What became of each declaration by the time the optimizer settled, one row per line",
                 ),
             ))
             // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden.
@@ -544,6 +539,12 @@ impl Args for Query {
                 ),
             )))
             .arg(Self::view(flag(
+                "footprint",
+                FOOTPRINT.query_help(
+                    "Beside `--name`, what the program holds of each function of the declaration's text, one row each: its hint, what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place",
+                ),
+            )))
+            .arg(Self::view(flag(
                 "exports",
                 EXPORTS.query_help(
                     "Beside `--name`, what the module its path names exposes to a consumer, one row each: a name, what it is declared as and its head, then each public child module with the command that lists its own",
@@ -563,7 +564,7 @@ impl Args for Query {
             )
             .group(
                 ArgGroup::new(Self::VIEWS)
-                    .args(["witnesses", "exports"])
+                    .args(["witnesses", "footprint", "exports"])
                     .multiple(false),
             )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
@@ -579,8 +580,6 @@ impl FromArgMatches for Query {
     fn from_arg_matches(matches: &ArgMatches) -> Result<Self, Error> {
         Ok(if matches.get_flag("tests") {
             Query::Tests
-        } else if matches.get_flag("cost") {
-            Query::Cost
         } else if let Some(name) = matches.get_one::<String>("stage") {
             Query::Stage(name.clone())
         } else if let Some(place) = matches.get_one::<Place>("at") {
@@ -590,6 +589,8 @@ impl FromArgMatches for Query {
                 Some(View::Exports)
             } else if matches.get_flag("witnesses") {
                 Some(View::Witnesses)
+            } else if matches.get_flag("footprint") {
+                Some(View::Footprint)
             } else {
                 None
             };

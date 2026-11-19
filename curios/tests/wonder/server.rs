@@ -961,7 +961,13 @@ fn a_loose_file_and_standard_input_leave_no_store() {
     for arguments in [
         &["wonder", "scratch.crs"][..],
         &["wonder", "-"],
-        &["wonder", "--cost", "scratch.crs"],
+        &[
+            "wonder",
+            "--name",
+            "/std/print",
+            "--footprint",
+            "scratch.crs",
+        ],
     ] {
         let asked = curios(&root, arguments, program);
         assert_eq!(

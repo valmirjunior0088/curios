@@ -814,11 +814,26 @@ fn hinted(index: usize, hint: Option<&str>) -> String {
 pub fn value_name(value: MachineValueId) -> EmissionValueName {
     EmissionValueName::from(format!("m{}", value.0))
 }
+/// What the emitter calls the CPS function `function`, of `hint`: `main` where it is the program's entry, and `{index}$hint` otherwise — the spelling of its body and, entry or not, of the closure it is made into where it escapes as one ([`emitted_functions`](crate::emitted_functions)).
+pub fn emitted_name(function: curios_cps::FunctionId, hint: Option<&str>, entry: bool) -> String {
+    match entry {
+        true => "main".to_string(),
+        false => hinted(function.index(), hint),
+    }
+}
 fn direct_name(machine: &MachineModule, function: curios_cps::FunctionId) -> EmissionFunctionName {
-    EmissionFunctionName::from(hinted(function.index(), machine.function_hint(function)))
+    EmissionFunctionName::from(emitted_name(
+        function,
+        machine.function_hint(function),
+        false,
+    ))
 }
 fn wrapper_name(machine: &MachineModule, function: curios_cps::FunctionId) -> EmissionClosureName {
-    EmissionClosureName::from(hinted(function.index(), machine.function_hint(function)))
+    EmissionClosureName::from(emitted_name(
+        function,
+        machine.function_hint(function),
+        false,
+    ))
 }
 fn return_name(function: curios_cps::FunctionId) -> EmissionBlockName {
     EmissionBlockName::from(format!("return/{}", function.index()))
@@ -827,9 +842,9 @@ fn function_name(
     machine: &MachineModule,
     function: curios_cps::FunctionId,
 ) -> EmissionFunctionName {
-    if function == machine.entry {
-        EmissionFunctionName::from("main")
-    } else {
-        direct_name(machine, function)
-    }
+    EmissionFunctionName::from(emitted_name(
+        function,
+        machine.function_hint(function),
+        function == machine.entry,
+    ))
 }

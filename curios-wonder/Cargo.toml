@@ -18,13 +18,16 @@ test-support = []
 [dependencies]
 curios-common = { workspace = true }
 curios-document = { workspace = true }
-# For what a name is declared as and where its declaration's name is written, which `at` and `declarations` answer in the lowering's own terms.
+# For what a name is declared as and where its declaration's name is written, which `--at` and `--name` answer in the lowering's own terms.
 curios-core = { workspace = true }
 curios-module = { workspace = true }
 curios-surface = { workspace = true }
 curios-unit = { workspace = true }
-# For the fate survey `cost` reads: the CPS graph is `curios-cps`'s to walk, so the walk lives there and this crate is one of its consumers. It carries no back end — `curios-pipeline` already depends on it to name `curios_cps::Module` in `Stage`.
+# For what `--footprint` reads of each rung a program's compilation passes: the functions of a lineage in the erased program, what the CPS graph holds of one (`curios-cps`'s survey, since the graph is its to walk), the Wasm functions the emitter names after each and what the writer measures of each body. No back end past the emitted module — `curios-pipeline` already depends on each to name the module of its `Stage`.
+curios-anf = { workspace = true }
 curios-cps = { workspace = true }
+curios-emit = { workspace = true }
+curios-wasm = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 curios-verdict = { workspace = true }

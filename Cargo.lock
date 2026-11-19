@@ -1007,17 +1007,20 @@ dependencies = [
 name = "curios-wonder"
 version = "0.16.25"
 dependencies = [
+ "curios-anf",
  "curios-common",
  "curios-core",
  "curios-cps",
  "curios-document",
  "curios-elab",
+ "curios-emit",
  "curios-module",
  "curios-package",
  "curios-pipeline",
  "curios-surface",
  "curios-unit",
  "curios-verdict",
+ "curios-wasm",
  "lsp-server",
  "lsp-types",
  "serde_json",

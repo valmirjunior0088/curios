@@ -209,14 +209,6 @@ pub const TESTS: Contract = Contract {
     product: Product::Nothing,
 };
 
-pub const COST: Contract = Contract {
-    command: "wonder --cost",
-    accepts: Accepts::Program,
-    own_file_only: false,
-    access: Access::Write,
-    product: Product::Nothing,
-};
-
 pub const STAGE: Contract = Contract {
     command: "wonder --stage",
     accepts: Accepts::Program,
@@ -271,6 +263,15 @@ pub const WITNESSES: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// What a program holds of a declaration is a compiled program's, so the view takes a program where `--name` alone takes any scope.
+pub const FOOTPRINT: Contract = Contract {
+    command: "wonder --name --footprint",
+    accepts: Accepts::Program,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 pub const SERVER: Contract = Contract {
     command: "wonder --server",
     accepts: Accepts::Nothing,
@@ -297,13 +298,13 @@ impl Mode {
             Mode::Wonder { query, .. } => match query {
                 Query::Check => &DIAGNOSTICS,
                 Query::Tests => &TESTS,
-                Query::Cost => &COST,
                 Query::Stage(name) if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
                 Query::Stage(_) => &STAGE,
                 Query::At(_) => &AT,
                 Query::Name(_, None) => &NAME,
                 Query::Name(_, Some(View::Exports)) => &EXPORTS,
                 Query::Name(_, Some(View::Witnesses)) => &WITNESSES,
+                Query::Name(_, Some(View::Footprint)) => &FOOTPRINT,
                 Query::Server => &SERVER,
             },
             #[cfg(feature = "profile")]

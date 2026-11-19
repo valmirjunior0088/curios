@@ -2,8 +2,8 @@ use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, Envelope, FltHelper, LoadAs, call, concrete_val, get, i64_const,
-        refuse_func_name, tee, when,
+        EmissionValueName, Envelope, FltHelper, LoadAs, call, concrete_val, emitted_name, get,
+        i64_const, refuse_func_name, tee, when,
     },
     curios_abi::{Carrier, ForeignFunction, Namespace, WireLeaf, WireType},
     std::{
@@ -113,14 +113,52 @@ fn clsr_indices(module: &EmissionModule) -> Vec<i32> {
         .collect()
 }
 
+/// The Wasm functions the emitter makes of the CPS function `function` of `source`, where it makes them: the function its body is written as, then, where the function escapes as a closure, the one a call of the closure enters and the one a heap call of it enters. Named by the rule the emitter names them by, so a reader finds a function's code in the module by looking each up, and never by reading a name.
+pub fn emitted_functions(
+    source: &curios_cps::Module,
+    function: curios_cps::FunctionId,
+) -> [curios_wasm::FuncName; 3] {
+    let hint = source
+        .function(function)
+        .and_then(|function| function.debug_name.as_deref());
+    let body = EmissionFunctionName::from(emitted_name(
+        function,
+        hint,
+        source.entry() == Some(function),
+    ));
+    let closure = EmissionClosureName::from(emitted_name(function, hint, false));
+
+    [
+        body_name(&body),
+        closure_body_name(&closure),
+        heap_entry_name(&closure),
+    ]
+    .map(curios_wasm::FuncName::from)
+}
+
+/// The Wasm function the emission function `name` is written as. The prefix is why the exported entrypoint is `func/main`: the entry is always `main`, and the export reuses the function's emitted name.
+fn body_name(name: &EmissionFunctionName) -> String {
+    format!("func/{name}")
+}
+
+/// The Wasm function a call of the closure `name` enters.
+fn closure_body_name(name: &EmissionClosureName) -> String {
+    format!("clsr/{name}")
+}
+
+/// The Wasm function a heap call of the closure `name` enters.
+fn heap_entry_name(name: &EmissionClosureName) -> String {
+    format!("heap/{name}")
+}
+
 impl<'a> ClsrData<'a> {
     pub fn new(clsr_name: &'a EmissionClosureName, clsr: &'a EmissionClosure, index: i32) -> Self {
-        Self::named(clsr_name, clsr, index, format!("clsr/{}", clsr_name))
+        Self::named(clsr_name, clsr, index, closure_body_name(clsr_name))
     }
 
     /// The heap entry `heap` of the closure `clsr_name`, at the closure's `index`: it reads the closure's own environment, so it shares the closure's environment type and fields.
     pub fn heap(clsr_name: &'a EmissionClosureName, heap: &'a EmissionClosure, index: i32) -> Self {
-        Self::named(clsr_name, heap, index, format!("heap/{}", clsr_name))
+        Self::named(clsr_name, heap, index, heap_entry_name(clsr_name))
     }
 
     fn named(
@@ -340,8 +378,7 @@ impl<'a> FuncData<'a> {
     ) -> Self {
         Self {
             signature: Signature::of(func, raw, closures),
-            // The `func/` prefix is why the exported entrypoint is `func/main`: the entry is always `main`, and the export reuses the function's emitted name.
-            func_name: curios_wasm::FuncName::from(format!("func/{}", func_name)),
+            func_name: curios_wasm::FuncName::from(body_name(func_name)),
             params: func
                 .params
                 .iter()

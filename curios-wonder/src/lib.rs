@@ -33,14 +33,15 @@ mod named;
 use named::*;
 pub use named::{Declaration, Described, Named, Witnessed, Written, described, placed};
 
-mod cost;
-use cost::*;
+mod footprint;
+use footprint::*;
+pub use footprint::{Fate, Row};
 
 mod ask;
 use ask::*;
 pub use ask::{
     Ended, Place, Scope, Staged, Telling, answer, file_subject, not_a_program, wonder_at,
-    wonder_cost, wonder_diagnostics, wonder_exports, wonder_name, wonder_stage, wonder_tests,
+    wonder_diagnostics, wonder_exports, wonder_footprint, wonder_name, wonder_stage, wonder_tests,
     wonder_witnesses,
 };
 

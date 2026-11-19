@@ -2,20 +2,19 @@
 //!
 //! **The answer goes to stdout, and nothing else does** ([`answer`]). A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
-//! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
+//! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `footprint` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
 use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Origin, Refusal,
-        Rendering, Severity, Subject, Uncosted, checked, cost, declared_tests, described,
-        diagnostics, exported, placed, stage, unit_stage,
+        Rendering, Row, Severity, Subject, Unfooted, checked, declared_tests, described,
+        diagnostics, exported, footprint, placed, stage, unit_stage,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
         SourceName, Style,
     },
     curios_core::{Declared, Totality},
-    curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress},
@@ -313,24 +312,25 @@ impl Asked {
         reached
     }
 
-    /// What the optimizer did to each of the subject's declarations.
-    pub fn costed(
+    /// What `path` names in the program's scope, and what the program holds of each function of its text ([`footprint()`]).
+    pub fn footprinted(
         self,
         budget: u64,
         overlay: &Overlay,
+        path: &Qualifier,
         telling: &mut dyn Telling,
-    ) -> Result<Vec<Fate>, Uncosted> {
+    ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
-        let fates = cost(budget, subject, overlay, cache, &mut |progress| {
+        let footprint = footprint(budget, subject, path, overlay, cache, &mut |progress| {
             telling.step(progress, cache);
         });
-        telling.ended(match &fates {
-            Err(Uncosted::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+        telling.ended(match &footprint {
+            Err(Unfooted::Diagnostics(diagnostics)) => Ended::of(diagnostics),
             _ => Ended::Done,
         });
 
-        fates
+        footprint
     }
 
     /// What the name written at `place` of `file` of the subject names ([`placed`]).
@@ -876,12 +876,17 @@ fn declaration(
             telling.answering();
             Ok(described)
         }
-        Ok(None) => Err(Refused::of("unknown declaration")
-            .stating("nothing in scope is declared or exported at this path")
-            .about_named(path.join())
-            .into()),
+        Ok(None) => Err(unknown_declaration(path)),
         Err(diagnostics) => Err(stopped(diagnostics)),
     }
+}
+
+/// The refusal of a path that names nothing in scope.
+fn unknown_declaration(path: &Qualifier) -> CompileError {
+    Refused::of("unknown declaration")
+        .stating("nothing in scope is declared or exported at this path")
+        .about_named(path.join())
+        .into()
 }
 
 /// What `wonder --name` and its `--witnesses` view say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its totality, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
@@ -1009,39 +1014,39 @@ fn no_such_stage(asked: &str) -> CompileError {
         .into()
 }
 
-/// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.
-///
-/// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
-///
-/// `telling` is told as [`wonder_diagnostics`]' is.
-pub fn wonder_cost(
+/// `wonder --name PATH --footprint [SUBJECT]`: what the program holds of each function of the text of the declaration `path` names, to stdout — the block `--name` answers with, then a row for each function in the order the declaration writes them, each heap twin under its function: its hint (`-` for none), what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place, `-` for a function with no body of its own ([`Row`]). Four tab-separated fields a row, so `awk -F'\t' '$2 == "absorbed"'` is a whole question and a diff of two runs a diff of two files. A path that names nothing in scope is refused, as a subject written as a module is, which has no program. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_footprint(
     budget: u64,
     program: Program,
+    path: &Qualifier,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
-    let overlay = Overlay::default();
-
+    let reader = telling.reader();
     let refusal = not_a_program(program.entry());
     let asked = Asked::about_program(program)?;
 
-    let fates = asked.costed(budget, &overlay, telling);
-    match fates {
-        Ok(fates) => {
+    match asked.footprinted(budget, &Overlay::default(), path, telling) {
+        Ok(Some((described, rows))) => {
             telling.answering();
-            for fate in fates {
-                // The outcome is one token and its count, so a column stays a column: `specialized 3` reads as one answer and splits as one field.
-                let outcome = match fate.outcome {
-                    Outcome::Survived => "survived".to_string(),
-                    Outcome::Specialized { copies } => format!("specialized {copies}"),
-                    Outcome::Absorbed => "absorbed".to_string(),
-                };
-
-                answer(format_args!("{}\t{outcome}\n", fate.name));
+            answer(format_args!(
+                "{}\n\n",
+                block(&described, None).rendered(Kind::Declaration, &reader)
+            ));
+            let field = |field: Option<usize>| field.map_or("-".to_string(), |n| n.to_string());
+            for row in rows {
+                answer(format_args!(
+                    "{}\t{}\t{}\t{}\n",
+                    row.label.as_deref().unwrap_or("-"),
+                    row.fate,
+                    field(row.bytes),
+                    field(row.rebuilds)
+                ));
             }
             Ok(())
         }
-        Err(Uncosted::Unit) => Err(refusal.into()),
-        Err(Uncosted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Ok(None) => Err(unknown_declaration(path)),
+        Err(Unfooted::Unit) => Err(refusal.into()),
+        Err(Unfooted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }
 }
 

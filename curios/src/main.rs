@@ -41,8 +41,8 @@ use {
     curios_pipeline::CompileError,
     curios_surface::{Format, Formatted},
     curios_wonder::{
-        Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_cost,
-        wonder_diagnostics, wonder_exports, wonder_name, wonder_stage, wonder_tests,
+        Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_diagnostics,
+        wonder_exports, wonder_footprint, wonder_name, wonder_stage, wonder_tests,
         wonder_witnesses,
     },
     std::{
@@ -796,12 +796,6 @@ fn dispatch() -> Result<(), Failure> {
                 contract.admit_any(subject, manifest, &here()?)?,
                 &mut Asking::checking(answered.clone()),
             )?,
-            Query::Cost => wonder_cost(
-                elaboration.budget,
-                contract.admit_program(subject, manifest, None, &here()?)?,
-                &mut Asking::reading(answered.clone()),
-            )?,
-            // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage(name) => wonder_stage(
                 elaboration.budget,
                 &name,
@@ -842,6 +836,12 @@ fn dispatch() -> Result<(), Failure> {
             Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
                 elaboration.budget,
                 contract.admit_scope(subject, manifest, &here()?)?,
+                &path,
+                &mut Asking::reading(answered.clone()),
+            )?,
+            Query::Name(path, Some(View::Footprint)) => wonder_footprint(
+                elaboration.budget,
+                contract.admit_program(subject, manifest, None, &here()?)?,
                 &path,
                 &mut Asking::reading(answered.clone()),
             )?,
