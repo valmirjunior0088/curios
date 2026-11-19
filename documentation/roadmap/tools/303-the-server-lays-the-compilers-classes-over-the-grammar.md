@@ -15,7 +15,7 @@ The next step is stage 1, a delivery, which settles the open question under *Ope
 - **The command line answers by a query of its own**, settled 2026-11-17: `curios wonder --classes [SUBJECT]` lists every classed span of the file the subject is asked through, one row per line: its place as a report prints one, `<file>:<line>:<column>`, its length, its class and its modifiers. They are the same records the server encodes as tokens, documented in `documentation/usage.md` beside `--at`.
 - **The legend is the class set's, mapped once, exhaustively**: a module `namespace`, a type `type`, a constructor `enumMember`, a concept `interface`, a method `method`, a function `function`, a value `variable` with `readonly`, a field `property`, a parameter `parameter`, a type parameter `typeParameter`, a local `variable`, and the keyword `keyword`. The modifiers are `declaration`, where the name is its declaration's own, and `defaultLibrary`, where it resolved into `/std` or `/sys`.
 - **The whole document at once**, with positions in UTF-16 at the protocol's boundary, as every other answer of the server's converts.
-- **What no record answers keeps the grammar's colour.** That covers a binder, a path's segment and a name no term holds, and each joins as [The editor is answered at a position](101-the-editor-is-answered-at-a-position.md) records it.
+- **What no record answers keeps the grammar's colour.** A check's record of a file (`Placed`, `curios-wonder/src/named.rs`) answers a name, a local where it is bound and read, a field's label and a path's segment; what it answers nothing of keeps the grammar's.
 
 ## Open
 

@@ -1,17 +1,16 @@
 # The places a declaration is written are answered, and renamed
 
-**Not refined yet.** Every place a declaration is written across a package and every unit that imports it is answered, and a rename edits each, the edit handed back as text the formatter lays out. Today a place answers the declaration written there ([The editor is answered at a position](101-the-editor-is-answered-at-a-position.md)), and no query answers the places a declaration is written at, within a package or across its importers.
+**Not refined yet.** Every place a declaration is written across a package and every unit that imports it is answered, and a rename edits each, the edit handed back as text the formatter lays out. Today a place answers what is written there ([A place in a file is answered from the declaration that writes it](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md)), and no query answers the places a declaration is written at, within a package or across its importers.
 
 ## What is known
 
 - **A declaration's name is told from another of the same spelling by what it resolves to**, as `wonder --at` tells `/std/Bool/not` from `/std/Bytes/not` a place at a time, off the names each check reads (`Named`, `curios-wonder/src/named.rs`).
-- **A place answers an occurrence**, recorded where the compilation resolved it, by tools/101: names a term holds now, a binder at its stage 3, a name the elaborator resolves at its stage 5, a path's segments and a `use` line's names at its stage 6. A rename reads every one of them: a name on a `use` line renamed, or a local's every use.
+- **A place answers an occurrence**, recorded where the compilation resolved it: a name a term holds; a head the lowering resolves and a path's segment, with what the declaration minted (`curios_core::Mints`); a written binder where it is bound and read; a word the elaborator resolves, with what the declaration concluded (`curios_elab::Concluded::resolved`); and a `use` or a `mod` line's names, with the body's imports (`curios_core::Imports::lines`). A rename reads every one of them: a name on a `use` line renamed, or a local's every use.
 
 ## What it waits on
 
 - **Whether a unit's occurrences are stored with it**, a facet read without the unit, so a query across the units that import a declaration reads no unit whole. Lean writes `.ilean` files, "All references of this module" and "All declarations of this module", and "The current references in a file worker take precedence over those in .ilean files" ([`References.lean`](https://github.com/leanprover/lean4/blob/master/src/Lean/Server/References.lean)); hiedb indexes HIE files and answers `point-refs` of a place ([HieDb](https://github.com/wz1000/HieDb)).
 - **What `curios-wonder`'s README states the engine is** once it writes a file as well as a store.
-- **tools/101's stages 3, 5 and 6**, for the occurrences a rename edits beyond the names a term holds.
 
 ## Prior art
 
