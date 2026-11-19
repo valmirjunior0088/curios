@@ -33,6 +33,8 @@ pub fn sink_computations(module: &mut Module) -> bool {
     for function in functions {
         pass.place_in(function);
     }
+    #[cfg(debug_assertions)]
+    pass.check_index();
     pass.changed
 }
 
@@ -43,6 +45,10 @@ enum Holder {
     Continuation(ContinuationId),
     Function(FunctionId),
 }
+
+/// A chain of the lexical tree: the nodes from a continuation's or a function's body to the node ending it, each following the one before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Chain(u32);
 
 /// A computation that may move, read off the node computing it.
 enum Work {
@@ -78,6 +84,12 @@ struct Sink<'m> {
     owner: BTreeMap<NodeId, FunctionId>,
     /// The function being placed in, which owns every node the pass adds.
     placing: Option<FunctionId>,
+    /// The chain each node stands in, kept through every move: what [`Sink::container`] reads, so a node's container is found without climbing the chain before it.
+    chain: BTreeMap<NodeId, Chain>,
+    /// The continuation or function whose body each chain is.
+    contains: BTreeMap<Chain, Holder>,
+    /// The chains handed out, the next one's identity.
+    chains: u32,
     /// What binds each value: the node computing it, or the continuation or function whose parameter it is.
     binder: BTreeMap<ValueId, Holder>,
     /// The nodes naming each value, a closure call's callee among them.
@@ -106,6 +118,9 @@ impl<'m> Sink<'m> {
             bound: BTreeMap::new(),
             owner: BTreeMap::new(),
             placing: None,
+            chain: BTreeMap::new(),
+            contains: BTreeMap::new(),
+            chains: 0,
             binder: BTreeMap::new(),
             uses: BTreeMap::new(),
             references: BTreeMap::new(),
@@ -131,6 +146,7 @@ impl<'m> Sink<'m> {
             .collect::<Vec<_>>();
         for (id, body, params) in continuations {
             pass.parent.insert(body, Holder::Continuation(id));
+            pass.thread(Holder::Continuation(id), body);
             for param in params {
                 pass.binder.insert(param, Holder::Continuation(id));
             }
@@ -145,11 +161,53 @@ impl<'m> Sink<'m> {
                 pass.owner.insert(node, id);
             }
             pass.parent.insert(body, Holder::Function(id));
+            pass.thread(Holder::Function(id), body);
             for param in params {
                 pass.binder.insert(param, Holder::Function(id));
             }
         }
         pass
+    }
+
+    /// Hold the owners and the chains to the module as the pass leaves it: each live block's chain walked once from its head, each live function's own nodes once, as debug builds verify every round.
+    #[cfg(debug_assertions)]
+    fn check_index(&self) {
+        let blocks = self
+            .module
+            .live_continuations()
+            .map(|(id, definition)| (Holder::Continuation(id), definition.body))
+            .chain(
+                self.module
+                    .live_functions()
+                    .map(|(id, definition)| (Holder::Function(id), definition.body)),
+            )
+            .collect::<Vec<_>>();
+        for (holder, body) in blocks {
+            let chain = self.chain.get(&body).copied();
+            assert_eq!(
+                chain.and_then(|chain| self.contains.get(&chain).copied()),
+                Some(holder),
+                "placement's index holds {holder:?}'s body"
+            );
+            let mut at = Some(body);
+            while let Some(node) = at {
+                assert_eq!(
+                    self.chain.get(&node).copied(),
+                    chain,
+                    "placement's index holds {node} in its chain"
+                );
+                at = self.successor(node);
+            }
+        }
+        for (function, _) in self.module.live_functions() {
+            for node in function_nodes(self.module, function) {
+                assert_eq!(
+                    self.owner.get(&node),
+                    Some(&function),
+                    "placement's index holds {node}'s owner"
+                );
+            }
+        }
     }
 
     /// File what the node at `id` names, transfers to, binds and is followed by.
@@ -301,6 +359,75 @@ impl<'m> Sink<'m> {
         self.parent.insert(child, holder);
     }
 
+    /// A chain of its own for the body of `holder`.
+    fn fresh_chain(&mut self, holder: Holder) -> Chain {
+        let chain = Chain(self.chains);
+        self.chains += 1;
+        self.contains.insert(chain, holder);
+        chain
+    }
+
+    /// File the chain from `head`, the body of `holder`, as a chain of its own.
+    fn thread(&mut self, holder: Holder, head: NodeId) {
+        let chain = self.fresh_chain(holder);
+        let mut at = Some(head);
+        while let Some(node) = at {
+            self.chain.insert(node, chain);
+            at = self.successor(node);
+        }
+    }
+
+    /// The node following `node` along its chain, where it is a binding.
+    fn successor(&self, node: NodeId) -> Option<NodeId> {
+        match self.module.node(node)? {
+            Node::LetValue { next, .. }
+            | Node::LetIntrinsic { next, .. }
+            | Node::LetFun { body: next, .. }
+            | Node::LetCont { body: next, .. } => Some(*next),
+            _ => None,
+        }
+    }
+
+    /// The node `node` follows along its chain, where it is not the chain's head.
+    fn predecessor(&self, node: NodeId) -> Option<NodeId> {
+        match self.parent.get(&node)? {
+            Holder::Node(before) => Some(*before),
+            Holder::Continuation(_) | Holder::Function(_) => None,
+        }
+    }
+
+    /// Part the chain holding `last` after it: `rest`, the node following it, and every node after that become the body of `holder`. The smaller side takes a chain of its own, found by walking both sides from the split in step, so every split together costs each node the logarithm of its chain.
+    fn split(&mut self, last: NodeId, rest: NodeId, holder: Holder) {
+        let old = self.chain[&last];
+        let (mut back, mut forth) = (Some(last), Some(rest));
+        let (mut before, mut after) = (Vec::new(), Vec::new());
+        let before_is_smaller = loop {
+            let Some(node) = back else {
+                break true;
+            };
+            before.push(node);
+            back = self.predecessor(node);
+            let Some(node) = forth else {
+                break false;
+            };
+            after.push(node);
+            forth = self.successor(node);
+        };
+        if before_is_smaller {
+            let held = self.contains[&old];
+            let chain = self.fresh_chain(held);
+            for node in before {
+                self.chain.insert(node, chain);
+            }
+            self.contains.insert(old, holder);
+        } else {
+            let chain = self.fresh_chain(holder);
+            for node in after {
+                self.chain.insert(node, chain);
+            }
+        }
+    }
+
     /// What holds `holder` in turn: a node what it follows, a continuation its `LetCont`, a function its `LetFun`; nothing above a function defined at the top.
     fn above(&self, holder: Holder) -> Option<Holder> {
         match holder {
@@ -324,15 +451,9 @@ impl<'m> Sink<'m> {
         false
     }
 
-    /// The continuation or function whose body chain holds the node at `node`.
+    /// The continuation or function whose body chain holds the node at `node`, read off its chain.
     fn container(&self, node: NodeId) -> Option<Holder> {
-        let mut at = Holder::Node(node);
-        loop {
-            match self.above(at)? {
-                Holder::Node(parent) => at = Holder::Node(parent),
-                holder => return Some(holder),
-            }
-        }
+        self.contains.get(self.chain.get(&node)?).copied()
     }
 
     /// Where the node at `node` reads within `function`'s own body: itself, or the `LetFun` binding the outermost function defined in that body that holds it, found by the functions it is defined in and not by the chain before it.
@@ -346,17 +467,20 @@ impl<'m> Sink<'m> {
         Some(site)
     }
 
-    /// The continuations holding `site` below `region`, outermost first; `None` where `region` does not hold it within one function.
+    /// The continuations holding `site` below `region`, outermost first; `None` where `region` does not hold it within one function. A reader stands below what it reads, so they are the continuations `site`'s chain is nested in up to the chain holding `region`, climbed a continuation at a time.
     fn between(&self, region: Holder, site: NodeId) -> Option<Vec<ContinuationId>> {
+        let stop = match region {
+            Holder::Node(node) => self.container(node)?,
+            holder => holder,
+        };
         let mut found = Vec::new();
-        let mut at = Holder::Node(site);
-        while at != region {
-            match at {
-                Holder::Continuation(continuation) => found.push(continuation),
-                Holder::Function(_) => return None,
-                Holder::Node(_) => {}
-            }
-            at = self.above(at)?;
+        let mut at = self.container(site)?;
+        while at != stop {
+            let Holder::Continuation(continuation) = at else {
+                return None;
+            };
+            found.push(continuation);
+            at = self.container(*self.held.get(&continuation)?)?;
         }
         found.reverse();
         Some(found)
@@ -885,6 +1009,7 @@ impl<'m> Sink<'m> {
                 self.unfile(next);
                 self.module.remove_node(next);
                 self.parent.remove(&next);
+                self.chain.remove(&next);
                 self.module.remove_value(result);
                 self.binder.remove(&result);
                 (target, false)
@@ -897,6 +1022,7 @@ impl<'m> Sink<'m> {
                     body: next,
                     terminates: false,
                 });
+                self.split(site, next, Holder::Continuation(join));
                 self.parent.insert(next, Holder::Continuation(join));
                 self.binder.insert(result, Holder::Continuation(join));
                 self.carved(join, from);
@@ -915,6 +1041,8 @@ impl<'m> Sink<'m> {
             terminates: false,
         });
         self.parent.insert(handed, Holder::Continuation(arm));
+        let chain = self.fresh_chain(Holder::Continuation(arm));
+        self.chain.insert(handed, chain);
         self.carved(arm, from);
         let decided_value = Edge {
             target: join,
@@ -932,6 +1060,8 @@ impl<'m> Sink<'m> {
             cases,
             default: None,
         });
+        let chain = self.chain[&site];
+        self.chain.insert(switch, chain);
         self.set(
             site,
             Node::LetCont {
@@ -978,6 +1108,8 @@ impl<'m> Sink<'m> {
             },
         );
         self.parent.insert(handed, Holder::Continuation(landing));
+        let chain = self.fresh_chain(Holder::Continuation(landing));
+        self.chain.insert(handed, chain);
         self.carved(landing, from);
         let holder = *self.parent.get(&site).expect("a switch is held");
         self.set(
@@ -993,6 +1125,8 @@ impl<'m> Sink<'m> {
             body: site,
         });
         self.link(holder, hold);
+        let chain = self.chain[&site];
+        self.chain.insert(hold, chain);
         landing
     }
 
@@ -1034,6 +1168,8 @@ impl<'m> Sink<'m> {
             .body;
         self.link(Holder::Node(node), body);
         self.link(Holder::Continuation(target), node);
+        let joined = self.chain[&body];
+        self.chain.insert(node, joined);
     }
 
     /// Move the call at `node` to the head of `target`'s body, its results arriving where that body hands them on or in a continuation made there: where it stood, a jump enters `resume`, which no longer binds them.
@@ -1051,6 +1187,8 @@ impl<'m> Sink<'m> {
             args: Vec::new(),
         }));
         self.link(holder, enter);
+        let left = self.chain[&node];
+        self.chain.insert(enter, left);
         let body = self
             .module
             .continuation(target)
@@ -1058,9 +1196,12 @@ impl<'m> Sink<'m> {
             .body;
         let returns_to = match self.forwarded(body, &results) {
             Some(onward) => {
+                let headed = self.chain[&body];
+                self.chain.insert(node, headed);
                 self.unfile(body);
                 self.module.remove_node(body);
                 self.parent.remove(&body);
+                self.chain.remove(&body);
                 for result in &results {
                     self.module.remove_value(*result);
                     self.binder.remove(result);
@@ -1083,6 +1224,8 @@ impl<'m> Sink<'m> {
                     terminates: false,
                 });
                 self.parent.insert(body, Holder::Continuation(landed));
+                let taken = self.chain[&body];
+                self.contains.insert(taken, Holder::Continuation(landed));
                 for result in &results {
                     self.binder.insert(*result, Holder::Continuation(landed));
                 }
@@ -1092,6 +1235,9 @@ impl<'m> Sink<'m> {
                     body: node,
                 });
                 self.link(Holder::Continuation(target), hold);
+                let chain = self.fresh_chain(Holder::Continuation(target));
+                self.chain.insert(hold, chain);
+                self.chain.insert(node, chain);
                 landed
             }
         };
