@@ -1779,7 +1779,7 @@ impl Shape {
             .collect()
     }
 
-    /// Whether `part`, read out of `of` at `read`, is still held by `of` where `of` is consumed after the read, while it is the value that read: where the consumption hands `of` on, whoever takes it may read `part` out of it again, so `part` is kept where it is still named past that consumption, or something between the read and it may write `part` or a field read off it — a consumption of one, an update of a list among them, or a construction a rebuild may become — since a write there changes what the later reader finds in `of`; an update of `of` itself writes the whole, not what was read out of it. Elsewhere `of` is consumed with `part` dead and untouched since the read, as One-Shot Bufferize finds a write in place in conflict only where it falls between a value's definition and a later read of what it was. `overwritten` is the index an element was read at, where an update of `of` there writes over the element, and copies a list something else holds, which the list's own sharing covers.
+    /// Whether `part`, read out of `of` at `read`, is still held by `of` where `of` is consumed after the read, while it is the value that read: where the consumption hands `of` on, whoever takes it may read `part` out of it again, so `part` is kept where it is still named past that consumption, or something on a path between the read and it may write `part` or a field read off it — a consumption of one along an edge that leads there, an update of a list among them, or a construction a rebuild may become — since a write there changes what the later reader finds in `of`; an update of `of` itself writes the whole, not what was read out of it. Elsewhere `of` is consumed with `part` dead and untouched since the read, as One-Shot Bufferize finds a write in place in conflict only where it falls between a value's definition and a later read of what it was. `overwritten` is the index an element was read at, where an update of `of` there writes over the element, and copies a list something else holds, which the list's own sharing covers.
     fn part_kept_after(
         &self,
         module: &Module,
@@ -1790,29 +1790,31 @@ impl Shape {
         borrowed: &Borrowed,
     ) -> bool {
         let parts = self.with_fields(part);
-        let touched = parts
+        // A consumption is on the path to another only along its own edge: a switch that hands the part on in one arm and goes on to consume the whole in another touches nothing on the second path.
+        let consumed = parts
             .iter()
             .flat_map(|value| self.consumed(*value, borrowed))
-            .map(|point| point.node)
-            .chain(
-                self.home
-                    .get(&part)
-                    .and_then(|function| self.writes.get(function))
-                    .into_iter()
-                    .flatten()
-                    .copied(),
-            )
+            .collect::<Vec<_>>();
+        let writes = self
+            .home
+            .get(&part)
+            .and_then(|function| self.writes.get(function))
+            .into_iter()
+            .flatten()
+            .copied()
             .collect::<Vec<_>>();
         self.consumed(of, borrowed).iter().any(|point| {
+            let between = |node: NodeId| node != point.node && self.reaches(read, node);
             self.reaches_holding(of, read, point.node)
                 && overwritten
                     .is_none_or(|index| !self.overwrites(module, point.node, of, index, read))
                 && (self.live_after(module, *point, part)
-                    || touched.iter().any(|between| {
-                        *between != point.node
-                            && self.reaches(read, *between)
-                            && self.reaches(*between, point.node)
-                    }))
+                    || consumed
+                        .iter()
+                        .any(|touch| between(touch.node) && self.point_reaches(*touch, point.node))
+                    || writes
+                        .iter()
+                        .any(|write| between(*write) && self.reaches(*write, point.node)))
         })
     }
 

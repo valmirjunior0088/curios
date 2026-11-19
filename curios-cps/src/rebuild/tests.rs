@@ -1556,8 +1556,16 @@ fn an_element_an_update_writes_over_is_held_by_nothing_else() {
     assert_eq!((beside.rows.len(), beside.lists.len()), (0, 1));
 }
 
-/// `main` reads a `Pair` out of a whole nothing else holds — the first element of a list of two, or the first slot of a product holding two — and switches on the `Pair`'s tag: at `1` it builds a `Pair` of its slot beside it dying, which nothing reads after, and otherwise hands the whole on, as a search that stops on a twig answers the twig and goes on with its list past an empty one. Where `between`, the arm that hands the whole on builds a `Pair` first.
-fn passed_over(element: bool, between: bool) -> Module {
+/// How the switch of [`passed_over`] hands the part to its arms: to neither, the arm that takes it reading it where it was read; on the edge of the arm that takes it alone, as a search's loop hands the twig it stops on out of the loop; or on both edges, the arm that hands the whole on handing the part on with it in one tuple.
+#[derive(Clone, Copy, PartialEq)]
+enum Handed {
+    Neither,
+    Taking,
+    Both,
+}
+
+/// `main` reads a `Pair` out of a whole nothing else holds — the first element of a list of two, or the first slot of a product holding two — and switches on the `Pair`'s tag: at `1` it builds a `Pair` of its slot beside it dying, which nothing reads after, and otherwise hands the whole on, as a search that stops on a twig answers the twig and goes on with its list past an empty one. Where `between`, the arm that hands the whole on builds a `Pair` first; `handed` is which of the switch's edges hand the part on.
+fn passed_over(element: bool, between: bool, handed: Handed) -> Module {
     module_with(|module| {
         let pair = module.add_row(Row {
             debug_name: Some("Pair".into()),
@@ -1569,6 +1577,11 @@ fn passed_over(element: bool, between: bool) -> Module {
         });
         let [v, p, q, whole, e, tag, f, n] = ["v", "p", "q", "whole", "e", "tag", "f", "n"]
             .map(|name| module.add_value(Some(name.into())));
+        // The parameters the arms receive the part at, minted only where an edge hands it.
+        let taken_part =
+            (handed != Handed::Neither).then(|| module.add_value(Some("taken".into())));
+        let passed_part = (handed == Handed::Both).then(|| module.add_value(Some("passed".into())));
+        let taking = taken_part.unwrap_or(e);
 
         // The arm that takes the part: a `Pair` of its slot, built beside it dying.
         let taken = module.add_node(halt(vec![Atom::Value(n)]));
@@ -1580,7 +1593,7 @@ fn passed_over(element: bool, between: bool) -> Module {
         let read_slot = module.add_node(Node::LetIntrinsic {
             result: f,
             op: Intrinsic::RowGet(pair, 1),
-            args: vec![Atom::Value(e)],
+            args: vec![Atom::Value(taking)],
             next: build,
         });
         let take = module.reserve_continuation();
@@ -1589,22 +1602,33 @@ fn passed_over(element: bool, between: bool) -> Module {
             Continuation {
                 lineage: None,
                 debug_name: None,
-                params: vec![],
+                params: taken_part.into_iter().collect(),
                 body: read_slot,
                 terminates: false,
             },
         );
 
-        // The arm that passes it over: the whole handed on.
-        let handed = module.add_node(halt(vec![Atom::Value(whole)]));
+        // The arm that passes it over: the whole handed on, and the part beside it where the edge hands it.
+        let handed_on = match passed_part {
+            None => module.add_node(halt(vec![Atom::Value(whole)])),
+            Some(passed) => {
+                let both = module.add_value(Some("both".into()));
+                let halted = module.add_node(halt(vec![Atom::Value(both)]));
+                module.add_node(Node::LetValue {
+                    result: both,
+                    value: ValueExpr::Tuple(vec![Atom::Value(whole), Atom::Value(passed)]),
+                    next: halted,
+                })
+            }
+        };
         let pass_body = match between {
-            false => handed,
+            false => handed_on,
             true => {
                 let w = module.add_value(Some("w".into()));
                 module.add_node(Node::LetValue {
                     result: w,
                     value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
-                    next: handed,
+                    next: handed_on,
                 })
             }
         };
@@ -1614,24 +1638,28 @@ fn passed_over(element: bool, between: bool) -> Module {
             Continuation {
                 lineage: None,
                 debug_name: None,
-                params: vec![],
+                params: passed_part.into_iter().collect(),
                 body: pass_body,
                 terminates: false,
             },
         );
 
+        let on = |edge: bool| match edge {
+            true => vec![Atom::Value(e)],
+            false => vec![],
+        };
         let switch = module.add_node(Node::Switch {
             scrutinee: Atom::Value(tag),
             cases: std::collections::BTreeMap::from([(
                 1,
                 Edge {
                     target: take,
-                    args: vec![],
+                    args: on(handed != Handed::Neither),
                 },
             )]),
             default: Some(Edge {
                 target: pass,
-                args: vec![],
+                args: on(handed == Handed::Both),
             }),
         });
         let arms = module.add_node(Node::LetCont {
@@ -1691,7 +1719,7 @@ fn a_part_a_search_passes_over_is_held_by_nothing_else_where_it_is_taken() {
             true => "an element",
             false => "a field",
         };
-        let taken = passed_over(element, false);
+        let taken = passed_over(element, false, Handed::Neither);
         taken.verify().unwrap();
         assert_eq!(
             in_place(&taken).rows.len(),
@@ -1699,12 +1727,38 @@ fn a_part_a_search_passes_over_is_held_by_nothing_else_where_it_is_taken() {
             "{kind}, passed over\n{taken}"
         );
 
-        let built_between = passed_over(element, true);
+        let built_between = passed_over(element, true, Handed::Neither);
         built_between.verify().unwrap();
         assert_eq!(
             in_place(&built_between).rows.len(),
             0,
             "{kind}, a construction between\n{built_between}"
+        );
+    }
+}
+
+/// A part the switch hands out on the edge of the arm that takes it alone, while the other arm hands the whole on, is held by nothing else where it is taken: the switch consumes the part on an edge that never reaches the whole's hand-off, so nothing on the path that hands the whole on touches it, and the arm rebuilds it, as a search's loop answering the twig it stops on leaves the twig its own. Handed on both edges, the part goes on beside the whole, and nothing is rebuilt. Mutation-checked: reading a consumption on a switch's edge as the switch's, whichever edge it is on, rebuilds neither.
+#[test]
+fn a_part_handed_out_on_the_edge_that_takes_it_is_held_by_nothing_else_there() {
+    for element in [true, false] {
+        let kind = match element {
+            true => "an element",
+            false => "a field",
+        };
+        let taking = passed_over(element, false, Handed::Taking);
+        taking.verify().unwrap();
+        assert_eq!(
+            in_place(&taking).rows.len(),
+            1,
+            "{kind}, handed on the taking edge\n{taking}"
+        );
+
+        let both = passed_over(element, false, Handed::Both);
+        both.verify().unwrap();
+        assert_eq!(
+            in_place(&both).rows.len(),
+            0,
+            "{kind}, handed on both edges\n{both}"
         );
     }
 }

@@ -1689,34 +1689,6 @@ pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =
     | [h, ..r] => match h | empty() => lone(r) | leaf(_, _) => h | branch(_, _) => h end
     end;
 
---- Where the first twig that holds anything is; past the last where none does.
-pub let filled_at(@K: Type, @V: Type, l: List(Node(K, V))) -> Nat =
-    match l
-    | [] => 0
-    | [h, ..r] =>
-        match h
-        | empty() => filled_at(r) + 1
-        | leaf(_, _) => 0
-        | branch(_, _) => 0
-        end
-    end;
-
---- `pick` reads at `filled_at` what `lone` answers: a run reads one twig there and hands its list on nowhere after, so the twig it reads is the list's alone.
-pub let picked_lone(
-    @K: Type,
-    @V: Type,
-    l: List(Node(K, V)),
-) -> Eq()(pick(l, filled_at(l)), lone(l)) =
-    match l
-    | [] => Eq/refl()
-    | [h, ..r] =>
-        match h
-        | empty() => picked_lone(r)
-        | leaf(_, _) => Eq/refl()
-        | branch(_, _) => Eq/refl()
-        end
-    end;
-
 --- The first twig that holds anything is the one the first key's digit picks, and holds something.
 pub let lone_at(
     @K: Type,
@@ -2102,15 +2074,10 @@ pub let remove(
                                 Held {
                                     under = deeper_down(lone(l2), at, c, left.2, proved()),
                                     agree = (j, within) => left.3(j, proved()) } };
-                let same: Eq()(lone(l2), pick(l2, filled_at(l2))) = Eq/sym(picked_lone(l2));
                 Removed/kept(
-                    pick(l2, filled_at(l2)),
-                    @Eq/subst((m: Node(K, V)) => Stands(m, t), same, stands),
-                    @Eq/subst(
-                        (m: Node(K, V)) => Answers(m, t, k, Option/none()),
-                        same,
-                        (j) =>
-                            Eq/trans(collapsed(at, tw2, first_in(l), twigs2, one, j), answers2(j))),
+                    lone(l2),
+                    @stands,
+                    @(j) => Eq/trans(collapsed(at, tw2, first_in(l), twigs2, one, j), answers2(j)),
                     @Bool/True/qed())
             | false =>
                 let many: Bool/Holds(1 < count(List/set(l, i, Node/empty()))) =
