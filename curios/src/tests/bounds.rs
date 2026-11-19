@@ -376,6 +376,15 @@ const ROWS: &[Row] = &[
     ),
     claim("x: Nat, y: Nat, p: Holds(y < 3)", "Holds(x % 5 + y < 7)"),
     claim("x: Nat", "Holds(x / 64 + x / 64 <= x)"),
+    // A strict bound over a remainder from its loose one and a disequality: the disequality's split is on the goal's comparison, whose arms decide the goal, so the goal's own split is that one.
+    claim(
+        "k: Nat, at: Nat, d: Nat, p: Holds(d <= (k + at) % 16), q: Holds((k + at) % 16 != d)",
+        "Holds(d < (k + at) % 16)",
+    ),
+    claim(
+        "x: Nat, d: Nat, p: Holds(d <= x % 16), q: Holds(x % 16 != d)",
+        "Holds(d < x % 16)",
+    ),
     // A truncated subtraction of a remainder, under a guard on it: `Char/hex_digit`'s shape.
     body(
         "n: Nat",

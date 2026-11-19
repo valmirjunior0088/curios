@@ -261,6 +261,11 @@ impl Split {
         &self.guard
     }
 
+    /// The guard as reduction leaves it, by which a goal an arm of the split decides is told ([`Reader::open`]).
+    pub fn asked(&self) -> Option<&Term> {
+        self.asked.as_ref()
+    }
+
     pub fn holds(&self) -> &[Fact] {
         &self.holds
     }
@@ -1724,7 +1729,7 @@ pub fn stated_spellings(context: &mut Context, bound: &Term) -> Result<Vec<(Term
 }
 
 /// `term` reduced, and the reduct with the metavariables elaboration has solved substituted: an operand's own reduct, before its atoms are classed, which is what [`Facts::respell`] writes the operand in place of.
-fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
+pub fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
     let reduced = reduce_with(context, term)?;
     Ok(zonk_solved_term_metas(context, &reduced))
 }

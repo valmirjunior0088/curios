@@ -4,7 +4,7 @@
 //!
 //! **The direct form.** Where the goal is a `<` or a `<=` and its negation's multiplier is one, the facts' sum is the goal's view plus a constant `s >= 0` — `a <= b` and `b <= c` sum to `a <= c`, a strict fact to its successor's — and the sum with the literal fact `0 <= s` is the proof, one proposition with the goal by clause 5.
 //!
-//! **The refuting form.** Otherwise the proof splits on the goal's own decision, spelled as the bound's reduct spells it, so the arm's refinement is keyed where the bound reads it. The true arm is `True/qed()`. The false arm eliminates, with a zero-arm match, the sum of the facts with the negated goal — proved there by `le/of_not_lt` or `lt/of_not_le` at `qed` — whose type reduces to `False`: `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`.
+//! **The refuting form.** Otherwise the proof splits on the goal's own decision, spelled as the bound's reduct spells it, so the arm's refinement is keyed where the bound reads it, unless a case split it stands in decides that decision already, its guard the goal's comparison or its negation: there the arm's refinement answers the goal, and the proof is the arm the split would have taken. The true arm is `True/qed()`. The false arm eliminates, with a zero-arm match, the sum of the facts with the negated goal — proved there by `le/of_not_lt` or `lt/of_not_le` at `qed` — whose type reduces to `False`: `a <= b` from `2 * a <= 2 * b` scales the negated goal `b + 1 <= a` by two and leaves `2 <= 0`.
 //!
 //! **The absurd form.** Where the goal is itself an empty proposition, the sum of the facts is the proof, its type reducing to that proposition; where the facts refute each other without the goal, the sum is eliminated by a zero-arm match in the goal's place.
 //!
@@ -21,12 +21,12 @@
 use {
     super::{
         Certificate, Fact, Facts, Split, Target, add, eliminate, global, in_scope, literal,
-        multiply, order, qed, split,
+        multiply, order, qed, solved, split,
     },
-    crate::Context,
+    crate::{Context, answered_guard},
     curios_algebra::{Carrier, Operation},
     curios_common::Plicity,
-    curios_core::Term,
+    curios_core::{Intrinsic, Subterm, Term},
     curios_num::{Integer, Natural},
 };
 
@@ -47,13 +47,26 @@ pub fn write(
     certificate: &Certificate,
 ) -> Written {
     let lifted = goal.is_some_and(|goal| facts.lifted_over(&goal.form));
+    let asked = goal
+        .and_then(|goal| solved(context, &goal.decision).ok())
+        .filter(|asked| {
+            matches!(&**asked, Subterm::Intrinsic(operation) if !matches!(operation, Intrinsic::Bool(_)))
+        });
     let case = Case {
         goal,
         negated,
         common: facts.common(),
         lifted,
+        asked,
     };
-    match case.write(context, facts.facts().to_vec(), facts.splits(), certificate) {
+    let mut arms = Vec::new();
+    match case.write(
+        context,
+        facts.facts().to_vec(),
+        facts.splits(),
+        certificate,
+        &mut arms,
+    ) {
         Some(proof) => Written::Proof(proof),
         None => Written::Unwritten,
     }
@@ -67,35 +80,58 @@ struct Case<'a> {
     common: &'a [Fact],
     /// Whether the goal holds a remainder the facts were lifted over, which their sum does not meet.
     lifted: bool,
+    /// The goal's decision as reduction leaves it, by which an enclosing arm that decides it is told, as [`Split::asked`] tells a split.
+    asked: Option<Term>,
 }
 
 impl Case<'_> {
-    /// The proof of one case, over `facts`, the splits its path has not opened in `splits`: a split on the next one's guard, its arms each over its own facts, where the certificate opened it.
+    /// The proof of one case, over `facts`, the splits its path has not opened in `splits`: a split on the next one's guard, its arms each over its own facts, where the certificate opened it. `arms` is each split its path did open, by its guard as reduction leaves it, beside the case it took.
     fn write(
         &self,
         context: &mut Context,
         facts: Vec<Fact>,
         splits: &[Split],
         certificate: &Certificate,
+        arms: &mut Vec<(Term, bool)>,
     ) -> Option<Term> {
         match certificate {
-            Certificate::Leaf(multipliers) => self.leaf(context, &facts, multipliers),
+            Certificate::Leaf(multipliers) => self.leaf(context, &facts, multipliers, arms),
             Certificate::Common(multipliers) => {
                 let facts = facts.into_iter().chain(self.common.iter().cloned());
-                self.leaf(context, &facts.collect::<Vec<_>>(), multipliers)
+                self.leaf(context, &facts.collect::<Vec<_>>(), multipliers, arms)
             }
             Certificate::Split { holds, fails } => {
                 let (opened, later) = splits.split_first()?;
                 let with = |extra: &[Fact]| facts.iter().chain(extra).cloned().collect::<Vec<_>>();
-                let holds = self.write(context, with(opened.holds()), later, holds)?;
-                let fails = self.write(context, with(opened.fails()), later, fails)?;
+                let depth = arms.len();
+                arms.extend(opened.asked().map(|key| (key.clone(), true)));
+                let holds = self.write(context, with(opened.holds()), later, holds, arms)?;
+                arms.truncate(depth);
+                arms.extend(opened.asked().map(|key| (key.clone(), false)));
+                let fails = self.write(context, with(opened.fails()), later, fails, arms)?;
+                arms.truncate(depth);
                 Some(split(context, opened.guard(), fails, holds))
             }
         }
     }
 
-    /// The proof one combination stands for: `multipliers` over `facts`, the negation's last.
-    fn leaf(&self, context: &mut Context, facts: &[Fact], multipliers: &[Natural]) -> Option<Term> {
+    /// What an arm the leaf stands in says of the goal's decision, `arms` being the splits its path opened: where one's guard is the goal's comparison or its negation, the arm's refinement answers the goal, and a split on it there would have a case no value reaches.
+    fn decided(&self, context: &mut Context, arms: &[(Term, bool)]) -> Option<bool> {
+        let asked = self.asked.as_ref()?;
+        arms.iter().find_map(|(key, taken)| {
+            let said = answered_guard(context, asked, key).ok().flatten()?;
+            Some(said == *taken)
+        })
+    }
+
+    /// The proof one combination stands for: `multipliers` over `facts`, the negation's last, under the splits `arms` says its path opened.
+    fn leaf(
+        &self,
+        context: &mut Context,
+        facts: &[Fact],
+        multipliers: &[Natural],
+        arms: &[(Term, bool)],
+    ) -> Option<Term> {
         let (weights, goal_weights) = multipliers.split_at(facts.len());
         let used = weighted(facts, weights);
         let negations = weighted(self.negated, goal_weights);
@@ -129,11 +165,17 @@ impl Case<'_> {
             return sum(context, carrier, &used, slack(&used, goal));
         }
         let with_goal = used.into_iter().chain(negations).collect::<Vec<_>>();
-        sum(context, carrier, &with_goal, none).map(|refuted| {
-            let false_arm = eliminate(context, refuted);
-            // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
-            let true_arm = qed(context);
-            split(context, &goal.decision, false_arm, true_arm)
+        let decided = self.decided(context, arms);
+        sum(context, carrier, &with_goal, none).map(|refuted| match decided {
+            // An enclosing arm decides the goal: its refinement proves it, or the negation `qed` proves there.
+            Some(true) => qed(context),
+            Some(false) => eliminate(context, refuted),
+            None => {
+                let false_arm = eliminate(context, refuted);
+                // Computed first: `split` borrows the context mutably, and so would an argument written in the same call.
+                let true_arm = qed(context);
+                split(context, &goal.decision, false_arm, true_arm)
+            }
         })
     }
 }
