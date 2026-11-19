@@ -26,8 +26,8 @@ curios-verdict = { workspace = true, features = ["test-support"] }
 curios-unit = { workspace = true }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
-# The program a witness's text is parsed as, the reader that makes a module of one written as Core text and the name of each of its refusals, and the spelling a certifier's refusal is printed in.
-curios-surface = { workspace = true, features = ["test-support"] }
+# The program a witness's text is parsed as, the reader that makes a module of one written as Core text, and the spelling a certifier's refusal is printed in.
+curios-surface = { workspace = true }
 # The binary's subcommands, `report` and `probe`.
 clap = { workspace = true }
 # The board's records, each a `metadata.toml`.
