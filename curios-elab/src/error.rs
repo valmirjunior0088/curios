@@ -301,6 +301,8 @@ pub enum Need {
     Embedding(EmbeddingDiagnosis),
     /// To execute what closes a program: the goal is the registry's `Program`, at this type.
     Closing(Box<Term>),
+    /// To execute a description of a test as a program: the goal is the registry's `Program` at the registry's `Test`, which a `test` declaration states and only `curios test` runs.
+    Testing(Box<Term>),
     /// To add two texts: the goal is the registry's `Add` at `/std/Str`, which is no operator's carrier.
     Joining(Box<Joining>),
 }
@@ -507,7 +509,7 @@ macro_rules! shown_terms {
                         $visit(source);
                         $visit(target);
                     }
-                    Some(Need::Closing(type_)) => $visit(type_),
+                    Some(Need::Closing(type_) | Need::Testing(type_)) => $visit(type_),
                     Some(Need::Joining(_)) | None => {}
                 }
             }

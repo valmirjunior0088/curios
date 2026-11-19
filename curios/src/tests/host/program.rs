@@ -81,23 +81,18 @@ fn a_failure_of_the_programs_own_type_is_written_as_that_type_is_shown() {
     assert_eq!(errors, b"it broke\n");
 }
 
+/// A description of a test closes no program: its runner is its one presenter, so the refusal says where a test is declared and what runs it.
 #[test]
-fn a_test_that_closes_a_program_is_reported_and_decides_its_status() {
-    for (claim, status, report) in [
-        ("1 + 1 == 2", 0, "program: passed\n"),
-        (
-            "1 + 1 == 3",
-            1,
-            "program: failed\n  the condition was false\n",
-        ),
-    ] {
-        let source = fill!("use /std/{Nat, Test};\nTest/assert(${claim})\n", claim);
-        let (code, output, errors) = ended(&source, &[]);
+fn a_test_closes_no_program_and_is_told_where_one_is_declared() {
+    let error = typecheck("use /std/{Nat, Test};\nTest/assert(1 + 1 == 2)\n")
+        .expect_err("nothing executes a test");
 
-        assert_eq!(code, status, "{claim}");
-        assert_eq!(output, report.as_bytes(), "{claim}");
-        assert_eq!(errors, b"", "{claim}");
-    }
+    assert!(
+        error.contains(
+            "this one's type is `Test({})`\n│  a description of a test is declared, `test name = ...;`, and run by `curios test`"
+        ),
+        "{error}"
+    );
 }
 
 /// Each way a program closes is executed at its own type: an arm that prints and an arm that may fail stand in one `match`, which states no type for both.
@@ -157,7 +152,7 @@ fn a_term_nothing_executes_is_refused_as_what_closes_the_program() {
 
         assert!(
             error.contains(&format!(
-                "a program closes with a term whose type has one\n│  this one's type is {type_}"
+                "a program closes with a term whose type has one\n│  this one's type is `{type_}`"
             )),
             "{closing}: {error}"
         );

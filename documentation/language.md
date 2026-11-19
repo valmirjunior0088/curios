@@ -893,8 +893,9 @@ The final term is performed through `/std/Program`, the concept whose `execute` 
 
 - an `Io({})` is the program itself; no other result has a witness, so a final term that computes a value discards it explicitly;
 - a `Try(Io, E, {})` whose `E` has a `Show` witness is run, and a failure is written to standard error as it shows and ends the program with status `1`;
-- a `/std/Test({})` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
 - a `()` is an empty program.
+
+A `/std/Test({})` closes no program: a test is [declared](#test-declarations) and run by `curios test`, which presents what it found.
 
 Each tail of the final term closes the program: a tail is reached through a local `let`, and through a `match` to each of its arms, so two arms may close one program at two types. A written goal is asked at `Io({})`. A program's function keeps its own result type and is called as the final term, which `/std/Program` performs with no `Program/execute` written:
 

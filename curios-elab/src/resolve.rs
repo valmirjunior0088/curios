@@ -178,7 +178,7 @@ fn diagnose_open(context: &mut Reporting, goal: &Term) -> Option<Box<OpenKey>> {
 fn diagnose_need(context: &mut Reporting, goal: &Term, site: Option<&Extent>) -> Option<Need> {
     diagnose_embedding(context, goal, site)
         .map(Need::Embedding)
-        .or_else(|| diagnose_closing(context, goal).map(Need::Closing))
+        .or_else(|| diagnose_closing(context, goal))
         .or_else(|| diagnose_joining(context, goal).map(Need::Joining))
 }
 
@@ -212,21 +212,31 @@ fn diagnose_joining(context: &mut Reporting, goal: &Term) -> Option<Box<Joining>
     })
 }
 
-/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes.
-fn diagnose_closing(context: &mut Reporting, goal: &Term) -> Option<Box<Term>> {
+/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes — a description of a test among them, which only `curios test` runs.
+fn diagnose_closing(context: &mut Reporting, goal: &Term) -> Option<Need> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let Global::Authored(concept_path) = &concept_name else {
         return None;
     };
-    if *concept_path != context.syntax().program.execute.concept.qualifier() {
+    let syntax = context.syntax();
+    if *concept_path != syntax.program.execute.concept.qualifier() {
         return None;
     }
     let [closing] = params.as_slice() else {
         return None;
     };
+    let test = HeadKey::Nominal(Global::Authored(syntax.test.test_type.qualifier()));
+    let tested = reduce_with(context, closing)
+        .ok()
+        .and_then(|closing| HeadKey::of_whnf(&closing))
+        .is_some_and(|head| head == test);
+    let type_ = Box::new(resolved_for_display(context, closing));
 
-    Some(Box::new(resolved_for_display(context, closing)))
+    Some(match tested {
+        true => Need::Testing(type_),
+        false => Need::Closing(type_),
+    })
 }
 
 /// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Where the goal came from an auto-lift at `site`, the monads are the ones it named as written ([`EmbeddingSite`](crate::EmbeddingSite)), and so is the goal the report leads with. Error-path only; a diagnosis that cannot be computed is simply absent.

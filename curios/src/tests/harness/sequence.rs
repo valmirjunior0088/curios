@@ -6,7 +6,8 @@ use crate::tests::test_support::*;
 #[test]
 fn a_function_returning_test_sequences_assertions_and_io() {
     assert_eq!(
-        run(r#"
+        run_tests_program(
+            r#"
         use /std/{Io, Test, print};
         let check() -> Test({}) =
             let _ = Test/assert(true)!;
@@ -14,9 +15,11 @@ fn a_function_returning_test_sequences_assertions_and_io() {
             let _ = Io/yield()!;
             let _ = Test/assert(true)!;
             Test/assert(true);
-        check()
-    "#),
-        b"before|program: passed\n"
+        test checked = check();
+        ()
+    "#
+        ),
+        b"before|/checked: passed\n"
     );
 }
 
@@ -75,7 +78,8 @@ fn a_test_declaration_requires_a_terminal_unit_payload() {
 #[test]
 fn successful_payloads_flow_through_binding_and_identity_lifting() {
     assert_eq!(
-        run(r#"
+        run_tests_program(
+            r#"
         use /std/{Nat, Test};
         let answer() -> Test(Nat) =
             let first = Test/pure(20)!;
@@ -84,16 +88,19 @@ fn successful_payloads_flow_through_binding_and_identity_lifting() {
             let value = answer()!;
             let _ = Test/equal(value, 21)!;
             Test/assert(value * 2 == 42);
-        check()
-        "#),
-        b"program: passed\n"
+        test checked = check();
+        ()
+        "#
+        ),
+        b"/checked: passed\n"
     );
 }
 
 #[test]
 fn a_test_can_inspect_expected_errors_as_data() {
     assert_eq!(
-        run(r#"
+        run_tests_program(
+            r#"
         use /std/{Nat, Str, Io, Try, Test};
         let refused() -> Try(Io, Str, Nat) = Try/raise("expected refusal");
         let check() -> Test({}) =
@@ -102,23 +109,11 @@ fn a_test_can_inspect_expected_errors_as_data() {
             | success(_) => Test/fail("unexpected success")
             | failure(why) => Test/equal(why, "expected refusal")
             end;
-        check()
-        "#),
-        b"program: passed\n"
-    );
-}
-
-#[test]
-fn a_program_refuses_to_discard_a_nonunit_test_payload() {
-    let refusal = error(
-        r#"
-        use /std/{Nat, Test};
-        Test/pure(42)
-        "#,
-    );
-    assert!(
-        refusal.contains("inferred: `Nat`") && refusal.contains("expected: `{}`"),
-        "{refusal}"
+        test checked = check();
+        ()
+        "#
+        ),
+        b"/checked: passed\n"
     );
 }
 
@@ -131,7 +126,7 @@ fn a_try_embedding_requires_its_bases_declared_embedding() {
         let check() -> Test({}) =
             let value = action()!;
             Test/equal(value, 1);
-        check()
+        ()
     "#,
     );
     assert!(

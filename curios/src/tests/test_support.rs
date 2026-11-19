@@ -141,22 +141,46 @@ pub fn test_program(source: &str) -> TestProgram {
         .expect("fixture compiles as a test program")
 }
 
-/// [`test_program`], run under a fresh mock host with no arguments, returning what it wrote. That it ran to an answer is asserted, and what it answered is not: a fixture about a verdict reaches for the pieces itself.
+/// [`run_tests_under`] a fresh mock host.
 pub fn run_tests_program(source: &str) -> Vec<u8> {
-    let (module, foreigns) = test_program(source)
+    run_tests_under(source, MockHost::builder)
+}
+
+/// [`test_program`], each test it schedules run by its index, as the runner runs one, under a host `host` builds, and what each came to, in order: what the test wrote, then its path and `passed`, or `failed` and beneath it what it said went wrong, indented. That every test ran to an answer is asserted, and that a failing one's account is the last it wrote: a fixture about an exit or a trap reaches for the pieces itself.
+pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<u8> {
+    let program = test_program(source);
+    let (module, foreigns) = program
         .compiled
         .expect("a test program scheduling a test is built");
-
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 
-    let (system, io) = MockHost::builder().build();
-    let outcome = compiled.run_test(system, ForeignBindings::empty());
-    assert!(
-        matches!(outcome, Ok(TestEnd::Answered(_))),
-        "the test program ran to {outcome:?}"
-    );
+    let mut drawn = Vec::new();
+    let scheduled = program.modules.iter().flat_map(|module| &module.scheduled);
+    for (index, test) in scheduled.enumerate() {
+        let (system, io) = host().args(["prog".to_string(), index.to_string()]).build();
+        let outcome = compiled.run_test(system, ForeignBindings::empty());
+        let (output, errors) = (io.output(), io.errors());
+        let wrote = output
+            .strip_suffix(errors.as_slice())
+            .expect("a test writes on standard error only what went wrong, last");
 
-    io.output().to_vec()
+        drawn.extend_from_slice(wrote);
+        match outcome {
+            Ok(TestEnd::Answered(true)) => {
+                drawn.extend_from_slice(format!("{}: passed\n", test.join()).as_bytes());
+            }
+            Ok(TestEnd::Answered(false)) => {
+                drawn.extend_from_slice(format!("{}: failed\n", test.join()).as_bytes());
+                for line in errors.split_inclusive(|byte| *byte == b'\n') {
+                    drawn.extend_from_slice(b"  ");
+                    drawn.extend_from_slice(line);
+                }
+            }
+            outcome => panic!("`{}` ran to {outcome:?}", test.join()),
+        }
+    }
+
+    drawn
 }
 
 /// [`anf_optm`]'s sibling on the synthesized-tail path: the optimized ANF arena of `source` compiled as its own test program.

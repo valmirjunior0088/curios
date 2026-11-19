@@ -15,29 +15,25 @@ use {
 
 #[test]
 fn the_description_schedules_every_rung() {
-    // The end-to-end scheduler, through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the certifier checks and never reaches a runner.
+    // The end-to-end scheduler, through the library: each declared test run by its index, in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the certifier checks and never reaches a runner.
     assert_eq!(
-        run(r#"
-        use /std/{Nat, Str, Io, Eq, Test};
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Test};
         let double(n: Nat) -> Nat = n * 2;
-        let an_action() -> Test({}) =
+        test a_bool = Test/assert(1 + 1 == 2);
+        test doubling = Test/equal(double(21), 42);
+        test a_failing_equal = Test/equal(double(2), 5);
+        test an_action =
             let s = Io/pure("x")!;
             Test/equal(s, "x");
-        let a_failing_action() -> Test({}) =
+        test a_failing_action =
             let _ = Io/pure(())!;
             Test/assert(false);
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([
-                ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
-                ("/tests/doubling", () => Test/equal(double(21), 42)),
-                ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
-                ("/tests/an_action", () => an_action()),
-                ("/tests/a_failing_action", () => a_failing_action()),
-            ])!;
-            Io/pure(());
-        entry()
-        "#),
-        b"/tests/a_bool: passed\n/tests/doubling: passed\n/tests/a_failing_equal: failed\n  expected 5 but got 4\n/tests/an_action: passed\n/tests/a_failing_action: failed\n  the condition was false\n"
+        ()
+        "#
+        ),
+        b"/a_bool: passed\n/doubling: passed\n/a_failing_equal: failed\n  expected 5 but got 4\n/an_action: passed\n/a_failing_action: failed\n  the condition was false\n"
     );
 }
 
@@ -45,7 +41,8 @@ fn the_description_schedules_every_rung() {
 fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
     // `try`'s thunk is a `Try` region over `Io`: a fallible operation sequences bare, a success yields the inner test, and a raise is a failure carrying the error's `Show`.
     assert_eq!(
-        run(r#"
+        run_tests_program(
+            r#"
         use /std/{Nat, Str, Io, Try, Path, fs, Test};
         let exists() -> Try(Io, Io/Error, Test({})) =
             let here = fs/exists(Path/of_str("data"))!;
@@ -53,15 +50,12 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
         let missing() -> Try(Io, Io/Error, Test({})) =
             let m = fs/stat(Path/of_str("nope"))!;
             Try/pure(Test/assert(true));
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([
-                ("/tests/exists", () => Test/try(exists)),
-                ("/tests/missing", () => Test/try(missing)),
-            ])!;
-            Io/pure(());
-        entry()
-        "#),
-        b"/tests/exists: passed\n/tests/missing: failed\n  not_found\n"
+        test an_absent_file = Test/try(exists);
+        test a_missing_file = Test/try(missing);
+        ()
+        "#
+        ),
+        b"/an_absent_file: passed\n/a_missing_file: failed\n  not_found\n"
     );
 }
 
@@ -74,10 +68,7 @@ fn an_index_argument_selects_one_test() {
             r#"
             use /std/{Nat, Io, Test};
             let entry() -> /std/Io({}) =
-                let _ = Test/main([
-                    ("/tests/first", () => Test/assert(true)),
-                    ("/tests/second", () => Test/equal(1 + 1, 3)),
-                ])!;
+                let _ = Test/main([() => Test/assert(true), () => Test/equal(1 + 1, 3)])!;
                 Io/pure(());
             entry()
             "#,
@@ -98,14 +89,14 @@ fn an_index_argument_selects_one_test() {
 fn spelled_strings_are_quoted_and_escaped() {
     // `Show(Str)` is the identity, which made string reports ambiguous; `Spell` quotes and escapes, so `"a"` and `"a\n"` are distinct report text.
     assert_eq!(
-        run(r#"
-        use /std/{Str, Io, Test};
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([("/tests/newline", () => Test/equal("a\n", "a"))])!;
-            Io/pure(());
-        entry()
-        "#),
-        b"/tests/newline: failed\n  expected \"a\" but got \"a\\n\"\n"
+        run_tests_program(
+            r#"
+        use /std/{Str, Test};
+        test newline = Test/equal("a\n", "a");
+        ()
+        "#
+        ),
+        b"/newline: failed\n  expected \"a\" but got \"a\\n\"\n"
     );
 }
 
@@ -113,23 +104,21 @@ fn spelled_strings_are_quoted_and_escaped() {
 fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
     // `Test/all` at every rung: passing verdicts conjoin to a passing verdict, the empty conjunction included; the first failure is the report, positioned; an action performs before what follows it is consulted, and a failure before an action leaves the action unrun.
     assert_eq!(
-        run(r#"
-        use /std/{Nat, Str, Io, Eq, Test};
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Test};
         let counter() -> Test({}) =
             let _ = /std/print("performed\n")!;
             Test/assert(true);
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([
-                ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
-                ("/tests/empty", () => Test/all([])),
-                ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
-                ("/tests/action_then_verdict", () => Test/all([counter(), Test/assert(true)])),
-                ("/tests/failure_before_action", () => Test/all([Test/assert(false), counter()])),
-            ])!;
-            Io/pure(());
-        entry()
-        "#),
-        b"/tests/passing: passed\n/tests/empty: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
+        test passing = Test/all([Test/equal(1, 1), Test/equal(2, 2)]);
+        test empty = Test/all([]);
+        test first_failure = Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)]);
+        test action_then_verdict = Test/all([counter(), Test/assert(true)]);
+        test failure_before_action = Test/all([Test/assert(false), counter()]);
+        ()
+        "#
+        ),
+        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/action_then_verdict: passed\n/failure_before_action: failed\n  case 0: the condition was false\n"
     );
 }
 
@@ -276,14 +265,14 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
 fn a_structural_fixture_compares_and_spells() {
     // `Option`, `Result` and `Ordering` carry `Eql` and `Spell`, so `Test/equal` works on them out of the box.
     assert_eq!(
-        run(r#"
-        use /std/{Nat, Io, Option, Test};
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([("/tests/options", () => Test/equal(Option/some(3), Option/some(4)))])!;
-            Io/pure(());
-        entry()
-        "#),
-        b"/tests/options: failed\n  expected Option/some(4) but got Option/some(3)\n"
+        run_tests_program(
+            r#"
+        use /std/{Nat, Option, Test};
+        test options = Test/equal(Option/some(3), Option/some(4));
+        ()
+        "#
+        ),
+        b"/options: failed\n  expected Option/some(4) but got Option/some(3)\n"
     );
 }
 

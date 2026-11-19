@@ -1948,8 +1948,16 @@ impl Displayed<'_> {
                         f.stating("a program closes with a term whose type has one");
                         f.stating(format_args!(
                             "this one's type is {}",
-                            type_.spelled(spelling)
+                            Code(type_.spelled(spelling))
                         ));
+                    }
+                    Some(Need::Testing(type_)) => {
+                        f.stating("a program closes with a term whose type has one");
+                        f.stating(format_args!(
+                            "this one's type is {}",
+                            Code(type_.spelled(spelling))
+                        ));
+                        f.stating("a description of a test is declared, `test name = ...;`, and run by `curios test`");
                     }
                     Some(Need::Embedding(diagnosis)) => {
                         let source = diagnosis.source.spelled(spelling).to_string();

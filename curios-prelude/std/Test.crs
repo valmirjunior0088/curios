@@ -1,15 +1,7 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Fmt, Program,
-    print, print_err, Proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Fmt, print_err,
+    Proc};
 use /std/ops/{Eql};
 use /std/time/{Duration};
-
---- How a terminal test came out.
-pub induct Verdict: pub Type
---- It held.
-| passed()
---- It did not, with what went wrong.
-| failed(Str)
-end
 
 struct Failure: Type {
     message: Str,
@@ -137,17 +129,6 @@ pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
 let message(failure: Failure) -> Str =
     Str/join(": ", [..failure.contexts, failure.message]);
 
-let report(name: Str, test: Test({})) -> Io(Bool) =
-    let result = finish(test)!;
-    match result
-    | success(()) =>
-        let () = print(Str/concat(name, ": passed\n"))!;
-        Io/pure(true)
-    | failure(failure) =>
-        let () = Fmt/print("%: failed\n  %\n")(name)(message(failure))!;
-        Io/pure(false)
-    end;
-
 -- The one test a runner selected is named by the runner, which says how it ended: the test says only what went wrong.
 let answer(test: Test({})) -> Io(Bool) =
     let result = finish(test)!;
@@ -158,39 +139,24 @@ let answer(test: Test({})) -> Io(Bool) =
         Io/pure(false)
     end;
 
-satisfy Program(Test({})) {
-    execute(test) =
-        let held = report("program", test)!;
-        match held | true => Io/pure(()) | false => Proc/exit(1) end,
-}
-
 let parse_index(raw: Bytes) -> Option(Nat) =
     match Str/of_bytes(raw)
     | success(s) => Nat/of_str(s)
     | failure(_) => Option/none()
     end;
 
-let run_all(tests: List({Str, () -> Test({})})) -> Io(Bool) =
-    List/fold(
-        tests,
-        Io/pure(true),
-        ((name, body), acc) =>
-            let earlier = acc!;
-            let here = report(name, body())!;
-            Io/pure(earlier && here));
-
---- Run the selected test, or every named test in order, and answer whether each one held. A selected test that fails says what went wrong on standard error and nothing else, since whoever selected it names it; run in order, each is reported under its name on standard output.
-pub let main(tests: List({Str, () -> Test({})})) -> Io(Bool) =
+--- Run the test the runner selected, its index in `tests` the program's first argument, and answer whether it held. A test that fails says what went wrong on standard error and nothing else, since the runner names it and says how it ended.
+pub let main(tests: List(() -> Test({}))) -> Io(Bool) =
     let arguments = Proc/args()!;
     match List/try_get(arguments, 1)
     | some(raw) =>
         match parse_index(raw)
         | some(index) =>
             match List/try_get(tests, index)
-            | some((_, body)) => answer(body())
+            | some(body) => answer(body())
             | none() => Io/pure(false)
             end
         | none() => Io/pure(false)
         end
-    | none() => run_all(tests)
+    | none() => Io/pure(false)
     end;
