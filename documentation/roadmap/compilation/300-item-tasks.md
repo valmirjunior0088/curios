@@ -85,7 +85,7 @@ Parallelizing the ANF and CPS optimizers or the emitter beyond Cranelift; cachin
 
 ## Completion and retirement
 
-- A compilation is the same bytes for every number of workers, and the gate holds it.
+- A compilation is the same bytes for every number of workers, and the handoff holds it.
 - The prelude build and a program's compilation schedule ready independent work on the workers the product supplies, with measured end-to-end speedup, single-worker overhead, memory and remaining serial shares recorded. A dependency chain is not promised to occupy every worker.
 
 Before this specification is deleted, its contracts are recorded in the owning crates' READMEs and rustdoc, its decision and its rejected alternatives are a design decision in `documentation/design/compilation/`, `.claude/rules/`' area routing names the executor, no reference to this filename remains.

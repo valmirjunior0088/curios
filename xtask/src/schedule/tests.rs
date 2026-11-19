@@ -85,12 +85,12 @@ fn a_variable_given_runs_only_the_steps_that_use_it() {
 }
 
 #[test]
-fn the_gate_runs_every_subject_s_steps_in_the_order_it_names_them() {
+fn the_handoff_runs_every_subject_s_steps_in_the_order_it_names_them() {
     let tree = Tree::read().unwrap();
-    let gate = scheduled("gate", &[]);
+    let handoff = scheduled("handoff", &[]);
 
-    assert_eq!(gate.first().map(String::as_str), Some("launcher build"));
-    assert_eq!(gate.last().map(String::as_str), Some("gate"));
+    assert_eq!(handoff.first().map(String::as_str), Some("launcher build"));
+    assert_eq!(handoff.last().map(String::as_str), Some("handoff"));
     for subject in [
         "launcher",
         "workspace",
@@ -105,12 +105,15 @@ fn the_gate_runs_every_subject_s_steps_in_the_order_it_names_them() {
         "tools",
     ] {
         for step in tree.steps_of(&[subject.to_string()]) {
-            assert!(gate.contains(&spelled(&tree.steps[step].name)), "{subject}");
+            assert!(
+                handoff.contains(&spelled(&tree.steps[step].name)),
+                "{subject}"
+            );
         }
     }
     for subject in ["format", "native", "profile"] {
         assert!(
-            !gate
+            !handoff
                 .iter()
                 .any(|step| step.starts_with(&format!("{subject} "))),
             "{subject}"

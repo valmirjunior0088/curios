@@ -16,7 +16,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
-# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_gate_runs_has_a_job` there holds that these lines parse and together run every step the gate runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; every other program's version is the task files' `programs`, which `./.github/actions/pins` reads into a job's environment before the steps that install it.
+# A job sets up a machine and runs tasks of one subject, each a `cargo xtask` line, which runs first what its steps require and consume. Which steps there are, and what each runs, is the task files' in `xtask/tasks.toml` and `xtask/tasks/`; `every_step_the_handoff_runs_has_a_job` there holds that these lines parse and together run every step the handoff runs. A subject's `lint` holds its formatting, so no line writes or checks it apart. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; every other program's version is the task files' `programs`, which `./.github/actions/pins` reads into a job's environment before the steps that install it.
 jobs:
   workspace:
     name: Workspace

@@ -1,36 +1,37 @@
 ---
-description: Run the hand-off gate — `cargo xtask gate`, every subject's steps one after another — and report each step's result
+description: Run the handoff — `cargo xtask handoff`, every subject's steps one after another — and report each step's result
 allowed-tools: Read, Edit, Write, Grep, Glob, Monitor, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*), Bash(systemd-run:*)
+disable-model-invocation: true
 ---
 
-The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`; what the steps are, and what each runs after, is the task files', `xtask/tasks.toml` and `xtask/tasks/`, and `cargo xtask <subject> --help` prints a subject's.
+The handoff: the check work passes before it lands. Why it holds these steps and no others is `documentation/design/every-handoff-step-catches-what-no-other-step-does.md`; what the steps are, and what each runs after, is the task files', `xtask/tasks.toml` and `xtask/tasks/`, and `cargo xtask <subject> --help` prints a subject's.
 
 ## What it runs
 
-One command, `cargo xtask gate`: every step of the subjects the gate requires, one after another in the order it names them, each after what it requires and consumes; each subject's `lint` holds its formatting, and nothing writes. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the last line names what failed and what was not run.
+One command, `cargo xtask handoff`: every step of the subjects the handoff requires, one after another in the order it names them, each after what it requires and consumes; each subject's `lint` holds its formatting, and nothing writes. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the last line names what failed and what was not run.
 
 It needs, beyond cargo, nextest, Biome, Node, `npm` and the `wasm-bindgen` program, and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs. A step that lacks a tool, or has one the `programs` of `xtask/tasks.toml` do not admit, refuses before it builds, naming what installs it.
 
 ## Before it runs
 
-The checkout is the gate's own while it runs: no other session builds in it or shares it, so whatever it waits on is its own. The gate holds the history it runs over, so that history is final before it starts: the tree clean, `git status --short` printing nothing, and every fixup folded into the commit it belongs to, `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`, with any commit a document cites by its hash restated where the fold moved it. A branch of a worktree is rebased onto local `main` once, here, and gated as rebased; where it does not apply cleanly, say so and gate what the rebase made.
+The checkout is the handoff's own while it runs: no other session builds in it or shares it, so whatever it waits on is its own. The handoff holds the history it runs over, so that history is final before it starts: the tree clean, `git status --short` printing nothing, and every fixup folded into the commit it belongs to, `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`, with any commit a document cites by its hash restated where the fold moved it. A branch of a worktree is rebased onto local `main` once, here, and checked as rebased; where it does not apply cleanly, say so and check what the rebase made.
 
 ## How it runs
 
-The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask gate > <scratchpad>/gate.log 2>&1`: the scope caps what the gate's changed code may hold, so a run that outgrows it ends rather than taking the machine, and standard error, where the gate writes each step's verdict, joins its output in the log. Nothing follows the gate in the command, so its exit code is the gate's, and the task's notification reports it; where the gate fails, the log's last line names what failed and what was not run. Never detach with `&`, and never add a shell that waits on another.
+The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask handoff > <scratchpad>/handoff.log 2>&1`: the scope caps what the handoff's changed code may hold, so a run that outgrows it ends rather than taking the machine, and standard error, where the handoff writes each step's verdict, joins its output in the log. Nothing follows the handoff in the command, so its exit code is the handoff's, and the task's notification reports it; where the handoff fails, the log's last line names what failed and what was not run. Never detach with `&`, and never add a shell that waits on another.
 
-Beside it, one monitor reports each step as it ends: an event for each line of the log that ends a step or the gate, in order, and an exit once the gate's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the gate runs on, starting past the lines it already reported:
+Beside it, one monitor reports each step as it ends: an event for each line of the log that ends a step or the handoff, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
 
 ```sh
 lines=' (passed|failed) in |not run|^failed:'
-seen=$(grep -cE "$lines" <scratchpad>/gate.log 2>/dev/null || true)
+seen=$(grep -cE "$lines" <scratchpad>/handoff.log 2>/dev/null || true)
 seen=${seen:-0}
 while true; do
-  running=$(pgrep -f 'xtask gate' > /dev/null && echo yes || echo no)
-  n=$(grep -cE "$lines" <scratchpad>/gate.log 2>/dev/null || true)
+  running=$(pgrep -f 'xtask handoff' > /dev/null && echo yes || echo no)
+  n=$(grep -cE "$lines" <scratchpad>/handoff.log 2>/dev/null || true)
   n=${n:-0}
   if [ "$n" -gt "$seen" ]; then
-    grep -E "$lines" <scratchpad>/gate.log | sed -n "$((seen+1)),${n}p"
+    grep -E "$lines" <scratchpad>/handoff.log | sed -n "$((seen+1)),${n}p"
     seen=$n
   fi
   [ "$running" = no ] && break
@@ -38,9 +39,9 @@ while true; do
 done
 ```
 
-The process is looked for before the log is read, so the lines a gate writes as it exits are reported before the monitor stops.
+The process is looked for before the log is read, so the lines a handoff writes as it exits are reported before the monitor stops.
 
-Do other work between events. A step that fails is read as its event arrives and fixed then, as the next section says, while the steps that read nothing of it run on: the fix and its reruns wait only for the failed step to end, since a rebuild under a step still running overwrites what it launches, and the gate is never stopped for one. The whole log is read once the gate has exited.
+Do other work between events. A step that fails is read as its event arrives and fixed then, as the next section says, while the steps that read nothing of it run on: the fix and its reruns wait only for the failed step to end, since a rebuild under a step still running overwrites what it launches, and the handoff is never stopped for one. The whole log is read once the handoff has exited.
 
 ## When a step fails
 
@@ -58,4 +59,4 @@ A fix is committed as a fixup of the commit the fault belongs to, `git commit --
 
 ## Report
 
-The gate's exit code, as the task's notification gives it, and each step that failed or was not run; each failure with its cause, the commit that introduced it, and its fix or, where it was left, its evidence; and, where it matters, each step's time by name. Never quote a whole-gate total.
+The handoff's exit code, as the task's notification gives it, and each step that failed or was not run; each failure with its cause, the commit that introduced it, and its fix or, where it was left, its evidence; and, where it matters, each step's time by name. Never quote a whole-handoff total.

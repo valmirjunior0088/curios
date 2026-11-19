@@ -8,7 +8,7 @@ Curios is a dependently typed functional language implemented in Rust 2024, comp
 - A problem you were not asked to solve is a finding: state it once, with its evidence, and the user decides whether it becomes work. Don't reopen settled decisions.
 - Where more than one design is reasonable, present the alternatives with their trade-offs, recommend one, and wait.
 - Uncommitted changes are the user's, and other sessions commit to `main` while you work: never revert, reformat or stage what you did not write, and stage explicit paths. Never discard work with a reset or a checkout.
-- Commit only when asked: one imperative, capitalized line — no body, trailer or co-author — on `main`.
+- Commit only when asked: one imperative, capitalized line, a few words naming the change — no body, trailer or co-author — on `main`.
 - Don't delegate to subagents unless asked. Stop only your own processes, by exact PID.
 
 ## The compiler is the interface
@@ -26,7 +26,7 @@ Every other fact is on disk: `documentation/language.md` for the surface languag
 ## Build and check
 
 - `cargo xtask <task>` runs a task of the files `xtask/tasks.toml` and `xtask/tasks/*.toml`, where every step is stated once: a path such as `cargo xtask workspace lint` names a group or a step, a group runs every step it holds, and `--help` at any depth lists what is there. `cargo xtask launcher build` builds the launcher the compiler embeds, once per checkout.
-- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint`, which holds the formatting too, after `cargo xtask format`, plus the change's own tests by name, `cargo xtask workspace test -E 'test(~<name>)'`. The lint already elaborates, erases and certifies all of `/std`, so a Text, Core, ANF or certifier change needs nothing more; a change to `curios-cps`, `curios-emit` or `curios-wasm` adds the corpus tests that reach it, `curios-prelude`'s. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
+- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint`, which holds the formatting too, after `cargo xtask format`, plus the change's own tests by name, `cargo xtask workspace test -E 'test(~<name>)'`. The lint already elaborates, erases and certifies all of `/std`, so a Text, Core, ANF or certifier change needs nothing more; a change to `curios-cps`, `curios-emit` or `curios-wasm` adds the corpus tests that reach it, `curios-prelude`'s; documents and doc comments alone take `cargo xtask format` and `cargo xtask docs build`, and no lint. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
 - Run a long command as a tracked background task writing `cmd > log 2>&1`, with nothing after it, so the task's notification reports the command's own exit code. Never detach one with `&` or add a shell that waits on it.
 - Keep the feature set constant within a session: every feature builds a second prelude archive, and the two evict each other. `cargo xtask instrumented lint` and `docs build` are the steps that build with every feature.
 

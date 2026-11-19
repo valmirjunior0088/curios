@@ -20,7 +20,7 @@ fn a_path_names_a_task_at_any_depth() {
         "workspace",
         "workspace lint",
         "workspace lint clippy",
-        "gate",
+        "handoff",
     ] {
         assert_eq!(
             parsed(&path.split(' ').collect::<Vec<_>>()).unwrap(),

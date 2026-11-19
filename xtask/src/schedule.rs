@@ -2,7 +2,7 @@
 //!
 //! **A run is what was asked and everything it runs after.** Asking for a group asks for every step it holds; a variable the command line gives keeps of those only the steps that use it. Each step brings what it requires and the producer of each file it consumes, and those bring theirs, so the schedule is the whole closure, known before anything runs.
 //!
-//! **Order is the order things are written, after what they run after.** A step is placed once everything it runs after is, and otherwise in the order the tree reaches it: an asked group's steps as its file writes them, a step's requirements as its `requires` lists them. So the gate runs its subjects in the order it names them, and nothing about a step's place needs stating beyond what it reads.
+//! **Order is the order things are written, after what they run after.** A step is placed once everything it runs after is, and otherwise in the order the tree reaches it: an asked group's steps as its file writes them, a step's requirements as its `requires` lists them. So the handoff runs its subjects in the order it names them, and nothing about a step's place needs stating beyond what it reads.
 
 use {
     crate::{Given, Name, Tree},

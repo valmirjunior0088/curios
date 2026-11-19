@@ -1,19 +1,19 @@
 ---
-description: Work the roadmap with the user, in three layers — tackle every finding first, asking the user about each fix, with its reasoning, before it lands; refine the roadmap's documents whenever the findings leave a wait; and, beneath both and throughout, brainstorm with the user, take their steering and collect the notes, findings and directions the session turns up — acting on no specification's plan
+description: Triage the findings with the user, in three layers — tackle every finding first, asking the user about each fix, with its reasoning, before it lands; refine the rest of the roadmap whenever the findings leave a wait, every finding it turns up joining the queue; and, beneath both and throughout, brainstorm with the user, take their steering and collect the notes, findings and directions the session turns up — acting on no specification's plan
 argument-hint: "[directions in prose — areas, entries, specifications, what to take first or leave alone]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Bash(mkdir:*), Bash(python3:*), Bash(systemd-run:*), WebSearch, WebFetch, AskUserQuestion
 disable-model-invocation: true
 ---
 
-Work the roadmap with the user, who is present in the thread throughout. `$ARGUMENTS` is directions in prose — the areas or entries to take first, the specifications to look at, what to leave alone — and without any, every area is in scope. It is one session, with no hunters, no snapshot and no workflow: every answer here is the user's or the compiler's. To ask the user, anywhere below, is to call `AskUserQuestion`, the question interface Claude Code shows: recommendation first, any draft in an option's preview, and never a question left in prose, which a reader mid-run may not see; a probe asks the compiler. It runs until the user stops it.
+Triage the findings with the user, who is present in the thread throughout. `$ARGUMENTS` is directions in prose — the areas or entries to take first, the specifications to look at, what to leave alone — and without any, every area is in scope. It is one session, with no hunters, no snapshot and no workflow: every answer here is the user's or the compiler's. To ask the user, anywhere below, is to call `AskUserQuestion`, the question interface Claude Code shows: recommendation first, any draft in an option's preview, and never a question left in prose, which a reader mid-run may not see; a probe asks the compiler. It runs until the user stops it.
 
 ## The three layers
 
 1. **The findings, first and always.** Every findings entry is tackled, one at a time, the user asked about each fix before it lands.
-2. **The roadmap's documents, second.** Whenever the findings leave the session waiting — a build, a suite — the rest of the roadmap is refined.
+2. **The rest of the roadmap, second.** Whenever the findings leave the session waiting — a build, a suite — the rest of the roadmap is refined: the findings the queue has not reached as much as the specifications, and every finding the refining turns up joins the queue.
 3. **The conversation, beneath both and constant.** The user brainstorms and steers in the thread. Each direction is taken as it comes and folded into the work, without dropping either layer above it.
 
-Nothing else is done. The roadmap is its documents and never the plan they encode: a specification is refined and never acted upon — no stage of it delivered, no step of it taken, its next-step measurement included — so once every finding has been tackled the session goes on refining the documents.
+Nothing else is done. The roadmap is its documents and never the plan they encode: a specification is refined and never acted upon — no stage of it delivered, no step of it taken, its next-step measurement included — so once every finding has been tackled the session goes on refining the roadmap, and whatever finding that turns up is triaged in its turn.
 
 ## Read first
 
@@ -21,9 +21,11 @@ Nothing else is done. The roadmap is its documents and never the plan they encod
 
 ## Layer one: the findings
 
-**The inventory.** Before the first fix, read every findings file the directions reach, and say once, in a few lines, what each entry is: settled, its fix stated and its decisions made; waiting on an investigation, with what would settle it; waiting on a decision of the user's; or uncertain. Then say the order you take them in — a broken rule before a cost, a settled entry before one that needs a decision, the smaller before the larger where nothing else orders them — and why. Take every finding on with confidence, whatever its size.
+**The inventory.** Before the first fix, read every findings file the directions reach, and say once, in a few lines, what each entry is: settled, its fix stated and its decisions made; waiting on an investigation, with what would settle it; waiting on a decision of the user's; or uncertain. Give each the outcome it is headed for, one of five, since every entry the session takes ends in one: **fixed**, its fix landed; **lifted** into a specification; **merged** into a neighbour; **dropped**, the tree no longer bearing it out or it being worth too little; or **held** uncertain, with what would settle it.
 
-**Each entry, in that order:**
+**The queue.** Then say the order you take them in, and why: by the harm each does first — a proof of `False`, then a program compiled to do something else than it says, then a wrong refusal or a wrong report, then a cost, then wording — then a settled entry before one that needs a decision, and the smaller before the larger where nothing else orders them. That order is the queue, and the user may reorder it. A finding filed while the session runs, by it or by a commit another session makes, is classified as it arrives and joins the back of the queue, unless its harm or the user's word places it further up; after each landing, `git log` over the findings files shows what arrived. Take every finding on with confidence, whatever its size.
+
+**Each entry, in the queue's order:**
 
 - **Show it again first.** Reproduce it with this tree's compiler, as CLAUDE.md probes, before trusting a word of it; one the code no longer bears out is dropped, as `.claude/rules/findings.md` says.
 - **Question what it touches.** Read the rule it crosses and question the decision three times over: whether its reasoning still holds of the tree as it stands, and whether a revised rule would serve the language's philosophy better and let the code be written more plainly.
@@ -33,13 +35,11 @@ Nothing else is done. The roadmap is its documents and never the plan they encod
 
 **What may be lifted.** A finding, or a group of related ones, that is a well-bounded task of its own, encapsulated and defined enough to be planned as one, is better as a specification: ask the user, with its text exactly as it would be written.
 
-## Layer two: the roadmap's documents
+## Layer two: the rest of the roadmap
 
-Whenever the findings leave a wait, and never by waiting: refine the documents, findings and specifications alike.
+Whenever the findings leave a wait, and never by waiting: refine the rest of the roadmap — the findings entries the queue has not reached, in every area unless the directions leave one alone, and the specifications. A finding the refining turns up — an entry shown again as a defect it never named, a specification's claim that is a defect today, what a seed shows — is filed on the user's word and joins the queue.
 
 - **Citations and figures.** Each path, name, commit and figure a document states, looked up against the tree, and what is stale restated; a figure whose retaking is a specification's own next step is left to that step.
-
-Documentation lands in runs, one commit a run: the refinements, additions, removals and updates made between two fixes — an entry filed, restated, merged or dropped, a citation fixed, a decision the user made recorded, a specification renumbered — each amend the run's commit while it is the last one. A fix is a commit of its own, the change with its one finding deleted in the same commit, and the documentation after it begins the next run.
 - **The shape of the roadmap.** Each specification weighed against the numbering and its neighbours, and the user asked about any of these: **reprioritised**, renumbered within its hundred or moved to another — lifted to `1nn` where a rule is broken, or a benefit is beyond doubt with one way to take it and little left to land; **merged** with one related closely enough to be one piece of work; **dropped** where it is worth too little at its priority to keep; **updated** where what it states has moved — its facts, its next step, its stages, its decisions. A findings entry is weighed the same way: merged with its neighbour, or lifted, alone or with others, into a specification. And what is missing is named.
 - **Decisions questioned**, from more than one side, with the peers surveyed.
 - **What is not written down yet**, hunted from a seed that states a theory a probe can ask:
@@ -50,7 +50,9 @@ Documentation lands in runs, one commit a run: the refinements, additions, remov
   - **A form that must not matter.** Two spellings the theory judges alike — a call direct and through an instance, a term under an arm and outside it, eta-expanded and not, bound by a `let` and inlined — and a verdict that moves with the spelling names the rule.
   - **A check waived.** An `#[allow]` or an `#[expect]` whose reason has lapsed, or never held, at its site or a sibling's.
 
-  The user is asked about what a seed shows, and on their word it is filed as `.claude/rules/findings.md` files a finding, in a commit of its own, and taken in its turn; a proof of `False` is filed as an open ticket the moment it is shown, as `.claude/commands/hunt-soundness.md` files one, before anything else.
+  The user is asked about what a seed shows, and on their word it is filed as `.claude/rules/findings.md` files a finding, in a commit of its own, and joins the queue; a proof of `False` is filed as an open ticket the moment it is shown, as `.claude/commands/hunt-false.md` files one, before anything else.
+
+Documentation lands in runs, one commit a run: the refinements, additions, removals and updates made between two fixes — an entry filed, restated, merged or dropped, a citation fixed, a decision the user made recorded, a specification renumbered — each amend the run's commit while it is the last one. A fix is a commit of its own, the change with its one finding deleted in the same commit, and the documentation after it begins the next run.
 
 ## Layer three: the conversation
 
@@ -68,4 +70,4 @@ A long command runs in the background, as CLAUDE.md runs one, and the next piece
 
 ## A pause
 
-There is no close: the session runs until the user stops it. Where it pauses, say what was committed, by its subject, what is in flight, and which questions are open.
+There is no close: the session runs until the user stops it. Where it pauses, say what was committed, by its subject, what is in flight, and which questions are open, and give the queue as it stands: the ready entries in order, and what each held entry waits on.

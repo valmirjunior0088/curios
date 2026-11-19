@@ -2,6 +2,7 @@
 description: Teach Curios by what its compiler answers, until the learner has resolved, unaided, a refusal that would have been a crash
 argument-hint: "[optional — the language you know best, and anything you want from the session]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash(./target/release/curios:*), Bash(curios:*), Bash(git status:*)
+disable-model-invocation: true
 ---
 
 Teach Curios to the person in front of you: a developer, or someone becoming one, who came to see what the language is for and who skims what a model writes.

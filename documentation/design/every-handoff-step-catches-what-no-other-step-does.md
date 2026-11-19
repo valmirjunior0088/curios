@@ -1,6 +1,6 @@
-# Every gate step catches what no other step does
+# Every handoff step catches what no other step does
 
-**Decision.** The hand-off gate, `/run-full-gate` (`.claude/commands/run-full-gate.md`), which runs `cargo xtask gate`, is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated in its `description` in the task files, `xtask/tasks.toml` and `xtask/tasks/`, which is also its help line, and a step added later states its own first. That the steps are task files, and what the runner reads off them, is [`xtask`'s own decision](../../xtask/README.md).
+**Decision.** The handoff, the check work passes before it lands — `/run-handoff` (`.claude/commands/run-handoff.md`), which runs `cargo xtask handoff` — is a minimal set: a step earns its place by being the only thing that fails when something specific is wrong, and a step whose findings another reports is removed rather than kept for reassurance. Each step's sole catch is stated in its `description` in the task files, `xtask/tasks.toml` and `xtask/tasks/`, which is also its help line, and a step added later states its own first. That the steps are task files, and what the runner reads off them, is [`xtask`'s own decision](../../xtask/README.md).
 
 What a description is too short to say:
 
@@ -11,12 +11,12 @@ What a description is too short to say:
 - **`docs build`** alone runs rustdoc, under `[workspace.lints.rustdoc] all = "deny"` inherited through `[lints] workspace = true`, over private items because the crates state their invariants on `pub(crate)` ones, and over every feature; a broken intra-doc link is checked nowhere else.
 - **`compiler test`** alone runs a page the compiler wrote: the compiler as it is released, `compiler build`'s, compiles fixture packages with `--target browser`, and Node imports each page's loader and starts it with the program's bytes, its gateways answering their rows and the query its arguments.
 - **`bundle test`** alone runs a compiled program under a JavaScript engine against the browser harness's own host, with the bundle built for `wasm32-unknown-unknown` first.
-- **A tree's `lint`** alone holds the files the tree's tests never read as text: the workspace's Rust under rustfmt and Clippy, and every tree's JavaScript, JSON and CSS under Biome, its formatting as a check; `format`, which writes it, is no step of the gate.
+- **A tree's `lint`** alone holds the files the tree's tests never read as text: the workspace's Rust under rustfmt and Clippy, and every tree's JavaScript, JSON and CSS under Biome, its formatting as a check; `format`, which writes it, is no step of the handoff.
 - **The tree-sitter, TextMate and VS Code steps** install their npm trees from the lock file; `tree-sitter test` parses the corpus and `textmate test` holds the TextMate grammars to their snapshots; `tree-sitter build` generates the parser the repository commits, which `zed test` hashes; `vscode build` alone runs `vsce` over the extension's manifest and bundles it as it ships, which the grammar snapshots never load.
 - **The Zed steps** lint, build for `wasm32-wasip2` and test the extension. `zed test` checks that `editors/zed/extension.toml`'s grammar rev is the grammar the checkout holds, since Zed installs the grammar from a pushed commit, and that the extension's lint table is the workspace's, since a workspace of its own inherits nothing. The first fails exactly on a regenerated grammar not yet pushed, which is the two-commit sequence those moves follow. `zed build` is the only step that links the extension into the `wasm32-wasip2` component Zed loads, which `zed lint`'s check build and `zed test`'s host build never do.
 - **The `tools` steps** lint and test the jig's crates — the runner of the task files, the bench and the board — which the compiler's lint and tests leave out, so that their dependencies give the compiler no feature it ships without: the task files held to the command line and the check workflow, and each crate's own tests.
 
-**Rationale.** A gate is read under time pressure, and a reader who cannot tell which step would have caught a mistake starts skipping the slow ones. Naming each unique catch makes that judgement unnecessary: nothing in the list is redundant, so nothing is optional.
+**Rationale.** A handoff is read under time pressure, and a reader who cannot tell which step would have caught a mistake starts skipping the slow ones. Naming each unique catch makes that judgement unnecessary: nothing in the list is redundant, so nothing is optional.
 
 **Rejected.**
 

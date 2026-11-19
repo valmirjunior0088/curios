@@ -60,9 +60,9 @@ fn written(tree: &Tree, name: &str) -> String {
     }
 }
 
-/// Every line of the check workflow that runs this program is a command the parser reads, and together they run every step the gate runs: a step added to a subject and to no job fails here, and so does a job left spelling a task that is gone.
+/// Every line of the check workflow that runs this program is a command the parser reads, and together they run every step the handoff runs: a step added to a subject and to no job fails here, and so does a job left spelling a task that is gone.
 #[test]
-fn every_step_the_gate_runs_has_a_job() {
+fn every_step_the_handoff_runs_has_a_job() {
     let tree = tree();
     let mut run = BTreeSet::new();
 
@@ -83,9 +83,9 @@ fn every_step_the_gate_runs_has_a_job() {
         run.extend(schedule(&tree, &name, &given));
     }
 
-    let gate = vec!["gate".to_string()];
-    for step in schedule(&tree, &gate, &Given::new()) {
-        if tree.steps[step].name != gate {
+    let handoff = vec!["handoff".to_string()];
+    for step in schedule(&tree, &handoff, &Given::new()) {
+        if tree.steps[step].name != handoff {
             assert!(run.contains(&step), "{}", spelled(&tree.steps[step].name));
         }
     }

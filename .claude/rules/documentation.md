@@ -12,7 +12,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | --- | --- |
 | `README.md` | What Curios is, the happy path to running one, and where to go next |
 | `documentation/usage.md` | The command line and packages: every subcommand, flag, manifest key, exit code and file |
-| `documentation/language.md` | The surface language, complete |
+| `documentation/language.md` | The surface language, complete as far as its syntax conveys it: each form's spelling and what the grammar refuses; typing, inference, coverage, totality, positivity and resolution are the design decisions', linked from it |
 | `documentation/roadmap/**` | Pending work: an area's findings and specifications, each owning its status |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
 | `xboard/tickets/<part>/` | The soundness board: one part of the judgment per directory, its question in its `metadata.toml`, with a directory for every proof of `False` found in it, and `xboard/archive/<part>/` for the tickets whose construct left the language; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
@@ -37,3 +37,16 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 The filing, refinement and retirement rules are [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s.
 
 An absolute Curios path leads with its slash — `/std/Tui/View` — while a file path such as `curios-prelude/std/Tui.crs` keeps its form.
+
+A command a document or a slash command tells the reader to run is spelled as its `cargo xtask` recipe wherever one exists, `cargo xtask workspace test -E 'test(~<name>)'` and never `cargo test -p …`; bare cargo stays only where no recipe covers the step.
+
+## Retired words
+
+A word the project renamed is not written again for what it named, in a document, a comment, a message or a command:
+
+| Retired | Written | Kept for |
+| --- | --- | --- |
+| kernel, for `curios-cert`'s checker | the certifier | the operating system, and another system's checker — Lean's kernel, Rocq's kernel |
+| soundness perimeter, the perimeter | the soundness board | nothing |
+| cell, for what one stage makes of one declaration | facet | the language's write-once cell, `Intrinsic::Cell` |
+| full gate, hand-off gate, `cargo xtask gate` | the handoff, `cargo xtask handoff` | nothing |
