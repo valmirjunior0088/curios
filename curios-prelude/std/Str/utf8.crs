@@ -144,35 +144,26 @@ pub let advanced(
 ) -> Bool/Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
     match rem
     | 0 => match p end
-    | r1 + 1 =>
-        match r1
-        | 0 => match more end
-        | r2 + 1 =>
-            match r2
-            | 0 =>
-                scalars_within(
-                    (partial * 0x40 + (lo - 0x80)) * 0x40,
-                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F,
-                    (partial * 0x40 + (c - 0x80)) * 0x40,
-                    (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
-                    p,
-                    proved(),
-                    proved())
-            | r3 + 1 =>
-                match r3
-                | 0 =>
-                    scalars_within(
-                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
-                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
-                        (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
-                        ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
-                        p,
-                        proved(),
-                        proved())
-                | _ + 1 => match p end
-                end
-            end
-        end
+    | 1 => match more end
+    | 2 =>
+        scalars_within(
+            (partial * 0x40 + (lo - 0x80)) * 0x40,
+            (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F,
+            (partial * 0x40 + (c - 0x80)) * 0x40,
+            (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
+            p,
+            proved(),
+            proved())
+    | 3 =>
+        scalars_within(
+            (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
+            ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+            (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
+            ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+            p,
+            proved(),
+            proved())
+    | _ + 4 => match p end
     end;
 
 --- Whether the character `c` begins can only end at a scalar value: what `classify`'s ranges promise of a lead byte, and nothing to promise of any other.

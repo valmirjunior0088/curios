@@ -188,98 +188,94 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                         let one = partial * 0x40 + (Byte/to_nat(c1) - 0x80);
                         match rem
                         | 0 => match p end
-                        | r1 + 1 =>
-                            match r1
-                            | 0 =>
-                                go(
-                                    t1,
-                                    v,
-                                    f(
-                                        Char {
-                                            code = one,
-                                            @valid =
-                                                concluded(
-                                                    lo,
-                                                    hi,
-                                                    partial,
-                                                    Byte/to_nat(c1),
-                                                    p,
-                                                    Bool/True/qed()) },
-                                        acc))
-                            | r2 + 1 =>
-                                let p1 =
-                                    advanced(
-                                        rem,
-                                        lo,
-                                        hi,
-                                        partial,
-                                        Byte/to_nat(c1),
-                                        p,
-                                        Bool/True/qed(),
-                                        proved());
-                                match t1
-                                | x[] => match v end
-                                | x[c2, ..t2] =>
-                                    match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
-                                    | false => match Valid/from_bad(@t2, v) end
-                                    | true =>
-                                        let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
-                                        match r2
-                                        | 0 =>
-                                            go(
-                                                t2,
-                                                v,
-                                                f(
-                                                    Char {
-                                                        code = two,
-                                                        @valid =
-                                                            concluded(
-                                                                0x80,
-                                                                0xBF,
-                                                                one,
-                                                                Byte/to_nat(c2),
-                                                                p1,
-                                                                Bool/True/qed()) },
-                                                    acc))
-                                        | r3 + 1 =>
-                                            let p2 =
-                                                advanced(
-                                                    rem - 1,
-                                                    0x80,
-                                                    0xBF,
-                                                    one,
-                                                    Byte/to_nat(c2),
-                                                    p1,
-                                                    Bool/True/qed(),
-                                                    proved());
-                                            match t2
-                                            | x[] => match v end
-                                            | x[c3, ..t3] =>
-                                                match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
-                                                | false => match Valid/from_bad(@t3, v) end
-                                                | true =>
-                                                    match r3
-                                                    | 0 =>
-                                                        go(
-                                                            t3,
-                                                            v,
-                                                            f(
-                                                                Char {
-                                                                    code =
-                                                                        two * 0x40
-                                                                            + (Byte/to_nat(c3)
-                                                                                - 0x80),
-                                                                    @valid =
-                                                                        concluded(
-                                                                            0x80,
-                                                                            0xBF,
-                                                                            two,
-                                                                            Byte/to_nat(c3),
-                                                                            p2,
-                                                                            Bool/True/qed()) },
-                                                                acc))
-                                                    | _ + 1 => match p end
-                                                    end
+                        | 1 =>
+                            go(
+                                t1,
+                                v,
+                                f(
+                                    Char {
+                                        code = one,
+                                        @valid =
+                                            concluded(
+                                                lo,
+                                                hi,
+                                                partial,
+                                                Byte/to_nat(c1),
+                                                p,
+                                                Bool/True/qed()) },
+                                    acc))
+                        | r2 + 2 =>
+                            let p1 =
+                                advanced(
+                                    rem,
+                                    lo,
+                                    hi,
+                                    partial,
+                                    Byte/to_nat(c1),
+                                    p,
+                                    Bool/True/qed(),
+                                    proved());
+                            match t1
+                            | x[] => match v end
+                            | x[c2, ..t2] =>
+                                match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
+                                | false => match Valid/from_bad(@t2, v) end
+                                | true =>
+                                    let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
+                                    match r2
+                                    | 0 =>
+                                        go(
+                                            t2,
+                                            v,
+                                            f(
+                                                Char {
+                                                    code = two,
+                                                    @valid =
+                                                        concluded(
+                                                            0x80,
+                                                            0xBF,
+                                                            one,
+                                                            Byte/to_nat(c2),
+                                                            p1,
+                                                            Bool/True/qed()) },
+                                                acc))
+                                    | r3 + 1 =>
+                                        let p2 =
+                                            advanced(
+                                                rem - 1,
+                                                0x80,
+                                                0xBF,
+                                                one,
+                                                Byte/to_nat(c2),
+                                                p1,
+                                                Bool/True/qed(),
+                                                proved());
+                                        match t2
+                                        | x[] => match v end
+                                        | x[c3, ..t3] =>
+                                            match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
+                                            | false => match Valid/from_bad(@t3, v) end
+                                            | true =>
+                                                match r3
+                                                | 0 =>
+                                                    go(
+                                                        t3,
+                                                        v,
+                                                        f(
+                                                            Char {
+                                                                code =
+                                                                    two * 0x40
+                                                                        + (Byte/to_nat(c3) - 0x80),
+                                                                @valid =
+                                                                    concluded(
+                                                                        0x80,
+                                                                        0xBF,
+                                                                        two,
+                                                                        Byte/to_nat(c3),
+                                                                        p2,
+                                                                        Bool/True/qed()) },
+                                                            acc))
+                                                | _ + 1 => match p end
                                                 end
                                             end
                                         end
@@ -377,134 +373,128 @@ let leading(
                     let one = partial * 0x40 + (Byte/to_nat(c1) - 0x80);
                     match rem
                     | 0 => match p end
-                    | r1 + 1 =>
-                        match r1
-                        | 0 =>
-                            let c =
-                                Char {
-                                    code = one,
-                                    @valid =
-                                        concluded(
-                                            lo,
-                                            hi,
-                                            partial,
-                                            Byte/to_nat(c1),
-                                            p,
-                                            Bool/True/qed()) };
-                            match pred(c)
+                    | 1 =>
+                        let c =
+                            Char {
+                                code = one,
+                                @valid =
+                                    concluded(
+                                        lo,
+                                        hi,
+                                        partial,
+                                        Byte/to_nat(c1),
+                                        p,
+                                        Bool/True/qed()) };
+                        match pred(c)
+                        | true =>
+                            let step = passing(@whole, @x[h, c1], @t1, taken, w, e);
+                            leading(t1, v, pred, taken + 2, @whole, @step.within, @step.cut)
+                        | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
+                        end
+                    | r2 + 2 =>
+                        let p1 =
+                            advanced(
+                                rem,
+                                lo,
+                                hi,
+                                partial,
+                                Byte/to_nat(c1),
+                                p,
+                                Bool/True/qed(),
+                                proved());
+                        match t1
+                        | x[] => match v end
+                        | x[c2, ..t2] =>
+                            match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
+                            | false => match Valid/from_bad(@t2, v) end
                             | true =>
-                                let step = passing(@whole, @x[h, c1], @t1, taken, w, e);
-                                leading(t1, v, pred, taken + 2, @whole, @step.within, @step.cut)
-                            | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
-                            end
-                        | r2 + 1 =>
-                            let p1 =
-                                advanced(
-                                    rem,
-                                    lo,
-                                    hi,
-                                    partial,
-                                    Byte/to_nat(c1),
-                                    p,
-                                    Bool/True/qed(),
-                                    proved());
-                            match t1
-                            | x[] => match v end
-                            | x[c2, ..t2] =>
-                                match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
-                                | false => match Valid/from_bad(@t2, v) end
-                                | true =>
-                                    let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
-                                    match r2
-                                    | 0 =>
-                                        let c =
-                                            Char {
-                                                code = two,
-                                                @valid =
-                                                    concluded(
-                                                        0x80,
-                                                        0xBF,
-                                                        one,
-                                                        Byte/to_nat(c2),
-                                                        p1,
-                                                        Bool/True/qed()) };
-                                        match pred(c)
+                                let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
+                                match r2
+                                | 0 =>
+                                    let c =
+                                        Char {
+                                            code = two,
+                                            @valid =
+                                                concluded(
+                                                    0x80,
+                                                    0xBF,
+                                                    one,
+                                                    Byte/to_nat(c2),
+                                                    p1,
+                                                    Bool/True/qed()) };
+                                    match pred(c)
+                                    | true =>
+                                        let step = passing(@whole, @x[h, c1, c2], @t2, taken, w, e);
+                                        leading(
+                                            t2,
+                                            v,
+                                            pred,
+                                            taken + 3,
+                                            @whole,
+                                            @step.within,
+                                            @step.cut)
+                                    | false => stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
+                                    end
+                                | r3 + 1 =>
+                                    let p2 =
+                                        advanced(
+                                            rem - 1,
+                                            0x80,
+                                            0xBF,
+                                            one,
+                                            Byte/to_nat(c2),
+                                            p1,
+                                            Bool/True/qed(),
+                                            proved());
+                                    match t2
+                                    | x[] => match v end
+                                    | x[c3, ..t3] =>
+                                        match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
+                                        | false => match Valid/from_bad(@t3, v) end
                                         | true =>
-                                            let step =
-                                                passing(@whole, @x[h, c1, c2], @t2, taken, w, e);
-                                            leading(
-                                                t2,
-                                                v,
-                                                pred,
-                                                taken + 3,
-                                                @whole,
-                                                @step.within,
-                                                @step.cut)
-                                        | false =>
-                                            stopped(@whole, @b, v, taken, Option/some(c), @w, @e)
-                                        end
-                                    | r3 + 1 =>
-                                        let p2 =
-                                            advanced(
-                                                rem - 1,
-                                                0x80,
-                                                0xBF,
-                                                one,
-                                                Byte/to_nat(c2),
-                                                p1,
-                                                Bool/True/qed(),
-                                                proved());
-                                        match t2
-                                        | x[] => match v end
-                                        | x[c3, ..t3] =>
-                                            match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
-                                            | false => match Valid/from_bad(@t3, v) end
-                                            | true =>
-                                                match r3
-                                                | 0 =>
-                                                    let c =
-                                                        Char {
-                                                            code =
-                                                                two * 0x40
-                                                                    + (Byte/to_nat(c3) - 0x80),
-                                                            @valid =
-                                                                concluded(
-                                                                    0x80,
-                                                                    0xBF,
-                                                                    two,
-                                                                    Byte/to_nat(c3),
-                                                                    p2,
-                                                                    Bool/True/qed()) };
-                                                    match pred(c)
-                                                    | true =>
-                                                        let step =
-                                                            passing(
-                                                                @whole,
-                                                                @x[h, c1, c2, c3],
-                                                                @t3,
-                                                                taken,
-                                                                w,
-                                                                e);
-                                                        leading(
-                                                            t3,
-                                                            v,
-                                                            pred,
-                                                            taken + 4,
+                                            match r3
+                                            | 0 =>
+                                                let c =
+                                                    Char {
+                                                        code =
+                                                            two * 0x40 + (Byte/to_nat(c3) - 0x80),
+                                                        @valid =
+                                                            concluded(
+                                                                0x80,
+                                                                0xBF,
+                                                                two,
+                                                                Byte/to_nat(c3),
+                                                                p2,
+                                                                Bool/True/qed()) };
+                                                match pred(c)
+                                                | true =>
+                                                    let step =
+                                                        passing(
                                                             @whole,
-                                                            @step.within,
-                                                            @step.cut)
-                                                    | false =>
-                                                        stopped(
-                                                            @whole,
-                                                            @b,
-                                                            v,
+                                                            @x[h, c1, c2, c3],
+                                                            @t3,
                                                             taken,
-                                                            Option/some(c),
-                                                            @w,
-                                                            @e)
-                                                    end
-                                                | _ + 1 => match p end
+                                                            w,
+                                                            e);
+                                                    leading(
+                                                        t3,
+                                                        v,
+                                                        pred,
+                                                        taken + 4,
+                                                        @whole,
+                                                        @step.within,
+                                                        @step.cut)
+                                                | false =>
+                                                    stopped(
+                                                        @whole,
+                                                        @b,
+                                                        v,
+                                                        taken,
+                                                        Option/some(c),
+                                                        @w,
+                                                        @e)
                                                 end
+                                            | _ + 1 => match p end
                                             end
                                         end
                                     end

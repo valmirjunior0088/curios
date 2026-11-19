@@ -15,11 +15,9 @@ let at_place(k: Bytes, g: Nat, o: Nat) -> Nat =
     | true =>
         match o
         | 0 => 1
-        | i + 1 =>
-            match i
-            | 0 => high(Byte/to_nat(Bytes/get(k, g)))
-            | j + 1 => match j | 0 => low(Byte/to_nat(Bytes/get(k, g))) | _ + 1 => 0 end
-            end
+        | 1 => high(Byte/to_nat(Bytes/get(k, g)))
+        | 2 => low(Byte/to_nat(Bytes/get(k, g)))
+        | _ + 3 => 0
         end
     end;
 
@@ -86,11 +84,9 @@ pub let small(k: Bytes, p: Nat) -> Bool/Holds(digit(k, p) < 16) =
         let down = Bool/and/second(high(x) < 16, low(x) < 16, both);
         match p % 4
         | 0 => Bool/True/qed()
-        | i + 1 =>
-            match i
-            | 0 => up
-            | j + 1 => match j | 0 => down | _ + 1 => Bool/True/qed() end
-            end
+        | 1 => up
+        | 2 => down
+        | _ + 3 => Bool/True/qed()
         end
     end;
 
@@ -273,15 +269,12 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                     (j, under) =>
                                         match j
                                         | 0 => Eq/refl()
-                                        | i + 1 =>
-                                            match i
-                                            | 0 =>
-                                                Nat/eq_of_eql(
-                                                    high(Byte/to_nat(h)),
-                                                    high(Byte/to_nat(k)),
-                                                    Bool/True/qed())
-                                            | _ + 1 => match under end
-                                            end
+                                        | 1 =>
+                                            Nat/eq_of_eql(
+                                                high(Byte/to_nat(h)),
+                                                high(Byte/to_nat(k)),
+                                                Bool/True/qed())
+                                        | _ + 2 => match under end
                                         end,
                                 differs = low_differs(h, k, Bool/True/qed(), Bool/True/qed()) }) }
             end
@@ -386,50 +379,39 @@ pub let before(
         let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
         match c
         | 0 => match less end
-        | i + 1 =>
-            match i
-            | 0 => headed(h, k, t, r, higher(hn, kn, proved(), proved(), less))
-            | m + 1 =>
-                match m
-                | 0 =>
-                    headed(
-                        h,
-                        k,
-                        t,
-                        r,
-                        lower(hn, kn, proved(), proved(), apart.below(1, Bool/True/qed()), less))
-                | q + 1 =>
-                    match q
-                    | 0 => match less end
-                    | _ + 1 =>
-                        let same: Eq()(h, k) =
-                            joined(h, k, apart.below(1, proved()), apart.below(2, proved()));
-                        Eq/subst(
-                            (y: Byte) =>
-                                (apart: Apart(x[h, ..t], x[y, ..r], c)) -> (
-                                    less: Bool/Holds(
-                                        digit(x[h, ..t], c) < digit(x[y, ..r], c))) -> Eq()(
-                                    Bytes/ord(x[h, ..t], x[y, ..r]),
-                                    Ordering/lt()),
-                            same,
-                            (apart) =>
-                                (less) =>
-                                    before(
-                                        t,
-                                        r,
-                                        c - 4,
-                                        lowered(h, t, r, c, apart, proved()),
-                                        Eq/subst(
-                                            (v: Nat) => Bool/Holds(v < digit(r, c - 4)),
-                                            onward(h, t, c, proved()),
-                                            Eq/subst(
-                                                (v: Nat) => Bool/Holds(digit(x[h, ..t], c) < v),
-                                                onward(h, r, c, proved()),
-                                                less))))(
-                            apart)(
-                            less)
-                    end
-                end
-            end
+        | 1 => headed(h, k, t, r, higher(hn, kn, proved(), proved(), less))
+        | 2 =>
+            headed(
+                h,
+                k,
+                t,
+                r,
+                lower(hn, kn, proved(), proved(), apart.below(1, Bool/True/qed()), less))
+        | 3 => match less end
+        | _ + 4 =>
+            let same: Eq()(h, k) = joined(h, k, apart.below(1, proved()), apart.below(2, proved()));
+            Eq/subst(
+                (y: Byte) =>
+                    (apart: Apart(x[h, ..t], x[y, ..r], c)) -> (
+                        less: Bool/Holds(digit(x[h, ..t], c) < digit(x[y, ..r], c))) -> Eq()(
+                        Bytes/ord(x[h, ..t], x[y, ..r]),
+                        Ordering/lt()),
+                same,
+                (apart) =>
+                    (less) =>
+                        before(
+                            t,
+                            r,
+                            c - 4,
+                            lowered(h, t, r, c, apart, proved()),
+                            Eq/subst(
+                                (v: Nat) => Bool/Holds(v < digit(r, c - 4)),
+                                onward(h, t, c, proved()),
+                                Eq/subst(
+                                    (v: Nat) => Bool/Holds(digit(x[h, ..t], c) < v),
+                                    onward(h, r, c, proved()),
+                                    less))))(
+                apart)(
+                less)
         end
     end;

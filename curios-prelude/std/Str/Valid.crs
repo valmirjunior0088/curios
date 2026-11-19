@@ -274,73 +274,62 @@ let finish(
             let one = partial * 0x40 + (Byte/to_nat(c1) - 0x80);
             match rem
             | 0 => match p end
-            | r1 + 1 =>
-                match r1
-                | 0 =>
-                    Char {
-                        code = one,
-                        @valid = concluded(lo, hi, partial, Byte/to_nat(c1), p, Bool/True/qed()) }
-                | r2 + 1 =>
-                    let p1 =
-                        advanced(
-                            rem,
-                            lo,
-                            hi,
-                            partial,
-                            Byte/to_nat(c1),
-                            p,
-                            Bool/True/qed(),
-                            proved());
-                    match t1
-                    | x[] => match w end
-                    | x[c2, ..t2] =>
-                        match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
-                        | false => match from_bad(@t2, w) end
-                        | true =>
-                            let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
-                            match r2
-                            | 0 =>
-                                Char {
-                                    code = two,
-                                    @valid =
-                                        concluded(
-                                            0x80,
-                                            0xBF,
-                                            one,
-                                            Byte/to_nat(c2),
-                                            p1,
-                                            Bool/True/qed()) }
-                            | r3 + 1 =>
-                                let p2 =
-                                    advanced(
-                                        rem - 1,
+            | 1 =>
+                Char {
+                    code = one,
+                    @valid = concluded(lo, hi, partial, Byte/to_nat(c1), p, Bool/True/qed()) }
+            | r2 + 2 =>
+                let p1 =
+                    advanced(rem, lo, hi, partial, Byte/to_nat(c1), p, Bool/True/qed(), proved());
+                match t1
+                | x[] => match w end
+                | x[c2, ..t2] =>
+                    match Nat/in_range(Byte/to_nat(c2), 0x80, 0xBF)
+                    | false => match from_bad(@t2, w) end
+                    | true =>
+                        let two = one * 0x40 + (Byte/to_nat(c2) - 0x80);
+                        match r2
+                        | 0 =>
+                            Char {
+                                code = two,
+                                @valid =
+                                    concluded(
                                         0x80,
                                         0xBF,
                                         one,
                                         Byte/to_nat(c2),
                                         p1,
-                                        Bool/True/qed(),
-                                        proved());
-                                match t2
-                                | x[] => match w end
-                                | x[c3, ..t3] =>
-                                    match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
-                                    | false => match from_bad(@t3, w) end
-                                    | true =>
-                                        match r3
-                                        | 0 =>
-                                            Char {
-                                                code = two * 0x40 + (Byte/to_nat(c3) - 0x80),
-                                                @valid =
-                                                    concluded(
-                                                        0x80,
-                                                        0xBF,
-                                                        two,
-                                                        Byte/to_nat(c3),
-                                                        p2,
-                                                        Bool/True/qed()) }
-                                        | _ + 1 => match p end
-                                        end
+                                        Bool/True/qed()) }
+                        | r3 + 1 =>
+                            let p2 =
+                                advanced(
+                                    rem - 1,
+                                    0x80,
+                                    0xBF,
+                                    one,
+                                    Byte/to_nat(c2),
+                                    p1,
+                                    Bool/True/qed(),
+                                    proved());
+                            match t2
+                            | x[] => match w end
+                            | x[c3, ..t3] =>
+                                match Nat/in_range(Byte/to_nat(c3), 0x80, 0xBF)
+                                | false => match from_bad(@t3, w) end
+                                | true =>
+                                    match r3
+                                    | 0 =>
+                                        Char {
+                                            code = two * 0x40 + (Byte/to_nat(c3) - 0x80),
+                                            @valid =
+                                                concluded(
+                                                    0x80,
+                                                    0xBF,
+                                                    two,
+                                                    Byte/to_nat(c3),
+                                                    p2,
+                                                    Bool/True/qed()) }
+                                    | _ + 1 => match p end
                                     end
                                 end
                             end

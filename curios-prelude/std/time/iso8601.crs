@@ -44,12 +44,8 @@ let fraction(n: Nat) -> Str =
     | false =>
         let trimmed(m: Nat, width: Nat) -> {Nat, Nat} =
             match width
-            | 0 => (m, 0)
-            | w + 1 =>
-                match w == 0 || m % 10 != 0
-                | true => (m, width)
-                | false => trimmed(m / 10, w)
-                end
+            | w + 2, m % 10 == 0 => trimmed(m / 10, w + 1)
+            | _ => (m, width)
             end;
         let (digits, width) = trimmed(n, 9);
         Str/concat(".", padded(digits, width))
