@@ -14,6 +14,7 @@ use {
 pub struct CallAnalysis {
     pub call_sites: BTreeMap<FunctionId, Vec<NodeId>>,
     pub call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
+    /// The function whose body holds each known call and each `LetFun`: the nodes contification, the inliner, the frame bound and the scopes ask the owner of, and no other.
     pub node_owners: BTreeMap<NodeId, FunctionId>,
     pub escaping: BTreeSet<FunctionId>,
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question, and the specializer's of a component no member calls directly (`eligible_sccs`): see `analyze_calls`.
@@ -148,13 +149,13 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut applies_a_closure: BTreeSet<FunctionId> = BTreeSet::new();
     for owner in module.function_ids().collect::<Vec<_>>() {
         for node_id in function_nodes(module, owner) {
-            analysis.node_owners.insert(node_id, owner);
             let node = module.node(node_id).unwrap();
             match node {
                 Node::ApplyFun {
                     callee: Callee::Known(callee),
                     ..
                 } => {
+                    analysis.node_owners.insert(node_id, owner);
                     analysis
                         .call_sites
                         .entry(*callee)
@@ -171,6 +172,9 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
                     ..
                 } => {
                     applies_a_closure.insert(owner);
+                }
+                Node::LetFun { .. } => {
+                    analysis.node_owners.insert(node_id, owner);
                 }
                 _ => {}
             }
