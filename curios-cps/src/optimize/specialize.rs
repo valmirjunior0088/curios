@@ -12,8 +12,8 @@ pub use jump::*;
 
 use {
     crate::{
-        Atom, CallAnalysis, Callee, FunctionId, Lattice, Literal, Module, Node, NodeId, Slot,
-        Solver, ValueExpr, ValueId, resolve_atom,
+        Atom, CallAnalysis, Callee, FunctionId, Lattice, Literal, Module, Node, NodeId, Scopes,
+        Slot, Solver, ValueExpr, ValueId, resolve_atom,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -63,10 +63,11 @@ impl Lattice for Knowledge {
 ///
 /// Only members of an eligible SCC participate: the SCC must be recursive and must contain no escaping member and not the program entry, because an escaping or host-called function receives arguments this analysis cannot observe. `known_literals` seeds resolution of caller values already known to be constant.
 ///
-/// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make. That scope is the walk the verifier performs, so a reference bound earlier in an enclosing body chain counts as much as one in the member's own group — the site passing the reference and the body receiving it sit at different points of that chain, and only the receiving body's point decides.
+/// A function reference counts only where the member's body may name it (`Scopes::functions`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make. That scope is the walk the verifier performs, so a reference bound earlier in an enclosing body chain counts as much as one in the member's own group — the site passing the reference and the body receiving it sit at different points of that chain, and only the receiving body's point decides.
 pub fn scc_invariant_knowns(
     module: &Module,
     analysis: &CallAnalysis,
+    scopes: &Scopes,
     known_literals: &BTreeMap<ValueId, Atom>,
 ) -> BTreeMap<ValueId, Atom> {
     let mut params_of: BTreeMap<FunctionId, Vec<ValueId>> = BTreeMap::new();
@@ -102,8 +103,8 @@ pub fn scc_invariant_knowns(
     useful_knowns(class)
         .into_iter()
         .filter(|(param, atom)| match atom {
-            Atom::Fun(function) => analysis
-                .lexical_scope
+            Atom::Fun(function) => scopes
+                .functions
                 .get(&owner_of_param[param])
                 .is_some_and(|scope| scope.contains(function)),
             Atom::Literal(_) | Atom::Value(_) | Atom::Filler => true,

@@ -6,8 +6,8 @@ use {
         scc_invariant_knowns, useful_knowns,
     },
     crate::{
-        Atom, CallAnalysis, Callee, CopyBudget, CopyPlan, CopyPriority, FunctionId, Literal,
-        Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId, analyze_calls, copy_bodies,
+        Atom, Callee, CopyBudget, CopyPlan, CopyPriority, FunctionId, Literal, Module, Node,
+        NodeId, SCC_CLONE_NODE_LIMIT, Scopes, ValueId, analyze_calls, copy_bodies,
     },
     curios_common::ArenaId,
     std::{
@@ -75,13 +75,13 @@ impl Component {
         &self,
         constraints: &[(FunctionId, Vec<Atom>)],
         seeds: &BTreeMap<ValueId, Atom>,
-        analysis: &CallAnalysis,
+        scopes: &Scopes,
     ) -> BTreeMap<ValueId, Atom> {
         useful_knowns(invariant_fixpoint(&self.params, constraints, seeds))
             .into_iter()
             .filter(|(param, atom)| match atom {
-                Atom::Fun(function) => analysis
-                    .lexical_scope
+                Atom::Fun(function) => scopes
+                    .functions
                     .get(&self.owners[param])
                     .is_some_and(|scope| scope.contains(function)),
                 Atom::Literal(_) | Atom::Value(_) | Atom::Filler => false,
@@ -94,15 +94,15 @@ impl Component {
         &self,
         constraints: &[(FunctionId, Vec<Atom>)],
         seeds: &BTreeMap<ValueId, Atom>,
-        analysis: &CallAnalysis,
+        scopes: &Scopes,
         intros: &BTreeMap<FunctionId, NodeId>,
     ) -> Option<NodeId> {
         let outside = useful_knowns(invariant_fixpoint(&self.params, constraints, seeds))
             .into_iter()
             .filter_map(|(param, atom)| match atom {
                 Atom::Fun(function)
-                    if !analysis
-                        .lexical_scope
+                    if !scopes
+                        .functions
                         .get(&self.owners[&param])
                         .is_some_and(|scope| scope.contains(&function)) =>
                 {
@@ -113,7 +113,7 @@ impl Component {
             .collect::<BTreeSet<_>>();
         outside.iter().find_map(|function| {
             let group = intros.get(function)?;
-            let scope = analysis.lexical_scope.get(function)?;
+            let scope = scopes.functions.get(function)?;
             (outside.iter().all(|other| scope.contains(other))
                 && self.members.iter().all(|member| scope.contains(member)))
             .then_some(*group)
@@ -152,8 +152,9 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
         return false;
     }
     let analysis = analyze_calls(module);
+    let scopes = Scopes::of(module, &analysis);
     let mut seeds = literal_value_map(module);
-    let global = scc_invariant_knowns(module, &analysis, &seeds);
+    let global = scc_invariant_knowns(module, &analysis, &scopes, &seeds);
     seeds.extend(global);
     let intros = function_introductions(module);
     let mut components = Vec::new();
@@ -228,13 +229,13 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
             baseline: BTreeMap::new(),
             disabled: false,
         };
-        component.baseline = component.functions(&component.remaining(module), &seeds, &analysis);
+        component.baseline = component.functions(&component.remaining(module), &seeds, &scopes);
         for (index, group) in component.groups.iter().enumerate() {
             let mut constraints = component.internal.clone();
             constraints.push((group.context.entry, group.context.args.clone()));
-            let context = component.functions(&constraints, &seeds, &analysis);
+            let context = component.functions(&constraints, &seeds, &scopes);
             let intro = component
-                .relocation(&constraints, &seeds, &analysis, &intros)
+                .relocation(&constraints, &seeds, &scopes, &intros)
                 .unwrap_or(component.intro);
             if intro != component.intro
                 || context
@@ -313,7 +314,7 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
         budget.charge(candidate.priority.nodes);
         changed = true;
         component.disabled = !component.extent.is_disjoint(&touched)
-            || component.functions(&component.remaining(module), &seeds, &analysis)
+            || component.functions(&component.remaining(module), &seeds, &scopes)
                 != component.baseline;
     }
     changed

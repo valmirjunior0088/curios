@@ -1,4 +1,4 @@
-//! The verifier: the structure every pass may assume of a module, the rows and lexical scope a round boundary promises on top, and the scope walk the call analysis reads back.
+//! The verifier: the structure every pass may assume of a module, the rows and lexical scope a round boundary promises on top, and the scope walk [`Scopes`](crate::Scopes) reads back.
 
 use {
     super::{
@@ -620,20 +620,10 @@ impl Module {
         Ok(())
     }
 
-    /// The functions each body may name, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: its own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
+    /// The functions each function's body may name, and each continuation's, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: a function's own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry; a continuation's, those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
     ///
-    /// A function the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
-    pub(crate) fn lexical_scopes(&self) -> BTreeMap<FunctionId, InScope<FunctionId>> {
-        self.scopes().0
-    }
-
-    /// The functions each continuation's body may name, by the same walk as [`Self::lexical_scopes`]: those in scope where its `LetCont` binds it, which take in the groups its function's body binds before it. A continuation the walk does not reach is absent.
-    pub(crate) fn continuation_scopes(&self) -> BTreeMap<ContinuationId, InScope<FunctionId>> {
-        self.scopes().1
-    }
-
-    /// The walk [`Self::lexical_scopes`] and [`Self::continuation_scopes`] each answer half of.
-    fn scopes(
+    /// A function or continuation the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
+    pub(crate) fn scopes(
         &self,
     ) -> (
         BTreeMap<FunctionId, InScope<FunctionId>>,

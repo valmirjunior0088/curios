@@ -16,8 +16,6 @@ pub struct CallAnalysis {
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question, and the specializer's of a component no member calls directly (`eligible_sccs`): see `analyze_calls`.
     pub recursive: BTreeSet<FunctionId>,
     pub sccs: SccAnalysis,
-    /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
-    pub lexical_scope: BTreeMap<FunctionId, InScope<FunctionId>>,
 }
 /// Strongly-connected components of a graph, the known-callee call graph's by default, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its nodes in their order.
 pub type SccId = usize;
@@ -235,43 +233,61 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
         }
     }
     analysis.sccs = analyze_sccs(&analysis.call_graph);
-
-    // Each function's lexical scope, taken from the walk `verify_lexical_scopes` performs rather than restated here.
-    //
-    // Reading it off the `LetFun` nodes alone — a member's own group, then everything its owner's group holds, up to the entry — would miss the third of the three things `scope_step` admits: a group bound *earlier along the same body chain*. Every group the lowering emits is a singleton, so that is precisely a body's siblings, which is nearly every function reference a program makes.
-    analysis.lexical_scope = module.lexical_scopes();
-
-    // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
-    let mut group_of: BTreeMap<FunctionId, (FunctionId, Vec<FunctionId>)> = BTreeMap::new();
-    for (&node_id, &owner) in &analysis.node_owners {
-        if let Some(Node::LetFun { functions, .. }) = module.node(node_id) {
-            for &member in functions {
-                group_of.insert(member, (owner, functions.clone()));
-            }
-        }
-    }
-    for function in module.function_ids() {
-        if analysis.lexical_scope.contains_key(&function) {
-            continue;
-        }
-        let mut scope = InScope::default();
-        let mut visited = BTreeSet::new();
-        let mut current = function;
-        while visited.insert(current) {
-            match group_of.get(&current) {
-                Some((owner, members)) => {
-                    scope.extend(members.iter().copied());
-                    current = *owner;
-                }
-                None => {
-                    scope.insert(current);
-                    break;
-                }
-            }
-        }
-        analysis.lexical_scope.insert(function, scope);
-    }
     analysis
+}
+
+/// The functions a body may name, each function's and each continuation's, read off the one walk `verify_lexical_scopes` performs rather than restated here: what a pass that forwards a function reference into a body asks, known-value propagation and component specialization alone, so it is built where they start and by no other reader of the call analysis.
+pub struct Scopes {
+    /// Each function's: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
+    pub functions: BTreeMap<FunctionId, InScope<FunctionId>>,
+    /// Each continuation's: those in scope where its `LetCont` binds it. A continuation the walk does not reach is absent.
+    pub continuations: BTreeMap<ContinuationId, InScope<FunctionId>>,
+}
+
+impl Scopes {
+    /// `module`'s scopes, a function the walk does not reach placed by the owners `calls` read.
+    pub fn of(module: &Module, calls: &CallAnalysis) -> Self {
+        // Reading a function's scope off the `LetFun` nodes alone — a member's own group, then everything its owner's group holds, up to the entry — would miss the third of the three things `scope_step` admits: a group bound *earlier along the same body chain*. Every group the lowering emits is a singleton, so that is precisely a body's siblings, which is nearly every function reference a program makes.
+        let (mut functions, continuations) = module.scopes();
+
+        // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
+        let mut group_of: BTreeMap<FunctionId, (FunctionId, Vec<FunctionId>)> = BTreeMap::new();
+        for (&node_id, &owner) in &calls.node_owners {
+            if let Some(Node::LetFun {
+                functions: members, ..
+            }) = module.node(node_id)
+            {
+                for &member in members {
+                    group_of.insert(member, (owner, members.clone()));
+                }
+            }
+        }
+        for function in module.function_ids() {
+            if functions.contains_key(&function) {
+                continue;
+            }
+            let mut scope = InScope::default();
+            let mut visited = BTreeSet::new();
+            let mut current = function;
+            while visited.insert(current) {
+                match group_of.get(&current) {
+                    Some((owner, members)) => {
+                        scope.extend(members.iter().copied());
+                        current = *owner;
+                    }
+                    None => {
+                        scope.insert(current);
+                        break;
+                    }
+                }
+            }
+            functions.insert(function, scope);
+        }
+        Self {
+            functions,
+            continuations,
+        }
+    }
 }
 
 /// The functions that hand their results back alike. A call whose return continuation is its function's own sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly, and agreement is symmetric: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point, so the classes are the undirected connected components of the tail-call graph.
@@ -476,6 +492,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
 
     let analysis = analyze_calls(module);
     let recursive_functions = &analysis.recursive;
+    let scopes = Scopes::of(module, &analysis);
 
     let mut function_inputs = BTreeMap::<FunctionId, Vec<Knowledge>>::new();
     for (function, definition) in module.live_functions() {
@@ -509,7 +526,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
         let params = &module.function(function).unwrap().params;
         record_known_literals(params, &inputs, &mut known);
         // A function every call hands one function is substituted where its body may name it, so its call through the parameter becomes a known call, and a recursive callee it hands the parameter on to receives one function at every entry, which `scc_invariant_knowns` then substitutes.
-        let scope = analysis.lexical_scope.get(&function);
+        let scope = scopes.functions.get(&function);
         for (&param, input) in params.iter().zip(&inputs) {
             if let Knowledge::Known(Atom::Fun(passed)) = input
                 && scope.is_some_and(|scope| scope.contains(passed))
@@ -562,7 +579,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     }
 
     // A loop's parameter is forwarded by its own back edges, which the flat join above reads as a conflict, so a function its entry hands it and every back edge passes on is recovered by the fixpoint the recursive members' parameters take below, over every transfer into a continuation: an edge hands its arguments, and an operation delivering into its `return_to` a value nothing sees, which is a conflict. Only a function is taken from it, where the continuation's body may name it, so a loop over a combinator a caller hands its step calls the step directly; what it finds of literals the flat join already answers where it may.
-    let continuation_scopes = module.continuation_scopes();
+    let continuation_scopes = &scopes.continuations;
     let mut continuation_params = BTreeMap::<ContinuationId, Vec<ValueId>>::new();
     for (continuation, definition) in module.live_continuations() {
         continuation_params.insert(continuation, definition.params.clone());
@@ -604,7 +621,7 @@ pub fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     }
 
     // Recursive members are skipped above because a self-forwarded argument pollutes the flat per-call join. Recover their provably-invariant known parameters with a dedicated SCC fixpoint and fold them in.
-    let invariant = scc_invariant_knowns(module, &analysis, &known);
+    let invariant = scc_invariant_knowns(module, &analysis, &scopes, &known);
     known.extend(invariant);
 
     // Collapse deterministic substitution chains once at the phase boundary.
