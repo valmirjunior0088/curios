@@ -86,26 +86,47 @@ enum Shape<'m> {
     Remains(Sequence, &'m [Pattern], Ending),
     /// What a string pattern spells past the bytes read: a closed run of those bytes.
     Text(&'m [u8]),
-    /// A successor pattern with this many successors of its value peeled by the splits around it, always short of its whole step: one peeled to its step is its predecessor's binder ([`Shape::peel`]).
+    /// A successor pattern or a literal with this many successors of its value peeled by the splits around it: what is left of a successor's step, always short of the whole step since one peeled to its step is its predecessor's binder, or a literal's value less them ([`Shape::peel`]).
     Peeled(&'m Pattern, usize),
 }
 
 impl<'m> Shape<'m> {
-    /// What a successor pattern leaves past one more successor of its value: what is left of its step, or its predecessor's binder once its step is spent.
+    /// What a successor pattern or a literal past `0` leaves past one more successor of its value: what is left of a successor's step, or its predecessor's binder once its step is spent, and a literal one less.
     fn peel(self) -> Shape<'m> {
         let (pattern, peeled) = match self {
             Shape::Pattern(pattern) => (pattern, 1),
             Shape::Peeled(pattern, peeled) => (pattern, peeled + 1),
-            Shape::Remains(..) | Shape::Text(_) => unreachable!("only a successor is peeled"),
-        };
-        let Pattern::Succ { predecessor, step } = pattern else {
-            unreachable!("only a successor is peeled");
+            Shape::Remains(..) | Shape::Text(_) => unreachable!("only a number is peeled"),
         };
 
-        match Natural::from(peeled) == *step {
-            true => Shape::Pattern(slot_pattern(*predecessor)),
-            false => Shape::Peeled(pattern, peeled),
+        match pattern {
+            Pattern::Succ { predecessor, step } if Natural::from(peeled) == *step => {
+                Shape::Pattern(slot_pattern(*predecessor))
+            }
+            _ => Shape::Peeled(pattern, peeled),
         }
+    }
+
+    /// The value of a literal at its column, where this is one: the value it is written as, less what the splits around it peeled.
+    fn value(self) -> Option<Natural> {
+        let (pattern, peeled) = match self {
+            Shape::Pattern(pattern) => (pattern, 0usize),
+            Shape::Peeled(pattern, peeled) => (pattern, peeled),
+            Shape::Remains(..) | Shape::Text(_) => return None,
+        };
+        let written = match pattern {
+            Pattern::Zero => Natural::zero(),
+            Pattern::Literal(value) => value.clone(),
+            Pattern::Character(character) => Natural::from(*character as u32),
+            _ => return None,
+        };
+
+        Some(written.monus(&Natural::from(peeled)))
+    }
+
+    /// Whether this is what a split peeling successors leaves of a literal: no part of the value is the row's to bind, so the successors peeled off it are the compiler's, and the row states no case by them, as its own walk, which reads the literal by its value, states none ([`Compiler::alone`]).
+    fn is_peeled_literal(self) -> bool {
+        matches!(self, Shape::Peeled(pattern, _) if !matches!(pattern, Pattern::Succ { .. }))
     }
 
     /// What is left of a successor pattern's step at its column, where this is one: its step, less what the splits around it peeled.
@@ -179,6 +200,14 @@ fn byte_pattern(byte: u8) -> &'static Pattern {
             .map(|byte| Pattern::Literal(Natural::from(u32::from(byte))))
             .collect()
     })[usize::from(byte)]
+}
+
+/// Whether the cells a row writes for a case's parts are what a split left of a literal, which states no case of the row's ([`Shape::is_peeled_literal`]).
+fn states_no_case(cells: &[Cell<'_>]) -> bool {
+    cells
+        .iter()
+        .flatten()
+        .any(|(shape, _)| shape.is_peeled_literal())
 }
 
 /// The pattern a part a case always holds is read as at a column of its own, a predecessor or an open run's rest: a binder, or `_`.
@@ -1214,7 +1243,9 @@ impl<'m> Compiler<'m> {
         for (cells, mut line) in group {
             let cells = match cells {
                 Some(cells) => {
-                    line.cases.extend(binders.iter().copied());
+                    if !states_no_case(&cells) {
+                        line.cases.extend(binders.iter().copied());
+                    }
 
                     cells
                 }
@@ -1255,6 +1286,7 @@ impl<'m> Compiler<'m> {
         line: &mut Line<'m>,
         cells: Vec<Cell<'m>>,
     ) -> (Vec<Free>, Vec<usize>) {
+        let states = !states_no_case(&cells);
         let mut binders = Vec::with_capacity(cells.len());
         let mut slots = Vec::new();
         let mut front = Vec::new();
@@ -1281,7 +1313,9 @@ impl<'m> Compiler<'m> {
         }
         front.append(&mut line.cells);
         line.cells = front;
-        line.cases.extend(binders.iter().copied());
+        if states {
+            line.cases.extend(binders.iter().copied());
+        }
 
         (binders, slots)
     }
@@ -1354,7 +1388,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a column of naturals or of bytes, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, or the column is a byte, over the literals written, with the rows that write a binder as what any other value takes, and a case split otherwise, `0` and `n + 1`, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value. A byte is dispatched as the natural it is, and a column of any other type takes no literal.
+    /// Rows over a column of naturals or of bytes, in one of two forms the rows that write a case choose: a case split, `0` and `n + 1`, where a row writes a successor or only `0` beside binders, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes, as a byte's column always is. A case split takes each literal apart as the successors it is, `0` at its zero case and a literal past it one less at the predecessor, so a column peels as many successors as its largest step and dispatches on the literals past it there. A byte is dispatched as the natural it is, and a column of any other type takes no literal.
     fn naturals(
         &mut self,
         context: &mut Context,
@@ -1406,22 +1440,12 @@ impl<'m> Compiler<'m> {
             }
             .at_opt(place(successor)));
         }
-        if let (Some(successor), Some(literal)) = (peels, dispatches) {
-            return Err(Error::MatrixMixedNatDispatch {
-                successor: self.written(successor),
-                literal: self.written(literal),
-                successor_at: place(successor),
-                literal_at: place(literal),
-            });
-        }
-
         // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal. A byte has no successor, so its `0` is a literal.
-        if byte || character || dispatches.is_some() {
-            let literal = |shape: Shape<'m>| match shape {
-                Shape::Pattern(Pattern::Zero) => Natural::zero(),
-                Shape::Pattern(Pattern::Literal(value)) => value.clone(),
-                Shape::Pattern(Pattern::Character(character)) => Natural::from(*character as u32),
-                _ => unreachable!("every row of the column writes a `Nat`"),
+        if peels.is_none() && (byte || character || dispatches.is_some()) {
+            let literal = |shape: Shape<'m>| {
+                shape
+                    .value()
+                    .expect("every row of a dispatch writes a literal")
             };
             // A byte's literals are its values, as a packed literal's constant entries are.
             if byte {
@@ -1457,16 +1481,7 @@ impl<'m> Compiler<'m> {
                         });
                 }
             }
-            let reached = self.reached(
-                &lines,
-                |shape| match shape.pattern()? {
-                    Pattern::Zero => Some(Natural::zero()),
-                    Pattern::Literal(value) => Some(value.clone()),
-                    Pattern::Character(character) => Some(Natural::from(*character as u32)),
-                    _ => None,
-                },
-                groups.len() + 1,
-            );
+            let reached = self.reached(&lines, Shape::value, groups.len() + 1);
             self.strayed(&reached);
             let mut others = Vec::new();
             for mut line in lines {
@@ -1536,12 +1551,12 @@ impl<'m> Compiler<'m> {
             });
         }
 
-        // A successor closes the case of every successor where a step of one is left of it; a larger step leaves the successor of `0` to the rows after it.
+        // A literal of `0` closes the zero case, and a successor the case of every successor where a step of one is left of it; a larger step leaves the successor of `0` to the rows after it, and a literal past `0` closes no case of the split.
         let reached = self.reached(
             &lines,
-            |shape| match shape {
-                Shape::Pattern(Pattern::Zero) => Some(false),
-                _ => shape.step_left().filter(Natural::is_one).map(|_| true),
+            |shape| match shape.value() {
+                Some(value) => value.is_zero().then_some(false),
+                None => shape.step_left().filter(Natural::is_one).map(|_| true),
             },
             2,
         );
@@ -1549,10 +1564,17 @@ impl<'m> Compiler<'m> {
         let mut zeros = Vec::new();
         let mut successors = Vec::new();
         for mut line in lines {
-            match line.cells.remove(0) {
-                Some((Shape::Pattern(Pattern::Zero), _)) => zeros.push(line),
+            let cell = line.cells.remove(0);
+            let value = cell.and_then(|(shape, _)| shape.value());
+            match (cell, value) {
+                // A literal is the successors it builds over zero: `0` is the zero case,
+                (_, Some(value)) if value.is_zero() => zeros.push(line),
+                // and one past it the successor case, one less at the predecessor, `7` at `n` being `6` at `n - 1`.
+                (Some((shape, place)), Some(_)) => {
+                    successors.push((Some(vec![Some((shape.peel(), place))]), line));
+                }
                 // A successor of a step past one is one of a step less over the predecessor, `p + 2` at `n` being `p + 1` at `n - 1`.
-                Some((shape, place)) if shape.step_left().is_some() => {
+                (Some((shape, place)), None) if shape.step_left().is_some() => {
                     successors.push((Some(vec![Some((shape.peel(), place))]), line));
                 }
                 _ => {
@@ -2183,13 +2205,39 @@ impl<'m> Compiler<'m> {
                 })?;
             }
             Pattern::Literal(_) | Pattern::Character(_) => {
-                let value = match pattern {
-                    Pattern::Literal(value) => value.clone(),
-                    Pattern::Character(character) => Natural::from(*character as u32),
-                    _ => unreachable!("a literal is a numeral or a character"),
-                };
+                let value = shape.value().expect("a literal has a value");
                 let split = match shared {
                     Some(Outermost::Switch(split)) => split,
+                    // The tree peels successors at this column, so a literal is the successors it builds over zero there: `0` the zero case, and one past it the successor case, one less at the predecessor, which states no case of the row's.
+                    Some(Outermost::Nat(split)) => {
+                        match value.is_zero() {
+                            true => {
+                                walk_awaited(context, awaits, |context| {
+                                    split.zero(context, |context, expected| {
+                                        arm(self, context, columns, line, expected)
+                                    })
+                                })?;
+                            }
+                            false => {
+                                let cells = vec![Some((shape.peel(), place))];
+                                let (binders, slots) = self.alone(context, &mut line, cells);
+                                let predecessor = binders[0];
+                                let mut parts = slots
+                                    .into_iter()
+                                    .map(|slot| Term::free_var(&binders[slot]))
+                                    .collect::<Vec<_>>();
+                                parts.extend(columns);
+
+                                walk_awaited(context, awaits, |context| {
+                                    split.successor(context, &predecessor, |context, expected| {
+                                        arm(self, context, parts, line, expected)
+                                    })
+                                })?;
+                            }
+                        }
+
+                        return Ok(walked.expect("the arm of a row's case is its walk"));
+                    }
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;

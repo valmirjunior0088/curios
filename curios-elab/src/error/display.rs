@@ -1446,17 +1446,6 @@ impl Displayed<'_> {
                 ));
                 f.stating("write the byte's literals beside `_`");
             }
-            Error::MatrixMixedNatDispatch {
-                successor, literal, ..
-            } => {
-                f.text("mixed patterns");
-                f.stating(format_args!(
-                    "`{successor}` peels a successor and `{literal}` matches a value"
-                ));
-                f.stating("a `Nat` is taken apart one of the two ways");
-                f.stating("write `0` beside successor arms, or literals beside `_`");
-                f.stating("match a value past `0` on the predecessor, inside the successor arm");
-            }
             // A name a program wrote is reported by the reason the lowering filed for it, in that value's own words, so a misspelled name reads the same whichever stage refuses for it.
             Error::UnboundVariable { why: Some(why), .. } => why.say(f),
             Error::UnboundVariable { term, why: None } => {

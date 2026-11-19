@@ -126,41 +126,17 @@ fn a_nested_nat_literal_dispatches_by_value() {
     assert_eq!(run(source), b"1");
 }
 
-// A literal arm and a successor arm in one `Nat` column are the dispatch and the case split, and one column is one of them.
+// A literal and a successor in one `Nat` column meet as every pattern does: the literal the successor takes is an exception written before it.
 #[test]
-fn nat_literal_mixed_with_succ_is_rejected() {
+fn a_literal_beside_a_successor_is_an_exception_written_before_it() {
     let source = r#"
         use /std/{Option, Nat};
         let f(m : Option(Nat)) -> Nat =
             match m | some(5) => 1 | some(n + 1) => n | _ => 0 end;
-        /std/print(Nat/to_str(f(Option/some(5))))
+        /std/print(Nat/to_str(f(Option/some(5)) + 10 * f(Option/some(9)) + 100 * f(Option/some(0)) + 1000 * f(Option/none())))
         "#;
 
-    let error = error(source);
-    assert!(
-        error.contains("`some(n + 1)` peels a successor and `some(5)` matches a value"),
-        "unexpected error: {error}"
-    );
-}
-
-// The refusal names the two arms as they are written, whatever they are, and notes each where it stands: the literal here is no `5`.
-#[test]
-fn a_mixed_nat_column_is_refused_by_the_arms_it_holds() {
-    let source = r#"
-        use /std/{Nat};
-        let f(n : Nat) -> Nat =
-            match n | 0 => 10 | 1 => 11 | p + 1 => p end;
-        /std/print(Nat/to_str(f(1)))
-        "#;
-
-    let error = error(source);
-    for said in [
-        "`p + 1` peels a successor and `1` matches a value",
-        "`p + 1` peels a successor here",
-        "`1` matches a value here",
-    ] {
-        assert!(error.contains(said), "{said:?} unsaid in {error}");
-    }
+    assert_eq!(run(source), b"81");
 }
 
 // A refusal of a match's shape stands under the match, wherever in a body the match is written: a whole body, an operand, a lambda's body.
@@ -168,21 +144,21 @@ fn a_mixed_nat_column_is_refused_by_the_arms_it_holds() {
 fn a_match_shape_refusal_is_located_at_the_match() {
     for (source, line) in [
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | some(n + 1) => n\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | [] => 2\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | some(n + 1) => n | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | [] => 2 | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     1 + (match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | some(n + 1) => n | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | [] => 2 | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  5 │         match k",
         ),
     ] {
         let error = error(source);
         assert!(
-            error.contains("peels a successor and") && error.contains(line),
+            error.contains("disagree on shape") && error.contains(line),
             "{source:?} reported {error}"
         );
     }

@@ -102,7 +102,6 @@ variants!(Error {
     MatrixTupleArity,
     MatrixLiteralColumn,
     MatrixByteSuccessor,
-    MatrixMixedNatDispatch,
     NotAInductType,
     LargeElimOfProp,
     SortDecided,

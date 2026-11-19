@@ -145,21 +145,21 @@ fn a_character_pattern_nests_inside_a_constructor() {
     );
 }
 
+// A character is a literal of its code point, so beside a successor it is an exception written before it, and the binder after both takes the one value they leave.
 #[test]
-fn a_character_case_cannot_join_successor_peeling() {
-    let report = error(
-        r#"
-        use /std/{Nat, Io};
+fn a_character_case_joins_successor_peeling() {
+    let source = r#"
+        use /std/{List, Nat, Str};
         let f(n: Nat) -> Nat =
             match n
             | 'a' => 0
             | p + 1 => p
             | _ => 1
             end;
-        /std/print("")
-        "#,
-    );
-    assert!(!report.is_empty(), "{report}");
+        /std/print(Str/join(" ", List/map([f(97), f(0), f(5)], Nat/to_str)))
+        "#;
+
+    assert_eq!(run(source), b"0 1 4");
 }
 
 #[test]

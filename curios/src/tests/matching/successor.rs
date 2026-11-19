@@ -1,4 +1,4 @@
-//! A successor pattern's step: `p + k` takes `k` successors apart, its predecessor what is left of the value.
+//! A successor pattern's step, `p + k` taking `k` successors apart, its predecessor what is left of the value, and the literals beside it, each the successors it builds over zero.
 
 use {crate::tests::test_support::*, curios_common::fill};
 
@@ -101,5 +101,146 @@ fn a_step_past_a_value_no_arm_takes_names_it() {
             error.contains("no arm matches") && error.contains(missing),
             "{arms}: unexpected error: {error}"
         );
+    }
+}
+
+// A Fibonacci written by its literals and a step of two refines each arm to its case, so its law at `k + 2` holds by reduction alone, through both checkers.
+#[test]
+fn literals_beside_a_step_refine_each_arm() {
+    let source = r#"
+        use /std/{Eq, Nat};
+
+        let fib(n: Nat) -> Nat =
+            match n
+            | 0 => 0
+            | 1 => 1
+            | p + 2 => fib(p) + fib(p + 1)
+            end;
+
+        let law(k: Nat) -> Eq()(fib(k + 2), fib(k) + fib(k + 1)) = Eq/refl();
+
+        /std/print(Nat/to_str(fib(10)))
+        "#;
+
+    assert_eq!(run(source), b"55");
+}
+
+// Literals and successor arms meet as every pattern does: a literal a successor arm takes is an exception written before it, below the step or past it, and a literal far past the step stays one test.
+#[test]
+fn literals_beside_a_step_answer_as_stated() {
+    for (arms, calls, expected) in [
+        (
+            "| 0 => 0 | 7 => 70 | p + 1 => p",
+            "f(0), f(1), f(7), f(9)",
+            "0 0 70 8",
+        ),
+        (
+            "| 0 => 0 | 1 => 10 | 7 => 70 | p + 2 => p",
+            "f(0), f(1), f(2), f(7), f(9)",
+            "0 10 0 70 7",
+        ),
+        (
+            "| 5 => 50 | p + 3 => p | _ => 99",
+            "f(0), f(2), f(3), f(5), f(8)",
+            "99 99 0 50 5",
+        ),
+        (
+            "| 1000 => 1 | p + 2 => p | _ => 99",
+            "f(0), f(1), f(2), f(1000), f(1001)",
+            "99 99 0 1 999",
+        ),
+    ] {
+        let source = fill!(
+            r#"
+            use /std/{List, Nat, Str};
+            let f(n: Nat) -> Nat = match n ${arms} end;
+            /std/print(Str/join(" ", List/map([${calls}], Nat/to_str)))
+            "#,
+            arms,
+            calls
+        );
+
+        assert_eq!(run(&source), expected.as_bytes(), "{arms}");
+    }
+}
+
+// The arm past an exception knows its value is not the exception: `p + 2` past `7` knows `n != 7`, which discharges the bound it is called with.
+#[test]
+fn a_step_past_an_exception_knows_the_exception_is_not_its_value() {
+    let source = r#"
+        use /std/{Bool, Nat};
+
+        let need(n: Nat, @ok: Bool/Holds(n != 7)) -> Nat = n;
+
+        let f(n: Nat) -> Nat =
+            match n
+            | 0 => 0
+            | 1 => 1
+            | 7 => 70
+            | p + 2 => need(p + 2)
+            end;
+
+        /std/print(Nat/to_str(f(7) + f(9)))
+        "#;
+
+    assert_eq!(run(source), b"79");
+}
+
+// A literal nested under a constructor meets a step there as it does at the column.
+#[test]
+fn literals_beside_a_nested_step_answer_as_stated() {
+    let source = r#"
+        use /std/{List, Nat, Option, Str};
+
+        let f(o: Option(Nat)) -> Nat =
+            match o
+            | some(0) => 10
+            | some(1) => 11
+            | some(p + 2) => p
+            | none() => 99
+            end;
+
+        /std/print(Str/join(" ", List/map([f(Option/some(0)), f(Option/some(1)), f(Option/some(6)), f(Option/none())], Nat/to_str)))
+        "#;
+
+    assert_eq!(run(source), b"10 11 4 99");
+}
+
+// A row reached at several places is typed once along its own patterns, a literal at a column the tree peels for another row's step among them.
+#[test]
+fn a_literal_row_reached_at_several_places_meets_a_step() {
+    let source = r#"
+        use /std/{Bool, List, Nat, Str};
+
+        let f(b: Bool, n: Nat) -> Nat =
+            match (b, n)
+            | (true, 0) => 1
+            | (_, 7) => 70
+            | (_, p + 2) => p
+            | (_, _) => 2
+            end;
+
+        /std/print(Str/join(" ", List/map([f(true, 0), f(false, 0), f(true, 7), f(false, 7), f(true, 9), f(false, 1)], Nat/to_str)))
+        "#;
+
+    assert_eq!(run(source), b"1 2 70 70 7 2");
+}
+
+// A literal a successor arm before it takes is reached by no value, and a successor arm with no zero arm leaves `0` to none.
+#[test]
+fn a_literal_past_a_step_is_refused_as_unreachable() {
+    for (arms, refusal) in [
+        ("| 0 => 0 | p + 1 => p | 3 => 3", "unreachable arm"),
+        ("| p + 1 => p | 3 => 3", "no arm matches `0`"),
+    ] {
+        let error = error(&fill!(
+            r#"
+            use /std/{Nat};
+            let f(n: Nat) -> Nat = match n ${arms} end;
+            /std/print(Nat/to_str(f(4)))
+            "#,
+            arms
+        ));
+        assert!(error.contains(refusal), "{arms}: unexpected error: {error}");
     }
 }
