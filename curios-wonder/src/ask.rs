@@ -876,6 +876,19 @@ pub fn wonder_at(
                 answer(format_args!("{}\n", heading.head));
             }
         }
+        Some(Answer {
+            stands: Stands::Module { path, place: at },
+            ..
+        }) => {
+            let about = match at {
+                Some(at) => About::Place(at),
+                None => About::Named(path.clone()),
+            };
+            let report = Report::about(about, Said::line(&path))
+                .stating("module")
+                .trying(exports_listing(&path, Some(place.subject())));
+            answer(format_args!("{}\n", report.rendered(Kind::Module, &reader)));
+        }
         Some(answered) => {
             let (about, said, kind) = match &answered.stands {
                 Stands::Local { name, bound, .. } => (
@@ -891,7 +904,9 @@ pub fn wonder_at(
                 Stands::Term { written, .. } => {
                     (answered.range.clone(), opening(written), Kind::Term)
                 }
-                Stands::Declaration { .. } => unreachable!("a declaration is answered above"),
+                Stands::Declaration { .. } | Stands::Module { .. } => {
+                    unreachable!("a declaration and a module are answered above")
+                }
             };
             let report = answered.facts().into_iter().fold(
                 Report::about(About::Place(about), Said::line(said)),

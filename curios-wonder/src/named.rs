@@ -132,6 +132,8 @@ pub struct Written {
     pub settled: BTreeMap<(usize, usize), String>,
     /// Each label of a structure's field the text writes, in no order, as elaboration resolved it ([`Placed::establish`]).
     pub fields: Vec<WrittenField>,
+    /// Each segment of a path the text writes that reaches a module, with the module, in the order they are written (`curios_module::Text::modules`).
+    pub modules: Vec<(Span, Qualifier)>,
 }
 
 /// A structure's field named by the label it is written with ([`Stands::Field`]): where the label is written, the field's label, the path of the structure that declares it, where the structure writes the field, and its type as the structure declares it, spelled for a reader standing in the text.
@@ -189,6 +191,8 @@ pub enum Stands {
         bound: Option<Span>,
         type_: Option<String>,
     },
+    /// A segment of a path reaching a module: the module's path, and where it is declared.
+    Module { path: String, place: Option<Span> },
     /// A term no name stands at, as it is written, and the type it settled at.
     Term {
         written: String,
@@ -225,6 +229,10 @@ impl Answer {
             .into_iter()
             .chain(typed(type_))
             .collect(),
+            Stands::Module { .. } => vec![Fact {
+                lead: "module".to_string(),
+                values: Vec::new(),
+            }],
             Stands::Term { type_, .. } => typed(type_),
         }
     }
@@ -233,7 +241,28 @@ impl Answer {
 impl Placed {
     /// What stands at `offset` of the text `written`, one of this file's: the name [`Named::at`] finds, and where none holds the offset the narrowest term that does, a term at its end being at it as a name is. `None` where neither does.
     pub fn answer(&self, written: &Written, offset: usize) -> Option<Answer> {
-        if let Some(named) = Named::at(&written.names, offset) {
+        let holds = |span: &Span| span.start <= offset && offset <= span.end;
+        let narrowest = |span: &Span| (span.end - span.start, offset == span.end);
+        let named = Named::at(&written.names, offset);
+        // A segment reaching a module is a name as narrow as it is written, a declaration's name standing where the two are as narrow.
+        if let Some((span, module)) = written
+            .modules
+            .iter()
+            .filter(|(span, _)| holds(span))
+            .min_by_key(|(span, _)| narrowest(span))
+            .filter(|(span, _)| {
+                named.is_none_or(|named| narrowest(span) < narrowest(&named.written))
+            })
+        {
+            return Some(Answer {
+                range: span.clone(),
+                stands: Stands::Module {
+                    path: module.join(),
+                    place: None,
+                },
+            });
+        }
+        if let Some(named) = named {
             let mut described = self.declarations.get(&named.named)?.clone();
             described.type_ = written.types.get(&named.named).cloned();
 
@@ -245,8 +274,6 @@ impl Placed {
                 },
             });
         }
-        let holds = |span: &Span| span.start <= offset && offset <= span.end;
-        let narrowest = |span: &Span| (span.end - span.start, offset == span.end);
         if let Some(field) = written
             .fields
             .iter()
@@ -582,6 +609,7 @@ impl Reading {
                     binders: BTreeMap::new(),
                     settled: BTreeMap::new(),
                     fields: Vec::new(),
+                    modules: passage.modules(),
                 }
             })
             .collect();

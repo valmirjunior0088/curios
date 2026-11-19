@@ -1,7 +1,7 @@
 //! The census of a unit's lowering: each declaration it keeps a record of, held to that record and to the answers its trace holds ([`PreparedText::census`]). What a recompile keeps of a declaration is what a whole lowering makes where both hold: one kept unasked where nothing its record names moved, and one kept by asking where every name it resolved is answered as it was.
 
 use {
-    super::{Consulted, Found, Key, LoweredDeclaration},
+    super::{Consulted, Found, Key, LoweredDeclaration, Reached},
     crate::{
         Compiled, PreparedText,
         into_core::{
@@ -196,12 +196,22 @@ impl Census<'_> {
             }
         }
 
-        record
+        let unanswered = record
             .trace
             .asked()
             .iter()
             .filter(|(lookup, found)| !context.answers(lookup, found))
-            .map(|(lookup, _)| Name::new(lookup.absolute, lookup.path).join())
+            .map(|(lookup, _)| lookup);
+        let unreached = record
+            .walked
+            .asked()
+            .iter()
+            .filter(|(lookup, reached)| !context.reaches(lookup, reached))
+            .map(|(lookup, _)| lookup);
+
+        unanswered
+            .chain(unreached)
+            .map(|lookup| Name::new(lookup.absolute, lookup.path).join())
             .collect()
     }
 
@@ -260,6 +270,32 @@ impl Census<'_> {
         let mut public = BTreeMap::<Qualifier, PublicInterface>::new();
         let mut bindings = BTreeMap::new();
         let mut qualifiers = BTreeMap::new();
+        // Where each walk the record holds reached, which a path through it passes; a step it holds nothing of reaches the module its spelling names.
+        let reached = record
+            .walked
+            .asked()
+            .iter()
+            .map(|(lookup, reached)| {
+                let module = match reached {
+                    Reached::Module(module) | Reached::Namespace(module) => *module,
+                };
+                ((lookup.absolute, lookup.path), module)
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (_, reached) in record.walked.asked() {
+            if let Reached::Namespace(namespace) = reached {
+                table
+                    .entry(namespace.without_last())
+                    .or_insert_with(ModuleInfo::new)
+                    .holding(
+                        namespace.last(),
+                        Declares::Child(ChildInfo::InductConstructors {
+                            vis_pub: true,
+                            rep_pub: true,
+                        }),
+                    );
+            }
+        }
         for (lookup, found) in record.trace.asked() {
             let target = found.target();
             let Some((last, steps)) = lookup.path.segments().split_last() else {
@@ -268,17 +304,26 @@ impl Census<'_> {
             if !lookup.absolute && steps.is_empty() {
                 bindings.insert(last.clone(), target);
             } else {
-                // A relative path's head stands for a module of the body's own, which no guard refuses.
-                let (mut current, steps) = match (lookup.absolute, steps.split_first()) {
+                // A relative path's head stands for a module of the body's own, which no guard refuses, where no walk the record holds says otherwise.
+                let (mut current, mut prefix, steps) = match (lookup.absolute, steps.split_first())
+                {
                     (false, Some((head, rest))) => {
-                        let start = site.body.with(head);
+                        let prefix = Qualifier::empty().with(head);
+                        let start = reached
+                            .get(&(false, prefix))
+                            .copied()
+                            .unwrap_or_else(|| site.body.with(head));
                         qualifiers.insert(head.clone(), start);
-                        (start, rest)
+                        (start, prefix, rest)
                     }
-                    _ => (Qualifier::empty(), steps),
+                    _ => (Qualifier::empty(), Qualifier::empty(), steps),
                 };
                 for step in steps {
-                    let next = current.with(step);
+                    prefix = prefix.with(step);
+                    let next = reached
+                        .get(&(lookup.absolute, prefix))
+                        .copied()
+                        .unwrap_or_else(|| current.with(step));
                     public
                         .entry(current)
                         .or_insert_with(nothing_exported)

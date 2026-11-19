@@ -228,6 +228,21 @@ impl Text<'_> {
         mentions
     }
 
+    /// Every segment of a path this text writes that reaches a module, where it is written and the module, in the order they are written ([`curios_core::Mints::modules`]).
+    pub fn modules(&self) -> Vec<(Span, Qualifier)> {
+        let mut modules = self
+            .mints()
+            .into_iter()
+            .flat_map(|mints| &mints.modules)
+            .filter(|(extent, _)| (extent.anchor, extent.stamp) == self.key)
+            .filter_map(|(extent, module)| Some((self.placed(extent.start, extent.end)?, *module)))
+            .collect::<Vec<_>>();
+        modules.sort_by_key(|(span, _)| (span.start, span.end));
+        modules.dedup_by(|(this, _), (that, _)| (this.start, this.end) == (that.start, that.end));
+
+        modules
+    }
+
     /// Where each term this text writes stands, once a place and in the order they are written, a term holding another before it: every lowered node placed in this text, whatever it lowered to — what a place no name stands at answers.
     pub fn terms(&self) -> Vec<Span> {
         let mut placed = BTreeSet::new();

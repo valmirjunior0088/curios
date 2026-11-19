@@ -247,7 +247,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     assert_eq!(named, "");
 }
 
-/// A place answers the name written there on stdout as `--name` answers a declaration, a block — its path, what it is declared as, the type and totality the library's check established of it, and where its name is written — then the prose and head its author wrote.
+/// A place answers the name written there on stdout as `--name` answers a declaration, a block — its path, what it is declared as, the type and totality the library's check established of it, and where its name is written — then the prose and head its author wrote; and a segment of the path, the module it reaches.
 #[test]
 fn a_place_answers_the_name_written_there() {
     let root = project("at");
@@ -257,7 +257,7 @@ fn a_place_answers_the_name_written_there() {
         "--- The word a run prints.\npub let word : /std/Str = \"placed\";\n",
     );
 
-    let answered = curios(&root, &["wonder", "--at", "app.crs:1:20"], "");
+    let answered = curios(&root, &["wonder", "--at", "app.crs:1:22"], "");
 
     assert!(
         answered.status.success(),
@@ -280,8 +280,20 @@ fn a_place_answers_the_name_written_there() {
     );
 
     // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
-    let again = curios(&root, &["wonder", "--at", "app.crs:1:20"], "");
+    let again = curios(&root, &["wonder", "--at", "app.crs:1:22"], "");
     assert_eq!(stdout(&again), answer);
+
+    // A segment of the path answers the module it reaches, with the command that lists what it exposes.
+    let module = curios(&root, &["wonder", "--at", "app.crs:1:18"], "");
+    assert_eq!(
+        stdout(&module),
+        concat!(
+            "/app/util\n",
+            "│  module\n",
+            "├─ try; curios wonder --name /app/util --exports app.crs\n",
+            "└─ [module] /app/util\n",
+        )
+    );
 }
 
 /// A place in a library's file answers what is written there whatever the store holds of the library: here the check of the package entire files the library, beside an executable, before the place is asked.

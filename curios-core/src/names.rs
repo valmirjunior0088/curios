@@ -192,6 +192,8 @@ pub struct Mints {
     pub hides: Vec<Hiding>,
     /// Every name the lowering resolved into a node rather than into a term, where it is written: a literal's or a structure pattern's head, which no lowered term holds at its place. What a place's answer reads beside the names its terms write. Held here, as `written` is.
     pub named: Vec<(Extent, Global)>,
+    /// Every segment of a path that reaches a module a `mod` line declares, where it is written, with the module: what a place's answer reads of a module. A segment reaching a declaration's namespace — a family's constructors, a concept's methods — is a name of the declaration (`named`). Held here, as `written` is.
+    pub modules: Vec<(Extent, Qualifier)>,
     /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
     pub lints: Vec<Lint>,
 }
@@ -261,6 +263,7 @@ impl Minted {
             written: Vec::new(),
             hides: Vec::new(),
             named: Vec::new(),
+            modules: Vec::new(),
             lints: Vec::new(),
         };
 

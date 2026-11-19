@@ -70,6 +70,9 @@ fn said(answer: &Answer) -> (&str, Declared, bool, Option<(usize, usize)>) {
         Stands::Field { label, .. } => {
             panic!("a field stands there, `{label}`, and no declaration")
         }
+        Stands::Module { path, .. } => {
+            panic!("a module stands there, `{path}`, and no declaration")
+        }
         Stands::Term { written, .. } => panic!("a term stands there, `{written}`, and no name"),
     }
 }
@@ -826,4 +829,31 @@ fn a_field_of_a_structure_in_scope_answers_where_its_unit_writes_it() {
         }
         stands => panic!("no placed field stands at the projection: {stands:?}"),
     }
+}
+
+/// A segment of a path answers what it reaches: a module a `mod` line declares, as a module, and a family's namespace, as the family.
+#[test]
+fn a_paths_segment_answers_the_module_or_the_family_it_reaches() {
+    const PROGRAM: &str = "\
+pub mod Shapes
+    pub induct Colour: pub Type
+    | red()
+    end
+end
+let picked: /Shapes/Colour = /Shapes/Colour/red();
+/std/print(\"\")";
+    let module = at(PROGRAM, "Shapes/Colour/red", 0, 0).expect("a module stands there");
+    let family = at(PROGRAM, "Colour/red", 0, 0).expect("a name stands there");
+
+    assert_eq!(
+        module.stands,
+        Stands::Module {
+            path: "/Shapes".to_string(),
+            place: None,
+        }
+    );
+    assert_eq!(
+        said(&family),
+        ("/Shapes/Colour", Declared::Inductive, false, Some((2, 16)))
+    );
 }

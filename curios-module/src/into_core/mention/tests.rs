@@ -1,6 +1,6 @@
 //! What a text names, held over one program that writes a name in every position the lowering resolves one.
 //!
-//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves, or one on a `use` line — and is read with the marks taken out. Every path it writes is then held to what its text mentions: one that ends in a declaration's name, and stands in no mark, is one mention of that declaration over the whole path, and every other is none.
+//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves, or one on a `use` line — and is read with the marks taken out. Every path it writes is then held to what its text mentions, where it stands in no mark: one that ends in a declaration's name is a mention of that declaration over the whole path, each segment before its last that is a declaration's name — the family or the concept whose namespace it reaches — a mention of that declaration over the segment, and nothing else is one.
 
 use {
     super::super::{test_support::*, *},
@@ -144,28 +144,40 @@ fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
     let mut disagreements = Vec::new();
     for (start, path) in paths(&text) {
         let end = start + path.len();
-        let named = path.rsplit('/').next().expect("a path has a last segment");
-        let expected = declared
-            .get(named)
-            .filter(|_| !silent.iter().any(|held| held.contains(&start)));
+        let silenced = silent.iter().any(|held| held.contains(&start));
+        // Each segment before the last that reaches a declaration's namespace names the declaration over itself, and the last names its declaration over the whole path.
+        let mut expected = Vec::new();
+        let mut at = start + usize::from(path.starts_with('/'));
+        for segment in path.trim_start_matches('/').split('/') {
+            let whole = at + segment.len() == end;
+            if let Some(name) = declared.get(segment).filter(|_| !silenced) {
+                expected.push(match whole {
+                    true => ((start, end), *name),
+                    false => ((at, at + segment.len()), *name),
+                });
+            }
+            at += segment.len() + 1;
+        }
+        expected.sort_by_key(|(at, _)| *at);
         let within = mentions
             .iter()
             .filter(|mention| start <= mention.span.start && mention.span.end <= end)
             .collect::<Vec<_>>();
 
-        let agrees = match (expected, within.as_slice()) {
-            (None, []) => true,
-            (Some(expected), [mention]) => {
-                let at = (mention.span.start, mention.span.end);
-                let label = curios_core::Anchors::label(&[unit.anchors()], &mention.name);
+        let agrees = within.len() == expected.len()
+            && within
+                .iter()
+                .zip(&expected)
+                .all(|(mention, (at, expected))| {
+                    let written = (mention.span.start, mention.span.end);
+                    let label = curios_core::Anchors::label(&[unit.anchors()], &mention.name);
 
-                mention.name == *expected
-                    && at == (start, end)
-                    && mention.declared.is_some()
-                        == label.is_some_and(|label| (label.start, label.end) == at)
-            }
-            _ => false,
-        };
+                    mention.name == *expected
+                        && written == *at
+                        && mention.declared.is_some()
+                            == label.is_some_and(|label| (label.start, label.end) == written)
+                });
+        let expected = expected.iter().map(|(_, name)| name).collect::<Vec<_>>();
         if !agrees {
             let line = text[..start].lines().count();
             let found = within
@@ -324,4 +336,43 @@ fn a_witness_is_declared_by_its_head_and_a_member_by_its_name() {
             "Test stays_painted",
         ]
     );
+}
+
+/// A segment of a path that reaches a module a `mod` line declares is placed with the module, and one that reaches a family's namespace is a name of the family.
+#[test]
+fn a_segment_reaching_a_module_is_placed_with_the_module() {
+    const WRITTEN: &str = "\
+pub mod Shapes
+    pub induct Colour: pub Type
+    | red()
+    end
+end
+
+/Shapes/Colour/red()
+";
+    let entrypoint = WRITTEN.parse::<Entrypoint>().unwrap();
+    let loader = fixture_loader();
+    let (unit, entry) = into_core_entry(
+        &UnitSource::entry(&entrypoint, &loader),
+        &[],
+        syntax(),
+        None,
+    )
+    .unwrap();
+
+    let texts = unit.texts(Some(&entry), |_| true);
+    let closing = texts.last().expect("the program closes with a term");
+    let modules = closing
+        .modules()
+        .into_iter()
+        .map(|(span, module)| (&WRITTEN[span.start..span.end], module.join()))
+        .collect::<Vec<_>>();
+    let mentions = closing
+        .mentions()
+        .into_iter()
+        .map(|mention| &WRITTEN[mention.span.start..mention.span.end])
+        .collect::<Vec<_>>();
+
+    assert_eq!(modules, [("Shapes", "/Shapes".to_string())]);
+    assert_eq!(mentions, ["/Shapes/Colour/red", "Colour"]);
 }

@@ -77,6 +77,34 @@ impl Name {
         }
     }
 
+    /// Where each segment was written, in order, read off the path's own span and the leaf's where the leaf was written apart: `None` for a segment no span holds as written, as in a name the compiler built or extended.
+    pub fn segment_spans(&self) -> Vec<Option<Span>> {
+        let segments = self.qualifier.segments();
+        let along = match self.leaf {
+            Some(_) => segments.len().saturating_sub(1),
+            None => segments.len(),
+        };
+        let mut spans = Vec::with_capacity(segments.len());
+        let mut start = self
+            .span
+            .as_ref()
+            .map(|span| span.start + usize::from(self.is_abs));
+        for segment in &segments[..along] {
+            let placed = self.span.as_ref().zip(start).and_then(|(span, start)| {
+                let end = start + segment.len();
+                (end <= span.end && span.source.text().get(start..end) == Some(segment.as_str()))
+                    .then(|| Span::new(span.source.clone(), start, end))
+            });
+            spans.push(placed);
+            start = start.map(|start| start + segment.len() + 1);
+        }
+        if along < segments.len() {
+            spans.push(self.leaf.clone());
+        }
+
+        spans
+    }
+
     pub fn join(&self) -> String {
         // A `Name` is a *surface* reference printed back as written: an absolute reference keeps `Qualifier::join`'s leading `/`; a relative one strips it. (Canonical core identities go through `Qualifier::join` directly and are always absolute — this `is_abs`-respecting form is only for surface text.)
         match self.is_abs {

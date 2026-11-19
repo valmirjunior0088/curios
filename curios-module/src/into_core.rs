@@ -17,8 +17,8 @@ mod lowered;
 use lowered::*;
 pub use lowered::{
     ArchivedBaselineHalf, ArchivedConsulted, ArchivedFound, ArchivedHalfEntry, ArchivedLookup,
-    ArchivedLoweredDeclaration, BaselineHalf, Consulted, Found, HalfEntry, Lookup, LookupReaders,
-    LoweredDeclaration,
+    ArchivedLoweredDeclaration, ArchivedReached, BaselineHalf, Consulted, Found, HalfEntry, Lookup,
+    LookupReaders, LoweredDeclaration, Reached,
 };
 
 mod context;

@@ -254,6 +254,14 @@ impl Found {
     }
 }
 
+/// What the walk of a path reached at a segment before the name's last ([`curios_core::Mints::modules`], [`curios_core::Mints::named`]): a module a `mod` line declares, or the namespace a declaration declares — a family's, which holds its constructors, or a concept's, which holds its methods.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Reached {
+    Module(Qualifier),
+    Namespace(Qualifier),
+}
+
 /// A binding the lowering read to resolve a name, found or not: what an answer to a lookup can move with. Each is a label of one table, named by the path the label extends.
 ///
 /// **Read where the resolution reads it.** A bare name and the head of a relative path are read off the lexical scope of the module body they are written in, a binding or a module; every further step, and a path's last segment, off the table and the interface of the module the step stands in; a glob off the whole of a module's interface. So a lookup answers as it did wherever every binding it read is the entry it was, and a declaration whose lookups all do lowers to what it lowered to.
@@ -288,6 +296,8 @@ pub struct LoweredDeclaration {
     scoped: Vec<u32>,
     /// Every name it resolved through its scope, with what its door answered of each ([`Found`]).
     trace: curios_core::Trace<Lookup, Found>,
+    /// Every path it walked to a segment before a name's last, with what the walk reached there ([`Reached`]): what each segment it keeps the place of names.
+    walked: curios_core::Trace<Lookup, Reached>,
     /// Every binding resolving those names read, each once, in order: what an answer can move with ([`Consulted`]).
     consulted: Vec<Consulted>,
 }
@@ -302,6 +312,7 @@ impl LoweredDeclaration {
     ) -> Self {
         let Journal {
             trace,
+            walked,
             consulted,
             scoped,
             unbound,
@@ -334,6 +345,7 @@ impl LoweredDeclaration {
             items: facts,
             scoped: scoped.unwrap_or_default(),
             trace,
+            walked,
             consulted: consulted
                 .into_iter()
                 .collect::<BTreeSet<_>>()
@@ -716,10 +728,13 @@ impl<'a> Baseline<'a> {
             return None;
         }
 
-        let stands = self
-            .record(first)
+        let record = self.record(first);
+        let stands = record
             .trace
-            .stands(|lookup, found| context.answers(lookup, found));
+            .stands(|lookup, found| context.answers(lookup, found))
+            && record
+                .walked
+                .stands(|lookup, reached| context.reaches(lookup, reached));
         context.forget_asked();
         if stands {
             self.claimed.borrow_mut().insert(first);

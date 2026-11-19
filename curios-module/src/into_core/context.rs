@@ -1,7 +1,7 @@
 use {
     super::{
-        Consulted, Found, Held, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named,
-        out_of_reach, unresolved,
+        Consulted, Found, Held, Lookup, PublicInterface, Reach, Reached, Scoped, Shared, carriers,
+        named, out_of_reach, unresolved,
     },
     crate::{Error, OrderedMap},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
@@ -122,6 +122,8 @@ impl WrittenSorts {
 pub struct Journal {
     /// Every name it resolved through its scope, with what its door answered of each, in the order it asked.
     pub trace: curios_core::Trace<Lookup, Found>,
+    /// Every path it walked to a segment before a name's last, with what the walk reached there.
+    pub walked: curios_core::Trace<Lookup, Reached>,
     /// Every binding resolving those names read, as each was read — see [`Consulted`]. What a `use` declaration's resolution read too, where it is the one being resolved.
     pub consulted: Vec<Consulted>,
     /// The names it recorded an import scope for.
@@ -636,6 +638,8 @@ pub struct Declaring {
     hides: RefCell<Vec<curios_core::Hiding>>,
     // Every name the declaration being lowered resolved into a node rather than a term, where it is written. The declaration's, as its written binders are.
     named: RefCell<Vec<(curios_core::Extent, curios_core::Global)>>,
+    // Every segment of a path the declaration being lowered writes that reaches a module, where it is written. The declaration's, as its written binders are.
+    modules: RefCell<Vec<(curios_core::Extent, Qualifier)>>,
     // The lints the lowering of the declaration being lowered decided, its last fact being the text as written. The declaration's, as its unread sites are.
     lints: RefCell<Vec<curios_core::Lint>>,
 }
@@ -655,6 +659,7 @@ impl Declaring {
             written,
             hides,
             named,
+            modules,
             lints,
         } = self;
 
@@ -669,6 +674,7 @@ impl Declaring {
         written.borrow_mut().clear();
         hides.borrow_mut().clear();
         named.borrow_mut().clear();
+        modules.borrow_mut().clear();
         lints.borrow_mut().clear();
     }
 }
@@ -689,6 +695,7 @@ impl Shared {
                 written: RefCell::default(),
                 hides: RefCell::default(),
                 named: RefCell::default(),
+                modules: RefCell::default(),
                 lints: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
@@ -1033,6 +1040,7 @@ impl<'a> Context<'a> {
             written: self.shared.declaring.written.borrow().clone(),
             hides: self.shared.declaring.hides.borrow().clone(),
             named: self.shared.declaring.named.borrow().clone(),
+            modules: self.shared.declaring.modules.borrow().clone(),
             lints: self.shared.declaring.lints.borrow().clone(),
         }
     }
@@ -1344,13 +1352,21 @@ impl<'a> Context<'a> {
         self.shared.sites.borrow()[self.current_site?].span.clone()
     }
 
-    // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target. A step that fails is refused where it stopped ([`unresolved`]).
-    fn walk_children(&self, start: Qualifier, segments: &[String]) -> Result<Qualifier, Error> {
+    // Walk from `start` through `segments` as child modules visible to this module, following each entry's re-export target: the module each segment reaches, in order. A step that fails is refused where it stopped ([`unresolved`]).
+    fn walk_children(
+        &self,
+        start: Qualifier,
+        segments: &[String],
+    ) -> Result<Vec<Qualifier>, Error> {
         let mut current = start;
+        let mut reached = Vec::with_capacity(segments.len());
 
         for segment in segments {
             match self.step(&current, segment, false) {
-                Some(target) => current = target,
+                Some(target) => {
+                    current = target;
+                    reached.push(target);
+                }
                 None => {
                     return Err(self.unresolved_step(
                         &current,
@@ -1362,21 +1378,30 @@ impl<'a> Context<'a> {
             }
         }
 
-        Ok(current)
+        Ok(reached)
     }
 
     // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`).
     //
     // **What is guarded is the reach the author spelled, not where the name they wrote happens to live.** An absolute path names its root outright, and a relative one whose head is a module of this scope reaches the same place by another spelling — both are guarded at the head, so `sys/Nat/add` is refused exactly as `/sys/Nat/add` is. A head an *import* put in scope is not: that `use` was vetted where it was written, against the facade the standard library offers, and a type re-exported out of an internal root carries its constructors with it. Walking into them is reaching through the facade rather than past it, so `True/qed` under `use /std/{True}` is the consumer's to write even though the declaration sits in `/sys`.
     fn resolve_module_prefix(&self, name: &Name, upto: usize) -> Result<Qualifier, Error> {
+        let reached = self.resolve_module_steps(name, upto)?;
+
+        Ok(reached.last().copied().unwrap_or_else(Qualifier::empty))
+    }
+
+    // The module each of `name`'s first `upto` segments reaches, in order, as [`Context::resolve_module_prefix`] walks them.
+    fn resolve_module_steps(&self, name: &Name, upto: usize) -> Result<Vec<Qualifier>, Error> {
         let segments = name.qualifier().segments();
 
         let resolved = if name.is_abs() {
             // The root the path names is its head; a re-export the walk passes through past it is the facade's to give.
             let first = upto.min(1);
-            let root = self.walk_children(Qualifier::empty(), &segments[..first])?;
+            let mut reached = self.walk_children(Qualifier::empty(), &segments[..first])?;
+            let root = reached.last().copied().unwrap_or_else(Qualifier::empty);
             self.guarded(&root, name, first)?;
-            self.walk_children(root, &segments[first..upto])?
+            reached.extend(self.walk_children(root, &segments[first..upto])?);
+            reached
         } else {
             let head = name.head();
             let start = self
@@ -1389,7 +1414,9 @@ impl<'a> Context<'a> {
                 self.guarded(&start, name, 1)?;
             }
 
-            self.walk_children(start, &segments[1..upto])?
+            let mut reached = vec![start];
+            reached.extend(self.walk_children(start, &segments[1..upto])?);
+            reached
         };
 
         Ok(resolved)
@@ -1629,6 +1656,76 @@ impl<'a> Context<'a> {
         result.map_err(|e| attach(e, name))
     }
 
+    // Record what each segment `name` writes before its last reaches, `reached` being the module each reaches: a module a `mod` line declares, or the declaration whose namespace it is — a family's, which holds its constructors, or a concept's, which holds its methods. What the segment reaches is read as resolution reads a member, the read recorded, so a namespace that changes kind lowers the declaration again.
+    fn note_segments(&self, name: &Name, reached: &[Qualifier]) {
+        let mut prefix = Qualifier::empty();
+        for ((segment, span), module) in name
+            .qualifier()
+            .segments()
+            .iter()
+            .zip(name.segment_spans())
+            .zip(reached)
+        {
+            prefix = prefix.with(segment);
+            let kind = self.reached_kind(*module);
+            // What the walk reached is an answer of the declaration's, asked again before a later lowering keeps it.
+            self.shared.anchoring.journal.borrow_mut().walked.record(
+                Lookup {
+                    absolute: name.is_abs(),
+                    path: prefix,
+                },
+                kind,
+            );
+            let Some(at) = span.as_ref().and_then(|span| self.extent(span)) else {
+                continue;
+            };
+            match kind {
+                Reached::Namespace(module) => {
+                    self.named(at, curios_core::Global::Authored(module));
+                }
+                Reached::Module(module) => {
+                    self.shared
+                        .declaring
+                        .modules
+                        .borrow_mut()
+                        .push((at, module));
+                }
+            }
+        }
+    }
+
+    // What `module`, which a walk reached, is: a declaration's namespace — a family's or a concept's — or a module a `mod` line declares, read as resolution reads a member.
+    fn reached_kind(&self, module: Qualifier) -> Reached {
+        let declared = match module.is_root() {
+            true => None,
+            false => {
+                self.held(&module.without_last(), module.last(), false)
+                    .declared
+            }
+        };
+
+        match declared {
+            Some(Declares::Child(
+                ChildInfo::InductConstructors { .. } | ChildInfo::ConceptMethods { .. },
+            )) => Reached::Namespace(module),
+            _ => Reached::Module(module),
+        }
+    }
+
+    /// Whether the walk of the path `lookup` reaches `reached` where this context stands, as [`Context::answers`] asks a name again.
+    pub fn reaches(&self, lookup: &Lookup, reached: &Reached) -> bool {
+        let name = Name::new(lookup.absolute, lookup.path);
+        let walked = self.quietly(|| {
+            let steps = self
+                .resolve_module_steps(&name, name.qualifier().segments().len())
+                .ok()?;
+
+            Some(self.reached_kind(*steps.last()?))
+        });
+
+        walked.as_ref() == Some(reached)
+    }
+
     // What the lowering reads of a name resolved to `target`: a concept's method where `target` is a binding of the namespace a concept declares ([`concept_method`]), and the declaration it is otherwise. Read off what the module holding the namespace holds under its label, through the reading every step takes, so an edit making the namespace another kind's reaches the declaration, and asking it again compares the answer.
     fn found(&self, target: Qualifier) -> Found {
         // A name of the root's own stands in no namespace.
@@ -1647,16 +1744,20 @@ impl<'a> Context<'a> {
     // Resolve a qualified/absolute term reference to its canonical binding target, reading the frozen public interfaces, and answer what the lowering reads of it.
     pub fn resolve_term_name(&self, name: &Name) -> Result<Found, Error> {
         let result = (|| {
-            let (parent, label) = self.resolve_parent_path(name)?;
-            match self.step(&parent, &label, true) {
+            let last = name.qualifier().segments().len() - 1;
+            let reached = self.resolve_module_steps(name, last)?;
+            let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
+            let label = name.last();
+            match self.step(&parent, label, true) {
                 Some(target) => {
                     self.note_written(name);
+                    self.note_segments(name, &reached);
                     let found = self.found(target);
                     self.asked(name, found);
                     Ok(found)
                 }
                 None => {
-                    Err(self.unresolved_step(&parent, &label, curios_core::Sought::Binding, true))
+                    Err(self.unresolved_step(&parent, label, curios_core::Sought::Binding, true))
                 }
             }
         })();
@@ -1709,7 +1810,9 @@ impl<'a> Context<'a> {
 
     /// Drop what has been asked since the declaration began: the questions of a trace asked again are no questions of the declaration.
     pub fn forget_asked(&self) {
-        self.shared.anchoring.journal.borrow_mut().trace = curios_core::Trace::default();
+        let mut journal = self.shared.anchoring.journal.borrow_mut();
+        journal.trace = curios_core::Trace::default();
+        journal.walked = curios_core::Trace::default();
     }
 }
 
