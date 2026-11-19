@@ -2,7 +2,7 @@
 //!
 //! These probes live here rather than in `curios-wasm` because that crate must not name wasmtime — the pin is `curios-native`'s single row — and `curios_native::validate` is the only thing that reads an encoded module back. With no binary reader in the tree, acceptance by the engine *is* the binary-side check: a flag byte, a limits header, or a memarg written wrong is a validation failure here rather than a silent miscompile later.
 //!
-//! Each module is written in the crate's own WAT dialect and parsed, so one source string exercises the parser, the printer's inverse, and the encoder at once.
+//! Each module is written in the WebAssembly text format and parsed by the crate, so one source string exercises the parser, the printer's inverse, and the encoder at once.
 
 use {
     curios_native::validate,
@@ -80,7 +80,7 @@ fn elem_flag_01_is_accepted() {
         (module $elem
             (type $f (func))
             (func $a (type $f))
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }
@@ -137,7 +137,7 @@ fn elem_flag_05_is_accepted() {
         (module $elem
             (type $f (func))
             (func $a (type $f))
-            (elem $e passive (ref null $f) (item ref.func $a)))
+            (elem $e (ref null $f) (item ref.func $a)))
 "#,
     );
 }
@@ -205,7 +205,7 @@ fn the_table_instructions_are_accepted() {
                 elem.drop $e)
             (table $first i32 1 (ref null func))
             (table $second i32 1 (ref null func))
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }
@@ -218,10 +218,10 @@ fn the_indirect_calls_are_accepted() {
             (type $f (func))
             (func $a (type $f)
                 i32.const 0
-                call_indirect $t $f)
+                call_indirect $t (type $f))
             (func $b (type $f)
                 i32.const 0
-                return_call_indirect $t $f)
+                return_call_indirect $t (type $f))
             (table $t i32 1 (ref null func)))
 "#,
     );
@@ -248,7 +248,7 @@ fn array_copy_writes_its_destination_first() {
                 i32.const 0
                 i32.const 1
                 array.copy $dst $src)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }
@@ -268,7 +268,7 @@ fn the_element_segment_array_operations_are_accepted() {
                 i32.const 0
                 i32.const 1
                 array.init_elem $funcs $e)
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }
@@ -428,7 +428,7 @@ fn the_bulk_memory_instructions_are_accepted() {
                 data.drop $d)
             (memory $first i32 1)
             (memory $second i32 1)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }
@@ -439,7 +439,7 @@ fn data_flag_01_is_accepted() {
     validates(
         r#"
         (module $data
-            (data $d passive "\00\01"))
+            (data $d "\00\01"))
 "#,
     );
 }
@@ -484,7 +484,7 @@ fn the_data_segment_array_operations_are_accepted() {
                 i32.const 0
                 i32.const 1
                 array.init_data $bytes $d)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }

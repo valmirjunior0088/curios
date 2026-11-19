@@ -41,7 +41,7 @@ fn a_module_of_every_section_round_trips() {
             (memory $mem i32 0)
             (global $answer (mut i32)
                 i32.const 41)
-            (data $greeting$0 passive "\68\65\6c\6c\6f")
+            (data $greeting$0 "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
             (export "answer" (global $answer))
             (export "memory" (memory $mem))
@@ -109,7 +109,7 @@ fn a_passive_element_segment_round_trips_with_funcs() {
         (module $elem
             (type $f (func))
             (func $a (type $f))
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }
@@ -164,7 +164,7 @@ fn a_passive_element_segment_round_trips_with_exprs() {
         (module $elem
             (type $f (func))
             (func $a (type $f))
-            (elem $e passive (ref null $f) (item ref.func $a)))
+            (elem $e (ref null $f) (item ref.func $a)))
 "#,
     );
 }
@@ -227,7 +227,7 @@ fn the_table_instructions_round_trip() {
                 elem.drop $e)
             (table $first i32 1 (ref null func))
             (table $second i32 1 (ref null func))
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }
@@ -240,9 +240,9 @@ fn the_indirect_call_instructions_round_trip() {
             (type $f (func))
             (func $a (type $f)
                 i32.const 0
-                call_indirect $t $f
+                call_indirect $t (type $f)
                 i32.const 0
-                return_call_indirect $t $f)
+                return_call_indirect $t (type $f))
             (table $t i32 1 (ref null func)))
 "#,
     );

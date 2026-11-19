@@ -57,19 +57,33 @@ where
         .parse(state)
 }
 
-fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
-    take_exact("$")
+/// An identifier, bare or quoted, `$"…"`, its escapes the bytes they are, as a data segment's are.
+fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
+    let quoted = take_exact("$")
+        .and_keep(parse_bytes)
+        .and_then(|bytes| String::from_utf8(bytes).map_err(|_| "a quoted name is UTF-8"));
+    let bare = take_exact("$")
         .and_keep(take_while(|char| !is_delimiter(char)))
         .flat_map(|string| match string.is_empty() {
             true => fail("Expected 'non-empty name'").boxed(),
-            false => pure(string).boxed(),
+            false => pure(string.to_string()).boxed(),
         })
-        .and_drop(parse_whitespace)
-        .parse(state)
+        .and_drop(parse_whitespace);
+
+    quoted.or(bare).parse(state)
 }
 
 fn parse_type_name<'a>(state: ParserState<'a>) -> Parsed<'a, TypeName> {
     parse_name.map(TypeName::from).parse(state)
+}
+
+/// A type an instruction names as its signature, `(type $t)`.
+fn parse_type_use<'a>(state: ParserState<'a>) -> Parsed<'a, TypeName> {
+    parse_literal("(")
+        .and_drop(parse_literal("type"))
+        .and_keep(parse_type_name)
+        .and_drop(parse_literal(")"))
+        .parse(state)
 }
 
 fn parse_label_name<'a>(state: ParserState<'a>) -> Parsed<'a, LabelName> {
@@ -547,7 +561,7 @@ fn parse_control_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
         .map(|label_name| Instr::Br { label_name }))
     .or(parse_literal("return_call_indirect")
         .and_keep(parse_table_name)
-        .and(parse_type_name)
+        .and(parse_type_use)
         .map(|(table_name, type_name)| Instr::ReturnCallIndirect {
             table_name,
             type_name,
@@ -560,7 +574,7 @@ fn parse_control_instr<'a>(state: ParserState<'a>) -> Parsed<'a, Instr> {
         .map(|func_name| Instr::ReturnCall { func_name }))
     .or(parse_literal("call_indirect")
         .and_keep(parse_table_name)
-        .and(parse_type_name)
+        .and(parse_type_use)
         .map(|(table_name, type_name)| Instr::CallIndirect {
             table_name,
             type_name,
@@ -936,15 +950,16 @@ fn parse_const_expr<'a>(keyword: &'static str) -> impl Parser<'a, Expr> {
     }
 }
 
+/// A segment's mode: a passive one names none.
 fn parse_elem_mode<'a>(state: ParserState<'a>) -> Parsed<'a, ElemMode> {
-    (parse_literal("passive").map(|()| ElemMode::Passive))
-        .or(parse_literal("declare").map(|()| ElemMode::Declarative))
+    (parse_literal("declare").map(|()| ElemMode::Declarative))
         .or(parse_literal("(")
             .and_drop(parse_literal("table"))
             .and_keep(parse_table_name)
             .and_drop(parse_literal(")"))
             .and(parse_const_expr("offset"))
             .map(|(table_name, offset)| ElemMode::Active { table_name, offset }))
+        .or(pure(ElemMode::Passive))
         .parse(state)
 }
 
@@ -978,15 +993,16 @@ fn parse_memory<'a>(state: ParserState<'a>) -> Parsed<'a, (MemName, MemType)> {
         .parse(state)
 }
 
+/// A segment's mode: a passive one names no memory.
 fn parse_data_mode<'a>(state: ParserState<'a>) -> Parsed<'a, DataMode> {
-    (parse_literal("passive").map(|()| DataMode::Passive))
-        .or(parse_literal("(")
-            .and_drop(parse_literal("memory"))
-            .and_keep(parse_mem_name)
-            .and_drop(parse_literal(")"))
-            .and(parse_const_expr("offset"))
-            .map(|(mem_name, offset)| DataMode::Active { mem_name, offset }))
-        .parse(state)
+    (parse_literal("(")
+        .and_drop(parse_literal("memory"))
+        .and_keep(parse_mem_name)
+        .and_drop(parse_literal(")"))
+        .and(parse_const_expr("offset"))
+        .map(|(mem_name, offset)| DataMode::Active { mem_name, offset }))
+    .or(pure(DataMode::Passive))
+    .parse(state)
 }
 
 fn parse_data_segment<'a>(state: ParserState<'a>) -> Parsed<'a, (DataName, DataSegment)> {

@@ -14,8 +14,30 @@ use {
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
 };
 
+/// An identifier as the text format writes one: bare where each of its characters is one an identifier may hold, and otherwise quoted, `$"…"`, since a hint may hold a brace, a parenthesis or a space. A quote, a backslash and a control character are escaped as the bytes they are, the one escape the parser reads.
 fn print_dollar_ident(name: &str) -> Printer {
-    flat([pure("$"), pure(name)])
+    if !name.is_empty() && name.chars().all(is_id_char) {
+        return flat([pure("$"), pure(name)]);
+    }
+    let quoted = name
+        .chars()
+        .map(|char| match char {
+            '"' | '\\' => format!("\\{:02x}", char as u32),
+            char if char.is_control() => char
+                .encode_utf8(&mut [0; 4])
+                .bytes()
+                .map(|byte| format!("\\{byte:02x}"))
+                .collect(),
+            char => char.to_string(),
+        })
+        .collect::<String>();
+
+    flat([pure("$\""), pure(quoted), pure("\"")])
+}
+
+/// Whether the text format's bare identifier may hold `char`: its `idchar`, the printable ASCII characters but the space, the quote, the comma, the semicolon, the parentheses, the brackets and the braces.
+fn is_id_char(char: char) -> bool {
+    char.is_ascii_alphanumeric() || "!#$%&'*+-./:<=>?@\\^_`|~".contains(char)
 }
 
 fn print_type_name(type_name: &TypeName) -> Printer {
@@ -402,8 +424,9 @@ fn print_instr(instr: &Instr) -> Printer {
         } => flat([
             pure("call_indirect "),
             print_table_name(table_name),
-            pure(" "),
+            pure(" (type "),
             print_type_name(type_name),
+            pure(")"),
         ]),
         Instr::ReturnCall { func_name } => flat([pure("return_call "), print_func_name(func_name)]),
         Instr::ReturnCallRef { type_name } => {
@@ -415,8 +438,9 @@ fn print_instr(instr: &Instr) -> Printer {
         } => flat([
             pure("return_call_indirect "),
             print_table_name(table_name),
-            pure(" "),
+            pure(" (type "),
             print_type_name(type_name),
+            pure(")"),
         ]),
         Instr::BrOnNull { label_name } => flat([pure("br_on_null "), print_label_name(label_name)]),
         Instr::BrOnNonNull { label_name } => {
@@ -812,12 +836,12 @@ fn print_elem_segment<'a>(elem_name: &'a ElemName, segment: &'a ElemSegment) -> 
     group(flat([
         pure("(elem "),
         print_elem_name(elem_name),
-        pure(" "),
+        // A passive segment is the one that names no mode.
         match &segment.mode {
-            ElemMode::Passive => pure("passive"),
-            ElemMode::Declarative => pure("declare"),
+            ElemMode::Passive => pure(""),
+            ElemMode::Declarative => pure(" declare"),
             ElemMode::Active { table_name, offset } => flat([
-                pure("(table "),
+                pure(" (table "),
                 print_table_name(table_name),
                 pure(") "),
                 print_const_expr("offset", offset),
@@ -865,11 +889,11 @@ fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Print
     flat([
         pure("(data "),
         print_data_name(name),
-        pure(" "),
+        // A passive segment is the one that names no memory.
         match &segment.mode {
-            DataMode::Passive => pure("passive"),
+            DataMode::Passive => pure(""),
             DataMode::Active { mem_name, offset } => flat([
-                pure("(memory "),
+                pure(" (memory "),
                 print_mem_name(mem_name),
                 pure(") "),
                 print_const_expr("offset", offset),

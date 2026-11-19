@@ -17,7 +17,7 @@ fn the_array_data_segment_instructions_round_trip() {
                 i32.const 0
                 i32.const 1
                 array.init_data $bytes $d)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }
@@ -41,7 +41,7 @@ fn the_array_copy_instruction_round_trips() {
                 i32.const 0
                 i32.const 1
                 array.copy $dst $src)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }
@@ -61,7 +61,7 @@ fn the_array_element_segment_instructions_round_trip() {
                 i32.const 0
                 i32.const 1
                 array.init_elem $funcs $e)
-            (elem $e passive func $a))
+            (elem $e func $a))
 "#,
     );
 }

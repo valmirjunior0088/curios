@@ -85,7 +85,7 @@ fn passes_the_full_memory_and_table_surface_through() {
                     data.drop $d)
                 (memory $first i32 1)
                 (memory $second i32 1)
-                (data $d passive "\00")
+                (data $d "\00")
                 (export "a" (func $a)))
 "#,
         ),
@@ -96,7 +96,7 @@ fn passes_the_full_memory_and_table_surface_through() {
                 (type $f (func))
                 (func $a (type $f)
                     i32.const 0
-                    call_indirect $t $f)
+                    call_indirect $t (type $f))
                 (table $t i32 1 (ref null func))
                 (elem $e (table $t) (offset i32.const 0) func $a)
                 (export "a" (func $a)))

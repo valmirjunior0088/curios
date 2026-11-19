@@ -38,7 +38,7 @@ fn a_passive_data_segment_round_trips() {
     round_trips(
         r#"
         (module $data
-            (data $d passive "\00\01"))
+            (data $d "\00\01"))
 "#,
     );
 }
@@ -195,7 +195,7 @@ fn the_bulk_memory_instructions_round_trip() {
                 data.drop $d)
             (memory $first i32 1)
             (memory $second i32 1)
-            (data $d passive "\00"))
+            (data $d "\00"))
 "#,
     );
 }

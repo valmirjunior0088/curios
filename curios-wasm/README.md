@@ -20,6 +20,14 @@ The Curios WebAssembly-GC back end: the symbolic module model, the WAT parser an
 
 **Rejected.** Either as a convenience over the general model, which makes the encoder hold a whole-module policy the builder cannot inspect.
 
+### The text form is WebAssembly's
+
+**Decision.** `Module`'s `Display` writes, and its `FromStr` reads, the WebAssembly text format: a name an identifier cannot hold — a hint with a brace, a parenthesis or a space — is written in the format's quoted form, `$"…"`, a quote, a backslash and a control character in it escaped as the bytes they are; an indirect call names its signature as a type use, `call_indirect $table (type $t)`; and a passive segment names no mode.
+
+**Rationale.** The text is what `wonder --stage wasm` prints, and a tool that reads WebAssembly text then reads it as it stands, to assemble, validate or measure the module beside the compiler's own encoder. A dialect of its own made every such check a conversion first, and a name it wrote bare it could not always read back: a witness's hint, which holds a space and parentheses, ended its own parser's name.
+
+**Rejected.** Spelling a name so that it never needs quoting, which would print a Wasm name other than the hint every other rung prints for the same function.
+
 ### A memarg names its memory; only the encoder knows one of them is index 0
 
 **Decision.** `MemArg` carries a `MemName`, and the text form always spells it — `i32.load $m offset=4`. The binary encoding omits the memory index, and the alignment bit announcing it, whenever the resolved index is 0. Offset and alignment are omitted in text at their defaults: zero, and the natural log2 alignment of the access width.
