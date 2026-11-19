@@ -115,6 +115,7 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
@@ -227,6 +228,7 @@ fn a_value_free_in_another_function_is_held_at_its_own_carrier() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![],
             return_cont: callee_return,

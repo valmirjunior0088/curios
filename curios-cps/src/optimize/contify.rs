@@ -279,6 +279,7 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
     module.define_continuation(
         loop_cont,
         Continuation {
+            lineage: function.lineage,
             debug_name: function.debug_name,
             params: function.params,
             body: function.body,

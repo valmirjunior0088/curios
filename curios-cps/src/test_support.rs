@@ -42,6 +42,7 @@ pub fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -90,6 +91,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: Some(name.into()),
                 params: vec![param],
                 return_cont: function_return,
@@ -117,6 +119,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
     module.define_continuation(
         after,
         Continuation {
+            lineage: None,
             debug_name: Some("after".into()),
             params: vec![after_r],
             body: after_body,
@@ -133,6 +136,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
     module.define_continuation(
         recur,
         Continuation {
+            lineage: None,
             debug_name: Some("recur".into()),
             params: vec![recur_m],
             body: recur_body,
@@ -173,6 +177,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
     module.define_function(
         loop_fn,
         Function {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![op, n],
             return_cont: loop_return,
@@ -196,6 +201,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
     module.define_continuation(
         k1,
         Continuation {
+            lineage: None,
             debug_name: Some("k1".into()),
             params: vec![x1],
             body: call2,
@@ -221,6 +227,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -264,6 +271,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
     module.define_function(
         helper,
         Function {
+            lineage: None,
             debug_name: Some("helper".into()),
             params: vec![x],
             return_cont: helper_return,
@@ -284,6 +292,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
         module.define_continuation(
             bridge,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 body: call2,
@@ -313,6 +322,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -345,6 +355,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
     module.define_function(
         helper,
         Function {
+            lineage: None,
             debug_name: Some("helper".into()),
             params: vec![x],
             return_cont: helper_return,
@@ -363,6 +374,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
     module.define_function(
         owner,
         Function {
+            lineage: None,
             debug_name: Some("owner".into()),
             params: vec![y],
             return_cont: owner_return,
@@ -389,6 +401,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -472,6 +485,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
     module.define_function(
         consume,
         Function {
+            lineage: None,
             debug_name: Some("consume".into()),
             params: vec![t],
             return_cont: consume_return,
@@ -532,6 +546,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
         module.define_continuation(
             conts[i],
             Continuation {
+                lineage: None,
                 debug_name: Some(format!("k{i}")),
                 params: vec![results[i]],
                 body: next,
@@ -547,6 +562,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -586,6 +602,7 @@ pub fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module, NodeId
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![x],
             return_cont,
@@ -642,6 +659,7 @@ pub fn duplicate_pair_module(
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![x, y],
             return_cont,
@@ -682,6 +700,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_continuation(
         some_arm,
         Continuation {
+            lineage: None,
             debug_name: Some("some arm".into()),
             params: vec![],
             body: some_body,
@@ -695,6 +714,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_continuation(
         none_arm,
         Continuation {
+            lineage: None,
             debug_name: Some("none arm".into()),
             params: vec![],
             body: none_body,
@@ -734,6 +754,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![p],
             body: join_body,
@@ -764,6 +785,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_continuation(
         to_some,
         Continuation {
+            lineage: None,
             debug_name: Some("to some".into()),
             params: vec![],
             body: build_some,
@@ -789,6 +811,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_continuation(
         to_none,
         Continuation {
+            lineage: None,
             debug_name: Some("to none".into()),
             params: vec![],
             body: build_none,
@@ -817,6 +840,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![x],
             return_cont,
@@ -841,6 +865,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
     module.define_function(
         inner,
         Function {
+            lineage: None,
             debug_name: Some("nested inner".into()),
             params: vec![],
             return_cont: inner_return,
@@ -862,6 +887,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
     module.define_function(
         outer,
         Function {
+            lineage: None,
             debug_name: Some("nested outer".into()),
             params: vec![],
             return_cont: outer_return,

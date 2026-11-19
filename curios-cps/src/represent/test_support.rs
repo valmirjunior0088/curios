@@ -10,6 +10,7 @@ pub fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params,
             return_cont,
@@ -29,6 +30,7 @@ pub fn through_continuation(module: &mut Module, params: Vec<ValueId>, body: Nod
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params,
             body,
@@ -52,6 +54,7 @@ pub fn define(
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params,
             return_cont,
@@ -72,6 +75,7 @@ pub fn resume(
     module.define_continuation(
         continuation,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params,
             body,

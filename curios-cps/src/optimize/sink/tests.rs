@@ -19,6 +19,7 @@ fn continuation(
     body: NodeId,
 ) -> ContinuationId {
     module.add_continuation(Continuation {
+        lineage: None,
         debug_name: Some(name.into()),
         params,
         body,
@@ -54,6 +55,7 @@ fn identity(module: &mut Module, name: &str, droppable: Droppable) -> FunctionId
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![param],
             return_cont,
@@ -78,6 +80,7 @@ fn main(
         false => module.add_node(Node::LetFun { functions, body }),
     };
     let main = module.add_function(Function {
+        lineage: None,
         debug_name: Some("main".into()),
         params,
         return_cont,
@@ -292,6 +295,7 @@ fn work_stays_out_of_a_loop_it_ran_before() {
     module.define_continuation(
         lap,
         Continuation {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![i],
             body: lap_body,
@@ -325,6 +329,7 @@ fn a_closure_and_what_it_captures_move_into_the_arm_that_calls_it() {
     module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,

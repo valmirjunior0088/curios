@@ -94,6 +94,7 @@ fn a_panic_node_reports_its_class() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -123,6 +124,7 @@ fn a_cycles_panic_names_the_member_it_was_seated_for() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

@@ -26,6 +26,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
     module.define_function(
         a,
         Function {
+            lineage: None,
             debug_name: Some("a".into()),
             params: vec![p],
             return_cont: a_return,
@@ -47,6 +48,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
     module.define_function(
         b,
         Function {
+            lineage: None,
             debug_name: Some("b".into()),
             params: vec![q],
             return_cont: b_return,
@@ -69,6 +71,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -131,6 +134,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
     module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,
@@ -159,6 +163,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
     module.define_continuation(
         after_call,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![r],
             body: again,
@@ -177,6 +182,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
     module.define_function(
         g,
         Function {
+            lineage: None,
             debug_name: Some("g".into()),
             params: vec![p, n],
             return_cont: g_return,
@@ -204,6 +210,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
     module.define_function(
         h,
         Function {
+            lineage: None,
             debug_name: Some("h".into()),
             params: vec![],
             return_cont: h_return,
@@ -233,6 +240,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -310,6 +318,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
     module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,
@@ -330,6 +339,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
     module.define_continuation(
         after,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![r],
             body: again,
@@ -348,6 +358,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
     module.define_continuation(
         looped,
         Continuation {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![p],
             body: loop_body,
@@ -381,6 +392,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -451,6 +463,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     module.define_continuation(
         target,
         Continuation {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![target_param],
             body: target_body,
@@ -464,6 +477,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     module.define_continuation(
         forwarding,
         Continuation {
+            lineage: None,
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
@@ -481,6 +495,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![seed],
             return_cont,
@@ -519,6 +534,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
     module.define_continuation(
         continuation,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![parameter],
             body: continuation_body,
@@ -536,6 +552,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont,
@@ -574,6 +591,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: callee_return,
@@ -591,6 +609,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![received],
             body: join_body,
@@ -612,6 +631,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     module.define_continuation(
         calling,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: call,
@@ -621,6 +641,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     module.define_continuation(
         jumping,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: jump,
@@ -656,6 +677,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![chooser],
             return_cont,
@@ -688,6 +710,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     module.define_continuation(
         taken,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: taken_body,
@@ -701,6 +724,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     module.define_continuation(
         untaken,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: untaken_body,
@@ -734,6 +758,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![tag, payload],
             body: join_body,
@@ -768,6 +793,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![chooser],
             return_cont,
@@ -809,6 +835,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     module.define_function(
         h,
         Function {
+            lineage: None,
             debug_name: Some("h".into()),
             params: vec![],
             return_cont: h_return,
@@ -828,6 +855,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     module.define_function(
         g,
         Function {
+            lineage: None,
             debug_name: Some("g".into()),
             params: vec![],
             return_cont: g_return,
@@ -844,6 +872,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,
@@ -866,6 +895,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -904,6 +934,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
     module.define_function(
         inner,
         Function {
+            lineage: None,
             debug_name: Some("inner".into()),
             params: vec![],
             return_cont: inner_return,
@@ -924,6 +955,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
     module.define_function(
         outer,
         Function {
+            lineage: None,
             debug_name: Some("outer".into()),
             params: vec![],
             return_cont: outer_return,
@@ -944,6 +976,7 @@ fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

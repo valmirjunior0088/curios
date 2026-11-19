@@ -37,6 +37,7 @@ fn minimal_module() -> Module {
     module.define_function(
         fun,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -219,6 +220,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     module.define_continuation(
         dead,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: dead_read,
@@ -228,6 +230,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     module.define_continuation(
         live,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: live_body,
@@ -339,6 +342,7 @@ fn verifier_rejects_shared_return_continuations() {
     module.define_function(
         second,
         Function {
+            lineage: None,
             debug_name: Some("second".into()),
             params: vec![],
             return_cont: shared_return,
@@ -368,6 +372,7 @@ fn verifier_rejects_another_functions_return_target() {
     module.define_function(
         second,
         Function {
+            lineage: None,
             debug_name: Some("second".into()),
             params: vec![],
             return_cont: second_return,
@@ -425,6 +430,7 @@ fn verifier_rejects_local_body_at_return_id() {
     module.define_continuation(
         return_cont,
         Continuation {
+            lineage: None,
             debug_name: Some("invalid-return-body".into()),
             params: vec![],
             body: local_body,
@@ -450,12 +456,14 @@ fn a_node_reached_from_two_places_is_refused() {
     // Two continuations sharing one body, both bound by a group the entry enters.
     let shared = module.add_node(halt_zero());
     let first = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: Some("first".into()),
         params: Vec::new(),
         body: shared,
         terminates: false,
     });
     let second = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: Some("second".into()),
         params: Vec::new(),
         body: shared,
@@ -497,6 +505,7 @@ fn a_cycle_naming_a_member_the_module_does_not_hold_is_refused() {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

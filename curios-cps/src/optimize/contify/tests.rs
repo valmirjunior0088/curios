@@ -3,6 +3,7 @@
 use {
     super::*,
     crate::{test_support::*, *},
+    curios_common::{Lineage, Qualifier},
     curios_num::Natural,
     std::collections::BTreeMap,
 };
@@ -26,6 +27,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
     module.define_continuation(
         recur,
         Continuation {
+            lineage: None,
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
@@ -53,6 +55,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
     module.define_function(
         loop_function,
         Function {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![loop_param],
             return_cont: loop_return,
@@ -73,6 +76,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -114,6 +118,32 @@ fn contifies_a_nonrecursive_single_call_function() {
     module.verify().unwrap();
 }
 
+/// A function contified is its code still, now a continuation of its caller's: it keeps its lineage, so its declaration is found standing in the caller.
+#[test]
+fn a_contified_function_hands_its_lineage_to_the_continuation_it_becomes() {
+    let (mut module, helper) = helper_called(false);
+    let lineage = Lineage {
+        declaration: Qualifier::empty().with("helper"),
+        function: 0,
+    };
+    module
+        .function_mut(helper)
+        .expect("the helper is defined")
+        .lineage = Some(lineage);
+
+    assert!(
+        contify_calls(&mut module),
+        "the single-call helper is contified"
+    );
+    let continuation = module
+        .continuations()
+        .iter()
+        .flatten()
+        .find(|continuation| continuation.debug_name.as_deref() == Some("helper"))
+        .expect("the helper is a continuation");
+    assert_eq!(continuation.lineage, Some(lineage));
+}
+
 /// `main` calls `outer` once, `outer` calls `inner` once, and `outer` is minted first so the sweep reaches it first: by `inner`'s turn the function the snapshot names as its owner is gone, contified under `main`. One call contifies both — the owner is resolved through the sweep's own record rather than deferred a round.
 #[test]
 fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
@@ -134,6 +164,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
     module.define_function(
         inner,
         Function {
+            lineage: None,
             debug_name: Some("inner".into()),
             params: vec![y],
             return_cont: inner_return,
@@ -157,6 +188,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
     module.define_function(
         outer,
         Function {
+            lineage: None,
             debug_name: Some("outer".into()),
             params: vec![x],
             return_cont: outer_return,
@@ -179,6 +211,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -370,6 +403,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
     module.define_continuation(
         recur,
         Continuation {
+            lineage: None,
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
@@ -397,6 +431,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
     module.define_function(
         loop_function,
         Function {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![loop_param],
             return_cont: loop_return,
@@ -416,6 +451,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
     for _ in 1..calls {
         let answered = module.add_value(None);
         let next = module.add_continuation(Continuation {
+            lineage: None,
             debug_name: Some("next".into()),
             params: vec![answered],
             body: rest,
@@ -439,6 +475,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -546,6 +583,7 @@ fn a_nontail_recursive_call_does_not_mint_a_copy() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![result],
             body,
@@ -592,6 +630,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
     module.define_continuation(
         again,
         Continuation {
+            lineage: None,
             debug_name: Some("again".into()),
             params: vec![r],
             body: recur,
@@ -610,6 +649,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
     module.define_function(
         walker,
         Function {
+            lineage: None,
             debug_name: Some("walker".into()),
             params: vec![x],
             return_cont: walker_return,
@@ -635,6 +675,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
     module.define_function(
         owner,
         Function {
+            lineage: None,
             debug_name: Some("owner".into()),
             params: vec![y],
             return_cont: owner_return,
@@ -660,6 +701,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

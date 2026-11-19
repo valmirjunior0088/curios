@@ -17,6 +17,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![kept, removed],
             return_cont: callee_return,
@@ -41,6 +42,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -100,6 +102,7 @@ impl Program {
         self.module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: None,
                 params,
                 return_cont: returned,
@@ -117,6 +120,7 @@ impl Program {
         self.module.define_continuation(
             continuation,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params,
                 body,
@@ -142,6 +146,7 @@ impl Program {
         self.module.define_function(
             self.entry,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 return_cont: self.returned,
@@ -234,6 +239,7 @@ fn inert_arguments_into_a_retained_signature_become_fillers() {
     p.module.define_function(
         worker,
         Function {
+            lineage: None,
             debug_name: None,
             params: worker_params.clone(),
             return_cont: returned,
@@ -280,6 +286,7 @@ fn an_indirect_callee_keeps_its_binding_and_arguments() {
     p.module.define_function(
         worker,
         Function {
+            lineage: None,
             debug_name: None,
             params: params.clone(),
             return_cont: returned,
@@ -329,6 +336,7 @@ fn recursive_jumps_keep_the_order_of_surviving_arguments() {
     p.module.define_continuation(
         header,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: params.clone(),
             body,
@@ -520,6 +528,7 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
     p.module.define_continuation(
         after,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: result,
             body: hand_back,
@@ -543,6 +552,7 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
     p.module.define_function(
         nested,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: returned,
@@ -684,6 +694,7 @@ fn a_self_call_filters_its_original_argument_positions() {
     p.module.define_continuation(
         back,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: call,
@@ -712,6 +723,7 @@ fn a_self_call_filters_its_original_argument_positions() {
     p.module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: None,
             params: params.clone(),
             return_cont: returned,
@@ -760,6 +772,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
     p.module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: None,
             params: a.clone(),
             return_cont: fr,
@@ -777,6 +790,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
     p.module.define_continuation(
         back,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: gf,
@@ -805,6 +819,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
     p.module.define_function(
         g,
         Function {
+            lineage: None,
             debug_name: None,
             params: b.clone(),
             return_cont: gr,
@@ -877,6 +892,7 @@ fn every_returning_operation_retains_its_result_receiver() {
         p.module.define_continuation(
             resume,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: results.clone(),
                 body: end,
@@ -924,6 +940,7 @@ fn every_returning_operation_retains_its_result_receiver() {
         p.module.define_function(
             worker,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: params.clone(),
                 return_cont: returned,

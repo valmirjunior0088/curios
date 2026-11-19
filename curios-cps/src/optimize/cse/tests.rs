@@ -103,6 +103,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     module.define_continuation(
         reached,
         Continuation {
+            lineage: None,
             debug_name: Some("reached".into()),
             params: vec![],
             body: reached_body,
@@ -125,6 +126,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     module.define_continuation(
         other,
         Continuation {
+            lineage: None,
             debug_name: Some("other".into()),
             params: vec![],
             body: other_body,
@@ -160,6 +162,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![x],
             return_cont,

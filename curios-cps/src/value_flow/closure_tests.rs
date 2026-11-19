@@ -22,6 +22,7 @@ fn define(
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params,
             return_cont,
@@ -107,6 +108,7 @@ fn resumed(
         .collect::<Vec<_>>();
     let body = body_of(module, &params);
     let continuation = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params,
         body,

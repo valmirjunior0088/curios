@@ -18,6 +18,7 @@ fn a_construction_reaches_its_parameter_exactly() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: Some("target".into()),
                 params: vec![param],
                 body: exit,
@@ -73,6 +74,7 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
         module.define_continuation(
             header,
             Continuation {
+                lineage: None,
                 debug_name: Some("header".into()),
                 params: vec![param],
                 body: spin,
@@ -115,6 +117,7 @@ fn merged_arities_travel_as_a_variant() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: Some("target".into()),
                 params: vec![param],
                 body: exit,
@@ -185,6 +188,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![callee_param],
             return_cont: callee_ret,
@@ -205,6 +209,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![landed],
             body: exit,
@@ -218,6 +223,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
@@ -236,6 +242,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -263,6 +270,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         module.define_function(
             callee,
             Function {
+                lineage: None,
                 debug_name: Some("callee".into()),
                 params: vec![callee_param],
                 return_cont: callee_ret,
@@ -284,6 +292,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         module.define_continuation(
             resume,
             Continuation {
+                lineage: None,
                 debug_name: Some("resume".into()),
                 params: vec![received],
                 body: resume_exit,
@@ -310,6 +319,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         module.define_function(
             caller,
             Function {
+                lineage: None,
                 debug_name: Some("caller".into()),
                 params: vec![],
                 return_cont: caller_ret,
@@ -350,6 +360,7 @@ fn a_variant_construction_carries_its_family() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 body: exit,
@@ -406,6 +417,7 @@ fn two_constructors_of_a_family_merge_to_the_family() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 body: exit,

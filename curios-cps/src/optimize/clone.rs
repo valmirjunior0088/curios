@@ -380,6 +380,7 @@ pub fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
             (
                 conts[&old],
                 Continuation {
+                    lineage: cont.lineage,
                     debug_name: cont.debug_name.clone(),
                     params: cont.params.iter().map(|&p| map_value(p)).collect(),
                     body: nodes[&cont.body],
@@ -394,6 +395,7 @@ pub fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
             (
                 minted[&id],
                 Function {
+                    lineage: def.lineage,
                     debug_name: def.debug_name.clone(),
                     params: def.params.iter().map(|&p| map_value(p)).collect(),
                     return_cont: returns[&def.return_cont],

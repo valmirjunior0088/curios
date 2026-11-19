@@ -6,7 +6,7 @@ use {
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_definitions},
-    curios_common::{Plicity, Qualifier},
+    curios_common::{Lineage, Plicity, Qualifier},
     curios_elab::DEFAULT_BUDGET,
     std::sync::Arc,
 };
@@ -450,6 +450,62 @@ fn a_capturing_closure_stores_no_capture_list() {
     );
 }
 
+/// A declaration's functions are of its lineage, numbered in the order its text writes them, the outer before the inner; the entry's, which no path names, are of none.
+#[test]
+fn each_function_a_declaration_writes_carries_its_lineage_in_order() {
+    let nat = || curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
+    let x = fresh(Some("x"));
+    let y = fresh(Some("y"));
+    let z = fresh(Some("z"));
+    // make = (y : Nat) => (x : Nat) => x + y; the entry is (z : Nat) => make(z)(z).
+    let made = curios_core::Term::func_type([(x, nat())], nat());
+    let items = vec![definition(
+        "make",
+        curios_core::Term::func_type([(y, nat())], made),
+        curios_core::Term::func(
+            [(y, nat())],
+            curios_core::Term::func(
+                [(x, nat())],
+                curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
+                    curios_core::Term::free_var(&x),
+                    curios_core::Term::free_var(&y),
+                )),
+            ),
+        ),
+    )];
+    let entry = curios_core::Term::func(
+        [(z, nat())],
+        curios_core::Term::apply(
+            curios_core::Term::apply(reference("make"), [curios_core::Term::free_var(&z)]),
+            [curios_core::Term::free_var(&z)],
+        ),
+    );
+    let erased = erase(
+        &module(items, entry),
+        curios_core::Term::func_type([(z, nat())], nat()),
+    );
+
+    let make = Qualifier::from(["make"]);
+    let lineages = erased
+        .function_ids()
+        .map(|id| erased.function(id).expect("live").lineage)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lineages,
+        [
+            Some(Lineage {
+                declaration: make,
+                function: 0,
+            }),
+            Some(Lineage {
+                declaration: make,
+                function: 1,
+            }),
+            None,
+        ]
+    );
+}
+
 #[test]
 fn a_recursive_function_group_erases_to_functions() {
     let x = fresh(Some("x"));
@@ -591,6 +647,63 @@ entry
   Return ~v2
 "
     );
+}
+
+/// Each member of a top-level recursive group is a declaration of its own, its functions minted for it across the two stretches the group is erased in: every member reserved first, then each body.
+#[test]
+fn each_member_of_a_recursive_item_carries_its_own_lineage() {
+    let nat = || curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
+    let (x, y, z) = (fresh(Some("x")), fresh(Some("y")), fresh(Some("z")));
+    let (f, g) = (fresh(Some("f")), fresh(Some("g")));
+    let func_type = || curios_core::Term::func_type([(x, nat())], nat());
+    let member = |name: &str, body| curios_core::Definition {
+        name: curios_core::Global::Authored(Qualifier::from([name])),
+        kind: curios_core::DefinitionKind::Authored,
+        universe_context: curios_core::UniverseContext::empty(),
+        island: Qualifier::empty(),
+        proof: false,
+        value_sort: None,
+        type_: func_type(),
+        body,
+    };
+    // rec { f = (x : Nat) => g(x); g = (x : Nat) => ((y : Nat) => y)(x) }
+    let calls_g = curios_core::Term::func(
+        [(x, nat())],
+        curios_core::Term::apply(
+            curios_core::Term::free_var(&g),
+            [curios_core::Term::free_var(&x)],
+        ),
+    );
+    let applies_a_lambda = curios_core::Term::func(
+        [(z, nat())],
+        curios_core::Term::apply(
+            curios_core::Term::func([(y, nat())], curios_core::Term::free_var(&y)),
+            [curios_core::Term::free_var(&z)],
+        ),
+    );
+    let items = vec![curios_core::Item::Rec(curios_core::RecItem::new(vec![
+        (f, member("f", calls_g)),
+        (g, member("g", applies_a_lambda)),
+    ]))];
+    let erased = erase(
+        &module(
+            items,
+            curios_core::Term::apply(reference("f"), [nat_lit(1)]),
+        ),
+        nat(),
+    );
+
+    let of = |declaration: &str, function| {
+        Some(Lineage {
+            declaration: Qualifier::from([declaration]),
+            function,
+        })
+    };
+    let lineages = erased
+        .function_ids()
+        .map(|id| erased.function(id).expect("live").lineage)
+        .collect::<Vec<_>>();
+    assert_eq!(lineages, [of("f", 0), of("g", 0), of("g", 1)]);
 }
 
 /// An applied lambda is transcribed as the function and the call it is, whatever its parameters are marked: erasure reads the callee's type off the lambda itself and holds no opinion on what a declaration may type a `use` parameter at.

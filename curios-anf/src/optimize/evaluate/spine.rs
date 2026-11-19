@@ -338,6 +338,7 @@ impl Minter {
         module.set_function(
             spec,
             Function {
+                lineage: definition.lineage,
                 debug_name: definition.debug_name,
                 params,
                 body: definition.body,

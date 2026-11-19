@@ -18,6 +18,7 @@ fn module_with(body_of: impl FnOnce(&mut Module, ContinuationId) -> NodeId) -> M
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: Vec::new(),
             return_cont: main_return,
@@ -50,6 +51,7 @@ fn representative() -> Module {
         module.define_function(
             helper,
             Function {
+                lineage: None,
                 debug_name: Some("helper".into()),
                 params: vec![n],
                 return_cont: helper_return,
@@ -65,6 +67,7 @@ fn representative() -> Module {
         module.define_continuation(
             join,
             Continuation {
+                lineage: None,
                 debug_name: Some("join".into()),
                 params: vec![total],
                 body: join_body,
@@ -120,6 +123,7 @@ fn a_stated_register_prints_at_its_binder() {
         module.define_continuation(
             join,
             Continuation {
+                lineage: None,
                 debug_name: Some("join".into()),
                 params: vec![total],
                 body: exit,
@@ -182,6 +186,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
         module.define_continuation(
             inner,
             Continuation {
+                lineage: None,
                 debug_name: Some("inner".into()),
                 params: Vec::new(),
                 body: inner_body,
@@ -199,6 +204,7 @@ fn a_value_bound_in_an_enclosing_continuation_reads_in_view_of_its_binder() {
         module.define_continuation(
             outer,
             Continuation {
+                lineage: None,
                 debug_name: Some("outer".into()),
                 params: vec![x],
                 body: outer_body,
@@ -238,6 +244,7 @@ fn a_join_is_defined_once_and_named_at_every_predecessor() {
         module.define_continuation(
             join,
             Continuation {
+                lineage: None,
                 debug_name: Some("join".into()),
                 params: vec![answer],
                 body: join_body,
@@ -299,6 +306,7 @@ fn a_call_returning_to_the_sentinel_prints_as_a_tail_call() {
         module.define_function(
             callee,
             Function {
+                lineage: None,
                 debug_name: Some("callee".into()),
                 params: Vec::new(),
                 return_cont: callee_return,
@@ -338,6 +346,7 @@ fn a_continuation_prints_the_role_its_hint_names() {
         module.define_continuation(
             arm,
             Continuation {
+                lineage: None,
                 debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: arm_body,
@@ -459,6 +468,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
         module.define_continuation(
             first,
             Continuation {
+                lineage: None,
                 debug_name: Some("first".into()),
                 params: Vec::new(),
                 body: shared,
@@ -469,6 +479,7 @@ fn a_node_reached_twice_is_reported_rather_than_duplicated() {
         module.define_continuation(
             second,
             Continuation {
+                lineage: None,
                 debug_name: Some("second".into()),
                 params: Vec::new(),
                 body: shared,
@@ -510,6 +521,7 @@ fn a_split_parameter_run_prints_as_one_bracketed_group() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![head, left, right],
                 body,
@@ -547,6 +559,7 @@ fn a_function_the_walk_never_reaches_still_prints() {
     module.define_function(
         orphan,
         Function {
+            lineage: None,
             debug_name: Some("orphan".into()),
             params: Vec::new(),
             return_cont: orphan_return,
@@ -580,6 +593,7 @@ fn an_operand_names_its_kind_by_its_sigil() {
         module.define_continuation(
             target,
             Continuation {
+                lineage: None,
                 debug_name: Some("resume".into()),
                 params: vec![result],
                 body: exit,
@@ -714,6 +728,7 @@ fn a_function_group_prints_as_one_and_chain() {
             module.define_function(
                 function,
                 Function {
+                    lineage: None,
                     debug_name: Some(name.into()),
                     params: Vec::new(),
                     return_cont: function_return,
@@ -828,6 +843,7 @@ fn a_switch_arm_to_the_sentinel_spells_the_return() {
         module.define_continuation(
             other,
             Continuation {
+                lineage: None,
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body: other_body,

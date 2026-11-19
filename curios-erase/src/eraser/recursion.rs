@@ -105,6 +105,8 @@ impl Eraser<'_> {
     }
 
     /// Pre-bind every member, erase function bodies and computed initializers, and emit the group statement (`Functions` when every member is a function, a recursive group otherwise). Statement emission falls through to the top-level item list when no block is open.
+    ///
+    /// A member a path names is a declaration of its own, so its functions are minted for it, its own first, across the two stretches it is erased in; a local member's are the enclosing declaration's.
     fn emit_group(
         &mut self,
         context: &mut Reader,
@@ -117,11 +119,18 @@ impl Eraser<'_> {
             .zip(hints)
             .zip(members)
             .map(|((name, hint), (_, body))| {
-                let member = match &**body {
+                let declaring = match name {
+                    curios_core::Mention::Declaration(global) => {
+                        Some(curios_anf::Declaring::of(global.qualifier().copied()))
+                    }
+                    curios_core::Mention::Local(_) => None,
+                };
+                let (member, declaring) = match &**body {
                     curios_core::Subterm::Func(_) => {
-                        let function = self.builder.reserve_function();
+                        let (function, declaring) =
+                            self.minting(declaring, |lowering| lowering.builder.reserve_function());
                         self.names.functions.insert(function, *name);
-                        Member::Function(function)
+                        (Member::Function(function), declaring)
                     }
                     _ => {
                         let value = self.builder.value(hint.clone());
@@ -130,7 +139,7 @@ impl Eraser<'_> {
                         if let Some(extent) = body.extent() {
                             self.extents.insert(value, extent);
                         }
-                        Member::Computed(value)
+                        (Member::Computed(value), declaring)
                     }
                 };
                 let atom = match &member {
@@ -138,43 +147,50 @@ impl Eraser<'_> {
                     Member::Computed(value) => curios_anf::Atom::Value(*value),
                 };
                 self.environment.bind(name, atom);
-                member
+                (member, declaring)
             })
             .collect::<Vec<_>>();
 
         let mut functions = Vec::new();
         let mut values = Vec::new();
-        for (member, ((type_, body), hint)) in classified.iter().zip(members.iter().zip(hints)) {
-            match member {
-                Member::Function(function) => {
-                    let curios_core::Subterm::Func(func) = &**body else {
-                        unreachable!("erase: a function member's body is a lambda")
-                    };
-                    // A member the group named keeps that name; one it did not takes its owner's, the same way an argument-position lambda does.
-                    match hint.clone().or_else(|| self.derived_hint()) {
-                        Some(name) => {
-                            let named = name.clone();
-                            self.with_owner(name, |lowering| {
-                                lowering.define_lambda(
-                                    context,
-                                    *function,
-                                    func,
-                                    type_,
-                                    Some(&named),
-                                )
-                            })?;
+        for ((member, declaring), ((type_, body), hint)) in
+            classified.into_iter().zip(members.iter().zip(hints))
+        {
+            let (erased, _) = self.minting(declaring, |lowering| {
+                match member {
+                    Member::Function(function) => {
+                        let curios_core::Subterm::Func(func) = &**body else {
+                            unreachable!("erase: a function member's body is a lambda")
+                        };
+                        // A member the group named keeps that name; one it did not takes its owner's, the same way an argument-position lambda does.
+                        match hint.clone().or_else(|| lowering.derived_hint()) {
+                            Some(name) => {
+                                let named = name.clone();
+                                lowering.with_owner(name, |lowering| {
+                                    lowering.define_lambda(
+                                        context,
+                                        function,
+                                        func,
+                                        type_,
+                                        Some(&named),
+                                    )
+                                })?;
+                            }
+                            None => lowering.define_lambda(context, function, func, type_, None)?,
                         }
-                        None => self.define_lambda(context, *function, func, type_, None)?,
+                        functions.push(function);
                     }
-                    functions.push(*function);
+                    Member::Computed(value) => {
+                        lowering.builder.open_block();
+                        let outcome = lowering.walk(context, body, type_, None)?;
+                        let init = lowering.seal(outcome);
+                        values.push((value, init));
+                    }
                 }
-                Member::Computed(value) => {
-                    self.builder.open_block();
-                    let outcome = self.walk(context, body, type_, None)?;
-                    let init = self.seal(outcome);
-                    values.push((*value, init));
-                }
-            }
+
+                Ok::<_, Error>(())
+            });
+            erased?;
         }
 
         if values.is_empty() {

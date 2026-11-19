@@ -882,6 +882,7 @@ impl<'m> Sink<'m> {
             }
             None => {
                 let join = self.module.add_continuation(Continuation {
+                    lineage: None,
                     debug_name: Some("join".into()),
                     params: vec![result],
                     body: next,
@@ -898,6 +899,7 @@ impl<'m> Sink<'m> {
             args: vec![second],
         }));
         let arm = self.module.add_continuation(Continuation {
+            lineage: None,
             debug_name: Some("arm".into()),
             params: Vec::new(),
             body: handed,
@@ -959,6 +961,7 @@ impl<'m> Sink<'m> {
         self.module.define_continuation(
             landing,
             Continuation {
+                lineage: None,
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body: handed,
@@ -1057,11 +1060,14 @@ impl<'m> Sink<'m> {
                 onward
             }
             None => {
-                let debug_name = self
+                // The landing stands in for the resume it takes the place of, and is made of what that was made of.
+                let (debug_name, lineage) = self
                     .module
                     .continuation(resume)
-                    .and_then(|definition| definition.debug_name.clone());
+                    .map(|definition| (definition.debug_name.clone(), definition.lineage))
+                    .unwrap_or_default();
                 let landed = self.module.add_continuation(Continuation {
+                    lineage,
                     debug_name,
                     params: results.clone(),
                     body,

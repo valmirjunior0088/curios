@@ -92,6 +92,7 @@ pub fn intrinsic_main(
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -128,6 +129,7 @@ pub fn tuple_project() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -162,6 +164,7 @@ pub fn list_len() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -199,6 +202,7 @@ pub fn bytes_len() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -222,6 +226,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
     let value = module.add_value(Some("value".into()));
     let exit = module.add_node(halt(vec![curios_cps::Atom::Value(value)]));
     let get_k = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("got".into()),
         params: vec![present, value],
         body: exit,
@@ -233,6 +238,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
         return_to: get_k,
     });
     let filled_k = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("filled".into()),
         params: vec![filled],
         body: get,
@@ -248,6 +254,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
         body: fill,
     });
     let new_k = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("made".into()),
         params: vec![cell],
         body: operations,
@@ -265,6 +272,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -287,6 +295,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
     let payload = module.add_value(None);
     let exit = module.add_node(halt(vec![curios_cps::Atom::Value(payload)]));
     let after_take = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![taken, payload],
         body: exit,
@@ -298,6 +307,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
         return_to: after_take,
     });
     let after_push = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![pushed],
         body: take,
@@ -313,6 +323,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
         body: push,
     });
     let after_new = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![channel],
         body,
@@ -330,6 +341,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -360,6 +372,7 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
         None => halt_zero(),
     });
     let resume = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("resume".into()),
         params: bound,
         body: exit,
@@ -390,6 +403,7 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -450,6 +464,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
     module.define_function(
         target,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -469,6 +484,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
     module.define_function(
         apply,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("apply".into()),
             params: vec![closure],
             return_cont: apply_return,
@@ -489,6 +505,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
         module.define_continuation(
             continuation,
             curios_cps::Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![ignored],
                 body,
@@ -516,6 +533,7 @@ fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Mod
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -556,6 +574,7 @@ pub fn list_read() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -597,6 +616,7 @@ pub fn list_settle() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -624,6 +644,7 @@ pub fn list_map() -> curios_cps::Module {
     module.define_function(
         mapper,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("mapper".into()),
             params: vec![element],
             return_cont: mapper_return,
@@ -637,6 +658,7 @@ pub fn list_map() -> curios_cps::Module {
     let mapped = module.add_value(Some("mapped".into()));
     let exit = module.add_node(halt(vec![curios_cps::Atom::Value(mapped)]));
     let resume = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("mapped".into()),
         params: vec![mapped],
         body: exit,
@@ -664,6 +686,7 @@ pub fn list_map() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -701,6 +724,7 @@ pub fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -729,6 +753,7 @@ pub fn reducible_loop() -> curios_cps::Module {
     module.define_continuation(
         loop_cont,
         curios_cps::Continuation {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![counter],
             body: again,
@@ -746,6 +771,7 @@ pub fn reducible_loop() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -773,6 +799,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
     module.define_continuation(
         k1,
         curios_cps::Continuation {
+            lineage: None,
             debug_name: Some("k1".into()),
             params: vec![],
             body: to_k2,
@@ -786,6 +813,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
     module.define_continuation(
         k2,
         curios_cps::Continuation {
+            lineage: None,
             debug_name: Some("k2".into()),
             params: vec![],
             body: to_k1,
@@ -820,6 +848,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -860,6 +889,7 @@ pub fn constant_tuple_pair() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -890,6 +920,7 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
     module.define_continuation(
         after,
         curios_cps::Continuation {
+            lineage: None,
             debug_name: Some("after".into()),
             params: vec![],
             body: project,
@@ -912,6 +943,7 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -943,6 +975,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
     module.define_function(
         answer,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("answer".into()),
             params: vec![],
             return_cont: answer_return,
@@ -971,6 +1004,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
     module.define_function(
         reader,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("reader".into()),
             params: vec![],
             return_cont: reader_return,
@@ -1012,6 +1046,7 @@ pub fn constants_read_by_a_function() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -1053,6 +1088,7 @@ pub fn runtime_tuple() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -1087,6 +1123,7 @@ pub fn big_tuple() -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

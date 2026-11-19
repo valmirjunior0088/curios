@@ -397,6 +397,7 @@ impl Inversion {
         module.define_function(
             worker,
             Function {
+                lineage: definition.lineage,
                 debug_name: definition
                     .debug_name
                     .as_ref()

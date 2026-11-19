@@ -38,6 +38,9 @@ pub use qualifier::{
     ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char, is_identifier_start,
 };
 
+mod lineage;
+pub use lineage::{ArchivedLineage, Lineage};
+
 mod keyword;
 pub use keyword::{Keyword, Standing, is_reserved};
 

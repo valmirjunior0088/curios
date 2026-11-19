@@ -178,6 +178,7 @@ fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
         });
         let return_cont = module.reserve_continuation();
         let main = module.add_function(curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

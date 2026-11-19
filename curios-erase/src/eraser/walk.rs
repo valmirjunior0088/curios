@@ -154,6 +154,21 @@ impl<'s> Eraser<'s> {
         Ok(Some(binding))
     }
 
+    /// Run `erase` with the functions it reserves minted as `declaring` says, and hand back how far it took the count beside what it erased; with none given, it mints for whatever is being declared around it.
+    pub fn minting<R>(
+        &mut self,
+        declaring: Option<curios_anf::Declaring>,
+        erase: impl FnOnce(&mut Self) -> R,
+    ) -> (R, Option<curios_anf::Declaring>) {
+        let Some(declaring) = declaring else {
+            return (erase(self), None);
+        };
+        let before = self.builder.declaring(declaring);
+        let erased = erase(self);
+
+        (erased, Some(self.builder.declaring(before)))
+    }
+
     /// Erase `body` with `name` standing as the definition every function minted inside it descends from.
     pub fn with_owner<R>(&mut self, name: String, body: impl FnOnce(&mut Self) -> R) -> R {
         self.owners.push((name, 0));

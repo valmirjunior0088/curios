@@ -74,6 +74,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
     module.define_function(
         producer,
         curios_cps::Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: producer_ret,
@@ -93,6 +94,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
     module.define_continuation(
         resume,
         curios_cps::Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![ignored],
             body,
@@ -115,6 +117,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
     module.define_function(
         entry,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: ret,

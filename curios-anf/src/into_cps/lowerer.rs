@@ -83,6 +83,7 @@ impl<'a> Lowerer<'a> {
         self.emitter.define_function(
             main,
             curios_cps::Function {
+                lineage: None,
                 debug_name: Some("main".into()),
                 params: Vec::new(),
                 return_cont,
@@ -225,12 +226,15 @@ impl Lowerer<'_> {
         } else {
             self.emitter.block_member_refs(function.body)
         };
+        let lowering = self.emitter.lowering(function.lineage);
         let body = self.with_cell_reads(members, |lowerer| {
             lowerer.lower_block(function.body, return_cont)
         });
+        self.emitter.lowering(lowering);
         self.emitter.define_function(
             id,
             curios_cps::Function {
+                lineage: function.lineage,
                 debug_name: function.debug_name.clone(),
                 params,
                 return_cont,
@@ -321,6 +325,7 @@ impl Lowerer<'_> {
             self.emitter.define_continuation(
                 after_store,
                 curios_cps::Continuation {
+                    lineage: self.emitter.lineage(),
                     debug_name: Some("knot/stored".into()),
                     params: vec![status],
                     body,
@@ -360,6 +365,7 @@ impl Lowerer<'_> {
             self.emitter.define_continuation(
                 channel_bound,
                 curios_cps::Continuation {
+                    lineage: self.emitter.lineage(),
                     debug_name: Some("knot/channel".into()),
                     params: vec![knot.initializer],
                     body,
@@ -381,6 +387,7 @@ impl Lowerer<'_> {
             self.emitter.define_continuation(
                 bound,
                 curios_cps::Continuation {
+                    lineage: self.emitter.lineage(),
                     debug_name: Some("knot/cell".into()),
                     params: vec![knot.result],
                     body,
@@ -411,6 +418,7 @@ impl Lowerer<'_> {
         self.emitter.define_function(
             thunk,
             curios_cps::Function {
+                lineage: self.emitter.lineage(),
                 debug_name: hint.map(|hint| format!("{hint}/init")),
                 params: Vec::new(),
                 return_cont,
@@ -459,6 +467,7 @@ impl Lowerer<'_> {
             self.emitter.define_continuation(
                 resume,
                 curios_cps::Continuation {
+                    lineage: self.emitter.lineage(),
                     debug_name: Some("force/resume".into()),
                     params: vec![local],
                     body,
@@ -779,6 +788,8 @@ impl Lowerer<'_> {
         if let Some(carry) = self.carry {
             return carry;
         }
+        // Every bind shares it, so it is made of no declaration's text, whichever function's body first asked for it.
+        let lowering = self.emitter.lowering(None);
         let carry = self.emitter.reserve_function();
         let return_cont = self.emitter.reserve_continuation();
         let suspension = self.emitter.add_value(None);
@@ -822,6 +833,7 @@ impl Lowerer<'_> {
         self.emitter.define_function(
             carry,
             curios_cps::Function {
+                lineage: None,
                 debug_name: Some("io/carry".into()),
                 params: vec![suspension, continuation],
                 return_cont,
@@ -832,6 +844,7 @@ impl Lowerer<'_> {
             },
         );
         self.emitter.keep_out_of_line(carry);
+        self.emitter.lowering(lowering);
         self.carry = Some(carry);
         carry
     }
@@ -841,6 +854,8 @@ impl Lowerer<'_> {
         if let Some(later) = self.later {
             return later;
         }
+        // Every row's call shares it, so it is made of no declaration's text, as `carry` is.
+        let lowering = self.emitter.lowering(None);
         let later = self.emitter.reserve_function();
         let return_cont = self.emitter.reserve_continuation();
         let token = self.emitter.add_value(None);
@@ -878,6 +893,7 @@ impl Lowerer<'_> {
             self.emitter.define_continuation(
                 made_it,
                 curios_cps::Continuation {
+                    lineage: self.emitter.lineage(),
                     debug_name: Some("io/later/made".into()),
                     params: vec![made],
                     body,
@@ -900,6 +916,7 @@ impl Lowerer<'_> {
         self.emitter.define_function(
             later,
             curios_cps::Function {
+                lineage: None,
                 debug_name: Some("io/later".into()),
                 params: vec![token, again],
                 return_cont,
@@ -910,6 +927,7 @@ impl Lowerer<'_> {
             },
         );
         self.emitter.keep_out_of_line(later);
+        self.emitter.lowering(lowering);
         self.later = Some(later);
         later
     }
@@ -1047,6 +1065,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             join,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("join".into()),
                 params: vec![parameter],
                 body,
@@ -1067,6 +1086,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             continuation,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body,
@@ -1166,6 +1186,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             continuation,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("key".into()),
                 params: Vec::new(),
                 body,
@@ -1286,6 +1307,7 @@ impl Lowerer<'_> {
                 self.emitter.define_continuation(
                     continuation,
                     curios_cps::Continuation {
+                        lineage: self.emitter.lineage(),
                         debug_name: Some("arm/immediate".into()),
                         params: Vec::new(),
                         body,
@@ -1352,6 +1374,7 @@ impl Lowerer<'_> {
                 self.emitter.define_continuation(
                     continuation,
                     curios_cps::Continuation {
+                        lineage: self.emitter.lineage(),
                         debug_name: Some("arm/boxed".into()),
                         params: Vec::new(),
                         body,
@@ -1477,6 +1500,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             continuation,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some(hint),
                 params: Vec::new(),
                 body,
@@ -1520,6 +1544,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             cons_arm,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: cons_body,
@@ -1596,6 +1621,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             join,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some(role.into()),
                 params,
                 body,
@@ -1679,6 +1705,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             resume,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("outcome/resume".into()),
                 params,
                 body,
@@ -1737,6 +1764,7 @@ impl Lowerer<'_> {
         self.emitter.define_continuation(
             resume,
             curios_cps::Continuation {
+                lineage: self.emitter.lineage(),
                 debug_name: Some("foreign/resume".into()),
                 params: results,
                 body: pack,

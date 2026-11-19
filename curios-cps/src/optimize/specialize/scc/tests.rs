@@ -30,6 +30,7 @@ fn independent_components_specialize_together_and_charge_their_complete_extents(
         return_to: ret,
     });
     let resume = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![result],
         body: run_copy,
@@ -82,6 +83,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
         unreachable!()
     };
     let original = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![],
         body: first,
@@ -108,6 +110,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
         module.define_function(
             helper,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 return_cont: helper_ret,
@@ -127,6 +130,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
         });
         sites.push(call);
         let before = module.add_continuation(Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: call,
@@ -344,6 +348,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: Some(name.into()),
                 params: vec![next, x],
                 return_cont: function_return,
@@ -372,6 +377,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
     module.define_function(
         again,
         Function {
+            lineage: None,
             debug_name: Some("again".into()),
             params: vec![m],
             return_cont: again_return,
@@ -392,6 +398,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
     module.define_function(
         g,
         Function {
+            lineage: None,
             debug_name: Some("g".into()),
             params: vec![op, n],
             return_cont: g_return,
@@ -414,6 +421,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
     module.define_continuation(
         k1,
         Continuation {
+            lineage: None,
             debug_name: Some("k1".into()),
             params: vec![x1],
             body: call2,
@@ -439,6 +447,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -510,6 +519,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
     module.define_continuation(
         turn,
         Continuation {
+            lineage: None,
             debug_name: Some("turn".into()),
             params: vec![],
             body: step,
@@ -537,6 +547,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
     module.define_function(
         walk,
         Function {
+            lineage: None,
             debug_name: Some("walk".into()),
             params: vec![k, n],
             return_cont: walk_return,
@@ -559,6 +570,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
     module.define_continuation(
         k1,
         Continuation {
+            lineage: None,
             debug_name: Some("k1".into()),
             params: vec![first_result],
             body: call2,
@@ -584,6 +596,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

@@ -37,6 +37,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
     module.define_function(
         step,
         Function {
+            lineage: None,
             debug_name: Some("step".into()),
             params: vec![step_param],
             return_cont: step_sentinel,
@@ -60,6 +61,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
     module.define_function(
         leader,
         Function {
+            lineage: None,
             debug_name: Some("leader".into()),
             params: vec![leader_param],
             return_cont: leader_sentinel,
@@ -81,6 +83,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
     module.define_function(
         forwarder,
         Function {
+            lineage: None,
             debug_name: Some("forwarder".into()),
             params: vec![forwarder_param],
             return_cont: forwarder_sentinel,
@@ -104,6 +107,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                 // The application resumes past the call, which is the shape `Resume::Retarget` is written for.
                 let ignored = module.add_value(Some("ignored".into()));
                 let after = module.add_continuation(Continuation {
+                    lineage: None,
                     debug_name: None,
                     params: vec![ignored],
                     body: next,
@@ -129,6 +133,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                 module.define_function(
                     nested,
                     Function {
+                        lineage: None,
                         debug_name: Some("nested".into()),
                         params: vec![],
                         return_cont: nested_sentinel,
@@ -149,6 +154,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                 });
                 // Bound inside the resume rather than beside it, since the nested function names the resume's parameter — the `LetCont`-then-site shape `Resume::Jump` is written for.
                 let after = module.add_continuation(Continuation {
+                    lineage: None,
                     debug_name: None,
                     params: vec![ignored],
                     body: define,
@@ -173,6 +179,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                     next,
                 });
                 let after = module.add_continuation(Continuation {
+                    lineage: None,
                     debug_name: None,
                     params: vec![ignored],
                     body: keep,
@@ -202,6 +209,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
         module.define_continuation(
             resume,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![received],
                 body,
@@ -244,6 +252,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("entry".into()),
             params: vec![],
             return_cont: entry_sentinel,
@@ -458,6 +467,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.define_function(
         inner,
         Function {
+            lineage: None,
             debug_name: Some("inner".into()),
             params: vec![inner_param],
             return_cont: inner_ret,
@@ -477,6 +487,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.define_function(
         producer,
         Function {
+            lineage: None,
             debug_name: Some("producer".into()),
             params: vec![produced_param],
             return_cont: producer_ret,
@@ -502,6 +513,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![forwarded],
             body: apply,
@@ -515,6 +527,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
@@ -533,6 +546,7 @@ fn a_forwarded_application_declines_uncurrying() {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -572,6 +586,7 @@ fn unary(module: &mut Module, name: &str) -> FunctionId {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![param],
             return_cont,
@@ -595,6 +610,7 @@ fn returning(module: &mut Module, name: &str, returned: FunctionId) -> FunctionI
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![param],
             return_cont,
@@ -625,6 +641,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
     module.define_continuation(
         spare,
         Continuation {
+            lineage: None,
             debug_name: Some("spare".into()),
             params: vec![],
             body: spare_body,
@@ -643,6 +660,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: resume_body,
@@ -660,6 +678,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
         module.define_continuation(
             continuation,
             Continuation {
+                lineage: None,
                 debug_name: Some(name.into()),
                 params: vec![],
                 body,
@@ -713,6 +732,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -821,6 +841,7 @@ fn a_new_tail_edge_defers_a_class_until_its_new_members_can_agree() {
         return_to: ret,
     });
     let resume = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![held],
         body: apply,
@@ -871,6 +892,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
     module.define_continuation(
         first,
         Continuation {
+            lineage: None,
             debug_name: Some("first".into()),
             params: vec![],
             body: first_body,
@@ -892,6 +914,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
     module.define_continuation(
         second,
         Continuation {
+            lineage: None,
             debug_name: Some("second".into()),
             params: vec![],
             body: second_body,
@@ -920,6 +943,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
     module.define_function(
         producer,
         Function {
+            lineage: None,
             debug_name: Some("producer".into()),
             params: vec![n, through],
             return_cont: producer_ret,
@@ -942,6 +966,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: apply,
@@ -965,6 +990,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,

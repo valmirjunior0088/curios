@@ -1,6 +1,6 @@
 //! The `cost` query: what the optimizer did to each declaration the program declares.
 //!
-//! It answers *which cliff am I on* — whether an optimization fired — and needs no execution. It is read off the compilation the way a lint is read off name resolution: the driver already observes the CPS graph before and after optimization, so counting the declarations each side names is the whole measurement, and no pass is instrumented to produce it.
+//! It answers *which cliff am I on* — whether an optimization fired — and needs no execution. It is read off the compilation the way a lint is read off name resolution: the driver already observes the CPS graph before and after optimization, so counting the functions of each declaration's text on either side, by the lineage each carries, is the whole measurement, and no pass is instrumented to produce it.
 //!
 //! **Nothing here judges.** A row states what became of a declaration and stops; whether an absorbed helper or a threefold specialization is good news is the author's to decide, and a rule that decided it for them would be the heuristic the lint decision spent a paragraph refusing.
 

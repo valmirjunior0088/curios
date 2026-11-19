@@ -43,6 +43,7 @@ fn called_both_ways(tested: bool) -> Module {
             module.define_continuation(
                 built,
                 Continuation {
+                    lineage: None,
                     debug_name: None,
                     params: vec![],
                     body: read_x,
@@ -78,6 +79,7 @@ fn called_both_ways(tested: bool) -> Module {
     module.define_function(
         bump,
         Function {
+            lineage: None,
             debug_name: Some("bump".into()),
             params: vec![t],
             return_cont: bump_return,
@@ -91,6 +93,7 @@ fn called_both_ways(tested: bool) -> Module {
     module.define_continuation(
         after_second,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![b],
             body: exit,
@@ -110,6 +113,7 @@ fn called_both_ways(tested: bool) -> Module {
     module.define_continuation(
         after_first,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![a],
             body: second_scope,
@@ -137,6 +141,7 @@ fn called_both_ways(tested: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -203,6 +208,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
     module.define_function(
         pick,
         Function {
+            lineage: None,
             debug_name: Some("pick".into()),
             params: vec![t],
             return_cont: pick_return,
@@ -234,6 +240,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
     module.define_continuation(
         answered,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![r],
             body: read,
@@ -276,6 +283,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -307,6 +315,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
     module.define_continuation(
         done,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![d],
             body: exit,
@@ -345,6 +354,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
     module.define_continuation(
         round,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![k],
             body: read_inner,
@@ -379,6 +389,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -449,6 +460,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
     module.define_function(
         bump,
         Function {
+            lineage: None,
             debug_name: Some("bump".into()),
             params: vec![t],
             return_cont: bump_return,
@@ -469,6 +481,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
     module.define_continuation(
         answered,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![a],
             body: read_again,
@@ -507,6 +520,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -606,6 +620,7 @@ fn arms_of_a_round(back: bool) -> Module {
         module.define_continuation(
             continuation,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body,
@@ -635,6 +650,7 @@ fn arms_of_a_round(back: bool) -> Module {
     module.define_continuation(
         round,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![p],
             body: read_tag,
@@ -645,6 +661,7 @@ fn arms_of_a_round(back: bool) -> Module {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![w],
             body: again,
@@ -655,6 +672,7 @@ fn arms_of_a_round(back: bool) -> Module {
     module.define_continuation(
         done,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![d],
             body: exit,
@@ -686,6 +704,7 @@ fn arms_of_a_round(back: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -743,6 +762,7 @@ fn built_over_a_number_handed_twice() -> Module {
     module.define_continuation(
         take,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![r],
             body: read,
@@ -767,6 +787,7 @@ fn built_over_a_number_handed_twice() -> Module {
     module.define_continuation(
         step,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![],
             body: count,
@@ -785,6 +806,7 @@ fn built_over_a_number_handed_twice() -> Module {
     module.define_continuation(
         build,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![n, acc],
             body: round,
@@ -809,6 +831,7 @@ fn built_over_a_number_handed_twice() -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -883,6 +906,7 @@ fn child_beside_its_holder(apart: bool) -> Module {
     module.define_continuation(
         k,
         Continuation {
+            lineage: None,
             debug_name: Some("k".into()),
             params: vec![a, b],
             body: read_b,
@@ -932,6 +956,7 @@ fn child_beside_its_holder(apart: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -992,6 +1017,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
     module.define_function(
         deep,
         Function {
+            lineage: None,
             debug_name: Some("deep".into()),
             params: vec![t],
             return_cont: deep_return,
@@ -1023,6 +1049,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
     module.define_continuation(
         after,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![deeper],
             body: read_held,
@@ -1077,6 +1104,7 @@ fn child_read_before_its_holder_is_handed_on(apart: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -1138,6 +1166,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
     module.define_function(
         peek,
         Function {
+            lineage: None,
             debug_name: Some("peek".into()),
             params: vec![s],
             return_cont: peek_return,
@@ -1161,6 +1190,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
     module.define_continuation(
         after_peek,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![peeked],
             body: exit,
@@ -1209,6 +1239,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
             module.define_continuation(
                 j,
                 Continuation {
+                    lineage: None,
                     debug_name: Some("j".into()),
                     params: vec![o],
                     body: j_body,
@@ -1239,6 +1270,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
     module.define_continuation(
         k,
         Continuation {
+            lineage: None,
             debug_name: Some("k".into()),
             params,
             body: k_body,
@@ -1312,6 +1344,7 @@ fn written_while_read(write: Write, apart: bool) -> Module {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -1554,6 +1587,7 @@ fn passed_over(element: bool, between: bool) -> Module {
         module.define_continuation(
             take,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body: read_slot,
@@ -1578,6 +1612,7 @@ fn passed_over(element: bool, between: bool) -> Module {
         module.define_continuation(
             pass,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body: pass_body,

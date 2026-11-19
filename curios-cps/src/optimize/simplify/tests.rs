@@ -22,6 +22,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     module.define_continuation(
         target,
         Continuation {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![target_left, target_right],
             body: target_body,
@@ -40,6 +41,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     module.define_continuation(
         forwarding,
         Continuation {
+            lineage: None,
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
@@ -57,6 +59,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -95,6 +98,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
     module.define_continuation(
         target,
         Continuation {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![received],
             body: target_body,
@@ -110,6 +114,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
     module.define_continuation(
         forwarding,
         Continuation {
+            lineage: None,
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
@@ -128,6 +133,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -206,6 +212,7 @@ fn a_closure_call_of_a_function_of_another_arity_is_unreachable() {
     module.define_function(
         target,
         Function {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![first, second],
             return_cont: target_return,
@@ -246,6 +253,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
     module.define_function(
         arm,
         Function {
+            lineage: None,
             debug_name: Some("arm".into()),
             params: vec![arm_param],
             return_cont: arm_return,
@@ -266,6 +274,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![join_callee, join_argument],
             body: join_body,
@@ -296,6 +305,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: entry_params,
             return_cont: entry_return,
@@ -353,6 +363,7 @@ fn returning_call(
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![],
             return_cont: callee_return,
@@ -374,6 +385,7 @@ fn returning_call(
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params,
             body: resume_body,
@@ -396,6 +408,7 @@ fn returning_call(
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -511,6 +524,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
     module.define_function(
         stepping,
         Function {
+            lineage: None,
             debug_name: Some("stepper".into()),
             params: vec![x],
             return_cont: stepping_return,
@@ -535,6 +549,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
     module.define_function(
         fold,
         Function {
+            lineage: None,
             debug_name: Some("fold".into()),
             params: vec![f],
             return_cont: fold_return,
@@ -555,6 +570,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![unread],
             body: resume_body,
@@ -577,6 +593,7 @@ fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, Fu
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -639,6 +656,7 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
     module.define_continuation(
         exit,
         Continuation {
+            lineage: None,
             debug_name: Some("exit".into()),
             params: vec![answer],
             body: exit_body,
@@ -656,6 +674,7 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
             module.define_continuation(
                 back,
                 Continuation {
+                    lineage: None,
                     debug_name: Some("back".into()),
                     params: vec![result],
                     body: back_body,
@@ -680,6 +699,7 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
     module.define_continuation(
         round,
         Continuation {
+            lineage: None,
             debug_name: Some("round".into()),
             params: vec![],
             body: round_body,
@@ -707,6 +727,7 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
     module.define_continuation(
         looped,
         Continuation {
+            lineage: None,
             debug_name: Some("walk".into()),
             params: vec![count],
             body: loop_body,
@@ -724,6 +745,7 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![handed],
             return_cont: main_return,

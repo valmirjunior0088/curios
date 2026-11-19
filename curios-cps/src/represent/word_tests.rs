@@ -26,6 +26,7 @@ fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
@@ -69,6 +70,7 @@ fn a_parameter_a_bounded_sum_reaches_is_held_in_a_word() {
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
@@ -111,6 +113,7 @@ fn counting_loop(module: &mut Module, seed: Atom, op: Intrinsic) -> (ValueId, Va
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
@@ -177,6 +180,7 @@ fn a_length_counted_down_and_read_at_rides_a_word_read_unsigned() {
     module.define_continuation(
         head,
         Continuation {
+            lineage: None,
             debug_name: Some("head".into()),
             params: vec![param],
             body: read,

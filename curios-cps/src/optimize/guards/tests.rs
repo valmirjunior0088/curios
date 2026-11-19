@@ -43,6 +43,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
         false => suffix,
         true => {
             let inner = module.add_continuation(Continuation {
+                lineage: None,
                 debug_name: Some("inner".into()),
                 params: vec![],
                 body: suffix,
@@ -59,6 +60,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
         }
     };
     let arm = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: Some("arm".into()),
         params: vec![],
         body: arm_body,
@@ -76,6 +78,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
             args: vec![nat(0)],
         }));
         let exit = module.add_continuation(Continuation {
+            lineage: None,
             debug_name: Some("exit".into()),
             params: vec![],
             body,
@@ -104,6 +107,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
                 default: Some(to(arm)),
             });
             let around = module.add_continuation(Continuation {
+                lineage: None,
                 debug_name: Some("around".into()),
                 params: vec![],
                 body: switch,
@@ -112,6 +116,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
             continuations.push(around);
             let jump = module.add_node(Node::ApplyCont(to(arm)));
             let pick = module.add_continuation(Continuation {
+                lineage: None,
                 debug_name: Some("pick".into()),
                 params: vec![],
                 body: jump,
@@ -133,6 +138,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![length],
             return_cont,

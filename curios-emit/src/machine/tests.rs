@@ -27,6 +27,7 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     source.define_function(
         function,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -76,6 +77,7 @@ fn a_switch_edge_to_the_return_lands_in_a_block_that_returns() {
     source.define_function(
         pick,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("pick".into()),
             params: vec![x],
             return_cont: pick_return,
@@ -87,6 +89,7 @@ fn a_switch_edge_to_the_return_lands_in_a_block_that_returns() {
     let picked = source.add_value(Some("picked".into()));
     let exit = source.add_node(halt(vec![curios_cps::Atom::Value(picked)]));
     let done = source.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("done".into()),
         params: vec![picked],
         body: exit,
@@ -110,6 +113,7 @@ fn a_switch_edge_to_the_return_lands_in_a_block_that_returns() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -166,6 +170,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     source.define_function(
         callee,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![],
             return_cont: callee_return,
@@ -188,6 +193,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -218,6 +224,7 @@ fn a_halt_stays_terminal_through_structurization() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -268,6 +275,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     source.define_function(
         target,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -289,6 +297,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     source.define_function(
         consumer,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("consumer".into()),
             params: vec![first, second],
             return_cont: consumer_return,
@@ -311,6 +320,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -341,6 +351,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
     source.define_function(
         target,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -357,6 +368,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
         args: vec![curios_cps::Atom::Fun(target)],
     }));
     let resume = source.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("resume".into()),
         params: vec![result],
         body: escape,
@@ -378,6 +390,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -408,6 +421,7 @@ fn exiting_main() -> (curios_cps::Module, curios_cps::FunctionId) {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -446,6 +460,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     let bound = source.add_value(Some("bound".into()));
     let exit = source.add_node(halt(vec![curios_cps::Atom::Value(bound)]));
     let resume = source.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("resume".into()),
         params: vec![bound],
         body: exit,
@@ -464,6 +479,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     source.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

@@ -3,7 +3,7 @@
 use {
     super::{Intrinsic, Module, Repr},
     curios_abi::ForeignFunction,
-    curios_common::id,
+    curios_common::{Lineage, id},
     curios_num::{Binary, Floating, Integer, Natural},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -305,6 +305,8 @@ impl Register {
 
 #[derive(Debug, Clone)]
 pub struct Function {
+    /// The function of a declaration's text this one was made of, lowered from the erased function's and kept by every copy ([`Lineage`]). `None` for one of no declaration's text, a pass's or the runtime's.
+    pub lineage: Option<Lineage>,
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub return_cont: ContinuationId,
@@ -363,6 +365,8 @@ impl Droppable {
 
 #[derive(Debug, Clone)]
 pub struct Continuation {
+    /// The function of a declaration's text this continuation's code was made of: the lowering gives each continuation it makes the lineage of the function it lowers, contification moves a function's onto the loop it makes of it, and every copy keeps it, so a continuation standing in another function's body says what was inlined there ([`Lineage`]). `None` for one a pass makes.
+    pub lineage: Option<Lineage>,
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub body: NodeId,

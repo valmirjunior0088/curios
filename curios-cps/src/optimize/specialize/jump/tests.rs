@@ -38,6 +38,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
         module.define_continuation(
             root,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 body,
@@ -56,6 +57,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
             module.define_continuation(
                 before,
                 Continuation {
+                    lineage: None,
                     debug_name: None,
                     params: vec![],
                     body,
@@ -94,6 +96,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![choice],
             return_cont: ret,
@@ -239,6 +242,7 @@ fn more_matching_sites_win_a_budget_that_fits_only_one_copy() {
     }).unwrap();
     let body = module.add_node(module.node(sites[1]).unwrap().clone());
     let extra = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![],
         body,

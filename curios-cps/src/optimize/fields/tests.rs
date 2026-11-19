@@ -36,6 +36,7 @@ fn loop_module() -> (Module, FunctionId, ContinuationId, ValueId) {
     module.define_continuation(
         exit,
         Continuation {
+            lineage: None,
             debug_name: Some("exit".into()),
             params: vec![out],
             body: take,
@@ -85,6 +86,7 @@ fn loop_module() -> (Module, FunctionId, ContinuationId, ValueId) {
     module.define_continuation(
         header,
         Continuation {
+            lineage: None,
             debug_name: Some("header".into()),
             params: vec![carried],
             body: project,
@@ -112,6 +114,7 @@ fn loop_module() -> (Module, FunctionId, ContinuationId, ValueId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![scrutinee],
             return_cont,
@@ -182,6 +185,7 @@ fn two_joins_module(chained: bool) -> (Module, ContinuationId, ContinuationId) {
     module.define_continuation(
         second,
         Continuation {
+            lineage: None,
             debug_name: Some("second".into()),
             params: vec![second_param],
             body: take,
@@ -209,6 +213,7 @@ fn two_joins_module(chained: bool) -> (Module, ContinuationId, ContinuationId) {
     module.define_continuation(
         first,
         Continuation {
+            lineage: None,
             debug_name: Some("first".into()),
             params: vec![first_param],
             body: read,
@@ -261,6 +266,7 @@ fn two_joins_module(chained: bool) -> (Module, ContinuationId, ContinuationId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![scrutinee],
             return_cont,
@@ -375,6 +381,7 @@ fn a_mixed_origin_is_declined() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![callee_param],
             return_cont: callee_ret,
@@ -399,6 +406,7 @@ fn a_mixed_origin_is_declined() {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![landed],
             body: project,
@@ -412,6 +420,7 @@ fn a_mixed_origin_is_declined() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
@@ -451,6 +460,7 @@ fn a_mixed_origin_is_declined() {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -496,6 +506,7 @@ fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
     module.define_continuation(
         exit,
         Continuation {
+            lineage: None,
             debug_name: Some("exit".into()),
             params: vec![out],
             body: take,
@@ -538,6 +549,7 @@ fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
     module.define_continuation(
         header,
         Continuation {
+            lineage: None,
             debug_name: Some("header".into()),
             params: vec![carried],
             body: dispatch,
@@ -562,6 +574,7 @@ fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -686,6 +699,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![callee_param],
             return_cont: callee_ret,
@@ -712,6 +726,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: done,
@@ -728,6 +743,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     module.define_continuation(
         join,
         Continuation {
+            lineage: None,
             debug_name: Some("join".into()),
             params: vec![merged],
             body: call,
@@ -775,6 +791,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![scrutinee],
             return_cont: caller_ret,
@@ -939,6 +956,7 @@ fn define_walk(
     module.define_continuation(
         header,
         Continuation {
+            lineage: None,
             debug_name: Some("header".into()),
             params: vec![window],
             body: measure,
@@ -969,6 +987,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![rope, scrutinee],
             return_cont,
@@ -1003,6 +1022,7 @@ fn two_walks_module() -> (Module, [crate::ContinuationId; 2]) {
     module.define_continuation(
         between,
         Continuation {
+            lineage: None,
             debug_name: Some("between".into()),
             params: vec![passed],
             body: onward,
@@ -1020,6 +1040,7 @@ fn two_walks_module() -> (Module, [crate::ContinuationId; 2]) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![first, second, scrutinee],
             return_cont,
@@ -1192,6 +1213,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
     module.define_function(
         consume,
         Function {
+            lineage: None,
             debug_name: Some("consume".into()),
             params: vec![param],
             return_cont: consume_ret,
@@ -1208,6 +1230,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
     let second_result = module.add_value(Some("second result".into()));
     let exit = module.add_node(halt(vec![Atom::Value(second_result)]));
     let second_resume = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![second_result],
         body: exit,
@@ -1237,6 +1260,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
         body: build_second,
     });
     let first_resume = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![first_result],
         body: scope_second,
@@ -1270,6 +1294,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_ret,
@@ -1460,6 +1485,7 @@ fn a_worker_backedge_projects_its_own_rebuilt_parameter() {
         return_to: ret,
     });
     let repeat = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![],
         body: backedge,

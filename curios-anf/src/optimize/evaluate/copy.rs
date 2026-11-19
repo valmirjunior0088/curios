@@ -101,6 +101,7 @@ pub fn deep_copy_function(
     }
     for (old, function) in &functions {
         let remapped = Function {
+            lineage: function.lineage,
             debug_name: function.debug_name.clone(),
             params: function
                 .params

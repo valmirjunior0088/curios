@@ -309,6 +309,7 @@ impl Remap<'_> {
 
     pub fn function(&self, function: &Function) -> Function {
         Function {
+            lineage: function.lineage,
             debug_name: function.debug_name.clone(),
             params: function.params.iter().map(|&p| self.value(p)).collect(),
             body: self.block(function.body),

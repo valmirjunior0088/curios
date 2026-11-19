@@ -1,6 +1,7 @@
 use {
     super::*,
     crate::{Literal, test_support::*},
+    curios_common::{Lineage, Qualifier},
     curios_num::Natural,
 };
 
@@ -18,6 +19,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
         args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
     }));
     let zero = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![],
         body: zero_body,
@@ -36,6 +38,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
                 args: vec![Atom::Value(answer)],
             }));
             let after = module.add_continuation(Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![answer],
                 body: after_body,
@@ -53,6 +56,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
         }
     };
     let more = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![],
         body: again,
@@ -79,6 +83,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
     module.define_function(
         count,
         Function {
+            lineage: None,
             debug_name: Some("count".into()),
             params: vec![n],
             return_cont: count_return,
@@ -100,6 +105,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -133,6 +139,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
         args: vec![Atom::Value(answer)],
     }));
     let after = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![answer],
         body: after_body,
@@ -150,6 +157,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
     module.define_function(
         apply,
         Function {
+            lineage: None,
             debug_name: Some("apply".into()),
             params: vec![closure],
             return_cont: apply_return,
@@ -166,6 +174,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
     module.define_function(
         leaf,
         Function {
+            lineage: None,
             debug_name: Some("leaf".into()),
             params: vec![],
             return_cont: leaf_return,
@@ -198,6 +207,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
     module.define_function(
         again,
         Function {
+            lineage: None,
             debug_name: Some("again".into()),
             params: vec![],
             return_cont: again_return,
@@ -219,6 +229,7 @@ fn applying(back: bool) -> (Module, FunctionId) {
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -270,6 +281,27 @@ fn a_non_tail_self_call_is_guarded_and_its_function_gains_a_twin() {
         "a twin takes its function's parameters and the continuation"
     );
     assert!(module.live_functions().count() > functions);
+}
+
+/// A twin runs its function's code on the heap, so it is of its function's lineage: what a reader asks of the declaration finds both.
+#[test]
+fn a_twin_is_of_its_functions_lineage() {
+    let (mut module, count) = counting(false);
+    let lineage = Lineage {
+        declaration: Qualifier::empty().with("count"),
+        function: 0,
+    };
+    module
+        .function_mut(count)
+        .expect("count is defined")
+        .lineage = Some(lineage);
+
+    bound_frames(&mut module, &OnceCell::new());
+
+    let twin = module
+        .twin(count)
+        .expect("a function on a cycle has a twin");
+    assert_eq!(module.function(twin).unwrap().lineage, Some(lineage));
 }
 
 #[test]

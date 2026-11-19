@@ -15,6 +15,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
     module.define_function(
         inner,
         Function {
+            lineage: None,
             debug_name: Some("inner".into()),
             params: vec![],
             return_cont: inner_sentinel,
@@ -42,6 +43,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
     module.define_function(
         outer,
         Function {
+            lineage: None,
             debug_name: Some("outer".into()),
             params: vec![param],
             return_cont: outer_sentinel,
@@ -112,6 +114,7 @@ fn planning_closes_nested_definitions_transitively_without_minting() {
     module.define_function(
         deeper,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont,
@@ -160,6 +163,7 @@ fn function_recursion_follows_the_copy_and_external_callees_stay_shared() {
     module.define_function(
         external,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: external_return,
@@ -229,6 +233,7 @@ fn a_peeled_continuation_keeps_its_backedge_and_renames_nested_captures() {
     module.define_continuation(
         target,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![param],
             body,

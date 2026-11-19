@@ -31,6 +31,7 @@ fn registered_entry(suspended: bool, construct: bool) -> curios_cps::Module {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: ret,

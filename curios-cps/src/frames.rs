@@ -434,6 +434,7 @@ fn guard(
         args: answers.iter().copied().map(Atom::Value).collect(),
     }));
     let back = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: Vec::new(),
         body: resume,
@@ -449,6 +450,7 @@ fn guard(
         body: leave_call,
     });
     let leave = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: answers,
         body: leave_body,
@@ -456,6 +458,7 @@ fn guard(
     });
     let native_call = module.add_node(resuming(call.clone(), leave));
     let native = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: Vec::new(),
         body: native_call,
@@ -478,6 +481,7 @@ fn guard(
         body: heap_call,
     });
     let heap = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: Vec::new(),
         body: heap_body,
@@ -501,6 +505,7 @@ fn guard(
         }),
     });
     let chosen = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![admitted],
         body: choose,
@@ -620,6 +625,7 @@ impl Twin<'_> {
                             let continuation = self.module.continuation(id).unwrap().clone();
                             let return_cont = self.module.reserve_continuation();
                             let function = self.module.add_function(Function {
+                                lineage: continuation.lineage,
                                 debug_name: Some(heap_named(continuation.debug_name.as_deref())),
                                 params: continuation.params.clone(),
                                 return_cont,
@@ -764,6 +770,7 @@ impl Twin<'_> {
                         params.iter().copied().map(Atom::Value).collect(),
                     ));
                     let thin = self.module.add_continuation(Continuation {
+                        lineage: None,
                         debug_name: None,
                         params,
                         body,
@@ -878,6 +885,7 @@ impl Twin<'_> {
             params.iter().copied().map(Atom::Value).collect(),
         ));
         let thin = self.module.add_continuation(Continuation {
+            lineage: None,
             debug_name: None,
             params,
             body,
@@ -1005,6 +1013,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         return_to: returned,
     });
     let done = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: Vec::new(),
         body: done_body,
@@ -1037,6 +1046,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         next: step,
     });
     let resume = module.add_function(Function {
+        lineage: None,
         debug_name: Some(heap_named(Some("map/resume"))),
         params: vec![image],
         return_cont: resumed,
@@ -1061,6 +1071,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         next: bound,
     });
     let more = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: Vec::new(),
         body: read,
@@ -1102,6 +1113,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
     module.define_function(
         looping,
         Function {
+            lineage: None,
             debug_name: Some(heap_named(Some("map"))),
             params: vec![position, mapped, k],
             return_cont: returned,
@@ -1159,6 +1171,7 @@ fn handing_back(
         }
     };
     let handed = module.add_function(Function {
+        lineage: None,
         debug_name: Some(heap_named(Some("answer"))),
         params,
         return_cont,
@@ -1185,6 +1198,7 @@ fn handing_back(
         });
     }
     let unpacked = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![packed],
         body: next,

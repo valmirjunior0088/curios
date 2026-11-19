@@ -291,6 +291,7 @@ pub fn inline_call(
         module.define_continuation(
             continuations[&old],
             Continuation {
+                lineage: continuation.lineage,
                 debug_name: continuation.debug_name.clone(),
                 params: continuation
                     .params
@@ -311,6 +312,7 @@ pub fn inline_call(
         module.define_function(
             functions[&old],
             Function {
+                lineage: definition.lineage,
                 debug_name: definition.debug_name.clone(),
                 params: definition.params.iter().map(|id| map_value(*id)).collect(),
                 return_cont: returns[&definition.return_cont],

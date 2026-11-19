@@ -15,7 +15,8 @@ use {
         Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
-    std::{collections::BTreeSet, sync::Arc},
+    curios_common::{Lineage, Qualifier},
+    std::{collections::BTreeMap, sync::Arc},
 };
 
 /// A checked module under construction. See the module documentation.
@@ -23,10 +24,23 @@ use {
 pub struct Builder {
     module: Module,
     open_blocks: Vec<Vec<StatementId>>,
-    /// Identities handed out by [`reserve_function`](Self::reserve_function) and not yet defined.
+    /// Identities handed out by [`reserve_function`](Self::reserve_function) and not yet defined, each with the lineage it was reserved under.
     ///
     /// Tracked here rather than read back off the arena, because an empty slot does not say *why* it is empty: `Arena::reserve` and `Arena::remove` both write `None`, so an unfilled reservation and a pruned-away function are the same value. Reading finalization's question off the arena therefore answers a different one — it reports the first empty slot whatever put it there, and a module carrying a tombstone would be rejected for a reservation nobody made. Reservation is a lifecycle of *construction*, opening and closing inside one builder, where a tombstone outlives the builder; keeping the two apart is what lets a pruned module be finalized at all.
-    reserved_functions: BTreeSet<FunctionId>,
+    reserved_functions: BTreeMap<FunctionId, Option<Lineage>>,
+    /// The declaration the functions reserved from here on are minted for, with how many of its functions are minted already ([`Builder::declaring`]).
+    declaring: Declaring,
+}
+
+/// The declaration a builder mints functions for, with how many it has minted: what [`Builder::declaring`] swaps in, and hands back for its caller to put back or to resume later.
+#[derive(Debug, Default)]
+pub struct Declaring(Option<(Qualifier, u32)>);
+
+impl Declaring {
+    /// Minting for `declaration`, none of whose functions is minted yet, or for no declaration.
+    pub fn of(declaration: Option<Qualifier>) -> Self {
+        Self(declaration.map(|declaration| (declaration, 0)))
+    }
 }
 
 impl Builder {
@@ -129,13 +143,33 @@ impl Builder {
     }
 
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. Finalization rejects a reservation that was never defined.
+    ///
+    /// Its lineage is drawn here rather than where it is defined: a function is reserved before its body is walked and defined after, so drawing here numbers a declaration's functions in the order its text writes them, the outer before the inner.
     pub fn reserve_function(&mut self) -> FunctionId {
         let id = self.module.reserve_function();
-        self.reserved_functions.insert(id);
+        let lineage = self.minted();
+        self.reserved_functions.insert(id, lineage);
         id
     }
 
-    /// Define a previously reserved function.
+    /// Mint each function reserved from here on as `declaring` says, its lineage the next of the declaration's ([`Lineage`]), and hand back what was being declared before: the caller puts it back once the declaration is built, keeping what it swapped out where the declaration's functions are reserved in more than one stretch.
+    pub fn declaring(&mut self, declaring: Declaring) -> Declaring {
+        std::mem::replace(&mut self.declaring, declaring)
+    }
+
+    /// The lineage of the next function reserved, counting it among the declaration's.
+    fn minted(&mut self) -> Option<Lineage> {
+        let (declaration, minted) = self.declaring.0.as_mut()?;
+        let lineage = Lineage {
+            declaration: *declaration,
+            function: *minted,
+        };
+        *minted += 1;
+
+        Some(lineage)
+    }
+
+    /// Define a previously reserved function, of the lineage it was reserved under ([`Builder::declaring`]).
     pub fn define_function(
         &mut self,
         id: FunctionId,
@@ -143,10 +177,14 @@ impl Builder {
         params: Vec<ValueId>,
         body: BlockId,
     ) {
-        self.reserved_functions.remove(&id);
+        let lineage = self
+            .reserved_functions
+            .remove(&id)
+            .expect("a function is defined once, after it is reserved");
         self.module.define_function(
             id,
             Function {
+                lineage,
                 debug_name,
                 params,
                 body,
@@ -268,7 +306,7 @@ impl Builder {
             });
         }
         self.reserved_functions
-            .iter()
+            .keys()
             .next()
             .map(|&id| StructuralFault {
                 rule: StructuralRule::DanglingReservation,

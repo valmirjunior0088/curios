@@ -24,6 +24,7 @@ fn resumed_with(
     module.define_function(
         producer,
         Function {
+            lineage: None,
             debug_name: Some("producer".into()),
             params: Vec::new(),
             return_cont: producer_ret,
@@ -46,6 +47,7 @@ fn resumed_with(
             module.define_function(
                 middle,
                 Function {
+                    lineage: None,
                     debug_name: Some("middle".into()),
                     params: Vec::new(),
                     return_cont: middle_ret,
@@ -66,6 +68,7 @@ fn resumed_with(
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: exit,
@@ -84,6 +87,7 @@ fn resumed_with(
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("entry".into()),
             params: Vec::new(),
             return_cont: entry_ret,
@@ -196,6 +200,7 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
     let received = module.add_value(Some("received".into()));
     let exit = module.add_node(halt_zero());
     let resume = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: Some("resume".into()),
         params: vec![received],
         body: exit,
@@ -213,6 +218,7 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("entry".into()),
             params: vec![closure],
             return_cont: entry_ret,

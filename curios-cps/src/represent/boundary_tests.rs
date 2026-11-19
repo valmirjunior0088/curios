@@ -245,6 +245,7 @@ fn edge_to(module: &mut Module, body: NodeId) -> Edge {
     module.define_continuation(
         target,
         Continuation {
+            lineage: None,
             debug_name: Some("arm".into()),
             params: vec![],
             body,

@@ -35,6 +35,7 @@ fn a_tuple_type_is_declared_for_each_arity_the_module_builds() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -76,6 +77,7 @@ fn small_packed_literal_rides_the_immediate() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: Vec::new(),
             return_cont,
@@ -153,6 +155,7 @@ fn an_aggregate_read_at_a_raw_carrier_is_refused() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -193,6 +196,7 @@ fn a_region_aggregate_read_at_a_raw_carrier_is_refused() {
         next: add,
     });
     let made = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("made".into()),
         params: vec![cell],
         body: built,
@@ -211,6 +215,7 @@ fn a_region_aggregate_read_at_a_raw_carrier_is_refused() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -245,6 +250,7 @@ fn an_aggregate_reaching_a_parameter_read_as_a_float_leaves_it_a_reference() {
         next: exit,
     });
     let joined = module.add_continuation(curios_cps::Continuation {
+        lineage: None,
         debug_name: Some("joined".into()),
         params: vec![param],
         body: add,
@@ -268,6 +274,7 @@ fn an_aggregate_reaching_a_parameter_read_as_a_float_leaves_it_a_reference() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -322,6 +329,7 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -370,6 +378,7 @@ fn a_short_variant_construction_is_refused() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -439,6 +448,7 @@ fn a_rebuild_writes_its_slots_and_declares_only_them_mutable() {
     module.define_function(
         main,
         curios_cps::Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

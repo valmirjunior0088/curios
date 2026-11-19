@@ -419,6 +419,7 @@ impl Module {
             terminator: Terminator::Unreachable,
         });
         let function = self.functions.mint(Function {
+            lineage: None,
             debug_name,
             params,
             body,

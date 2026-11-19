@@ -1,6 +1,7 @@
 use {
     crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
+    curios_common::{Lineage, Qualifier},
     curios_num::{Binary, Natural},
     std::{collections::BTreeSet, sync::Arc},
 };
@@ -1058,6 +1059,157 @@ fn every_lowered_continuation_carries_the_role_it_fills() {
         ["apply/resume", "arm/none", "arm/some", "join"],
         "{cps}"
     );
+}
+
+/// The continuations a function's body lowers to are its code, so each takes the function's lineage; those of the entry, of no declaration's text, take none.
+#[test]
+fn a_functions_continuations_are_of_its_lineage() {
+    let mut builder = Builder::new();
+    let family = builder.family(Some("Opt".into()));
+    let none = builder.constructor(family, Some("none".into()), vec![]);
+    let some = builder.constructor(
+        family,
+        Some("some".into()),
+        vec![Field::opaque(Some("x".into()))],
+    );
+
+    let before = builder.declaring(Declaring::of(Some(Qualifier::from(["pick"]))));
+    let pick = builder.reserve_function();
+    let subject = builder.value(Some("subject".into()));
+    builder.open_block();
+    builder.open_block();
+    let zero = nat(&mut builder, 0);
+    let none_arm = builder.seal_block(Terminator::Return(zero));
+    builder.open_block();
+    let x = builder.value(Some("x".into()));
+    let some_arm = builder.seal_block(Terminator::Return(Atom::Value(x)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(subject),
+            arms: vec![
+                VariantArm {
+                    constructor: none,
+                    bindings: vec![],
+                    block: none_arm,
+                },
+                VariantArm {
+                    constructor: some,
+                    bindings: vec![x],
+                    block: some_arm,
+                },
+            ],
+            default: None,
+        },
+    );
+    // A statement after the match keeps its result flowing into a join rather than straight out of the function.
+    let one = nat(&mut builder, 1);
+    let bumped = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(matched), one],
+        },
+    );
+    let pick_body = builder.seal_block(Terminator::Return(Atom::Value(bumped)));
+    builder.define_function(pick, Some("pick".into()), vec![subject], pick_body);
+    builder.declaring(before);
+    builder.item_functions(vec![pick]);
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: some,
+            fields: vec![six],
+        },
+    );
+    let picked = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(pick),
+            arguments: vec![Atom::Value(value)],
+        },
+    );
+    let two = nat(&mut builder, 2);
+    let doubled = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatMul,
+            operands: vec![Atom::Value(picked), two],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(doubled)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let cps = lowered(&module);
+    let lineage = Some(Lineage {
+        declaration: Qualifier::from(["pick"]),
+        function: 0,
+    });
+    let mut continuations = cps
+        .continuations()
+        .iter()
+        .flatten()
+        .map(|continuation| (continuation.debug_name.as_deref(), continuation.lineage))
+        .collect::<Vec<_>>();
+    continuations.sort_unstable();
+    assert_eq!(
+        continuations,
+        [
+            (Some("apply/resume"), None),
+            (Some("arm/none"), lineage),
+            (Some("arm/some"), lineage),
+            (Some("join"), lineage),
+        ],
+        "{cps}"
+    );
+}
+
+/// The step every bind's suspension arm calls is made once, on first use, and shared by every bind: it is of no declaration's text, though the first to ask for it is a function of one.
+#[test]
+fn the_shared_carry_is_of_no_lineage() {
+    let mut builder = Builder::new();
+    let before = builder.declaring(Declaring::of(Some(Qualifier::from(["bind"]))));
+    let bind = builder.reserve_function();
+    let suspension = builder.value(Some("suspension".into()));
+    let rest = builder.value(Some("rest".into()));
+    builder.open_block();
+    let carried = builder.let_value(
+        None,
+        Rhs::Suspension {
+            operation: SuspensionOperation::Carry,
+            operands: vec![Atom::Value(suspension), Atom::Value(rest)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(carried)));
+    builder.define_function(bind, Some("bind".into()), vec![suspension, rest], body);
+    builder.declaring(before);
+    builder.item_functions(vec![bind]);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(bind)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let cps = lowered(&module);
+    let lineage = |hint: &str| {
+        cps.function_ids()
+            .filter_map(|id| cps.function(id))
+            .find(|function| function.debug_name.as_deref() == Some(hint))
+            .unwrap_or_else(|| panic!("{hint} is lowered: {cps}"))
+            .lineage
+    };
+    assert_eq!(
+        lineage("bind"),
+        Some(Lineage {
+            declaration: Qualifier::from(["bind"]),
+            function: 0,
+        })
+    );
+    assert_eq!(lineage("io/carry"), None, "{cps}");
 }
 
 // The knot protocol: publication before forcing, storage-only captures, and the cached and reentrant paths.

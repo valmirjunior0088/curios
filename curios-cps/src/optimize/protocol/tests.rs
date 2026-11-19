@@ -23,6 +23,7 @@ fn returning_callee(module: &mut Module, name: &str) -> FunctionId {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![field],
             return_cont: sentinel,
@@ -57,6 +58,7 @@ fn projecting_resume(module: &mut Module, name: &str) -> ContinuationId {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,
@@ -81,6 +83,7 @@ fn opaque_resume(module: &mut Module, name: &str) -> ContinuationId {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![result],
             body: hold,
@@ -116,6 +119,7 @@ fn calling_function(
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -157,6 +161,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![result],
             body: forward,
@@ -179,6 +184,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -255,6 +261,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("entry/resume".into()),
             params: vec![result],
             body: tail,
@@ -273,6 +280,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("entry".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -318,6 +326,7 @@ fn an_escaping_callee_stays_a_tuple() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("entry".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -365,6 +374,7 @@ fn row_returning_callee(module: &mut Module, name: &str, row: RowId) -> Function
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![field],
             return_cont: sentinel,
@@ -399,6 +409,7 @@ fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> Continu
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,

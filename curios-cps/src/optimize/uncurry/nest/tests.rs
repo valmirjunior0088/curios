@@ -6,6 +6,7 @@ fn jump(module: &mut Module, target: ContinuationId, args: Vec<Atom>) -> NodeId 
 
 fn continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> ContinuationId {
     module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params,
         body,
@@ -30,6 +31,7 @@ fn nest(module: &mut Module, depth: usize) -> FunctionId {
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 return_cont,
@@ -121,6 +123,7 @@ fn called_twice(depth: usize, first: usize, second: usize, named: bool) -> (Modu
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![a],
             return_cont: main_return,

@@ -11,6 +11,7 @@ use {
         edge, sequence_get_op, sequence_rest_op,
     },
     curios_abi::Handle,
+    curios_common::Lineage,
     curios_num::{Binary, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -33,9 +34,21 @@ pub struct Emitter<'a> {
     knot_members: BTreeMap<ValueId, KnotMember>,
     /// What every nominal shape's CPS heap type is and what it is called, memoized across the lowering: rows it registers in `module`.
     layout: Layout<'a>,
+    /// The lineage of the function whose body is being lowered, which every continuation and thunk made for it takes ([`Emitter::lowering`]).
+    lineage: Option<Lineage>,
 }
 
 impl<'a> Emitter<'a> {
+    /// Lower what follows as the body of a function of `lineage`, handing back the lineage being lowered before, for the caller to put back.
+    pub fn lowering(&mut self, lineage: Option<Lineage>) -> Option<Lineage> {
+        std::mem::replace(&mut self.lineage, lineage)
+    }
+
+    /// The lineage of the function whose body is being lowered.
+    pub fn lineage(&self) -> Option<Lineage> {
+        self.lineage
+    }
+
     pub fn new(source: &'a Module) -> Self {
         Self {
             source,
@@ -44,6 +57,7 @@ impl<'a> Emitter<'a> {
             functions: BTreeMap::new(),
             knot_members: BTreeMap::new(),
             layout: Layout::new(source),
+            lineage: None,
         }
     }
 
@@ -283,6 +297,7 @@ impl<'a> Emitter<'a> {
         self.module.define_continuation(
             continuation,
             curios_cps::Continuation {
+                lineage: self.lineage,
                 debug_name: None,
                 params: Vec::new(),
                 body,
@@ -457,6 +472,7 @@ impl<'a> Emitter<'a> {
         self.module.define_continuation(
             after_fill,
             curios_cps::Continuation {
+                lineage: self.lineage,
                 debug_name: Some("knot/filled".into()),
                 params: vec![accepted],
                 body: returning,
@@ -479,6 +495,7 @@ impl<'a> Emitter<'a> {
         self.module.define_continuation(
             receive,
             curios_cps::Continuation {
+                lineage: self.lineage,
                 debug_name: Some("knot/produced".into()),
                 params: vec![produced],
                 body: fill,
@@ -515,6 +532,7 @@ impl<'a> Emitter<'a> {
         self.module.define_continuation(
             after_take,
             curios_cps::Continuation {
+                lineage: self.lineage,
                 debug_name: Some("knot/taken".into()),
                 params: vec![status, thunk],
                 body: taken,
@@ -548,6 +566,7 @@ impl<'a> Emitter<'a> {
         self.module.define_continuation(
             after_poll,
             curios_cps::Continuation {
+                lineage: self.lineage,
                 debug_name: Some("knot/polled".into()),
                 params: vec![present, cached],
                 body: polled,
@@ -566,6 +585,7 @@ impl<'a> Emitter<'a> {
         self.module.define_function(
             knot.force,
             curios_cps::Function {
+                lineage: self.lineage,
                 debug_name: hint.map(|hint| format!("{hint}/force")),
                 params: Vec::new(),
                 return_cont,

@@ -27,6 +27,7 @@ fn entry_with(
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: None,
             params,
             return_cont: ret,
@@ -50,6 +51,7 @@ fn define(
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: ret,
@@ -155,6 +157,7 @@ fn a_suspension_consumed_by_an_internal_resume_does_not_escape() {
         module.define_continuation(
             resume,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![received],
                 body,
@@ -199,6 +202,7 @@ fn split_results_keep_their_return_positions_distinct() {
             module.define_continuation(
                 resume,
                 Continuation {
+                    lineage: None,
                     debug_name: None,
                     params,
                     body,
@@ -238,6 +242,7 @@ fn a_recursive_component_propagates_its_returned_row() {
         module.define_continuation(
             again,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body: tail,
@@ -271,6 +276,7 @@ fn a_recursive_component_propagates_its_returned_row() {
         module.define_function(
             first,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 return_cont: first_ret,
@@ -287,6 +293,7 @@ fn a_recursive_component_propagates_its_returned_row() {
         module.define_function(
             second,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 return_cont: second_ret,
@@ -319,6 +326,7 @@ fn a_recursive_component_that_never_returns_contributes_no_row() {
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 return_cont: sentinel,
@@ -404,6 +412,7 @@ fn stored_suspension(
     let suspension = module.add_value(None);
     let outcome = module.add_value(None);
     let after = module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params: vec![outcome],
         body: next,
@@ -478,6 +487,7 @@ fn read_handed(
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: params_of_resume,
             body,
@@ -538,6 +548,7 @@ fn an_escaping_functions_parameters_take_what_every_call_hands() {
             module.define_function(
                 function,
                 Function {
+                    lineage: None,
                     debug_name: None,
                     params: vec![param],
                     return_cont: sentinel,
@@ -559,6 +570,7 @@ fn an_escaping_functions_parameters_take_what_every_call_hands() {
                     let suspension = module.add_value(None);
                     let answer = module.add_value(None);
                     let after = module.add_continuation(Continuation {
+                        lineage: None,
                         debug_name: None,
                         params: vec![answer],
                         body: call,
@@ -652,6 +664,7 @@ fn poll_or_take(
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![status, payload],
             body,
@@ -681,6 +694,7 @@ fn foreign_wire_results_cannot_fabricate_a_nominal_suspension() {
         module.define_continuation(
             resume,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![value, lane],
                 body,

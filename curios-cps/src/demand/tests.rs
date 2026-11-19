@@ -31,6 +31,7 @@ fn module() -> (Module, ValueId, ValueId, ValueId) {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![projected, whole, unused],
             return_cont,
@@ -90,6 +91,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![param],
             return_cont: callee_ret,
@@ -106,6 +108,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     module.define_continuation(
         resume,
         Continuation {
+            lineage: None,
             debug_name: Some("resume".into()),
             params: vec![received],
             body: resume_exit,
@@ -124,6 +127,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     module.define_function(
         caller,
         Function {
+            lineage: None,
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -163,6 +167,7 @@ fn deferral_reaches_unused_through_a_chain() {
     module.define_continuation(
         inner,
         Continuation {
+            lineage: None,
             debug_name: Some("inner".into()),
             params: vec![second],
             body: inner_exit,
@@ -176,6 +181,7 @@ fn deferral_reaches_unused_through_a_chain() {
     module.define_continuation(
         outer,
         Continuation {
+            lineage: None,
             debug_name: Some("outer".into()),
             params: vec![first],
             body: forward,
@@ -193,6 +199,7 @@ fn deferral_reaches_unused_through_a_chain() {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![argument],
             return_cont,
@@ -224,6 +231,7 @@ fn a_returned_value_stays_opaque() {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![returned],
             return_cont,
@@ -255,6 +263,7 @@ fn a_closure_call_consumes_its_arguments_whole() {
     module.define_function(
         function,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![closure, argument],
             return_cont,
@@ -294,6 +303,7 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_unused() {
         module.define_continuation(
             looping,
             Continuation {
+                lineage: None,
                 debug_name: Some("loop".into()),
                 params: vec![seen],
                 body: append,
@@ -313,6 +323,7 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_unused() {
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: Some("main".into()),
                 params: Vec::new(),
                 return_cont,

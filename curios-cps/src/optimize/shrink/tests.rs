@@ -15,6 +15,7 @@ fn jump(module: &mut Module, target: ContinuationId, args: Vec<Atom>) -> NodeId 
 
 fn continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> ContinuationId {
     module.add_continuation(Continuation {
+        lineage: None,
         debug_name: None,
         params,
         body,
@@ -40,6 +41,7 @@ fn entry(
     module.define_function(
         main,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params,
             return_cont,
@@ -286,6 +288,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
     module.define_function(
         nested,
         Function {
+            lineage: None,
             debug_name: Some("nested".into()),
             params: vec![],
             return_cont: nested_return,
@@ -469,6 +472,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
     module.define_function(
         innermost,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![innermost_param],
             return_cont: innermost_return,
@@ -488,6 +492,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
         module.define_function(
             lambda,
             Function {
+                lineage: None,
                 debug_name: None,
                 params: vec![param],
                 return_cont: lambda_return,
@@ -609,6 +614,7 @@ fn a_loop_whose_entrance_is_dropped_is_dropped_with_it() {
     module.define_continuation(
         lp,
         Continuation {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![counter],
             body: test,
@@ -683,6 +689,7 @@ fn a_function_whose_one_call_is_its_own_stays_where_it_is() {
     module.define_function(
         f,
         Function {
+            lineage: None,
             debug_name: Some("f".into()),
             params: vec![x],
             return_cont: f_return,
@@ -730,6 +737,7 @@ fn a_claim_follows_the_substitution_of_what_it_names() {
         module.define_function(
             stepping,
             Function {
+                lineage: None,
                 debug_name: Some("stepper".into()),
                 params: vec![x],
                 return_cont: stepping_return,
@@ -750,6 +758,7 @@ fn a_claim_follows_the_substitution_of_what_it_names() {
         module.define_function(
             go,
             Function {
+                lineage: None,
                 debug_name: Some("go".into()),
                 params: vec![],
                 return_cont: go_return,

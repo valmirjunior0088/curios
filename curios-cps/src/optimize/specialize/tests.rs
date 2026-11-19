@@ -23,6 +23,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     module.define_function(
         helper,
         Function {
+            lineage: None,
             debug_name: Some("helper".into()),
             params: vec![],
             return_cont: helper_return,
@@ -47,6 +48,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     module.define_continuation(
         recur,
         Continuation {
+            lineage: None,
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
@@ -74,6 +76,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     module.define_function(
         loop_function,
         Function {
+            lineage: None,
             debug_name: Some("loop".into()),
             params: vec![invariant, counter],
             return_cont: loop_return,
@@ -98,6 +101,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -361,6 +365,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     module.define_continuation(
         leaf,
         Continuation {
+            lineage: None,
             debug_name: Some("leaf".into()),
             params: vec![],
             body: leaf_body,
@@ -375,6 +380,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     module.define_continuation(
         node,
         Continuation {
+            lineage: None,
             debug_name: Some("node".into()),
             params: vec![],
             body: node_body,
@@ -414,6 +420,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     module.define_function(
         consume,
         Function {
+            lineage: None,
             debug_name: Some("consume".into()),
             params: vec![t],
             return_cont: consume_return,
@@ -447,6 +454,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

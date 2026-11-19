@@ -7,6 +7,7 @@ use {
         Atom, BlockId, ConstructorId, FamilyId, ForeignId, FunctionId, Operation, ProductId,
         RecGroupId, SequenceGrain, SequenceOp, StatementId, ValueId,
     },
+    curios_common::Lineage,
     curios_num::Natural,
 };
 
@@ -301,6 +302,8 @@ pub struct Block {
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Function {
+    /// The function of a declaration's text this one was made of — stamped where erasure mints it, and kept by every copy, since it is a fact of where the function came from that no later shape recovers ([`Lineage`]). `None` for a function of no declaration's text.
+    pub lineage: Option<Lineage>,
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub body: BlockId,

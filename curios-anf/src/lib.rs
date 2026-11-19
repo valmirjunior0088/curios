@@ -47,7 +47,7 @@ use verify::*;
 pub use verify::{CycleCall, CycleStep, VerifyError};
 
 mod build;
-pub use build::Builder;
+pub use build::{Builder, Declaring};
 
 mod print;
 use print::*;

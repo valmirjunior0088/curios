@@ -24,6 +24,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     module.define_continuation(
         local_cont,
         Continuation {
+            lineage: None,
             debug_name: None,
             params: vec![local_param],
             body: local_body,
@@ -41,6 +42,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![callee_param],
             return_cont: callee_return,
@@ -61,6 +63,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: None,
             params: vec![],
             return_cont: entry_return,
@@ -136,6 +139,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![p],
             return_cont: callee_return,
@@ -157,6 +161,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -217,6 +222,7 @@ fn calls_handing_a_function(
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![value, step],
             return_cont: callee_return,
@@ -237,6 +243,7 @@ fn calls_handing_a_function(
         module.define_function(
             function,
             Function {
+                lineage: None,
                 debug_name: Some(format!("step{index}")),
                 params: vec![param],
                 return_cont: function_return,
@@ -261,6 +268,7 @@ fn calls_handing_a_function(
         module.define_continuation(
             continuation,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body: call,
@@ -293,6 +301,7 @@ fn calls_handing_a_function(
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![input],
             return_cont: entry_return,
@@ -398,6 +407,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
     module.define_function(
         callee,
         Function {
+            lineage: None,
             debug_name: Some("callee".into()),
             params: vec![param],
             return_cont: callee_return,
@@ -420,6 +430,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
         module.define_continuation(
             continuation,
             Continuation {
+                lineage: None,
                 debug_name: None,
                 params: vec![],
                 body: call,
@@ -460,6 +471,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
     module.define_function(
         entry,
         Function {
+            lineage: None,
             debug_name: Some("main".into()),
             params: vec![input],
             return_cont: entry_return,
@@ -530,6 +542,7 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
     module.define_function(
         helper,
         Function {
+            lineage: None,
             debug_name: Some("helper".into()),
             params: vec![param],
             return_cont: helper_return,
