@@ -117,6 +117,11 @@ module.exports = grammar(curios, {
 
     _atom: ($, original) => choice(original, $.intrinsic, $.witness_name),
 
+    // A dispatch's key no numeral spells, written as the value it is: a byte's, `#Byte(65)`.
+    _match_pattern: ($, original) => choice(original, $.intrinsic_pattern),
+
+    intrinsic_pattern: ($) => seq($.intrinsic, "(", commaList($.number), ")"),
+
     // A decorator states the fields of the node its operand builds, so a call's arguments are its operand's, not a node of their own: the operand reads on through every suffix.
     decorated: ($) =>
       prec.right(

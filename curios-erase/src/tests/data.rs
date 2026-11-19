@@ -701,3 +701,36 @@ entry
 "
     );
 }
+
+#[test]
+fn a_bytes_switch_erases_to_its_codes_switch() {
+    let keys = curios_core::Keyed::new(vec![(0x41u8, nat_lit(10)), (0x42u8, nat_lit(20))])
+        .expect("ascending keys");
+    let body = curios_core::Term::from(curios_core::Subterm::Match(curios_core::Match {
+        head: curios_core::Term::intrinsic(curios_core::Intrinsic::Byte(7)),
+        goal: curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+        cases: curios_core::Cases::Switch {
+            keys: curios_core::Keys::Byte(keys),
+            default: nat_lit(99),
+        },
+    }));
+    let erased = erase(
+        &module(Vec::new(), body),
+        curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+    );
+    assert_eq!(
+        curios_anf::test_support::shape(&erased),
+        "\
+entry
+  Let ~v0$code = Operation ByteToNat [Byte(7)]
+  Let ~v1 = Switch ~v0$code
+    case 65
+      Return Nat(10)
+    case 66
+      Return Nat(20)
+    default
+      Return Nat(99)
+  Return ~v1
+"
+    );
+}

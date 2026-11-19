@@ -610,6 +610,7 @@ fn parse_match_pattern_inner<'a, D: Grammar>(
         .or(parse_char_match_pattern::<D>)
         .or(parse_str_match_pattern::<D>)
         .or(parse_numeral_match_pattern::<D>)
+        .or(D::parse_pattern_form)
         .or(parse_nat_succ_match_pattern::<D>)
         .or(parse_list_match_pattern::<D>)
         .or(parse_tuple_match_pattern::<D>)

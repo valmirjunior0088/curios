@@ -137,7 +137,7 @@ pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
     }
 }
 
-/// The arm a dispatch over `keys` and `default` takes at `scrutinee`, a term in weak-head normal form: a key's arm where the scrutinee is that literal, the catch-all where it is a literal no key names or, for a natural, a successor floor past every key, and `None` where it may yet be a key, so the dispatch stays stuck. An integer that is no literal is stuck whatever its sum, since no floor bounds it.
+/// The arm a dispatch over `keys` and `default` takes at `scrutinee`, a term in weak-head normal form: a key's arm where the scrutinee is that literal, the catch-all where it is a literal no key names or, for a natural, a successor floor past every key, and `None` where it may yet be a key, so the dispatch stays stuck. An integer or a byte that is no literal is stuck, since no floor bounds it.
 ///
 /// A floor past every key decides the dispatch whatever stands under it: `k + 2` is no `0` and no `1` for any `k`. The closed machine and the elaborator take a dispatch's arm through here; the certifier states the rule for itself, as it does a projection's ([`project_literal`]).
 pub fn switch_arm<'c>(keys: &'c Keys, default: &'c Term, scrutinee: &Term) -> Option<&'c Term> {
@@ -157,6 +157,16 @@ pub fn switch_arm<'c>(keys: &'c Keys, default: &'c Term, scrutinee: &Term) -> Op
         }
         Keys::Int(keyed) => match &**scrutinee {
             Subterm::Intrinsic(Intrinsic::Int(value)) => Some(
+                keyed
+                    .arms()
+                    .iter()
+                    .find(|(key, _)| key == value)
+                    .map_or(default, |(_, arm)| arm),
+            ),
+            _ => None,
+        },
+        Keys::Byte(keyed) => match &**scrutinee {
+            Subterm::Intrinsic(Intrinsic::Byte(value)) => Some(
                 keyed
                     .arms()
                     .iter()

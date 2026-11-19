@@ -259,3 +259,39 @@ A binder's word under the decorator stating the rest of its label
                 (identifier)))
             (path
               (identifier))))))))
+
+================================================================================
+A byte's dispatch key, written as the value it is
+================================================================================
+
+(b: #ByteType) =>
+    #{goal = #NatType} match b
+    | #Byte(65) => 1
+    | _ => 2
+    end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (entry
+    (lambda
+      (lambda_parameters
+        (lambda_parameter
+          (identifier)
+          (intrinsic)))
+      (decorated
+        (decorator
+          (decorator_field
+            (identifier)
+            (intrinsic)))
+        (match_term
+          (path
+            (identifier))
+          (match_arm
+            (intrinsic_pattern
+              (intrinsic)
+              (number))
+            (number))
+          (match_arm
+            (identifier)
+            (number)))))))

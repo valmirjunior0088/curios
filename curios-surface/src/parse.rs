@@ -30,7 +30,7 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Dialect, Doc, Label, Name, Program, Term},
+    super::{Dialect, Doc, Label, MatchPattern, Name, Program, Term},
     curios_common::{
         Keyword, Qualifier, Source, Span, Standing, is_identifier_char, is_identifier_start,
         is_reserved,
@@ -68,6 +68,9 @@ pub trait Grammar: Dialect {
     /// What a decorator states before a declaration's word, before a group's `and`, or before a case.
     fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, Self::Fields>;
 
+    /// A pattern only this dialect writes, and none in a program.
+    fn parse_pattern_form<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<Self>>;
+
     /// A declaration's name and what follows it, with the head the dialect writes beside the label: a program declares a label, and Core text the absolute path the label ends, under the decorator `fields` read before the declaring word.
     fn declaring<'a, T: 'a>(
         fields: Self::Fields,
@@ -88,6 +91,10 @@ impl Grammar for Program {
 
     fn parse_result_sort<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         parse_sort(state)
+    }
+
+    fn parse_pattern_form<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
+        fail("a pattern only Core text writes").parse(state)
     }
 
     fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {

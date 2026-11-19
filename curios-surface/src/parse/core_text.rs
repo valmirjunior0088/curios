@@ -12,8 +12,8 @@ use {
     },
     crate::{
         CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreNominals, CoreText,
-        CoreValue, Decorated, DecoratorField, Label, Subterm, Term, TopConcept, TopInduct, TopLet,
-        TopStruct, parse_whitespace,
+        CoreValue, Decorated, DecoratorField, Label, MatchPattern, Subterm, Term, TopConcept,
+        TopInduct, TopLet, TopStruct, parse_whitespace,
     },
     curios_common::{Keyword, Qualifier, Source, Span, is_identifier_char},
     curios_core::{Global, HeadKey, WitnessId},
@@ -60,6 +60,11 @@ impl Grammar for CoreText {
 
     fn parse_fields<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<DecoratorField>> {
         parse_decorator.or(pure(Vec::new())).parse(state)
+    }
+
+    // A dispatch's key no numeral spells, written as the value it is: `#Byte(65)`.
+    fn parse_pattern_form<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<CoreText>> {
+        parse_intrinsic.map(MatchPattern::Form).parse(state)
     }
 
     fn declaring<'a, T: 'a>(

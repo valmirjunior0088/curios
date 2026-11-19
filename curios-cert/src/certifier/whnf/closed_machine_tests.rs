@@ -496,3 +496,33 @@ fn the_closed_machine_takes_an_integers_dispatch_as_the_strategy_does() {
         }
     }
 }
+
+/// A dispatch on a byte's keys: a literal takes its key's arm, and one no key names the catch-all, under the machine as under the strategy.
+#[test]
+fn the_closed_machine_takes_a_bytes_dispatch_as_the_strategy_does() {
+    for (scrutinee, expected) in [
+        ("#Byte(65)", Some(term("10"))),
+        ("#Byte(66)", Some(term("20"))),
+        ("#Byte(7)", Some(term("99"))),
+    ] {
+        let dispatch = term(&fill!(
+            "#{goal = #NatType} match ${scrutinee} | #Byte(65) => 10 | #Byte(66) => 20 | _ => 99 end",
+            scrutinee
+        ));
+
+        let mut machined = certifier();
+        declare_g(&mut machined);
+        let mut strategy = strategy_certifier();
+        declare_g(&mut strategy);
+
+        let reduct = machined
+            .reduce_forced(dispatch.clone())
+            .expect("the machine reduces");
+        assert_eq!(
+            Some(reduct.clone()),
+            strategy.reduce_forced(dispatch.clone()).ok(),
+            "{scrutinee}: the machine and the strategy disagreed on {dispatch:?}",
+        );
+        assert_eq!(Some(reduct), expected, "{scrutinee}");
+    }
+}

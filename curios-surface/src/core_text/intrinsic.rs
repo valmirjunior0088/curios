@@ -761,14 +761,7 @@ pub fn intrinsic_read(
             let [nat] = operands(intrinsic, span)?;
             Intrinsic::Nat(nat_read(nat, reader)?)
         }
-        "Byte" => {
-            let [byte] = operands(intrinsic, span)?;
-            Intrinsic::Byte(
-                unsigned(byte)
-                    .and_then(|byte| u8::try_from(&byte).ok())
-                    .ok_or_else(|| malformed("a byte's value", byte))?,
-            )
-        }
+        "Byte" => Intrinsic::Byte(byte_read(intrinsic, span)?),
         "Flt" => {
             let [flt] = operands(intrinsic, span)?;
             Intrinsic::Flt(flt_read(flt)?)
@@ -1428,6 +1421,15 @@ pub fn intrinsic_read(
 }
 
 /// The operands of `intrinsic`, as many as its variant takes: none written where it takes none, and a list of them otherwise.
+/// The byte `#Byte(…)` writes, as a value and as a dispatch's key.
+pub fn byte_read(intrinsic: &CoreIntrinsic, span: Option<&Span>) -> Result<u8, ReadError> {
+    let [byte] = operands(intrinsic, span)?;
+
+    unsigned(byte)
+        .and_then(|byte| u8::try_from(&byte).ok())
+        .ok_or_else(|| malformed("a byte's value", byte))
+}
+
 fn operands<'i, const N: usize>(
     intrinsic: &'i CoreIntrinsic,
     span: Option<&Span>,

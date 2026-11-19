@@ -38,6 +38,16 @@ pub fn catch_all_tests<'c>(head: &'c Term, keys: &'c Keys) -> impl Iterator<Item
     keys.literals().map(|(literal, _)| match keys {
         Keys::Nat(_) => Term::intrinsic(Intrinsic::NatEql(head.clone(), literal)),
         Keys::Int(_) => Term::intrinsic(Intrinsic::IntEql(head.clone(), literal)),
+        // A byte's equality is its code's, as `/std/Byte`'s `==` reduces, the key's code the natural its literal folds to.
+        Keys::Byte(_) => {
+            let Subterm::Intrinsic(Intrinsic::Byte(key)) = &*literal else {
+                unreachable!("a byte's key is a byte literal");
+            };
+            Term::intrinsic(Intrinsic::NatEql(
+                Term::intrinsic(Intrinsic::ByteToNat(head.clone())),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(u32::from(*key)))),
+            ))
+        }
     })
 }
 

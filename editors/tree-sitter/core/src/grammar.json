@@ -4515,56 +4515,65 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "constructor_pattern"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "constructor_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "boolean"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "character"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "string"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "block_string"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "successor_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "number"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "list_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "packed_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "tuple_match_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "struct_match_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "parenthesized_match_pattern"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_binder"
+            }
+          ]
         },
         {
           "type": "SYMBOL",
-          "name": "boolean"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "character"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "string"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "block_string"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "successor_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "number"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "list_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "packed_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "tuple_match_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "struct_match_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "parenthesized_match_pattern"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_binder"
+          "name": "intrinsic_pattern"
         }
       ]
     },
@@ -5491,6 +5500,73 @@
         {
           "type": "SYMBOL",
           "name": "concept_member"
+        }
+      ]
+    },
+    "intrinsic_pattern": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "intrinsic"
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "number"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "number"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": ","
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ")"
         }
       ]
     },

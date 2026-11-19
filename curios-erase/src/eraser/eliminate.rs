@@ -286,10 +286,32 @@ impl Eraser<'_> {
         for (literal, body) in keys.literals() {
             blocks.push(self.refined_arm(context, head, &literal, goal, body)?);
         }
-        // A key crosses whole, as the value it is compared with does: Core dispatches on a `Natural` or an `Integer` and so does `curios-anf`'s switch, and which keys a branch table indexes is decided where the table is built.
-        let keys = match keys {
-            curios_core::Keys::Nat(keyed) => curios_anf::Keys::Nat(cases(keyed.arms(), blocks)),
-            curios_core::Keys::Int(keyed) => curios_anf::Keys::Int(cases(keyed.arms(), blocks)),
+        // A key crosses whole, as the value it is compared with does: Core dispatches on a `Natural` or an `Integer` and so does `curios-anf`'s switch, and which keys a branch table indexes is decided where the table is built. A byte's dispatch is erased as its code's, the erased alphabet's explicit conversion, `ByteToNat`, ahead of a natural's switch.
+        let (scrutinee, keys) = match keys {
+            curios_core::Keys::Nat(keyed) => (
+                scrutinee,
+                curios_anf::Keys::Nat(cases(keyed.arms(), blocks)),
+            ),
+            curios_core::Keys::Int(keyed) => (
+                scrutinee,
+                curios_anf::Keys::Int(cases(keyed.arms(), blocks)),
+            ),
+            curios_core::Keys::Byte(keyed) => {
+                let code = emitted!(self.bind(
+                    Some("code"),
+                    curios_anf::Rhs::Operation {
+                        operation: curios_anf::Operation::ByteToNat,
+                        operands: vec![scrutinee],
+                    },
+                ));
+                let codes = keyed
+                    .arms()
+                    .iter()
+                    .map(|(key, body)| (Natural::from(u32::from(*key)), body.clone()))
+                    .collect::<Vec<_>>();
+
+                (code, curios_anf::Keys::Nat(cases(&codes, blocks)))
+            }
         };
 
         let default_expected = goal.clone();

@@ -496,6 +496,7 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Char(character) => print_char_literal(character),
             MatchPattern::Str(literal) => print_string_literal(&literal),
             MatchPattern::Numeral(numeral) => pure(spelled_numeral(&numeral)),
+            MatchPattern::Form(form) => D::pattern_form(self, form),
             MatchPattern::Successor {
                 pred_label,
                 step: NatLiteral(step, radix),
@@ -533,7 +534,8 @@ fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
         MatchPattern::Binder(_)
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
-        | MatchPattern::Numeral(_) => true,
+        | MatchPattern::Numeral(_)
+        | MatchPattern::Form(_) => true,
         MatchPattern::Str(literal) => !literal.block,
         MatchPattern::Variant { args, .. } => args.is_empty(),
         MatchPattern::List(elements) | MatchPattern::Bytes(elements) => {
@@ -701,6 +703,9 @@ trait Layout: Dialect {
     /// An operand only this dialect writes, followed by `suffix`, the call chain and the marks after it.
     fn form(printer: TreePrinter<Self>, form: Self::Form, suffix: Printer) -> Printer;
 
+    /// A pattern only this dialect writes.
+    fn pattern_form(printer: TreePrinter<Self>, form: Self::PatternForm) -> Printer;
+
     /// Whether `form` prints as one indivisible piece, as a name does.
     fn form_is_atom(form: &Self::Form) -> bool;
 
@@ -725,6 +730,10 @@ impl Layout for Program {
     type Options = ();
 
     fn form(_: TreePrinter<Self>, form: Self::Form, _: Printer) -> Printer {
+        match form {}
+    }
+
+    fn pattern_form(_: TreePrinter<Self>, form: Self::PatternForm) -> Printer {
         match form {}
     }
 
@@ -1806,6 +1815,10 @@ impl Layout for CoreText {
         flat([printer.core_form(form), suffix])
     }
 
+    fn pattern_form(printer: TreePrinter<Self>, form: CoreIntrinsic) -> Printer {
+        printer.core_form(CoreForm::Intrinsic(form))
+    }
+
     fn form_is_atom(form: &CoreForm) -> bool {
         core_form_is_atom(form)
     }
@@ -1851,6 +1864,10 @@ pub struct ShownOptions {
 /// A shown term's forms: Core text's, and the ones only a bounded print or a reader's spelling writes ([`Shown`]).
 impl Layout for Shown {
     type Options = ShownOptions;
+
+    fn pattern_form(printer: TreePrinter<Self>, form: CoreIntrinsic<Shown>) -> Printer {
+        printer.core_form(CoreForm::Intrinsic(form))
+    }
 
     fn form(printer: TreePrinter<Self>, form: ShownForm, suffix: Printer) -> Printer {
         let written = match form {

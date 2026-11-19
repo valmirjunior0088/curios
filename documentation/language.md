@@ -130,7 +130,7 @@ The values no decimal spells have literals of their own, each with a required si
 
 ### Character and string literals
 
-A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a dispatch case of a `Char`, a `Nat` or a `Byte` ([Character and string dispatch](#character-and-string-dispatch), [Natural-number patterns](#natural-number-patterns)).
+A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a dispatch case of a `Char`, a `Nat` or a `Byte` ([Character and string dispatch](#character-and-string-dispatch), [Number patterns](#number-patterns)).
 
 ```text
 'c'
@@ -645,7 +645,7 @@ pub let answer(condition: Bool) -> Str =
     end;
 ```
 
-### Natural-number patterns
+### Number patterns
 
 A `Nat` is taken apart by its literals, its successors and a binder. A literal is the successors it builds over zero, and a successor arm binds a predecessor before a `+` and a step of one or more: `p + 2` takes the value apart two successors deep, so `p` is the value less two. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern, and `p + 0` is the binder `p`.
 
@@ -689,7 +689,7 @@ pub let classify(i: Int) -> Str =
     end;
 ```
 
-A `Byte` is dispatched on literals as a `Nat` is, a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are. Its `0` is a literal like any other, and a byte takes no successor pattern.
+A `Byte` is dispatched on its values, each a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are, beside an arm that writes a binder. Each arm knows the byte it took and the arm past the keys knows the byte is none of them, as an `Int`'s do. Its `0` is a literal like any other, and a byte takes no successor pattern.
 
 ```crs
 use /std/{Byte, Nat};
@@ -760,7 +760,7 @@ A run takes its elements from the front, so a rest written before an element is 
 
 ### Packed case split
 
-A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`, a byte's literals among them ([Natural-number patterns](#natural-number-patterns)).
+A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`, a byte's literals among them ([Number patterns](#number-patterns)).
 
 ```crs
 use /std/{Byte, Bytes, Nat};

@@ -18,6 +18,8 @@ use {
 pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {
     /// What the dialect writes in an operand's place beyond the forms both write.
     type Form: Clone + fmt::Debug + PartialEq;
+    /// What the dialect writes in a pattern's place beyond the patterns both write: a dispatch's key no numeral spells.
+    type PatternForm: Clone + fmt::Debug + PartialEq;
     /// What a declaration's head writes beside its label.
     type Head: Clone + fmt::Debug + PartialEq;
     /// What a decorator states: before a case, a declaration's word, a group's `and`, or a binder's word. None where nothing is written.
@@ -38,12 +40,14 @@ pub enum Unwritable {}
 
 impl Dialect for Program {
     type Form = Unwritable;
+    type PatternForm = Unwritable;
     type Head = ();
     type Fields = ();
 }
 
 impl Dialect for CoreText {
     type Form = CoreForm;
+    type PatternForm = CoreIntrinsic;
     type Head = CoreHead;
     type Fields = Vec<DecoratorField>;
 }
@@ -54,12 +58,19 @@ pub struct Shown;
 
 impl Dialect for Shown {
     type Form = ShownForm;
+    type PatternForm = CoreIntrinsic<Shown>;
     type Head = CoreHead<Shown>;
     type Fields = Vec<DecoratorField<Shown>>;
 }
 
 /// A dialect a render of Core builds a tree of: Core text's own, which a reader reads back, or a shown one. Both hold Core text's forms; what no grammar reads is built only under a leave, which a shown tree's render holds and Core text's has no value of, so no walk writes one into a tree a reader reads.
-pub trait Rendered: Dialect<Head = CoreHead<Self>, Fields = Vec<DecoratorField<Self>>> {
+pub trait Rendered:
+    Dialect<
+        Head = CoreHead<Self>,
+        Fields = Vec<DecoratorField<Self>>,
+        PatternForm = CoreIntrinsic<Self>,
+    >
+{
     /// What a render holds to write what no grammar reads back.
     type Leave: Copy;
 

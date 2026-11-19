@@ -82,6 +82,7 @@ variants!(Error {
     TupleFieldNameMismatch,
     NotNatType,
     NotIntType,
+    NotByteType,
     NotBoolType,
     NotListType,
     NotBytesType,

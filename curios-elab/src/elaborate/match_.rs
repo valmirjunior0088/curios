@@ -17,7 +17,7 @@ use {
         IntrinsicHead, Keys, Many, Match, Nat, One, Quality, Scope, StructType, Subterm, Telescope,
         Term, Two, Universes, goal_at,
     },
-    curios_num::Binary,
+    curios_num::{Binary, Natural},
     std::collections::{HashMap, HashSet},
 };
 
@@ -39,7 +39,7 @@ impl Scrutinee {
         })
     }
 
-    /// Whether the scrutinee is a byte, which a dispatch on its literals reads as the natural it is ([`Scrutinee::of_byte`]).
+    /// Whether the scrutinee is a byte, which a dispatch takes apart by its values.
     pub fn is_byte(&self) -> bool {
         matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::ByteType))
     }
@@ -62,14 +62,6 @@ impl Scrutinee {
     /// Whether the scrutinee is of a type nothing has decided yet.
     pub fn is_undecided(&self, context: &Context) -> bool {
         stuck_on_metavar(context, &self.type_)
-    }
-
-    /// The byte as the natural it is, `Byte/to_nat` of it: a dispatch on a byte's literals is a natural's, so Core and the certifier hold nothing new for it.
-    pub fn of_byte(self) -> Self {
-        Self {
-            term: Term::intrinsic(Intrinsic::ByteToNat(self.term)),
-            type_: Term::intrinsic(Intrinsic::NatType),
-        }
     }
 
     /// Whether the scrutinee is a `/std/Char`, which a dispatch on its literals reads as its code point ([`Scrutinee::of_char`]).
@@ -134,6 +126,7 @@ impl Scrutinee {
             let carrier: Term = Subterm::Intrinsic(match expected {
                 IntrinsicHead::Nat => Intrinsic::NatType,
                 IntrinsicHead::Int => Intrinsic::IntType,
+                IntrinsicHead::Byte => Intrinsic::ByteType,
                 IntrinsicHead::Bool => Intrinsic::BoolType,
                 IntrinsicHead::Bytes => Intrinsic::BytesType,
             })
@@ -145,6 +138,7 @@ impl Scrutinee {
         let carrier = match expected {
             IntrinsicHead::Nat => matches!(&*type_, Subterm::Intrinsic(Intrinsic::NatType)),
             IntrinsicHead::Int => matches!(&*type_, Subterm::Intrinsic(Intrinsic::IntType)),
+            IntrinsicHead::Byte => matches!(&*type_, Subterm::Intrinsic(Intrinsic::ByteType)),
             IntrinsicHead::Bool => matches!(&*type_, Subterm::Intrinsic(Intrinsic::BoolType)),
             IntrinsicHead::Bytes => {
                 matches!(&*type_, Subterm::Intrinsic(Intrinsic::BytesType))
@@ -166,6 +160,8 @@ pub enum Eliminator {
     Nat,
     /// The dispatch on an integer.
     Int,
+    /// The dispatch on a byte.
+    Byte,
     List,
     Bytes,
     /// `vacuous` where the match writes no arm and no default: what it eliminates is then said to be empty.
@@ -182,6 +178,7 @@ fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term
             Eliminator::Bool => Error::not_bool_type(type_),
             Eliminator::Nat => Error::not_nat_type(type_),
             Eliminator::Int => Error::not_int_type(type_),
+            Eliminator::Byte => Error::not_byte_type(type_),
             Eliminator::List => Error::not_list_type(type_),
             Eliminator::Bytes => Error::not_bytes_type(type_),
             Eliminator::Nominal { vacuous } => Error::not_a_induct_type(type_, vacuous),
@@ -559,10 +556,11 @@ fn elaborate_sequence_match(
 pub struct SwitchSplit {
     head: Term,
     goal: Term,
+    carrier: IntrinsicHead,
 }
 
 impl SwitchSplit {
-    /// The dispatch on `scrutinee` held to `carrier`, its keys' type: a natural's or an integer's.
+    /// The dispatch on `scrutinee` held to `carrier`, its keys' type: a natural's, an integer's or a byte's.
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
@@ -573,6 +571,7 @@ impl SwitchSplit {
         let eliminator = match carrier {
             IntrinsicHead::Nat => Eliminator::Nat,
             IntrinsicHead::Int => Eliminator::Int,
+            IntrinsicHead::Byte => Eliminator::Byte,
             IntrinsicHead::Bool => Eliminator::Bool,
             IntrinsicHead::Bytes => Eliminator::Bytes,
         };
@@ -580,7 +579,24 @@ impl SwitchSplit {
 
         let goal = resolve_goal(context, goal, mode)?;
 
-        Ok(Self { head, goal })
+        Ok(Self {
+            head,
+            goal,
+            carrier,
+        })
+    }
+
+    /// The key the natural `value` spells at this dispatch: the natural at a natural's dispatch, and the byte at a byte's, whose keys a row writes as unsigned numerals and characters alike.
+    pub fn key(&self, value: Natural) -> Term {
+        match self.carrier {
+            IntrinsicHead::Byte => Term::intrinsic(Intrinsic::Byte(
+                u8::try_from(&value).expect("a byte's key is a byte"),
+            )),
+            IntrinsicHead::Nat
+            | IntrinsicHead::Int
+            | IntrinsicHead::Bool
+            | IntrinsicHead::Bytes => Term::intrinsic(Intrinsic::Nat(Nat::new(value))),
+        }
     }
 
     /// The case at `literal`, a key's: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
@@ -646,6 +662,7 @@ fn elaborate_switch(
     let carrier = match keys {
         Keys::Nat(_) => IntrinsicHead::Nat,
         Keys::Int(_) => IntrinsicHead::Int,
+        Keys::Byte(_) => IntrinsicHead::Byte,
     };
     let split = SwitchSplit::resolve(context, scrutinee, carrier, goal, &mode)?;
 

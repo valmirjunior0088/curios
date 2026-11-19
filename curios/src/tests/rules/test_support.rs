@@ -233,7 +233,8 @@ impl fmt::Display for Refusals {
                 )?,
                 curios_elab::Error::NotBoolType { head_type }
                 | curios_elab::Error::NotNatType { head_type }
-                | curios_elab::Error::NotIntType { head_type } => {
+                | curios_elab::Error::NotIntType { head_type }
+                | curios_elab::Error::NotByteType { head_type } => {
                     write!(formatter, "\n  head type: {}", pinned(head_type))?
                 }
                 curios_elab::Error::UnboundVariable { term, .. } => {

@@ -4,12 +4,12 @@
 
 use {
     super::{
-        Decoration, Fields, LabelRead, ReadError, Reader, Refusal, core_read, nested,
-        stated_proofs, tree, value, value_fields, value_term,
+        Decoration, Fields, LabelRead, ReadError, Reader, Refusal, byte_read, core_read, nested,
+        numeral, stated_proofs, tree, value, value_fields, value_term,
     },
     crate::{
-        Binder, CoreText, DecoratorField, Elements, Frame, Label, MatchPattern, MatrixArm,
-        NatLiteral, Radix, Rendered, label_terms, numeral_pattern, sub,
+        Binder, CoreIntrinsic, CoreText, DecoratorField, Elements, Frame, Label, MatchPattern,
+        MatrixArm, NatLiteral, Radix, Rendered, label_terms, numeral_pattern, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -38,6 +38,18 @@ pub fn match_written<D: Rendered>(
             arm(MatchPattern::Bool(false), false_case, frame),
             arm(MatchPattern::Bool(true), true_case, frame),
         ],
+        // A byte's key is written as the value it is, `#Byte(65)`, and a natural's and an integer's as their numerals.
+        Cases::Switch {
+            keys: Keys::Byte(keyed),
+            default,
+        } => keyed
+            .arms()
+            .iter()
+            .map(|(key, body)| arm(byte_pattern(*key), body.clone(), frame))
+            .chain(iter::once_with(|| {
+                arm(binder(Vec::new(), "_"), default, frame)
+            }))
+            .collect(),
         Cases::Switch { keys, default } => keys
             .numerals()
             .map(|(key, body)| arm(numeral_pattern(key), body.clone(), frame))
@@ -319,33 +331,48 @@ pub fn match_read(
         }
         [.., MatchPattern::Binder(default)]
             if is_bare_wildcard(default)
-                && patterns[..patterns.len() - 1]
-                    .iter()
-                    .all(|pattern| matches!(pattern, MatchPattern::Numeral(_)))
+                && patterns[..patterns.len() - 1].iter().all(|pattern| {
+                    matches!(pattern, MatchPattern::Numeral(_) | MatchPattern::Form(_))
+                })
                 && patterns.len() > 1 =>
         {
             let (keyed, default) = arms.split_at(arms.len() - 1);
             let mut cases = Vec::with_capacity(keyed.len());
             for (arm, pattern) in keyed.iter().zip(&patterns) {
-                let MatchPattern::Numeral(numeral) = pattern else {
-                    unreachable!("every arm before a dispatch's catch-all is a key");
+                let key = match pattern {
+                    MatchPattern::Numeral(numeral) => Key::Numeral(numeral.value.clone()),
+                    MatchPattern::Form(intrinsic) if intrinsic.variant.as_str() == "Byte" => {
+                        Key::Byte(byte_read(intrinsic, arm.body.span())?)
+                    }
+                    _ => {
+                        return Err(ReadError::at(
+                            Refusal::Malformed(
+                                "a dispatch's key: a numeral, or a byte's `#Byte(…)`",
+                            ),
+                            arm.body.span(),
+                        ));
+                    }
                 };
-                cases.push((numeral.value.clone(), core_read(&arm.body, reader)?));
+                cases.push((key, core_read(&arm.body, reader)?));
             }
-            // The first key's carrier is the dispatch's, an unsigned key a natural's and a signed one an integer's, and a key of the other is no key of it.
+            // The first key's carrier is the dispatch's, an unsigned numeral a natural's, a signed one an integer's and `#Byte(…)` a byte's, and a key of another carrier is no key of it.
             let keys = match &cases[0].0 {
-                curios_core::Numeral::Natural(_) => {
+                Key::Numeral(curios_core::Numeral::Natural(_)) => {
                     Keys::Nat(keyed_read(keyed, cases, |key| match key {
-                        curios_core::Numeral::Natural(natural) => Some(natural),
-                        curios_core::Numeral::Integer(_) => None,
+                        Key::Numeral(curios_core::Numeral::Natural(natural)) => Some(natural),
+                        _ => None,
                     })?)
                 }
-                curios_core::Numeral::Integer(_) => {
+                Key::Numeral(curios_core::Numeral::Integer(_)) => {
                     Keys::Int(keyed_read(keyed, cases, |key| match key {
-                        curios_core::Numeral::Integer(integer) => Some(integer),
-                        curios_core::Numeral::Natural(_) => None,
+                        Key::Numeral(curios_core::Numeral::Integer(integer)) => Some(integer),
+                        _ => None,
                     })?)
                 }
+                Key::Byte(_) => Keys::Byte(keyed_read(keyed, cases, |key| match key {
+                    Key::Byte(byte) => Some(byte),
+                    _ => None,
+                })?),
             };
             Cases::Switch {
                 keys,
@@ -398,16 +425,40 @@ pub fn match_read(
     })))
 }
 
-/// A dispatch's keys of one carrier, each read off its numeral by `key`, under the arms `keyed` they are written by. A switch's keys are what reads them, so a key of another carrier, or one written out of order or twice, is no switch and is refused where it is written ([`Keyed`]).
+/// A dispatch's key as Core text writes it: a numeral, a natural's or an integer's, or a byte's `#Byte(65)`.
+enum Key {
+    Numeral(curios_core::Numeral),
+    Byte(u8),
+}
+
+impl Key {
+    /// The key as it is written, which a refusal names it by.
+    fn written(&self) -> String {
+        match self {
+            Key::Numeral(numeral) => format!("{}{}", numeral.sign().symbol(), numeral.magnitude()),
+            Key::Byte(byte) => format!("#Byte({byte})"),
+        }
+    }
+}
+
+/// A byte's key as Core text writes it, the value it is: `#Byte(65)`.
+fn byte_pattern<D: Rendered>(key: u8) -> MatchPattern<D> {
+    MatchPattern::Form(CoreIntrinsic {
+        variant: Label::from("Byte"),
+        operands: Some(vec![value(numeral(key))]),
+    })
+}
+
+/// A dispatch's keys of one carrier, each read off what it is written as by `key`, under the arms `keyed` they are written by. A switch's keys are what reads them, so a key of another carrier, or one written out of order or twice, is no switch and is refused where it is written ([`Keyed`]).
 fn keyed_read<K: Ord>(
     keyed: &[MatrixArm<CoreText>],
-    cases: Vec<(curios_core::Numeral, Term)>,
-    key: impl Fn(curios_core::Numeral) -> Option<K>,
+    cases: Vec<(Key, Term)>,
+    key: impl Fn(Key) -> Option<K>,
 ) -> Result<Keyed<K>, ReadError> {
     let mut read: Vec<(K, Term)> = Vec::with_capacity(cases.len());
-    for (at, (numeral, body)) in cases.into_iter().enumerate() {
-        let written = format!("{}{}", numeral.sign().symbol(), numeral.magnitude());
-        let Some(value) = key(numeral) else {
+    for (at, (written, body)) in cases.into_iter().enumerate() {
+        let spelled = written.written();
+        let Some(value) = key(written) else {
             return Err(ReadError::at(
                 Refusal::Malformed(
                     "a dispatch's keys, each unsigned for a natural or each signed for an integer",
@@ -417,7 +468,7 @@ fn keyed_read<K: Ord>(
         };
         if read.last().is_some_and(|(before, _)| *before >= value) {
             return Err(ReadError::at(
-                Refusal::DisorderedKey(written),
+                Refusal::DisorderedKey(spelled),
                 keyed[at].body.span(),
             ));
         }

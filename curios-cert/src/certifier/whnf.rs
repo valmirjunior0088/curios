@@ -734,6 +734,30 @@ fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
             }))),
         },
 
+        // A `Byte` literal takes its key's case, or the default when no key names it; a byte that is no literal is stuck.
+        Cases::Switch {
+            keys: Keys::Byte(keyed),
+            default,
+        } => match &*forced {
+            Subterm::Intrinsic(Intrinsic::Byte(value)) => Step::Continue(
+                keyed
+                    .arms()
+                    .iter()
+                    .find(|(key, _)| key == value)
+                    .map(|(_, body)| body)
+                    .unwrap_or(&default)
+                    .clone(),
+            ),
+            _ => Step::Stop(Term::from(Subterm::Match(Match {
+                head: forced,
+                goal,
+                cases: Cases::Switch {
+                    keys: Keys::Byte(keyed),
+                    default,
+                },
+            }))),
+        },
+
         Cases::Induct {
             cases,
             default,

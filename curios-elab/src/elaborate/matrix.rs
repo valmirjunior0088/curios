@@ -276,15 +276,11 @@ impl DispatchKey for Natural {
         Keys::Nat(keyed)
     }
 
-    // No set of literals covers every natural: the least one no row writes is a value no arm matches. A byte's dispatch is a natural's, so it too takes its other values at a binder, written `_` where every byte has an arm; and a character no row writes is any of them.
+    // No set of literals covers every natural: the least one no row writes is a value no arm matches; and a character no row writes is any of them.
     fn missing(context: &Context, scrutinee: &Scrutinee, written: impl Fn(&Self) -> bool) -> Seen {
-        match (scrutinee.is_byte(), scrutinee.is_char(context)) {
-            (true, _) => (0..=u32::from(u8::MAX))
-                .map(Natural::from)
-                .find(|literal| !written(literal))
-                .map_or(Seen::Any, |least| Seen::Leaf(least.to_string())),
-            (false, true) => Seen::Any,
-            (false, false) => {
+        match scrutinee.is_char(context) {
+            true => Seen::Any,
+            false => {
                 let least = (0u32..)
                     .map(Natural::from)
                     .find(|literal| !written(literal))
@@ -297,6 +293,37 @@ impl DispatchKey for Natural {
 
     fn viewed(context: &Context, scrutinee: Scrutinee) -> Scrutinee {
         dispatched(context, scrutinee)
+    }
+}
+
+impl DispatchKey for u8 {
+    const CARRIER: IntrinsicHead = IntrinsicHead::Byte;
+
+    fn of(shape: Shape<'_>) -> Option<Self> {
+        u8::try_from(&shape.value()?).ok()
+    }
+
+    fn spelled(&self, shape: Shape<'_>) -> String {
+        Natural::from(u32::from(*self)).spelled(shape)
+    }
+
+    fn literal(&self) -> Term {
+        Term::intrinsic(Intrinsic::Byte(*self))
+    }
+
+    fn keys(keyed: Keyed<Self>) -> Keys {
+        Keys::Byte(keyed)
+    }
+
+    // A byte's other values are taken at a binder, written `_` where every byte has an arm.
+    fn missing(_: &Context, _: &Scrutinee, written: impl Fn(&Self) -> bool) -> Seen {
+        (0..=u8::MAX)
+            .find(|byte| !written(byte))
+            .map_or(Seen::Any, |least| Seen::Leaf(least.to_string()))
+    }
+
+    fn viewed(_: &Context, scrutinee: Scrutinee) -> Scrutinee {
+        scrutinee
     }
 }
 
@@ -1577,7 +1604,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a column of numbers: naturals, bytes or integers. A natural's column takes one of two forms the rows that write a case choose: a case split, `0` and `n + 1`, where a row writes a successor or only `0` beside binders, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes, as a byte's column and an integer's always are. A case split takes each literal apart as the successors it is, `0` at its zero case and a literal past it one less at the predecessor, so a column peels as many successors as its largest step and dispatches on the literals past it there. A byte is dispatched as the natural it is, an integer on its signed keys, and a column of any other type takes no literal.
+    /// Rows over a column of numbers: naturals, bytes or integers. A natural's column takes one of two forms the rows that write a case choose: a case split, `0` and `n + 1`, where a row writes a successor or only `0` beside binders, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes, as a byte's column and an integer's always are. A case split takes each literal apart as the successors it is, `0` at its zero case and a literal past it one less at the predecessor, so a column peels as many successors as its largest step and dispatches on the literals past it there. A byte is dispatched on its values, an integer on its signed keys, and a column of any other type takes no literal.
     fn numbers(
         &mut self,
         context: &mut Context,
@@ -1615,7 +1642,7 @@ impl<'m> Compiler<'m> {
 
             return self.booleans(context, columns, lines, top, mode);
         }
-        // What a column's literals are is its type's: a byte's are its values, dispatched as the natural it is, a character's its code point, which only a character's literal names, a natural's its values, an integer's the keys written with their sign, and a type that is none of these takes none.
+        // What a column's literals are is its type's: a byte's are its values, a character's its code point, which only a character's literal names, a natural's its values, an integer's the keys written with their sign, and a type that is none of these takes none.
         let byte = scrutinee.is_byte();
         let character = scrutinee.is_char(context);
         let integer = scrutinee.is_int();
@@ -1678,7 +1705,10 @@ impl<'m> Compiler<'m> {
             let mut columns = rest;
             columns.insert(0, column);
 
-            return self.dispatch::<Natural>(context, columns, lines, top, mode, scrutinee);
+            return match byte {
+                true => self.dispatch::<u8>(context, columns, lines, top, mode, scrutinee),
+                false => self.dispatch::<Natural>(context, columns, lines, top, mode, scrutinee),
+            };
         }
 
         // A literal of `0` closes the zero case, and a successor the case of every successor where a step of one is left of it; a larger step leaves the successor of `0` to the rows after it, and a literal past `0` closes no case of the split.
@@ -2434,19 +2464,19 @@ impl<'m> Compiler<'m> {
                             return Ok(walked.expect("the arm of a row's case is its walk"));
                         }
 
+                        let carrier = match scrutinee.is_byte() {
+                            true => IntrinsicHead::Byte,
+                            false => IntrinsicHead::Nat,
+                        };
                         let scrutinee = dispatched(context, scrutinee);
 
                         Rc::new(SwitchSplit::resolve(
-                            context,
-                            scrutinee,
-                            IntrinsicHead::Nat,
-                            &goal,
-                            &mode,
+                            context, scrutinee, carrier, &goal, &mode,
                         )?)
                     }
                 };
 
-                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+                let literal = split.key(value);
                 walk_awaited(context, awaits, |context| {
                     split.arm(context, literal, |context, expected| {
                         arm(self, context, columns, line, expected)
@@ -2858,11 +2888,10 @@ fn opening(sequence: Sequence) -> &'static str {
     }
 }
 
-/// The scrutinee a dispatch on literals reads: a byte as the natural it is, a character as its code point, and any other as it stands.
+/// The scrutinee a dispatch on literals reads: a character as its code point, and any other as it stands.
 fn dispatched(context: &Context, scrutinee: Scrutinee) -> Scrutinee {
-    match (scrutinee.is_byte(), scrutinee.is_char(context)) {
-        (true, _) => scrutinee.of_byte(),
-        (false, true) => scrutinee.of_char(context),
-        (false, false) => scrutinee,
+    match scrutinee.is_char(context) {
+        true => scrutinee.of_char(context),
+        false => scrutinee,
     }
 }

@@ -76,3 +76,19 @@ fn a_literal_over_an_integer_names_what_a_literal_takes_apart() {
         "unexpected error: {error}"
     );
 }
+
+/// A byte is dispatched on itself: each arm knows the byte it took, so `Eq/refl()` proves `Eq()(b, 0x41)` in `| 0x41 =>`, and the arm past the keys knows the byte is none of them, so `b != 0x41` holds there.
+#[test]
+fn a_bytes_arm_knows_the_byte_it_took() {
+    let source = r#"
+        use /std/{Bool, Byte, Eq, Nat, Str};
+        use /std/Bool/{Holds};
+        let at(b: Byte, @same: Eq()(b, 0x41)) -> Nat = 1;
+        let known(b: Byte) -> Nat = match b | 0x41 => at(b, @Eq/refl()) | _ => 0 end;
+        let need(b: Byte, @ok: Holds(b != 0x41)) -> Nat = 2;
+        let past(b: Byte) -> Nat = match b | 0x41 => 0 | _ => need(b) end;
+        /std/print(Str/join(" ", [Nat/to_str(known(0x41)), Nat/to_str(known(0x42)), Nat/to_str(past(0x42))]))
+        "#;
+
+    assert_eq!(run(source), b"1 0 2");
+}

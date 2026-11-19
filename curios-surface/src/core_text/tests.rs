@@ -982,3 +982,20 @@ fn an_integers_dispatch_writes_its_keys_signed() {
     );
     assert_eq!(read_back(&read), read);
 }
+
+/// A byte's dispatch writes each key as the value it is, `#Byte(65)`, and reads back as the switch it was; a natural's key among a byte's is refused where it is written.
+#[test]
+fn a_bytes_dispatch_writes_its_keys_as_bytes() {
+    let text =
+        "#{goal = #NatType} match #Byte(7) | #Byte(65) => 10 | #Byte(66) => 20 | _ => 99 end";
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let read = term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"));
+
+    assert_eq!(written(&read), text);
+    assert_eq!(read_back(&read), read);
+    assert!(matches!(
+        refused("#{goal = #NatType} match #Byte(7) | #Byte(65) => 10 | 66 => 20 | _ => 99 end"),
+        (Refusal::Malformed(_), Some(_))
+    ));
+}

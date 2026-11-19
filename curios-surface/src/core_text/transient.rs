@@ -498,6 +498,13 @@ fn pattern_read(
         MatchPattern::Char(character) => Pattern::Literal(NumLit::Character(character.value)),
         MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
         MatchPattern::Numeral(numeral) => Pattern::Literal(NumLit::Number(numeral.value.clone())),
+        // A row writes a byte's literal as a program does, a numeral its column realizes.
+        MatchPattern::Form(_) => {
+            return Err(ReadError::at(
+                Refusal::Malformed("a row's literal, which a row writes as a program does"),
+                at.span(),
+            ));
+        }
         MatchPattern::Successor { pred_label, step } => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,
             step: step.0.clone(),

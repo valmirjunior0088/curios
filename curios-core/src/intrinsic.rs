@@ -2176,6 +2176,7 @@ fn try_binary<T, U, E>(
 pub enum IntrinsicHead {
     Nat,
     Int,
+    Byte,
     Bool,
     Bytes,
 }

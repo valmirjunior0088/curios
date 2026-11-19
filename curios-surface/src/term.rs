@@ -479,6 +479,8 @@ pub enum MatchPattern<D: Dialect = Program> {
     ///
     /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`).
     Numeral(NumLit),
+    /// A pattern only the dialect writes: Core text's key of a byte's dispatch, `#Byte(65)`, written as the value it is.
+    Form(D::PatternForm),
     /// The `pred + step` leaf, `step` successors over `pred_label`: one at least, and kept with the radix it was written in so it prints back as written. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
     Successor {
         pred_label: Binder<D>,

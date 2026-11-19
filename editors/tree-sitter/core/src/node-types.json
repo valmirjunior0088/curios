@@ -1001,6 +1001,10 @@
           "named": true
         },
         {
+          "type": "intrinsic_pattern",
+          "named": true
+        },
+        {
           "type": "list_pattern",
           "named": true
         },
@@ -2831,6 +2835,25 @@
     }
   },
   {
+    "type": "intrinsic_pattern",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "intrinsic",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "lambda",
     "named": true,
     "fields": {
@@ -3957,6 +3980,10 @@
           "named": true
         },
         {
+          "type": "intrinsic_pattern",
+          "named": true
+        },
+        {
           "type": "list_pattern",
           "named": true
         },
@@ -4144,6 +4171,10 @@
             "named": true
           },
           {
+            "type": "intrinsic_pattern",
+            "named": true
+          },
+          {
             "type": "list_pattern",
             "named": true
           },
@@ -4220,6 +4251,10 @@
         },
         {
           "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "intrinsic_pattern",
           "named": true
         },
         {
@@ -4612,6 +4647,10 @@
           "named": true
         },
         {
+          "type": "intrinsic_pattern",
+          "named": true
+        },
+        {
           "type": "list_pattern",
           "named": true
         },
@@ -4948,6 +4987,10 @@
         },
         {
           "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "intrinsic_pattern",
           "named": true
         },
         {
@@ -6350,6 +6393,10 @@
         },
         {
           "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "intrinsic_pattern",
           "named": true
         },
         {

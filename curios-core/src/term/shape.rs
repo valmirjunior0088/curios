@@ -564,7 +564,7 @@ impl Cases {
     }
 }
 
-/// The keys a [`Cases::Switch`] dispatches on, each with its arm, by the carrier they are values of, so a dispatch has one form over every carrier and each carrier's keys are of its own type.
+/// The keys a [`Cases::Switch`] dispatches on, each with its arm, by the carrier they are values of — a natural's, an integer's or a byte's — so a dispatch has one form over every carrier and each carrier's keys are of its own type.
 ///
 /// **A natural's key is a [`Natural`], not the erased carrier's `u32`.** `Nat` is unbounded here and a key narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md). A `u32` here would write `curios-anf`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -572,6 +572,7 @@ impl Cases {
 pub enum Keys {
     Nat(Keyed<Natural>),
     Int(Keyed<Integer>),
+    Byte(Keyed<u8>),
 }
 
 impl Keys {
@@ -581,6 +582,7 @@ impl Keys {
             .iter()
             .map(|(_, arm)| arm)
             .chain(self.integers().iter().map(|(_, arm)| arm))
+            .chain(self.bytes().iter().map(|(_, arm)| arm))
     }
 
     /// Each key as the literal it is, beside its arm, in key order: the value an arm is typed at.
@@ -589,9 +591,10 @@ impl Keys {
             .iter()
             .map(|(key, arm)| (natural(key), arm))
             .chain(self.integers().iter().map(|(key, arm)| (integer(key), arm)))
+            .chain(self.bytes().iter().map(|(key, arm)| (byte(*key), arm)))
     }
 
-    /// Each key as the numeral a reader writes it as, beside its arm, in key order: unsigned for a natural's key and signed for an integer's.
+    /// Each key as the numeral a program writes it as, beside its arm, in key order: unsigned for a natural's key and a byte's, and signed for an integer's.
     pub fn numerals(&self) -> impl Iterator<Item = (Numeral, &Term)> {
         self.naturals()
             .iter()
@@ -601,13 +604,18 @@ impl Keys {
                     .iter()
                     .map(|(key, arm)| (Numeral::Integer(key.clone()), arm)),
             )
+            .chain(
+                self.bytes()
+                    .iter()
+                    .map(|(key, arm)| (Numeral::Natural(Natural::from(u32::from(*key))), arm)),
+            )
     }
 
     /// A natural's arms, and none for another carrier's keys: with [`Keys::integers`], one walk over every carrier's arms, with no iterator boxed.
     fn naturals(&self) -> &[(Natural, Term)] {
         match self {
             Keys::Nat(keyed) => &keyed.arms,
-            Keys::Int(_) => &[],
+            Keys::Int(_) | Keys::Byte(_) => &[],
         }
     }
 
@@ -615,7 +623,15 @@ impl Keys {
     fn integers(&self) -> &[(Integer, Term)] {
         match self {
             Keys::Int(keyed) => &keyed.arms,
-            Keys::Nat(_) => &[],
+            Keys::Nat(_) | Keys::Byte(_) => &[],
+        }
+    }
+
+    /// A byte's arms, and none for another carrier's keys.
+    fn bytes(&self) -> &[(u8, Term)] {
+        match self {
+            Keys::Byte(keyed) => &keyed.arms,
+            Keys::Nat(_) | Keys::Int(_) => &[],
         }
     }
 
@@ -624,6 +640,7 @@ impl Keys {
         match self {
             Keys::Nat(_) => Term::intrinsic(Intrinsic::NatType),
             Keys::Int(_) => Term::intrinsic(Intrinsic::IntType),
+            Keys::Byte(_) => Term::intrinsic(Intrinsic::ByteType),
         }
     }
 
@@ -631,7 +648,7 @@ impl Keys {
     pub fn names_zero(&self) -> bool {
         match self {
             Keys::Nat(keyed) => keyed.arms.iter().any(|(key, _)| key.is_zero()),
-            Keys::Int(_) => false,
+            Keys::Int(_) | Keys::Byte(_) => false,
         }
     }
 
@@ -647,6 +664,7 @@ impl Keys {
         Ok(match self {
             Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|_, body| arm(body))?),
             Keys::Int(keyed) => Keys::Int(keyed.try_map(|_, body| arm(body))?),
+            Keys::Byte(keyed) => Keys::Byte(keyed.try_map(|_, body| arm(body))?),
         })
     }
 
@@ -665,6 +683,7 @@ impl Keys {
         Ok(match self {
             Keys::Nat(keyed) => Keys::Nat(keyed.try_map(|key, body| arm(natural(key), body))?),
             Keys::Int(keyed) => Keys::Int(keyed.try_map(|key, body| arm(integer(key), body))?),
+            Keys::Byte(keyed) => Keys::Byte(keyed.try_map(|key, body| arm(byte(*key), body))?),
         })
     }
 }
@@ -712,6 +731,11 @@ fn natural(key: &Natural) -> Term {
 /// An integer's key as the literal it is.
 fn integer(key: &Integer) -> Term {
     Term::intrinsic(Intrinsic::Int(key.clone()))
+}
+
+/// A byte's key as the literal it is.
+fn byte(key: u8) -> Term {
+    Term::intrinsic(Intrinsic::Byte(key))
 }
 
 /// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two arms: a case split, which peels one generator and binds what the peel leaves. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<One>` for `Nat` (the predecessor), `Scope<Two>` for `Bytes`/`List` (head, tail). A recursion over the carrier is a call on what the peel left, which totality grades.

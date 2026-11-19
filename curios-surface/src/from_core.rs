@@ -1229,7 +1229,7 @@ fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> 
 
 /// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by. Its goal is what the position it stands in supplies, so it is not written.
 fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> {
-    use curios_core::{Carrier, Cases};
+    use curios_core::{Carrier, Cases, Keys};
 
     let curios_core::Match { head, cases, .. } = elimination;
     let open = |labels: &[curios_core::Free]| {
@@ -1250,10 +1250,15 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
         ],
         // A dispatch by value: a numeral an arm, and the fallthrough it is required to have.
         Cases::Switch { keys, default } => {
+            // A byte's key is written as a program writes a byte, in hexadecimal.
+            let radix = match keys {
+                Keys::Byte(_) => Radix::Hex(2),
+                Keys::Nat(_) | Keys::Int(_) => Radix::Dec(0),
+            };
             let mut arms = Vec::new();
             for (value, body) in keys.numerals() {
                 arms.push(MatrixArm::of(
-                    numeral_pattern(value),
+                    MatchPattern::Numeral(NumLit { value, radix }),
                     sub(body.clone(), frame)?,
                 ));
             }

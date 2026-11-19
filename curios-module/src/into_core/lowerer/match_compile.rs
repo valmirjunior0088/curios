@@ -288,6 +288,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Numeral(numeral) => {
                 curios_core::Pattern::Literal(curios_core::NumLit::Number(numeral.value.clone()))
             }
+            MatchPattern::Form(form) => match *form {},
             MatchPattern::Successor { pred_label, step } => curios_core::Pattern::Succ {
                 predecessor: self.slot(pred_label, binders),
                 step: step.0.clone(),
@@ -397,6 +398,7 @@ fn takes_apart(pattern: &MatchPattern) -> bool {
         | MatchPattern::Successor { .. }
         | MatchPattern::List(_)
         | MatchPattern::Bytes(_) => true,
+        MatchPattern::Form(form) => match *form {},
     }
 }
 
