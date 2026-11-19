@@ -370,38 +370,13 @@ pub fn described(
     let through = store.as_ref().map(|store| store as &dyn Cache);
 
     match subject.formed(overlay) {
-        Subject::Unit { units } => {
-            let units = tested_last(overlaid(units, overlay));
-            let said = match Fold::new(budget, &units, through)
-                .lowered_unit(&mut *progress, |scope, own| said_by(asked, scope, own))
-                .map_err(of_error)?
-            {
-                None => return Ok(None),
-                Some(Ok(described)) => return Ok(Some(described)),
-                Some(Err((said, _))) => said,
-            };
-
-            Fold::new(budget, &units, through)
-                .units(&mut *progress, |prelude, produced| {
-                    Ok(produced.split_last().map(|(last, before)| {
-                        let scope = prelude
-                            .iter()
-                            .map(|unit| unit.lexicon())
-                            .chain(before.iter().map(Unit::lexicon))
-                            .collect::<Vec<_>>();
-
-                        spelled(
-                            asked,
-                            said,
-                            last.core(),
-                            Some((last.lexicon(), last.places())),
-                            &scope,
-                            Some(last.certification()),
-                        )
-                    }))
-                })
-                .map_err(of_error)
-        }
+        Subject::Unit { units } => described_unit(
+            budget,
+            &tested_last(overlaid(units, overlay)),
+            asked,
+            through,
+            progress,
+        ),
         Subject::Entry {
             units,
             origin,
@@ -421,6 +396,57 @@ pub fn described(
             )
         }
     }
+}
+
+/// What `asked` names in the scope of the library that is the last of `units`, compiled over `through` as [`described`] answers it: off the unit in scope that declares it, or off the library's own module, elaborated, where the library declares it.
+pub fn described_unit(
+    budget: u64,
+    units: &[RootSource],
+    asked: &Qualifier,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Described>, Vec<Diagnosis>> {
+    let said = match Fold::new(budget, units, through)
+        .lowered_unit(&mut *progress, |scope, own| said_by(asked, scope, own))
+        .map_err(of_error)?
+    {
+        None => return Ok(None),
+        Some(Ok(described)) => return Ok(Some(described)),
+        Some(Err((said, _))) => said,
+    };
+
+    Fold::new(budget, units, through)
+        .units(&mut *progress, |prelude, produced| {
+            Ok(produced.split_last().map(|(last, before)| {
+                let scope = prelude
+                    .iter()
+                    .map(|unit| unit.lexicon())
+                    .chain(before.iter().map(Unit::lexicon))
+                    .collect::<Vec<_>>();
+
+                spelled(
+                    asked,
+                    said,
+                    last.core(),
+                    Some((last.lexicon(), last.places())),
+                    &scope,
+                    Some(last.certification()),
+                )
+            }))
+        })
+        .map_err(of_error)
+}
+
+/// The declaration `asked` names, by the subject's own lowering `own` and the units in `scope`, beside the lowering that declares it and the unit in scope it is, none for the subject's own: what a rung narrowed to a declaration reads its part off. `None` for a name no lowered item declares.
+pub fn declared_where<'s>(
+    scope: &[&'s Unit],
+    own: &'s PreparedText,
+    asked: &Qualifier,
+) -> Option<(Global, &'s PreparedText, Option<&'s Unit>)> {
+    let name = resolved(scope, own, asked);
+    let found = found(scope, own, &name)?;
+
+    Some((name, found.lowered, found.unit))
 }
 
 /// What `asked` names in the scope of the program `entrypoint`, compiled against `units` over `through` as [`described`] answers it: off the unit in scope that declares it, or off the program's own lowering, elaborated, where the program declares it. `loader` is the program's source as a question reads it, [`tested`](RootSource::tested).

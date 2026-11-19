@@ -86,6 +86,14 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["wonder", "--name", "/std/Bool/not", SUBJECT],
         &["wonder", "--name", "/std/Show", "--witnesses", SUBJECT],
         &["wonder", "--name", "/std/Bool/not", "--footprint", SUBJECT],
+        &[
+            "wonder",
+            "--name",
+            "/std/Bool/not",
+            "--stage",
+            "core",
+            SUBJECT,
+        ],
         &["wonder", "--name", "/std/Map", "--exports", SUBJECT],
         &["wonder", "--server"],
     ];
@@ -736,6 +744,26 @@ wonder --name /std/Bool/not --footprint SUBJECT — Program, store Write, leaves
   work/app/helper: bench → program bench
   work/app/nested: (none) → refused: no executable: `nested` declares no executable · add `exe.crs`, or declare one with `[[executables]]` → <root>/work/app/nested/curios.toml
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
+wonder --name /std/Bool/not --stage core SUBJECT — Scope, store Write, leaves Nothing, options --tests --stage --at --name --witnesses --footprint --exports --server --budget --manifest
+  work/app: (none) → program serve
+  work/app: serve → program serve
+  work/app: absent → refused: unknown executable: `app` declares no executable named `absent` · it declares: `serve`, `bench` → <root>/work/app/curios.toml
+  work/app: - → loose -
+  work/app: serve.crs → program serve
+  work/app: helper.crs → program serve through helper.crs
+  work/app: bench.crs → program bench
+  work/app: lib.crs → library app through lib.crs
+  work/app: util.crs → library app through util.crs
+  work/app: stray.crs → loose stray.crs
+  work/app: nested/lib.crs → library nested through nested/lib.crs
+  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
+  work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
+  work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
+  work/app/nested: (none) → library nested
+  .: (none) → the prelude
 wonder --name /std/Map --exports SUBJECT — Scope, store Write, leaves Nothing, options --tests --stage --at --name --witnesses --footprint --exports --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
@@ -841,9 +869,20 @@ fn a_view_beside_another_query_or_another_view_does_not_parse() {
         }
     }
 
-    let words = ["wonder", "--name", "/std/Map", "--exports", "--witnesses"];
-    let refused = parsed(&words).expect_err("a second view does not parse");
-    assert_eq!(refused.kind(), clap::error::ErrorKind::ArgumentConflict);
+    for words in [
+        &["wonder", "--name", "/std/Map", "--exports", "--witnesses"][..],
+        &[
+            "wonder",
+            "--name",
+            "/std/Map",
+            "--stage",
+            "core",
+            "--exports",
+        ],
+    ] {
+        let refused = parsed(words).expect_err("a second view does not parse");
+        assert_eq!(refused.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
 }
 
 /// Every command the parser knows has a line in the table, so a command added without one fails here rather than going unexamined.

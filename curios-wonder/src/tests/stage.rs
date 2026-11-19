@@ -1,7 +1,8 @@
-//! What `wonder --stage` answers: a rung the driver reached is an answer whatever stopped the program after it, and a rung it never reached is a refusal carrying what stopped it.
+//! What `wonder --stage` answers: a rung the driver reached is an answer whatever stopped the program after it, and a rung it never reached is a refusal carrying what stopped it; beside `--name`, the declaration's part of a rung a unit has and nothing else.
 
 use {
     crate::*,
+    curios_common::Qualifier,
     curios_common::Source,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
@@ -120,4 +121,88 @@ fn a_librarys_core_rung_lowers_it_and_compiles_nothing() {
     assert!(compiled.is_empty(), "{compiled:?}");
     assert!(printed.contains("answer"), "{printed}");
     assert!(printed.contains("#{node = Infix}"), "{printed}");
+}
+
+/// A program of two declarations, `twice` holding a lambda and `other` beside it.
+const TWO: &str = "use /std/{Nat};\n\nlet twice(n: Nat) -> Nat =\n    let step = (k: Nat) => k + n;\n    step(step(n));\n\nlet other(n: Nat) -> Nat = n + 1;\n\n/std/print(\"ok\\n\")\n";
+
+/// The declaration at `path`'s part of the rung `name` of `program`, asked the way the one-shot transport asks.
+fn part(name: &str, program: &str, path: &[&str]) -> Result<String, crate::Refusal> {
+    crate::named_stage(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                text: program.to_string(),
+            },
+            declares: None,
+            package: None,
+        },
+        &Qualifier::from(path.to_vec()),
+        name,
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .map(|described| described.expect("the path names a declaration").1)
+}
+
+/// At each of a unit's rungs, the program's own declaration is printed and its neighbour is not.
+#[test]
+fn a_programs_own_declaration_is_its_part_of_each_rung_a_unit_has() {
+    for name in ["text", "core", "core-elab"] {
+        let printed = part(name, TWO, &["twice"]).unwrap_or_else(|_| panic!("{name} is answered"));
+
+        assert!(printed.contains("twice"), "{name}: {printed}");
+        assert!(!printed.contains("other"), "{name}: {printed}");
+    }
+}
+
+/// A library's own declaration answers as a program's does, off the library's lowering and its elaborated module.
+#[test]
+fn a_librarys_own_declaration_is_its_part_of_each_rung_a_unit_has() {
+    const LIBRARY: &str = "use /std/{Nat};\npub let answer: Nat = 42;\npub let other: Nat = 7;\n";
+    for name in ["text", "core", "core-elab"] {
+        let library = RootSource::supplied_module("answers", &Source::held("answers.crs", LIBRARY))
+            .expect("the text is written as a module");
+        let printed = crate::named_stage(
+            DEFAULT_BUDGET,
+            Subject::Unit {
+                units: vec![library],
+            },
+            &Qualifier::from(["answers", "answer"]),
+            name,
+            &Overlay::default(),
+            None,
+            &mut |_| {},
+        )
+        .unwrap_or_else(|_| panic!("{name} is answered"))
+        .expect("the path names a declaration")
+        .1;
+
+        assert!(printed.contains("answer"), "{name}: {printed}");
+        assert!(!printed.contains("other"), "{name}: {printed}");
+    }
+}
+
+/// A declaration of a unit in scope is printed as that unit was elaborated, and refused at `core`, which is the subject's own lowering: a unit in scope keeps none.
+#[test]
+fn a_declaration_in_scope_is_its_units_elaborated_part_and_has_no_core() {
+    let elaborated =
+        part("core-elab", TWO, &["std", "Bool", "not"]).expect("core-elab is answered");
+    assert!(elaborated.contains("/std/Bool/not"), "{elaborated}");
+    assert!(!elaborated.contains("/std/Bool/and"), "{elaborated}");
+
+    assert!(matches!(
+        part("core", TWO, &["std", "Bool", "not"]),
+        Err(crate::Refusal::Kept { .. })
+    ));
+}
+
+#[test]
+fn a_declarations_part_is_not_asked_past_a_units_rungs() {
+    assert!(matches!(
+        part("anf", TWO, &["twice"]),
+        Err(crate::Refusal::PastCore)
+    ));
 }

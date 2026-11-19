@@ -263,6 +263,24 @@ pub const WITNESSES: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// A declaration's part of a rung a unit has is read off the unit that declares it, so the view takes any scope `--name` takes.
+pub const NAMED_STAGE_OF_A_UNIT: Contract = Contract {
+    command: "wonder --name --stage",
+    accepts: Accepts::Scope,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
+/// Past a unit's rungs, a declaration's part is a compiled program's.
+pub const NAMED_STAGE: Contract = Contract {
+    command: "wonder --name --stage",
+    accepts: Accepts::Program,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 /// What a program holds of a declaration is a compiled program's, so the view takes a program where `--name` alone takes any scope.
 pub const FOOTPRINT: Contract = Contract {
     command: "wonder --name --footprint",
@@ -305,6 +323,10 @@ impl Mode {
                 Query::Name(_, Some(View::Exports)) => &EXPORTS,
                 Query::Name(_, Some(View::Witnesses)) => &WITNESSES,
                 Query::Name(_, Some(View::Footprint)) => &FOOTPRINT,
+                Query::Name(_, Some(View::Stage(name))) if Stage::of_a_unit(name) => {
+                    &NAMED_STAGE_OF_A_UNIT
+                }
+                Query::Name(_, Some(View::Stage(_))) => &NAMED_STAGE,
                 Query::Server => &SERVER,
             },
             #[cfg(feature = "profile")]

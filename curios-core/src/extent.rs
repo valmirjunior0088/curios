@@ -369,6 +369,13 @@ impl Anchors {
             .resolved(anchors)
     }
 
+    /// The text `name` was written in, by its anchor and its stamp: what tells it apart from every other text, each of a module's unnamed declarations among them, so every name one text declares answers the same. `None` for a definition no name was written for.
+    pub fn text_key(&self, name: &Global) -> Option<(Anchor, u32)> {
+        self.labels
+            .get(name)
+            .map(|label| (label.anchor, label.stamp))
+    }
+
     /// The text `name`'s declaration was written in, and where its name stands in it, each as a span of the source the text was read as. `None` for a definition no name was written for, and for one whose text this table no longer holds.
     pub fn written(&self, name: &Global) -> Option<(Span, Span)> {
         let label = self.labels.get(name)?;

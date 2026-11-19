@@ -41,9 +41,9 @@ use {
     curios_pipeline::CompileError,
     curios_surface::{Format, Formatted},
     curios_wonder::{
-        Linted, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_diagnostics,
-        wonder_exports, wonder_footprint, wonder_name, wonder_stage, wonder_tests,
-        wonder_witnesses,
+        Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at,
+        wonder_diagnostics, wonder_exports, wonder_footprint, wonder_name, wonder_named_stage,
+        wonder_stage, wonder_tests, wonder_witnesses,
     },
     std::{
         collections::BTreeSet,
@@ -843,6 +843,19 @@ fn dispatch() -> Result<(), Failure> {
                 elaboration.budget,
                 contract.admit_program(subject, manifest, None, &here()?)?,
                 &path,
+                &mut Asking::reading(answered.clone()),
+            )?,
+            // A unit's rung takes any scope `--name` takes, and a rung past them a program, as the contract the rung selected says.
+            Query::Name(path, Some(View::Stage(name))) => wonder_named_stage(
+                elaboration.budget,
+                match contract.accepts {
+                    Accepts::Program => {
+                        Scope::Program(contract.admit_program(subject, manifest, None, &here()?)?)
+                    }
+                    _ => contract.admit_scope(subject, manifest, &here()?)?,
+                },
+                &path,
+                &name,
                 &mut Asking::reading(answered.clone()),
             )?,
             Query::Server => serve(elaboration.budget, manifest).map_err(|words| {

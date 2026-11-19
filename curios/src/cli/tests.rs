@@ -16,6 +16,28 @@ fn run(words: &[&str]) -> (Option<String>, Vec<OsString>, Elaboration) {
     (subject, args, elaboration)
 }
 
+/// `wonder`'s query on a line that parses.
+fn wonder(words: &[&str]) -> Query {
+    let cli = Cli::try_parse_from(iter::once("curios").chain(words.iter().copied())).unwrap();
+    let Mode::Wonder { query, .. } = cli.mode else {
+        panic!("the fixture names wonder");
+    };
+    query
+}
+
+/// `--stage` alone asks for a program's rung whole, and beside `--name` it is a view of the declaration, its part of the rung.
+#[test]
+fn a_stage_is_a_query_alone_and_a_view_beside_a_name() {
+    assert!(matches!(
+        wonder(&["wonder", "--stage", "core"]),
+        Query::Stage(name) if name == "core"
+    ));
+    assert!(matches!(
+        wonder(&["wonder", "--name", "/std/Bool/not", "--stage", "core"]),
+        Query::Name(_, Some(View::Stage(name))) if name == "core"
+    ));
+}
+
 /// `--target` and `--port` are `run`'s before the subject, and the program's after it, as every option is.
 #[test]
 fn a_target_and_a_port_before_the_subject_are_the_commands_own() {

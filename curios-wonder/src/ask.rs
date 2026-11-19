@@ -8,7 +8,7 @@ use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Origin, Refusal,
         Rendering, Row, Severity, Subject, Unfooted, checked, declared_tests, described,
-        diagnostics, exported, footprint, placed, stage, unit_stage,
+        diagnostics, exported, footprint, named_stage, placed, stage, unit_stage,
     },
     curios_common::{
         About, Code, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -17,7 +17,7 @@ use {
     curios_core::{Declared, Totality},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
-    curios_pipeline::{CompileError, Progress},
+    curios_pipeline::{CompileError, Progress, Stage},
     curios_surface::{Format, Formatted},
     curios_verdict::{Session, Verdicts},
     std::{
@@ -312,6 +312,36 @@ impl Asked {
         reached
     }
 
+    /// What `path` names in the subject's scope, and its part at the rung `name` ([`named_stage`]).
+    pub fn named_staged(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        path: &Qualifier,
+        name: &str,
+        telling: &mut dyn Telling,
+    ) -> Result<Option<(Described, String)>, Refusal> {
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let staged = named_stage(
+            budget,
+            subject,
+            path,
+            name,
+            overlay,
+            cache,
+            &mut |progress| {
+                telling.step(progress, cache);
+            },
+        );
+        telling.ended(match &staged {
+            Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+            _ => Ended::Done,
+        });
+
+        staged
+    }
+
     /// What `path` names in the program's scope, and what the program holds of each function of its text ([`footprint()`]).
     pub fn footprinted(
         self,
@@ -588,6 +618,69 @@ pub fn wonder_stage(
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Kept { .. } | Refusal::PastCore) => {
+            unreachable!("a whole program's rung is asked of no declaration")
+        }
+    }
+}
+
+/// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_named_stage(
+    budget: u64,
+    scope: Scope,
+    path: &Qualifier,
+    name: &str,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let reader = telling.reader();
+    let staged = scope
+        .asked()?
+        .named_staged(budget, &Overlay::default(), path, name, telling);
+
+    match staged {
+        Ok(Some((described, part))) => {
+            telling.answering();
+            answer(format_args!(
+                "{}\n",
+                block(&described, None).rendered(Kind::Declaration, &reader)
+            ));
+            // A rung's printer may close its text on a line of its own or not; the answer closes each part on one.
+            let part = part.trim_end_matches('\n');
+            if !part.is_empty() {
+                answer(format_args!("\n{part}\n"));
+            }
+            Ok(())
+        }
+        Ok(None) => Err(unknown_declaration(path)),
+        Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
+        Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Kept { file }) => {
+            let refused = Refused::of("not the subject's own")
+                .stating("`core` is the subject's own lowering, and a unit in scope keeps none")
+                .about_named(path.join());
+            Err(match file {
+                Some(file) => Box::new(refused.trying(format!(
+                    "curios wonder --name {} --stage core {}",
+                    path.join(),
+                    file.display()
+                ))),
+                None => refused,
+            }
+            .into())
+        }
+        Err(Refusal::PastCore) => Err(Refused::of("not a unit's rung")
+            .stating(format_args!(
+                "beside `--name`, `--stage` reaches {}",
+                Stage::NAMES
+                    .into_iter()
+                    .filter(|name| Stage::of_a_unit(name))
+                    .map(|name| format!("`{name}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+            .about_named("--stage")
+            .into()),
+        Err(Refusal::Unit) => unreachable!("a declaration's part is asked of any scope"),
     }
 }
 
@@ -626,6 +719,9 @@ fn library_stage(
         // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
         Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Kept { .. } | Refusal::PastCore) => {
+            unreachable!("a whole library's rung is asked of no declaration")
+        }
     }
 }
 
@@ -1006,9 +1102,7 @@ fn no_such_stage(asked: &str) -> CompileError {
         .stating(format_args!("no stage is named `{asked}`"))
         .stating(format_args!(
             "the stages: {}",
-            curios_pipeline::Stage::NAMES
-                .map(|name| format!("`{name}`"))
-                .join(", ")
+            Stage::NAMES.map(|name| format!("`{name}`")).join(", ")
         ))
         .about_named("--stage")
         .into()

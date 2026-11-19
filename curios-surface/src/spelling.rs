@@ -96,6 +96,8 @@ pub struct Spelling {
     keys: Rc<Cell<u64>>,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
     form_scope: Option<Rc<FormScope>>,
+    /// The items of a module written, by a name each declares, where a write is of a declaration's part: the module stays what each is written in ([`Spelling::narrowed_to`]).
+    only: Option<Rc<BTreeSet<Global>>>,
 }
 
 /// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t = …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Core text is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
@@ -514,6 +516,12 @@ impl Spelling {
     /// This spelling with `scope` to write a test's and a foreign row's forms against.
     pub fn with_form_scope(mut self, scope: Rc<FormScope>) -> Self {
         self.form_scope = Some(scope);
+        self
+    }
+
+    /// This spelling writing, of a module, the items declaring one of `names` and no other: one printer for a module and for a declaration's part of it, the module still what each item is written in.
+    pub fn narrowed_to(mut self, names: BTreeSet<Global>) -> Self {
+        self.only = Some(Rc::new(names));
         self
     }
 
@@ -2110,7 +2118,11 @@ fn items_written<D: Rendered>(
     spelling: &Rc<Spelling>,
     mut each: impl FnMut(CoreItem<D>) -> fmt::Result,
 ) -> fmt::Result {
-    for item in definitions.items.iter() {
+    let written = |item: &Item| match &spelling.only {
+        Some(only) => item.declared_names().iter().any(|name| only.contains(name)),
+        None => true,
+    };
+    for item in definitions.items.iter().filter(|item| written(item)) {
         match item {
             Item::Let(definition) => {
                 // A foreign row is stated by its form, which implies the definition that calls it: one written beside it where it is not that one.

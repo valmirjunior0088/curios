@@ -532,3 +532,29 @@ fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
     assert!(block.starts_with("/helper\n"), "{stdout}");
     assert_eq!(rows, "/helper\tnot linked\t-\t-\n");
 }
+
+/// `--stage` beside `--name` answers the block, then, a blank line before, the declaration's part of the rung, closed on a line of its own: at `text`, its text reprinted, and nothing of its neighbours.
+#[test]
+fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
+    let root = temporary("named-stage");
+    fs::create_dir_all(&root).unwrap();
+    let program = "let helper(x : /std/Nat) -> /std/Nat = x + 1;\n\nlet other(x : /std/Nat) -> /std/Nat = x;\n\n/std/print(\"hello\\n\")\n";
+
+    let answered = curios(
+        &root,
+        &["wonder", "--name", "/helper", "--stage", "text", "-"],
+        program,
+    );
+    assert_eq!(
+        answered.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&answered.stdout);
+    let (block, part) = stdout
+        .split_once("\n\n")
+        .expect("a blank line parts the block from the part");
+    assert!(block.starts_with("/helper\n"), "{stdout}");
+    assert_eq!(part, "let helper(x: /std/Nat) -> /std/Nat =\n    x + 1;\n");
+}

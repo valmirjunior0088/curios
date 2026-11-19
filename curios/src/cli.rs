@@ -444,22 +444,27 @@ impl Query {
     const GROUP: &str = "query";
 
     /// The query options, the group's members.
-    const QUERIES: [&str; 5] = ["tests", "stage", "at", "name", "server"];
+    const QUERIES: [&str; 4] = ["tests", "at", "name", "server"];
 
     /// The group the views of a selection form, which holds them to one.
     const VIEWS: &str = "view";
 
     /// `argument` as a view of the selection `--name` makes: it requires the selection, and conflicts with every other query by name, since clap waives a requirement whose target conflicts with an argument present, which the group makes `--name` do with each of them.
     fn view(argument: Arg) -> Arg {
-        argument
-            .requires("name")
-            .conflicts_with_all(Self::QUERIES.into_iter().filter(|query| *query != "name"))
+        Self::beside_name(argument.requires("name"))
+    }
+
+    /// `argument` standing beside `--name` and no other query.
+    fn beside_name(argument: Arg) -> Arg {
+        argument.conflicts_with_all(Self::QUERIES.into_iter().filter(|query| *query != "name"))
     }
 }
 
 /// What `--name` is asked beside its path, in place of the declaration's own text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum View {
+    /// The declaration's part of a rung of the pipeline, by the rung's name ([`Stage::NAMES`]).
+    Stage(String),
     /// What the module the path names exposes to a consumer.
     Exports,
     /// What the program holds of each function of the declaration's text, and what each weighs.
@@ -501,18 +506,18 @@ impl Args for Query {
                     "Every test the subject declares, one path per line; nothing executes",
                 ),
             ))
-            // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden.
-            .arg(
+            // The names are clap's to refuse, so an unknown one is a command line that does not parse; the help already lists them, so the parser's own listing is hidden. Alone it is a query, and beside `--name` a view, so it stands in the views' group, which holds a view to one, and conflicts with every other query.
+            .arg(Self::beside_name(
                 Arg::new("stage")
                     .long("stage")
                     .value_name("STAGE")
                     .value_parser(PossibleValuesParser::new(Stage::NAMES))
                     .hide_possible_values(true)
                     .help(STAGE.query_help(&format!(
-                        "The program's representation at one rung of the pipeline, reprinted; one of: {}",
+                        "The program's representation at one rung of the pipeline, reprinted, and beside `--name` the declaration's part of a rung a unit has; one of: {}",
                         *NAMES
                     ))),
-            )
+            ))
             // The place names its file, so a subject beside it would state the file twice.
             .arg(
                 Arg::new("at")
@@ -564,7 +569,7 @@ impl Args for Query {
             )
             .group(
                 ArgGroup::new(Self::VIEWS)
-                    .args(["witnesses", "footprint", "exports"])
+                    .args(["witnesses", "footprint", "exports", "stage"])
                     .multiple(false),
             )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
@@ -578,10 +583,10 @@ impl Args for Query {
 
 impl FromArgMatches for Query {
     fn from_arg_matches(matches: &ArgMatches) -> Result<Self, Error> {
+        let stage = matches.get_one::<String>("stage");
+
         Ok(if matches.get_flag("tests") {
             Query::Tests
-        } else if let Some(name) = matches.get_one::<String>("stage") {
-            Query::Stage(name.clone())
         } else if let Some(place) = matches.get_one::<Place>("at") {
             Query::At(place.clone())
         } else if let Some(path) = matches.get_one::<Qualifier>("name") {
@@ -592,10 +597,12 @@ impl FromArgMatches for Query {
             } else if matches.get_flag("footprint") {
                 Some(View::Footprint)
             } else {
-                None
+                stage.map(|name| View::Stage(name.clone()))
             };
 
             Query::Name(*path, view)
+        } else if let Some(name) = stage {
+            Query::Stage(name.clone())
         } else if matches.get_flag("server") {
             Query::Server
         } else {
