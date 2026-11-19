@@ -9,6 +9,8 @@
 //! **Work that may trap crosses no effect.** It moves only along transfers no call stands on — switch edges and jumps from the chain holding each continuation it enters — so it runs after no effect it ran before; a construction, a total intrinsic or a group of functions cannot fail, and moves past anything.
 //!
 //! **A moved call returns where its result went on.** Moved to a continuation whose body only hands the call's results on, the call returns to where they are handed, so a call into a branch that returns its answer is a tail call, and a recursion closed by a conjunction a loop that ends at the first operand that decides it.
+//!
+//! **A reader's place is read off the census, never climbed.** The census files each node's owning function and its chain, and each chain's continuation or function, kept exact through every move — a node moved or added takes the chain it joins, a landing that takes a whole body hands that chain to the landing, and a split names its smaller side afresh, so every split together costs a node the logarithm of its chain. A reader's site then climbs only the functions it is defined in, a node's container is a lookup, and the innermost continuation holding a computation's readers is read off the continuations between them, each once: the first reader's climbed to the computation's chain, every other's until it meets one already climbed, as [Every stage but reduction costs the graph it is handed](../../../documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once. Debug builds hold the index to the chains where a placement ends.
 
 #[cfg(test)]
 mod tests;
@@ -63,12 +65,12 @@ enum Work {
 
 /// Where a computation's readers place it.
 enum Destination {
-    /// The innermost continuation holding every reader, and the continuations between the computation and it, outermost first.
-    Into(Vec<ContinuationId>),
-    /// The one reader is the second operand of the operation at the node, which the given value of its first decides; the continuations between, outermost first.
-    Decided(NodeId, u32, Vec<ContinuationId>),
-    /// The one reader is an argument of the switch at the node, on the edge of the given case, or the default.
-    Edge(NodeId, Option<u32>, Vec<ContinuationId>),
+    /// The innermost continuation below the computation holding every reader.
+    Into(ContinuationId),
+    /// The one reader is the second operand of the operation at the node, which the given value of its first decides; the innermost continuation below the computation holding it, where one is between them.
+    Decided(NodeId, u32, Option<ContinuationId>),
+    /// The one reader is an argument of the switch at the node, on the edge of the given case, or the default; the innermost continuation below the computation holding it, where one is between them.
+    Edge(NodeId, Option<u32>, Option<ContinuationId>),
 }
 
 /// The pass: the module, a census it keeps exact through its own moves, and the cycles of the function it is placing in.
@@ -467,23 +469,65 @@ impl<'m> Sink<'m> {
         Some(site)
     }
 
-    /// The continuations holding `site` below `region`, outermost first; `None` where `region` does not hold it within one function. A reader stands below what it reads, so they are the continuations `site`'s chain is nested in up to the chain holding `region`, climbed a continuation at a time.
-    fn between(&self, region: Holder, site: NodeId) -> Option<Vec<ContinuationId>> {
-        let stop = match region {
-            Holder::Node(node) => self.container(node)?,
-            holder => holder,
-        };
-        let mut found = Vec::new();
-        let mut at = self.container(site)?;
+    /// The block a climb from below `region` ends at: the chain holding the computation at `region`, or the continuation whose parameters are what a call computes.
+    fn stop(&self, region: Holder) -> Option<Holder> {
+        match region {
+            Holder::Node(node) => self.container(node),
+            holder => Some(holder),
+        }
+    }
+
+    /// The innermost continuation below `stop` holding `site`, or `None` where `site` stands in `stop`'s own chain. A reader stands below what it reads, so its chain's continuation is the one, read off its chain.
+    fn below(&self, stop: Holder, site: NodeId) -> Option<Option<ContinuationId>> {
+        match self.container(site)? {
+            holder if holder == stop => Some(None),
+            Holder::Continuation(continuation) => Some(Some(continuation)),
+            Holder::Node(_) | Holder::Function(_) => None,
+        }
+    }
+
+    /// The innermost continuation below `stop` holding every one of `sites`, or `None` where none does or a site stands where `stop` does not hold it within one function. The first site's continuations are climbed to `stop`, each marked with how many continuations the climb shares from `stop` down to it; every other site's are climbed only until they meet a marked one, and are marked with what they share, so each continuation between `stop` and the sites is read once.
+    fn innermost_holding(&self, stop: Holder, sites: &BTreeSet<NodeId>) -> Option<ContinuationId> {
+        let mut sites = sites.iter();
+        let first = *sites.next()?;
+        let mut climbed = Vec::new();
+        let mut at = self.container(first)?;
         while at != stop {
             let Holder::Continuation(continuation) = at else {
                 return None;
             };
-            found.push(continuation);
+            climbed.push(continuation);
             at = self.container(*self.held.get(&continuation)?)?;
         }
-        found.reverse();
-        Some(found)
+        climbed.reverse();
+        let mut shares = climbed
+            .iter()
+            .enumerate()
+            .map(|(depth, continuation)| (*continuation, depth + 1))
+            .collect::<BTreeMap<_, _>>();
+        let mut shared = climbed.len();
+        for &site in sites {
+            let mut met = Vec::new();
+            let mut at = self.container(site)?;
+            let joined = loop {
+                if at == stop {
+                    break 0;
+                }
+                let Holder::Continuation(continuation) = at else {
+                    return None;
+                };
+                if let Some(&depth) = shares.get(&continuation) {
+                    break depth;
+                }
+                met.push(continuation);
+                at = self.container(*self.held.get(&continuation)?)?;
+            };
+            for continuation in met {
+                shares.insert(continuation, joined);
+            }
+            shared = shared.min(joined);
+        }
+        shared.checked_sub(1).map(|depth| climbed[depth])
     }
 
     /// The node ending the chain that begins at `node`.
@@ -720,22 +764,37 @@ impl<'m> Sink<'m> {
         false
     }
 
-    /// Whether every continuation of `path` is entered only by switch edges and jumps from the chain holding it, so that work moved along it crosses no call.
-    fn pure_path(&self, path: &[ContinuationId]) -> bool {
-        path.iter().all(|continuation| {
-            let Some(&binder) = self.held.get(continuation) else {
+    /// Whether every continuation from `innermost` up to the chain `region` stands in is entered only by switch edges and jumps from the chain holding it, so that work moved along them crosses no call.
+    fn pure_path(&self, region: Holder, innermost: ContinuationId) -> bool {
+        let Some(stop) = self.stop(region) else {
+            return false;
+        };
+        let mut at = Holder::Continuation(innermost);
+        while at != stop {
+            let Holder::Continuation(continuation) = at else {
+                return false;
+            };
+            let Some(&binder) = self.held.get(&continuation) else {
                 return false;
             };
             let holding = self.container(binder);
-            self.transfers.get(continuation).is_some_and(|sources| {
+            let pure = self.transfers.get(&continuation).is_some_and(|sources| {
                 sources.iter().all(|source| {
                     matches!(
                         self.module.node(*source),
                         Some(Node::Switch { .. } | Node::ApplyCont(_))
                     ) && self.container(*source) == holding
                 })
-            })
-        })
+            });
+            if !pure {
+                return false;
+            }
+            let Some(above) = holding else {
+                return false;
+            };
+            at = above;
+        }
+        true
     }
 
     /// The work the node at `id` computes, where it may move.
@@ -827,7 +886,7 @@ impl<'m> Sink<'m> {
         }
     }
 
-    /// Where `work`'s readers place it within `function`, or nowhere it may move.
+    /// Where `work`'s readers place it within `function`, or nowhere it may move: read off the continuations between `region` and the readers, each once.
     fn destination(
         &self,
         function: FunctionId,
@@ -847,12 +906,13 @@ impl<'m> Sink<'m> {
                 sites.insert(site);
             }
         }
+        let stop = self.stop(region)?;
         let listed = sites.iter().copied().collect::<Vec<_>>();
         if let ([site], Some(value)) = (listed.as_slice(), self.single_value(work))
             && readers.len() == 1
             && readers.contains(site)
         {
-            let path = self.between(region, *site)?;
+            let innermost = self.below(stop, *site)?;
             match self.module.node(*site)? {
                 Node::LetIntrinsic { op, args, .. } => {
                     if let (Some(decided), [first, second]) =
@@ -860,7 +920,7 @@ impl<'m> Sink<'m> {
                         && *second == Atom::Value(value)
                         && *first != Atom::Value(value)
                     {
-                        return Some(Destination::Decided(*site, decided, path));
+                        return Some(Destination::Decided(*site, decided, innermost));
                     }
                 }
                 Node::Switch {
@@ -875,27 +935,13 @@ impl<'m> Sink<'m> {
                         .map(|(case, _)| Some(*case))
                         .chain(default.iter().filter(|edge| names(edge)).map(|_| None));
                     if let (Some(case), None) = (naming.next(), naming.next()) {
-                        return Some(Destination::Edge(*site, case, path));
+                        return Some(Destination::Edge(*site, case, innermost));
                     }
                 }
                 _ => {}
             }
         }
-        let mut common: Option<Vec<ContinuationId>> = None;
-        for site in &sites {
-            let path = self.between(region, *site)?;
-            common = Some(match common {
-                None => path,
-                Some(common) => common
-                    .into_iter()
-                    .zip(path)
-                    .take_while(|(a, b)| a == b)
-                    .map(|(a, _)| a)
-                    .collect(),
-            });
-        }
-        let path = common?;
-        (!path.is_empty()).then_some(Destination::Into(path))
+        self.innermost_holding(stop, &sites).map(Destination::Into)
     }
 
     /// Move `work` to where its readers place it, where that is allowed.
@@ -917,20 +963,23 @@ impl<'m> Sink<'m> {
         let Some(destination) = self.destination(function, &work, region) else {
             return;
         };
-        let (path, innermost) = match &destination {
-            Destination::Into(path) => (path, path.last().copied()),
-            Destination::Decided(_, _, path) | Destination::Edge(_, _, path) => {
-                (path, path.last().copied())
+        let innermost = match &destination {
+            Destination::Into(target) => Some(*target),
+            Destination::Decided(_, _, innermost) | Destination::Edge(_, _, innermost) => {
+                *innermost
             }
         };
         if innermost.is_some_and(|target| self.repeats(target, origin)) {
             return;
         }
-        if trapping && !self.pure_path(path) {
+        if trapping
+            && let Some(innermost) = innermost
+            && !self.pure_path(region, innermost)
+        {
             return;
         }
         // A branch and a landing are entered on one outcome alone; a continuation is worth moving into only where some run that does the work does not reach it.
-        if let Destination::Into(path) = &destination {
+        if let Destination::Into(target) = &destination {
             let from = match &work {
                 Work::Binding { node, .. } => *node,
                 Work::Call { resume, .. } => match self.module.continuation(*resume) {
@@ -938,22 +987,20 @@ impl<'m> Sink<'m> {
                     None => return,
                 },
             };
-            if !self.avoidable(from, *path.last().expect("a destination is a continuation")) {
+            if !self.avoidable(from, *target) {
                 return;
             }
         }
         // Read before a branch or a landing is made, so that nothing is made for work that stays: one made at a reader holds what holds the reader.
         let lands_at = match &destination {
-            Destination::Into(path) => {
-                Holder::Continuation(*path.last().expect("a destination is a continuation"))
-            }
+            Destination::Into(target) => Holder::Continuation(*target),
             Destination::Decided(site, ..) | Destination::Edge(site, ..) => Holder::Node(*site),
         };
         if !self.in_scope_at(&work, lands_at) {
             return;
         }
         let target = match destination {
-            Destination::Into(path) => *path.last().expect("a destination is a continuation"),
+            Destination::Into(target) => target,
             Destination::Decided(site, decided, _) => self.branch(site, decided),
             Destination::Edge(site, case, _) => self.land(site, case),
         };
