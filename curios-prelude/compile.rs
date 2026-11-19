@@ -112,6 +112,7 @@ fn reported(
         scope: &lexicons.iter().collect::<Vec<_>>(),
         syntax: &SYNTAX,
         spellings: None,
+        minted: None,
         anchors: &[anchors],
     })
 }

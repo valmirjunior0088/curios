@@ -1371,6 +1371,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             scope: &lexicons,
             syntax: &SYNTAX,
             spellings: Some(&spellings),
+            minted: None,
             anchors: &[],
         };
         // Made once: the library's own lexicon is what every reader of it is spelled by.

@@ -284,6 +284,7 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
                 scope: &[],
                 syntax: &SYNTAX,
                 spellings: None,
+                minted: None,
                 anchors: &[],
             })
             .contains("budget spent"),

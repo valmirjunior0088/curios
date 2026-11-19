@@ -531,3 +531,25 @@ fn a_typed_mistake_names_what_is_written_instead() {
         "unexpected report: {surplus}"
     );
 }
+
+/// A mismatch at a name a binder hides names the binder beside it: after `@` a lambda reads a binder, so `@Nat` binds a variable that hides `/std/Nat`, and the annotation that reads it is refused with a note at the binder saying so.
+#[test]
+fn a_mismatch_at_a_binder_hiding_a_name_notes_the_binder() {
+    let source = r#"
+        use /std/{Nat, Io};
+
+        let f: (@n: Nat, x: Nat) -> Nat = (@Nat, x) => let y: Nat = x; y;
+
+        Io/pure(())
+    "#;
+    let error = compile(source).map(|_| ()).unwrap_err();
+
+    assert!(
+        error.contains("inferred: `/std/Nat`"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        error.contains("`Nat` is bound here, hiding `/std/Nat`"),
+        "unexpected report: {error}"
+    );
+}

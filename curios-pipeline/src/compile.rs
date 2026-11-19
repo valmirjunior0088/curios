@@ -351,6 +351,7 @@ fn read_for_report(
         scope: lexicons,
         syntax,
         spellings: Some(&spellings),
+        minted: Some(text.minted()),
         anchors: &anchors_of(text, predecessors),
     };
 
@@ -371,6 +372,7 @@ pub fn spelling_at(
         scope,
         syntax,
         spellings: None,
+        minted: None,
         anchors: &[],
     };
 
@@ -395,6 +397,7 @@ pub fn spelling_for(
         scope,
         syntax,
         spellings: Some(spellings),
+        minted: None,
         anchors: &[],
     }
     .spelling()
@@ -502,6 +505,7 @@ pub fn erasure_reported(
         scope: lexicons,
         syntax,
         spellings: None,
+        minted: None,
         anchors,
     };
 
@@ -916,6 +920,7 @@ where
         scope: &lexicons,
         syntax,
         spellings: Some(&*spellings),
+        minted: None,
         anchors: &anchors,
     };
     // The error is kept as raised beside what it renders to: rendering is where its variant is lost.

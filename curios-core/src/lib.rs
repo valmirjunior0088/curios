@@ -130,11 +130,11 @@ pub use machine::{
 mod names;
 pub use names::{
     ArchivedArgumentSite, ArchivedAtom, ArchivedCalleeId, ArchivedFree, ArchivedGlobal,
-    ArchivedImport, ArchivedImports, ArchivedImportsEntry, ArchivedInScope, ArchivedMention,
-    ArchivedMint, ArchivedMinted, ArchivedMints, ArchivedStoredMints, ArgumentSite, Atom,
-    ByDeclarationProxy, CalleeId, Faithful, Free, Global, Import, Imported, Imports, ImportsEntry,
-    InScope, Mention, Mint, Minted, Mints, ModuleExport, Paths, Spellings, StoredMints, UnitPaths,
-    WritablePath,
+    ArchivedHiding, ArchivedImport, ArchivedImports, ArchivedImportsEntry, ArchivedInScope,
+    ArchivedMention, ArchivedMint, ArchivedMinted, ArchivedMints, ArchivedStoredMints,
+    ArgumentSite, Atom, ByDeclarationProxy, CalleeId, Faithful, Free, Global, Hiding, Import,
+    Imported, Imports, ImportsEntry, InScope, Mention, Mint, Minted, Mints, ModuleExport, Paths,
+    Spellings, StoredMints, UnitPaths, WritablePath,
 };
 
 mod lint;

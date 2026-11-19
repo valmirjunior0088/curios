@@ -188,6 +188,8 @@ pub struct Mints {
     pub unread: Vec<Unread>,
     /// Where each written binder of the declaration stands, read or not: what a local answers it is bound at. Held here, as `unread` is, because a written binder's place means something within its declaration alone.
     pub written: Vec<(WrittenBinder, Extent)>,
+    /// Every use of a written binder that hides what the module's scope binds under its name ([`Hiding`]): what a mismatch at the use names beside its report. Held here, as `written` is.
+    pub hides: Vec<Hiding>,
     /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
     pub lints: Vec<Lint>,
 }
@@ -218,6 +220,15 @@ impl Mints {
     }
 }
 
+/// A use of a written binder that hides what the module's scope binds under its name: where the use stands, where the binder does, and the declaration the module's scope binds there, which the use does not reach.
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub struct Hiding {
+    pub at: Extent,
+    pub bound: Extent,
+    pub hides: Global,
+}
+
 /// What one unit's lowering minted, declaration by declaration — the whole of what the lowering hands elaboration beside the module.
 ///
 /// **Within the declaration, never across declarations.** Every counter starts at zero for each source declaration, and the items one declaration lowers to — a type former with its constructors, a concept with its method wrappers — share its identities, a written type copied into several of them being one level. So what a declaration's lowered form holds depends on nothing written before it, and neither does what its elaboration mints above it: an edit to one declaration renumbers no other. No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing another declaration or a predecessor minted can meet a declaration's walk.
@@ -246,6 +257,7 @@ impl Minted {
             qualities: Vec::new(),
             unread: Vec::new(),
             written: Vec::new(),
+            hides: Vec::new(),
             lints: Vec::new(),
         };
 

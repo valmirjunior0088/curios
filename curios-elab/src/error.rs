@@ -12,9 +12,9 @@ use {
     },
     curios_core::{
         Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
-        Extent, Free, Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError,
-        Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey,
-        WitnessRole,
+        Extent, Free, Global, Hiding, Item, Level, Lexicon, Mention, Minted, Places, Polarity,
+        ReduceError, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, Unresolved,
+        WitnessKey, WitnessRole,
     },
     curios_surface::{
         DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
@@ -2318,18 +2318,34 @@ impl Error {
     ///
     /// Every elaboration error reaching a reader comes through here, so every axis of its spelling is set in one place: a global is named source-style, shortened against the unit's symbols together with those of its scope (axis (b)), the qualified-name universe an error's globals are spelled relative to, and axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn reports(&self, reading: &Reading<'_>) -> Vec<Report> {
-        self.located(&Rc::new(reading.spelling()), reading.anchors)
+        let hiding = reading
+            .minted
+            .map(|minted| {
+                minted
+                    .each()
+                    .flat_map(|(_, mints)| &mints.hides)
+                    .chain(&minted.entry.hides)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        self.located(&Rc::new(reading.spelling()), reading.anchors, &hiding)
     }
 
     /// One report per rendered error, at the innermost extent attached to it, and at the name of the declaration it arose in where it has none — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost extent is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser extent outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner extent silently.
-    fn located(&self, spelling: &Rc<Spelling>, anchors: &[&Anchors]) -> Vec<Report> {
+    fn located(
+        &self,
+        spelling: &Rc<Spelling>,
+        anchors: &[&Anchors],
+        hiding: &[&Hiding],
+    ) -> Vec<Report> {
         // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
         if let Self::Batch(errors) = self {
             return errors
                 .iter()
-                .flat_map(|error| error.located(spelling, anchors))
+                .flat_map(|error| error.located(spelling, anchors, hiding))
                 .collect();
         }
 
@@ -2369,7 +2385,8 @@ impl Error {
         );
         // Said before the report is made: what a term printed as is known once every term has been.
         let said = Displayed(self, Rc::clone(spelling), anchors).said();
-        let notes = self.notes(spelling, anchors);
+        let mut notes = self.notes(spelling, anchors);
+        notes.extend(self.hiding_note(hiding, spelling, anchors));
         vec![Report {
             notes,
             ..Report::of(
@@ -2377,6 +2394,30 @@ impl Error {
                 held(said, spelling),
             )
         }]
+    }
+
+    /// Where a mismatch stands at a use of a written binder that hides what the module's scope binds under its name, the binder, as a further place: what the name is there, and what it hides, which is why the type at the use is not the module's.
+    fn hiding_note(
+        &self,
+        hiding: &[&Hiding],
+        spelling: &Rc<Spelling>,
+        anchors: &[&Anchors],
+    ) -> Option<Note> {
+        if !matches!(self.unwrapped(), Self::TypeMismatch { .. }) {
+            return None;
+        }
+        let at = self.innermost_extent()?;
+        let hidden = hiding.iter().find(|hidden| hidden.at == at)?;
+        let span = hidden.bound.resolved(anchors)?;
+        let name = span.source.text()[span.start..span.end].to_string();
+
+        Some(Note {
+            span,
+            message: format!(
+                "`{name}` is bound here, hiding `{}`",
+                spelling.symbol(&hidden.hides)
+            ),
+        })
     }
 
     /// The further places this error is about, each with the line that says what stands there: a cycle's other members, the witness a duplicate collides with, the term or the goal a refusal of one term names beside it. A place that does not resolve is left out, the message standing without it.
@@ -2654,6 +2695,8 @@ pub struct Reading<'a> {
     pub syntax: &'a SyntaxRegistry,
     /// How each of the unit's names can be written and where: the imports each definition's `use` lines brought into scope, and the absolute paths each global is reachable by with who may write them. With it a global displays as resolution would find it from where the report's reader stands, rather than as its shortest unambiguous suffix, which is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported). By pointer, since every member of a batch is rendered against the one table. `None` where no lowering's tables stand behind the unit: a root of the prelude as its build refuses it, a module built by hand.
     pub spellings: Option<&'a Rc<Spellings>>,
+    /// What the unit's lowering minted, where a lowering stands behind the unit: each use of a written binder that hides a module's name, which a mismatch at one names beside its report (`Mints::hides`).
+    pub minted: Option<&'a Minted>,
     /// Where the declarations an error's positions lie in were written, the unit's own first and then its scope's: an error holds extents of declarations ([`curios_core::Extent`]), and this is where one becomes a line of a file.
     pub anchors: &'a [&'a Anchors],
 }

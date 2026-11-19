@@ -5,7 +5,7 @@ use {
     super::{Context, Found, SortSite},
     crate::Error,
     curios_abi::ForeignFunction,
-    curios_common::{Plicity, Span, recurse},
+    curios_common::{Plicity, Qualifier, Span, recurse},
     curios_num::Binary,
     curios_surface::{
         Apply, BytesSegment, Field, FuncParam, FuncTypeParam, Intrinsic, Label, Let, LetBinding,
@@ -162,6 +162,8 @@ pub struct Lowerer<'a, 'b> {
     scope: RefCell<LexicalScope>,
     /// Every written binder, with where it was written, `_` among them, which no reference reaches and a proof the elaborator writes may still read — the candidates for an unread site, read by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
     candidates: RefCell<Vec<Candidate>>,
+    /// What the module's scope binds under each name a written binder of the declaration hides, asked once a name ([`Self::note_hiding`]): none where it binds nothing there.
+    hidden: RefCell<HashMap<String, Option<Qualifier>>>,
     /// Every `let` whose value runs no action, by the places of the binders its pattern writes: an unread `let` where nothing reads any of them ([`Self::flush`]).
     lets: RefCell<Vec<LetCandidate>>,
     /// The binder identities some reference resolved to.
@@ -200,6 +202,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             declaration,
             scope: RefCell::default(),
             candidates: RefCell::new(Vec::new()),
+            hidden: RefCell::new(HashMap::new()),
             lets: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
@@ -579,6 +582,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // A local binder shadows any like-named module binding, and the innermost one wins. Resolving here — rather than emitting the spelling for a later stage to re-resolve — is what makes shadowing exact: two binders written `go` are two identities from the start.
         if let Some(id) = self.scope.borrow().innermost(name.head()).copied() {
             self.used.borrow_mut().insert(id);
+            self.note_hiding(name, id);
             return Ok(Err(id));
         }
         match self.context.resolve_bare(name) {
@@ -591,6 +595,36 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 name.head(),
                 curios_core::Sought::Binding,
             ))),
+        }
+    }
+
+    /// Where `id`, the written binder `name` resolved to, hides what the module's scope binds under the name, record the use: what a mismatch at it names beside its report. The module's scope is asked once a name a declaration, its read recorded as resolution's is.
+    fn note_hiding(&self, name: &Name, id: curios_core::Free) {
+        let hidden = *self
+            .hidden
+            .borrow_mut()
+            .entry(name.head().to_string())
+            .or_insert_with(|| match self.context.hidden(name) {
+                Some(Found::Declaration(target)) => Some(target),
+                _ => None,
+            });
+        let Some(hidden) = hidden else {
+            return;
+        };
+        let candidates = self.candidates.borrow();
+        let Some(candidate) = candidates
+            .iter()
+            .find(|candidate| candidate.ids.contains(&id))
+        else {
+            return;
+        };
+        let at = name.span().and_then(|span| self.context.extent(span));
+        if let (Some(at), Some(bound)) = (at, self.context.extent(&candidate.span)) {
+            self.context.hiding(curios_core::Hiding {
+                at,
+                bound,
+                hides: curios_core::Global::Authored(hidden),
+            });
         }
     }
 

@@ -621,6 +621,8 @@ pub struct Declaring {
     unread: RefCell<Vec<curios_core::Unread>>,
     // Where every written binder of the declaration being lowered stands, read or not: what a local answers it is bound at. The declaration's, as its unread sites are.
     written: RefCell<Vec<(curios_core::WrittenBinder, curios_core::Extent)>>,
+    // Every use of a written binder of the declaration being lowered that hides what the module's scope binds under its name. The declaration's, as its written binders are.
+    hides: RefCell<Vec<curios_core::Hiding>>,
     // The lints the lowering of the declaration being lowered decided, its last fact being the text as written. The declaration's, as its unread sites are.
     lints: RefCell<Vec<curios_core::Lint>>,
 }
@@ -638,6 +640,7 @@ impl Declaring {
             unbound,
             unread,
             written,
+            hides,
             lints,
         } = self;
 
@@ -650,6 +653,7 @@ impl Declaring {
         unbound.borrow_mut().clear();
         unread.borrow_mut().clear();
         written.borrow_mut().clear();
+        hides.borrow_mut().clear();
         lints.borrow_mut().clear();
     }
 }
@@ -668,6 +672,7 @@ impl Shared {
                 unbound: RefCell::default(),
                 unread: RefCell::default(),
                 written: RefCell::default(),
+                hides: RefCell::default(),
                 lints: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
@@ -803,6 +808,11 @@ impl<'a> Context<'a> {
         binders: impl IntoIterator<Item = (curios_core::WrittenBinder, curios_core::Extent)>,
     ) {
         self.shared.declaring.written.borrow_mut().extend(binders);
+    }
+
+    /// Record `hiding`, a use of a written binder of the declaration being lowered that hides what the module's scope binds under its name, beside what it minted.
+    pub fn hiding(&self, hiding: curios_core::Hiding) {
+        self.shared.declaring.hides.borrow_mut().push(hiding);
     }
 
     /// Record `lint`, which the lowering decided of the declaration being lowered ([`curios_core::Mints::lints`]).
@@ -1000,6 +1010,7 @@ impl<'a> Context<'a> {
             qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
             unread: self.shared.declaring.unread.borrow().clone(),
             written: self.shared.declaring.written.borrow().clone(),
+            hides: self.shared.declaring.hides.borrow().clone(),
             lints: self.shared.declaring.lints.borrow().clone(),
         }
     }
@@ -1628,6 +1639,15 @@ impl<'a> Context<'a> {
             }
         })();
         result.map_err(|e| attach(e, name))
+    }
+
+    /// What the module's scope binds under the bare name `name` where a binder of the declaration hides it ([`Context::resolve_bare`]'s read, recorded as that one is): what the binder hides, which no use of the name reaches, so no `use` is used by it. A name a module gains under it then lowers the declaration again.
+    pub fn hidden(&self, name: &Name) -> Option<Found> {
+        let target = self.bound(name.head(), true)?;
+        let found = self.found(target);
+        self.asked(name, found);
+
+        Some(found)
     }
 
     /// What the bare name `name` is bound to in this module's scope, where it is — a declaration of the module or a label a `use` brought in, whose `use` is then used — as the lowering reads it ([`Found`]). A binder of the declaration itself is the lowerer's to find first.

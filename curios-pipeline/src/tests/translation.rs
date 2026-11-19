@@ -38,6 +38,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
             scope: &lexicons,
             syntax: &SYNTAX,
             spellings: Some(&spellings),
+            minted: None,
             anchors: &[],
         };
         let owner = Global::Authored(Qualifier::from(["lib", name]));
