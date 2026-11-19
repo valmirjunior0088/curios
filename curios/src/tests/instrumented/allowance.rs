@@ -6,6 +6,7 @@ use {
     curios_module::Overlay,
     curios_prelude::test_support::*,
     curios_profile::{Destination, fold_at, trace},
+    curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},
     std::fs::{create_dir_all, read_to_string},
 };
@@ -45,7 +46,10 @@ fn classification_allowance_measurements() {
             .into_iter()
             .map(|(_, text)| Subject::Entry {
                 units: Vec::new(),
-                origin: Origin::Text { text },
+                origin: Origin::Text {
+                    text,
+                    written: WrittenIn::Program,
+                },
                 declares: None,
                 package: None,
             }),
