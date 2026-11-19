@@ -2618,6 +2618,9 @@ fn into_core_unit_within(
                 shared.anchoring.name(*name, *label);
             }
         }
+        for (structure, fields) in &lowered.fields {
+            shared.anchoring.name_fields(*structure, fields.clone());
+        }
     }
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-unit-holds-its-own-definitions-and-the-prelude-is-an-environment.md`.

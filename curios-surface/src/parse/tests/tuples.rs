@@ -45,7 +45,7 @@ fn proj_label_suffix() {
         "r.status".parse::<Term>().unwrap(),
         Term::from(Subterm::Proj(Proj {
             head: Subterm::Name(Name::from(["r".to_string()])).into(),
-            field: Field::Label("status".to_string()),
+            field: Field::Label("status".into()),
         }))
     );
 }
@@ -57,7 +57,7 @@ fn proj_chained_mixed_fields() {
         Term::from(Subterm::Proj(Proj {
             head: Subterm::Proj(Proj {
                 head: Subterm::Name(Name::from(["r".to_string()])).into(),
-                field: Field::Label("inner".to_string()),
+                field: Field::Label("inner".into()),
             })
             .into(),
             field: Field::Index(0),
@@ -71,7 +71,7 @@ fn named_tuple_single_needs_no_trailing_comma() {
         "(a = x)".parse::<Term>().unwrap(),
         Term::from(Subterm::Tuple(Tuple {
             fields: vec![TupleField {
-                label: Some("a".to_string()),
+                label: Some("a".into()),
                 func_params: None,
                 value: Subterm::Name(Name::from(["x".to_string()])).into(),
             }],
@@ -91,7 +91,7 @@ fn named_tuple_mixed_fields() {
         Term::from(Subterm::Tuple(Tuple {
             fields: vec![
                 TupleField {
-                    label: Some("a".to_string()),
+                    label: Some("a".into()),
                     func_params: None,
                     value: Subterm::Name(Name::from(["x".to_string()])).into(),
                 },
@@ -185,12 +185,12 @@ fn struct_literal_disambiguates_from_tuple_type() {
             params: None,
             entries: vec![
                 StructLitEntry::Field(TupleField {
-                    label: Some("fst".to_string()),
+                    label: Some("fst".into()),
                     func_params: None,
                     value: name("a"),
                 }),
                 StructLitEntry::Field(TupleField {
-                    label: Some("snd".to_string()),
+                    label: Some("snd".into()),
                     func_params: None,
                     value: name("b"),
                 }),

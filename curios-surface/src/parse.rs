@@ -378,6 +378,20 @@ fn parse_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     parse_identifier_raw.and_drop(parse_whitespace).parse(state)
 }
 
+// A word naming a field or a constructor where it is read — a field's label, a projection's, a constructor's tag in a pattern — as [`parse_identifier`] reads one, carrying the span of the word alone, so what it names can be answered where it is written.
+fn parse_written_word<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    parse_written_word_raw
+        .and_drop(parse_whitespace)
+        .parse(state)
+}
+
+// [`parse_written_word`], consuming no whitespace: a projection's label, glued to its `.`.
+fn parse_written_word_raw<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    spanned(parse_identifier_raw)
+        .map(|(span, word)| Label::spanned(word, span))
+        .parse(state)
+}
+
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
 //
 // A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. Accepted, `let match : Nat = 1;` would be unreachable — every later `match` is the keyword, so the binding would report only as unused, and in expression position the tail would read as a match with no scrutinee.

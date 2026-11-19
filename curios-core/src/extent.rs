@@ -201,9 +201,9 @@ struct Sited {
     end: usize,
 }
 
-/// Where each text of each anchor of one unit lies, and where each of the unit's definitions is named: what an [`Extent`] is resolved against, and where a report about a definition is placed when it holds no position of its own.
+/// Where each text of each anchor of one unit lies, and where each of the unit's definitions is named and each of its structures writes its fields: what an [`Extent`] is resolved against, and where a report about a definition is placed when it holds no position of its own.
 ///
-/// **Persistent**, so the anchors of a unit lowered over a baseline are the baseline's with the texts and names of what it lowered again placed again.
+/// **Persistent**, so the anchors of a unit lowered over a baseline are the baseline's with the texts, names and fields of what it lowered again placed again.
 ///
 /// **Each source's texts an object of its own** ([`SourceTexts`]), holding the source once, stored apart and handed back where the table is restored ([`Records`]): what is archived with the unit is where each definition is named. A source is the grain its texts are stored at, as a file is the grain a lowering reads at: the texts of every source are grouped and digested where the unit is filed, which reads each source once, as a compile reads each file.
 #[derive(Debug, Clone, Default)]
@@ -215,6 +215,9 @@ pub struct Anchors {
     /// Where each definition's name was written, for the ones a name was written for: a constructor's tag and a method's label as much as a `let`'s, the head of a `satisfy` for the witness it declares.
     #[archived_with(InKeyOrder)]
     labels: Sorted<Global, Extent>,
+    /// Where each structure wrote each of its labelled fields, by the structure and in the order they are written: a field is no definition, and is named by its structure and its label.
+    #[archived_with(InKeyOrder)]
+    fields: Sorted<Global, Vec<(String, Extent)>>,
 }
 
 /// The texts of one source as a store keeps them, an object of its own: the source, once, and each text's key with where it lies in it.
@@ -351,9 +354,15 @@ impl Anchors {
         self.labels.insert(name, label);
     }
 
-    /// Forget where `name` was written.
+    /// Record that the structure `structure` wrote its labelled fields at `fields`, each by its label, in place of what was recorded of it.
+    pub fn name_fields(&mut self, structure: Global, fields: Vec<(String, Extent)>) {
+        self.fields.insert(structure, fields);
+    }
+
+    /// Forget where `name` was written, and where it wrote its fields.
     pub fn unname(&mut self, name: &Global) {
         self.labels.remove(name);
+        self.fields.remove(name);
     }
 
     /// Forget the text of `anchor` that carries `stamp`.
@@ -366,6 +375,16 @@ impl Anchors {
         anchors
             .iter()
             .find_map(|anchors| anchors.labels.get(name))?
+            .resolved(anchors)
+    }
+
+    /// The span the structure `structure` wrote its field `label` at, by the first of `anchors` that holds the structure's fields. `None` for a field written with no label, and for one whose text has since changed past resolving.
+    pub fn field(anchors: &[&Anchors], structure: &Global, label: &str) -> Option<Span> {
+        anchors
+            .iter()
+            .find_map(|anchors| anchors.fields.get(structure))?
+            .iter()
+            .find_map(|(written, at)| (written == label).then_some(at))?
             .resolved(anchors)
     }
 

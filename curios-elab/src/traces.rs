@@ -57,6 +57,23 @@ pub struct Concluded {
     pub settled: Vec<SettledPlace>,
     /// The type each written binder of its text was opened at: what a local answers where it is bound.
     pub binders: Vec<(WrittenBinder, Term)>,
+    /// What each word of its text elaboration resolved names, where it is written, one a place ([`Resolved`]): a pattern's constructor, a field's label. What a question about a place answers such a word with. Placed as `lints` are.
+    pub resolved: Vec<(Extent, Resolved)>,
+}
+
+/// What a word a declaration writes names, where elaboration resolved it rather than the lowering ([`Concluded::resolved`]): a declaration — the constructor a pattern's tag names, the method a concept's field label names — or a structure's field, by its label, which no declaration is.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Resolved {
+    Declaration(Global),
+    Field { structure: Global, label: String },
+}
+
+/// What a word written at a place names ([`Resolved`]), as a [`TraceTable`] holds it: the declaration it names, or whose field it names, by the place of its name, and the field's label where it names one.
+#[curios_archive::archived]
+struct TabledResolved {
+    at: Extent,
+    name: u32,
+    field: Option<String>,
 }
 
 /// The type a written place of a declaration's text settled at ([`Concluded::settled`]), zonked as the declaration was published, and where the place is a use of one of its written binders, which.
@@ -702,6 +719,7 @@ struct TabledTrace {
     lints: Vec<Lint>,
     settled: Vec<SettledPlace>,
     binders: Vec<(WrittenBinder, Term)>,
+    resolved: Vec<TabledResolved>,
     made: Option<TabledMade>,
 }
 
@@ -743,6 +761,21 @@ impl TabledTrace {
             lints: self.lints,
             settled: self.settled,
             binders: self.binders,
+            resolved: self
+                .resolved
+                .into_iter()
+                .map(|resolved| {
+                    let named = name(resolved.name)?;
+                    let names = match resolved.field {
+                        Some(label) => Resolved::Field {
+                            structure: named,
+                            label,
+                        },
+                        None => Resolved::Declaration(named),
+                    };
+                    Ok((resolved.at, names))
+                })
+                .collect::<Result<_, String>>()?,
         };
 
         Ok((name(self.name)?, trace, concluded, made))
@@ -896,6 +929,22 @@ impl TraceTable {
                         .binders
                         .iter()
                         .map(|(binder, type_)| (*binder, sharing.share(type_)))
+                        .collect(),
+                    resolved: concluded
+                        .resolved
+                        .iter()
+                        .map(|(at, resolved)| match resolved {
+                            Resolved::Declaration(declaration) => TabledResolved {
+                                at: *at,
+                                name: names.place(*declaration),
+                                field: None,
+                            },
+                            Resolved::Field { structure, label } => TabledResolved {
+                                at: *at,
+                                name: names.place(*structure),
+                                field: Some(label.clone()),
+                            },
+                        })
                         .collect(),
                     made,
                 }

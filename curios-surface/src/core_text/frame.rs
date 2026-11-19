@@ -248,7 +248,7 @@ pub fn literal_of<D: Rendered>(head: &str, fields: Vec<(&str, crate::Term<D>)>) 
             .into_iter()
             .map(|(label, value)| {
                 StructLitEntry::Field(TupleField {
-                    label: Some(label.to_string()),
+                    label: Some(label.to_string().into()),
                     func_params: None,
                     value,
                 })

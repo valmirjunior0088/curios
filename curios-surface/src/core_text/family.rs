@@ -14,7 +14,8 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Atom, Global, InductType, Struct, StructEntry, StructType, Term, Universes, Variant,
+        Atom, FieldLabel, Global, InductType, Struct, StructEntry, StructType, Term, Universes,
+        Variant,
     },
 };
 
@@ -224,7 +225,7 @@ pub fn literal_written<D: Rendered>(
 
 /// How a literal elaboration has not rebuilt wrote one of its entries, as Core names it.
 fn entry_written<D: Rendered>(entry: &StructEntry) -> crate::Term<D> {
-    let label = |label: &Option<String>| match label {
+    let label = |label: &Option<FieldLabel>| match label {
         Some(label) => called(word("Some"), vec![word(label.as_str())]),
         None => word("None"),
     };
@@ -428,8 +429,8 @@ fn entry_read(value: &crate::CoreValue) -> Result<StructEntry, ReadError> {
         _ => Err(malformed("an entry's label", value)),
     };
     match value_variant(value)? {
-        ("Field", held) => Ok(StructEntry::Field(label(&held)?)),
-        ("Implicit", held) => Ok(StructEntry::Implicit(label(&held)?)),
+        ("Field", held) => Ok(StructEntry::Field(label(&held)?.map(FieldLabel::from))),
+        ("Implicit", held) => Ok(StructEntry::Implicit(label(&held)?.map(FieldLabel::from))),
         ("Use", held) if held.is_empty() => Ok(StructEntry::Use),
         ("Spread", held) if held.is_empty() => Ok(StructEntry::Spread),
         _ => Err(malformed("a literal's entry, as Core names it", value)),

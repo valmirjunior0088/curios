@@ -883,6 +883,11 @@ pub fn wonder_at(
                     name.clone(),
                     Kind::Local,
                 ),
+                Stands::Field { label, bound, .. } => (
+                    bound.clone().unwrap_or_else(|| answered.range.clone()),
+                    label.clone(),
+                    Kind::Field,
+                ),
                 Stands::Term { written, .. } => {
                     (answered.range.clone(), opening(written), Kind::Term)
                 }

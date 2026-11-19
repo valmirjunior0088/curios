@@ -7,10 +7,13 @@
 use {
     super::Spend,
     crate::{
-        Context, LINT_ALLOWANCE, Mode, SettledPlace, SiteClass, Traces, binder_lints, elaborate,
-        reduce_with, zonk_solved_term_metas,
+        Context, LINT_ALLOWANCE, Mode, Resolved, SettledPlace, SiteClass, Traces, binder_lints,
+        elaborate, reduce_with, zonk_solved_term_metas,
     },
-    curios_core::{Definitions, Global, HeadKey, Lint, Subterm, Term, WitnessKey, WrittenBinder},
+    curios_core::{
+        Definitions, Extent, FieldLabel, Global, HeadKey, Lint, Subterm, Term, WitnessKey,
+        WrittenAt, WrittenBinder,
+    },
     std::{
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
@@ -177,6 +180,49 @@ impl Context<'_> {
     /// Take what the items published since the last record was filed settled at their written places, for the record filed now.
     pub(crate) fn take_settled(&mut self) -> Vec<SettledPlace> {
         std::mem::take(&mut self.underway.settled)
+    }
+
+    /// Record that the word written at `at` names `resolved`, where the lowering placed it: what the declaration's record answers the place with.
+    pub(crate) fn resolved(&mut self, at: WrittenAt, resolved: Resolved) {
+        if let WrittenAt(Some(at)) = at {
+            self.underway.resolved.push((at, resolved));
+        }
+    }
+
+    /// Record what the written label `label` of a field of `structure` names: the method it is where `structure` is a concept, and the structure's field otherwise.
+    pub(crate) fn resolved_label(&mut self, label: &FieldLabel, structure: Global) {
+        let resolved = match (self.concept(&structure), structure.qualifier()) {
+            (Some(_), Some(concept)) => {
+                Resolved::Declaration(Global::Authored(concept.with(label)))
+            }
+            _ => Resolved::Field {
+                structure,
+                label: label.to_string(),
+            },
+        };
+        self.resolved(label.at, resolved);
+    }
+
+    /// How many words elaboration has resolved since the last record was filed: what an item that is refused or void takes back to ([`Context::truncate_resolved`]).
+    pub(crate) fn resolved_mark(&self) -> usize {
+        self.underway.resolved.len()
+    }
+
+    /// Take back each word resolved since `mark`.
+    pub(crate) fn truncate_resolved(&mut self, mark: usize) {
+        self.underway.resolved.truncate(mark);
+    }
+
+    /// Take what the words of the declaration filed now resolved to, the last recorded at a place standing for it: an elaboration done again at a place is the one that stands.
+    pub(crate) fn take_resolved(&mut self) -> Vec<(Extent, Resolved)> {
+        let mut resolved = Vec::<(Extent, Resolved)>::new();
+        for (at, names) in std::mem::take(&mut self.underway.resolved) {
+            match resolved.iter_mut().find(|(placed, _)| *placed == at) {
+                Some(placed) => placed.1 = names,
+                None => resolved.push((at, names)),
+            }
+        }
+        resolved
     }
 
     pub(crate) fn lints_in(&mut self, names: &[Global]) -> Vec<Lint> {

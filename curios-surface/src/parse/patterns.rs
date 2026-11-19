@@ -5,7 +5,7 @@ use {
         member_ends, members, parse_binder_label, parse_block_str, parse_identifier, parse_keyword,
         parse_label, parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
         parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw,
-        parse_written_char, refused, require_space, trimmed, unbindable,
+        parse_written_char, parse_written_word, refused, require_space, trimmed, unbindable,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
@@ -111,11 +111,8 @@ pub fn parse_decorated_binder<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<
 }
 
 // The committing prefix of a labeled pattern field: `label =`. It fails recoverably, so a positional field that merely starts with an identifier backtracks cleanly — mirrors `parse_tuple_field_prefix`, with no definition-sugar form (a pattern field is never itself a function).
-pub fn parse_pattern_field_prefix<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
-    parse_identifier
-        .and_drop(parse_literal("="))
-        .map(str::to_string)
-        .parse(state)
+pub fn parse_pattern_field_prefix<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    parse_written_word.and_drop(parse_literal("=")).parse(state)
 }
 
 // A tuple-pattern / struct-pattern field: `label = pattern` or a bare positional pattern — the literal mirror of `parse_tuple_field`, with `Term` replaced by `Pattern`. Field-punning (`Name { x, y }`) falls out for free: it is just the positional case where the sub-pattern happens to be a binder matching the field.
@@ -350,13 +347,13 @@ pub fn parse_ctor_arg<'a, D: Grammar>(
 pub fn parse_ctor_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_identifier
+    parse_written_word
         .and_drop(parse_literal("("))
         .and(sep_by0_trailing(parse_ctor_arg::<D>, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .map(
-            |(tag, args): (&str, Vec<(Plicity, MatchPattern<D>)>)| MatchPattern::Variant {
-                tag: tag.to_string(),
+            |(tag, args): (Label, Vec<(Plicity, MatchPattern<D>)>)| MatchPattern::Variant {
+                tag,
                 args,
             },
         )

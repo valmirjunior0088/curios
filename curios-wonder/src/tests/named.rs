@@ -9,7 +9,7 @@ use {
     curios_module::{Overlay, RootSource},
     curios_surface::WrittenIn,
     std::collections::BTreeSet,
-    std::path::Path,
+    std::path::{Path, PathBuf},
 };
 
 /// What a check of `program` leaves of it, read as the editor's check reads a document, of standard input, through `overlay`.
@@ -67,6 +67,9 @@ fn said(answer: &Answer) -> (&str, Declared, bool, Option<(usize, usize)>) {
             described,
         } => row(described, *declares),
         Stands::Local { name, .. } => panic!("a local stands there, `{name}`, and no declaration"),
+        Stands::Field { label, .. } => {
+            panic!("a field stands there, `{label}`, and no declaration")
+        }
         Stands::Term { written, .. } => panic!("a term stands there, `{written}`, and no name"),
     }
 }
@@ -676,4 +679,151 @@ fn a_facade_answers_its_declaration_and_its_module_and_a_private_module_nothing(
             .collect::<Vec<_>>()
     );
     assert!(exported("/std/Map/internal").is_none());
+}
+
+/// A program writing a word in each place elaboration resolves one: a structure's field labels in a literal, a projection and a pattern, a concept's method in a witness, and a constructor in a match.
+const LABELLED: &str = "\
+use /std/{Nat, Show, print};
+struct Pair(Left: Type): Type {
+    first: Left,
+    second: Nat,
+}
+induct Shade: Type
+| light()
+| dark(Nat)
+end
+satisfy Show(Shade) {
+    show(_) = \"shade\",
+}
+let made: Pair(Nat) = Pair { first = 1, second = 2 };
+let read(held: Pair(Nat)) -> Nat = held.second;
+let opened(held: Pair(Nat)) -> Nat =
+    let Pair { first = inner, second = _ } = held;
+    inner;
+let toned(shade: Shade) -> Nat =
+    match shade
+    | light() => 0
+    | dark(depth) => depth
+    end;
+print(\"\")";
+
+/// What a field's label answers ([`Stands::Field`]), where the structure writes it held as its line and column.
+#[derive(Debug, PartialEq)]
+struct Fielded {
+    label: String,
+    of: Option<String>,
+    bound: Option<(usize, usize)>,
+    type_: Option<String>,
+}
+
+/// What the field's label written at `written`, `within` bytes into it, answers.
+fn field(written: &str, within: usize) -> Fielded {
+    match at(LABELLED, written, 0, within).map(|answer| answer.stands) {
+        Some(Stands::Field {
+            label,
+            of,
+            bound,
+            type_,
+        }) => Fielded {
+            label,
+            of,
+            bound: bound.map(|bound| bound.line_column()),
+            type_,
+        },
+        stands => panic!("no field stands at `{written}`: {stands:?}"),
+    }
+}
+
+/// A structure's field answers itself wherever its label is written — in a literal, a projection and a pattern — with where the structure writes it and its type as the structure declares it.
+#[test]
+fn a_fields_label_answers_the_field() {
+    let declared = |label: &str, line, type_: &str| Fielded {
+        label: label.to_string(),
+        of: Some("/Pair".to_string()),
+        bound: Some((line, 5)),
+        type_: Some(type_.to_string()),
+    };
+    let (first, second) = (declared("first", 3, "Left"), declared("second", 4, "Nat"));
+
+    assert_eq!(field("first = 1", 0), first);
+    assert_eq!(field("second = 2", 0), second);
+    assert_eq!(field(".second", 1), second);
+    assert_eq!(field("first = inner", 0), first);
+}
+
+/// A word elaboration resolves to a declaration answers the declaration: a constructor a pattern names, and a method a witness defines.
+#[test]
+fn a_constructor_and_a_method_elaboration_resolves_answer_their_declarations() {
+    let dark = at(LABELLED, "dark(depth)", 0, 0).expect("a name stands there");
+    let show = at(LABELLED, "show(_)", 0, 0).expect("a name stands there");
+
+    assert_eq!(
+        said(&dark),
+        ("/Shade/dark", Declared::Constructor, false, Some((8, 3)))
+    );
+    assert_eq!(said(&show).1, Declared::Method);
+    assert!(said(&show).0.ends_with("/show"), "{:?}", said(&show));
+}
+
+/// A literal's head and a structure pattern's, which the lowering resolves into the node, answer the structure they name.
+#[test]
+fn a_heads_structure_is_answered() {
+    let literal = at(LABELLED, "Pair {", 0, 0).expect("a name stands there");
+    let pattern = at(LABELLED, "Pair {", 1, 0).expect("a name stands there");
+
+    assert_eq!(
+        said(&literal),
+        ("/Pair", Declared::Struct, false, Some((2, 8)))
+    );
+    assert_eq!(said(&pattern), said(&literal));
+}
+
+/// A field of a structure a unit in scope declares answers where that unit writes it, read off the unit's own table of where its definitions are named.
+#[test]
+fn a_field_of_a_structure_in_scope_answers_where_its_unit_writes_it() {
+    const SHAPES: &str = "use /std/{Nat};\npub struct Pair: pub Type {\n    first: Nat,\n}\n";
+    const READS: &str =
+        "use /std/{Nat};\nuse /shapes/{Pair};\npub let read(held: Pair) -> Nat = held.first;\n";
+    let library = |mount, file, text| {
+        RootSource::supplied_module(mount, &Source::held(file, text))
+            .expect("the text is written as a module")
+    };
+    let file = Path::new("reads.crs");
+    let overlay = Overlay::of([
+        (PathBuf::from("shapes.crs"), SHAPES.to_string()),
+        (file.to_path_buf(), READS.to_string()),
+    ]);
+
+    let placed = crate::checked(
+        DEFAULT_BUDGET,
+        Subject::Unit {
+            units: vec![
+                library("shapes", "shapes.crs", SHAPES),
+                library("reads", "reads.crs", READS),
+            ],
+        },
+        &overlay,
+        None,
+        file,
+        &mut |_| {},
+    )
+    .placed
+    .expect("the library lowers");
+    let offset = READS.rfind("first").expect("the library writes it");
+
+    match placed.at(offset).map(|answer| answer.stands) {
+        Some(Stands::Field {
+            label,
+            of,
+            bound: Some(bound),
+            ..
+        }) => {
+            assert_eq!(
+                (label.as_str(), of.as_deref()),
+                ("first", Some("/shapes/Pair"))
+            );
+            assert_eq!((bound.source.text(), bound.line_column()), (SHAPES, (3, 5)));
+        }
+        stands => panic!("no placed field stands at the projection: {stands:?}"),
+    }
 }

@@ -121,7 +121,7 @@ fn named(program: &str, buffer: &str, written: &str, nth: usize) -> Option<Strin
 
     match answered_at(buffer, &checked(program), offset)?.0.stands {
         Stands::Declaration { described, .. } => Some(described.asked),
-        Stands::Local { .. } | Stands::Term { .. } => None,
+        Stands::Local { .. } | Stands::Field { .. } | Stands::Term { .. } => None,
     }
 }
 
@@ -192,6 +192,64 @@ fn a_place_answers_alike_through_both_transports() {
                 column + 1
             );
         }
+    }
+}
+
+/// A word elaboration resolves answers one record through both transports: a field's label, a projection's, a pattern's constructor and a concept's method.
+#[test]
+fn a_resolved_word_answers_alike_through_both_transports() {
+    const PROGRAM: &str = "\
+use /std/{Nat, Show, print};
+struct Pair: Type {
+    first: Nat,
+}
+induct Shade: Type
+| dark(Nat)
+end
+satisfy Show(Shade) {
+    show(_) = \"shade\",
+}
+let made: Pair = Pair { first = 1 };
+let read(held: Pair) -> Nat = held.first;
+let toned(shade: Shade) -> Nat =
+    match shade
+    | dark(depth) => depth
+    end;
+print(\"\")
+";
+    let held = checked(PROGRAM);
+
+    for written in ["first = 1", "first;", "dark(depth)", "show(_)", "Pair {"] {
+        let offset = PROGRAM.find(written).expect("the program writes it");
+        let before = &PROGRAM[..offset];
+        let line = before.matches('\n').count() + 1;
+        let column = offset - before.rfind('\n').map_or(0, |at| at + 1) + 1;
+        let asked = crate::placed(
+            DEFAULT_BUDGET,
+            Subject::Entry {
+                units: Vec::new(),
+                origin: Origin::Text {
+                    text: PROGRAM.to_string(),
+                    written: WrittenIn::Program,
+                },
+                declares: None,
+                package: None,
+            },
+            Path::new("<stdin>"),
+            (line, column),
+            &Overlay::default(),
+            None,
+            &mut |_| {},
+        )
+        .expect("the program lowers");
+        let rendered = |answer: &Answer| (answer.range.start, answer.range.end, markup(answer));
+
+        assert!(asked.is_some(), "nothing stands at `{written}`");
+        assert_eq!(
+            answered_at(PROGRAM, &held, offset).map(|(answer, _)| rendered(&answer)),
+            asked.as_ref().map(rendered),
+            "at `{written}`"
+        );
     }
 }
 

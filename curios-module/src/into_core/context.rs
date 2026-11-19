@@ -151,6 +151,15 @@ impl Anchoring {
         self.anchors.borrow_mut().name(name, label);
     }
 
+    /// Record that the structure `structure` wrote its labelled fields at `fields` ([`curios_core::Anchors::name_fields`]).
+    pub fn name_fields(
+        &self,
+        structure: curios_core::Global,
+        fields: Vec<(String, curios_core::Extent)>,
+    ) {
+        self.anchors.borrow_mut().name_fields(structure, fields);
+    }
+
     /// The extent of `at` in `line`, a line of `module` that declares no item — a `use` declaration, or the name a `mod` line gives — sited as a text of the module's namespace for the report that stands on it.
     pub fn line(&self, module: Qualifier, line: &Span, at: &Span) -> Option<curios_core::Extent> {
         let anchor = curios_core::Anchor::of(curios_core::Anchored::Namespace(module));
@@ -221,6 +230,8 @@ pub struct FlatNominal {
     pub span: Option<Span>,
     /// The names it declares beside its former, each with where it was written: a concept's methods and a family's constructors. Empty for one a later lowering keeps.
     pub members: Vec<(curios_core::Global, Option<Span>)>,
+    /// A structure's labelled fields, each with where it was written. Empty for anything else, and for one a later lowering keeps.
+    pub fields: Vec<(String, Option<Span>)>,
 }
 
 impl FlatNominal {

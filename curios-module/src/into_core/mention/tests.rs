@@ -1,6 +1,6 @@
 //! What a text names, held over one program that writes a name in every position the lowering resolves one.
 //!
-//! The program is written with a mark around each name the lowering does not resolve, `«name»`, and is read with the marks taken out. Every path it writes is then held to what its text mentions: one that ends in a declaration's name, and stands in no mark, is one mention of that declaration over the whole path, and every other is none.
+//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves, or one on a `use` line — and is read with the marks taken out. Every path it writes is then held to what its text mentions: one that ends in a declaration's name, and stands in no mark, is one mention of that declaration over the whole path, and every other is none.
 
 use {
     super::super::{test_support::*, *},

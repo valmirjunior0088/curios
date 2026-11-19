@@ -6,7 +6,7 @@ use {
     super::{
         Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture, Sites,
     },
-    crate::{SettledPlace, Traces},
+    crate::{Resolved, SettledPlace, Traces},
     curios_core::{Declarations, Definitions, Extent, Free, Global, Imports, Lint, Minted},
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -28,6 +28,8 @@ pub struct Underway {
     pub held: Vec<Lint>,
     /// The type each written place settled at, of the items published since the declaration they belong to was last filed ([`SettledPlace`]): taken into its record where it is filed (`Context::take_settled`).
     pub settled: Vec<SettledPlace>,
+    /// What each word written in the declaration under way that elaboration resolved names, where it is written ([`Resolved`]): taken into its record where it is filed (`Context::take_resolved`), and taken back with what an item that is refused or void wrote (`ItemMark`).
+    pub resolved: Vec<(Extent, Resolved)>,
     /// The declarations that elaborated, where the walk refused, with the record of each, taken where it ends (`Context::hold_elaborated`): what `Context::observed` hands out beside the lints.
     pub elaborated: Option<(Definitions, Traces)>,
     // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
@@ -65,6 +67,7 @@ impl Default for Underway {
             sites: Sites::default(),
             held: Vec::new(),
             settled: Vec::new(),
+            resolved: Vec::new(),
             elaborated: None,
             checked: CheckedTerms::default(),
             posture: Posture::default(),

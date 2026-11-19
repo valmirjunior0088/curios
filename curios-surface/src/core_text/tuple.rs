@@ -57,7 +57,7 @@ pub fn tuple_written<D: Rendered>(
     let fields = fields
         .into_iter()
         .map(|field| TupleField {
-            label: names.next().flatten(),
+            label: names.next().flatten().map(crate::Label::from),
             func_params: None,
             value: sub(field, frame),
         })
@@ -79,7 +79,7 @@ pub fn projection_written<D: Rendered>(
     };
     match field {
         Field::Tuple(index) => read(crate::Field::Index(index)),
-        Field::Label(label) => read(crate::Field::Label(label)),
+        Field::Label(label) => read(crate::Field::Label(label.as_str().into())),
         Field::Position(index) => frame.decorated(
             vec![(
                 "field",
@@ -145,7 +145,7 @@ pub fn tuple_read(
             ));
         }
         values.push(core_read(&field.value, reader)?);
-        names.push(field.label.clone());
+        names.push(field.label.as_ref().map(|label| label.to_string()));
     }
     if names.iter().all(Option::is_none) {
         names.clear();
@@ -166,7 +166,7 @@ pub fn projection_read(
     let head = core_read(head, reader)?;
     let field = match (fields.take("field"), field) {
         (None, crate::Field::Index(index)) => Field::Tuple(*index),
-        (None, crate::Field::Label(label)) => Field::Label(label.clone()),
+        (None, crate::Field::Label(label)) => Field::Label(label.as_str().into()),
         (Some(value), crate::Field::Index(index)) => {
             let slot = |held: &crate::Term<CoreText>| {
                 term_number(held)

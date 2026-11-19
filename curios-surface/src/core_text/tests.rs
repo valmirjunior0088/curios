@@ -12,7 +12,7 @@ use {
         Intrinsic, Item, Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
         Nominals, NumLit, Numeral, Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort,
         StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
-        WitnessId, WitnessKey, WitnessOrigin,
+        WitnessId, WitnessKey, WitnessOrigin, WrittenAt,
     },
     curios_num::{Floating, Integer, Natural, Rounding},
     std::rc::Rc,
@@ -550,6 +550,7 @@ fn every_node_written_reads_back_as_itself() {
                             Pattern::Binder,
                             Pattern::Variant {
                                 tag: Atom::from("none"),
+                                at: WrittenAt::default(),
                                 args: Vec::new(),
                             },
                         ])),

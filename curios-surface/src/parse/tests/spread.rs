@@ -102,7 +102,7 @@ fn bytes_literal_spread_segments() {
         Subterm::Literal(Literal::Bytes(vec![BytesSegment::Spread(
             Subterm::Proj(Proj {
                 head: name("hdr"),
-                field: Field::Label("bytes".to_string()),
+                field: Field::Label("bytes".into()),
             })
             .into()
         )]))

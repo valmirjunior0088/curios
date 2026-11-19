@@ -189,12 +189,17 @@ fn project(
                     Field::Tuple(index) | Field::Struct(_, index) | Field::Position(index) => {
                         index.to_string()
                     }
-                    Field::Label(label) => label.clone(),
+                    Field::Label(label) => label.to_string(),
                 };
                 return Err(Error::private_field(*name, field));
             }
 
-            (slot(struct_decl.fields(), field)?, Some(*name))
+            let index = slot(struct_decl.fields(), field)?;
+            if let Field::Label(label) = field {
+                context.resolved_label(label, *name);
+            }
+
+            (index, Some(*name))
         }
         _ => {
             return Err(pending(context, [head_type], |reporting, [head_type]| {
@@ -252,13 +257,13 @@ fn slot(telescope: &Telescope<()>, field: &Field) -> Result<usize, Error> {
         Field::Label(label) => {
             match telescope
                 .members()
-                .position(|(_, hint)| hint.unwrap_or_default() == label)
+                .position(|(_, hint)| hint.unwrap_or_default() == label.as_str())
             {
                 Some(index) => index,
                 None => {
                     // The fields a program can name: a positional field and a concept's superclass edge have no label.
                     return Err(Error::unknown_tuple_label(
-                        label.clone(),
+                        label.to_string(),
                         telescope
                             .labels()
                             .iter()

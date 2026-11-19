@@ -874,7 +874,7 @@ impl Term {
     }
 
     /// A labelled projection `head.label` — the pre-elaboration form; elaboration resolves the label against the head's type and rebuilds it as [`Term::proj`] or [`Term::proj_struct`].
-    pub fn proj_label<H: Into<Term>, L: Into<String>>(head: H, label: L) -> Self {
+    pub fn proj_label<H: Into<Term>, L: Into<FieldLabel>>(head: H, label: L) -> Self {
         Self::from(Subterm::Proj(Proj {
             head: head.into(),
             field: Field::Label(label.into()),

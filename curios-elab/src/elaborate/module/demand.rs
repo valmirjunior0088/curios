@@ -1278,6 +1278,7 @@ impl<'a> Demand<'a> {
                 let binders = context.binders_in(&names);
                 let lints = context.lints_in(&names);
                 let settled = context.take_settled();
+                let resolved = context.take_resolved();
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
@@ -1296,6 +1297,7 @@ impl<'a> Demand<'a> {
                     lints,
                     settled,
                     binders,
+                    resolved,
                 };
                 self.file(&names, Rc::new(TraceRecord::new(trace, concluded)));
                 self.poison = poison;

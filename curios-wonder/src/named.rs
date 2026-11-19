@@ -21,12 +21,12 @@ use {
     },
     curios_common::{Code, Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
-        Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
-        Intrinsic, Item, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths,
-        WitnessKey, WrittenBinder,
+        Anchors, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey, Imports,
+        Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
+        UnitPaths, WitnessKey, WrittenBinder,
     },
     curios_document::{Documentation, ModuleDocumentation},
-    curios_elab::Traces,
+    curios_elab::{Resolved, Traces},
     curios_module::{Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity},
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
@@ -40,6 +40,7 @@ use {
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
+        convert::Infallible,
         path::{Path, PathBuf},
         ptr,
         rc::Rc,
@@ -129,6 +130,18 @@ pub struct Written {
     pub binders: BTreeMap<WrittenBinder, String>,
     /// The type each term settled at, by where it stands, spelled for a reader standing in the text: none for a declaration elaboration settled nothing of, and none of the term a program closes with.
     pub settled: BTreeMap<(usize, usize), String>,
+    /// Each label of a structure's field the text writes, in no order, as elaboration resolved it ([`Placed::establish`]).
+    pub fields: Vec<WrittenField>,
+}
+
+/// A structure's field named by the label it is written with ([`Stands::Field`]): where the label is written, the field's label, the path of the structure that declares it, where the structure writes the field, and its type as the structure declares it, spelled for a reader standing in the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WrittenField {
+    pub written: Span,
+    pub label: String,
+    pub of: Option<String>,
+    pub bound: Option<Span>,
+    pub type_: Option<String>,
 }
 
 /// One place a written binder is bound at or read, as a question about a place answers it.
@@ -169,6 +182,13 @@ pub enum Stands {
         bound: Option<Span>,
         type_: Option<String>,
     },
+    /// A field's label: the field, by its label and the path of the structure that declares it, where the structure writes it ([`Anchors::field`]), and its type as the structure declares it, over the structure's parameters.
+    Field {
+        label: String,
+        of: Option<String>,
+        bound: Option<Span>,
+        type_: Option<String>,
+    },
     /// A term no name stands at, as it is written, and the type it settled at.
     Term {
         written: String,
@@ -198,6 +218,13 @@ impl Answer {
             .into_iter()
             .chain(typed(type_))
             .collect(),
+            Stands::Field { of, type_, .. } => [Fact {
+                lead: "field of".to_string(),
+                values: of.iter().map(|of| Code(of).to_string()).collect(),
+            }]
+            .into_iter()
+            .chain(typed(type_))
+            .collect(),
             Stands::Term { type_, .. } => typed(type_),
         }
     }
@@ -220,6 +247,22 @@ impl Placed {
         }
         let holds = |span: &Span| span.start <= offset && offset <= span.end;
         let narrowest = |span: &Span| (span.end - span.start, offset == span.end);
+        if let Some(field) = written
+            .fields
+            .iter()
+            .filter(|field| holds(&field.written))
+            .min_by_key(|field| narrowest(&field.written))
+        {
+            return Some(Answer {
+                range: field.written.clone(),
+                stands: Stands::Field {
+                    label: field.label.clone(),
+                    of: field.of.clone(),
+                    bound: field.bound.clone(),
+                    type_: field.type_.clone(),
+                },
+            });
+        }
         if let Some(local) = written
             .locals
             .iter()
@@ -273,6 +316,10 @@ impl Placed {
         let places = Places::of(definitions);
         let owned = |name: &Global| own.declared_as(name).is_some();
         let anchors = [own.anchors()];
+        // The subject's anchors, then those of the units in its scope: where a structure any of them declares wrote its fields.
+        let scoped = std::iter::once(own.anchors())
+            .chain(scope.iter().map(|unit| unit.anchors()))
+            .collect::<Vec<_>>();
         for written in &mut self.texts {
             let reader = saying.reader(written.owner);
             // What elaboration concluded of the declaration written here: the type each place settled at, the binder each local reads, and each binder's type.
@@ -307,6 +354,60 @@ impl Placed {
                     .binders
                     .insert(*binder, type_.spelled(&reader).to_string());
             }
+            // What each word elaboration resolved names: a declaration, answered as a name the lowering resolved is, or a structure's field.
+            for (at, resolved) in concluded.iter().flat_map(|concluded| &concluded.resolved) {
+                let Some(at) = at.resolved(&anchors) else {
+                    continue;
+                };
+                if !Arc::ptr_eq(&at.source, &written.text.source)
+                    || at.start < written.text.start
+                    || written.text.end < at.end
+                {
+                    continue;
+                }
+                match resolved {
+                    Resolved::Declaration(name) => {
+                        if !self.declarations.contains_key(name) {
+                            let Some((described, unit)) = saying.described(*name) else {
+                                continue;
+                            };
+                            self.declarations.insert(*name, described);
+                            let type_ = unit
+                                .and_then(|unit| declared_type(unit.core(), unit.places(), name));
+                            if let Some(type_) = type_ {
+                                written
+                                    .types
+                                    .insert(*name, type_.spelled(&reader).to_string());
+                            }
+                        }
+                        written.names.push(Named {
+                            written: at,
+                            named: *name,
+                            declares: false,
+                        });
+                    }
+                    Resolved::Field { structure, label } => {
+                        let of = saying
+                            .described(*structure)
+                            .map(|(described, _)| described.asked);
+                        let declared = std::iter::once((definitions, &places))
+                            .chain(saying.scope.iter().map(|unit| (unit.core(), unit.places())))
+                            .find_map(|(definitions, places)| {
+                                declared_field(definitions.struct_decl(places, structure)?, label)
+                            });
+                        written.fields.push(WrittenField {
+                            written: at,
+                            label: label.clone(),
+                            of,
+                            bound: Anchors::field(&scoped, structure, label),
+                            type_: declared.map(|type_| type_.spelled(&reader).to_string()),
+                        });
+                    }
+                }
+            }
+            written
+                .names
+                .sort_by_key(|named| (named.written.start, named.written.end));
             let named = written
                 .names
                 .iter()
@@ -480,6 +581,7 @@ impl Reading {
                     bound,
                     binders: BTreeMap::new(),
                     settled: BTreeMap::new(),
+                    fields: Vec::new(),
                 }
             })
             .collect();
@@ -1279,6 +1381,35 @@ fn spelled(
 /// The type `definitions` holds of `name`, read off the one item `places` say holds it ([`item_type`]).
 fn declared_type(definitions: &Definitions, places: &Places, name: &Global) -> Option<Term> {
     item_type(&definitions.items[places.place(name)?.item()], name)
+}
+
+/// The type `record` declares its field labelled `label` at, its parameters and the fields before it each read by the name it is written with: what a field answers. None where `record` declares no field under `label`.
+fn declared_field(record: &StructDecl, label: &str) -> Option<Term> {
+    let hinted = |offset: usize, hints: Vec<Option<&str>>| {
+        hints
+            .into_iter()
+            .enumerate()
+            .map(|(index, hint)| Term::free_var(&Free::local((offset + index) as u64, hint)))
+            .collect::<Vec<_>>()
+    };
+    let params = hinted(0, record.arity.hints());
+    let fields = record.fields_at(&params);
+    let position = fields
+        .labels()
+        .iter()
+        .position(|written| *written == label)?;
+    let opened = hinted(params.len(), fields.hints());
+    let mut type_ = None;
+    fields
+        .walk(&opened, |index, _, entry| {
+            if index == position {
+                type_ = Some(entry.clone());
+            }
+            Ok::<_, Infallible>(())
+        })
+        .ok()?;
+
+    type_
 }
 
 /// The type `item` holds of `name`: a definition's, or a constructor's as its family's entry makes it. None where the item holds no definition under the name.

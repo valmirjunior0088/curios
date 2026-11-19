@@ -241,6 +241,7 @@ pub(super) fn lower_declaration(
                         entry: curios_core::Nominal::Inductive(lowered.induct_decls[&name].clone()),
                         span: u.label.span().cloned(),
                         members,
+                        fields: Vec::new(),
                     })
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -334,6 +335,14 @@ pub(super) fn lower_declaration(
                     entry: curios_core::Nominal::Struct(lowered.struct_decls[&name].clone()),
                     span: s.label.span().cloned(),
                     members: Vec::new(),
+                    fields: s
+                        .fields
+                        .iter()
+                        .filter_map(|field| {
+                            let label = field.param.label.as_ref()?;
+                            Some((label.to_string(), label.span().cloned()))
+                        })
+                        .collect(),
                 });
             }
             lowered.items.push(FlatItem::Nominal(nominals));
@@ -464,6 +473,7 @@ pub(super) fn lower_declaration(
                     },
                     span: concept.label.span().cloned(),
                     members: methods,
+                    fields: Vec::new(),
                 });
             }
             lowered.items.push(FlatItem::Nominal(nominals));

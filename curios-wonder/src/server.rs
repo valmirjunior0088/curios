@@ -407,7 +407,7 @@ impl Server {
         let (answer, _) = answered_at(buffer, &checked, offset_of(buffer, asked.position))?;
         let place = match &answer.stands {
             Stands::Declaration { described, .. } => described.declaration.as_ref()?.place()?,
-            Stands::Local { bound, .. } => bound.as_ref()?,
+            Stands::Local { bound, .. } | Stands::Field { bound, .. } => bound.as_ref()?,
             Stands::Term { .. } => return None,
         };
 
@@ -579,6 +579,7 @@ fn markup(answer: &Answer) -> String {
     let (shown, prose) = match &answer.stands {
         Stands::Term { written, .. } => (written.clone(), Vec::new()),
         Stands::Local { name, .. } => (name.clone(), Vec::new()),
+        Stands::Field { label, .. } => (label.clone(), Vec::new()),
         Stands::Declaration { described, .. } => match described
             .declaration
             .as_ref()

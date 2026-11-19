@@ -2359,7 +2359,7 @@ fn print_witness_member(
 fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Printer {
     match field.func_params {
         Some(params) => flat([
-            pure(field.label),
+            pure(field.label.to_string()),
             listed(
                 "(",
                 params
@@ -2370,7 +2370,10 @@ fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Pr
             ),
             printer.attached_body(" =", field.value),
         ]),
-        None => flat([pure(field.label), printer.attached_body(" =", field.value)]),
+        None => flat([
+            pure(field.label.to_string()),
+            printer.attached_body(" =", field.value),
+        ]),
     }
 }
 

@@ -13,14 +13,14 @@ fn inductive_match_nullary_and_unary() {
             arms: vec![
                 MatrixArm::of(
                     MatchPattern::Variant {
-                        tag: "null".to_string(),
+                        tag: "null".into(),
                         args: vec![],
                     },
                     Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line("null"))).into()
                 ),
                 MatrixArm::of(
                     MatchPattern::Variant {
-                        tag: "bool_".to_string(),
+                        tag: "bool_".into(),
                         args: vec![(Plicity::Explicit, MatchPattern::Binder("b".into()))],
                     },
                     Subterm::Name(Name::from(["b".to_string()])).into()
@@ -39,7 +39,7 @@ fn inductive_match_multi_binder() {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             arms: vec![MatrixArm::of(
                 MatchPattern::Variant {
-                    tag: "lit".to_string(),
+                    tag: "lit".into(),
                     args: vec![
                         (Plicity::Explicit, MatchPattern::Binder("a".into())),
                         (Plicity::Explicit, MatchPattern::Binder("b".into())),
@@ -461,7 +461,7 @@ fn an_arm_writes_each_alternative_after_a_bar() {
         [
             MatchPattern::Char('a'.into()),
             MatchPattern::Variant {
-                tag: "some".to_string(),
+                tag: "some".into(),
                 args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
             },
             MatchPattern::Tuple(vec![

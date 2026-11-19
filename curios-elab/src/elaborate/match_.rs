@@ -1136,6 +1136,11 @@ impl NominalSplit {
     }
 
     /// The payload of `tag`'s case, at the scrutinee's parameters and universes: that one constructor of the family instantiated.
+    /// The constructor `tag` names, declared beside the family it constructs: what a pattern written with the tag names.
+    pub fn constructor(&self, tag: &Atom) -> Option<Global> {
+        Some(Global::Authored(self.name.qualifier()?.with(tag.as_str())))
+    }
+
     pub fn payload(&self, context: &Context, tag: &Atom) -> Result<Telescope<Vec<Term>>, Error> {
         self.family(context)
             .at(&self.universes)

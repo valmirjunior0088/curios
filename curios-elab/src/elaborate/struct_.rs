@@ -225,6 +225,24 @@ pub fn elaborate_struct(
     term: &Term,
     mode: &Mode,
 ) -> Result<(Term, Term), Error> {
+    let elaborated = elaborate_struct_entries(context, s, term, mode)?;
+    // What each labelled entry names, once every entry has met its field.
+    for entry in &s.entries {
+        if let StructEntry::Field(Some(label)) | StructEntry::Implicit(Some(label)) = entry {
+            context.resolved_label(label, s.name);
+        }
+    }
+
+    Ok(elaborated)
+}
+
+/// [`elaborate_struct`]'s literal, its entries met with the fields they fill.
+fn elaborate_struct_entries(
+    context: &mut Context,
+    s: &Struct,
+    term: &Term,
+    mode: &Mode,
+) -> Result<(Term, Term), Error> {
     let Struct {
         name,
         universes: written_universes,

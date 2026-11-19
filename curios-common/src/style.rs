@@ -24,6 +24,8 @@ pub enum Kind {
     Term,
     /// A local asked about by its place: where it is bound, and what it was bound at.
     Local,
+    /// A structure's field asked about by the place of its label: where the structure writes it, and what it declares it at.
+    Field,
 }
 
 impl Kind {
@@ -38,6 +40,7 @@ impl Kind {
             Kind::Module => "module",
             Kind::Term => "term",
             Kind::Local => "local",
+            Kind::Field => "field",
         }
     }
 

@@ -5,8 +5,8 @@ use {
         parse_apply_argument, parse_bound_word, parse_field_equals, parse_field_member,
         parse_func_pattern_param, parse_func_sugar_param, parse_func_type_param, parse_identifier,
         parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_prop, parse_terminator, parse_type, parse_word_raw, raised,
-        refusing,
+        parse_named_premise, parse_prop, parse_terminator, parse_type, parse_word_raw,
+        parse_written_word, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
@@ -1021,7 +1021,7 @@ pub fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a,
 
 // A witness field: `label = term`, or the definition sugar `label(params) = term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar. A witness entry has no positional form for its prefix to fall back to, so once its label and `(` are read the rest is the sugar's, and a member its list refuses or a list it cannot close is refused where it fails rather than at the label, as what the body's list expects next.
 pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
-    parse_identifier
+    parse_written_word
         .and(
             parse_literal("(")
                 .and_keep(commit(
@@ -1036,8 +1036,8 @@ pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessFiel
         // As in `parse_tuple_field`: past the `=` the implementation must follow, so a mistake in it is the diagnosis rather than the `}` the entry list falls back to.
         .and(commit(parse_term))
         .map(
-            |((label, func_params), value): ((&str, _), _)| WitnessField {
-                label: label.to_string(),
+            |((label, func_params), value): ((Label, _), _)| WitnessField {
+                label,
                 func_params,
                 value,
             },

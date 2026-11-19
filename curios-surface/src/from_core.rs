@@ -313,7 +313,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 .into_iter()
                 .map(|field| {
                     Some(TupleField {
-                        label: names.next().flatten(),
+                        label: names.next().flatten().map(Label::from),
                         func_params: None,
                         value: sub(field, frame)?,
                     })
@@ -612,8 +612,8 @@ pub fn written_pattern<D: Dialect>(
     match pattern {
         curios_core::Pattern::Binder => MatchPattern::Binder(own(next_name(names))),
         curios_core::Pattern::Wildcard(_) => MatchPattern::Binder("_".into()),
-        curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
-            tag: tag.as_string(),
+        curios_core::Pattern::Variant { tag, args, .. } => MatchPattern::Variant {
+            tag: tag.as_string().into(),
             args: args
                 .iter()
                 .map(|(plicity, arg)| (*plicity, written_pattern(arg, names, own)))
@@ -694,14 +694,14 @@ fn next_name<D: Dialect>(names: &mut dyn Iterator<Item = Binder<D>>) -> Binder<D
 }
 
 fn written_fields<D: Dialect>(
-    fields: &[(Option<String>, curios_core::Pattern)],
+    fields: &[(Option<curios_core::FieldLabel>, curios_core::Pattern)],
     names: &mut dyn Iterator<Item = Binder<D>>,
     own: fn(Binder<D>) -> Binder<D>,
 ) -> Vec<MatchPatternField<D>> {
     fields
         .iter()
         .map(|(label, field)| MatchPatternField {
-            label: label.clone(),
+            label: label.as_ref().map(|label| Label::from(label.as_str())),
             value: written_pattern(field, names, own),
         })
         .collect()
@@ -930,12 +930,12 @@ fn written_field(field: &curios_core::Field, frame: Frame) -> Option<Field> {
         curios_core::Field::Tuple(index) | curios_core::Field::Position(index) => {
             Some(Field::Index(*index))
         }
-        curios_core::Field::Label(label) => Some(Field::Label(label.clone())),
+        curios_core::Field::Label(label) => Some(Field::Label(label.as_str().into())),
         curios_core::Field::Struct(structure, slot) => {
             let fields = frame.spelling.structure_fields(structure)?;
             let (mark, label) = fields.get(*slot)?;
             match (label, mark) {
-                (Some(label), _) => Some(Field::Label(label.clone())),
+                (Some(label), _) => Some(Field::Label(label.as_str().into())),
                 (None, Plicity::Explicit) => {
                     let position = fields[..*slot]
                         .iter()
@@ -1101,8 +1101,8 @@ fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
             .zip(entries)
             .map(|(field, entry)| {
                 let value = sub(field, frame)?;
-                let labelled = |label| TupleField {
-                    label,
+                let labelled = |label: Option<curios_core::FieldLabel>| TupleField {
+                    label: label.as_ref().map(|label| Label::from(label.as_str())),
                     func_params: None,
                     value: value.clone(),
                 };
@@ -1151,7 +1151,7 @@ fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
     let mut entries = Vec::with_capacity(fields.len());
     for (index, field) in fields.into_iter().enumerate() {
         let entry = |label: Option<String>, value: Term| TupleField {
-            label,
+            label: label.map(Label::from),
             func_params: None,
             value,
         };
@@ -1289,7 +1289,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     .collect();
                 arms.push(MatrixArm::of(
                     MatchPattern::Variant {
-                        tag: tag.as_string(),
+                        tag: tag.as_string().into(),
                         args,
                     },
                     sub(body, frame)?,

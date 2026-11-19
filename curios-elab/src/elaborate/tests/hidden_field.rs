@@ -125,7 +125,7 @@ fn a_literal_writes_a_hidden_field_under_its_mark() {
 
     for hidden in [
         StructEntry::Implicit(None),
-        StructEntry::Implicit(Some("n".to_string())),
+        StructEntry::Implicit(Some("n".into())),
     ] {
         let literal =
             marked_literal([(hidden, nat_lit(3)), (StructEntry::Field(None), nat_lit(5))]);
@@ -173,7 +173,7 @@ fn a_hidden_entry_that_misaligns_is_refused() {
     ));
     assert!(matches!(
         refusal([
-            (StructEntry::Implicit(Some("m".to_string())), nat_lit(3)),
+            (StructEntry::Implicit(Some("m".into())), nat_lit(3)),
             (StructEntry::Field(None), nat_lit(5)),
         ]),
         Error::UnknownStructField { label, .. } if label == "@m"
@@ -201,7 +201,7 @@ fn a_spread_never_copies_a_hidden_field() {
         marked_literal([base(), (StructEntry::Implicit(None), nat_lit(7))]),
         marked_literal([
             base(),
-            (StructEntry::Implicit(Some("n".to_string())), nat_lit(7)),
+            (StructEntry::Implicit(Some("n".into())), nat_lit(7)),
         ]),
     ] {
         let (_, type_) = elaborate(&mut context, &literal, Mode::Infer).unwrap();
@@ -210,7 +210,7 @@ fn a_spread_never_copies_a_hidden_field() {
 
     let misnamed = marked_literal([
         base(),
-        (StructEntry::Implicit(Some("m".to_string())), nat_lit(7)),
+        (StructEntry::Implicit(Some("m".into())), nat_lit(7)),
     ]);
     assert!(matches!(
         elaborate(&mut context, &misnamed, Mode::Infer),

@@ -4,7 +4,7 @@ Adopted, to be taken soon (the user, 2026-11-18): a place in a file is answered 
 
 A place answers one record through both transports (`Placed`, `curios-wonder/src/named.rs`): a name with the declaration it names — the path it is exposed at and the one it is declared at, what it is, its members and witnesses, and for a declaration of a unit in scope its type, spelled where the name is written, and its totality — or, where no name stands, the narrowest term written there, its range and its text; the hover renders it as markup over its range, `--at` as a block. Both answer off the check of the subject (`Fold::reading` and `Fold::elaborating`), so a declaration of the subject's own that elaborated answers its type, and its totality where the certifier judged it, in a file one of whose declarations is refused. A local answers where it is bound and its type, and a term the type it settled at, kept with the declaration they belong to (`Concluded::settled` and `binders`, `curios-elab/src/traces.rs`; `Mints::written`, `curios-core/src/names.rs`). What is left: a name the elaborator resolves, a segment of a path and a name on a `use` line answer nothing, and the term a program closes with answers no type.
 
-The next step is stage 5, a delivery: each name recorded where it is resolved, beside what elaboration settled.
+The next step is stage 6, a delivery: each segment and each `use` and `mod` line's name recorded where the lowering walks it.
 
 ## What this builds on
 
@@ -60,7 +60,6 @@ Settled 2026-10-13, kept:
 
 ## Stages
 
-5. **A name the elaborator resolves, and a head the lowering resolves into a node.** Each recorded where it is resolved, an occurrence of the declaration it names, as Lean's field infos and HIE's record-field identifiers are. Not refined: the shape each is recorded as. Check: each position loses its mark in `mention/tests.rs` and answers alike through both transports.
 6. **A path's segments, and a `use` or `mod` line's names.** The lowering records each segment's module where it walks the path (`resolve_module_prefix`, `curios-module/src/into_core/context.rs`), an occurrence of a module, and every `use` and `mod` line is sited as a text of its module's namespace as a lint sites one, its names placed as a declaration's are; a module answers what `--name <PATH> --exports` lists of it. Not refined: what a module is answered with where no file is its own, and whether a name answers the walk it came in by, as Agda's "why in scope" does. Check: a segment, an import and a `mod` line through both transports.
 
 ## Verification

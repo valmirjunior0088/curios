@@ -25,7 +25,7 @@ fn an_arm_writes_guards_after_its_patterns() {
     assert_eq!(
         pattern.pattern,
         MatchPattern::Variant {
-            tag: "some".to_string(),
+            tag: "some".into(),
             args: vec![(Plicity::Explicit, MatchPattern::Binder("m".into()))],
         }
     );

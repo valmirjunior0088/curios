@@ -128,7 +128,7 @@ where
     }
 }
 
-/// A written identifier at a declaring position — a binder, a declaration's name, a `use` selector — with the span of the word itself, where a [`Term`](super::Term)'s span covers the whole form it heads. Equality and hashing compare the text alone, as [`Name`]'s do: tests build spanless expected trees, and two labels spelled alike are one name however they were located.
+/// A written identifier at a declaring position — a binder, a declaration's name, a `use` selector — or naming what is no declaration's path — a field's label, a constructor's tag in a pattern — with the span of the word itself, where a [`Term`](super::Term)'s span covers the whole form it heads. Equality and hashing compare the text alone, as [`Name`]'s do: tests build spanless expected trees, and two labels spelled alike are one name however they were located.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Label {

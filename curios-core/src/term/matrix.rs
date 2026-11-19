@@ -3,7 +3,7 @@
 //! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its rows' guards and their bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, and each guard a function over the binders written before it, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them, and a bind guard's pattern after them.
 
 use {
-    crate::{Atom, Mention, NumLit, Term},
+    crate::{Atom, FieldLabel, Mention, NumLit, Term, WrittenAt},
     curios_common::Plicity,
     curios_num::Natural,
     std::{hash, iter},
@@ -131,20 +131,21 @@ pub enum Pattern {
     Binder,
     /// `_`, which takes nothing apart and binds nothing: no place among its row's binders stands for it. Where the lowering wrote it, it holds its place among its declaration's written binders ([`WrittenPlace`]).
     Wildcard(WrittenPlace),
-    /// A constructor over one pattern for each payload it writes, each under the mark it is written under.
+    /// A constructor over one pattern for each payload it writes, each under the mark it is written under, its tag where it was written ([`WrittenAt`]).
     Variant {
         tag: Atom,
+        at: WrittenAt,
         #[archived_omit_bounds]
         args: Vec<(Plicity, Pattern)>,
     },
     /// A tuple pattern, each field under the label it is written with.
-    Tuple(#[archived_omit_bounds] Vec<(Option<String>, Pattern)>),
+    Tuple(#[archived_omit_bounds] Vec<(Option<FieldLabel>, Pattern)>),
     /// A struct pattern: the head it is written with, which a report prints, and the structure that head resolved to, or the binder it lowered to where it names none.
     Struct {
         head: String,
         structure: Mention,
         #[archived_omit_bounds]
-        fields: Vec<(Option<String>, Pattern)>,
+        fields: Vec<(Option<FieldLabel>, Pattern)>,
     },
     Bool(bool),
     /// `predecessor + step`, `step` successors over the predecessor: one at least, since `p + 0` is the binder `p`, which the parser and Core text's reader refuse to spell this way.

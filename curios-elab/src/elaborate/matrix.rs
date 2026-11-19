@@ -20,14 +20,14 @@ use {
         SwitchSplit, elaborate, payload_fills, realize,
     },
     crate::{
-        Context, Error, HeldFrames, WrittenLiteral, check, expect_as, pending, reduce_with,
-        resolved_for_display, stuck_on_metavar,
+        Context, Error, HeldFrames, Resolved, WrittenLiteral, check, expect_as, pending,
+        reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Intrinsic, IntrinsicHead, Keyed, Keys,
-        Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, WrittenPlace,
+        Arm, Atom, Elements, Ending, FieldLabel, Free, Guard, InductArm, Intrinsic, IntrinsicHead,
+        Keyed, Keys, Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
     },
     curios_num::{Integer, Natural},
     curios_surface::written_pattern,
@@ -1213,7 +1213,7 @@ impl<'m> Compiler<'m> {
         let named = self.reached(
             &lines,
             |shape| match shape.pattern()? {
-                Pattern::Variant { tag, args }
+                Pattern::Variant { tag, args, .. }
                     if args.iter().all(|(_, arg)| refutations(arg) == 0) =>
                 {
                     Some(tag.as_string())
@@ -1333,7 +1333,10 @@ impl<'m> Compiler<'m> {
         let mut written = Vec::with_capacity(group.len());
         for mut line in group {
             let cells = match line.cells.remove(0) {
-                Some((Shape::Pattern(Pattern::Variant { args, .. }), first)) => {
+                Some((Shape::Pattern(Pattern::Variant { at, args, .. }), first)) => {
+                    if let Some(constructor) = split.constructor(tag) {
+                        context.resolved(*at, Resolved::Declaration(constructor));
+                    }
                     Some(payload_cells(tag, &payload, args, first)?)
                 }
                 _ => None,
@@ -1920,7 +1923,7 @@ impl<'m> Compiler<'m> {
             Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => fields,
             _ => unreachable!("every row that takes the column apart writes a tuple or a struct"),
         };
-        let labelled = |fields: &'m [(Option<String>, Pattern)]| {
+        let labelled = |fields: &'m [(Option<FieldLabel>, Pattern)]| {
             fields
                 .iter()
                 .map(|(label, _)| label.as_deref())
@@ -1968,6 +1971,18 @@ impl<'m> Compiler<'m> {
                     let fields = written(shape);
                     if labelled(fields) != canonical {
                         return Err(Error::MatrixInconsistentShape);
+                    }
+                    // What each label names, at the row's own place for it.
+                    if let Some(Pattern::Struct {
+                        structure: Mention::Declaration(structure),
+                        ..
+                    }) = shape.pattern()
+                    {
+                        for (label, _) in fields {
+                            if let Some(label) = label {
+                                context.resolved_label(label, *structure);
+                            }
+                        }
                     }
 
                     fields
@@ -2319,7 +2334,7 @@ impl<'m> Compiler<'m> {
             Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
                 unreachable!("a run is read above")
             }
-            Pattern::Variant { tag, args } => {
+            Pattern::Variant { tag, at, args } => {
                 let split = match shared {
                     Some(Outermost::Nominal(split)) => split,
                     Some(_) => unreachable!("a column is split by one shape"),
@@ -2333,6 +2348,9 @@ impl<'m> Compiler<'m> {
                     }
                 };
                 let payload = split.payload(context, tag)?;
+                if let Some(constructor) = split.constructor(tag) {
+                    context.resolved(*at, Resolved::Declaration(constructor));
+                }
                 let cells = payload_cells(tag, &payload, args, place)?;
                 let (binders, slots) = self.alone(context, &mut line, cells);
                 let mut payloads = slots
@@ -2836,10 +2854,11 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
         (_, Pattern::Binder | Pattern::Wildcard(_)) => true,
         (Pattern::Binder | Pattern::Wildcard(_), that) => refutations(that) == 0,
         (
-            Pattern::Variant { tag, args },
+            Pattern::Variant { tag, args, .. },
             Pattern::Variant {
                 tag: other_tag,
                 args: others,
+                ..
             },
         ) => {
             // A hidden payload one row writes and another leaves out is a binder where it is left out.

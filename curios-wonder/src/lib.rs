@@ -33,7 +33,7 @@ mod named;
 use named::*;
 pub use named::{
     Answer, Declaration, Described, Fact, Local, Named, Placed, Stands, Witnessed, Written,
-    described, placed,
+    WrittenField, described, placed,
 };
 
 mod footprint;

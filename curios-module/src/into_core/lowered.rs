@@ -778,6 +778,7 @@ impl<'a> Baseline<'a> {
                                 // What is read of where it was written was taken where it was lowered.
                                 span: None,
                                 members: Vec::new(),
+                                fields: Vec::new(),
                             }
                         })
                         .collect(),

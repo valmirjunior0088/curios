@@ -84,6 +84,7 @@ pub fn withdraw(context: &mut Context, declared: &[Global]) {
 /// Where an attempt at an item began, so what it wrote can be taken back when it is refused or void.
 pub struct ItemMark {
     checked: usize,
+    resolved: usize,
     site: Option<Global>,
 }
 
@@ -92,13 +93,15 @@ impl ItemMark {
     pub fn begin(context: &Context) -> Self {
         Self {
             checked: context.checked_mark(),
+            resolved: context.resolved_mark(),
             site: context.checked_site(),
         }
     }
 
-    /// What a refusal and a void attempt alike take back before their declarations: the terms recorded for the erasure obligations and the parked work.
+    /// What a refusal and a void attempt alike take back before their declarations: the terms recorded for the erasure obligations, the words resolved, and the parked work.
     fn unwind(self, context: &mut Context) {
         context.truncate_checked(self.checked);
+        context.truncate_resolved(self.resolved);
         context.restore_checked_site(self.site);
         context.take_parked();
         // The wake signals the item's solutions raised, now that nothing is parked to wake.

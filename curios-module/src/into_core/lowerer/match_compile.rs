@@ -264,6 +264,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
             MatchPattern::Variant { tag, args } => curios_core::Pattern::Variant {
                 tag: curios_core::Atom::from(tag.as_str()),
+                at: self.written_at(tag),
                 args: args
                     .iter()
                     .map(|(plicity, arg)| Ok((*plicity, self.pattern(arg, binders)?)))
@@ -345,10 +346,15 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         &self,
         fields: &[MatchPatternField],
         binders: &mut Vec<Binder>,
-    ) -> Result<Vec<(Option<String>, curios_core::Pattern)>, Error> {
+    ) -> Result<Vec<(Option<curios_core::FieldLabel>, curios_core::Pattern)>, Error> {
         fields
             .iter()
-            .map(|field| Ok((field.label.clone(), self.pattern(&field.value, binders)?)))
+            .map(|field| {
+                Ok((
+                    field.label.as_ref().map(|label| self.field_label(label)),
+                    self.pattern(&field.value, binders)?,
+                ))
+            })
             .collect()
     }
 }

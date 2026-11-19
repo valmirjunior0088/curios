@@ -5,7 +5,7 @@ use {
         parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
         parse_name, parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
         parse_qualified_name, parse_struct_lit, parse_terminator, parse_tuple, parse_tuple_type,
-        parse_type, parse_unreadable_binder, parse_usize_raw, refused,
+        parse_type, parse_unreadable_binder, parse_usize_raw, parse_written_word_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
@@ -241,7 +241,7 @@ pub fn parse_proj_suffix_raw<'a>(state: ParserState<'a>) -> Parsed<'a, Field> {
         .and_keep(
             parse_usize_raw
                 .map(Field::Index)
-                .or(parse_identifier_raw.map(|label| Field::Label(label.to_string())))
+                .or(parse_written_word_raw.map(Field::Label))
                 .map_err("expected: a field index or label after `.`"),
         )
         .parse(state)

@@ -223,7 +223,7 @@ fn constructor_arm<D: Rendered>(
 
     arm(
         MatchPattern::Variant {
-            tag: tag.to_string(),
+            tag: tag.to_string().into(),
             args,
         },
         body,

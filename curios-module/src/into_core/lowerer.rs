@@ -10,8 +10,8 @@ use {
     curios_surface::{
         Apply, BytesSegment, Field, FuncParam, FuncTypeParam, Intrinsic, Label, Let, LetBinding,
         LetGroup, LetSignature, ListEntry, Literal, Name, NumLit, Pattern, PatternField,
-        ProofLiteral, StructLit, StructLitEntry, Subterm, Term, TuplePattern, func_sugar_params,
-        func_sugar_type_params,
+        ProofLiteral, StructLit, StructLitEntry, Subterm, Term, TupleField, TuplePattern,
+        func_sugar_params, func_sugar_type_params,
     },
     std::{
         cell::{Cell, RefCell},
@@ -735,14 +735,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 tuple
                     .fields
                     .iter()
-                    .map(|field| Ok((field.label.clone(), self.term(&field.desugared_value())?)))
+                    .map(|field| {
+                        Ok((
+                            field.label.as_ref().map(|label| label.to_string()),
+                            self.term(&field.desugared_value())?,
+                        ))
+                    })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Proj(proj) => {
                 let head = self.term(&proj.head)?;
                 match &proj.field {
                     Field::Index(index) => curios_core::Term::proj_position(head, *index),
-                    Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
+                    Field::Label(label) => {
+                        curios_core::Term::proj_label(head, self.field_label(label))
+                    }
                 }
             }
             // A struct literal lowers to a `curios_core::Struct` carrying the resolved (qualified) struct name, no parameters (core elaboration mints metavariables for them), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base — stated at its head's type where the head is applied ([`Self::headed`]). Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
@@ -753,13 +760,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .iter()
                     .map(|entry| match entry {
                         StructLitEntry::Field(field) => Ok((
-                            curios_core::StructEntry::Field(field.label.clone()),
+                            curios_core::StructEntry::Field(self.entry_label(field)),
                             self.term(&field.desugared_value())?,
                         )),
                         StructLitEntry::Implicit(field) => {
                             let value = field.desugared_value();
                             Ok((
-                                curios_core::StructEntry::Implicit(field.label.clone()),
+                                curios_core::StructEntry::Implicit(self.entry_label(field)),
                                 self.term(&value)?,
                             ))
                         }
@@ -1044,7 +1051,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .iter()
                     .map(|field| {
                         let value = field.desugared_value();
-                        Ok((field.label.clone(), self.collect(&value, binds)?))
+                        Ok((
+                            field.label.as_ref().map(|label| label.to_string()),
+                            self.collect(&value, binds)?,
+                        ))
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
@@ -1052,7 +1062,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let head = self.collect(&proj.head, binds)?;
                 match &proj.field {
                     Field::Index(index) => curios_core::Term::proj_position(head, *index),
-                    Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
+                    Field::Label(label) => {
+                        curios_core::Term::proj_label(head, self.field_label(label))
+                    }
                 }
             }
             // A struct literal's entry values hoist their bangs into this region, exactly like a tuple's fields. Its head is a type, which has no region to hoist into.
@@ -1065,14 +1077,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         StructLitEntry::Field(field) => {
                             let value = field.desugared_value();
                             Ok((
-                                curios_core::StructEntry::Field(field.label.clone()),
+                                curios_core::StructEntry::Field(self.entry_label(field)),
                                 self.collect(&value, binds)?,
                             ))
                         }
                         StructLitEntry::Implicit(field) => {
                             let value = field.desugared_value();
                             Ok((
-                                curios_core::StructEntry::Implicit(field.label.clone()),
+                                curios_core::StructEntry::Implicit(self.entry_label(field)),
                                 self.collect(&value, binds)?,
                             ))
                         }
@@ -1310,6 +1322,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
+    /// The field's label `label` as Core holds it, where it was written: what elaboration records the field it names under.
+    pub fn field_label(&self, label: &Label) -> curios_core::FieldLabel {
+        curios_core::FieldLabel {
+            text: label.to_string(),
+            at: self.written_at(label),
+        }
+    }
+
+    /// Where the word `word` was written, as Core holds a word's place.
+    pub fn written_at(&self, word: &Label) -> curios_core::WrittenAt {
+        curios_core::WrittenAt(word.span().and_then(|span| self.context.extent(span)))
+    }
+
+    /// The label a literal's entry `field` is written with, as Core holds it.
+    fn entry_label(&self, field: &TupleField) -> Option<curios_core::FieldLabel> {
+        field.label.as_ref().map(|label| self.field_label(label))
+    }
+
     /// The binder the bare name `label`, written as `written`, lowers to where it resolved to nothing this lowerer may read it as, sought as `sought`, filed with why ([`Context::unbound_bare`]): the binders in scope here and the bindings of the module's scope are what the nearest name is chosen among.
     fn unbound_here(
         &self,
@@ -1381,7 +1411,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let held = curios_core::Pattern::Tuple(
                     fields
                         .iter()
-                        .map(|field| (field.label.clone(), curios_core::Pattern::WILDCARD))
+                        .map(|field| {
+                            (
+                                field.label.as_ref().map(|label| self.field_label(label)),
+                                curios_core::Pattern::WILDCARD,
+                            )
+                        })
                         .collect(),
                 );
                 (held, span.clone().or_else(|| pattern_span(pattern)))
@@ -1427,7 +1462,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         for (index, field) in fields.iter().enumerate() {
             let value = curios_core::Term::var(curios_core::Var::free(scrutinee));
             let value = match &field.label {
-                Some(label) => curios_core::Term::proj_label(value, label.clone()),
+                Some(label) => curios_core::Term::proj_label(value, self.field_label(label)),
                 None => curios_core::Term::proj_position(value, index),
             };
             let value = match pattern_span(&field.value) {

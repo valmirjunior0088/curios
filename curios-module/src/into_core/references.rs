@@ -19,6 +19,8 @@ pub struct LoweredItem {
     pub definitions: Vec<Declared>,
     /// The names it declares beside its definitions, each with where it was written in the text of its declaration: a concept's methods and a family's constructors, which no definition holds.
     pub members: Vec<(curios_core::Global, Option<curios_core::Extent>)>,
+    /// Each structure it declares with where it wrote each labelled field in the text of its declaration.
+    pub fields: Vec<(curios_core::Global, Vec<(String, curios_core::Extent)>)>,
 }
 
 /// One definition of a lowered item, as the exposure audit and the `unused-declaration` lint read it.
@@ -74,6 +76,19 @@ impl LoweredItem {
                 .iter()
                 .flat_map(|nominal| &nominal.members)
                 .map(|(name, span)| (*name, span.as_ref().and_then(&placed)))
+                .collect(),
+            fields: item
+                .nominals()
+                .iter()
+                .filter(|nominal| !nominal.fields.is_empty())
+                .map(|nominal| {
+                    let fields = nominal
+                        .fields
+                        .iter()
+                        .filter_map(|(label, span)| Some((label.clone(), placed(span.as_ref()?)?)))
+                        .collect();
+                    (nominal.name, fields)
+                })
                 .collect(),
         }
     }

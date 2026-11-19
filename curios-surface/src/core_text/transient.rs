@@ -14,8 +14,8 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Arm, Ascribed, Atom, Bang, Elements, Func, Global, Infix, Matrix, Method, NumLit, Pattern,
-        Row, Slot, Subterm, Term, Transient,
+        Arm, Ascribed, Atom, Bang, Elements, FieldLabel, Func, Global, Infix, Matrix, Method,
+        NumLit, Pattern, Row, Slot, Subterm, Term, Transient, WrittenAt,
     },
 };
 
@@ -482,6 +482,7 @@ fn pattern_read(
         },
         MatchPattern::Variant { tag, args } => Pattern::Variant {
             tag: Atom::from(tag.as_str()),
+            at: WrittenAt::default(),
             args: args
                 .iter()
                 .map(|(mark, arg)| Ok((*mark, pattern_read(arg, at, places)?)))
@@ -490,7 +491,15 @@ fn pattern_read(
         MatchPattern::Tuple(fields) => Pattern::Tuple(
             fields
                 .iter()
-                .map(|field| Ok((field.label.clone(), pattern_read(&field.value, at, places)?)))
+                .map(|field| {
+                    Ok((
+                        field
+                            .label
+                            .as_ref()
+                            .map(|label| FieldLabel::from(label.as_str())),
+                        pattern_read(&field.value, at, places)?,
+                    ))
+                })
                 .collect::<Result<_, ReadError>>()?,
         ),
         MatchPattern::Struct { .. } => return Err(unresolved(at)),

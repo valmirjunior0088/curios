@@ -221,7 +221,7 @@ pub struct TupleType<D: Dialect = Program> {
 /// One tuple-literal / struct-literal field as written: an optional name annotation (`(status = 0, handle = h)`) and the field value. Names are checked positionally against the expected tuple type's labels at elaboration and never survive past it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleField<D: Dialect = Program> {
-    pub label: Option<String>,
+    pub label: Option<Label>,
     /// `Some` for the definition sugar `label(params) = value` — the written parameter list, each a lambda's parameter, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`). Always paired with a label.
     pub func_params: Option<Vec<FuncParam<D>>>,
     pub value: Term<D>,
@@ -315,7 +315,7 @@ impl<D: Dialect> From<String> for Binder<D> {
 /// One tuple-pattern / struct-pattern field: a labeled sub-pattern (`label = pattern`) or a bare positional one. The literal mirror of [`TupleField`] with `Term` replaced by `Pattern` in the value slot — construction and destructuring read as inverses of each other.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PatternField<D: Dialect = Program> {
-    pub label: Option<String>,
+    pub label: Option<Label>,
     pub value: Pattern<D>,
 }
 
@@ -323,7 +323,7 @@ pub struct PatternField<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Field {
     Index(usize),
-    Label(String),
+    Label(Label),
 }
 
 /// A projection `head.field` out of a tuple/struct value — positional (`p.0`) or by label (`p.status`), see [`Field`].
@@ -459,7 +459,7 @@ pub enum MatchPattern<D: Dialect = Program> {
     Binder(Binder<D>),
     /// An inductive constructor tag applied to sub-patterns — positional (constructors have no field labels in this language). Each argument retains its plicity mark (`@`/`use`): a payload slot the constructor declared implicit must be matched with `@`. The marks lower to the Core arm untouched; core elaboration checks them against the constructor's canonical payload plicities.
     Variant {
-        tag: String,
+        tag: Label,
         args: Vec<(Plicity, MatchPattern<D>)>,
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
@@ -550,7 +550,7 @@ impl<D: Dialect> Elements<D> {
 /// One tuple-pattern / struct-pattern field in a [`MatchPattern`]: a labeled sub-pattern (`label = pattern`) or a bare positional one. The literal mirror of [`PatternField`] with `Pattern` replaced by `MatchPattern`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchPatternField<D: Dialect = Program> {
-    pub label: Option<String>,
+    pub label: Option<Label>,
     pub value: MatchPattern<D>,
 }
 

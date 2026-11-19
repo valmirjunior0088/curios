@@ -243,7 +243,7 @@ pub struct TopConcept<D: Dialect = Program> {
 /// One implementation field of a `witness` declaration: `label = value`, or the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar with the label mandatory. The sugar is kept verbatim (the printer round-trips it); `into_core` undoes it when it builds the desugared struct literal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
-    pub label: String,
+    pub label: Label,
     pub func_params: Option<Vec<FuncParam>>,
     pub value: Term,
 }

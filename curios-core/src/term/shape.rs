@@ -4,7 +4,7 @@
 
 use {
     crate::{
-        ArgumentSite, Atom, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix,
+        ArgumentSite, Atom, CalleeId, Extent, Free, Global, Intrinsic, Label, Level, Many, Matrix,
         MetavarSpine, Nat, One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var,
         Visit, project_erased_universes,
     },
@@ -295,8 +295,82 @@ pub enum Field {
     Tuple(usize),
     /// A slot of the fields the structure named declares.
     Struct(Global, usize),
-    Label(String),
+    Label(FieldLabel),
     Position(usize),
+}
+
+/// Where a word a term writes — a field's label, a constructor's tag — was written, where the lowering wrote it: what elaboration records what it resolves the word to under, for a place's answer, and nothing the term means. Ignored by identity as a term's extent is, so two terms apart only in where their words were written are one, and none a compiler built holds one.
+#[derive(Debug, Clone, Copy, Default)]
+#[curios_archive::archived]
+pub struct WrittenAt(pub Option<Extent>);
+
+impl PartialEq for WrittenAt {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for WrittenAt {}
+
+impl Hash for WrittenAt {
+    fn hash<H: Hasher>(&self, _: &mut H) {}
+}
+
+/// A field's label as a term writes it — a projection's, a literal's entry's, a pattern's field's — with where it was written ([`WrittenAt`]): the label is what it means, and two labels spelled alike are one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct FieldLabel {
+    pub text: String,
+    pub at: WrittenAt,
+}
+
+impl FieldLabel {
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl std::ops::Deref for FieldLabel {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.text
+    }
+}
+
+impl fmt::Display for FieldLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl PartialEq<str> for FieldLabel {
+    fn eq(&self, other: &str) -> bool {
+        self.text == other
+    }
+}
+
+impl PartialEq<&str> for FieldLabel {
+    fn eq(&self, other: &&str) -> bool {
+        self.text == *other
+    }
+}
+
+/// A label the compiler spells, which was written nowhere.
+impl From<&str> for FieldLabel {
+    fn from(text: &str) -> Self {
+        Self::from(text.to_string())
+    }
+}
+
+/// A label the compiler spells, which was written nowhere.
+impl From<String> for FieldLabel {
+    fn from(text: String) -> Self {
+        Self {
+            text,
+            at: WrittenAt::default(),
+        }
+    }
 }
 
 impl Field {
@@ -364,10 +438,10 @@ pub struct StructType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum StructEntry {
-    Field(Option<String>),
+    Field(Option<FieldLabel>),
     Use,
     Spread,
-    Implicit(Option<String>),
+    Implicit(Option<FieldLabel>),
 }
 
 /// A struct value as an intrinsic normal form (cf. [`Variant`], no tag). `name`/`params` are recoverable from the inferred type but stored redundantly so `convert` stays purely structural.
