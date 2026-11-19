@@ -14,7 +14,7 @@ use {
         StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
         WitnessId, WitnessKey, WitnessOrigin,
     },
-    curios_num::{Floating, Natural},
+    curios_num::{Floating, Integer, Natural, Rounding},
     std::rc::Rc,
 };
 
@@ -109,10 +109,20 @@ fn an_intrinsic_is_its_variant_and_a_literal_its_own_form() {
     );
     assert_eq!(written(&three), "3");
     assert_eq!(written(&Term::intrinsic(Intrinsic::Bool(true))), "true");
-    assert_eq!(
-        written(&Term::intrinsic(Intrinsic::Flt(Floating::infinite(true)))),
-        "#Flt(-inf.0)"
-    );
+    // A signed numeral is the `Int` it spells and a decimal or a non-finite literal the `Flt`, each read back as the value it writes.
+    for (value, text) in [
+        (Intrinsic::Int(Integer::from(-3i32)), "-3"),
+        (Intrinsic::Int(Integer::from(0i32)), "+0"),
+        (Intrinsic::Flt(Floating::infinite(true)), "-inf.0"),
+        (
+            Intrinsic::Flt(Floating::of_natural(&3u32.into(), Rounding::TiesToEven)),
+            "+3.0",
+        ),
+    ] {
+        let term = Term::intrinsic(value);
+        assert_eq!(written(&term), text);
+        assert_eq!(read_back(&term), term, "{text}");
+    }
 }
 
 /// A family applied as a node of its own is its former's call under the node it is, as a constructor's value is its constructor's call, the family's parameters under `@` ahead of its payload.
@@ -822,7 +832,6 @@ fn a_form_only_a_program_writes_is_refused_by_name_where_it_stands() {
         ("f(match | _ => a end)", "a match with no head", 2),
         ("f(\"text\")", "a string", 2),
         ("f(?)", "a goal `?`", 2),
-        ("f(-1)", "a signed numeral", 2),
     ] {
         assert_eq!(
             refused(text),

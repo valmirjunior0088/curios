@@ -476,7 +476,7 @@ let /f : (x: #FltType, y: #FltType) -> /M(#FltLt(x, y), x, y) =
         | false => /std/Bool/True/qed()
         | true => /std/Bool/True/qed()
         end;
-/f(#Flt(+nan.0), #Flt(0.0))
+/f(+nan.0, 0.0)
 "#;
 
 // Against a NaN both directions of an ordered comparison are false, so a `Flt` comparison has no dual the refinement probe may ask its guard under, and the false arm's `Holds(y <= x)` is left standing: `qed` is refused there, the one refusal between the module and `False`. `curios`'s `tests::rules::arm` puts the program to the elaborator under this name, over `Nat`, where the mirror is the guard's negation, as its control.

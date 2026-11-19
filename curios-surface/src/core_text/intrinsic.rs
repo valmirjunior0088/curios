@@ -1,6 +1,6 @@
 //! An intrinsic node: `#` and its Core variant's name, then its operands in the order Core holds them; in a reader's spelling, as a program writes it.
 //!
-//! **A literal form builds its own node.** A numeral is the `Nat` it spells, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes; every other value of a carrier states its variant: `#Int(-3)`, `#Byte(7)`, `#Flt(+1.5)`, `#Handle(2)`. A `Nat` over a term is `#Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `#FltAdd(TiesToEven, a, b)`, `#BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
+//! **A literal form builds its own node.** A numeral is the `Nat` it spells, a signed numeral the `Int`, `+0` its zero, a decimal or a non-finite literal the `Flt`, `true` and `false` the `Bool`s, and `x[…]` the `Bytes` holding those bytes, each the value a program's literal is where nothing pins its type; every other value of a carrier states its variant, `#Byte(7)`, `#Handle(2)`, and a NaN no literal spells its bits, `#Flt(0x7FF8000000000001)`. A `Nat` over a term is `#Nat(Succ(3, n))`. An operation's operands are its term operands, a rounding as its variant's name, a list of operands between brackets, and an instance as a decorator's universes are written: `#FltAdd(TiesToEven, a, b)`, `#BytesConcat([a, b])`. A `Flt` is the literal that reads back as it bit for bit, or its bits where no literal spells it: a NaN other than the default one of either sign.
 
 use {
     super::{
@@ -14,7 +14,7 @@ use {
     },
     curios_common::Span,
     curios_core::{Intrinsic, Nat, Subterm, Term, Universes},
-    curios_num::{Binary, Floating, Integer, Rounding},
+    curios_num::{Binary, Floating, Rounding},
 };
 
 /// `intrinsic` as Core text.
@@ -26,8 +26,8 @@ pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>)
         Intrinsic::Bool(value) => tree(crate::Subterm::Literal(Literal::Bool(value))),
         Intrinsic::Nat(nat) => nat_written(nat, frame),
         Intrinsic::Byte(byte) => called("Byte", vec![value(numeral(byte))]),
-        Intrinsic::Int(integer) => called("Int", vec![value(integer_written(&integer))]),
-        Intrinsic::Flt(flt) => called("Flt", vec![value(flt_literal(flt))]),
+        Intrinsic::Int(integer) => written_numeral(curios_core::Numeral::Integer(integer)),
+        Intrinsic::Flt(flt) => flt_written(flt),
         Intrinsic::Bytes(bytes) => bracketed_packed(bytes.as_bytes()),
         Intrinsic::Handle(handle) => called("Handle", vec![value(numeral(handle))]),
         Intrinsic::BoolType => called("BoolType", Vec::new()),
@@ -681,18 +681,10 @@ fn nat_written<D: Rendered>(nat: Nat, frame: Frame<'_, D>) -> crate::Term<D> {
     }
 }
 
-/// An `Int` as its numeral, signed where it is below zero.
-fn integer_written<D: Rendered>(integer: &Integer) -> crate::Term<D> {
-    match *integer < Integer::from(0i32) {
-        true => written_numeral(curios_core::Numeral::Integer(integer.clone())),
-        false => numeral(integer.magnitude()),
-    }
-}
-
-/// A `Flt` as the literal that reads back as it, or its bits in hexadecimal where none does: a NaN other than the default one of either sign.
-fn flt_literal<D: Rendered>(flt: Floating) -> crate::Term<D> {
+/// A `Flt` as the literal that reads back as it, or `#Flt` over its bits in hexadecimal where none does: a NaN other than the default one of either sign.
+fn flt_written<D: Rendered>(flt: Floating) -> crate::Term<D> {
     match flt.is_nan() && flt.abs().to_bits() != Floating::nan().to_bits() {
-        true => hexadecimal(flt.to_bits(), 16),
+        true => called("Flt", vec![value(hexadecimal(flt.to_bits(), 16))]),
         false => tree(crate::Subterm::Literal(Literal::Flt(flt.into()))),
     }
 }
@@ -776,10 +768,6 @@ pub fn intrinsic_read(
                     .and_then(|byte| u8::try_from(&byte).ok())
                     .ok_or_else(|| malformed("a byte's value", byte))?,
             )
-        }
-        "Int" => {
-            let [integer] = operands(intrinsic, span)?;
-            Intrinsic::Int(int_read(integer)?)
         }
         "Flt" => {
             let [flt] = operands(intrinsic, span)?;
@@ -1505,28 +1493,16 @@ fn nat_read(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Nat, ReadError
     Ok(Nat::Succ(offset, core_read(&tail.term, reader)?))
 }
 
-/// An `Int`'s value, a numeral under its sign.
-fn int_read(value: &CoreValue) -> Result<Integer, ReadError> {
-    match value_term(value)?.as_subterm() {
-        crate::Subterm::NumLit(NumLit { value, .. }) => Ok(match value {
-            curios_core::Numeral::Natural(natural) => Integer::from(natural.clone()),
-            curios_core::Numeral::Integer(integer) => integer.clone(),
-        }),
-        _ => Err(malformed("an integer", value)),
-    }
-}
-
-/// A `Flt`'s value: the literal that reads back as it, or its bits as a hexadecimal numeral.
+/// The bits `#Flt` states of a NaN no literal spells, a hexadecimal numeral.
 fn flt_read(value: &CoreValue) -> Result<Floating, ReadError> {
     match value_term(value)?.as_subterm() {
-        crate::Subterm::Literal(Literal::Flt(flt)) => Ok(flt.value),
         crate::Subterm::NumLit(NumLit {
             value: curios_core::Numeral::Natural(natural),
             ..
         }) => u64::try_from(natural)
             .map(Floating::from_bits)
             .map_err(|_| malformed("a float's bits", value)),
-        _ => Err(malformed("a float", value)),
+        _ => Err(malformed("a float's bits", value)),
     }
 }
 

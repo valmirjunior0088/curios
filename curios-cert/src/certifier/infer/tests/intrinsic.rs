@@ -61,7 +61,7 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     declare_holds(&mut certifier);
     let [narrowed, unproved] = under(
         &mut certifier,
-        "x: #IntType, ok: /std/Bool/Holds(#IntLe(#Int(0), x))",
+        "x: #IntType, ok: /std/Bool/Holds(#IntLe(+0, x))",
         "#IntToNat(x, ok), #IntToNat(x, 1)",
     );
 

@@ -639,8 +639,15 @@ fn form_read(
         Subterm::StructLit(literal) => literal_read(literal, fields, reader),
         Subterm::Match(elimination) => match_read(elimination, fields, reader),
         Subterm::Let(block) => let_read(block, reader),
-        Subterm::NumLit(_) => refused("a signed numeral"),
-        Subterm::Literal(Literal::Flt(_)) => refused("a decimal"),
+        Subterm::NumLit(NumLit {
+            value: curios_core::Numeral::Integer(integer),
+            ..
+        }) => Ok(curios_core::Term::intrinsic(Intrinsic::Int(
+            integer.clone(),
+        ))),
+        Subterm::Literal(Literal::Flt(flt)) => {
+            Ok(curios_core::Term::intrinsic(Intrinsic::Flt(flt.value)))
+        }
         Subterm::Literal(Literal::List(_)) => refused("a list literal"),
         Subterm::Infix(_) => refused("an operator"),
         Subterm::Bang(_) => refused("a `!`"),
