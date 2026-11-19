@@ -60,16 +60,12 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
-        match y.mantissa != +0
-        | false =>
-            match x.mantissa == +0
-            | true => invalid
-            | false => division_by_zero
-            end
-        | true =>
-            match x.mantissa == +0
-            | true => Exceptions/none
-            | false =>
+        match y.mantissa
+        | +0 => match x.mantissa | +0 => invalid | _ => division_by_zero end
+        | _ =>
+            match x.mantissa
+            | +0 => Exceptions/none
+            | _ =>
                 let (q, sticky) = Dyadic/quotient(x, y, @Bool/True/qed());
                 from_exact(r, q, sticky, rounded/div(r, a, b))
             end
@@ -261,10 +257,7 @@ pub let augmented_add(x: Flt, y: Flt) -> Exceptions =
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let v = a + b;
-        match v.mantissa == +0
-        | true => Exceptions/none
-        | false => augmented(v)
-        end
+        match v.mantissa | +0 => Exceptions/none | _ => augmented(v) end
     | _ =>
         match Flt/is_nan(x + y)
         | true => invalid
@@ -283,10 +276,7 @@ pub let augmented_mul(x: Flt, y: Flt) -> Exceptions =
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let v = a * b;
-        match v.mantissa == +0
-        | true => Exceptions/none
-        | false => augmented(v)
-        end
+        match v.mantissa | +0 => Exceptions/none | _ => augmented(v) end
     | _ =>
         match Flt/is_nan(x * y)
         | true => invalid

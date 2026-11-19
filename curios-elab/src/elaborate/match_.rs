@@ -49,6 +49,11 @@ impl Scrutinee {
         matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::NatType)) || self.is_undecided(context)
     }
 
+    /// Whether the scrutinee is an `Int`, which a dispatch takes apart by its signed keys.
+    pub fn is_int(&self) -> bool {
+        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::IntType))
+    }
+
     /// Whether the scrutinee is a `Bool`, whose numerals `0` and `1` are its two cases.
     pub fn is_bool(&self) -> bool {
         matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::BoolType))

@@ -1419,6 +1419,7 @@ impl Displayed<'_> {
                 pattern,
                 literal,
                 scrutinee,
+                instead,
             } => {
                 f.text("no literal pattern");
                 f.stating(match literal {
@@ -1446,7 +1447,12 @@ impl Displayed<'_> {
                     "scrutinee: {}",
                     Code(scrutinee.spelled(spelling))
                 ));
-                f.stating("match a natural the value gives, or test it in a guard");
+                match instead {
+                    Some(instead) => f.stating(format_args!(
+                        "an `Int` is taken apart by keys written with their sign: write `{instead}`"
+                    )),
+                    None => f.stating("match a natural the value gives, or test it in a guard"),
+                }
             }
             Error::MatrixByteSuccessor { successor } => {
                 f.text("no successor pattern");

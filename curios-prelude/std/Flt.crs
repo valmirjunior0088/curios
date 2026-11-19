@@ -224,7 +224,7 @@ pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =
     match (Dyadic/try_of(x), Dyadic/try_of(y))
     | (some(a), some(b)) =>
         let v = a + b;
-        match v.mantissa == +0 | true => (s, s) | false => augmented(v) end
+        match v.mantissa | +0 => (s, s) | _ => augmented(v) end
     | _ => (s, s)
     end;
 
@@ -238,7 +238,7 @@ pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
     match (Dyadic/try_of(x), Dyadic/try_of(y))
     | (some(a), some(b)) =>
         let v = a * b;
-        match v.mantissa == +0 | true => (p, p) | false => augmented(v) end
+        match v.mantissa | +0 => (p, p) | _ => augmented(v) end
     | _ => (p, p)
     end;
 

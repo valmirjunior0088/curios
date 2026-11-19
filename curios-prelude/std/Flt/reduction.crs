@@ -30,8 +30,8 @@ pub let product(a: Flt, b: Flt) -> Term =
     match (of(a), of(b))
     | (nan(_), _) | (infinite(_), nan(_)) | (number(_, _), nan(_)) => Term/nan(a + b)
     | (invalid(), _) | (infinite(_), invalid()) | (number(_, _), invalid()) => Term/invalid()
-    | (infinite(_), number(zero, _)) | (number(zero, _), infinite(_)), zero.mantissa == +0 =>
-        Term/invalid()
+    | (infinite(_), number(Dyadic { mantissa = +0, exponent = _ }, _))
+    | (number(Dyadic { mantissa = +0, exponent = _ }, _), infinite(_)) => Term/invalid()
     | (infinite(_), infinite(_)) | (infinite(_), number(_, _)) | (number(_, _), infinite(_)) =>
         Term/infinite(negative)
     | (number(x, _), number(y, _)) => Term/number(x * y, negative)
@@ -51,9 +51,9 @@ pub let sum(r: Rounding, a: Flt, b: Flt) -> Term =
     | (number(x, _), number(y, _)) =>
         let s = x + y;
         -- An exact zero sum takes the sign a rounded sum gives it, which rounding cannot change.
-        match s.mantissa == +0
-        | true => Term/number(s, Flt/is_sign_minus(rounded/add(r, a, b)))
-        | false => Term/number(s, s.mantissa < +0)
+        match s.mantissa
+        | +0 => Term/number(s, Flt/is_sign_minus(rounded/add(r, a, b)))
+        | _ => Term/number(s, s.mantissa < +0)
         end
     end;
 
@@ -129,9 +129,9 @@ pub let summed(r: Rounding, terms: List(Term)) -> Flt =
     -- No NaN, invalid term or infinity: every term is a number.
     | _ =>
         let s = number_sum(terms);
-        match s.mantissa == +0
-        | true => zero_sum(r, terms)
-        | false => Dyadic/to_flt(r, s)
+        match s.mantissa
+        | +0 => zero_sum(r, terms)
+        | _ => Dyadic/to_flt(r, s)
         end
     end;
 

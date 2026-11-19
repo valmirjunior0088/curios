@@ -59,7 +59,7 @@ fn a_bytes_dispatch_refuses_what_no_byte_is() {
     }
 }
 
-/// A literal over a type that takes none is refused by what a literal takes apart, not as a mismatch against a natural.
+/// A numeral without a sign over an integer is refused by what it takes apart, naming the signed key an integer is taken apart by.
 #[test]
 fn a_literal_over_an_integer_names_what_a_literal_takes_apart() {
     let source = r#"
@@ -71,7 +71,8 @@ fn a_literal_over_an_integer_names_what_a_literal_takes_apart() {
     let error = error(source);
     assert!(
         error.contains("no literal pattern")
-            && error.contains("takes a `Nat`, a `Byte` or a `Bool` apart"),
+            && error.contains("takes a `Nat`, a `Byte` or a `Bool` apart")
+            && error.contains("write `+0`"),
         "unexpected error: {error}"
     );
 }

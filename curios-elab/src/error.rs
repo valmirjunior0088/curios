@@ -800,11 +800,12 @@ pub enum Error {
         written: usize,
         scrutinee: Box<Term>,
     },
-    /// A literal or a successor pattern over a column whose type takes none of its kind: a numeral without a sign takes a `Nat`, a `Byte` or a `Bool` apart, one with its sign an `Int`, a successor a `Nat`, a character a `Nat`, a `Byte` or a `Char`, and a string a `Str`. `pattern` is the arm as written, `literal` what it writes at the column, and `scrutinee` the column's type.
+    /// A literal or a successor pattern over a column whose type takes none of its kind: a numeral without a sign takes a `Nat`, a `Byte` or a `Bool` apart, one with its sign an `Int`, a successor a `Nat`, a character a `Nat`, a `Byte` or a `Char`, and a string a `Str`. `pattern` is the arm as written, `literal` what it writes at the column, `scrutinee` the column's type, and `instead` the signed key an integer's column takes in the place of a numeral or a character without a sign.
     MatrixLiteralColumn {
         pattern: String,
         literal: WrittenLiteral,
         scrutinee: Box<Term>,
+        instead: Option<String>,
     },
     /// A successor pattern over a `Byte`, which a match takes apart by its values and never peels. `successor` is the arm as written.
     MatrixByteSuccessor {

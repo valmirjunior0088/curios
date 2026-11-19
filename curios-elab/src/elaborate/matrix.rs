@@ -29,7 +29,7 @@ use {
         Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType, Subterm, Telescope,
         Term, Tuple, TupleType, WrittenPlace,
     },
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
     curios_surface::written_pattern,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -115,7 +115,7 @@ impl<'m> Shape<'m> {
             Shape::Peeled(pattern, peeled) => (pattern, peeled),
             Shape::Remains(..) | Shape::Text(_) => return None,
         };
-        // A column reads a value only once its rows have been realized at its type, a signed numeral being no natural's ([`Compiler::naturals`]), so a numeral's value is the natural it spells and a character's its code point.
+        // A column reads a value only once its rows have been realized at its type, a signed numeral being no natural's ([`Compiler::numbers`]), so a numeral's value is the natural it spells and a character's its code point.
         let written = match pattern {
             Pattern::Literal(NumLit::Number(Numeral::Natural(natural))) => natural.clone(),
             Pattern::Literal(NumLit::Character(character)) => Natural::from(*character as u32),
@@ -225,6 +225,115 @@ fn truth_pattern(value: bool) -> &'static Pattern {
     match value {
         false => FALSE,
         true => TRUE,
+    }
+}
+
+/// A key a dispatch reads off its rows: a natural's, which a byte's and a character's are read as, or an integer's. One statement of a dispatch serves every carrier ([`Compiler::dispatch`]), each saying how its keys are read, written and typed, and which value no row writes.
+trait DispatchKey: Ord + Clone + Sized {
+    /// The carrier the scrutinee is held to.
+    const CARRIER: IntrinsicHead;
+
+    /// The key `shape` writes, where it writes one of this carrier's.
+    fn of(shape: Shape<'_>) -> Option<Self>;
+
+    /// The key as its first row writes it, which a report names its case by.
+    fn spelled(&self, shape: Shape<'_>) -> String;
+
+    /// The key as the literal its arm is typed at.
+    fn literal(&self) -> Term;
+
+    /// The switch's keys over `keyed`.
+    fn keys(keyed: Keyed<Self>) -> Keys;
+
+    /// The value no row writes where no row writes a binder, `written` saying which keys are written: the one a report names as a value no arm matches.
+    fn missing(context: &Context, scrutinee: &Scrutinee, written: impl Fn(&Self) -> bool) -> Seen;
+
+    /// The scrutinee as the dispatch reads it.
+    fn viewed(context: &Context, scrutinee: Scrutinee) -> Scrutinee;
+}
+
+impl DispatchKey for Natural {
+    const CARRIER: IntrinsicHead = IntrinsicHead::Nat;
+
+    fn of(shape: Shape<'_>) -> Option<Self> {
+        shape.value()
+    }
+
+    fn spelled(&self, shape: Shape<'_>) -> String {
+        match shape {
+            Shape::Pattern(Pattern::Literal(NumLit::Character(character))) => {
+                format!("{character:?}")
+            }
+            _ => self.to_string(),
+        }
+    }
+
+    fn literal(&self) -> Term {
+        Term::intrinsic(Intrinsic::Nat(Nat::new(self.clone())))
+    }
+
+    fn keys(keyed: Keyed<Self>) -> Keys {
+        Keys::Nat(keyed)
+    }
+
+    // No set of literals covers every natural: the least one no row writes is a value no arm matches. A byte's dispatch is a natural's, so it too takes its other values at a binder, written `_` where every byte has an arm; and a character no row writes is any of them.
+    fn missing(context: &Context, scrutinee: &Scrutinee, written: impl Fn(&Self) -> bool) -> Seen {
+        match (scrutinee.is_byte(), scrutinee.is_char(context)) {
+            (true, _) => (0..=u32::from(u8::MAX))
+                .map(Natural::from)
+                .find(|literal| !written(literal))
+                .map_or(Seen::Any, |least| Seen::Leaf(least.to_string())),
+            (false, true) => Seen::Any,
+            (false, false) => {
+                let least = (0u32..)
+                    .map(Natural::from)
+                    .find(|literal| !written(literal))
+                    .expect("a match writes finitely many literals");
+
+                Seen::Leaf(least.to_string())
+            }
+        }
+    }
+
+    fn viewed(context: &Context, scrutinee: Scrutinee) -> Scrutinee {
+        dispatched(context, scrutinee)
+    }
+}
+
+impl DispatchKey for Integer {
+    const CARRIER: IntrinsicHead = IntrinsicHead::Int;
+
+    fn of(shape: Shape<'_>) -> Option<Self> {
+        match shape.pattern()? {
+            Pattern::Literal(NumLit::Number(Numeral::Integer(integer))) => Some(integer.clone()),
+            _ => None,
+        }
+    }
+
+    fn spelled(&self, _: Shape<'_>) -> String {
+        format!("{self:+}")
+    }
+
+    fn literal(&self) -> Term {
+        Term::intrinsic(Intrinsic::Int(self.clone()))
+    }
+
+    fn keys(keyed: Keyed<Self>) -> Keys {
+        Keys::Int(keyed)
+    }
+
+    // The key of least magnitude no row writes, the nonnegative first.
+    fn missing(_: &Context, _: &Scrutinee, written: impl Fn(&Self) -> bool) -> Seen {
+        let least = (0u32..)
+            .flat_map(|magnitude| [Integer::from(magnitude), -Integer::from(magnitude)])
+            .find(|key| !written(key))
+            .expect("a match writes finitely many keys");
+
+        Seen::Leaf(format!("{least:+}"))
+    }
+
+    fn viewed(_: &Context, scrutinee: Scrutinee) -> Scrutinee {
+        scrutinee
     }
 }
 
@@ -541,7 +650,7 @@ impl<'m> Compiler<'m> {
                 match (truths, peels) {
                     (true, true) => Err(Error::MatrixInconsistentShape),
                     (true, false) => self.booleans(context, columns, lines, top, mode),
-                    (false, _) => self.naturals(context, columns, lines, top, mode),
+                    (false, _) => self.numbers(context, columns, lines, top, mode),
                 }
             }
             Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
@@ -652,6 +761,7 @@ impl<'m> Compiler<'m> {
         scrutinee: &Scrutinee,
         row: usize,
         literal: WrittenLiteral,
+        instead: Option<String>,
     ) -> Error {
         let pattern = self.written(row);
 
@@ -660,6 +770,7 @@ impl<'m> Compiler<'m> {
                 pattern,
                 literal,
                 scrutinee: Box::new(resolved_for_display(reporting, &type_)),
+                instead,
             }
         })
         .at_opt(self.row(row).body.extent())
@@ -1384,7 +1495,7 @@ impl<'m> Compiler<'m> {
             let written = written_literal(pattern);
             match (written, realize(literal, &carrier)) {
                 (WrittenLiteral::Signed, _) | (_, Ok(None)) => {
-                    return Err(self.literal_refused(context, &scrutinee, line.row, written));
+                    return Err(self.literal_refused(context, &scrutinee, line.row, written, None));
                 }
                 (_, Err(error)) => return Err(error.at_opt(self.row(line.row).body.extent())),
                 (_, Ok(Some(Intrinsic::Bool(value)))) => {
@@ -1466,8 +1577,8 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a column of naturals or of bytes, in one of two forms the rows that write a case choose: a case split, `0` and `n + 1`, where a row writes a successor or only `0` beside binders, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes, as a byte's column always is. A case split takes each literal apart as the successors it is, `0` at its zero case and a literal past it one less at the predecessor, so a column peels as many successors as its largest step and dispatches on the literals past it there. A byte is dispatched as the natural it is, and a column of any other type takes no literal.
-    fn naturals(
+    /// Rows over a column of numbers: naturals, bytes or integers. A natural's column takes one of two forms the rows that write a case choose: a case split, `0` and `n + 1`, where a row writes a successor or only `0` beside binders, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes, as a byte's column and an integer's always are. A case split takes each literal apart as the successors it is, `0` at its zero case and a literal past it one less at the predecessor, so a column peels as many successors as its largest step and dispatches on the literals past it there. A byte is dispatched as the natural it is, an integer on its signed keys, and a column of any other type takes no literal.
+    fn numbers(
         &mut self,
         context: &mut Context,
         mut columns: Vec<Column>,
@@ -1504,12 +1615,14 @@ impl<'m> Compiler<'m> {
 
             return self.booleans(context, columns, lines, top, mode);
         }
-        // What a column's literals are is its type's: a byte's are its values, dispatched as the natural it is, a character's its code point, which only a character's literal names, a natural's its values, and a type that is none of these takes none.
+        // What a column's literals are is its type's: a byte's are its values, dispatched as the natural it is, a character's its code point, which only a character's literal names, a natural's its values, an integer's the keys written with their sign, and a type that is none of these takes none.
         let byte = scrutinee.is_byte();
         let character = scrutinee.is_char(context);
+        let integer = scrutinee.is_int();
         let natural = byte || character || scrutinee.takes_naturals(context);
         let carrier = match () {
             () if byte => Some(Subterm::Intrinsic(Intrinsic::ByteType)),
+            () if integer => Some(Subterm::Intrinsic(Intrinsic::IntType)),
             () if natural => Some(Subterm::Intrinsic(Intrinsic::NatType)),
             // A `Bool` column reaches here only where a row peels a successor, which is what is refused.
             () if scrutinee.is_bool() => Some(Subterm::Intrinsic(Intrinsic::BoolType)),
@@ -1524,18 +1637,35 @@ impl<'m> Compiler<'m> {
             };
             let written = written_literal(pattern);
             let taken = match written {
-                WrittenLiteral::Numeral => carrier.is_some() && !character,
+                WrittenLiteral::Numeral => carrier.is_some() && !character && !integer,
+                WrittenLiteral::Signed => integer,
                 WrittenLiteral::Successor => natural && !character,
                 WrittenLiteral::Character => natural,
-                WrittenLiteral::Signed | WrittenLiteral::String => false,
+                WrittenLiteral::String => false,
             };
             if !taken {
-                return Err(self.literal_refused(context, &scrutinee, line.row, written));
+                // At an integer's column, the key a reader means is the value with its sign.
+                let instead = match pattern {
+                    Pattern::Literal(NumLit::Number(numeral)) if integer => {
+                        Some(format!("+{}", numeral.magnitude()))
+                    }
+                    Pattern::Literal(NumLit::Character(character)) if integer => {
+                        Some(format!("+{}", u32::from(*character)))
+                    }
+                    _ => None,
+                };
+                return Err(self.literal_refused(context, &scrutinee, line.row, written, instead));
             }
             // A literal is realized where it is first read, at the column it is written at; what a split peels off it is the same value less what was peeled.
             if let (Some(carrier), Shape::Pattern(Pattern::Literal(literal))) = (&carrier, shape) {
                 realize(literal, carrier).map_err(|error| error.at_opt(place(line.row)))?;
             }
+        }
+        if integer {
+            let mut columns = rest;
+            columns.insert(0, column);
+
+            return self.dispatch::<Integer>(context, columns, lines, top, mode, scrutinee);
         }
         if byte && let Some(successor) = peels {
             return Err(Error::MatrixByteSuccessor {
@@ -1545,108 +1675,10 @@ impl<'m> Compiler<'m> {
         }
         // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal. A byte has no successor, so its `0` is a literal.
         if peels.is_none() && (byte || character || dispatches.is_some()) {
-            let literal = |shape: Shape<'m>| {
-                shape
-                    .value()
-                    .expect("every row of a dispatch writes a literal")
-            };
-            let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = lines
-                .iter()
-                .filter_map(|line| line.cells[0].map(|(shape, _)| (literal(shape), Vec::new())))
-                .collect();
-            // Each case as its first row writes it, a character as a character.
-            let mut spelled = BTreeMap::new();
-            for line in &lines {
-                if let Some((shape, _)) = line.cells[0] {
-                    spelled
-                        .entry(literal(shape))
-                        .or_insert_with(|| match shape {
-                            Shape::Pattern(Pattern::Literal(NumLit::Character(character))) => {
-                                format!("{character:?}")
-                            }
-                            _ => literal(shape).to_string(),
-                        });
-                }
-            }
-            let reached = self.reached(&lines, Shape::value, groups.len() + 1);
-            self.strayed(&reached);
-            let mut others = Vec::new();
-            for mut line in lines {
-                match line.cells.remove(0) {
-                    Some((shape, _)) => groups
-                        .get_mut(&literal(shape))
-                        .expect("a group stands for each literal a row writes")
-                        .push(line),
-                    None => {
-                        for group in groups.values_mut() {
-                            group.push(line.clone());
-                        }
-                        others.push(line);
-                    }
-                }
-            }
-            // No set of literals covers every natural: the least one no row writes is a value no arm matches. A byte's dispatch is a natural's, so it too takes its other values at a binder, written `_` where every byte has an arm.
-            if others.is_empty() {
-                let missing = match (byte, character) {
-                    (true, _) => (0..=u32::from(u8::MAX))
-                        .map(Natural::from)
-                        .find(|literal| !groups.contains_key(literal))
-                        .map_or(Seen::Any, |least| Seen::Leaf(least.to_string())),
-                    // A character no row writes is any of them.
-                    (false, true) => Seen::Any,
-                    (false, false) => {
-                        let least = (0u32..)
-                            .map(Natural::from)
-                            .find(|literal| !groups.contains_key(literal))
-                            .expect("a match writes finitely many literals");
+            let mut columns = rest;
+            columns.insert(0, column);
 
-                        Seen::Leaf(least.to_string())
-                    }
-                };
-
-                return Err(self.uncovered(&column, missing, false));
-            }
-
-            let scrutinee = dispatched(context, scrutinee);
-            let goal = Term::hole(context.mint_metavar());
-
-            return context.awaiting(|context| {
-                let split = Rc::new(SwitchSplit::resolve(
-                    context,
-                    scrutinee,
-                    IntrinsicHead::Nat,
-                    &goal,
-                    &mode,
-                )?);
-                self.resolved(top, || {
-                    (
-                        Outermost::Switch(Rc::clone(&split)),
-                        column.term.clone(),
-                        split.result_type(),
-                    )
-                });
-
-                let mut cases = Vec::with_capacity(groups.len());
-                for (value, group) in groups {
-                    self.seen[column.seen] = Seen::Leaf(spelled[&value].clone());
-                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
-                    let arm = split.arm(context, literal, |context, expected| {
-                        self.case(context, rest.clone(), group, expected)
-                    })?;
-                    cases.push((value, arm));
-                }
-                self.seen[column.seen] = Seen::Any;
-                let keys = Keys::Nat(
-                    Keyed::new(cases)
-                        .expect("a dispatch's keys are its groups', one at least, ascending"),
-                );
-                let default = split.default(context, &keys, |context, expected| {
-                    self.case(context, rest, others, expected)
-                })?;
-                let (rebuilt, type_) = split.rebuild(keys, default);
-
-                self.settled(context, top, rebuilt, type_)
-            });
+            return self.dispatch::<Natural>(context, columns, lines, top, mode, scrutinee);
         }
 
         // A literal of `0` closes the zero case, and a successor the case of every successor where a step of one is left of it; a larger step leaves the successor of `0` to the rows after it, and a literal past `0` closes no case of the split.
@@ -1759,6 +1791,7 @@ impl<'m> Compiler<'m> {
                         &scrutinee,
                         text,
                         WrittenLiteral::String,
+                        None,
                     ));
                 }
                 self.texts.insert(column.seen);
@@ -2302,6 +2335,31 @@ impl<'m> Compiler<'m> {
                     })
                 })?;
             }
+            Pattern::Literal(_) if Integer::of(shape).is_some() => {
+                let key = Integer::of(shape).expect("an integer's key, as read");
+                let split = match shared {
+                    Some(Outermost::Switch(split)) => split,
+                    Some(_) => unreachable!("a column is split by one shape"),
+                    None => {
+                        let scrutinee = Scrutinee::read(context, &column)?;
+                        let goal = Term::hole(context.mint_metavar());
+
+                        Rc::new(SwitchSplit::resolve(
+                            context,
+                            scrutinee,
+                            IntrinsicHead::Int,
+                            &goal,
+                            &mode,
+                        )?)
+                    }
+                };
+
+                walk_awaited(context, awaits, |context| {
+                    split.arm(context, key.literal(), |context, expected| {
+                        arm(self, context, columns, line, expected)
+                    })
+                })?;
+            }
             Pattern::Literal(_) => {
                 let value = shape.value().expect("a literal has a value");
                 // A numeral at a `Bool` is the truth value it realizes as, which the tree held to `0` or `1` where it read the column ([`Compiler::truths`]).
@@ -2426,6 +2484,96 @@ impl<'m> Compiler<'m> {
         }
 
         Ok(walked.expect("the arm of a row's case is its walk"))
+    }
+
+    /// A dispatch on the literals the rows write at a column, each a key of `K`'s carrier: a case for each key, and what any other value takes, the rows that write a binder there, typed where each key's test failed. Where no row writes a binder, the value no row writes is refused as one no arm matches.
+    fn dispatch<K: DispatchKey>(
+        &mut self,
+        context: &mut Context,
+        mut columns: Vec<Column>,
+        lines: Vec<Line<'m>>,
+        top: bool,
+        mode: Mode,
+        scrutinee: Scrutinee,
+    ) -> Result<(Term, Term), Error> {
+        let column = columns.remove(0);
+        let rest = columns;
+        let key = |shape: Shape<'m>| K::of(shape).expect("every row of a dispatch writes a key");
+        let mut groups: BTreeMap<K, Vec<Line<'m>>> = lines
+            .iter()
+            .filter_map(|line| line.cells[0].map(|(shape, _)| (key(shape), Vec::new())))
+            .collect();
+        // Each case as its first row writes it.
+        let mut spelled = BTreeMap::new();
+        for line in &lines {
+            if let Some((shape, _)) = line.cells[0] {
+                let written = key(shape);
+                let spelling = written.spelled(shape);
+                spelled.entry(written).or_insert(spelling);
+            }
+        }
+        let reached = self.reached(&lines, K::of, groups.len() + 1);
+        self.strayed(&reached);
+        let mut others = Vec::new();
+        for mut line in lines {
+            match line.cells.remove(0) {
+                Some((shape, _)) => groups
+                    .get_mut(&key(shape))
+                    .expect("a group stands for each key a row writes")
+                    .push(line),
+                None => {
+                    for group in groups.values_mut() {
+                        group.push(line.clone());
+                    }
+                    others.push(line);
+                }
+            }
+        }
+        if others.is_empty() {
+            let missing = K::missing(context, &scrutinee, |key| groups.contains_key(key));
+
+            return Err(self.uncovered(&column, missing, false));
+        }
+
+        let scrutinee = K::viewed(context, scrutinee);
+        let goal = Term::hole(context.mint_metavar());
+
+        context.awaiting(|context| {
+            let split = Rc::new(SwitchSplit::resolve(
+                context,
+                scrutinee,
+                K::CARRIER,
+                &goal,
+                &mode,
+            )?);
+            self.resolved(top, || {
+                (
+                    Outermost::Switch(Rc::clone(&split)),
+                    column.term.clone(),
+                    split.result_type(),
+                )
+            });
+
+            let mut cases = Vec::with_capacity(groups.len());
+            for (value, group) in groups {
+                self.seen[column.seen] = Seen::Leaf(spelled[&value].clone());
+                let arm = split.arm(context, value.literal(), |context, expected| {
+                    self.case(context, rest.clone(), group, expected)
+                })?;
+                cases.push((value, arm));
+            }
+            self.seen[column.seen] = Seen::Any;
+            let keys = K::keys(
+                Keyed::new(cases)
+                    .expect("a dispatch's keys are its groups', one at least, ascending"),
+            );
+            let default = split.default(context, &keys, |context, expected| {
+                self.case(context, rest, others, expected)
+            })?;
+            let (rebuilt, type_) = split.rebuild(keys, default);
+
+            self.settled(context, top, rebuilt, type_)
+        })
     }
 
     /// The body of the row at `row`, as the function over its binders it is.

@@ -676,6 +676,19 @@ A literal is any natural, written whole, as a numeral or as a character literal,
 
 A numeral pattern takes its type from its column as a [numeral](#numeric-literals) does from where it stands, so a `Bool` is taken apart by `0` and `1` as well as by `false` and `true`. A numeral pattern written with a sign is an `Int`'s, which no `Nat`, `Byte` or `Bool` takes: `| +1 =>` is refused where `| 1 =>` is taken.
 
+An `Int` is dispatched on its keys, each written with its sign, beside an arm that writes a binder, which takes every other value and knows its value is none of the keys. A numeral without a sign and a character are no `Int`'s key, and are refused naming the key a reader means: `| 1 =>` as `+1`, and `| 'a' =>` as `+97`. With no arm past the keys, the value named as matched by none is the key of least magnitude no arm writes, the nonnegative first.
+
+```crs
+use /std/{Int, Str};
+
+pub let classify(i: Int) -> Str =
+    match i
+    | -1 => "minus one"
+    | +0 => "zero"
+    | _ => "otherwise"
+    end;
+```
+
 A `Byte` is dispatched on literals as a `Nat` is, a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are. Its `0` is a literal like any other, and a byte takes no successor pattern.
 
 ```crs
