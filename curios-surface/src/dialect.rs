@@ -7,12 +7,54 @@
 //! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
 //!
 //! **One writer builds either tree** ([`Rendered`]): Core text written whole, the text a reader reads back, is Core text's own tree, and everything else a shown one. What only a shown tree holds is built under a leave Core text's tree has no value of, so a whole print holding `…` or a reader's token is no tree the writer can build, and the print is the reader's inverse by its type.
+//!
+//! **What a text is written in is its name's** ([`WrittenIn`]): a file whose name ends in `.crsc` is Core text and any other a program, the one rule every reader of a file asks, and a text with no file states its own. A guess from the text would choose the grammar it is read by, and a closing term alone reads in both.
+
+#[cfg(test)]
+mod tests;
 
 use {
     crate::{Label, Term, TopConcept, TopForeign, TopInduct, TopLet, TopStruct, TopTest},
     curios_core::{Global, WitnessId},
-    std::fmt,
+    std::{fmt, path::Path},
 };
+
+/// What a text is written in, as a value: what a reader reads a text as, where [`Dialect`] is what a tree holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WrittenIn {
+    /// A program or a module, a `.crs`.
+    Program,
+    /// Core text, a `.crsc`.
+    CoreText,
+}
+
+impl WrittenIn {
+    /// Each dialect, in the order a file's extension is tried.
+    pub const EVERY: [WrittenIn; 2] = [WrittenIn::Program, WrittenIn::CoreText];
+
+    /// What the file at `path` is written in, by its name alone: Core text where its extension is a `.crsc`'s, and a program otherwise, a file named with no extension among them.
+    pub fn of(path: &Path) -> Self {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(Self::of_extension)
+            .unwrap_or(Self::Program)
+    }
+
+    /// The dialect whose files take `extension`, written without its dot, where one does.
+    pub fn of_extension(extension: &str) -> Option<Self> {
+        Self::EVERY
+            .into_iter()
+            .find(|written| written.extension() == extension)
+    }
+
+    /// The extension a file written so takes, without its dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            WrittenIn::Program => "crs",
+            WrittenIn::CoreText => "crsc",
+        }
+    }
+}
 
 /// A language a tree is written in, by the forms it writes beyond the other's.
 pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {

@@ -1,12 +1,12 @@
 //! What an invocation is about: every command's argument, resolved once.
 //!
-//! **A spelling means one thing.** `-` is standard input, an argument ending in `.crs` or holding a path separator is a file, any other argument is an executable's name, and no argument at all is the governing package entire. The rule is lexical and probes no disk — an executable's name is a single identifier, so it can hold neither `.crs` nor a separator nor be `-`, and the spaces cannot overlap — and it is spelled here once, so no two commands can come to read one argument two ways.
+//! **A spelling means one thing.** `-` is standard input, an argument ending in `.crs` or `.crsc` or holding a path separator is a file, any other argument is an executable's name, and no argument at all is the governing package entire. The rule is lexical and probes no disk — an executable's name is a single identifier, so it can hold neither `.crs` nor a separator nor be `-`, and the spaces cannot overlap — and it is spelled here once, so no two commands can come to read one argument two ways.
 //!
 //! That is also why `-` is spelled at all, rather than a bare invocation reading standard input when one is piped in. No argument already means the governing package, and deciding between the two would mean asking whether a terminal is attached — which makes one command line mean different things in a shell and in a pipeline.
 //!
 //! **What is selected is one of three things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; or a program. A program is *declared*, with a home in its package's store and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more.
 //!
-//! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
+//! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise, as a file of Core text always is, no `mod` line reaching one — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
 
 #[cfg(test)]
 mod tests;
@@ -20,6 +20,7 @@ use {
     curios_module::{
         Overlay, PackageRoot, RootSource, identity, open_entrypoint, overlay_entrypoint,
     },
+    curios_surface::WrittenIn,
     std::path::{Path, PathBuf},
 };
 
@@ -51,12 +52,13 @@ impl Spelling {
     }
 }
 
-/// Whether `argument` names a file rather than an executable.
+/// Whether `argument` names a file rather than an executable: by the extension of a file written in either dialect ([`WrittenIn`]), or by a separator.
 ///
 /// Both separators, not the platform's: an executable's name is an identifier, so neither can appear in one, and a path written with the other spelling is still plainly a path. Named for what it decides rather than `is_file`, which reads as a question about the disk — and this asks nothing of it.
 fn names_a_file(argument: &str) -> bool {
-    argument.ends_with(".crs")
-        || argument.ends_with(".crsc")
+    WrittenIn::EVERY
+        .into_iter()
+        .any(|written| argument.ends_with(&format!(".{}", written.extension())))
         || argument.contains('/')
         || argument.contains('\\')
 }
@@ -361,6 +363,11 @@ fn placed(
     manifest: Option<&Path>,
     overlay: &Overlay,
 ) -> Result<Selection, Box<Report>> {
+    // No `mod` line reaches Core text, so a file of it is in no unit, wherever it sits.
+    if WrittenIn::of(&file) == WrittenIn::CoreText {
+        return Ok(loose(file));
+    }
+
     let spelled = identity(&file);
 
     // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.

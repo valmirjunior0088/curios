@@ -16,7 +16,7 @@ use {
         nearest_manifest,
     },
     curios_pipeline::Stage,
-    curios_surface::Format,
+    curios_surface::{Format, WrittenIn},
     curios_verdict::Verdicts,
     curios_wonder::{Scope, Staged, file_subject},
     std::{
@@ -98,6 +98,8 @@ pub struct Contract {
     pub accepts: Accepts,
     /// Whether a program must be named by its own file rather than through one of its modules: a command that runs or builds a program performs it, and a module is not what performs.
     pub own_file_only: bool,
+    /// Whether the command reads Core text: a file whose name says it is Core text ([`WrittenIn::of`]) is refused, naming the cause, by a command that does not, before anything reads it.
+    pub core_text: bool,
     pub access: Access,
     pub product: Product,
 }
@@ -106,6 +108,7 @@ pub const RUN: Contract = Contract {
     command: "run",
     accepts: Accepts::Program,
     own_file_only: true,
+    core_text: false,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -114,6 +117,7 @@ pub const COMPILE: Contract = Contract {
     command: "compile",
     accepts: Accepts::Program,
     own_file_only: true,
+    core_text: false,
     access: Access::Write,
     product: Product::Executable,
 };
@@ -122,6 +126,7 @@ pub const DOCUMENT: Contract = Contract {
     command: "document",
     accepts: Accepts::Library,
     own_file_only: false,
+    core_text: false,
     access: Access::Write,
     product: Product::Pages,
 };
@@ -130,6 +135,7 @@ pub const DOCUMENT_STD: Contract = Contract {
     command: "document",
     accepts: Accepts::Nothing,
     own_file_only: false,
+    core_text: false,
     access: Access::None,
     product: Product::Pages,
 };
@@ -138,6 +144,7 @@ pub const TEST: Contract = Contract {
     command: "test",
     accepts: Accepts::Any,
     own_file_only: false,
+    core_text: false,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -146,6 +153,7 @@ pub const CURATE: Contract = Contract {
     command: "curate",
     accepts: Accepts::Entire,
     own_file_only: false,
+    core_text: false,
     access: Access::None,
     product: Product::Sources,
 };
@@ -155,6 +163,7 @@ pub const PIN: Contract = Contract {
     command: "pin",
     accepts: Accepts::Nothing,
     own_file_only: false,
+    core_text: false,
     access: Access::None,
     product: Product::Manifest,
 };
@@ -163,6 +172,7 @@ pub const NEW: Contract = Contract {
     command: "new",
     accepts: Accepts::Nothing,
     own_file_only: false,
+    core_text: false,
     access: Access::None,
     product: Product::Package,
 };
@@ -171,6 +181,7 @@ pub const LINT: Contract = Contract {
     command: "lint",
     accepts: Accepts::Any,
     own_file_only: false,
+    core_text: false,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -179,6 +190,7 @@ pub const FORMAT: Contract = Contract {
     command: "format",
     accepts: Accepts::Files,
     own_file_only: false,
+    core_text: true,
     access: Access::None,
     product: Product::Rewritten,
 };
@@ -189,6 +201,7 @@ pub const PROFILE: Contract = Contract {
     command: "profile",
     accepts: Accepts::Nothing,
     own_file_only: false,
+    core_text: false,
     access: Access::None,
     product: Product::Nothing,
 };
@@ -197,6 +210,7 @@ pub const DIAGNOSTICS: Contract = Contract {
     command: "wonder",
     accepts: Accepts::Any,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -205,6 +219,7 @@ pub const TESTS: Contract = Contract {
     command: "wonder --tests",
     accepts: Accepts::Any,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -213,6 +228,7 @@ pub const STAGE: Contract = Contract {
     command: "wonder --stage",
     accepts: Accepts::Program,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -222,6 +238,7 @@ pub const STAGE_OF_A_UNIT: Contract = Contract {
     command: "wonder --stage",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -231,6 +248,7 @@ pub const AT: Contract = Contract {
     command: "wonder --at",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -241,6 +259,7 @@ pub const NAME: Contract = Contract {
     command: "wonder --name",
     accepts: Accepts::Scope,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -250,6 +269,7 @@ pub const EXPORTS: Contract = Contract {
     command: "wonder --name --exports",
     accepts: Accepts::Scope,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -259,6 +279,7 @@ pub const WITNESSES: Contract = Contract {
     command: "wonder --name --witnesses",
     accepts: Accepts::Scope,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -268,6 +289,7 @@ pub const NAMED_STAGE_OF_A_UNIT: Contract = Contract {
     command: "wonder --name --stage",
     accepts: Accepts::Scope,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -277,6 +299,7 @@ pub const NAMED_STAGE: Contract = Contract {
     command: "wonder --name --stage",
     accepts: Accepts::Program,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -286,6 +309,7 @@ pub const FOOTPRINT: Contract = Contract {
     command: "wonder --name --footprint",
     accepts: Accepts::Program,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -294,6 +318,7 @@ pub const SERVER: Contract = Contract {
     command: "wonder --server",
     accepts: Accepts::Nothing,
     own_file_only: false,
+    core_text: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -413,8 +438,8 @@ impl Mode {
 pub enum Rewritten {
     /// Files on disk, rewritten in place: the files of one subject, which one package governs or none does, so one format serves them all.
     Files(Vec<PathBuf>, Format),
-    /// Standard input, written back to standard output, in the format the command line states, since no manifest governs it.
-    Stdin(Format),
+    /// Standard input, written back to standard output, in the format the command line states, since no manifest governs it, and written in what the command line says it is.
+    Stdin(Format, WrittenIn),
 }
 
 impl Contract {
@@ -428,17 +453,18 @@ impl Contract {
 
     /// What a SUBJECT's help says for this command: the forms its argument takes, and what none means.
     pub fn subject_help(&self) -> String {
+        let file = match self.core_text {
+            true => "a `.crs` or `.crsc` file",
+            false => "a `.crs` file",
+        };
         let forms = match (self.accepts, self.own_file_only) {
-            (Accepts::Library, _) => "A `.crs` file a library declares",
-            (Accepts::Files, _) => {
-                "A declared executable's name, a path to a `.crs` or `.crsc` file, or `-` for standard input"
-            }
+            (Accepts::Library, _) => "A `.crs` file a library declares".to_string(),
             (_, true) => {
-                "A declared executable's name, a program's own `.crs` file, or `-` for standard input"
+                "A declared executable's name, a program's own `.crs` file, or `-` for standard input".to_string()
             }
-            (_, false) => {
-                "A declared executable's name, a path to a `.crs` file, or `-` for standard input"
-            }
+            (_, false) => format!(
+                "A declared executable's name, a path to {file}, or `-` for standard input"
+            ),
         };
 
         format!("{forms} (default: {})", self.no_subject())
@@ -460,19 +486,56 @@ impl Contract {
         }
     }
 
-    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks.
+    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks — save Core text, which a command that reads none refuses first.
     fn selection(
+        &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Selection, Box<Report>> {
         let spelling = match Spelling::of(subject) {
             // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
-            Spelling::File(path) => Spelling::File(file_subject(path)?),
+            Spelling::File(path) => Spelling::File(self.read_here(file_subject(path)?)?),
             spelling => spelling,
         };
 
         Selection::of(spelling, manifest, directory, &Overlay::default())
+    }
+
+    /// `path`, where the command reads what its name says it is written in: a command that reads no Core text refuses a `.crsc` before anything reads it, rather than reading it as the program it is not.
+    fn read_here(&self, path: PathBuf) -> Result<PathBuf, Box<Report>> {
+        match (self.core_text, WrittenIn::of(&path)) {
+            (false, WrittenIn::CoreText) => Err(Refused::of("core text")
+                .stating(format_args!("`{}` reads no Core text", self.command))
+                .stating(format_args!(
+                    "a `.{}` file is Core text, which `wonder` checks and `format` formats",
+                    WrittenIn::CoreText.extension()
+                ))
+                .trying(format!("curios wonder {}", path.display()))
+                .about_path(&path)),
+            _ => Ok(path),
+        }
+    }
+
+    /// What standard input is written in where `core` says it is Core text, refused beside any subject but standard input, whose text alone the flag speaks of: a file says what it is written in by its name.
+    fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
+        match (core, Spelling::of(subject)) {
+            (false, _) => Ok(WrittenIn::Program),
+            (true, Spelling::Stdin) => Ok(WrittenIn::CoreText),
+            (true, spelling) => Err(Refused::of("surplus flag")
+                .stating("`--core` says the text on standard input is Core text")
+                .stating(match spelling {
+                    Spelling::File(_) => format!(
+                        "a file says what it is written in by its name: a `.{}` is Core text",
+                        WrittenIn::CoreText.extension()
+                    ),
+                    Spelling::Name(name) => format!("`{name}` names an executable, a program"),
+                    Spelling::Nothing | Spelling::Stdin => {
+                        "with no subject nothing reads standard input; `-` does".to_string()
+                    }
+                })
+                .about_named("--core")),
+        }
     }
 
     /// The program `subject` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
@@ -485,7 +548,7 @@ impl Contract {
     ) -> Result<Program, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
-        let program = match Self::selection(subject, manifest, directory)? {
+        let program = match self.selection(subject, manifest, directory)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
             Selection::Library(library) => {
@@ -536,7 +599,7 @@ impl Contract {
     ) -> Result<Staged, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
 
-        Ok(match Self::selection(subject, manifest, directory)? {
+        Ok(match self.selection(subject, manifest, directory)? {
             Selection::Program(program) => Staged::Program(program),
             Selection::Entire(entire) => Staged::Program(entire.default_program()?),
             Selection::Library(library) => Staged::Library(library),
@@ -556,7 +619,7 @@ impl Contract {
             return Ok(Scope::Prelude);
         }
 
-        Ok(match Self::selection(subject, manifest, directory)? {
+        Ok(match self.selection(subject, manifest, directory)? {
             Selection::Program(program) => Scope::Program(program),
             Selection::Library(library) => Scope::Library(library),
             Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
@@ -576,7 +639,7 @@ impl Contract {
     ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        match Self::selection(subject, manifest, directory)? {
+        match self.selection(subject, manifest, directory)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
                 Refused::of("no library")
@@ -609,7 +672,7 @@ impl Contract {
     ) -> Result<Selection, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        Self::selection(subject, manifest, directory)
+        self.selection(subject, manifest, directory)
     }
 
     /// The governing package entire, which is all a command taking no subject selects.
@@ -621,7 +684,7 @@ impl Contract {
     ) -> Result<Entire, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
-        match Self::selection(subject, manifest, directory)? {
+        match self.selection(subject, manifest, directory)? {
             Selection::Entire(entire) => Ok(*entire),
             Selection::Library(_) | Selection::Program(_) => Err(Refused::of("surplus subject")
                 .stating(format_args!(
@@ -633,16 +696,18 @@ impl Contract {
     }
 
     /// What `subject` rewrites, and within which format: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input. A file takes the format of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::format_under`]).
+    /// Standard input is read as Core text where `core` says so, which is refused beside any other subject.
     pub fn admit_files(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
+        core: bool,
     ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
-        Self::rewritten(subject, manifest, directory, settings)
+        self.rewritten(subject, manifest, directory, settings, core)
     }
 
     /// What [`admit_files`](Self::admit_files) would rewrite of whatever `subject` selects, for a command that takes any subject and says of each text it is written in whether the formatter would write it otherwise.
@@ -654,24 +719,34 @@ impl Contract {
     ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        Self::rewritten(subject, manifest, directory, &FormatSettings::default())
+        self.rewritten(
+            subject,
+            manifest,
+            directory,
+            &FormatSettings::default(),
+            false,
+        )
     }
 
     fn rewritten(
+        &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
+        core: bool,
     ) -> Result<Rewritten, Box<Report>> {
+        let stdin = Self::stdin_written_in(core, subject)?;
+
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
                 let path = file_subject(path)?;
                 let format = settings.format_of_file(&path, manifest)?;
                 Rewritten::Files(vec![path], format)
             }
-            spelling => match Self::selection(subject, manifest, directory)? {
+            spelling => match self.selection(subject, manifest, directory)? {
                 Selection::Program(_) if spelling == Spelling::Stdin => {
-                    Rewritten::Stdin(settings.format_under(None)?)
+                    Rewritten::Stdin(settings.format_under(None)?, stdin)
                 }
                 Selection::Entire(entire) => {
                     let format = settings.format_under(Some(&entire.governing))?;

@@ -2,7 +2,7 @@
 
 use {
     crate::{Checker, Date, Expected},
-    curios_verdict::test_support::Written,
+    curios_surface::WrittenIn,
     serde::Deserialize,
     std::fmt,
 };
@@ -69,7 +69,7 @@ pub enum Step {
     /// The unit claiming `mount` stepped to `text`, written as `written`, and every unit built: compiled over its earlier step where it had one, as a recompile is over its baseline.
     Unit {
         mount: String,
-        written: Written,
+        written: WrittenIn,
         text: String,
     },
     /// The unit claiming `mount` mounted by no later build, as a dependency taken out of a manifest is: a unit standing in for an archived root unmounted gives the root its place back.
@@ -81,11 +81,11 @@ impl Step {
     fn asked(&self) -> &'static [Checker] {
         match self {
             Step::Unit {
-                written: Written::Program,
+                written: WrittenIn::Program,
                 ..
             } => &[Checker::Elaborator, Checker::Certifier],
             Step::Unit {
-                written: Written::CoreText,
+                written: WrittenIn::CoreText,
                 ..
             } => &[Checker::Certifier],
             Step::Unmount { .. } => &[],

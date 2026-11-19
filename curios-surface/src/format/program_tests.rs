@@ -36,9 +36,13 @@ fn a_leading_byte_order_mark_is_not_written_back() {
 /// A program whose tail is garbled is refused where the tail's own parse stopped, naming what it expected there — as the compiler refuses it — and not at the top of the file expecting its end, which is what the optional tail reported while the term's failure was discarded.
 #[test]
 fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
-    let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Format::default())
-        .expect_err("garbled tail")
-        .render();
+    let refusal = Formatted::from_source(
+        &Source::inline("let x = (\n"),
+        WrittenIn::Program,
+        Format::default(),
+    )
+    .expect_err("garbled tail")
+    .render();
     assert!(
         refusal.starts_with("syntax error\n│  expected: `)`\n│  obtained: the end of the file"),
         "{refusal}"
@@ -181,9 +185,13 @@ fn every_source_in_the_tree_formats_without_refusal() {
     let refused = sources_of_the_tree()
         .into_iter()
         .filter_map(|(path, text)| {
-            Formatted::from_source(&Source::held(path.clone(), text), Format::default())
-                .err()
-                .map(|refusal| format!("{}: {refusal}", path.display(), refusal = refusal.render()))
+            Formatted::from_source(
+                &Source::held(path.clone(), text),
+                WrittenIn::of(&path),
+                Format::default(),
+            )
+            .err()
+            .map(|refusal| format!("{}: {refusal}", path.display(), refusal = refusal.render()))
         })
         .collect::<Vec<_>>();
     assert!(refused.is_empty(), "{}", refused.join("\n"));
@@ -198,6 +206,7 @@ fn every_source_in_the_tree_is_already_canonical() {
             matches!(
                 Formatted::from_source(
                     &Source::held(path.clone(), text.as_str()),
+                    WrittenIn::of(path),
                     Format::default()
                 ),
                 Ok(Formatted::Changed(_))

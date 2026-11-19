@@ -35,6 +35,7 @@ use probe::*;
 
 use {
     clap::{Parser, Subcommand},
+    curios_surface::WrittenIn,
     std::{
         collections::BTreeMap,
         fs,
@@ -158,10 +159,14 @@ fn candidate_at(path: &Path) -> Result<Candidate, String> {
         return Ok(Candidate::Ticket { part, ticket });
     }
 
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some("crs") => Ok(Candidate::Proof(Proof::Program(text()?))),
-        Some("crsc") => Ok(Candidate::Proof(Proof::Module(text()?))),
-        _ => Err(format!(
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .and_then(WrittenIn::of_extension)
+    {
+        Some(WrittenIn::Program) => Ok(Candidate::Proof(Proof::Program(text()?))),
+        Some(WrittenIn::CoreText) => Ok(Candidate::Proof(Proof::Module(text()?))),
+        None => Err(format!(
             "{}: a candidate is a program, `.crs`, Core text, `.crsc`, or a ticket's `{METADATA}`",
             path.display()
         )),

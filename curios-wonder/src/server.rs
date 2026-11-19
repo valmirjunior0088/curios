@@ -28,7 +28,7 @@ use {
     curios_core::Declared,
     curios_module::Overlay,
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Selection, Spelling},
-    curios_surface::Formatted,
+    curios_surface::{Formatted, WrittenIn},
     curios_verdict::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
@@ -368,8 +368,12 @@ impl Server {
             .format_of_file(&path, self.manifest.as_deref())
             .map_err(|report| report.listed())?;
 
-        match Formatted::from_source(&Source::held(&path, text.as_str()), format)
-            .map_err(|report| report.listed())?
+        match Formatted::from_source(
+            &Source::held(&path, text.as_str()),
+            WrittenIn::of(&path),
+            format,
+        )
+        .map_err(|report| report.listed())?
         {
             Formatted::Unchanged(_) => Ok(Vec::new()),
             Formatted::Changed(formatted) => Ok(vec![TextEdit {

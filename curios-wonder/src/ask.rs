@@ -18,7 +18,7 @@ use {
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress, Stage},
-    curios_surface::{Format, Formatted},
+    curios_surface::{Format, Formatted, WrittenIn},
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -524,6 +524,7 @@ fn uncanonical(
         .filter(|text| {
             moved(Formatted::from_source(
                 &Source::named(SourceName::stdin(), text.as_str()),
+                WrittenIn::Program,
                 format,
             ))
         })

@@ -12,7 +12,7 @@
 
 use {
     super::{
-        CoreFormatInput, FormatInput, TopItem, between_items, parse_core_for_format,
+        CoreFormatInput, FormatInput, TopItem, WrittenIn, between_items, parse_core_for_format,
         parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
     },
     curios_common::{About, MAX_LINE_WIDTH, OsError, Report, Said, Source, Span},
@@ -162,11 +162,15 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source` canonically within `format`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
-    pub fn from_source(source: &Arc<Source>, format: Format) -> Result<Self, Box<Report>> {
-        let output = match written_as_core_text(source) {
-            true => core_text_formatted(source, format)?,
-            false => program_formatted(source, format)?,
+    /// Format `source`, written in `written`, canonically within `format`. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
+    pub fn from_source(
+        source: &Arc<Source>,
+        written: WrittenIn,
+        format: Format,
+    ) -> Result<Self, Box<Report>> {
+        let output = match written {
+            WrittenIn::CoreText => core_text_formatted(source, format)?,
+            WrittenIn::Program => program_formatted(source, format)?,
         };
 
         Ok(match output == source.text() {
@@ -175,7 +179,7 @@ impl Formatted {
         })
     }
 
-    /// [`Formatted::from_source`] for the file at `path`, which a refusal is about. Writing a `Changed` result back is the caller's policy.
+    /// [`Formatted::from_source`] for the file at `path`, written in what its name says ([`WrittenIn::of`]), which a refusal is about. Writing a `Changed` result back is the caller's policy.
     pub fn from_path(path: &Path, format: Format) -> Result<Self, Box<Report>> {
         let source = Source::read(path).map_err(|error| {
             let mut said = Said::line("unreadable file");
@@ -184,20 +188,12 @@ impl Formatted {
             Report::about(About::Path(path.to_path_buf()), said)
         })?;
 
-        Self::from_source(&source, format)
+        Self::from_source(&source, WrittenIn::of(path), format)
     }
 }
 
 /// The canonical indent — the corpus's four spaces.
 const INDENT: usize = 4;
-
-/// Whether `source` was read from a file of Core text, `.crsc`, by the extension of the file it was read from.
-fn written_as_core_text(source: &Source) -> bool {
-    source.file().is_some_and(|path| {
-        path.extension()
-            .is_some_and(|extension| extension == "crsc")
-    })
-}
 
 /// What the renderer follows: the text `source` was read from, with the comments the parse consumed, each classified.
 fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {

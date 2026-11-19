@@ -64,7 +64,11 @@ fn every_source_in_the_tree_formats_at_the_narrowest_width_and_holds_there() {
             .into_iter()
             .map(move |source| (format, source))
     }) {
-        let once = match Formatted::from_source(&Source::held(path.clone(), text), format) {
+        let once = match Formatted::from_source(
+            &Source::held(path.clone(), text),
+            WrittenIn::of(&path),
+            format,
+        ) {
             Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
             Err(refusal) => {
                 faults.push(format!(
@@ -75,7 +79,11 @@ fn every_source_in_the_tree_formats_at_the_narrowest_width_and_holds_there() {
                 continue;
             }
         };
-        match Formatted::from_source(&Source::held(path.clone(), once.as_str()), format) {
+        match Formatted::from_source(
+            &Source::held(path.clone(), once.as_str()),
+            WrittenIn::of(&path),
+            format,
+        ) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => {
                 faults.push(format!("{}: a second run changes it", path.display()))

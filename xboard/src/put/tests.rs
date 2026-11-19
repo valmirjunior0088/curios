@@ -4,6 +4,7 @@ use {
     super::*,
     crate::*,
     curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Term},
+    curios_surface::WrittenIn,
 };
 
 /// The `Nat` literal zero: a term with a type, and no proof of anything.
@@ -121,7 +122,7 @@ fn carrier_read(expect: Vec<Expected>) -> Witness {
     let (carrier, paradox) = route();
     let steps = vec![Step::Unit {
         mount: "lib".to_string(),
-        written: Written::CoreText,
+        written: WrittenIn::CoreText,
         text: carrier,
     }];
 
@@ -165,7 +166,7 @@ fn a_step_the_reader_refuses_stops_the_history_and_says_where() {
     let answer = put(
         &[Step::Unit {
             mount: "lib".to_string(),
-            written: Written::CoreText,
+            written: WrittenIn::CoreText,
             text: "let".to_string(),
         }],
         &Proof::Module("0".to_string()),
@@ -184,7 +185,7 @@ fn a_program_step_refused_stops_the_history_by_no_checker() {
         what: "a library that does not elaborate".to_string(),
         steps: vec![Step::Unit {
             mount: "lib".to_string(),
-            written: Written::Program,
+            written: WrittenIn::Program,
             text: "pub let truth: /std/Bool/True = 0;\n".to_string(),
         }],
         proof: Proof::Module("0".to_string()),

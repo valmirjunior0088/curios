@@ -73,7 +73,11 @@ const PROJECTED_AT_PROP: &str = r"
 fn a_group_generic_in_a_sort_filed_partial_is_read_partial_at_prop() {
     let mut history = History::new();
     history
-        .step("lib", Written::Program, PARTIAL_AT_A_SORT_LEFT_TO_A_CALLER)
+        .step(
+            "lib",
+            WrittenIn::Program,
+            PARTIAL_AT_A_SORT_LEFT_TO_A_CALLER,
+        )
         .expect("the library builds");
 
     let verdicts = put(&history, PROJECTED_AT_PROP);
@@ -88,7 +92,7 @@ fn a_large_familys_instance_is_not_taken_a_level_down() {
     history
         .step(
             "lib",
-            Written::CoreText,
+            WrittenIn::CoreText,
             r"
 #{universe_context = {parameter_count = 1}}
 induct /lib/Big: pub
@@ -151,10 +155,10 @@ let /lib/p :
     };
     let mut history = History::new();
     history
-        .step("lib", Written::CoreText, &unit(0))
+        .step("lib", WrittenIn::CoreText, &unit(0))
         .expect("the unit builds");
 
-    let stepped = history.step("lib", Written::CoreText, &unit(1));
+    let stepped = history.step("lib", WrittenIn::CoreText, &unit(1));
 
     assert!(
         matches!(
@@ -172,19 +176,19 @@ fn a_proof_unfolding_through_a_unit_that_did_not_move_into_one_that_did_is_judge
     let lib = |value: u8| fill!("use /std/{Nat};\n\npub let c: Nat = ${value};\n", value);
     let mut history = History::new();
     history
-        .step("lib", Written::Program, &lib(0))
+        .step("lib", WrittenIn::Program, &lib(0))
         .expect("the library builds");
     history
         .step(
             "mid",
-            Written::Program,
+            WrittenIn::Program,
             "use /std/{Nat};\nuse /lib/{c};\n\npub let m: Nat = c;\n",
         )
         .expect("the middle unit builds");
     history
         .step(
             "app",
-            Written::CoreText,
+            WrittenIn::CoreText,
             r"
 let /app/p :
     #{node = InductType, universes = {levels = [0], qualities = [Type]}}
@@ -196,7 +200,7 @@ let /app/p :
         )
         .expect("the proof's unit builds");
 
-    let stepped = history.step("lib", Written::Program, &lib(1));
+    let stepped = history.step("lib", WrittenIn::Program, &lib(1));
 
     assert!(
         matches!(
@@ -291,10 +295,10 @@ ${w}let /lib/t : /lib/Q =
 fn a_proof_reaching_a_definition_whose_verdict_alone_moved_is_judged_again() {
     let mut history = History::new();
     history
-        .step("lib", Written::CoreText, &verdict_moved(false))
+        .step("lib", WrittenIn::CoreText, &verdict_moved(false))
         .expect("the unit builds");
 
-    let stepped = history.step("lib", Written::CoreText, &verdict_moved(true));
+    let stepped = history.step("lib", WrittenIn::CoreText, &verdict_moved(true));
 
     assert!(
         matches!(
@@ -348,10 +352,10 @@ let /lib/f : (
 fn a_match_over_a_family_an_edit_gave_a_case_is_judged_again() {
     let mut history = History::new();
     history
-        .step("lib", Written::CoreText, &covered("| a()\n"))
+        .step("lib", WrittenIn::CoreText, &covered("| a()\n"))
         .expect("the unit builds");
 
-    let stepped = history.step("lib", Written::CoreText, &covered("| a()\n| b()\n"));
+    let stepped = history.step("lib", WrittenIn::CoreText, &covered("| a()\n| b()\n"));
 
     assert!(
         matches!(
@@ -392,14 +396,14 @@ fn a_declaration_an_edit_moved_past_its_reader_is_unbound_where_the_reader_is_ju
     history
         .step(
             "lib",
-            Written::CoreText,
+            WrittenIn::CoreText,
             &q_and_t("/sys/Bool/True()", false),
         )
         .expect("the unit builds");
 
     let stepped = history.step(
         "lib",
-        Written::CoreText,
+        WrittenIn::CoreText,
         &q_and_t("/sys/Bool/False()", true),
     );
 
@@ -438,7 +442,7 @@ let /lib/t : /lib/Q =
     history
         .step(
             "lib",
-            Written::CoreText,
+            WrittenIn::CoreText,
             &unit(
                 ("/lib/Q", "/sys/Bool/True()"),
                 ("/lib/R", "/sys/Bool/False()"),
@@ -448,7 +452,7 @@ let /lib/t : /lib/Q =
 
     let stepped = history.step(
         "lib",
-        Written::CoreText,
+        WrittenIn::CoreText,
         &unit(
             ("/lib/R", "/sys/Bool/True()"),
             ("/lib/Q", "/sys/Bool/False()"),
@@ -479,12 +483,12 @@ fn a_name_declared_under_a_mount_its_unit_does_not_claim_is_asked_of_the_unit_th
     };
     let mut history = History::new();
     history
-        .step("a", Written::CoreText, &declared("/sys/Bool/True()"))
+        .step("a", WrittenIn::CoreText, &declared("/sys/Bool/True()"))
         .expect("the unit claiming `/a` builds");
     history
         .step(
             "b",
-            Written::CoreText,
+            WrittenIn::CoreText,
             r"let /b/t : /b/Q =
     #{node = Variant}
     /sys/Bool/True/qed();
@@ -492,7 +496,7 @@ fn a_name_declared_under_a_mount_its_unit_does_not_claim_is_asked_of_the_unit_th
         )
         .expect("the unit claiming `/b` builds");
 
-    let stepped = history.step("a", Written::CoreText, &declared("/sys/Bool/False()"));
+    let stepped = history.step("a", WrittenIn::CoreText, &declared("/sys/Bool/False()"));
 
     assert!(
         matches!(
@@ -612,21 +616,21 @@ fn a_proof_over_a_unit_compiled_over_a_baseline_is_judged_again_where_what_it_re
     history
         .step(
             "lib",
-            Written::CoreText,
+            WrittenIn::CoreText,
             &beside_filler("/sys/Bool/True()", "/sys/Bool/True()"),
         )
         .expect("the unit builds");
     history
         .step(
             "lib",
-            Written::CoreText,
+            WrittenIn::CoreText,
             &beside_filler("/sys/Bool/True()", "/sys/Bool/False()"),
         )
         .expect("the unit builds over its first text");
 
     let stepped = history.step(
         "lib",
-        Written::CoreText,
+        WrittenIn::CoreText,
         &beside_filler("/sys/Bool/False()", "/sys/Bool/False()"),
     );
 
@@ -782,14 +786,14 @@ let /lib/Q : Prop =
     };
 
     let mut whole = History::new();
-    let alone = whole.step("lib", Written::CoreText, reordered);
+    let alone = whole.step("lib", WrittenIn::CoreText, reordered);
     assert!(undeclared(&alone), "{alone:?}");
 
     let mut history = History::new();
     history
-        .step("lib", Written::CoreText, ordered)
+        .step("lib", WrittenIn::CoreText, ordered)
         .expect("the library builds");
-    let stepped = history.step("lib", Written::CoreText, reordered);
+    let stepped = history.step("lib", WrittenIn::CoreText, reordered);
     assert!(undeclared(&stepped), "{stepped:?}");
 }
 
@@ -818,14 +822,14 @@ end
     };
 
     let mut whole = History::new();
-    let alone = whole.step("u", Written::CoreText, &holding(wrapping));
+    let alone = whole.step("u", WrittenIn::CoreText, &holding(wrapping));
     assert!(indexed(&alone), "{alone:?}");
 
     let mut history = History::new();
     history
-        .step("u", Written::CoreText, &holding(""))
+        .step("u", WrittenIn::CoreText, &holding(""))
         .expect("the library builds");
-    let stepped = history.step("u", Written::CoreText, &holding(wrapping));
+    let stepped = history.step("u", WrittenIn::CoreText, &holding(wrapping));
     assert!(indexed(&stepped), "{stepped:?}");
 }
 
@@ -851,14 +855,14 @@ end
     };
 
     let mut whole = History::new();
-    let alone = whole.step("u", Written::CoreText, &carrying("Irrelevant"));
+    let alone = whole.step("u", WrittenIn::CoreText, &carrying("Irrelevant"));
     assert!(denied(&alone), "{alone:?}");
 
     let mut history = History::new();
     history
-        .step("u", Written::CoreText, &carrying("Invariant"))
+        .step("u", WrittenIn::CoreText, &carrying("Invariant"))
         .expect("the family builds");
-    let stepped = history.step("u", Written::CoreText, &carrying("Irrelevant"));
+    let stepped = history.step("u", WrittenIn::CoreText, &carrying("Irrelevant"));
     assert!(denied(&stepped), "{stepped:?}");
 }
 
@@ -882,14 +886,14 @@ struct /u/R: #{level = u + 1} Type { field: #{level = u} Type }
     };
 
     let mut whole = History::new();
-    let alone = whole.step("u", Written::CoreText, &carrying("Irrelevant"));
+    let alone = whole.step("u", WrittenIn::CoreText, &carrying("Irrelevant"));
     assert!(denied(&alone), "{alone:?}");
 
     let mut history = History::new();
     history
-        .step("u", Written::CoreText, &carrying("Invariant"))
+        .step("u", WrittenIn::CoreText, &carrying("Invariant"))
         .expect("the record builds");
-    let stepped = history.step("u", Written::CoreText, &carrying("Irrelevant"));
+    let stepped = history.step("u", WrittenIn::CoreText, &carrying("Irrelevant"));
     assert!(denied(&stepped), "{stepped:?}");
 }
 
@@ -992,17 +996,17 @@ fn a_recursion_through_a_callees_summary_is_judged_again_where_the_callee_moves_
         let (first, later) = steps.split_first().expect("a step of the library");
         let mut history = History::new();
         history
-            .step("base", Written::Program, SUCCESSOR)
+            .step("base", WrittenIn::Program, SUCCESSOR)
             .expect("the carrier builds");
         history
-            .step("lib", Written::Program, applying(*first))
+            .step("lib", WrittenIn::Program, applying(*first))
             .expect("the library builds");
         history
-            .step("app", Written::Program, LOOPING_THROUGH_APPLY)
+            .step("app", WrittenIn::Program, LOOPING_THROUGH_APPLY)
             .expect("the recursion builds");
         for below in later {
             history
-                .step("lib", Written::Program, applying(*below))
+                .step("lib", WrittenIn::Program, applying(*below))
                 .expect("the edited library builds");
         }
 
@@ -1070,17 +1074,17 @@ fn a_recursion_through_a_callees_summary_of_a_field_is_judged_again_where_the_ca
         let (first, later) = steps.split_first().expect("a step of the library");
         let mut history = History::new();
         history
-            .step("base", Written::Program, SUCCESSOR)
+            .step("base", WrittenIn::Program, SUCCESSOR)
             .expect("the carrier builds");
         history
-            .step("lib", Written::Program, applying_field(*first))
+            .step("lib", WrittenIn::Program, applying_field(*first))
             .expect("the library builds");
         history
-            .step("app", Written::Program, LOOPING_THROUGH_APPLY_FIELD)
+            .step("app", WrittenIn::Program, LOOPING_THROUGH_APPLY_FIELD)
             .expect("the recursion builds");
         for below in later {
             history
-                .step("lib", Written::Program, applying_field(*below))
+                .step("lib", WrittenIn::Program, applying_field(*below))
                 .expect("the edited library builds");
         }
 
@@ -1129,14 +1133,14 @@ fn a_recursion_through_a_summary_is_judged_again_where_what_the_callees_grader_u
     for edited in [false, true] {
         let mut history = History::new();
         history
-            .step("base", Written::Program, SUCCESSOR)
+            .step("base", WrittenIn::Program, SUCCESSOR)
             .expect("the carrier builds");
         history
-            .step("one", Written::Program, &forwarding(true))
+            .step("one", WrittenIn::Program, &forwarding(true))
             .expect("the unit builds");
         if edited {
             history
-                .step("one", Written::Program, &forwarding(false))
+                .step("one", WrittenIn::Program, &forwarding(false))
                 .expect("the edited unit builds");
         }
 
@@ -1232,17 +1236,17 @@ fn a_recursion_through_a_summary_is_judged_again_where_a_unit_the_callee_read_mo
         for edited in [false, true] {
             let mut history = History::new();
             history
-                .step("base", Written::Program, &carrier(false))
+                .step("base", WrittenIn::Program, &carrier(false))
                 .expect("the carrier builds");
             history
-                .step("lib", Written::Program, library)
+                .step("lib", WrittenIn::Program, library)
                 .expect("the library builds");
             history
-                .step("app", Written::Program, LOOPING_THROUGH_APPLY_AT_N)
+                .step("app", WrittenIn::Program, LOOPING_THROUGH_APPLY_AT_N)
                 .expect("the recursion builds");
             if edited {
                 history
-                    .step("base", Written::Program, &carrier(true))
+                    .step("base", WrittenIn::Program, &carrier(true))
                     .expect("the edited carrier builds");
             }
 

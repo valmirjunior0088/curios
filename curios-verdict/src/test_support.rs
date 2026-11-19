@@ -19,29 +19,10 @@ use {
         test_support::*,
     },
     curios_prelude::with_prelude,
-    curios_surface::{CoreFile, FormScope, ReadError, to_core},
+    curios_surface::{CoreFile, FormScope, ReadError, WrittenIn, to_core},
     curios_unit::{Predecessors, Unit},
     std::{fs, path::PathBuf, slice},
 };
-
-/// What a unit's step is written in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Written {
-    /// A program, compiled as a build compiles one.
-    Program,
-    /// Core text, read where a program is lowered and elaborated ([`compile_read`]).
-    CoreText,
-}
-
-impl Written {
-    /// The file a step written so is filed in.
-    fn extension(self) -> &'static str {
-        match self {
-            Written::Program => "crs",
-            Written::CoreText => "crsc",
-        }
-    }
-}
 
 /// Why a build stopped: at the unit claiming `mount`, for `why`.
 #[derive(Debug)]
@@ -69,7 +50,7 @@ pub enum Unbuilt {
 pub struct History {
     directory: Temporary,
     /// Each unit by the mount it claims, in the order its first step came, with what its latest step is written in and the file holding that step's text.
-    units: Vec<(String, Written, PathBuf)>,
+    units: Vec<(String, WrittenIn, PathBuf)>,
 }
 
 impl Default for History {
@@ -93,7 +74,7 @@ impl History {
     }
 
     /// Step the unit claiming `mount` to `text`, written as `written`, then build: every unit compiled over the ones before it as the store holds them, each through the store, which files what it compiles and offers each unit's earlier step as its baseline.
-    pub fn step(&mut self, mount: &str, written: Written, text: &str) -> Result<(), Stopped> {
+    pub fn step(&mut self, mount: &str, written: WrittenIn, text: &str) -> Result<(), Stopped> {
         let stored = |why: String| Stopped {
             mount: mount.to_string(),
             why: Unbuilt::Stored(why),
@@ -161,7 +142,7 @@ impl History {
                 let offered =
                     standing.map(|(_, archived)| archived.clone().read_for(root.packages()));
                 match written {
-                    Written::Program => compile_units(
+                    WrittenIn::Program => compile_units(
                         DEFAULT_BUDGET,
                         predecessors,
                         &SYNTAX,
@@ -172,7 +153,7 @@ impl History {
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),
-                    Written::CoreText => read(verdicts, predecessors, &seeing, &text),
+                    WrittenIn::CoreText => read(verdicts, predecessors, &seeing, &text),
                 }
             })
             .map_err(stopped)?;

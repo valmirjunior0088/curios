@@ -114,6 +114,46 @@ fn a_dash_formats_standard_input_onto_standard_output() {
     );
 }
 
+/// Core text the formatter moves: a definition whose body the canonical form writes on the line of its head.
+const UNFORMATTED_CORE: &str = "let /one : #NatType =\n    1;\n";
+
+/// `--core` reads standard input as Core text, written onto standard output exactly as the file form rewrites the same text of a `.crsc`; without it the text is read as the program it is not, and beside a file it is refused, the file's name saying what it is written in, with nothing written.
+#[test]
+fn core_formats_standard_input_as_a_crsc_is_formatted() {
+    let root = temporary("core");
+    write(&root, "proof.crsc", UNFORMATTED_CORE);
+
+    let piped = curios(&root, &["format", "--core", "-"], UNFORMATTED_CORE);
+    assert!(
+        piped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&piped.stderr)
+    );
+
+    let rewritten = curios(&root, &["format", "proof.crsc"], "");
+    assert!(
+        rewritten.status.success(),
+        "{}",
+        String::from_utf8_lossy(&rewritten.stderr)
+    );
+    let canonical = fs::read_to_string(root.join("proof.crsc")).unwrap();
+    assert_ne!(canonical, UNFORMATTED_CORE);
+    assert_eq!(String::from_utf8_lossy(&piped.stdout), canonical);
+
+    let as_a_program = curios(&root, &["format", "-"], UNFORMATTED_CORE);
+    assert!(!as_a_program.status.success());
+
+    write(&root, "proof.crsc", UNFORMATTED_CORE);
+    let beside_a_file = curios(&root, &["format", "--core", "proof.crsc"], "");
+    let stderr = String::from_utf8_lossy(&beside_a_file.stderr);
+    assert!(!beside_a_file.status.success(), "{stderr}");
+    assert!(stderr.contains("surplus flag"), "{stderr}");
+    assert_eq!(
+        fs::read_to_string(root.join("proof.crsc")).unwrap(),
+        UNFORMATTED_CORE
+    );
+}
+
 /// A declaration the default width keeps on one line and the narrowest breaks.
 const WIDE: &str =
     "let total: Nat =\n    combine(first_argument, second_argument, third_argument);\n";

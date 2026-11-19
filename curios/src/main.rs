@@ -672,6 +672,7 @@ fn dispatch() -> Result<(), Failure> {
             subjects,
             check,
             settings,
+            core,
             ..
         } => {
             let directory = here()?;
@@ -686,7 +687,9 @@ fn dispatch() -> Result<(), Failure> {
             // Every subject is admitted, and the width of each decided, before anything is written, so a refusal leaves every file as it was.
             let admitted = subjects
                 .into_iter()
-                .map(|subject| contract.admit_files(subject, manifest, &directory, &settings))
+                .map(|subject| {
+                    contract.admit_files(subject, manifest, &directory, &settings, core.core)
+                })
                 .collect::<Result<Vec<_>, _>>()?;
 
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
@@ -701,10 +704,11 @@ fn dispatch() -> Result<(), Failure> {
             for admitted in admitted {
                 match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
-                    Rewritten::Stdin(format) => {
+                    Rewritten::Stdin(format, written) => {
                         let text = drained()?;
                         let formatted = Formatted::from_source(
                             &Source::named(SourceName::stdin(), text.as_str()),
+                            written,
                             format,
                         )?;
 
@@ -779,7 +783,7 @@ fn dispatch() -> Result<(), Failure> {
                 // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
                 let (files, format) = match contract.written_in(subject, manifest, &directory) {
                     Ok(Rewritten::Files(files, format)) => (files, format),
-                    Ok(Rewritten::Stdin(format)) => (Vec::new(), format),
+                    Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
                     Err(_) => (Vec::new(), Format::default()),
                 };
 

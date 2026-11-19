@@ -15,7 +15,9 @@ pub fn formatted(source: &str) -> String {
 
 /// [`formatted`] within `format`.
 pub fn formatted_within(source: &str, format: Format) -> String {
-    match Formatted::from_source(&Source::inline(source), format).expect("fixture formats") {
+    match Formatted::from_source(&Source::inline(source), WrittenIn::Program, format)
+        .expect("fixture formats")
+    {
         Formatted::Unchanged(text) | Formatted::Changed(text) => text,
     }
 }

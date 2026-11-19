@@ -142,7 +142,11 @@ fn misplaced(
     written[index] = &marked;
     let perturbed = &format!("{}\n", written.join("\n"));
 
-    let once = match Formatted::from_source(&Source::held(file, perturbed.as_str()), format) {
+    let once = match Formatted::from_source(
+        &Source::held(file, perturbed.as_str()),
+        WrittenIn::of(Path::new(file)),
+        format,
+    ) {
         Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
         Err(refusal) => {
             return Some(format!(
@@ -167,7 +171,11 @@ fn misplaced(
         ));
     }
 
-    match Formatted::from_source(&Source::held(file, once.as_str()), format) {
+    match Formatted::from_source(
+        &Source::held(file, once.as_str()),
+        WrittenIn::of(Path::new(file)),
+        format,
+    ) {
         Ok(Formatted::Unchanged(_)) => None,
         Ok(Formatted::Changed(twice)) => Some(format!(
             "moved again\n--- once ---\n{once}--- twice ---\n{twice}"
@@ -288,8 +296,9 @@ fn assert_every_comment_keeps_its_place(sources: &[(PathBuf, String)], format: F
             let (item, within) = item_at(&whole, index);
             // An item cut where the source does not divide is tried in its whole file instead.
             let alone = format!("{}\n", item.join("\n").trim_end());
-            let divides = Formatted::from_source(&Source::inline(&alone), format)
-                == Ok(Formatted::Unchanged(alone.clone()));
+            let divides =
+                Formatted::from_source(&Source::inline(&alone), WrittenIn::Program, format)
+                    == Ok(Formatted::Unchanged(alone.clone()));
             let fault = match divides {
                 true => misplaced("a.crs", &item, (within, rides), format),
                 false => misplaced("a.crs", &whole, (index, rides), format),
@@ -321,7 +330,7 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_the_narrowest_width()
             .into_iter()
             .map(|(path, source)| {
                 let held = Source::held(path.clone(), source.as_str());
-                match Formatted::from_source(&held, format) {
+                match Formatted::from_source(&held, WrittenIn::of(&path), format) {
                     Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => (path, text),
                     Err(refusal) => {
                         panic!("{}: {refusal}", path.display(), refusal = refusal.render())

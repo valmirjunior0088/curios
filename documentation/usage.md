@@ -58,10 +58,12 @@ Every command that takes a subject takes it one of four ways, so what a bare inv
 | --- | --- |
 | *(none)* | the governing package, narrowed to what the command needs |
 | an identifier | the executable declared under that name |
-| anything ending in `.crs`, or holding a path separator | that file, placed by what declares it |
+| anything ending in `.crs` or `.crsc`, or holding a path separator | that file, placed by what declares it |
 | `-` | the program on [standard input](#standard-input), loose |
 
-The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
+The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither an extension nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
+
+**A file's name says what it is written in:** a `.crsc` is Core text, the form `wonder --stage core` and `core-elab` print a program in, and any other file a program or a module. No `mod` line reaches a `.crsc`, so one is always loose, and every command but `wonder` and `format` reads no Core text, so it refuses a `.crsc` before reading it and names the commands that do. Standard input says what it is written in with [`--core`](#standard-input).
 
 **A file is placed the same way by every command:** it is an executable's when it is that executable's entry or a module the entry's `mod` lines reach, a library's when the `mod` lines of `lib.crs` reach it, and loose otherwise — compiled against the standard library alone. A file written as [a module](language.md#declarations-and-modules), items with no final term, has no program in it. The project is decided from the file's own location, not the working directory.
 
@@ -486,10 +488,11 @@ curios format serve util.crs    # an executable's files, and one file
 curios format proof.crsc        # a file of Core text
 curios format --check           # write nothing, exit nonzero if anything would change
 curios format - < draft.crs     # standard input, written canonically to standard output
+curios format --core - < p.crsc # standard input, read as Core text
 curios format --line-width 64 - # standard input, within 64 columns
 ```
 
-Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output. A file nothing declares is formatted only when it is named, and a `.crsc` is formatted as the Core text it holds, read and not checked, so a file its reader refuses is formatted all the same.
+Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output, read as a program or, under `--core`, as Core text. A file nothing declares is formatted only when it is named, and a `.crsc` is formatted as the Core text it holds, read and not checked, so a file its reader refuses is formatted all the same.
 
 There is one canonical style, and three settings: `line-width`, the width a line is written within, 50 through 100 columns counted in characters, and 100 where nothing states another; and `flat-match-width` and `flat-match-arms`, the most columns, from `match` to `end`, and the most arms a match keeps on one line — the columns 0 through the line width, 70 where nothing states another or the line width where that is narrower, and the arms 1 or more, 3 where nothing states another. A file takes its settings from one place. Where a package governs it — the package whose manifest is nearest above the file, or the one `--manifest` names — that is the package's [`[format]`](#the-manifest) table, or its umbrella's, and a flag given for such a file is refused before anything is written. Standard input and a file no package governs take the flags. So the command line, `--check` and an editor's server format a file one way, and `curios format --line-width 80 - < file.crs` shows a package's file at another width without rewriting it. The rules and what they rejected are [A file is formatted as one place states](design/tools/a-file-is-formatted-as-one-place-states.md)'s.
 
@@ -719,6 +722,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | --- | --- | --- |
 | `--manifest <PATH>` | every command but `new` and `profile` | use this `curios.toml` as the governing package's, instead of the nearest one |
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
+| `--core` | `format` | read standard input as Core text, as a `.crsc` file is read; refused beside any subject but `-` |
 | `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
@@ -739,6 +743,8 @@ EOF
 It is loose in the same sense a file no unit declares is, and answers before anything looks for a manifest — so `-` means the same thing inside a package as outside one, never the package's default executable, and no `--manifest` can govern it. `compile -` builds it where `--output` says.
 
 Standard input is asked for with `-`, and never read because a pipe is attached ([why](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)).
+
+It is read as a program. `--core` says it is Core text, as a `.crsc` file's name says it of a file, and is refused beside any subject but `-`; `format` takes it. What a text is written in is never guessed from the text: a closing term alone reads in both.
 
 One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 

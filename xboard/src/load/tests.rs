@@ -246,7 +246,7 @@ fn a_history_reads_its_steps_and_closes_with_its_proof() {
     assert!(matches!(
         &history.steps[..],
         [
-            Step::Unit { mount, written: Written::Program, text },
+            Step::Unit { mount, written: WrittenIn::Program, text },
             Step::Unmount { mount: unmounted },
         ] if mount == "lib" && text == "/std/Bool/True/qed()" && unmounted == "lib"
     ));

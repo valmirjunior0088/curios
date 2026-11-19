@@ -269,6 +269,9 @@ pub enum Mode {
         settings: FormatSettings,
 
         #[command(flatten)]
+        core: CoreFlag,
+
+        #[command(flatten)]
         manifest: ManifestFlag,
     },
 
@@ -410,6 +413,16 @@ pub enum Pinned {
         #[command(flatten)]
         manifest: ManifestFlag,
     },
+}
+
+/// What standard input is written in: a file says it by its name, and standard input, which has none, says it here — as gcc's `-x` names a language, never guessed from the text, where a closing term alone reads in both.
+#[derive(Debug, Args)]
+pub struct CoreFlag {
+    #[arg(
+        long,
+        help = "Read standard input as Core text, as a `.crsc` file is read"
+    )]
+    pub core: bool,
 }
 
 /// Whether the manifest is written, or only asked what it would say.

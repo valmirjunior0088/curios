@@ -25,7 +25,7 @@ fn mounted(history: &History, name: &Global) -> Option<Totality> {
 fn a_step_files_its_unit_and_a_later_build_mounts_it_from_the_store() {
     let mut history = History::new();
     history
-        .step("lib", Written::Program, "pub let one: /std/Nat = 1;\n")
+        .step("lib", WrittenIn::Program, "pub let one: /std/Nat = 1;\n")
         .expect("the step builds");
 
     let (mounts, lowered) = history
@@ -67,14 +67,14 @@ fn a_core_text_unit_stepped_twice_is_the_unit_its_last_text_is() {
 
     let mut stepped = History::new();
     stepped
-        .step("lib", Written::CoreText, first)
+        .step("lib", WrittenIn::CoreText, first)
         .expect("the first step builds");
     stepped
-        .step("lib", Written::CoreText, last)
+        .step("lib", WrittenIn::CoreText, last)
         .expect("the last step builds over the first");
     let mut whole = History::new();
     whole
-        .step("lib", Written::CoreText, last)
+        .step("lib", WrittenIn::CoreText, last)
         .expect("the step builds");
 
     assert_eq!(core(&stepped), core(&whole));
@@ -87,10 +87,10 @@ fn a_core_text_unit_stepped_twice_is_the_unit_its_last_text_is() {
 fn a_unit_stepped_from_a_program_to_core_text_is_read_from_its_core_text() {
     let mut history = History::new();
     history
-        .step("lib", Written::Program, "pub let one: /std/Nat = 1;\n")
+        .step("lib", WrittenIn::Program, "pub let one: /std/Nat = 1;\n")
         .expect("the program step builds");
     history
-        .step("lib", Written::CoreText, "let /lib/one : #NatType = 2;\n")
+        .step("lib", WrittenIn::CoreText, "let /lib/one : #NatType = 2;\n")
         .expect("the Core text step builds");
 
     let lowered = history

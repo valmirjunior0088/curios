@@ -9,7 +9,7 @@ use {
     crate::{
         Archived, Checker, Date, Expected, Part, Proof, Status, Step, Ticket, Within, Witness,
     },
-    curios_verdict::test_support::Written,
+    curios_surface::WrittenIn,
     serde::Deserialize,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -294,31 +294,33 @@ fn filed_ticket(
 fn text_of<'f>(
     files: &BTreeMap<&str, &'f str>,
     source: &str,
-) -> Result<(Written, &'f str), String> {
+) -> Result<(WrittenIn, &'f str), String> {
     let text = files
         .get(source)
         .ok_or_else(|| format!("no file `{source}` holds a witness's text"))?;
-    match source.rsplit_once('.') {
-        Some((_, "crs")) => Ok((Written::Program, text)),
-        Some((_, "crsc")) => Ok((Written::CoreText, text)),
-        _ => Err(format!(
+    match source
+        .rsplit_once('.')
+        .and_then(|(_, extension)| WrittenIn::of_extension(extension))
+    {
+        Some(written) => Ok((written, text)),
+        None => Err(format!(
             "`{source}` is neither a program, `.crs`, nor Core text, `.crsc`"
         )),
     }
 }
 
 /// The proof a text is, by what it is written in.
-fn proof_of((written, text): (Written, &str)) -> Proof {
+fn proof_of((written, text): (WrittenIn, &str)) -> Proof {
     match written {
-        Written::Program => Proof::Program(text.to_string()),
-        Written::CoreText => Proof::Module(text.to_string()),
+        WrittenIn::Program => Proof::Program(text.to_string()),
+        WrittenIn::CoreText => Proof::Module(text.to_string()),
     }
 }
 
 /// The steps a history's records state before its last, and the proof its last puts, each text read through `text`.
 fn history<'f>(
     records: Vec<StepRecord>,
-    text: &mut impl FnMut(&str) -> Result<(Written, &'f str), String>,
+    text: &mut impl FnMut(&str) -> Result<(WrittenIn, &'f str), String>,
 ) -> Result<(Vec<Step>, Proof), String> {
     let shape = "a step is a unit, `mount` and `source`; a unit unmounted, `unmount`; or the proof, `source` alone";
     let mut records = records;
