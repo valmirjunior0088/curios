@@ -7,8 +7,7 @@
 use super::*;
 
 /// What a seed's program states ahead of its rows: its imports, the declarations the seeds are stated over, and the ones a context places a seed under — a struct over any type, and a definition and a recursive function that each hand an argument back from a match stuck on a count. `through`, `into` and `pair` eliminate a proof of `Zero`, so unfolding one leaves its proof a stuck elimination's scrutinee: what comparing two calls by their spines first is for.
-pub const STRUCTURAL: &str =
-    "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
+pub const STRUCTURAL: &str = "use /std/{Eq, Nat, Bool, List, Option, Io}; use /std/Bool/{Holds};
 struct Record: pub Type { a: Nat, b: Nat }
 struct Empty: pub Type {}
 struct Unital: pub Type { unit: {}, proof: Holds(0 < 10) }
@@ -28,7 +27,8 @@ let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e | zero() => (1, 2) end;
 let forward(h: (Nat) -> Nat) -> (Nat) -> Nat = h;
 let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);
 let hold(@A: Type, a: A, count: Nat) -> A = match count | 0 => a | pred + 1 => a end;
-let carry(@A: Type, count: Nat, a: A) -> A = match count | 0 => a | pred + 1 => carry(pred, a) end;";
+let carry(@A: Type, count: Nat, a: A) -> A = match count | 0 => a | pred + 1 => carry(pred, a) end;
+let Sel(A: Type, maybe: Option(Nat)) -> Type = match maybe | some(_) => A | none() => Nat end;";
 
 /// The seeds at one type, under the binders they share.
 pub struct Seeds {

@@ -248,6 +248,14 @@ const ARMS: &[Context] = &[
         "{T}",
         "match maybe | some(got) => {rest} | _ => {hole} end",
     ),
+    // The match's type computes on its scrutinee, so no reduction decides it and two such matches are compared arm by arm, each arm at no type its position hands: a seed is decided where only a lookup types it. The arm refines the scrutinee to a constructor over its own binder, which no seed writes, so the arm's type is the hole's alone.
+    any(
+        "an arm of a family's match at a type it computes",
+        Former::FamilyMatch,
+        "maybe: Option(Nat)",
+        "Sel({T}, maybe)",
+        "match maybe | some(got) => {hole} | none() => 0 end",
+    ),
 ];
 
 /// A hole that is what its former takes apart or computes on: a head, a scrutinee, an operand.
