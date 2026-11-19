@@ -774,20 +774,7 @@ impl PreparedText {
         name: &curios_core::Global,
         place: curios_core::Place,
     ) -> curios_core::Declared {
-        let member = match place {
-            curios_core::Place::Let(_) => 0,
-            curios_core::Place::Member { member, .. } => member as usize,
-            // A made name is placed by its item alone, among whose names it stands.
-            curios_core::Place::Made { .. } => self
-                .core
-                .items
-                .names(place.item())
-                .iter()
-                .position(|held| held == name)
-                .expect("a made name is its item's"),
-        };
-
-        self.core.items.declared(place.item())[member]
+        self.core.items.declared_at(name, place)
     }
 
     /// The entry this unit's lowering wrote for the nominal declaration `name`, read at the former that carries it: the one lowered item, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit declares no nominal under.

@@ -248,7 +248,7 @@ pub const AT: Contract = Contract {
     command: "wonder --at",
     accepts: Accepts::ProgramOrLibrary,
     own_file_only: false,
-    core_text: true,
+    core_text: false,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -269,7 +269,7 @@ pub const EXPORTS: Contract = Contract {
     command: "wonder --name --exports",
     accepts: Accepts::Scope,
     own_file_only: false,
-    core_text: true,
+    core_text: false,
     access: Access::Write,
     product: Product::Nothing,
 };

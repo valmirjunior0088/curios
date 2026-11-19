@@ -58,6 +58,18 @@ pub fn declared_tests(
 
             lowered.into_inner()
         }
+        // Read off the unit the text reads to, which holds its tests as the text writes them.
+        Subject::CoreText { origin } => {
+            let (source, module) = origin
+                .read(overlay)
+                .map_err(|refusal| CompileError::Failure(vec![refusal.report]))?;
+            Fold::new(budget, &[], cache).core_text_unit(
+                &source,
+                module,
+                &mut *progress,
+                |_, unit| declared_test_paths(unit.core()),
+            )?
+        }
     };
 
     Ok(paths

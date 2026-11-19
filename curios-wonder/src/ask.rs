@@ -638,10 +638,22 @@ pub fn wonder_stage(
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Lowered) => Err(no_lowering(name)),
         Err(Refusal::Kept { .. }) => {
             unreachable!("a whole program's rung is asked of no declaration")
         }
     }
+}
+
+/// The refusal of a rung a lowering makes, `text` or `core`, asked of Core text, which is lowered by nothing.
+fn no_lowering(name: &str) -> CompileError {
+    Refused::of("no such rung")
+        .stating(format_args!(
+            "`{name}` is a lowering's rung, and Core text is lowered by nothing"
+        ))
+        .stating("its rungs begin at `core-elab`")
+        .about_named(name)
+        .into()
 }
 
 /// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`wonder_diagnostics`]' is.
@@ -678,6 +690,7 @@ pub fn wonder_named_stage(
         Ok(None) => Err(unknown_declaration(path)),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Lowered) => Err(no_lowering(name)),
         Err(Refusal::Kept { file }) => {
             let refused = Refused::of("not the subject's own")
                 .stating("`core` is the subject's own lowering, and a unit in scope keeps none")
@@ -734,6 +747,7 @@ fn library_stage(
         // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
         Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
+        Err(Refusal::Lowered) => unreachable!("a library is lowered"),
         Err(Refusal::Kept { .. }) => {
             unreachable!("a whole library's rung is asked of no declaration")
         }

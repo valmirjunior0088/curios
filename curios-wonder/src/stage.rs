@@ -4,8 +4,9 @@
 
 use {
     crate::{
-        Described, Diagnosis, Overlaid, Severity, Subject, declared_where, described_entry,
-        described_unit, of_error, open, overlaid, tested_last,
+        Described, Diagnosis, Origin, Overlaid, Severity, Subject, declared_where,
+        described_core_text, described_entry, described_in_text, described_unit, of_error, open,
+        overlaid, tested_last,
     },
     curios_common::{MAX_LINE_WIDTH, Qualifier},
     curios_core::{Anchors, Definitions, Global, Item},
@@ -43,6 +44,8 @@ pub enum Refusal {
     Diagnostics(Vec<Diagnosis>),
     /// A declaration's part at `core` is asked of a unit in scope, which keeps no lowering: asked of `file`, the one that holds it where one does, it is the subject's own.
     Kept { file: Option<PathBuf> },
+    /// A rung no lowering made, `text` or `core`, asked of Core text, which is lowered by nothing: its rungs begin at `core-elab`.
+    Lowered,
 }
 
 /// `subject`'s representation at the rung `name`, compiled against its units and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
@@ -55,39 +58,56 @@ pub fn stage(
     mut shown: impl FnMut(&str),
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Rendering, Refusal> {
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-        package,
-    } = subject.formed(overlay)
-    else {
-        return Err(Refusal::Unit);
-    };
     let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {
         return Err(Refusal::NoSuchStage {
             asked: name.to_string(),
         });
     };
-
-    let (entrypoint, loader) =
-        open(origin, declares, package.as_ref(), overlay).map_err(Refusal::Diagnostics)?;
-    let units = overlaid(units, overlay);
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
-
     let mut reached = false;
-    let compiled = Fold::new(budget, &units, cache).compile(
-        &entrypoint,
-        &loader,
-        |stage| {
-            if stage.name() == name {
-                shown(&stage.to_string());
-                reached = true;
+    let mut observe = |stage: Stage<'_>| {
+        if stage.name() == name {
+            shown(&stage.to_string());
+            reached = true;
+        }
+    };
+
+    let compiled = match subject.formed(overlay) {
+        Subject::Unit { .. } => return Err(Refusal::Unit),
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+            package,
+        } => {
+            let (entrypoint, loader) =
+                open(origin, declares, package.as_ref(), overlay).map_err(Refusal::Diagnostics)?;
+            let units = overlaid(units, overlay);
+
+            Fold::new(budget, &units, cache)
+                .compile(&entrypoint, &loader, &mut observe, &mut *progress)
+                .map(|_| ())
+        }
+        Subject::CoreText { origin } => {
+            if !Stage::of_core_text(name) {
+                return Err(Refusal::Lowered);
             }
-        },
-        &mut *progress,
-    );
+            let (source, module) = origin
+                .read(overlay)
+                .map_err(|refusal| Refusal::Diagnostics(vec![*refusal]))?;
+
+            match Fold::new(budget, &[], cache).compile_core_text(
+                &source,
+                module,
+                &mut observe,
+                &mut *progress,
+            ) {
+                Ok(None) => return Err(Refusal::Unit),
+                compiled => compiled.map(|_| ()),
+            }
+        }
+    };
 
     // A rung the driver emitted has been answered, whatever happens downstream of it. Asking for `core` on a program that fails to elaborate is asking what the lowering produced — which is most of why one asks — and discarding it because a later stage refused answers a question nobody put. What the transport's contract refuses is a program that stopped *before* the rung, which is exactly the case where nothing was observed.
     match (reached, compiled) {
@@ -297,6 +317,44 @@ pub fn named_stage(
 
             Ok(Some((described, part)))
         }
+        // A declaration the text writes is read off the unit it reads to, its part at `core-elab` its items there; any other is the prelude's, a text being compiled against the prelude alone.
+        Subject::CoreText { origin } => {
+            if name != "core-elab" {
+                return Err(Refusal::Lowered);
+            }
+            let (source, module) = origin
+                .read(overlay)
+                .map_err(|refusal| Refusal::Diagnostics(vec![*refusal]))?;
+            let own = Fold::new(budget, &[], through)
+                .core_text_unit(&source, module, &mut *progress, |prelude, unit| {
+                    let described = described_in_text(prelude, unit, asked)?;
+                    let name = Global::Authored(*asked);
+                    let part = unit
+                        .core()
+                        .spelled(&narrowed(
+                            dumped_over(prelude.iter().map(|unit| unit.core())),
+                            part_of(unit.core(), unit.anchors(), &name),
+                        ))
+                        .to_string();
+
+                    Some((described, part))
+                })
+                .map_err(of_error)
+                .map_err(Refusal::Diagnostics)?;
+
+            match own {
+                Some(own) => Ok(Some(own)),
+                None => named_stage(
+                    budget,
+                    Subject::prelude(),
+                    asked,
+                    name,
+                    overlay,
+                    cache,
+                    progress,
+                ),
+            }
+        }
     }
 }
 
@@ -335,14 +393,17 @@ fn program_part(
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<(Described, String)>, Refusal> {
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-        package,
-    } = subject.formed(overlay)
-    else {
-        return Err(Refusal::Unit);
+    let (units, origin, declares, package) = match subject.formed(overlay) {
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+            package,
+        } => (units, origin, declares, package),
+        Subject::Unit { .. } => return Err(Refusal::Unit),
+        Subject::CoreText { origin } => {
+            return core_text_part(budget, origin, asked, name, overlay, through, progress);
+        }
     };
     let (entrypoint, loader) =
         open(origin, declares, package.as_ref(), overlay).map_err(Refusal::Diagnostics)?;
@@ -397,6 +458,68 @@ fn program_part(
         (Some(part), _) => Ok(Some((described, part))),
         (None, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
         (None, Ok(_)) => unreachable!("a compile that ends emits every rung"),
+    }
+}
+
+/// [`program_part`] of a program read from Core text: the declaration as `--name` answers it of the text, and its part of the rung the program the text compiles to holds.
+fn core_text_part(
+    budget: u64,
+    origin: Origin,
+    asked: &Qualifier,
+    name: &str,
+    overlay: &Overlay,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<(Described, String)>, Refusal> {
+    let Some(described) = described_core_text(
+        budget,
+        &origin,
+        asked,
+        overlay,
+        (None, through),
+        &mut *progress,
+    )
+    .map_err(Refusal::Diagnostics)?
+    else {
+        return Ok(None);
+    };
+    let (source, module) = origin
+        .read(overlay)
+        .map_err(|refusal| Refusal::Diagnostics(vec![*refusal]))?;
+    let declaration = Qualifier::from(
+        described
+            .path
+            .trim_start_matches('/')
+            .split('/')
+            .collect::<Vec<_>>(),
+    );
+
+    let mut part = None;
+    let mut names = HashSet::new();
+    let compiled = Fold::new(budget, &[], through).compile_core_text(
+        &source,
+        module,
+        |stage| match (stage, name) {
+            (Stage::Anf(module), "anf") | (Stage::AnfOptm(module), "anf-optm") => {
+                part = Some(module.part(declaration).to_string());
+            }
+            (Stage::Cps(module), "cps") | (Stage::CpsOptm(module), "cps-optm") => {
+                part = Some(module.part(declaration).to_string());
+            }
+            (Stage::CpsOptm(module), "wasm") => names = emitted_names(module, &declaration),
+            (Stage::Wasm(module), "wasm") => {
+                part = Some(module.part_within(&names, MAX_LINE_WIDTH).to_string());
+            }
+            _ => {}
+        },
+        &mut *progress,
+    );
+
+    match (part, compiled) {
+        (Some(part), _) => Ok(Some((described, part))),
+        (None, Ok(None)) => Err(Refusal::Unit),
+        (None, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
+        (None, Ok(Some(_))) => unreachable!("a compile that ends emits every rung"),
     }
 }
 

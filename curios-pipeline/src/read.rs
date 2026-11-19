@@ -4,14 +4,15 @@
 
 use {
     crate::{
-        CompileError, Earlier, Over, Placing, Progress, certifier_refusal, erasure_reported,
-        globals_after, judged, recheck_over,
+        CompileError, DumpScope, Earlier, Over, Placing, Progress, Stage, certifier_refusal,
+        erasure_reported, globals_after, judged, recheck_over,
     },
     curios_abi::ForeignStore,
     curios_cert::{Rechecked, Verdict, certify_definitions},
     curios_common::{Mount, Qualifier, Report, RootKind, Said, Source, Span, SyntaxRegistry},
     curios_core::{
-        Anchor, Anchored, Anchors, Definitions, Entrypoint, Global, Intrinsic, Places, Term,
+        Anchor, Anchored, Anchors, Definitions, Entrypoint, Global, Intrinsic, Places, Program,
+        Term,
     },
     curios_erase::{Erasures, erase_unit},
     curios_surface::{CoreFile, CoreItem, CoreNominals, FormScope, ReadError, to_core_at},
@@ -130,7 +131,13 @@ fn rows(definitions: &Definitions, syntax: SyntaxRegistry) -> ForeignStore {
     rows
 }
 
-/// The Core text `source` holds, entered on top of `predecessors` as a program is: read over them, compiled as a unit, and the term it closes with, where it closes with one, judged at the program contract over that unit and erased, the program it links to handed back. A text that closes with no term is a module, a unit claiming `module`; one that closes with a term is a program's declarations, which claim the empty prefix as a loose program's do. `progress` is told it is taken on.
+/// A text of Core text entered on top of a fold ([`enter_core_text`]): the unit it reads to, and the program it links to where it closes with a term.
+pub struct EnteredText {
+    pub unit: Unit,
+    pub linked: Option<curios_anf::Module>,
+}
+
+/// The Core text `source` holds, entered on top of `predecessors` as a program is: read over them, compiled as a unit, and the term it closes with, where it closes with one, judged at the program contract over that unit and erased, `observe` handed the program as the certifier accepted it, its `core-elab` rung. A text that closes with no term is a module, a unit claiming `module`; one that closes with a term is a program's declarations, which claim the empty prefix as a loose program's do. `progress` is told it is taken on.
 ///
 /// **Its term is judged as it is written.** Core text states every node, so the tails of what it closes with are not handed to `/std/Program`'s `execute`, which is the elaborator's rewriting of a program's tails: what it closes with is put at `Io({})` as it stands.
 pub fn enter_core_text(
@@ -139,8 +146,9 @@ pub fn enter_core_text(
     syntax: &SyntaxRegistry,
     source: &Arc<Source>,
     module: Qualifier,
+    observe: &mut dyn FnMut(Stage<'_>),
     progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Option<curios_anf::Module>, CompileError> {
+) -> Result<EnteredText, CompileError> {
     let scope = FormScope::over(*syntax, predecessors.cores());
     let contract = Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()));
     let read = read_core_text(source, &scope, &contract)
@@ -165,7 +173,7 @@ pub fn enter_core_text(
     )
     .map_err(|unmade| unmade.reported(&read, predecessors, syntax))?;
     let Some(entry) = read.entry else {
-        return Ok(None);
+        return Ok(EnteredText { unit, linked: None });
     };
 
     let units = predecessors
@@ -174,17 +182,29 @@ pub fn enter_core_text(
         .copied()
         .chain([&unit])
         .collect::<Vec<_>>();
-    let (_, erased) = judged(
+    let (program, erased) = judged(
         budget,
         (Predecessors::over(&units), predecessors),
         syntax,
         entry,
         (Placing::Read(unit.anchors()), true),
     )?;
+    observe(Stage::CoreElab(
+        &Program {
+            definitions: unit.core().clone(),
+            entrypoint: program.as_program().entrypoint.clone(),
+        },
+        DumpScope {
+            syntax,
+            predecessors,
+        },
+    ));
+    let linked = erased.expect("a program read from Core text is erased")?;
 
-    erased
-        .expect("a program read from Core text is erased")
-        .map(Some)
+    Ok(EnteredText {
+        unit,
+        linked: Some(linked),
+    })
 }
 
 /// Why a unit read from Core text was not made: the certifier refused it, what elaboration would have solved among what it refuses, or it could not be erased. Each held by pointer, a refusal being the large case of what a compile answers.

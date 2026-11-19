@@ -10,7 +10,10 @@
 mod tests;
 
 use {
-    crate::{Described, Diagnosis, Overlaid, Subject, described_entry, of_error, open, overlaid},
+    crate::{
+        Described, Diagnosis, Origin, Overlaid, Subject, described_core_text, described_entry,
+        of_error, open, overlaid,
+    },
     curios_common::{Lineage, Qualifier},
     curios_cps::{held, rebuilds},
     curios_emit::emitted_functions,
@@ -95,20 +98,30 @@ pub fn footprint(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-        package,
-    } = subject.formed(overlay)
-    else {
-        return Err(Unfooted::Unit);
+    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = reached.as_ref().map(|cache| cache as &dyn Cache);
+    let (units, origin, declares, package) = match subject.formed(overlay) {
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+            package,
+        } => (units, origin, declares, package),
+        Subject::Unit { .. } => return Err(Unfooted::Unit),
+        Subject::CoreText { origin } => {
+            return core_text_footprint(
+                budget,
+                &origin,
+                asked,
+                overlay,
+                (cache, through),
+                progress,
+            );
+        }
     };
     let (entrypoint, loader) =
         open(origin, declares, package.as_ref(), overlay).map_err(Unfooted::Diagnostics)?;
     let units = overlaid(units, overlay);
-    let reached = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = reached.as_ref().map(|cache| cache as &dyn Cache);
 
     // Asked as a question reads the program, with its tests, then compiled as a build compiles it.
     let loader = loader.tested();
@@ -138,6 +151,41 @@ pub fn footprint(
     let rows = seen.rows();
 
     Ok(Some((described, rows)))
+}
+
+/// [`footprint`] of a program read from Core text: the declaration as `--name` answers it of the text, and the rows the program the text compiles to holds of its functions, read off the lineage erasure gives each, as a program's are.
+fn core_text_footprint(
+    budget: u64,
+    origin: &Origin,
+    asked: &Qualifier,
+    overlay: &Overlay,
+    (cache, through): (Option<&Verdicts>, Option<&dyn Cache>),
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
+    let Some(described) = described_core_text(
+        budget,
+        origin,
+        asked,
+        overlay,
+        (cache, through),
+        &mut *progress,
+    )
+    .map_err(Unfooted::Diagnostics)?
+    else {
+        return Ok(None);
+    };
+    let (source, module) = origin
+        .read(overlay)
+        .map_err(|refusal| Unfooted::Diagnostics(vec![*refusal]))?;
+    let mut seen = Seen::of(&described.path);
+    let compiled = Fold::new(budget, &[], through)
+        .compile_core_text(&source, module, |stage| seen.observe(stage), &mut *progress)
+        .map_err(|error| Unfooted::Diagnostics(of_error(error)))?;
+    if compiled.is_none() {
+        return Err(Unfooted::Unit);
+    }
+
+    Ok(Some((described, seen.rows())))
 }
 
 /// What each rung of one compilation held of one declaration's functions, by each function's place among the declaration's.

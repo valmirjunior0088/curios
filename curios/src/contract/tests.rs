@@ -732,7 +732,7 @@ wonder --at SUBJECT:1:1 — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → loose stray.crs
-  work/app: proof.crsc → loose proof.crsc
+  work/app: proof.crsc → refused: core text: `wonder --at` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
@@ -854,7 +854,7 @@ wonder --name /std/Map --exports SUBJECT — Scope, store Write, leaves Nothing,
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
   work/app: stray.crs → loose stray.crs
-  work/app: proof.crsc → loose proof.crsc
+  work/app: proof.crsc → refused: core text: `wonder --name --exports` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs

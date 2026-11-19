@@ -47,6 +47,8 @@ pub enum Subject {
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
     Unit { units: Vec<RootSource> },
+    /// A loose text of Core text, which no lowering made: read over the prelude through the pipeline's door and compiled as a unit, the term it closes with, where it closes with one, judged as a program's is ([`Fold::check_core_text`]).
+    CoreText { origin: Origin },
 }
 
 impl Subject {
@@ -110,20 +112,7 @@ impl Subject {
         }
     }
 
-    /// The text of a loose subject written as Core text, as its name or standard input says: what the check reads through the pipeline's door rather than lowering it ([`Fold::check_core_text`]).
-    fn core_text(&self) -> Option<&Origin> {
-        match self {
-            Subject::Entry {
-                units,
-                origin,
-                declares: None,
-                package: None,
-            } if units.is_empty() && origin.written() == WrittenIn::CoreText => Some(origin),
-            _ => None,
-        }
-    }
-
-    /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
+    /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have. A loose text of Core text, as its name or standard input says, is a subject of its own, whichever form it is written in.
     pub fn formed(self, overlay: &Overlay) -> Self {
         match self {
             Subject::Entry {
@@ -132,6 +121,9 @@ impl Subject {
                 declares: None,
                 package: None,
             } if units.is_empty() => {
+                if origin.written() == WrittenIn::CoreText {
+                    return Subject::CoreText { origin };
+                }
                 let module = match &origin {
                     Origin::File(path) => RootSource::loose_module(path, overlay),
                     Origin::Text { text, .. } => RootSource::supplied_module(
@@ -177,7 +169,10 @@ impl Origin {
     }
 
     /// The text, as the source a report closes on, read through `overlay` for a file, with the prefix a unit of it claims where it is written as a module: a file's stem, and [`STDIN_MOUNT`] for standard input's text. A file that cannot be read is the one diagnosis.
-    fn read(&self, overlay: &Overlay) -> Result<(Arc<Source>, Qualifier), Box<Diagnosis>> {
+    pub(crate) fn read(
+        &self,
+        overlay: &Overlay,
+    ) -> Result<(Arc<Source>, Qualifier), Box<Diagnosis>> {
         match self {
             Origin::File(path) => {
                 let text = match overlay.get(path) {
@@ -260,27 +255,6 @@ fn diagnosed_reading(
         };
     }
 
-    // Core text is lowered by nothing: the check reads it through the pipeline's door.
-    if let Some(origin) = subject.core_text() {
-        return match origin.read(overlay) {
-            Ok((source, module)) => {
-                match Fold::new(budget, &[], through).check_core_text(
-                    &source,
-                    module,
-                    &mut *progress,
-                ) {
-                    Ok(()) => Diagnosed::found(None, Findings::default()),
-                    Err(error) => Diagnosed::refused(error),
-                }
-            }
-            Err(refusal) => Diagnosed {
-                diagnostics: vec![*refusal],
-                reached: BTreeSet::new(),
-                written: Vec::new(),
-            },
-        };
-    }
-
     // The subject's lowering, as the fold makes or restores it, read for what `file` writes.
     let reading = file.map(Reading::of);
     let written = RefCell::new(Vec::new());
@@ -334,6 +308,20 @@ fn diagnosed_reading(
                 written: Vec::new(),
             },
         },
+        // Core text is lowered by nothing: the check reads it through the pipeline's door.
+        Subject::CoreText { origin } => match origin.read(overlay) {
+            Ok((source, module)) => {
+                match Fold::new(budget, &[], through).check_core_text(
+                    &source,
+                    module,
+                    &mut *progress,
+                ) {
+                    Ok(()) => Diagnosed::found(None, Findings::default()),
+                    Err(error) => Diagnosed::refused(error),
+                }
+            }
+            Err(refusal) => Diagnosed::unread(*refusal),
+        },
     };
     diagnosed.written = written.take();
 
@@ -366,6 +354,15 @@ impl Diagnosed {
     fn refused(error: CompileError) -> Self {
         Self {
             diagnostics: of_error(error),
+            reached: BTreeSet::new(),
+            written: Vec::new(),
+        }
+    }
+
+    /// A subject whose text could not be read: the one diagnosis, and nothing reached.
+    fn unread(refusal: Diagnosis) -> Self {
+        Self {
+            diagnostics: vec![refusal],
             reached: BTreeSet::new(),
             written: Vec::new(),
         }

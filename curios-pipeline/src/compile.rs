@@ -1364,7 +1364,7 @@ pub fn examine_entrypoint(
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization and the rebuild in place it settles, and wasm emission, the entry's answer crossing at `answer` where it is declared at one, observing every stage in order.
-fn lower_from_anf<O>(
+pub fn lower_from_anf<O>(
     mut anf_module: curios_anf::Module,
     answer: Option<&WireType>,
     observe: &mut O,

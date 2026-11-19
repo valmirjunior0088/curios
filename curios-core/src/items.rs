@@ -13,7 +13,7 @@
 //! **A version holds items by place.** A unit compiled over a baseline holds the baseline's items and replaces the ones it made: a version shares every item it did not change with the module it was made from, each at the place it had, and holds an item new to it at a place between two others ([`Items::version`]). A module made whole or restored places its items at their indices; a version made of one spaces them apart first, once, and every version made of a version keeps its places. So a reader goes by the places a module gives ([`Items::places`]), never by counting.
 
 use {
-    crate::{ArchivedItemRun, Declared, Definitions, Global, Item, ItemRun},
+    crate::{ArchivedItemRun, Declared, Definitions, Global, Item, ItemRun, Place},
     curios_archive::{Bytes, Pooled, Proxy, Via},
     curios_common::{Object, Ordered},
     std::{
@@ -583,6 +583,21 @@ impl Items {
             Held::Stored(stored) => stored.outlines.declared(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).declared(),
         }
+    }
+
+    /// What `name`, which `place` says these items hold, is declared as, with nothing restored: its member's kind, a made name's read off its item's names, among which it stands.
+    pub fn declared_at(&self, name: &Global, place: Place) -> Declared {
+        let member = match place {
+            Place::Let(_) => 0,
+            Place::Member { member, .. } => member as usize,
+            Place::Made { .. } => self
+                .names(place.item())
+                .iter()
+                .position(|held| held == name)
+                .expect("a made name is its item's"),
+        };
+
+        self.declared(place.item())[member]
     }
 
     /// Whether the item at `place` is a group, with nothing restored.

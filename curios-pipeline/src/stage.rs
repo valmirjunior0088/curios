@@ -65,6 +65,11 @@ impl<'a> Stage<'a> {
         Self::NAMES[..3].contains(&name)
     }
 
+    /// Whether `name` is a rung a program read from Core text has: every rung from its elaborated module on, the two before it being a lowering's, which Core text has none of.
+    pub fn of_core_text(name: &str) -> bool {
+        Self::NAMES[2..].contains(&name)
+    }
+
     /// This stage's name, matching its entry in [`Stage::NAMES`].
     pub fn name(&self) -> &'static str {
         match self {

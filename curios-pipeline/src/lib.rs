@@ -27,7 +27,7 @@ pub use recompile::complete_records;
 use recompile::*;
 
 mod read;
-pub use read::{Read, Unmade, Unread, compile_read, enter_core_text, read_core_text};
+pub use read::{EnteredText, Read, Unmade, Unread, compile_read, enter_core_text, read_core_text};
 
 mod standard;
 pub use standard::{

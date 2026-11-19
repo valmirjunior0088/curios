@@ -9,7 +9,7 @@ use {
     crate::{
         Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadLowering, ReadRefusal,
         Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
-        declared_test_paths, enter_core_text, lower_subject,
+        declared_test_paths, enter_core_text, lower_from_anf, lower_subject,
     },
     curios_abi::ForeignStore,
     curios_common::{Qualifier, Source},
@@ -185,8 +185,73 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
     {
         self.under_entry(progress, |predecessors, _, progress| {
-            enter_core_text(self.budget, predecessors, &SYNTAX, source, module, progress)
-                .map(|_| ())
+            enter_core_text(
+                self.budget,
+                predecessors,
+                &SYNTAX,
+                source,
+                module,
+                &mut |_| {},
+                progress,
+            )
+            .map(|_| ())
+        })
+    }
+
+    /// [`Fold::check_core_text`] carried through the back half as [`Fold::compile`] carries a program, every rung from `core-elab` on handed to `observe`: the module the program read from Core text compiles to, or `None` for a text closing with no term, which is a module and no program.
+    pub fn compile_core_text<O, P>(
+        self,
+        source: &Arc<Source>,
+        module: Qualifier,
+        observe: O,
+        progress: P,
+    ) -> Result<Option<(curios_wasm::Module, ForeignStore)>, CompileError>
+    where
+        O: FnMut(Stage<'_>),
+        P: FnMut(Progress<'_>),
+    {
+        let mut observe = observe;
+
+        self.under_entry(progress, |predecessors, _, progress| {
+            let entered = enter_core_text(
+                self.budget,
+                predecessors,
+                &SYNTAX,
+                source,
+                module,
+                &mut observe,
+                progress,
+            )?;
+
+            Ok(entered
+                .linked
+                .map(|linked| lower_from_anf(linked, None, &mut observe)))
+        })
+    }
+
+    /// The unit the Core text `source` holds reads to, compiled on top of the fold as [`Fold::check_core_text`] compiles it, handed to `then` with the prelude's roots before it: what a question about what a text declares reads.
+    pub fn core_text_unit<P, T>(
+        self,
+        source: &Arc<Source>,
+        module: Qualifier,
+        progress: P,
+        then: impl FnOnce(&[&Unit], &Unit) -> T,
+    ) -> Result<T, CompileError>
+    where
+        P: FnMut(Progress<'_>),
+    {
+        self.under_entry(progress, |predecessors, _, progress| {
+            let entered = enter_core_text(
+                self.budget,
+                predecessors,
+                &SYNTAX,
+                source,
+                module,
+                &mut |_| {},
+                progress,
+            )?;
+
+            Ok(then(predecessors.units(), &entered.unit))
         })
     }
 

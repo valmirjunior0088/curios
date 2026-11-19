@@ -84,6 +84,117 @@ fn core_reads_standard_input_as_a_crsc_is_read() {
     assert!(stderr.contains("surplus flag"), "{stderr}");
 }
 
+/// A program in `root` as `p.crs`, and the module `--stage core-elab` prints for it as `p.crsc`: a declaration and a closing term reaching it.
+fn dumped(root: &Path) {
+    write(
+        root,
+        "p.crs",
+        "use /std/{Nat, print};\n\nlet double(n: Nat) -> Nat = n + n;\n\nprint(Nat/to_str(double(21)))\n",
+    );
+    let (dump, stderr, code) = said(&curios(
+        root,
+        &["wonder", "--stage", "core-elab", "p.crs"],
+        "",
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    write(root, "p.crsc", &dump);
+}
+
+/// A program read from Core text has every rung from `core-elab` on, each printed as the program the text was dumped from prints it, and the two rungs a lowering makes are refused, Core text being lowered by nothing.
+#[test]
+fn a_dumped_programs_rungs_are_printed_from_its_core_text_as_from_the_program() {
+    let root = temporary("rungs");
+    fs::create_dir_all(&root).unwrap();
+    dumped(&root);
+
+    for rung in ["anf", "cps-optm", "wasm"] {
+        let (program, stderr, code) =
+            said(&curios(&root, &["wonder", "--stage", rung, "p.crs"], ""));
+        assert_eq!(code, Some(0), "{rung}: {stderr}");
+        let (text, stderr, code) = said(&curios(&root, &["wonder", "--stage", rung, "p.crsc"], ""));
+        assert_eq!(code, Some(0), "{rung}: {stderr}");
+        assert_eq!(text, program, "{rung}");
+    }
+
+    for rung in ["text", "core"] {
+        let (_, stderr, code) = said(&curios(&root, &["wonder", "--stage", rung, "p.crsc"], ""));
+        assert_eq!(code, Some(1), "{rung}: {stderr}");
+        assert!(stderr.contains("lowered by nothing"), "{rung}: {stderr}");
+    }
+}
+
+/// A declaration a text writes is answered off the unit it reads to, placed where the text writes it, as is its part at `core-elab` and the footprint of its functions; a name of the prelude is answered as the prelude's scope answers it; and a question answered off a lowering is refused, naming the cause.
+#[test]
+fn a_declaration_a_text_writes_is_answered_off_the_unit_it_reads_to() {
+    let root = temporary("named");
+    fs::create_dir_all(&root).unwrap();
+    dumped(&root);
+
+    let (named, stderr, code) = said(&curios(
+        &root,
+        &["wonder", "--name", "/double", "p.crsc"],
+        "",
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(named.contains("/double"), "{named}");
+    assert!(named.contains("definition"), "{named}");
+    assert!(named.contains("total"), "{named}");
+    assert!(named.contains("p.crsc:1:5"), "{named}");
+
+    let (part, stderr, code) = said(&curios(
+        &root,
+        &[
+            "wonder",
+            "--name",
+            "/double",
+            "--stage",
+            "core-elab",
+            "p.crsc",
+        ],
+        "",
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(part.contains("let /double"), "{part}");
+
+    let (footprint, stderr, code) = said(&curios(
+        &root,
+        &["wonder", "--name", "/double", "--footprint", "p.crsc"],
+        "",
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        footprint.lines().any(|line| line.contains('\t')),
+        "{footprint}"
+    );
+
+    let (prelude, stderr, code) = said(&curios(
+        &root,
+        &["wonder", "--name", "/std/List/map", "p.crsc"],
+        "",
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(prelude.contains("/std/List/map"), "{prelude}");
+
+    let (_, stderr, code) = said(&curios(&root, &["wonder", "--at", "p.crsc:1:5"], ""));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("reads no Core text"), "{stderr}");
+}
+
+/// The tests a module of Core text writes are listed as the unit it reads to holds them.
+#[test]
+fn the_tests_a_text_writes_are_listed() {
+    let root = temporary("tests");
+    write(
+        &root,
+        "t.crsc",
+        "test /t/held = /std/Test/assert(/std/Str/Str { x[0x69], /sys/Bool/True/qed() }, true);\n",
+    );
+
+    let (listed, stderr, code) = said(&curios(&root, &["wonder", "--tests", "t.crsc"], ""));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(listed, "/t/held\n");
+}
+
 /// A closing term stating a type other than the one a check puts it at is refused by the reader where the text states it, before any checker reads it.
 #[test]
 fn a_closing_term_stating_another_type_is_refused_where_it_states_it() {

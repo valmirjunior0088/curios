@@ -11,8 +11,10 @@
 //! **A declaration asked about by its path is answered off the unit that declares it** ([`described`]), its type as that unit was elaborated: the subject is lowered as a question about a place lowers it, which finds the unit, and is elaborated only where it declares the name itself, so a file being edited never stands between a question and a declaration of a unit in scope.
 
 use {
-    crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
-    curios_common::{Plicity, Qualifier, Source, Span},
+    crate::{
+        Diagnosis, Origin, Overlaid, Severity, Subject, of_error, open, overlaid, tested_last,
+    },
+    curios_common::{Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
         Anchors, Certification, Declared, Definitions, Entrypoint, Global, HeadKey, Imports,
         Intrinsic, Lexicon, Places, Spellings, Subterm, Term, Totality, UnitPaths, WitnessKey,
@@ -186,8 +188,20 @@ fn lowering<T>(
                 |scope, own, entry| then(scope, own, Some(entry)),
             )
         }
+        Subject::CoreText { .. } => return Err(unlowered()),
     }
     .map_err(of_error)
+}
+
+/// The refusal of a question answered off a lowering, asked of Core text, which is lowered by nothing.
+fn unlowered() -> Vec<Diagnosis> {
+    let mut said = Said::line("no lowering");
+    said.stating("Core text is lowered by nothing, and this question is answered off a lowering");
+
+    vec![Diagnosis {
+        severity: Severity::Error,
+        report: Report::of(None, said),
+    }]
 }
 
 /// One question's reads of what a file writes, each asked once: which source is the file asked about.
@@ -395,7 +409,67 @@ pub fn described(
                 progress,
             )
         }
+        Subject::CoreText { origin } => {
+            described_core_text(budget, &origin, asked, overlay, (cache, through), progress)
+        }
     }
+}
+
+/// What `asked` names in the scope of a text of Core text, as [`described`] answers it: a declaration the text writes, which Core text names by its own path, answered off the unit it reads to — what it is declared as, its type, its totality as the certifier recorded it, its members, and where the text writes it, the path it is declared at being the one asked, since Core text exports nothing at another — and any other name as the prelude's scope answers it, a text being compiled against the prelude alone.
+pub fn described_core_text(
+    budget: u64,
+    origin: &Origin,
+    asked: &Qualifier,
+    overlay: &Overlay,
+    (cache, through): (Option<&Verdicts>, Option<&dyn Cache>),
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Described>, Vec<Diagnosis>> {
+    let (source, module) = origin.read(overlay).map_err(|refusal| vec![*refusal])?;
+    let own = Fold::new(budget, &[], through)
+        .core_text_unit(&source, module, &mut *progress, |prelude, unit| {
+            described_in_text(prelude, unit, asked)
+        })
+        .map_err(of_error)?;
+
+    match own {
+        Some(described) => Ok(Some(described)),
+        None => described(budget, Subject::prelude(), asked, overlay, cache, progress),
+    }
+}
+
+/// The declaration `asked` names in `unit`, a unit read from Core text over the prelude's roots `prelude`, as [`described`] answers it, where the text declares one at that path: off the unit, placed where the text writes it.
+pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> Option<Described> {
+    let name = Global::Authored(*asked);
+    let place = unit.places().place(&name)?;
+    let declared = unit.core().items.declared_at(&name, place);
+    let said = Lowered {
+        name,
+        declared,
+        public: None,
+        declaration: unit
+            .anchors()
+            .written(&name)
+            .map(|(text, label)| Declaration {
+                text,
+                label,
+                held: true,
+            }),
+        members: members(unit.lexicon(), &name, declared),
+        witnesses: None,
+    };
+    let scope = prelude
+        .iter()
+        .map(|unit| unit.lexicon())
+        .collect::<Vec<_>>();
+
+    Some(spelled(
+        asked,
+        said,
+        unit.core(),
+        Some((unit.lexicon(), unit.places())),
+        &scope,
+        Some(unit.certification()),
+    ))
 }
 
 /// What `asked` names in the scope of the library that is the last of `units`, compiled over `through` as [`described`] answers it: off the unit in scope that declares it, or off the library's own module, elaborated, where the library declares it.
@@ -540,6 +614,8 @@ pub fn exported(
     };
     let units = match subject {
         Subject::Entry { units, .. } | Subject::Unit { units } => units,
+        // A text of Core text is compiled against the prelude alone.
+        Subject::CoreText { .. } => Vec::new(),
     };
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
