@@ -19,7 +19,7 @@ use {
 const VERSION: &str = "18.0.0";
 
 /// Every file read, by its path under the version's `ucd/` directory, with its SHA-256.
-const FILES: [(&str, &str); 5] = [
+const FILES: [(&str, &str); 7] = [
     (
         "EastAsianWidth.txt",
         "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
@@ -39,6 +39,14 @@ const FILES: [(&str, &str); 5] = [
     (
         "auxiliary/GraphemeBreakTest.txt",
         "b0cf047ee94485bbdc846de2b902f5f8a815f6b674f9d04223cddadd91c9df31",
+    ),
+    (
+        "UnicodeData.txt",
+        "0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950",
+    ),
+    (
+        "PropList.txt",
+        "f438f532e8737bb8a2702126cdf9c4af5e357c58c7acf9d9eb2fc7c1a1d955d6",
     ),
 ];
 
@@ -290,6 +298,26 @@ fn binary(text: &str, property: &str) -> Vec<usize> {
     each
 }
 
+/// Every scalar's place in the general categories `categories` of `UnicodeData.txt`: `1` where a scalar's category is one of them. A range the file states as a pair of rows, its first named `<…, First>` and its last `<…, Last>`, is one category throughout.
+fn general_category(text: &str, categories: &[&str]) -> Vec<usize> {
+    let mut each = vec![0; SCALARS];
+    let mut opened = None;
+
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let fields: Vec<&str> = line.split(';').collect();
+        let (scalar, _) = scalars(fields[0]);
+        let held = usize::from(categories.contains(&fields[2]));
+        if fields[1].ends_with(", First>") {
+            opened = Some(scalar);
+        } else {
+            let first = opened.take().unwrap_or(scalar);
+            each[first..=scalar].fill(held);
+        }
+    }
+
+    each
+}
+
 /// Every case of the conformance file: the clusters a run of scalars segments into.
 fn cases(text: &str) -> Vec<Vec<Vec<u32>>> {
     text.lines()
@@ -316,8 +344,15 @@ fn cases(text: &str) -> Vec<Vec<Vec<u32>>> {
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
 
-    let [width, emoji, grapheme, derived, conformance] =
-        FILES.map(|(path, sha256)| text(path, sha256));
+    let [
+        width,
+        emoji,
+        grapheme,
+        derived,
+        conformance,
+        unicode_data,
+        properties,
+    ] = FILES.map(|(path, sha256)| text(path, sha256));
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
     let conjunct = |fields: &[&str]| {
@@ -365,6 +400,30 @@ fn main() {
         "DEFAULT_IGNORABLE",
         "Default_Ignorable_Code_Point",
         &binary(&derived, "Default_Ignorable_Code_Point"),
+    );
+    binary_table(
+        &mut out,
+        "ALPHABETIC",
+        "Alphabetic",
+        &binary(&derived, "Alphabetic"),
+    );
+    binary_table(
+        &mut out,
+        "NUMERIC",
+        "General_Category=Number",
+        &general_category(&unicode_data, &["Nd", "Nl", "No"]),
+    );
+    binary_table(
+        &mut out,
+        "CONTROL",
+        "General_Category=Control",
+        &general_category(&unicode_data, &["Cc"]),
+    );
+    binary_table(
+        &mut out,
+        "WHITE_SPACE",
+        "White_Space",
+        &binary(&properties, "White_Space"),
     );
 
     out.push_str(

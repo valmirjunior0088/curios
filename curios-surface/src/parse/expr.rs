@@ -504,7 +504,7 @@ pub fn parse_infix_rest<'a, D: Grammar>(left: Term<D>, min_prec: u8) -> impl Par
 
 // What begins an operand, as far as this probe needs to tell one from punctuation: a name, a literal, a bracket, a plicity mark. `->`, `--` and `<-` all fail it, so a term followed by one keeps its own report.
 fn starts_operand(char: char) -> bool {
-    char.is_alphanumeric() || matches!(char, '_' | '(' | '[' | '{' | '"' | '\'' | '@' | '/')
+    is_identifier_char(char) || matches!(char, '(' | '[' | '{' | '"' | '\'' | '@' | '/')
 }
 
 // An infix symbol glued to an operand on either side is refused by the rule, once the loop above has ended. `parse_infix_op` refuses it with the reason already — `preceded_by_space` and `require_space` each name the missing whitespace — but the loop's arm is caught so the loop can end at a non-operator, a caught failure is discarded, and the enclosing form would then report the token it wanted: `Expected ';', obtained '/'` for `a/ 2`, the spelling the reference warns about, and for the glued `a+b` every other language writes. Probed without consuming, so a symbol spaced on both sides is left for the loop or an enclosing level; only the refusal consumes, reading the symbol raw so the caret underlines it alone and the failure is past the choice point.

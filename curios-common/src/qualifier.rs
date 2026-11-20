@@ -9,6 +9,7 @@ mod tests;
 
 use {
     curios_archive::Segments,
+    curios_unicode::{is_alphabetic, is_numeric},
     std::{
         borrow::Borrow,
         cmp::Ordering,
@@ -23,14 +24,14 @@ use {
 /// The characters an identifier may spell beyond the alphanumerics.
 const CHARACTERS: &[char] = &['_'];
 
-/// Whether `character` may appear in an identifier.
+/// Whether `character` may appear in an identifier: one the Unicode Character Database the toolchain pins calls alphabetic or a number, as `curios-unicode` reads it, so a name is read by the same table a program reads a character by.
 pub fn is_identifier_char(character: char) -> bool {
-    CHARACTERS.contains(&character) || character.is_alphanumeric()
+    CHARACTERS.contains(&character) || is_alphabetic(character) || is_numeric(character)
 }
 
 /// Whether `character` may begin an identifier: a digit may not, since a word that begins with one is read as a number wherever a term stands, and a name no term can read names nothing.
 pub fn is_identifier_start(character: char) -> bool {
-    CHARACTERS.contains(&character) || character.is_alphabetic()
+    CHARACTERS.contains(&character) || is_alphabetic(character)
 }
 
 /// Whether `word` spells an identifier: a non-empty run of [`is_identifier_char`] whose first is an [`is_identifier_start`].

@@ -4,7 +4,7 @@ use {
         BytesSegment, CharLit, FltLit, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix,
         StrLit, Subterm, Term, Written, parse_term, parse_whitespace,
     },
-    curios_common::{Keyword, Sign, Span},
+    curios_common::{Keyword, Sign, Span, is_identifier_char},
     curios_core::Numeral,
     curios_num::{Floating, Integer, Natural},
     curios_parse::{
@@ -211,7 +211,7 @@ fn parse_non_finite_flt<'a>(negative: bool) -> impl Parser<'a, Floating> {
 // Succeeds, consuming nothing, when the input does not go on with a character an identifier or a numeral could continue with.
 fn not_ahead_word<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     look_ahead(take_while(|char: char| {
-        char.is_alphanumeric() || char == '_' || char == '.'
+        is_identifier_char(char) || char == '.'
     }))
     .flat_map(|rest| match rest.is_empty() {
         true => pure(()).boxed(),

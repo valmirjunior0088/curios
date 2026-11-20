@@ -98,3 +98,11 @@ fn an_identifier_begins_with_no_digit() {
         assert!(!is_identifier(word), "{word:?}");
     }
 }
+
+/// An identifier's letters are those of the database the toolchain pins: U+0558, a letter Unicode 18.0.0 adds, spells one wherever a letter stands, as a digit of another script continues one.
+#[test]
+fn an_identifier_spells_a_letter_the_pinned_database_adds() {
+    for word in ["a\u{558}", "\u{558}a", "x٣"] {
+        assert!(is_identifier(word), "{word}");
+    }
+}

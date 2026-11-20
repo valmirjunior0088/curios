@@ -1,7 +1,7 @@
 use {
     super::{Mark, Parsed, Parser, ParserError, ParserState, Stated},
     curios_common::{Span, is_identifier_char},
-    curios_unicode::is_default_ignorable,
+    curios_unicode::{is_control, is_default_ignorable, is_white_space},
 };
 
 /// Succeeds with `a` without consuming input — the monadic return, for injecting an already-known value into a combinator chain.
@@ -104,9 +104,9 @@ pub fn is_blank(char: char) -> bool {
     matches!(char, ' ' | '\t' | '\n' | '\r')
 }
 
-/// Whether `char` prints as nothing, or as a blank the grammar does not take: white space other than a blank, a control character, or one the Unicode Character Database calls default-ignorable — a zero-width space or joiner, a byte-order mark, a soft hyphen, a direction mark or override, a variation selector, a Hangul filler, a tag.
+/// Whether `char` prints as nothing, or as a blank the grammar does not take: what the Unicode Character Database the toolchain pins calls white space other than a blank, a control character, or default-ignorable — a zero-width space or joiner, a byte-order mark, a soft hyphen, a direction mark or override, a variation selector, a Hangul filler, a tag.
 pub fn unseen(char: char) -> bool {
-    !is_blank(char) && (char.is_whitespace() || char.is_control() || is_default_ignorable(char))
+    !is_blank(char) && (is_white_space(char) || is_control(char) || is_default_ignorable(char))
 }
 
 /// `text` as a report quotes it: a character its reader could not see is spelled by its code point, `U+200B`.

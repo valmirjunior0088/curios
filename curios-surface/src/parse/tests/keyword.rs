@@ -159,6 +159,17 @@ fn rec_is_an_ordinary_identifier() {
     assert!(matches!(&entrypoint.module.items[0], TopItem::Let(items) if items[0].label == "rec"));
 }
 
+/// A letter is a letter of the database the toolchain pins: U+0558, which Unicode 18.0.0 adds, names a binding and reads it back as any letter does.
+#[test]
+fn a_letter_the_pinned_database_adds_names_a_binding() {
+    let entrypoint = "let a\u{558} : Type = Type;\na\u{558}"
+        .parse::<Entrypoint>()
+        .expect("U+0558 is a letter");
+    assert!(
+        matches!(&entrypoint.module.items[0], TopItem::Let(items) if items[0].label == "a\u{558}")
+    );
+}
+
 #[test]
 fn a_test_takes_no_pub_and_stays_a_contextual_word() {
     // The name is a report line, not an export.

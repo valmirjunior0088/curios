@@ -6,7 +6,7 @@ use {
         parse_term, parse_top_item, print_module_items, print_term, signature_type, take_comments,
     },
     curios_abi::WireSignature,
-    curios_common::{Keyword, Plicity, Report, Source, Span},
+    curios_common::{Keyword, Plicity, Report, Source, Span, is_identifier_char},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
@@ -335,7 +335,7 @@ fn begins_item(line: &str) -> bool {
         return true;
     }
     let word = line
-        .split(|character: char| !character.is_alphanumeric() && character != '_')
+        .split(|character: char| !is_identifier_char(character))
         .next()
         .unwrap_or("");
     let head = Keyword::read(word)

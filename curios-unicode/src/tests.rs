@@ -56,6 +56,10 @@ fn every_table_s_runs_ascend_apart() {
     assert!(ascend_apart(EXTENDED_PICTOGRAPHIC.iter().copied()));
     assert!(ascend_apart(EMOJI_PRESENTATION.iter().copied()));
     assert!(ascend_apart(DEFAULT_IGNORABLE.iter().copied()));
+    assert!(ascend_apart(ALPHABETIC.iter().copied()));
+    assert!(ascend_apart(NUMERIC.iter().copied()));
+    assert!(ascend_apart(CONTROL.iter().copied()));
+    assert!(ascend_apart(WHITE_SPACE.iter().copied()));
 }
 
 /// What the database says of a few scalars, one from each kind of answer.
@@ -88,6 +92,17 @@ fn a_scalar_s_properties_are_the_database_s() {
     assert!(is_default_ignorable('\u{E0041}'));
     assert!(!is_default_ignorable('a'));
     assert!(!is_extended_pictographic('a'));
+    assert!(is_alphabetic('a'));
+    assert!(is_alphabetic('\u{558}'));
+    assert!(!is_alphabetic('1'));
+    assert!(is_numeric('1'));
+    assert!(is_numeric('\u{2163}'));
+    assert!(is_numeric('\u{BD}'));
+    assert!(!is_numeric('a'));
+    assert!(is_control('\u{7F}'));
+    assert!(!is_control(' '));
+    assert!(is_white_space('\u{A0}'));
+    assert!(!is_white_space('\u{200B}'));
 }
 
 /// A packed table is its runs, seven bytes each, read back as they were written.

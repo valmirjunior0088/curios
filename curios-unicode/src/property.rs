@@ -2,9 +2,9 @@
 
 use {
     crate::{
-        DEFAULT_IGNORABLE, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION,
-        EXTENDED_PICTOGRAPHIC, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING, INDIC_CONJUNCT_BREAK,
-        INDIC_CONJUNCT_BREAK_MISSING,
+        ALPHABETIC, CONTROL, DEFAULT_IGNORABLE, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING,
+        EMOJI_PRESENTATION, EXTENDED_PICTOGRAPHIC, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING,
+        INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING, NUMERIC, WHITE_SPACE,
     },
     std::cmp::Ordering,
 };
@@ -159,4 +159,24 @@ pub fn is_emoji_presentation(scalar: char) -> bool {
 /// Whether `scalar` is `Default_Ignorable_Code_Point`: one the database says a renderer shows nothing of where it does not support it — a zero-width space or joiner, a direction mark or override, a variation selector, a Hangul filler, a tag.
 pub fn is_default_ignorable(scalar: char) -> bool {
     held(DEFAULT_IGNORABLE, scalar)
+}
+
+/// Whether `scalar` is `Alphabetic`: a letter, or a mark or a number the database counts among the letters.
+pub fn is_alphabetic(scalar: char) -> bool {
+    held(ALPHABETIC, scalar)
+}
+
+/// Whether `scalar` is a number: of the general category `Nd`, `Nl` or `No`.
+pub fn is_numeric(scalar: char) -> bool {
+    held(NUMERIC, scalar)
+}
+
+/// Whether `scalar` is a control character: of the general category `Cc`.
+pub fn is_control(scalar: char) -> bool {
+    held(CONTROL, scalar)
+}
+
+/// Whether `scalar` is `White_Space`.
+pub fn is_white_space(scalar: char) -> bool {
+    held(WHITE_SPACE, scalar)
 }

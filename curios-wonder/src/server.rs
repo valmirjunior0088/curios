@@ -24,7 +24,7 @@
 
 use {
     crate::{Answer, Asked, Diagnosed, Diagnosis, Placed, Severity, Silent, Stands},
-    curios_common::{Source, Span, Style},
+    curios_common::{Source, Span, Style, is_identifier_char},
     curios_core::Declared,
     curios_module::Overlay,
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Selection, Spelling},
@@ -531,9 +531,7 @@ impl<'a> Standing<'a> {
     fn moved(&self, span: &Span) -> Option<isize> {
         let grown = self.held.len().cast_signed() - self.checked.len().cast_signed();
         let joins = |character: Option<char>| {
-            character.is_some_and(|character| {
-                character.is_alphanumeric() || character == '_' || character == '/'
-            })
+            character.is_some_and(|character| is_identifier_char(character) || character == '/')
         };
 
         // What follows the span in each text is the same character, or in neither one that joins it.

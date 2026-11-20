@@ -5,7 +5,6 @@ Adopted on 2026-11-19, since `/std` already writes a name in upper case and gets
 ## What is wrong today
 
 - **`/std/Cli` shouts a name in ASCII alone.** Help and a refusal write a positional's name in upper case through `shouted` (`curios-prelude/std/Cli.crs`), which maps each character by `Char/to_ascii_upper`: a command whose positionals are `année` and `straße` prints `Usage: cat <ANNéE> [STRAßE]`, and a missing `année` is refused as `ANNéE` (`Cli/parse.crs`), at `ef6a83175`, where the full mapping writes `ANNÉE` and `STRASSE`. Every other ASCII case `/std` reads is ASCII by its standard: `http` compares field names by RFC 9110 §5.1, `Flt/grammar` reads `inf` and `nan`, and `Url` writes a hex digit.
-- **The identifier rule reads another database than the one the toolchain pins.** `is_identifier_char` and `is_identifier_start` (`curios-common/src/qualifier.rs`) read Rust's `char::is_alphanumeric` and `char::is_alphabetic`, which answer from the Unicode 17.0.0 tables of Rust 1.99, where `curios-unicode` pins 18.0.0: 12,833 scalars are `Alphabetic` in 18.0.0 and not in 17.0.0, so an identifier spelled with one is refused, at `ef6a83175`. Four sites restate the rule rather than calling it — `not_ahead_word` (`curios-surface/src/parse/literals.rs`), `starts_operand` (`curios-surface/src/parse/expr.rs`), `begins_item` (`curios-surface/src/module.rs`) and the server's `moved` (`curios-wonder/src/server.rs`) — and `unseen` (`curios-parse/src/primitive.rs`) reads Rust's `White_Space` beside the pinned `Default_Ignorable_Code_Point`. [`curios-unicode`](../../../curios-unicode/README.md) states that what the compiler reads of a character and what a program reads of it are one table; once `Char` answers `Alphabetic` from 18.0.0, `Char/is_alpha` and the identifier rule would disagree on those scalars.
 
 ## What is missing
 
@@ -25,11 +24,10 @@ Adopted on 2026-11-19, since `/std` already writes a name in upper case and gets
 
 ## Stages
 
-1. **The language's characters are the pinned database's.** `curios-unicode` keeps `Alphabetic` of `DerivedCoreProperties.txt`, reads `UnicodeData.txt` for the general categories `Nd`, `Nl`, `No` and `Cc` and `PropList.txt` for `White_Space`, and answers them; `is_identifier_char` and `is_identifier_start` read them, the four sites that restate the rule call it, `unseen` reads the pinned `White_Space` and `Cc`, and `documentation/language.md` says an identifier's characters are those the pinned database calls alphabetic or numeric. Check: an identifier spelled with a letter 18.0.0 adds, `a՘`, is accepted, held by a test that fails before the stage.
-2. **Upper case.** `UnicodeData.txt`'s simple mappings and `SpecialCasing.txt`'s unconditional ones packed as records, carried by `/sys/unicode` as `upper`, with the record shape `curios-unicode` states; `Char/to_upper` and `Str/to_upper`; `Cli`'s `shouted` restated over `Str/to_upper`. Check: `année` and `straße` shouted `ANNÉE` and `STRASSE` in `Cli`'s render and parse tests; `/std`'s mapping equals the database's at every record's edges; the archive's and a mapping program's growth named.
-3. **Lower case**, `lower` packed, `Cased` and `Case_Ignorable` kept and answered as `Char/is_cased` and `Char/is_case_ignorable`, `Char/to_lower` and `Str/to_lower` with the final sigma. Check: `ΟΔΟΣ` lowered to `οδος`, `Σ` alone to `σ`, `ΣΑ` to `σα`, `Σ'` after a letter to `ς'`; edges as stage 2.
-4. **Folding and caseless comparison**, `CaseFolding.txt`'s common and full foldings packed as `fold`, `Char/to_casefold`, `Str/to_casefold` and `Str/eql_ignoring_case`. Check: `Straße` and `STRASSE` caselessly equal, `http`'s ASCII comparison unchanged; edges as stage 2.
-5. **The case predicates**, `Lowercase`, `Uppercase` and `Alphabetic` answered as `Char/is_lower`, `Char/is_upper` and `Char/is_alpha`. Check: each at every run's edges, as the existing properties are.
+1. **Upper case.** `UnicodeData.txt`'s simple mappings and `SpecialCasing.txt`'s unconditional ones packed as records, carried by `/sys/unicode` as `upper`, with the record shape `curios-unicode` states; `Char/to_upper` and `Str/to_upper`; `Cli`'s `shouted` restated over `Str/to_upper`. Check: `année` and `straße` shouted `ANNÉE` and `STRASSE` in `Cli`'s render and parse tests; `/std`'s mapping equals the database's at every record's edges; the archive's and a mapping program's growth named.
+2. **Lower case**, `lower` packed, `Cased` and `Case_Ignorable` kept and answered as `Char/is_cased` and `Char/is_case_ignorable`, `Char/to_lower` and `Str/to_lower` with the final sigma. Check: `ΟΔΟΣ` lowered to `οδος`, `Σ` alone to `σ`, `ΣΑ` to `σα`, `Σ'` after a letter to `ς'`; edges as stage 1.
+3. **Folding and caseless comparison**, `CaseFolding.txt`'s common and full foldings packed as `fold`, `Char/to_casefold`, `Str/to_casefold` and `Str/eql_ignoring_case`. Check: `Straße` and `STRASSE` caselessly equal, `http`'s ASCII comparison unchanged; edges as stage 1.
+4. **The case predicates**, `Lowercase`, `Uppercase` and `Alphabetic` answered as `Char/is_lower`, `Char/is_upper` and `Char/is_alpha` — `Alphabetic` the table the identifier rule already reads. Check: each at every run's edges, as the existing properties are.
 
 ## Next step
 
@@ -37,4 +35,4 @@ A ready delivery: stage 1.
 
 ## Retirement
 
-It retires when `Char` and `Str` map and fold case as the pinned database states, `Char` answers the case properties under their plain names, and the language's characters are read from the same database.
+It retires when `Char` and `Str` map and fold case as the pinned database states, and `Char` answers the case properties under their plain names.
