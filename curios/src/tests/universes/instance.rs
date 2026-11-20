@@ -370,3 +370,52 @@ fn a_derived_witness_compared_through_a_definition_elaborates_within_a_small_bud
     typecheck_with_prelude(200_000, &entrypoint, &RootSource::none())
         .expect("the two instances are one within the budget");
 }
+
+/// **The certifier holds a recursive witness's method compared through a definition one where the elaborator does.** The method is read off a call of the witness and applied, so its call is compared through the field, which keeps the call folded where unfolding it posed the same pair again at every level of the tree; a witness concatenating its subtrees' spellings and one summing their sizes both check within a small budget. Mutation-checked: with the field compared at nothing, the concatenating witness exhausts the budget.
+#[test]
+fn a_recursive_witness_compared_through_a_definition_is_certified_within_a_small_budget() {
+    let witnesses = [
+        r#"
+        use /std/{Eq, Spell, Str};
+        induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+        satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
+            spell(t) =
+                match t
+                | leaf(a) => Spell/spell(a)
+                | node(l, r) => Str/concat(Spell/spell(l), Spell/spell(r))
+                end,
+        }
+        pub let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str = Spell/spell(t);
+        pub let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =
+            Eq/refl();
+        /std/print("ok")
+        "#,
+        r#"
+        use /std/{Eq, Nat};
+        pub concept Sized(A: Type): pub Type {
+            size(A) -> Nat,
+        }
+        induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+        satisfy (@A: Type, use Sized(A)) => Sized(Tree(A)) {
+            size(t) =
+                match t
+                | leaf(a) => Sized/size(a)
+                | node(l, r) => Sized/size(l) + Sized/size(r)
+                end,
+        }
+        pub let measured(@A: Type, use Sized(A), t: Tree(A)) -> Nat = Sized/size(t);
+        pub let same(@A: Type, use Sized(A), t: Tree(A)) -> Eq()(measured(t), Sized/size(t)) =
+            Eq/refl();
+        /std/print("ok")
+        "#,
+    ];
+    for source in witnesses {
+        let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+        let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the program elaborates");
+
+        let refusals = recheck_with_prelude(&checked.program, 200_000);
+
+        assert!(refusals.is_empty(), "{refusals:?}");
+    }
+}

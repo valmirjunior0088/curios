@@ -452,6 +452,8 @@ fn fields_inhabited_once(
 /// Forcing first would open two calls whose spines already say they are equal, as the elaborator, which compares the spines of one global or one `rec` member before it unfolds, does not. Unfolded, a proof lands in a stuck match's scrutinee, where the type a lookup gives it is what equates it ([`by_their_own_type`]), and two calls of a recursive function carrying two proofs would be unfolded once and left apart where the unfolding posed them again. The spine compares at the head's telescope through [`compare_arguments`], so the proof meets irrelevance at its own type. `tests::rules`'s `a_definition_applied_to_two_proofs_converts_before_unfolding` and `a_recursive_function_carrying_a_proof_converts_without_unfolding` are the programs; its `tests::irrelevance` and `tests::recursion` put the same two to this function directly.
 ///
 /// Only heads that would unfold qualify, because a head with nothing to unfold reaches the same spine comparison in [`structural`] anyway, and asking twice would double the cost of every mismatch.
+///
+/// **A call's path is its spine** (`Subterm::inward`): a field read off a call is compared through the call, the slot one on both sides, since two calls that are one have one field at each slot, so a method read off a call of a witness and applied keeps the call folded. Two calls of a recursive witness apart in a level reach the head rule through it as two projections of one group, which [`rec_instances`] tells apart only at the levels the group's unfolding holds.
 fn one_definition_by_its_spines(
     certifier: &mut ByValue,
     pairs: &mut Pairs,
@@ -484,6 +486,11 @@ fn one_definition_by_its_spines(
             }
             (Subterm::Apply(_), Subterm::Apply(_)) => {
                 one_definition_by_its_spines(certifier, pairs, &left.head, &right.head)?
+            }
+            (Subterm::Proj(left), Subterm::Proj(right)) => {
+                left.field.slot().is_some()
+                    && left.field.slot() == right.field.slot()
+                    && one_definition_by_its_spines(certifier, pairs, &left.head, &right.head)?
             }
             _ => false,
         },

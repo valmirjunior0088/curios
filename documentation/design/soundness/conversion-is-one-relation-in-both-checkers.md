@@ -20,7 +20,7 @@
 
 **The rules have one statement and one order in both checkers:**
 
-- **Two calls of one definition, by their spines, first**: on the pair as posed, whatever spells its sides, through a curried spine. It keeps two calls folded; no verdict follows it.
+- **Two calls of one definition, by their spines, first**: on the pair as posed, whatever spells its sides, through a curried spine and through a field read off a call. It keeps two calls folded; no verdict follows it.
 - **The same member of two recursive groups, by the groups as binders, before either is unfolded**: member for member their types and their bodies under one shared set of binders, bare or at the head of two calls, whose spines follow ([Conversion recurrence](conversion-recurrence.md)). It unfolds no member, and a pair it does not hold goes on.
 - **A goal's type read forced**: a member of a declaration group and a call of a recursive definition are opened before any rule reads the type's shape.
 - **Eta by the goal's type, ahead of structure**: both sides applied at a function type, both projected at a Σ, whatever their shapes; at the Σ with no field nothing is left to project, and any two inhabitants convert.
