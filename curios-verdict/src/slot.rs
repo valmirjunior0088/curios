@@ -4,7 +4,7 @@
 //!
 //! **A slot is read as far as its record first.** Whether a slot may be believed is decided by its record, which is small, and what is behind it is read only where the record agrees: a question about text an editor holds edited misses on the record alone, and the artifact behind it stays unread.
 //!
-//! **What a filer stopped short of is swept where it was staged** ([`sweep`]): a staging file is never renamed by anyone but the process that wrote it, so one that process left is taken away once it is older than any filing takes — a pack's by its address's collection, a payload's by the filing that lands a payload beside it.
+//! **What a filer stopped short of is swept where it was staged** ([`sweep`]): a staging file is never renamed by anyone but the process that wrote it, so one that process left is taken away once it is older than any filing takes — a unit's verdict's and a pack's by the collection of the slot's directory they stand in, a payload's by the filing that lands a payload beside it.
 
 use {
     crate::GRACE,
@@ -62,7 +62,7 @@ pub fn opened(slot: &Path) -> Option<Opened> {
 ///
 /// **Written beside and renamed into place, which is the whole of it.** The file is complete before it bears the slot's name, and a rename replaces one name atomically, so a reader — this compiler or another filing the same slot at the same moment — sees the old slot, the new one, or none, and never a record beside an artifact it was not made from. A record and an artifact in two files would need their writes ordered so that every interrupted state reads as a miss, and the record to carry the artifact's digest to survive two compilers racing on one slot; one rename removes both cases rather than arguing about them.
 ///
-/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name; the filing that lands a payload takes one away beside it ([`sweep`]).
+/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name; the collection of a unit's slot takes one away in its directory, and the filing that lands a payload one beside it ([`sweep`]).
 ///
 /// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
 pub fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {

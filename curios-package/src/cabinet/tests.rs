@@ -77,7 +77,7 @@ fn kept(cabinet: &Cabinet) -> [PathBuf; 8] {
         cabinet.source(&hash),
         cabinet.foreign(&module),
         cabinet.verdict("key"),
-        cabinet.objects("key"),
+        cabinet.slot("key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
         cabinet.payload(Runs::Browser, "key"),
         cabinet.compiler(),

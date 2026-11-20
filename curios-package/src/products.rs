@@ -12,8 +12,8 @@
 //!   cabinet/
 //!     sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
 //!     foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
-//!     verdicts/       <slot>          judged units, one file per unit and compiler
-//!     objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
+//!     verdicts/       <slot>/         judged units, a directory per unit and compiler: its `verdict`, the packs
+//!                                     of what it names, and what its last collection found
 //!     payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
 //!                     browser/<slot>  and, natively, engine
 //!     compiler                        this machine's memo of the digest of the compiler running now

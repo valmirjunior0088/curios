@@ -443,11 +443,7 @@ fn a_damaged_unit_is_not_reused() {
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
-    let slot = fs::read_dir(own(&root).verdicts())
-        .expect("a store with units in it")
-        .map(|slot| slot.unwrap().path())
-        .next()
-        .expect("one slot");
+    let slot = own(&root).verdict_files().pop().expect("one slot");
     let mut bytes = fs::read(&slot).unwrap();
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
@@ -526,9 +522,10 @@ fn a_lint_stores_no_copy_of_its_source() {
 
 /// The bytes of every slot the store at `root` holds.
 fn slots(root: &Path) -> Vec<Vec<u8>> {
-    let mut slots = fs::read_dir(own(root).verdicts())
-        .expect("a store with units in it")
-        .map(|slot| fs::read(slot.unwrap().path()).unwrap())
+    let mut slots = own(root)
+        .verdict_files()
+        .into_iter()
+        .map(|slot| fs::read(slot).unwrap())
         .collect::<Vec<_>>();
     slots.sort();
 
@@ -801,8 +798,8 @@ fn library_of_three(word: &str) -> String {
 
 /// The packs of the store at `root`, each by where it is kept.
 fn packs(root: &Path) -> Vec<PathBuf> {
-    fs::read_dir(own(root).packs())
-        .expect("a store with objects in it")
+    fs::read_dir(own(root).verdicts())
+        .expect("a store with slots in it")
         .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
         .map(|pack| pack.unwrap().path())
         .filter(|path| {
@@ -850,7 +847,11 @@ fn a_unit_whose_objects_are_gone_is_compiled_again() {
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
-    fs::remove_dir_all(own(&root).packs()).expect("the packs a filing wrote");
+    let written = packs(&root);
+    assert!(!written.is_empty(), "the packs a filing wrote");
+    for pack in written {
+        fs::remove_file(pack).expect("a pack a filing wrote");
+    }
 
     assert!(!reused(&root), "a slot naming objects nowhere is no unit");
     assert!(reused(&root), "and the recompile writes them again");

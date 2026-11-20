@@ -430,7 +430,7 @@ impl Verdicts {
             .packs
             .borrow_mut()
             .entry(slot.to_string())
-            .or_insert_with(|| Rc::new(Packs::at(cabinet.objects(slot), SystemTime::now())))
+            .or_insert_with(|| Rc::new(Packs::at(cabinet.slot(slot), SystemTime::now())))
             .clone();
 
         Some(packs)

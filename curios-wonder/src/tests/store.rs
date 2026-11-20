@@ -88,10 +88,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
         "both units are the store's when nothing is missing"
     );
 
-    let slots = fs::read_dir(Cabinet::of(&root, None).verdicts())
-        .expect("a store with both units in it")
-        .map(|slot| slot.unwrap().path())
-        .collect::<Vec<_>>();
+    let slots = Cabinet::of(&root, None).verdict_files();
     assert_eq!(slots.len(), 2, "one slot per unit: {slots:?}");
 
     let mut outcomes = slots
@@ -668,11 +665,13 @@ fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
 
     entries
         .map(|slot| {
-            let slot = slot.expect("a readable store");
-            (
-                slot.file_name().to_string_lossy().into_owned(),
-                fs::read(slot.path()).expect("a readable slot"),
-            )
+            let name = slot
+                .expect("a readable store")
+                .file_name()
+                .to_string_lossy()
+                .into_owned();
+            let bytes = fs::read(Cabinet::of(root, None).verdict(&name)).expect("a readable slot");
+            (name, bytes)
         })
         .collect()
 }
@@ -682,7 +681,7 @@ fn damaged(root: &Path) {
     for (name, mut bytes) in slots(root) {
         let last = bytes.last_mut().expect("a slot holds an artifact");
         *last ^= 0xff;
-        fs::write(Cabinet::of(root, None).verdicts().join(name), bytes).expect("a writable slot");
+        fs::write(Cabinet::of(root, None).verdict(&name), bytes).expect("a writable slot");
     }
 }
 

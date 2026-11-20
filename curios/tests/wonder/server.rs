@@ -927,13 +927,11 @@ fn the_server_says_nothing_of_a_store_that_takes_nothing() {
 fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     let root = project("server-files");
     let slots = |root: &Path| {
-        let mut slots = fs::read_dir(Cabinet::of(root, None).verdicts())
-            .map(|entries| {
-                entries
-                    .map(|slot| fs::read(slot.unwrap().path()).unwrap())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let mut slots = Cabinet::of(root, None)
+            .verdict_files()
+            .into_iter()
+            .map(|slot| fs::read(slot).unwrap())
+            .collect::<Vec<_>>();
         slots.sort();
         slots
     };

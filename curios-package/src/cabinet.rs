@@ -16,11 +16,11 @@ use {
 /// The directory of `.curios/` a project's own cabinet is, where nothing names another.
 const OWN: &str = "cabinet";
 
-/// The family of judged units' slots.
+/// The family of judged units' slots, a directory each.
 const VERDICTS: &str = "verdicts";
 
-/// The family of the packs each slot's address keeps.
-const OBJECTS: &str = "objects";
+/// The file of a unit's slot holding its record and its index.
+const VERDICT: &str = "verdict";
 
 /// The family of precompiled payloads, a directory for each target.
 const PAYLOADS: &str = "payloads";
@@ -80,16 +80,16 @@ impl Cabinet {
         self.directory.join("foreign").join(scheme).join(digest)
     }
 
-    /// Where a judged unit is filed, under the address its mounts, what it declared and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
-    pub fn verdict(&self, slot: &str) -> PathBuf {
+    /// The slot a judged unit is filed in, under the address its mounts, what it declared and the certifier decide: one directory, holding its [`verdict`](Self::verdict) beside the packs of the objects it names and what its address's last collection found, which `curios-verdict` names.
+    ///
+    /// A directory for each address rather than a family for each kind of file, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, collecting it lists the same one, and two units never write one.
+    pub fn slot(&self, slot: &str) -> PathBuf {
         self.directory.join(VERDICTS).join(slot)
     }
 
-    /// Where the objects the slots at `slot` name are kept: the packs its filings wrote, beside the slot and named by what they hold.
-    ///
-    /// A directory for each address rather than one for the cabinet, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, and two units never write one.
-    pub fn objects(&self, slot: &str) -> PathBuf {
-        self.directory.join(OBJECTS).join(slot)
+    /// Where a judged unit's verdict is filed in its [`slot`](Self::slot): one file, holding the record of what it was compiled *from* ahead of the unit's index, verified when the slot is opened rather than spelled here.
+    pub fn verdict(&self, slot: &str) -> PathBuf {
+        self.slot(slot).join(VERDICT)
     }
 
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
@@ -111,7 +111,7 @@ impl Cabinet {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const VERDICT_SCHEMA: &str = "u111";
+const VERDICT_SCHEMA: &str = "u112";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p13";

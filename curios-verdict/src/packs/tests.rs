@@ -176,6 +176,36 @@ fn an_object_unnamed_for_five_days_is_dropped() {
     );
 }
 
+/// What a filer stopped short of in the address's directory — a slot's staged verdict as a pack's — is swept by the first collection that finds it five days old, and one younger is left to a filer that may still be writing it.
+#[test]
+fn a_collection_sweeps_a_staging_five_days_old() {
+    let directory = Temporary::new("packs", "staged");
+    fs::create_dir_all(&directory).expect("a directory for the address");
+    let staged = |name: &str, written: SystemTime| {
+        let path = directory.join(name);
+        fs::write(&path, "half of a verdict").expect("a staging is written");
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .and_then(|file| file.set_modified(written))
+            .expect("a staging's time is set");
+        path
+    };
+    let aged = staged("verdict.1.part", now());
+    let young = staged("verdict.2.part", after(2));
+    let collect = |day| {
+        Packs::at(directory.to_path_buf(), after(day))
+            .collect(&BTreeSet::new())
+            .expect("an address is collected");
+    };
+
+    collect(0);
+    collect(5);
+
+    assert!(!aged.exists(), "a staging five days old is swept");
+    assert!(young.exists(), "a younger one is left");
+}
+
 /// An address is collected at most once a day: a filing within a day of the last collection drops nothing, however long what it would drop has gone unnamed.
 #[test]
 fn an_address_is_collected_once_a_day() {

@@ -1,4 +1,4 @@
-//! The packs of one slot's address: the objects its slots name, written before a slot names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric.
+//! The packs of one slot's address, in the slot's own directory beside its verdict: the objects its slots name, written before a slot names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric.
 //!
 //! **Written whole and renamed into place, as a slot is.** A pack is complete before it bears its name, and its name is the digest of its bytes, so a reader sees a pack whole or not at all, and two filers packing the same objects write one file twice.
 //!
