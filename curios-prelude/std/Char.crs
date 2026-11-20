@@ -131,6 +131,22 @@ let upper_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/upper)) =
 pub let to_upper(c: Char) -> Str =
     unicode/mapping(/sys/unicode/upper, upper_lands, c);
 
+-- Every record of `/sys/unicode/lower` maps onto scalar values, decided by reading each when `/std` is built.
+let lower_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/lower)) =
+    Bool/True/qed();
+
+--- `c` in lower case: its full mapping, the database's `Lowercase_Mapping`, as text — `İ` becoming `i̇` — and `c` itself where the database maps it to no other. It reads no context, so `Σ` is `σ`; `Str/to_lower` writes a word's final sigma `ς`.
+pub let to_lower(c: Char) -> Str =
+    unicode/mapping(/sys/unicode/lower, lower_lands, c);
+
+--- Whether `c` is `Cased`: a letter with case, or one the database counts among them.
+pub let is_cased(c: Char) -> Bool =
+    unicode/held(/sys/unicode/cased, c);
+
+--- Whether `c` is `Case_Ignorable`: a mark, a modifier or a mark of punctuation the case of a word reads past, as the database states.
+pub let is_case_ignorable(c: Char) -> Bool =
+    unicode/held(/sys/unicode/case_ignorable, c);
+
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
 pub let hex_digit(nibble: Nat) -> Char =
     match nibble % 0x10 < 10

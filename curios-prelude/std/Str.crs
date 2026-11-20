@@ -159,6 +159,49 @@ pub let eql_ignoring_ascii_case(a: Str, b: Str) -> Bool =
 pub let to_upper(s: Str) -> Str =
     fold(s, "", (c, written) => concat(written, Char/to_upper(c)));
 
+-- How far `to_lower` has come: the text it has written, whether the last character it read that is not case-ignorable is cased, and a capital sigma it holds back, as what the case-ignorable characters after it lower to, until the next character that is not case-ignorable, or the end, decides whether the sigma ends a word.
+struct Lowering: Type {
+    written: Str,
+    cased: Bool,
+    held: Option(Str),
+}
+
+--- `s` in lower case, Unicode's `toLowercase`: each character by its full mapping, `Char/to_lower`, and a capital sigma that ends a word as `ς`, where `Final_Sigma` holds — after a cased character and any case-ignorable ones, and before no cased character past any case-ignorable ones — so `ΟΔΟΣ` becomes `οδος`.
+pub let to_lower(s: Str) -> Str =
+    let settled(written: Str, held: Option(Str), next_cased: Bool) -> Str =
+        match held
+        | none() => written
+        | some(after) =>
+            let sigma = match next_cased | true => "σ" | false => "ς" end;
+            concat(concat(written, sigma), after)
+        end;
+    let lowered =
+        fold(
+            s,
+            Lowering { written = "", cased = false, held = Option/none() },
+            (c, at) =>
+                match at.held
+                | some(after), Char/is_case_ignorable(c) =>
+                    Lowering { ..at, held = Option/some(concat(after, Char/to_lower(c))) }
+                | _ =>
+                    let written = settled(at.written, at.held, Char/is_cased(c));
+                    match
+                    | c == 'Σ', at.cased =>
+                        Lowering { written = written, cased = true, held = Option/some("") }
+                    | Char/is_case_ignorable(c) =>
+                        Lowering {
+                            written = concat(written, Char/to_lower(c)),
+                            cased = at.cased,
+                            held = Option/none() }
+                    | _ =>
+                        Lowering {
+                            written = concat(written, Char/to_lower(c)),
+                            cased = Char/is_cased(c),
+                            held = Option/none() }
+                    end
+                end);
+    settled(lowered.written, lowered.held, false);
+
 --- `s` written `n` times.
 ---
 --- Half the copies are built once and joined to themselves, with `s` once more where `n` is odd, so `n` copies take a number of joins logarithmic in `n` and hold each half once.

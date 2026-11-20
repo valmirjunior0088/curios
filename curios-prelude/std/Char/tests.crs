@@ -22,6 +22,18 @@ test to_upper_is_the_full_mapping =
         Test/equal(Char/to_upper('Ă'), "Ă"),
         Test/equal(Char/to_upper('1'), "1")]);
 
+-- Lower case is the database's full mapping, read with no context: `İ` becomes two characters, `Σ` is `σ` alone, a letter that is already lower stays, and so does a character with no mapping.
+test to_lower_is_the_full_mapping =
+    Test/all([
+        Test/equal(Char/to_lower('A'), "a"),
+        Test/equal(Char/to_lower('É'), "é"),
+        Test/equal(Char/to_lower('İ'), "i\u{307}"),
+        Test/equal(Char/to_lower('Σ'), "σ"),
+        Test/equal(Char/to_lower('Ǆ'), "ǆ"),
+        Test/equal(Char/to_lower('Ă'), "ă"),
+        Test/equal(Char/to_lower('ă'), "ă"),
+        Test/equal(Char/to_lower('1'), "1")]);
+
 -- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
 test hex_digit_spells_a_nibble_modulo_sixteen =
     Test/equal(

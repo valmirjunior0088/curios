@@ -443,19 +443,23 @@ const PROPERTIES: [&str; 2] = [
             Spell/spell(IndicConjunctBreak/of_char(c)),
             Spell/spell(EastAsianWidth/of_char(c)),
             Spell/spell(Char/is_extended_pictographic(c)),
-            Spell/spell(Char/is_emoji_presentation(c))]);
+            Spell/spell(Char/is_emoji_presentation(c)),
+            Spell/spell(Char/is_cased(c)),
+            Spell/spell(Char/is_case_ignorable(c))]);
     "#,
 ];
 
 /// `curios-unicode`'s answer for `scalar`, spelled as [`PROPERTIES`] prints `/std/Char`'s.
 fn database(scalar: char) -> String {
     format!(
-        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {}",
+        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {} {} {}",
         grapheme_break(scalar).sys_name(),
         indic_conjunct_break(scalar).sys_name(),
         east_asian_width(scalar).sys_name(),
         is_extended_pictographic(scalar),
         is_emoji_presentation(scalar),
+        is_cased(scalar),
+        is_case_ignorable(scalar),
     )
 }
 
@@ -481,7 +485,7 @@ const MAPPINGS: [&str; 2] = [
         Str/join(",", List/map(Str/to_list(s), (m) => Nat/to_str(Char/to_nat(m))));
 
     let answer(c: Char) -> Str =
-        spelled(Char/to_upper(c));
+        Str/join(" ", [spelled(Char/to_upper(c)), spelled(Char/to_lower(c))]);
     "#,
 ];
 
@@ -494,18 +498,28 @@ fn mapped(scalar: char) -> String {
             .collect::<Vec<_>>()
             .join(",")
     };
+    let scalar = u32::from(scalar);
 
-    spelled(uppercase(u32::from(scalar)))
+    format!(
+        "{} {}",
+        spelled(uppercase(scalar)),
+        spelled(lowercase(scalar))
+    )
 }
 
 /// How what the database maps `scalar` to stands to it: each mapping's first scalar as a distance from `scalar`, the others as they are, so every scalar a record steps through answers alike and its edges are where the answer changes.
 fn shape(scalar: char) -> String {
+    let scalar = u32::from(scalar);
     let relative = |mapped: Vec<u32>| {
-        let distance = i64::from(mapped[0]) - i64::from(u32::from(scalar));
+        let distance = i64::from(mapped[0]) - i64::from(scalar);
         format!("{distance}{:?}", &mapped[1..])
     };
 
-    relative(uppercase(u32::from(scalar)))
+    format!(
+        "{} {}",
+        relative(uppercase(scalar)),
+        relative(lowercase(scalar))
+    )
 }
 
 /// `/std/Char` maps case as the database's rows do at every record's edges, and at every scalar of a record that steps by two, whose answer alternates.

@@ -543,11 +543,24 @@ fn main() {
         "White_Space",
         &binary(&properties, "White_Space"),
     );
+    binary_table(&mut out, "CASED", "Cased", &binary(&derived, "Cased"));
+    binary_table(
+        &mut out,
+        "CASE_IGNORABLE",
+        "Case_Ignorable",
+        &binary(&derived, "Case_Ignorable"),
+    );
     mapping_table(
         &mut out,
         "UPPER",
         "Uppercase_Mapping",
         &full(simple(&unicode_data, 12), &special, 3),
+    );
+    mapping_table(
+        &mut out,
+        "LOWER",
+        "Lowercase_Mapping",
+        &full(simple(&unicode_data, 13), &special, 1),
     );
 
     out.push_str(

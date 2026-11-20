@@ -122,8 +122,8 @@ fn class_of<C: Copy>(table: &[(u32, u32, C)], missing: C, scalar: char) -> C {
         .map_or(missing, |run| table[run].2)
 }
 
-/// Whether a run of `table` holds `scalar`.
-fn held(table: &[(u32, u32)], scalar: char) -> bool {
+/// Whether a run of `table`, a binary property's, holds `scalar`.
+pub fn held(table: &[(u32, u32)], scalar: char) -> bool {
     let scalar = u32::from(scalar);
 
     table

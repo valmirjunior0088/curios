@@ -60,6 +60,8 @@ fn every_table_s_runs_ascend_apart() {
     assert!(ascend_apart(NUMERIC.iter().copied()));
     assert!(ascend_apart(CONTROL.iter().copied()));
     assert!(ascend_apart(WHITE_SPACE.iter().copied()));
+    assert!(ascend_apart(CASED.iter().copied()));
+    assert!(ascend_apart(CASE_IGNORABLE.iter().copied()));
 }
 
 /// What the database says of a few scalars, one from each kind of answer.
@@ -170,30 +172,47 @@ fn by_rows(rows: &[(u32, &[u32])], scalar: u32) -> Vec<u32> {
 /// A mapping's records ascend apart, step by one or two, become one to three scalars, and map every scalar as the database's rows do, which is what a reading of them in `/std` is held to.
 #[test]
 fn a_mapping_s_records_map_every_scalar_as_its_rows_do() {
-    assert!(ascend_apart(
-        UPPER.iter().map(|&(first, last, _, _)| (first, last))
-    ));
-    assert!(UPPER.iter().all(|&(_, _, step, targets)| {
-        (1..=2).contains(&step) && (1..=3).contains(&targets.len())
-    }));
+    for (name, records, rows) in [("upper", UPPER, UPPER_ROWS), ("lower", LOWER, LOWER_ROWS)] {
+        assert!(
+            ascend_apart(records.iter().map(|&(first, last, _, _)| (first, last))),
+            "{name}"
+        );
+        assert!(
+            records.iter().all(|&(_, _, step, targets)| {
+                (1..=2).contains(&step) && (1..=3).contains(&targets.len())
+            }),
+            "{name}"
+        );
 
-    let wrong: Vec<String> = (0..=0x10_FFFF)
-        .filter(|&scalar| by_records(UPPER, scalar) != by_rows(UPPER_ROWS, scalar))
-        .map(|scalar| format!("U+{scalar:04X}"))
-        .collect();
-    assert!(wrong.is_empty(), "the records map otherwise: {wrong:?}");
+        let wrong: Vec<String> = (0..=0x10_FFFF)
+            .filter(|&scalar| by_records(records, scalar) != by_rows(rows, scalar))
+            .map(|scalar| format!("U+{scalar:04X}"))
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "{name}'s records map otherwise: {wrong:?}"
+        );
+    }
 }
 
 /// A packed mapping is its records, seventeen bytes each, read back as they were written, a target the record does not have read as U+0000.
 #[test]
 fn a_packed_mapping_reads_back_as_its_records() {
-    let three = |bytes: &[u8]| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0]);
     let mappings = packed_mappings();
-    let upper = &mappings[0];
 
-    assert_eq!(upper.name, "upper");
-    assert_eq!(upper.bytes.len(), PACKED_RECORD * UPPER.len());
-    for (packed, &(first, last, step, targets)) in upper.bytes.chunks(PACKED_RECORD).zip(UPPER) {
+    for (mapping, (name, records)) in mappings.iter().zip([("upper", UPPER), ("lower", LOWER)]) {
+        assert_eq!(mapping.name, name);
+        assert_eq!(mapping.bytes.len(), PACKED_RECORD * records.len());
+        check_records(&mapping.bytes, records);
+    }
+    assert_eq!(mappings.len(), 2);
+}
+
+/// Each record of `packed` reads back as the record of `records` beside it, a target the record does not have read as U+0000.
+fn check_records(packed: &[u8], records: &[(u32, u32, u8, &[u32])]) {
+    let three = |bytes: &[u8]| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0]);
+
+    for (packed, &(first, last, step, targets)) in packed.chunks(PACKED_RECORD).zip(records) {
         let mut padded = targets.to_vec();
         padded.resize(3, 0);
         assert_eq!(
