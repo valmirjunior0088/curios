@@ -2,7 +2,7 @@
 //!
 //! Like the erased positions and the calls, this is the certifier's *output*, collected where the walk consults its environment because that is the only place a read happens: a name's type or universe scheme, a declaration's registry entry, a definition's body. Every other path to another item goes through one of those, a memo included: every memo lives one declaration, so a remembered reduct was computed, and the bodies it unfolds were asked for, within the judgment that hits it.
 //!
-//! **Behind a cell.** The accessors that read answer through `&Certifier`, because the seams they serve do: the closed machine's `ClosedHost`, the shared analyses' `Env` and `Reducer` all borrow the certifier shared while handing back what they read. Noting a read is the one mutation such a borrow needs, and nothing reads the notes until the item they belong to has been judged.
+//! **Behind a cell.** The accessors that read answer through `&Certifier`, because the seams they serve do: the closed machine's `ClosedHost`, the shared analyses' `Driver` and `Reducer` all borrow the certifier shared while handing back what they read. Noting a read is the one mutation such a borrow needs, and nothing reads the notes until the item they belong to has been judged.
 
 use {
     curios_core::{Global, Reads},

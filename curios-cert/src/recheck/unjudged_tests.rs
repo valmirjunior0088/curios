@@ -291,7 +291,7 @@ end
 
 // The cycle the formation ticket for two families declared apart closes, through a record: `A` reaches `B`, which no walk has judged where `A` is, so the occurrence reads as reaching `A` again at `Mixed`, and `B` reaches `A` through the record's function. Each is refused for its own part.
 //
-// Mutation-check: have the certifier's `Env::judged` answer yes for every family, and the module is admitted whole.
+// Mutation-check: have the certifier's `Driver::judged` answer yes for every family, and the module is admitted whole.
 #[test]
 fn a_record_and_a_family_declared_apart_that_hold_each_other_negatively_are_each_refused() {
     let verdicts = verdicts_of(CURRY_THROUGH_A_RECORD_DECLARED_BEFORE);

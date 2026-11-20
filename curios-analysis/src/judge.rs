@@ -10,22 +10,22 @@
 //!
 //! One part of conversion is shared all the same, because it is algebra rather than strategy: what two intrinsics are to each other — the carriers' peels, laws and views, and the congruence read off an operation's signature — which [`convert_intrinsics`](crate::convert_intrinsics) states once and each checker discharges by its own judgment. Two copies would buy a second transcription of one function, which a slip could make disagree without either copy holding a second opinion about arithmetic. What holds it is what holds any shared rule: the algebra's own tests over bare atoms and concrete values, and the law grid, held through both checkers, as integration evidence.
 //!
-//! Index inversion, strict positivity, and size-change totality are the other case: each is a total function of the terms it is handed, and what the checkers hand them differs only in what [`Env`] answers. Two runs of a total function on one input is one sample, not two: duplicating them would buy a diff test, which property-testing the single implementation buys more cheaply, and would cost thousands of trusted lines written twice.
+//! Index inversion, strict positivity, and size-change totality are the other case: each is a total function of the terms it is handed, and what the checkers hand them differs only in what [`Driver`] answers. Two runs of a total function on one input is one sample, not two: duplicating them would buy a diff test, which property-testing the single implementation buys more cheaply, and would cost thousands of trusted lines written twice.
 //!
 //! # The concession this records
 //!
-//! [`Env`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Env` borrows no opinion from its driver. [`Judge`] adds a judgment of sorts, whether a type's sort sits below a universe, and an analysis requiring it takes its driver's word on the levels. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], which it asks of a variable whose type is a sort before solving it, and it asks no conversion. If its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
+//! [`Driver`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Driver` borrows no opinion from its driver. [`Judge`] adds a judgment of sorts, whether a type's sort sits below a universe, and an analysis requiring it takes its driver's word on the levels. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], which it asks of a variable whose type is a sort before solving it, and it asks no conversion. If its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
 //!
 //! # Errors belong to the driver
 //!
-//! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The certifier's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+//! Both traits report through an associated [`Driver::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The certifier's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
 use curios_core::{
     Applications, Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term,
     Variance,
 };
 
-/// Whether it is both meaningful and *safe* to hand `term` to [`Env::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
+/// Whether it is both meaningful and *safe* to hand `term` to [`Driver::force`] — the guard a shared analysis takes before spending a reduction on a term it only wants to read.
 ///
 /// Two halves, paired because every site that needs one needs both. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
 ///
@@ -46,7 +46,7 @@ pub fn forceable(term: &Term) -> bool {
 /// What a shared analysis may ask of the checker running it, beyond the terms it was handed.
 ///
 /// Deliberately small, and for the same reason `Certifier` is: every method here is a way for an answer to come from something other than the term in hand. A new one should have to argue for itself.
-pub trait Env {
+pub trait Driver {
     /// How this checker reports a failure. The certifier's is `curios_cert::Error`; the elaborator's is its spanned diagnostic. Either says whether it is the budget's refusal, which an analysis reading a term as a [`Probe`](curios_core::Probe) propagates while it reads any other failure as nothing to read.
     type Error: Exhaustion;
 
@@ -57,7 +57,7 @@ pub trait Env {
     /// **Plain reduction: it asks its checker's conversion nothing.** Where a judgment reduces, a stuck fold's atoms and a missed case equation are put to the checker's own conversion; here they are not. Nothing this trait answers is a judgment, and that has to stay true of a reduct: totality reads terms through this method, and conversion's proof irrelevance is sound because a program is accepted only once totality has passed, an argument that holds only while totality's own reading rests on no verdict of conversion's.
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error>;
 
-    /// [`Env::force`] for the size order, which reads a term as a graded call reads it: a variable an arm's index inversion solved stands as written, since the order reads nothing an inversion concluded ([`refined_by_arm`](crate::refined_by_arm)). A checker whose `force` reads no solution answers it as `force` does.
+    /// [`Driver::force`] for the size order, which reads a term as a graded call reads it: a variable an arm's index inversion solved stands as written, since the order reads nothing an inversion concluded ([`refined_by_arm`](crate::refined_by_arm)). A checker whose `force` reads no solution answers it as `force` does.
     fn force_graded(&mut self, term: &Term) -> Result<Term, Self::Error> {
         self.force(term)
     }
@@ -70,7 +70,7 @@ pub trait Env {
     /// `&mut self` for the *implementors'* sake — both mint from an interior counter and could take `&self`, but the elaborator's method is spelled `&mut` and a trait should not force a signature change to satisfy it.
     fn fresh(&mut self, hint: Option<&str>) -> Free;
 
-    /// Whether the local `name` is in scope of the walk in progress. A local may carry a definition — the elaborator keeps a `let` as one, where the certifier hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
+    /// Whether the local `name` is in scope of the walk in progress. A local may carry a definition — the elaborator keeps a `let` as one, where the certifier hands an analysis its terms by value and answers none — which [`Driver::unfold`] answers.
     fn is_local(&self, name: &Free) -> bool;
 
     /// What the local `name` unfolds to through its *definition* — never through a refinement, which a definitions-only reading needs no invariant about.
@@ -95,7 +95,7 @@ pub trait Env {
 
     /// How the definition `name` applies its parameters, as the record this checker reads it by files it ([`Applications`]): `None` where nothing is filed. A read of what was concluded of `name`, as its totality is.
     ///
-    /// Asked of the checker for the reason [`Env::polarity`] is: the certifier's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
+    /// Asked of the checker for the reason [`Driver::polarity`] is: the certifier's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
     fn applications(&self, name: &Global) -> Option<Applications>;
 
     /// What the arms in force refine, each as a term naming the locals the refined term names and the value it stands for there: a scrutinee an arm matched on, a projection of one, and in the elaborator a variable. A reader meets a refined term's value in its place as it meets a definition's, so a term reaches every local such a value names wherever it names one of the refined term's ([`invert_indices`](crate::invert_indices)'s occurs check). Empty where no arm is entered.
@@ -103,7 +103,7 @@ pub trait Env {
 
     /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
     ///
-    /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the certifier's is the one its own walk filed.
+    /// Asked of the checker for the reason [`Driver::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the certifier's is the one its own walk filed.
     fn variance(&self, name: &Global, index: usize) -> Variance {
         self.induct_decl(name)
             .map(|declaration| declaration.variance(index))
@@ -115,10 +115,10 @@ pub trait Env {
     }
 }
 
-/// [`Env`], plus the one judgment a shared analysis is allowed to borrow.
+/// [`Driver`], plus the one judgment a shared analysis is allowed to borrow.
 ///
 /// Typing is duplicated between the two checkers on purpose, so an analysis that asks for a judgment here is trusting whichever implementation is driving it. See the module documentation on what that concession is and why it is a separate trait.
-pub trait Judge: Env {
+pub trait Judge: Driver {
     /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The certifier decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error>;
 }

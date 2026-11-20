@@ -540,7 +540,7 @@ impl Scope {
         self.hidden.unwrap_or(self.refinements.len())
     }
 
-    /// The equations in force that answer, each under its written spelling and its resolved one where it has one, beside the value it stands for: what a reader of a term naming a key's locals may meet ([`curios_analysis::Env::refined`]).
+    /// The equations in force that answer, each under its written spelling and its resolved one where it has one, beside the value it stands for: what a reader of a term naming a key's locals may meet ([`curios_analysis::Driver::refined`]).
     pub fn refined(&self) -> Vec<(Term, Term)> {
         self.in_force_innermost_first()
             .flat_map(|entry| {

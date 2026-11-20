@@ -9,8 +9,8 @@ use {
     crate::{Context, Declined, zonk_solved_term_metas},
     curios_algebra::{Cut, split},
     curios_analysis::{
-        Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
-        connectives_agree_classed, convert_classed, convert_intrinsics,
+        Agreement, Classes, Congruence, IntrinsicDriver, Obligation, Outcome, Pass,
+        connectives_agree, connectives_agree_classed, convert_classed, convert_intrinsics,
     },
     curios_common::SyntaxRegistry,
     curios_core::{Cost, Free, Intrinsic, Produced, ReduceError, Reducer, Subterm, Term},
@@ -151,7 +151,7 @@ impl Reducer for Elaborating<'_, '_> {
     }
 }
 
-impl Driver for Elaborating<'_, '_> {
+impl IntrinsicDriver for Elaborating<'_, '_> {
     /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom is a decision diagram's variable — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. Unprepared, `f(a + 1) + f(c + 1)` against its commutation would share no summand, fall to the positional congruence, and be refused there as `a` against `c` — where the certifier, handed zonked terms, accepts the equation.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved = zonk_solved_term_metas(self.context, &Term::intrinsic(intrinsic.clone()));

@@ -2,14 +2,14 @@
 //!
 //! Two intrinsics are equal when they are the same operation applied to convertible operands — a congruence, since both sides arrived reduced and a foldable operation would have folded. Before that congruence, the carriers' algebra decides what no operand-by-operand comparison can: a commuted sum, a De Morgan dual, a window of a window. [`convert_intrinsics`] runs that chain in one order for both checkers:
 //!
-//! 1. the driver's preparation of each side ([`Driver::prepare`]);
+//! 1. the driver's preparation of each side ([`IntrinsicDriver::prepare`]);
 //! 2. a stuck product distributed, where neither side is a literal;
 //! 3. the decision diagram over two `Bool` terms;
 //! 4. two connective trees flattened, their leaves forced;
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor and comparison-side pairings first;
 //! 7. where steps 3 to 6 decided nothing, the pair's atoms handed back to be classed ([`Pass::Atoms`]), and steps 3 to 6 read once more with each atom spelled as its class's representative ([`convert_classed`]);
-//! 8. the elaborator's solving views ([`Driver::solving_view`]);
+//! 8. the elaborator's solving views ([`IntrinsicDriver::solving_view`]);
 //! 9. two applications of one operation compared as values of what they produce;
 //! 10. the congruence, each operand at the type its operation declares.
 //!
@@ -32,7 +32,7 @@ use {
 };
 
 /// What a checker supplies to [`convert_intrinsics`] beyond its reduction.
-pub trait Driver: Reducer {
+pub trait IntrinsicDriver: Reducer {
     /// An intrinsic as this checker reads it before any peel does. The elaborator substitutes the metavariables it has solved, since two occurrences of one sum pair only once their witness metavariables are spliced; the certifier, handed finished terms, reads it as it is.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic;
 
@@ -124,7 +124,7 @@ pub fn foreign_congruence(
 
 /// Whether `this` and `that`, two intrinsics both checkers reached conversion with, are the same value — the chain the module documentation lays out, up to what only the driver can discharge, and stopping at step 7 where the pair has atoms to class.
 pub fn convert_intrinsics(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<Pass, ReduceError> {
@@ -133,7 +133,7 @@ pub fn convert_intrinsics(
 
 /// [`convert_intrinsics`] entered again with the partition its atoms were classed into: the whole chain, step 7 reading the pair as the partition spells it.
 pub fn convert_classed(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: Intrinsic,
     that: Intrinsic,
     classes: &mut Classes,
@@ -147,7 +147,7 @@ pub fn convert_classed(
 
 /// The chain over one pair: with no partition it stops at step 7 where there are atoms a checker could class, and with one it reads through.
 fn chain(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: Intrinsic,
     that: Intrinsic,
     classes: Option<&mut Classes>,
@@ -250,7 +250,7 @@ enum Prepared {
 
 /// Steps 1 and 2 over one pair: the driver's preparation of each side, and a stuck product distributed.
 fn prepared(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<Prepared, ReduceError> {
@@ -288,7 +288,7 @@ fn prepared(
 ///
 /// What a case equation's lookup asks ([`answers`](crate::answers)): it runs inside reduction, where no judgment may be called, and the readers call none.
 pub fn intrinsics_agree(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
@@ -444,7 +444,7 @@ fn pair_fused(this: &Intrinsic, that: &Intrinsic) -> Option<Vec<Obligation>> {
 ///
 /// **The congruence still meets the spelling it was handed.** A classed pair that decides nothing is dropped, so no respelled term reaches a checker's comparison; one that decides hands on an outcome whose residuals are the classed spelling's, a pair definitionally equal to the one asked about. Two sides spelled as one term are one.
 fn read_classed(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: &Intrinsic,
     that: &Intrinsic,
     classes: &mut Classes,

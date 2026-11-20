@@ -1,6 +1,6 @@
 //! What the certifier sees of a term that one of its checkers holds under local definitions.
 //!
-//! The certifier hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the certifier's copy of the same term has the value. Every rule that records or compares what the certifier sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the certifier does not, sees every term unchanged.
+//! The certifier hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the certifier's copy of the same term has the value. Every rule that records or compares what the certifier sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Driver::unfold`] and nothing else, so a driver that answers no local definition, as the certifier does not, sees every term unchanged.
 //!
 //! The spelling a guard's equation is recorded under reads a term whole, every definition substituted, and is not read here: the elaborator holds each definition by value from where it is made, as the certifier holds a `let` (`curios-elab`'s `Context::by_value`), where a reading from scratch would unfold a chain of definitions again at every spelling.
 //!
@@ -12,7 +12,7 @@
 mod tests;
 
 use {
-    crate::Env,
+    crate::Driver,
     curios_core::{Free, Names, Subterm, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -20,18 +20,18 @@ use {
 /// A term with the local definitions that reach given variables substituted, as the certifier has them, so a term is respelled no further than a substitution for those variables needs.
 ///
 /// Memoized for one use, because a scope's terms share their `let`s. A name is recorded before its definition is read, so a definition that mentions itself — which the elaborator's scope holds — is read once rather than without end.
-pub struct Unfolding<'a, E> {
-    env: &'a E,
+pub struct Unfolding<'a, D> {
+    driver: &'a D,
     /// The names the solutions solve, asked of each definition at once.
     solved: Names,
     expansions: BTreeMap<Free, Option<Term>>,
 }
 
-impl<'a, E: Env> Unfolding<'a, E> {
+impl<'a, D: Driver> Unfolding<'a, D> {
     /// The local definitions that reach a variable `solutions` solves.
-    pub fn toward(env: &'a E, solutions: &'a [(Free, Term)]) -> Self {
+    pub fn toward(driver: &'a D, solutions: &'a [(Free, Term)]) -> Self {
         Self {
-            env,
+            driver,
             solved: Names::new(solutions.iter().map(|(solved, _)| *solved)),
             expansions: BTreeMap::new(),
         }
@@ -54,8 +54,8 @@ impl<'a, E: Env> Unfolding<'a, E> {
         }
         self.expansions.insert(*name, None);
 
-        let definition = match self.env.is_local(name) {
-            true => self.env.unfold(name)?.clone(),
+        let definition = match self.driver.is_local(name) {
+            true => self.driver.unfold(name)?.clone(),
             false => return None,
         };
         let unfolded = self.term(&definition);
@@ -67,7 +67,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
 }
 
 /// The local variable `term` is, through local definitions that are themselves variables: `let t = s; … t …` is `s` to the certifier. `None` for a term that is, beneath its definitions, anything but a local variable.
-pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
+pub fn beneath<'a, D: Driver>(driver: &'a D, term: &'a Term) -> Option<&'a Free> {
     let mut seen = BTreeSet::new();
     let mut term = term;
 
@@ -76,11 +76,11 @@ pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
             return None;
         };
         let name = var.as_free()?;
-        if !seen.insert(name) || !env.is_local(name) {
+        if !seen.insert(name) || !driver.is_local(name) {
             return None;
         }
 
-        match env.unfold(name) {
+        match driver.unfold(name) {
             Some(definition) => term = definition,
             None => return Some(name),
         }
@@ -88,7 +88,7 @@ pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
 }
 
 /// The locals the certifier's spelling of `terms` names: each local they mention, and in place of a local definition, the locals its definition names in turn. Their order is immaterial to every caller, which reads them only for membership.
-pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
+pub fn locals_beneath<D: Driver>(driver: &D, terms: &[Term]) -> Vec<Free> {
     let mut locals = Vec::new();
     let mut seen = BTreeSet::new();
     let mut pending = Vec::new();
@@ -97,10 +97,10 @@ pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
     }
 
     while let Some(name) = pending.pop() {
-        if !seen.insert(name) || !env.is_local(&name) {
+        if !seen.insert(name) || !driver.is_local(&name) {
             continue;
         }
-        match env.unfold(&name) {
+        match driver.unfold(&name) {
             Some(definition) => pending.extend(definition.mentions().locals().copied()),
             None => locals.push(name),
         }

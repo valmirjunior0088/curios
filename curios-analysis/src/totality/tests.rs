@@ -1,6 +1,6 @@
 //! The size-change engine's own algebra: composition, join, idempotence, and the shape order.
 //!
-//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential — live under `curios-analysis/tests/driven/`; its `main.rs` says why they are an integration test rather than a module here.
+//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Driver` — including the `Walk::walk` position differential — live under `curios-analysis/tests/driven/`; its `main.rs` says why they are an integration test rather than a module here.
 
 use {
     super::*,
@@ -14,7 +14,7 @@ use {
 
 mod closure;
 
-/// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
+/// An [`Driver`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
 ///
 /// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live under `tests/driven/`, driven by the actual certifier.
 ///
@@ -24,7 +24,7 @@ struct Probe {
     minted: std::cell::Cell<u32>,
 }
 
-impl Env for Probe {
+impl Driver for Probe {
     type Error = std::convert::Infallible;
 
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {
@@ -469,7 +469,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     let parts = one_part();
     let arities = vec![1];
     let mut walk = Walk {
-        env: &mut certifier,
+        driver: &mut certifier,
         group: Some(group),
         parts: &parts,
         arities: &arities,
@@ -550,7 +550,7 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
     let parts = one_part();
     let arities = vec![1];
     let mut walk = Walk {
-        env: &mut certifier,
+        driver: &mut certifier,
         group: Some(group),
         parts: &parts,
         arities: &arities,

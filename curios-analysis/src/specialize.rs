@@ -14,7 +14,7 @@
 mod tests;
 
 use {
-    crate::{Env, Unfolding, beneath},
+    crate::{Driver, Unfolding, beneath},
     curios_core::{Free, Names, Term},
     std::collections::HashSet,
 };
@@ -22,8 +22,12 @@ use {
 /// The scrutinee's own solution for one case: `name := value` when the scrutinee is, through local definitions, a local variable. `None` for any other scrutinee — an expression has no binder to solve, and its equation is recorded against its spelling instead.
 ///
 /// `value` is taken as given: a caller holding index solutions substitutes them into it first, since a case value built from the payload may mention a binder they pinned.
-pub fn scrutinee_solution<E: Env>(env: &E, scrutinee: &Term, value: &Term) -> Option<(Free, Term)> {
-    beneath(env, scrutinee).map(|name| (*name, value.clone()))
+pub fn scrutinee_solution<D: Driver>(
+    driver: &D,
+    scrutinee: &Term,
+    value: &Term,
+) -> Option<(Free, Term)> {
+    beneath(driver, scrutinee).map(|name| (*name, value.clone()))
 }
 
 /// The locals one case re-types, each at its specialized type: every local whose type mentions a solved variable, reading through local definitions, at that type with those definitions inlined and `solutions` substituted.
@@ -31,8 +35,8 @@ pub fn scrutinee_solution<E: Env>(env: &E, scrutinee: &Term, value: &Term) -> Op
 /// A solved variable's own entry is left alone. Its occurrences in the arm are read as its solution or refined, so nothing reads it at its stale type.
 ///
 /// `locals` is the scope outermost first, and so is the answer: a caller re-assuming each entry in order leaves a name bound twice innermost at its innermost binding.
-pub fn retyped<E: Env>(
-    env: &E,
+pub fn retyped<D: Driver>(
+    driver: &D,
     locals: &[(Free, Term)],
     solutions: &[(Free, Term)],
 ) -> Vec<(Free, Term)> {
@@ -42,7 +46,7 @@ pub fn retyped<E: Env>(
 
     let names = Names::new(solutions.iter().map(|(name, _)| *name));
     let solved = |term: &Term| term.mentions_any(&names);
-    let mut unfolding = Unfolding::toward(env, solutions);
+    let mut unfolding = Unfolding::toward(driver, solutions);
 
     locals
         .iter()

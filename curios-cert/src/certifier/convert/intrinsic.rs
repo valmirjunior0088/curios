@@ -8,8 +8,9 @@ use {
     super::{Pairs, compare, ground},
     crate::{ByValue, Certifier, Error},
     curios_analysis::{
-        Agreement, Classes, Congruence, Driver, Obligation, Outcome, Pass, connectives_agree,
-        connectives_agree_classed, convert_classed, convert_intrinsics, foreign_congruence,
+        Agreement, Classes, Congruence, IntrinsicDriver, Obligation, Outcome, Pass,
+        connectives_agree, connectives_agree_classed, convert_classed, convert_intrinsics,
+        foreign_congruence,
     },
     curios_common::SyntaxRegistry,
     curios_core::{Intrinsic, Term},
@@ -112,7 +113,7 @@ fn classes(certifier: &mut ByValue, pairs: &mut Pairs, atoms: &[Term]) -> Result
 }
 
 /// The certifier is handed finished terms, so it prepares nothing, and it has no solving view: the elaborator's views only propose solutions, and once they are committed the two spellings agree by reduction. A reading's reduction trusts what it is handed ([`ByValue`]).
-impl Driver for ByValue<'_, '_> {
+impl IntrinsicDriver for ByValue<'_, '_> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         intrinsic
     }

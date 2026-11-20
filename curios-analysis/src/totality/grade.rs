@@ -4,7 +4,7 @@
 
 use {
     super::{Call, Carriers, Guard, Segment, Shape, Tag, spine},
-    crate::{Env, forceable},
+    crate::{Driver, forceable},
     curios_core::{
         CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
         Subterm, Term, Tuple, Variant,
@@ -32,7 +32,7 @@ pub const EXPAND_FUEL: usize = 16;
 
 /// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm. Where the scrutinee is an expression no binder stands for the case, and the case's own binders stand below the expression's value instead (`below_scrutinee`).
 ///
-/// **An index inversion's solutions are no part of it.** A solution is an equation conversion concluded — [`solve_indices`](crate::solve_indices) is the one analysis that borrows a driver's conversion — and at a `Prop`-sorted type conversion is proof irrelevance, which every proof of a proposition satisfies. A target holding a proposition's constructor is therefore one spelling of the scrutinee among all of them, and a payload read below the binder through it grades below a value no reduction took apart. The size order reads what reduction took apart and nothing conversion concluded, which is the line [`Env::force`] already draws by reducing plainly.
+/// **An index inversion's solutions are no part of it.** A solution is an equation conversion concluded — [`solve_indices`](crate::solve_indices) is the one analysis that borrows a driver's conversion — and at a `Prop`-sorted type conversion is proof irrelevance, which every proof of a proposition satisfies. A target holding a proposition's constructor is therefore one spelling of the scrutinee among all of them, and a payload read below the binder through it grades below a value no reduction took apart. The size order reads what reduction took apart and nothing conversion concluded, which is the line [`Driver::force`] already draws by reducing plainly.
 ///
 /// Both drivers read it here, so the rule has one home. What each supplies for itself is the case's shape: the discovery walk builds one from the binders it minted, and the certifier reads the arm's own spelling of the case value.
 pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
@@ -92,16 +92,16 @@ impl SizeContext {
     /// Enter an arm that establishes `binder` is `value`, that `nonzero` cannot be zero, and that `payloads` are the constructor's payloads — each where given.
     ///
     /// `value` is read as a shape against the context as it stands before the arm, which is where the value was built. A read the budget refuses opens nothing, so the refusal leaves the context as balanced as it found it.
-    pub fn enter<E: Env>(
+    pub fn enter<D: Driver>(
         &mut self,
-        env: &mut E,
+        driver: &mut D,
         refine: Option<(Free, &Term)>,
         nonzero: Option<Free>,
         payloads: Vec<Free>,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let refine = match refine {
             Some((binder, value)) => {
-                let shape = Grader::new(env, self).shape_of(value)?;
+                let shape = Grader::new(driver, self).shape_of(value)?;
                 Some((binder, shape))
             }
             None => None,
@@ -111,13 +111,13 @@ impl SizeContext {
     }
 
     /// Enter an arm whose scrutinee is an expression: each of `binders`, the case's own, stands below the value `scrutinee` reads at or below (`below_scrutinee`), `scrutinee` read against the context as it stands before the arm. A read the budget refuses opens nothing, as [`SizeContext::enter`]'s does.
-    pub fn enter_below<E: Env>(
+    pub fn enter_below<D: Driver>(
         &mut self,
-        env: &mut E,
+        driver: &mut D,
         scrutinee: &Term,
         binders: &[Free],
-    ) -> Result<(), E::Error> {
-        let shape = Grader::new(env, self).shape_of(scrutinee)?;
+    ) -> Result<(), D::Error> {
+        let shape = Grader::new(driver, self).shape_of(scrutinee)?;
         let refines = below_scrutinee(&shape)
             .map(|below| {
                 binders
@@ -247,17 +247,17 @@ impl SizeContext {
 }
 
 /// Grade a call from the member whose parameters are `params` to a member taking `callee_arity` parameters, with `arguments`, under `context`: each argument against each parameter, as strictly smaller, equal, or unrelated.
-pub fn grade<E: Env>(
-    env: &mut E,
+pub fn grade<D: Driver>(
+    driver: &mut D,
     context: &SizeContext,
     caller: usize,
     params: &[Free],
     callee: usize,
     callee_arity: usize,
     arguments: &[Term],
-) -> Result<Call, E::Error> {
+) -> Result<Call, D::Error> {
     curios_profile::profile!("grade");
-    let mut grader = Grader::new(env, context);
+    let mut grader = Grader::new(driver, context);
     let mut matrix = CallMatrix::unknown(params.len(), callee_arity);
 
     let expanded = params
@@ -328,13 +328,13 @@ impl Applied {
 }
 
 /// What a call of `callee`'s part at `path` with `arguments` — its leading lambdas at the empty path, a field lambda of the record they answer otherwise, its arguments the leading lambdas' and then the field's — from a member whose parameters are `params`, hands each argument at a parameter the part applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands the part under `context`. `None` at a position the part summarizes nothing at or applies nowhere, and at every position where nothing is filed of the part or the call does not hand it every parameter.
-pub fn handed<E: Env>(
-    env: &mut E,
+pub fn handed<D: Driver>(
+    driver: &mut D,
     context: &SizeContext,
     params: &[Free],
     callee: &Global,
     steps: &[Segment],
-) -> Result<Vec<Option<Applied>>, E::Error> {
+) -> Result<Vec<Option<Applied>>, D::Error> {
     let arguments = steps
         .iter()
         .flat_map(Segment::arguments)
@@ -342,7 +342,7 @@ pub fn handed<E: Env>(
         .collect::<Vec<_>>();
     let arguments = arguments.as_slice();
     let mut handed = vec![None; arguments.len()];
-    let Some(applications) = env.applications(callee) else {
+    let Some(applications) = driver.applications(callee) else {
         return Ok(handed);
     };
     // The part the steps reach: the leading lambdas where they apply arguments alone, and the field lambda at the slots they project where the arguments before those fill the leading lambdas and arguments alone follow.
@@ -378,7 +378,7 @@ pub fn handed<E: Env>(
     if !(0..arguments.len()).any(applies) {
         return Ok(handed);
     }
-    let call = grade(env, context, 0, params, 0, arguments.len(), arguments)?.matrix;
+    let call = grade(driver, context, 0, params, 0, arguments.len(), arguments)?.matrix;
     let through = |applied: &[CallMatrix]| {
         applied
             .iter()
@@ -434,27 +434,31 @@ pub fn binder_bounds(
 }
 
 /// The binder a boolean arm taken `taken` rules zero out for, when `head` compares a binder against a literal in a way that does.
-pub fn nonzero_by<E: Env>(env: &mut E, head: &Term, taken: bool) -> Result<Option<Free>, E::Error> {
+pub fn nonzero_by<D: Driver>(
+    driver: &mut D,
+    head: &Term,
+    taken: bool,
+) -> Result<Option<Free>, D::Error> {
     let context = SizeContext::default();
-    let guard = Grader::new(env, &context).guard(head)?;
+    let guard = Grader::new(driver, &context).guard(head)?;
     Ok(guard
         .filter(|guard| guard.establishes_nonzero(taken))
         .map(|guard| guard.atom))
 }
 
 /// The reader of terms as sizes: a checker to force through, the context the arms established, and what it has read.
-pub struct Grader<'a, E: Env> {
-    env: &'a mut E,
+pub struct Grader<'a, D: Driver> {
+    driver: &'a mut D,
     context: &'a SizeContext,
     /// The shape of each term read so far. The context stands for as long as the reader does, so a term reads as one shape however often it is met: an argument that holds a subterm twice — sixty `let`s each pairing the one before it with itself, handed whole to the member — is read in its size, where a reading per occurrence builds every path through it.
     read: HashMap<Term, Shape>,
 }
 
-impl<'a, E: Env> Grader<'a, E> {
+impl<'a, D: Driver> Grader<'a, D> {
     /// A reader under `context` that has read nothing.
-    pub fn new(env: &'a mut E, context: &'a SizeContext) -> Self {
+    pub fn new(driver: &'a mut D, context: &'a SizeContext) -> Self {
         Self {
-            env,
+            driver,
             context,
             read: HashMap::new(),
         }
@@ -505,7 +509,7 @@ impl<'a, E: Env> Grader<'a, E> {
     /// A constructor, a free-monoid layer, and a recognised arithmetic decrease read directly; everything else goes to [`Grader::unfolded_shape`], which sees through the definitions standing between a term and its shape. That fallback carries most of what the size order knows — an operator resolves a witness, so even `n - 1` reaches here as a projection — and it is not bounded by a step count; see [`readable`] for what bounds it instead.
     ///
     /// Each term is read once ([`Grader::read`]): a binder is looked up as it stands, and anything else is remembered.
-    pub fn shape_of(&mut self, term: &Term) -> Result<Shape, E::Error> {
+    pub fn shape_of(&mut self, term: &Term) -> Result<Shape, D::Error> {
         if let Subterm::Var(var) = &**term {
             return Ok(match var.as_free() {
                 Some(free) => self.expand(free, EXPAND_FUEL),
@@ -522,7 +526,7 @@ impl<'a, E: Env> Grader<'a, E> {
     }
 
     /// [`Grader::shape_of`] for a term that is no binder and has not been read.
-    fn shape_read(&mut self, term: &Term) -> Result<Shape, E::Error> {
+    fn shape_read(&mut self, term: &Term) -> Result<Shape, D::Error> {
         Ok(match &**term {
             Subterm::Variant(Variant { tag, payload, .. }) => {
                 let kids = self.shapes_of(payload)?;
@@ -604,7 +608,7 @@ impl<'a, E: Env> Grader<'a, E> {
     }
 
     /// Each of `terms` read as a shape, in order.
-    fn shapes_of(&mut self, terms: &[Term]) -> Result<Vec<Shape>, E::Error> {
+    fn shapes_of(&mut self, terms: &[Term]) -> Result<Vec<Shape>, D::Error> {
         terms.iter().map(|term| self.shape_of(term)).collect()
     }
 
@@ -616,7 +620,7 @@ impl<'a, E: Env> Grader<'a, E> {
         left: &Term,
         right: &Term,
         least: &Natural,
-    ) -> Result<Shape, E::Error> {
+    ) -> Result<Shape, D::Error> {
         let Some(divisor) = right.as_nat().and_then(|nat| nat.to_natural()) else {
             return Ok(Shape::Opaque);
         };
@@ -642,7 +646,7 @@ impl<'a, E: Env> Grader<'a, E> {
     /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
     ///
     /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bytes`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
-    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Result<Shape, E::Error> {
+    fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Result<Shape, D::Error> {
         let carriers = match carrier {
             FreeMonoid::Unary => {
                 return match &**term {
@@ -696,12 +700,12 @@ impl<'a, E: Env> Grader<'a, E> {
     ///
     /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the certifier grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle: the force is a [`Probe`], so a term with no reading is opaque and the budget's refusal propagates as the analysis's own.
     ///
-    /// A count here would bound *re-entries* rather than unfoldings: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call. The stated condition above is what bounds the read instead, and no verdict in the corpus depends on a number.
-    fn unfolded_shape(&mut self, term: &Term) -> Result<Shape, E::Error> {
+    /// A count here would bound *re-entries* rather than unfoldings: [`Driver::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call. The stated condition above is what bounds the read instead, and no verdict in the corpus depends on a number.
+    fn unfolded_shape(&mut self, term: &Term) -> Result<Shape, D::Error> {
         if !readable(term) {
             return Ok(Shape::Opaque);
         }
-        let Some(reduced) = self.env.force_graded(term).probed()? else {
+        let Some(reduced) = self.driver.force_graded(term).probed()? else {
             return Ok(Shape::Opaque);
         };
         if reduced == *term {
@@ -713,14 +717,14 @@ impl<'a, E: Env> Grader<'a, E> {
     /// Read a boolean scrutinee as a comparison against a literal.
     ///
     /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Grader::shape_of`] uses is what exposes the intrinsic under both, and it is the same [`Probe`].
-    pub fn guard(&mut self, head: &Term) -> Result<Option<Guard>, E::Error> {
+    pub fn guard(&mut self, head: &Term) -> Result<Option<Guard>, D::Error> {
         if let Some(guard) = Guard::read(head) {
             return Ok(Some(guard));
         }
         if !readable(head) {
             return Ok(None);
         }
-        let Some(reduced) = self.env.force_graded(head).probed()? else {
+        let Some(reduced) = self.driver.force_graded(head).probed()? else {
             return Ok(None);
         };
         if reduced == *head {

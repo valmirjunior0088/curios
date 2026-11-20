@@ -8,11 +8,11 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The certifier reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
+//! Both checkers run this analysis, through [`Driver`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The certifier reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
 
 use {
     crate::{
-        Declarations, Env, Segment, binders, call_path, forceable, labelled, least_fixpoint,
+        Declarations, Driver, Segment, binders, call_path, forceable, labelled, least_fixpoint,
         opened, peel, read_by_unfolding, rec_member,
     },
     curios_common::recurse,
@@ -41,10 +41,10 @@ pub struct VarianceVectors<E> {
 /// Whole-set for the reason the positivity fixpoint is: a family mentions itself, so its own vector is an input to computing it, and in a mutual pair one learns that a level is invariant on the round after the other does. Marking only grows a vector, so the iteration ends at the least fixpoint, which is the right one: a level nothing forces invariant is one two instances cannot be told apart by.
 ///
 /// A name outside `declarations` answers from the driver's registry: a family of a unit in scope, whose vector the same checker held to that unit's declarations when it took the unit, and which it reads from then on as it reads the rest of the entry. A name no registry holds is invariant.
-pub fn variance_vectors<E: Env>(
-    env: &mut E,
+pub fn variance_vectors<D: Driver>(
+    driver: &mut D,
     declarations: Declarations<'_>,
-) -> VarianceVectors<E::Error> {
+) -> VarianceVectors<D::Error> {
     curios_profile::profile!("variance_vectors");
     if declarations.is_empty() {
         return VarianceVectors {
@@ -58,7 +58,7 @@ pub fn variance_vectors<E: Env>(
         .names()
         .into_iter()
         .map(|name| {
-            let entry = Split::of(env, declarations, &name);
+            let entry = Split::of(driver, declarations, &name);
             (name, entry)
         })
         .collect::<BTreeMap<_, _>>();
@@ -73,7 +73,7 @@ pub fn variance_vectors<E: Env>(
     loop {
         let mut changed = false;
         for (name, entry) in &split {
-            let (marked, refused) = sweep(env, &vectors, &entry.parts);
+            let (marked, refused) = sweep(driver, &vectors, &entry.parts);
             if exhausted.is_none()
                 && let Some(error) = refused
             {
@@ -108,13 +108,13 @@ struct Split {
 }
 
 impl Split {
-    fn of<E: Env>(env: &mut E, declarations: Declarations<'_>, name: &Global) -> Self {
+    fn of<D: Driver>(driver: &mut D, declarations: Declarations<'_>, name: &Global) -> Self {
         if let Some(declaration) = declarations.induct(name) {
-            let params = binders(env, declaration.arity());
+            let params = binders(driver, declaration.arity());
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
 
             // The index types are read here where positivity leaves them out: they store nothing, which is positivity's question, and two instances apart in a level one of them mentions are families over different index types, which is this one's.
-            let mut parts = labelled(env, &declaration.indices_at(&arguments))
+            let mut parts = labelled(driver, &declaration.indices_at(&arguments))
                 .into_iter()
                 .map(|(_, type_)| type_)
                 .collect::<Vec<_>>();
@@ -123,7 +123,7 @@ impl Split {
                 let mut cursor = payload.cursor();
                 while let Some((_, type_)) = cursor.entry() {
                     parts.push(type_);
-                    cursor.advance_fresh(|hint| env.fresh(hint.filter(|hint| !hint.is_empty())));
+                    cursor.advance_fresh(|hint| driver.fresh(hint.filter(|hint| !hint.is_empty())));
                 }
                 // The targets are read because a level may reach nothing else: `mk(): (N(F))` puts `N`'s invariant level in `Fam`'s index and in no payload.
                 parts.extend(cursor.body().expect("a cursor past every entry"));
@@ -138,12 +138,12 @@ impl Split {
         let declaration = declarations
             .struct_(name)
             .expect("every analyzed name is an inductive or a struct");
-        let params = binders(env, &declaration.arity);
+        let params = binders(driver, &declaration.arity);
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
 
         Self {
             parameters: declaration.universe_context.parameter_count,
-            parts: labelled(env, &declaration.fields_at(&arguments))
+            parts: labelled(driver, &declaration.fields_at(&arguments))
                 .into_iter()
                 .map(|(_, type_)| type_)
                 .collect(),
@@ -158,19 +158,23 @@ struct Vectors {
 }
 
 impl Vectors {
-    /// `name`'s variance in its `index`th universe parameter. A name outside the analyzed set answers as its driver holds it ([`Env::variance`]), and one the driver holds no vector for is invariant, never irrelevant.
-    fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Variance {
+    /// `name`'s variance in its `index`th universe parameter. A name outside the analyzed set answers as its driver holds it ([`Driver::variance`]), and one the driver holds no vector for is invariant, never irrelevant.
+    fn at<D: Driver>(&self, driver: &D, name: &Global, index: usize) -> Variance {
         if let Some(vector) = self.computed.get(name) {
             return vector.get(index).copied().unwrap_or(Variance::Invariant);
         }
-        env.variance(name, index)
+        driver.variance(name, index)
     }
 }
 
 /// The levels `parts` fix under the current estimates, and the first reduction the driver refused while finding them.
-fn sweep<E: Env>(env: &mut E, vectors: &Vectors, parts: &[Term]) -> (Marked, Option<E::Error>) {
+fn sweep<D: Driver>(
+    driver: &mut D,
+    vectors: &Vectors,
+    parts: &[Term],
+) -> (Marked, Option<D::Error>) {
     let mut walk = Walk {
-        env,
+        driver,
         vectors,
         forcing: Vec::new(),
         entered: HashSet::new(),
@@ -222,12 +226,12 @@ impl<E> HeldLevels<E> {
 /// It is the walk and nothing of what it is asked about. Which terms of a declaration stand for it is the caller's, and so is what a held level means there. A level is reported by its head, a declaration's parameter or a level still open while the declaration elaborates, so one walk answers before and after a declaration's levels close. Every family answers from the driver's registry, a name it does not hold reading invariant.
 ///
 /// It forces what it reads, so it is for a term read once, a definition's body where its levels close. What a term holds as it is written, with nothing reduced, is `curios-core`'s `Term::level_differences` to say.
-pub fn held_levels<E: Env>(env: &mut E, parts: &[Term]) -> HeldLevels<E::Error> {
+pub fn held_levels<D: Driver>(driver: &mut D, parts: &[Term]) -> HeldLevels<D::Error> {
     curios_profile::profile!("held_levels");
     let vectors = Vectors {
         computed: BTreeMap::new(),
     };
-    let (marked, exhausted) = sweep(env, &vectors, parts);
+    let (marked, exhausted) = sweep(driver, &vectors, parts);
 
     HeldLevels {
         heads: marked.heads,
@@ -239,7 +243,11 @@ pub fn held_levels<E: Env>(env: &mut E, parts: &[Term]) -> HeldLevels<E::Error> 
 /// The level pairs two projections of one member of a recursive group, apart in levels alone, are told apart at: those at the positions the least fixpoint of the group's unfolding holds (`group_held`), the group generalized over the positions the two differ at, a parameter above every one either names standing at each (`Term::generalized_levels`). `None` where the two are not two projections of one member apart in levels alone. A reduction the driver refuses holds every position, and so does a group not read by its unfolding (`read_by_unfolding`).
 ///
 /// Two instances apart only at positions no unfolding holds unfold to terms apart only there, again and again, so they are one; what conversion compares of them is the rest.
-pub fn held_pairs<E: Env>(env: &mut E, this: &Term, that: &Term) -> Option<Vec<(Level, Level)>> {
+pub fn held_pairs<D: Driver>(
+    driver: &mut D,
+    this: &Term,
+    that: &Term,
+) -> Option<Vec<(Level, Level)>> {
     let base = universe_params(this)
         .into_iter()
         .chain(universe_params(that))
@@ -253,7 +261,7 @@ pub fn held_pairs<E: Env>(env: &mut E, this: &Term, that: &Term) -> Option<Vec<(
         level
     })?;
     let (group, _) = generalized.term.as_rec_proj()?;
-    let held = group_held(env, group);
+    let held = group_held(driver, group);
 
     Some(
         generalized
@@ -274,20 +282,20 @@ pub fn held_pairs<E: Env>(env: &mut E, this: &Term, that: &Term) -> Option<Vec<(
 /// The levels `declarations` hold while their own are still open: what [`variance_vectors`] reads of each, its index types, payloads, fields and targets, reported by head as [`held_levels`] reports a term's, where a vector has no parameter yet to report an open level under.
 ///
 /// One sweep, since nothing iterates: a family whose levels are open takes no parameter, and an occurrence of it inside its own group carries no instance. Every other family answers from the driver's registry.
-pub fn held_by<E: Env>(env: &mut E, declarations: Declarations<'_>) -> HeldLevels<E::Error> {
+pub fn held_by<D: Driver>(driver: &mut D, declarations: Declarations<'_>) -> HeldLevels<D::Error> {
     curios_profile::profile!("held_by");
     let mut vectors = Vectors {
         computed: BTreeMap::new(),
     };
     let mut parts = Vec::new();
     for name in declarations.names() {
-        let entry = Split::of(env, declarations, &name);
+        let entry = Split::of(driver, declarations, &name);
         vectors
             .computed
             .insert(name, vec![Variance::Irrelevant; entry.parameters]);
         parts.extend(entry.parts);
     }
-    let (marked, exhausted) = sweep(env, &vectors, &parts);
+    let (marked, exhausted) = sweep(driver, &vectors, &parts);
 
     HeldLevels {
         heads: marked.heads,
@@ -297,15 +305,15 @@ pub fn held_by<E: Env>(env: &mut E, declarations: Declarations<'_>) -> HeldLevel
 }
 
 /// One declaration's traversal: which of its universe parameters something it holds mentions.
-struct Walk<'a, E: Env> {
-    env: &'a mut E,
+struct Walk<'a, D: Driver> {
+    driver: &'a mut D,
     vectors: &'a Vectors,
     /// The `rec` members this walk is already inside, innermost last: positivity's guard, for positivity's reason.
     forcing: Vec<(RecGroup, usize)>,
     /// The nodes this walk has entered. A node entered again inside the same members marks what it marked and refuses what it refused, so a node a reduct shares is walked once however many paths reach it.
     entered: HashSet<Entered>,
     marked: Marked,
-    refused: Option<E::Error>,
+    refused: Option<D::Error>,
     /// The group whose held levels this walk is a step of computing, with the estimate so far, which a member of it met again reads ([`group_held`]).
     estimate: Option<(RecGroup, Marked)>,
     /// The held levels of each other group this walk met a member of again, computed once a walk; `None` for a group not read by its unfolding ([`read_by_unfolding`]).
@@ -313,9 +321,9 @@ struct Walk<'a, E: Env> {
 }
 
 /// The levels two instances of `group` are told apart by: what its members' unfoldings hold where conversion compares them, the least fixpoint over its members from none, a member met again contributing what the fixpoint holds so far. Each member's body is read under its leading lambdas, opened at fresh binders ([`peel`]), and its type is not read, as no parameter's type is. A reduction the driver refuses is kept, and the caller reads it as every level held. `None` for a group not read by its unfolding ([`read_by_unfolding`]), which the caller reads as written.
-pub fn group_held<E: Env>(env: &mut E, group: &RecGroup) -> Option<HeldLevels<E::Error>> {
+pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLevels<D::Error>> {
     curios_profile::profile!("group_held");
-    match read_by_unfolding(env, group) {
+    match read_by_unfolding(driver, group) {
         Ok(true) => {}
         Ok(false) => return None,
         Err(error) => {
@@ -327,7 +335,7 @@ pub fn group_held<E: Env>(env: &mut E, group: &RecGroup) -> Option<HeldLevels<E:
         }
     }
     let bodies = (0..group.length())
-        .map(|index| peel(env, group.member_body(index)).2)
+        .map(|index| peel(driver, group.member_body(index)).2)
         .collect::<Vec<_>>();
     let vectors = Vectors {
         computed: BTreeMap::new(),
@@ -336,7 +344,7 @@ pub fn group_held<E: Env>(env: &mut E, group: &RecGroup) -> Option<HeldLevels<E:
     let mut exhausted = None;
     let held = least_fixpoint(Marked::default(), |estimate| {
         let mut walk = Walk {
-            env: &mut *env,
+            driver: &mut *driver,
             vectors: &vectors,
             forcing: (0..group.length())
                 .map(|member| (group.clone(), member))
@@ -384,7 +392,7 @@ impl Hash for Entered {
     }
 }
 
-impl<E: Env> Walk<'_, E> {
+impl<D: Driver> Walk<'_, D> {
     /// A level standing where two instances would differ in it. The walk opens every binder it crosses and enters no universe binder, so a parameter here is the declaration's own.
     fn level(&mut self, level: &Level) {
         self.marked
@@ -426,7 +434,7 @@ impl<E: Env> Walk<'_, E> {
         if let Some(held) = self.groups.get(group) {
             return held.clone();
         }
-        let held = group_held(self.env, group).map(|found| {
+        let held = group_held(self.driver, group).map(|found| {
             let every = found.every || found.exhausted.is_some();
             if self.refused.is_none() {
                 self.refused = found.exhausted;
@@ -443,7 +451,7 @@ impl<E: Env> Walk<'_, E> {
     /// A nominal occurrence's instance: its levels at the family's invariant positions, and nothing at an irrelevant one.
     fn nominal(&mut self, name: &Global, universes: &Universes) {
         for (index, level) in universes.levels.iter().enumerate() {
-            if self.vectors.at(self.env, name, index) == Variance::Invariant {
+            if self.vectors.at(self.driver, name, index) == Variance::Invariant {
                 self.level(level);
             }
         }
@@ -453,7 +461,7 @@ impl<E: Env> Walk<'_, E> {
         if !forceable(term) {
             return (term.clone(), false);
         }
-        match self.env.force(term) {
+        match self.driver.force(term) {
             Ok(reduced) => (reduced, false),
             Err(error) => {
                 if self.refused.is_none() {
@@ -473,7 +481,7 @@ impl<E: Env> Walk<'_, E> {
         let mut cursor = telescope.cursor();
         while let Some((_, type_)) = cursor.entry() {
             self.walk(&type_);
-            cursor.advance_fresh(|hint| self.env.fresh(hint.filter(|hint| !hint.is_empty())));
+            cursor.advance_fresh(|hint| self.driver.fresh(hint.filter(|hint| !hint.is_empty())));
         }
         terminal(self, cursor.body().expect("a cursor past every entry"));
     }
@@ -487,7 +495,7 @@ impl<E: Env> Walk<'_, E> {
         });
     }
 
-    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Env::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Driver::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn walk(&mut self, term: &Term) {
         recurse(|| self.walk_within(term));
     }
@@ -610,7 +618,7 @@ impl<E: Env> Walk<'_, E> {
 
             // A `match` the reduction left stuck, under no binder this walk has not opened, is read as conversion compares two of it: its head, goal, stated instance and a list's element type as written, and each arm opened against fresh binders and forced, a mention an arm's reduction removes being no mention.
             Subterm::Match(matched) if term.reach() == 0 => {
-                let opened = opened(self.env, matched);
+                let opened = opened(self.driver, matched);
                 for part in opened
                     .suppliers
                     .iter()

@@ -1,6 +1,6 @@
 //! The variance analysis, driven through the certifier.
 //!
-//! An integration test for the reason `driven.rs` gives: the analysis is written against `Env`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the certifier and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
+//! An integration test for the reason `driven.rs` gives: the analysis is written against `Driver`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the certifier and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
 
 use {
     curios_analysis::{Declarations, held_levels, test_support::*, variance_vectors},
@@ -378,7 +378,7 @@ fn a_carried_vector_is_recomputed_rather_than_believed() {
     assert_eq!(vector("Box", lying), "=");
 }
 
-// A family registered and not analyzed answers as its driver holds it (`Env::variance`). The certifier holds the vector its own walk filed for a family and none for one it was only handed, so a level composes through such a family as invariant whatever its entry carries, an irrelevance it claims among it. A family no registry holds is invariant.
+// A family registered and not analyzed answers as its driver holds it (`Driver::variance`). The certifier holds the vector its own walk filed for a family and none for one it was only handed, so a level composes through such a family as invariant whatever its entry carries, an irrelevance it claims among it. A family no registry holds is invariant.
 #[test]
 fn a_family_outside_the_set_answers_as_its_driver_holds_it() {
     let holder = || {

@@ -7,7 +7,7 @@ mod tests;
 
 use {
     super::Applied,
-    crate::Env,
+    crate::Driver,
     curios_core::{
         Advance, CallMatrix, Free, Func, Inward, RecGroup, Struct, Subterm, Term, Tuple,
     },
@@ -206,25 +206,25 @@ pub(super) struct Part {
 }
 
 /// The parts of `group`, in the order both checkers number them: each member's leading lambdas, then the fields of the record under them, depth first.
-pub(super) fn open_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<Part> {
+pub(super) fn open_parts<D: Driver>(driver: &mut D, group: &RecGroup) -> Vec<Part> {
     let mut parts = Vec::new();
     for member in 0..group.length() {
-        let (params, _, body) = peel(env, group.member_body(member));
-        open_member(env, member, params, &body, &mut parts);
+        let (params, _, body) = peel(driver, group.member_body(member));
+        open_member(driver, member, params, &body, &mut parts);
     }
     parts
 }
 
 /// The parts of a definition that is no recursive group, numbered as a group's lone member's are; `None` where no parameter of its leading lambdas is of a type that is applied or projected — a function, a structure or a tuple — so nothing of it can be summarized and its body is not walked.
-pub(super) fn open_definition<E: Env>(
-    env: &mut E,
+pub(super) fn open_definition<D: Driver>(
+    driver: &mut D,
     body: &Term,
-) -> Result<Option<Vec<Part>>, E::Error> {
-    let (params, types, body) = peel(env, body.clone());
+) -> Result<Option<Vec<Part>>, D::Error> {
+    let (params, types, body) = peel(driver, body.clone());
     let mut applicable = false;
     for type_ in &types {
         if matches!(
-            &*env.force(type_)?,
+            &*driver.force(type_)?,
             Subterm::FuncType(_) | Subterm::StructType(_) | Subterm::TupleType(_)
         ) {
             applicable = true;
@@ -235,13 +235,13 @@ pub(super) fn open_definition<E: Env>(
         return Ok(None);
     }
     let mut parts = Vec::new();
-    open_member(env, 0, params, &body, &mut parts);
+    open_member(driver, 0, params, &body, &mut parts);
     Ok(Some(parts))
 }
 
 /// Push member `member`'s parts: its leading lambdas, binding `params`, and the fields of the record `body`, under them, answers.
-fn open_member<E: Env>(
-    env: &mut E,
+fn open_member<D: Driver>(
+    driver: &mut D,
     member: usize,
     params: Vec<Free>,
     body: &Term,
@@ -257,12 +257,12 @@ fn open_member<E: Env>(
         params: params.clone(),
         runs: Vec::new(),
     });
-    parts[base].runs = record(env, member, &[], &params, body, parts);
+    parts[base].runs = record(driver, member, &[], &params, body, parts);
 }
 
 /// Each part's shape: what a call is graded over and where a path leads.
-pub fn group_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<PartShape> {
-    open_parts(env, group)
+pub fn group_parts<D: Driver>(driver: &mut D, group: &RecGroup) -> Vec<PartShape> {
+    open_parts(driver, group)
         .into_iter()
         .map(|part| part.shape)
         .collect()
@@ -271,14 +271,14 @@ pub fn group_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<PartShape> {
 /// Peel `body`'s leading lambdas, minting one binder per parameter, with each parameter's type over the binders before it: what a member's parameters are, which totality grades its calls against and strict positivity summarizes its unfolding over.
 ///
 /// A member with no lambda — `rec inf : F = F/more(inf)`, or any of `/std/Json/decode`'s nullary parsers — has no parameter, and its self-call therefore contributes a 0×0 matrix. That matrix is idempotent and has no diagonal to descend on, so a nullary self-call is rejected, which is exactly right: nothing about it can get smaller.
-pub fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Vec<Term>, Term) {
+pub fn peel<D: Driver>(driver: &mut D, mut body: Term) -> (Vec<Free>, Vec<Term>, Term) {
     let mut params = Vec::new();
     let mut types = Vec::new();
     while let Subterm::Func(Func { telescope, .. }) = &*body {
         let mut cursor = telescope.cursor();
         while let Some((_, type_)) = cursor.entry() {
             types.push(type_);
-            params.push(cursor.advance_fresh(|hint| env.fresh(hint)));
+            params.push(cursor.advance_fresh(|hint| driver.fresh(hint)));
         }
         let inner = cursor.body().expect("a cursor past every entry");
         body = inner;
@@ -287,8 +287,8 @@ pub fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Vec<Term>, Term)
 }
 
 /// What `body`, at `path` under member `member`'s parameters `params`, runs where the part holding it is called: itself, unless it is a record literal, whose parameters and fields that are no part it runs, each field that is a lambda pushed as a part and each that is a record literal followed in turn.
-fn record<E: Env>(
-    env: &mut E,
+fn record<D: Driver>(
+    driver: &mut D,
     member: usize,
     path: &[usize],
     params: &[Free],
@@ -306,7 +306,7 @@ fn record<E: Env>(
         at.push(slot);
         match &**field {
             Subterm::Func(_) => {
-                let (own, _, inner) = peel(env, field.clone());
+                let (own, _, inner) = peel(driver, field.clone());
                 let mut all = params.to_vec();
                 all.extend(own);
                 parts.push(Part {
@@ -320,7 +320,7 @@ fn record<E: Env>(
                 });
             }
             Subterm::Struct(_) | Subterm::Tuple(_) => {
-                runs.extend(record(env, member, &at, params, field, parts));
+                runs.extend(record(driver, member, &at, params, field, parts));
             }
             _ => runs.push(field.clone()),
         }

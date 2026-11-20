@@ -195,7 +195,7 @@ impl Scope {
     }
 }
 
-impl Env for Scope {
+impl Driver for Scope {
     type Error = Infallible;
 
     fn force(&mut self, term: &Term) -> Result<Term, Self::Error> {

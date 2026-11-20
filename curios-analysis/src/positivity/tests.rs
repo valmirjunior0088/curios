@@ -1,6 +1,6 @@
 //! The polarity lattice's own laws, and the closure over the occurrence relation.
 //!
-//! Pure functions of the relation, so they need no checker and stay beside the analysis. The tests that drive `positivity_vectors` through a real `Env` are in `curios-analysis/tests/driven/positivity.rs`; that directory's `main.rs` says why.
+//! Pure functions of the relation, so they need no checker and stay beside the analysis. The tests that drive `positivity_vectors` through a real `Driver` are in `curios-analysis/tests/driven/positivity.rs`; that directory's `main.rs` says why.
 
 use {
     super::*,

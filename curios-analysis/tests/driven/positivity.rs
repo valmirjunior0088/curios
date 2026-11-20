@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     curios_analysis::{
-        Declarations, Env, PositivityRefusal, positivity_vectors, struct_reaches_itself,
+        Declarations, Driver, PositivityRefusal, positivity_vectors, struct_reaches_itself,
         test_support::*,
     },
     curios_cert::{Certifier, test_support::*},
@@ -575,7 +575,7 @@ fn a_group_that_may_not_terminate_is_read_as_written() {
     let inducts = ["N", "Zero", "W"]
         .map(|name| {
             let name = Global::Authored(Qualifier::from([name]));
-            let declaration = Env::induct_decl(&certifier, &name)
+            let declaration = Driver::induct_decl(&certifier, &name)
                 .cloned()
                 .expect("each family is declared");
             (name, declaration)

@@ -70,7 +70,7 @@ mod test_support;
 
 use {
     crate::{Filed, entails},
-    curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel, retyped},
+    curios_analysis::{Classification, DeclaredPart, Driver, Erased, Judge, MemberLabel, retyped},
     curios_common::{Plicity, SyntaxRegistry, variants},
     curios_core::{
         Advance, Applications, Atom, Consumption, Cost, Exhaustion, Free, Global, InductDecl,

@@ -24,7 +24,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept, and the set is refused for it: reading the term at `Mixed` may be all that refuses a declaration, and all that puts a `Mixed` in a vector the analysis would hand back, which a family declared later would then be refused by with no word of the budget. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
+//! Both checkers run *this* analysis, through [`Driver`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept, and the set is refused for it: reading the term at `Mixed` may be all that refuses a declaration, and all that puts a `Mixed` in a vector the analysis would hand back, which a family declared later would then be refused by with no word of the budget. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
 //!
 //! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`, and nothing in the corpus takes such a parameter. And whether a `rec` terminates is size-change totality's question (`totality`), a separate mechanism rather than a refinement of this one.
 
@@ -33,7 +33,7 @@ mod tests;
 
 use {
     crate::{
-        Data, Env, Segment, call_path, codomain, forceable, least_fixpoint, opened, peel,
+        Data, Driver, Segment, call_path, codomain, forceable, least_fixpoint, opened, peel,
         read_by_unfolding,
     },
     curios_common::recurse,
@@ -50,7 +50,7 @@ use {
 
 /// Why a declaration set was refused.
 #[derive(Debug, Clone, PartialEq)]
-pub enum PositivityRefusal<E> {
+pub enum PositivityRefusal<D> {
     /// A declaration reaches itself through a non-strict path.
     NotPositive(NotPositive),
     /// A structure reaches itself through record fields alone, so it has no finite value.
@@ -58,7 +58,7 @@ pub enum PositivityRefusal<E> {
     /// The driver refused a reduction while `name` was being walked — its budget ran out — and the set is refused for it.
     ///
     /// Reported instead of what the analysis computed past it, which may be the refusal's own doing: the term the driver could not reduce was read at `Mixed`, so a recursion through it that would have read `Strict` reads as a non-strict path back, and a vector that would have read `Strict` holds a `Mixed` no declaration put there. `name` is where the budget went, not necessarily a declaration a verdict would have fallen on, since a `Mixed` vector reaches every declaration that composes through it.
-    Exhausted { name: Global, error: E },
+    Exhausted { name: Global, error: D },
 }
 
 /// A member of a telescope as its declaration names it: by the label it was written under, or by its place among the members where it was written with none.
@@ -101,7 +101,7 @@ pub struct HoldsItself {
 
 /// The declaration set an analysis runs over: the `induct` and `struct` entries of one declaration, a group's taken together.
 ///
-/// **These are analyzed; every other is consulted.** A family the walk meets outside the set answers from its driver's registry ([`Env::induct_decl`], [`Env::struct_decl`]), by the vector the entry held there carries. Which vector that is is the driver's to say, and each checker reads only its own: the elaborator's entry carries the vector it wrote as that declaration was published, and the certifier's the vector its own walk computed and filed, never the one elaboration stamped on the entry a module carries. An entry with no vector answers `Mixed`.
+/// **These are analyzed; every other is consulted.** A family the walk meets outside the set answers from its driver's registry ([`Driver::induct_decl`], [`Driver::struct_decl`]), by the vector the entry held there carries. Which vector that is is the driver's to say, and each checker reads only its own: the elaborator's entry carries the vector it wrote as that declaration was published, and the certifier's the vector its own walk computed and filed, never the one elaboration stamped on the entry a module carries. An entry with no vector answers `Mixed`.
 ///
 /// A name is one declaration, and the set is read by name. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the certifier refuses a module that holds one, and lowering refuses the declaration that would produce one.
 #[derive(Clone, Copy)]
@@ -143,11 +143,11 @@ impl<'a> Declarations<'a> {
 
 /// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — and [`PositivityRefusal::Exhausted`] wherever the driver refused a reduction, so that a vector handed back is the declarations' own.
 ///
-/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration judged before the one analysed cannot mention it, so every out-of-set declaration the driver judged ([`Env::judged`]) is a sink of the occurrence relation. One it has not judged is none: the certifier registers every family of a module before it judges any, so a family stored after the one analysed and outside its declaration may reach it again through what nothing has read, and its occurrence is read as reaching the declaration walked at [`Polarity::Mixed`]. The elaborator never meets one, refusing a declaration that reaches one stored after it outside its group.
-pub fn positivity_vectors<E: Env>(
-    env: &mut E,
+/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Driver::induct_decl`] / [`Driver::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration judged before the one analysed cannot mention it, so every out-of-set declaration the driver judged ([`Driver::judged`]) is a sink of the occurrence relation. One it has not judged is none: the certifier registers every family of a module before it judges any, so a family stored after the one analysed and outside its declaration may reach it again through what nothing has read, and its occurrence is read as reaching the declaration walked at [`Polarity::Mixed`]. The elaborator never meets one, refusing a declaration that reaches one stored after it outside its group.
+pub fn positivity_vectors<D: Driver>(
+    driver: &mut D,
     declarations: Declarations<'_>,
-) -> Result<BTreeMap<Global, Vec<Polarity>>, PositivityRefusal<E::Error>> {
+) -> Result<BTreeMap<Global, Vec<Polarity>>, PositivityRefusal<D::Error>> {
     curios_profile::profile!("positivity_vectors");
     if declarations.is_empty() {
         return Ok(BTreeMap::new());
@@ -158,7 +158,7 @@ pub fn positivity_vectors<E: Env>(
     let mut split = BTreeMap::new();
     for name in &names {
         // Which parameters are type parameters is read by reduction, so a refused one is reported as every other is.
-        match Split::of(env, declarations, name) {
+        match Split::of(driver, declarations, name) {
             Ok(opened) => split.insert(*name, opened),
             Err(error) => {
                 return Err(PositivityRefusal::Exhausted { name: *name, error });
@@ -167,7 +167,7 @@ pub fn positivity_vectors<E: Env>(
     }
 
     let mut data = Data::new(declarations);
-    let (vectors, closed, exhausted) = fixpoint(env, &mut data, &split);
+    let (vectors, closed, exhausted) = fixpoint(driver, &mut data, &split);
 
     // Nothing computed past a refused reduction is handed back: an acceptance would file a vector that may hold the budget's `Mixed`, and a refusal may be that reading's alone.
     if let Some((walked, error)) = exhausted {
@@ -188,13 +188,13 @@ pub fn positivity_vectors<E: Env>(
         }
 
         return Err(PositivityRefusal::NotPositive(refusal(
-            env, &mut data, &split, &vectors, &closed, name, diagonal,
+            driver, &mut data, &split, &vectors, &closed, name, diagonal,
         )));
     }
 
     // A structure strictly positive in itself may still hold itself through its fields alone, which no finite value does.
     let mut holding = Holding {
-        env,
+        driver,
         declarations,
         held: BTreeMap::new(),
         underway: Vec::new(),
@@ -222,8 +222,8 @@ pub fn positivity_vectors<E: Env>(
 /// Meeting a structure whose own walk is underway is a path back to it, so the walk is exact and it ends: a structure is entered once, its summary kept for the rest of the pass, and one that grows its own arguments, `struct Q(A) { q: Q({A, A}) }`, meets itself on its first step. A structure outside the set is read off its declaration as the driver holds it, which a structure judged earlier cannot name one of the set through but at the arguments it is handed.
 ///
 /// A node one structure's walk has entered is not entered again, told apart by its address and held so the address stays the node's, as the strict-positivity walk's [`Entered`] is: the walk of one structure reads its parameters alone, so a node a second path reaches holds what it held on the first, and a field typed by a tower of tuples, each level naming the one below twice, is walked in its size and not in its paths.
-struct Holding<'d, 'e, E: Env> {
-    env: &'e mut E,
+struct Holding<'d, 'e, D: Driver> {
+    driver: &'e mut D,
     declarations: Declarations<'d>,
     /// The parameters each structure walked so far holds at a field-only position.
     held: BTreeMap<Global, BTreeSet<usize>>,
@@ -232,29 +232,29 @@ struct Holding<'d, 'e, E: Env> {
 }
 
 /// Why a [`Holding`] walk stopped short of a summary.
-enum Stop<E> {
+enum Stop<D> {
     Holds(HoldsItself),
-    Refused { name: Global, error: E },
+    Refused { name: Global, error: D },
 }
 
-impl<E: Env> Holding<'_, '_, E> {
+impl<D: Driver> Holding<'_, '_, D> {
     /// The parameters the structure `name` holds at a field-only position, walked where it is first met. A name the driver holds no structure for holds nothing.
-    fn held(&mut self, name: &Global) -> Result<BTreeSet<usize>, Stop<E::Error>> {
+    fn held(&mut self, name: &Global) -> Result<BTreeSet<usize>, Stop<D::Error>> {
         if let Some(held) = self.held.get(name) {
             return Ok(held.clone());
         }
         let declaration = match self.declarations.struct_(name) {
             Some(declaration) => declaration.clone(),
-            None => match self.env.struct_decl(name) {
+            None => match self.driver.struct_decl(name) {
                 Some(declaration) => declaration.clone(),
                 None => return Ok(BTreeSet::new()),
             },
         };
-        let params = binders(self.env, &declaration.arity);
+        let params = binders(self.driver, &declaration.arity);
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
         let mut held = BTreeSet::new();
         let mut entered = HashMap::new();
-        for (member, type_) in labelled(self.env, &declaration.fields_at(&arguments)) {
+        for (member, type_) in labelled(self.driver, &declaration.fields_at(&arguments)) {
             self.underway
                 .push((*name, DeclaredPart::Field(member), type_.clone()));
             self.position(&type_, &params, &mut held, &mut entered)?;
@@ -272,7 +272,7 @@ impl<E: Env> Holding<'_, '_, E> {
         params: &[Free],
         held: &mut BTreeSet<usize>,
         entered: &mut HashMap<usize, Term>,
-    ) -> Result<(), Stop<E::Error>> {
+    ) -> Result<(), Stop<D::Error>> {
         recurse(|| self.position_within(type_, params, held, entered))
     }
 
@@ -282,12 +282,12 @@ impl<E: Env> Holding<'_, '_, E> {
         params: &[Free],
         held: &mut BTreeSet<usize>,
         entered: &mut HashMap<usize, Term>,
-    ) -> Result<(), Stop<E::Error>> {
+    ) -> Result<(), Stop<D::Error>> {
         if entered.insert(type_.identity(), type_.clone()).is_some() {
             return Ok(());
         }
         let type_ = match forceable(type_) {
-            true => self.env.force(type_).map_err(|error| Stop::Refused {
+            true => self.driver.force(type_).map_err(|error| Stop::Refused {
                 name: self.underway.last().expect("a walk is underway").0,
                 error,
             })?,
@@ -305,7 +305,7 @@ impl<E: Env> Holding<'_, '_, E> {
                 let mut cursor = telescope.cursor();
                 while let Some((_, component)) = cursor.entry() {
                     self.position(&component, params, held, entered)?;
-                    cursor.advance_fresh(|hint| self.env.fresh(hint));
+                    cursor.advance_fresh(|hint| self.driver.fresh(hint));
                 }
             }
             Subterm::StructType(StructType {
@@ -336,12 +336,12 @@ impl<E: Env> Holding<'_, '_, E> {
 /// Whether the struct `name` reaches itself: whether its own name is among the globals its parameters' and fields' types name, or among those the structs they name do, each declaration read once.
 ///
 /// Read off the declarations as they are stored, with nothing opened or reduced, so any mention counts and the answer errs toward yes. It follows struct declarations alone, a struct's fields being all its caller's walk opens: a path back through a definition is not seen here, and is a walk the caller's budget ends. The module documentation says why this is not the pass's own diagonal.
-pub fn struct_reaches_itself<E: Env>(env: &E, name: &Global) -> bool {
+pub fn struct_reaches_itself<D: Driver>(driver: &D, name: &Global) -> bool {
     let mut pending = vec![*name];
     let mut met = BTreeSet::new();
 
     while let Some(declared) = pending.pop() {
-        let Some(declaration) = env.struct_decl(&declared) else {
+        let Some(declaration) = driver.struct_decl(&declared) else {
             continue;
         };
 
@@ -389,14 +389,14 @@ struct Piece {
 }
 
 impl Split {
-    fn of<E: Env>(
-        env: &mut E,
+    fn of<D: Driver>(
+        driver: &mut D,
         declarations: Declarations<'_>,
         name: &Global,
-    ) -> Result<Self, E::Error> {
+    ) -> Result<Self, D::Error> {
         if let Some(declaration) = declarations.induct(name) {
-            let params = binders(env, declaration.arity());
-            let type_params = type_parameters(env, declaration.arity())?;
+            let params = binders(driver, declaration.arity());
+            let type_params = type_parameters(driver, declaration.arity())?;
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
@@ -408,7 +408,7 @@ impl Split {
             for (tag, constructor) in declaration.constructors() {
                 // The terminal is the constructed type, not a payload: it is *always* a recursive occurrence and is skipped, which `labelled` does by ignoring the telescope's `Done`.
                 let payload = constructor.open(&arguments);
-                for (member, type_) in labelled(env, &payload) {
+                for (member, type_) in labelled(driver, &payload) {
                     parts.push(Piece {
                         part: DeclaredPart::Payload {
                             constructor: tag.clone(),
@@ -429,10 +429,10 @@ impl Split {
         let declaration = declarations
             .struct_(name)
             .expect("every analyzed name is an inductive or a struct");
-        let params = binders(env, &declaration.arity);
-        let type_params = type_parameters(env, &declaration.arity)?;
+        let params = binders(driver, &declaration.arity);
+        let type_params = type_parameters(driver, &declaration.arity)?;
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
-        let parts = labelled(env, &declaration.fields_at(&arguments))
+        let parts = labelled(driver, &declaration.fields_at(&arguments))
             .into_iter()
             .map(|(member, type_)| Piece {
                 part: DeclaredPart::Field(member),
@@ -449,20 +449,20 @@ impl Split {
 }
 
 /// One fresh binder per entry of a parameter telescope, carrying the declared hints so a diagnostic reads in the user's own names.
-pub fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
+pub fn binders<D: Driver, B: Bound>(driver: &mut D, params: &Telescope<B>) -> Vec<Free> {
     params
         .labels()
         .into_iter()
         .map(|label| {
             let hint = (!label.is_empty()).then_some(label);
-            env.fresh(hint)
+            driver.fresh(hint)
         })
         .collect::<Vec<_>>()
 }
 
 /// Split an opened telescope into `(label, type)` entries, minting a fresh binder per entry so each later type holds free occurrences rather than dangling de Bruijn indices — the precondition for reducing it at all.
-pub fn labelled<E: Env, B: Bound>(
-    env: &mut E,
+pub fn labelled<D: Driver, B: Bound>(
+    driver: &mut D,
     telescope: &Telescope<B>,
 ) -> Vec<(MemberLabel, Term)> {
     let mut entries = Vec::new();
@@ -473,22 +473,22 @@ pub fn labelled<E: Env, B: Bound>(
             None => MemberLabel::Place(cursor.args().len()),
         };
         entries.push((label, type_));
-        cursor.advance_fresh(|hint| env.fresh(hint.filter(|hint| !hint.is_empty())));
+        cursor.advance_fresh(|hint| driver.fresh(hint.filter(|hint| !hint.is_empty())));
     }
     entries
 }
 
 /// One declaration's occurrences under the current parameter estimates, and the first reduction the driver refused while finding them.
-fn sweep<E: Env>(
-    env: &mut E,
+fn sweep<D: Driver>(
+    driver: &mut D,
     data: &mut Data<'_>,
     vectors: &Vectors,
     split: &Split,
-) -> (BTreeMap<Target, Polarity>, Option<E::Error>) {
+) -> (BTreeMap<Target, Polarity>, Option<D::Error>) {
     let mut found = BTreeMap::new();
     let mut refused = None;
     for part in &split.parts {
-        let mut walk = Walk::over(env, data, vectors, split);
+        let mut walk = Walk::over(driver, data, vectors, split);
         walk.walk(&part.type_, Polarity::Strict);
         for (target, polarity) in walk.found {
             found
@@ -504,11 +504,11 @@ fn sweep<E: Env>(
 /// The two fixpoints, run together over the whole declaration set to stability, then the occurrence relation closed transitively — beside the first reduction the driver refused, and the declaration whose walk it was.
 ///
 /// Whole-set rather than declaration-by-declaration because a single ordered pass gets the wrong answer twice over. `Node(V)` mentions itself, so its own vector is an input to computing it; and in the mutual pair `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is negative in `X` on the round after `B` does. Seeding at `Unused` and joining upward computes the least fixpoint, which is the right one: an inductive declaration *is* the least fixpoint of its own unfolding.
-fn fixpoint<E: Env>(
-    env: &mut E,
+fn fixpoint<D: Driver>(
+    driver: &mut D,
     data: &mut Data<'_>,
     split: &BTreeMap<Global, Split>,
-) -> (Vectors, Occurrences, Option<(Global, E::Error)>) {
+) -> (Vectors, Occurrences, Option<(Global, D::Error)>) {
     let mut vectors = Vectors {
         computed: split
             .iter()
@@ -521,7 +521,7 @@ fn fixpoint<E: Env>(
     loop {
         let mut changed = false;
         for (name, entry) in split {
-            let (found, refused) = sweep(env, data, &vectors, entry);
+            let (found, refused) = sweep(driver, data, &vectors, entry);
             if exhausted.is_none()
                 && let Some(error) = refused
             {
@@ -538,7 +538,7 @@ fn fixpoint<E: Env>(
                     Target::Decl(other) => {
                         // A family outside the set its driver has not judged is no sink: what it reaches is unread, so it is read as reaching this declaration again, at `Mixed`.
                         let (other, polarity) =
-                            match split.contains_key(&other) || env.judged(&other) {
+                            match split.contains_key(&other) || driver.judged(&other) {
                                 true => (other, polarity),
                                 false => (*name, polarity.compose(Polarity::Mixed)),
                             };
@@ -606,8 +606,8 @@ fn close(direct: &Occurrences) -> Occurrences {
 /// Runs only on the error path, which is why the fixpoint above can stay a plain polarity join with no provenance threaded through it. Re-walking one declaration part by part is cheap here and gives a message that points at real source: `Toml`, rejected through `Toml → Map → Node → Toml`, still names the `table` payload the path leaves from.
 ///
 /// Reached only when the fixpoint refused no reduction, so the verdict is the rule's. A reduction this re-walk has refused can only cost the message its part, which the fallback below covers.
-fn refusal<E: Env>(
-    env: &mut E,
+fn refusal<D: Driver>(
+    driver: &mut D,
     data: &mut Data<'_>,
     split: &BTreeMap<Global, Split>,
     vectors: &Vectors,
@@ -617,7 +617,7 @@ fn refusal<E: Env>(
 ) -> NotPositive {
     let entry = &split[name];
     for part in &entry.parts {
-        let mut walk = Walk::over(env, data, vectors, entry);
+        let mut walk = Walk::over(driver, data, vectors, entry);
         walk.walk(&part.type_, Polarity::Strict);
 
         for (target, polarity) in walk.found {
@@ -628,7 +628,7 @@ fn refusal<E: Env>(
             let back = match other == *name {
                 true => Polarity::Strict,
                 // A family outside the set its driver has not judged reaches back as the fixpoint read it.
-                false if !split.contains_key(&other) && !env.judged(&other) => Polarity::Mixed,
+                false if !split.contains_key(&other) && !driver.judged(&other) => Polarity::Mixed,
                 false => match closed.get(&other).and_then(|reached| reached.get(name)) {
                     Some(back) => *back,
                     None => continue,
@@ -692,24 +692,24 @@ type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
 /// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
 ///
-/// A name absent from the map is outside the set under analysis, and answers as its driver holds it ([`Env::polarity`]): [`Polarity::Mixed`], never `Unused`, where the driver holds no vector for it.
+/// A name absent from the map is outside the set under analysis, and answers as its driver holds it ([`Driver::polarity`]): [`Polarity::Mixed`], never `Unused`, where the driver holds no vector for it.
 #[derive(Debug)]
 struct Vectors {
     computed: BTreeMap<Global, Vec<Polarity>>,
 }
 
 impl Vectors {
-    fn at<E: Env>(&self, env: &E, name: &Global, index: usize) -> Polarity {
+    fn at<D: Driver>(&self, driver: &D, name: &Global, index: usize) -> Polarity {
         match self.computed.get(name) {
             Some(vector) => vector.get(index).copied().unwrap_or(Polarity::Mixed),
-            None => env.polarity(name, index),
+            None => driver.polarity(name, index),
         }
     }
 }
 
 /// One declaration's traversal: where it mentions its own parameters, and where it mentions other declarations.
-struct Walk<'a, 'd, E: Env> {
-    env: &'a mut E,
+struct Walk<'a, 'd, D: Driver> {
+    driver: &'a mut D,
     /// The declaration's parameter binders as this traversal opened them, in declaration order. `Target::Param(i)` is a free occurrence of `params[i]`.
     params: Vec<Free>,
     vectors: &'a Vectors,
@@ -737,7 +737,7 @@ struct Walk<'a, 'd, E: Env> {
     reading: Reading,
     found: BTreeMap<Target, Polarity>,
     /// The first reduction the driver refused on this traversal, kept for [`positivity_vectors`] to report.
-    refused: Option<E::Error>,
+    refused: Option<D::Error>,
 }
 
 /// The type each of `arguments` stands at in `telescope`, each entry instantiated at the arguments before it; `None` past the telescope's last entry.
@@ -752,21 +752,21 @@ fn along<B: Bound>(telescope: &Telescope<B>, arguments: &[Term]) -> Vec<Option<T
 }
 
 /// Whether a binder at `type_` is a type parameter: every value of it a type, or a function answering one once applied to everything it takes ([`codomain`]). A datum can apply such a value but never take apart what it answers. A tuple holding a type is none: a datum can project its other components and compute on them, as it can on a value parameter.
-fn answers_a_type<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
+fn answers_a_type<D: Driver>(driver: &mut D, type_: &Term) -> Result<bool, D::Error> {
     Ok(matches!(
-        codomain(env, type_)?.as_deref(),
+        codomain(driver, type_)?.as_deref(),
         Some(Subterm::Sort(_))
     ))
 }
 
 /// Which of a telescope's entries is a type parameter ([`answers_a_type`]): what a datum carries none of.
-fn type_parameters<E: Env, B: Bound>(
-    env: &mut E,
+fn type_parameters<D: Driver, B: Bound>(
+    driver: &mut D,
     params: &Telescope<B>,
-) -> Result<Vec<bool>, E::Error> {
-    labelled(env, params)
+) -> Result<Vec<bool>, D::Error> {
+    labelled(driver, params)
         .into_iter()
-        .map(|(_, type_)| answers_a_type(env, &type_))
+        .map(|(_, type_)| answers_a_type(driver, &type_))
         .collect()
 }
 
@@ -817,11 +817,16 @@ impl Hash for Entered {
     }
 }
 
-impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
+impl<'a, 'd, D: Driver> Walk<'a, 'd, D> {
     /// A traversal of one of `split`'s parts, with nothing found yet.
-    fn over(env: &'a mut E, data: &'a mut Data<'d>, vectors: &'a Vectors, split: &Split) -> Self {
+    fn over(
+        driver: &'a mut D,
+        data: &'a mut Data<'d>,
+        vectors: &'a Vectors,
+        split: &Split,
+    ) -> Self {
         Self {
-            env,
+            driver,
             params: split.params.clone(),
             vectors,
             type_params: split.type_params.clone(),
@@ -870,7 +875,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         if !forceable(term) {
             return (term.clone(), false);
         }
-        match self.env.force(term) {
+        match self.driver.force(term) {
             Ok(reduced) => (reduced, false),
             Err(error) => {
                 if self.refused.is_none() {
@@ -890,7 +895,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         // Each binder is fresh so what follows holds free occurrences rather than dangling indices and can be reduced; it is never assumed a type, since the walk reads structure, not sorts.
         while let Some((_, domain)) = cursor.entry() {
             self.walk(&domain, flipped);
-            cursor.advance_fresh(|hint| self.env.fresh(hint));
+            cursor.advance_fresh(|hint| self.driver.fresh(hint));
         }
         let terminal = cursor.body().expect("a cursor past every entry");
         self.walk(&terminal, polarity)
@@ -901,7 +906,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         let mut cursor = telescope.cursor();
         while let Some((_, field)) = cursor.entry() {
             self.walk(&field, polarity);
-            cursor.advance_fresh(|hint| self.env.fresh(hint));
+            cursor.advance_fresh(|hint| self.driver.fresh(hint));
         }
     }
 
@@ -914,7 +919,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         polarity: Polarity,
     ) {
         for (index, argument) in arguments.iter().enumerate() {
-            let used = self.vectors.at(self.env, name, index);
+            let used = self.vectors.at(self.driver, name, index);
             let type_ = types.get(index).and_then(Option::as_ref);
             self.value_at(argument, type_, polarity.compose(used));
         }
@@ -940,7 +945,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         };
 
         self.within(reading, |walk| {
-            let opened = opened(walk.env, matched);
+            let opened = opened(walk.driver, matched);
             for arm in &opened.arms {
                 walk.walk(arm, polarity);
             }
@@ -983,7 +988,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
 
     /// Whether `type_` is data, a reduction the classification refuses kept as the walk keeps its own.
     fn is_data(&mut self, type_: &Term) -> bool {
-        self.data.is_data(self.env, type_, &mut self.refused)
+        self.data.is_data(self.driver, type_, &mut self.refused)
     }
 
     /// The type each of a family's or record's parameters and indices stands at in this occurrence, by position, each instantiated at the arguments before it; `None` past what the entry states, or for a name with no entry. Read off the entry where it is held, the declarations analysed first.
@@ -996,7 +1001,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         let declarations = self.data.declarations();
         let induct = declarations
             .induct(name)
-            .or_else(|| self.env.induct_decl(name));
+            .or_else(|| self.driver.induct_decl(name));
         if let Some(declaration) = induct {
             return (
                 along(declaration.arity(), params),
@@ -1005,7 +1010,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         }
         let record = declarations
             .struct_(name)
-            .or_else(|| self.env.struct_decl(name));
+            .or_else(|| self.driver.struct_decl(name));
         match record {
             Some(declaration) => (along(&declaration.arity, params), Vec::new()),
             None => (vec![None; params.len()], vec![None; indices.len()]),
@@ -1067,7 +1072,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
     /// The least fixpoint of what `group`'s members' unfoldings hold ([`least_fixpoint`]): every member's body walked at `Strict` under the others' current summaries, from every parameter `Unused` and nothing found, each step's reading joined with the estimate it read under, so the estimates only climb. Each step is a traversal of its own, with every member of the group on its path, so a member it meets is read by the estimate; it tracks the member's parameters beside this traversal's targets, and reads the member's type as an annotation.
     fn summarize(&mut self, group: &RecGroup) -> Option<Vec<Summary>> {
         // A refused reduction reads the group as written, and is kept for the analysis to report.
-        match read_by_unfolding(self.env, group) {
+        match read_by_unfolding(self.driver, group) {
             Ok(true) => {}
             Ok(false) => return None,
             Err(error) => {
@@ -1078,12 +1083,12 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
         // A member's parameters are its leading lambdas', as totality counts them ([`peel`]); its type is read as an annotation.
         let members = (0..group.length())
             .map(|index| {
-                let (params, domains, body) = peel(self.env, group.member_body(index));
+                let (params, domains, body) = peel(self.driver, group.member_body(index));
                 // A refused reduction reads the binder as a value, and is kept for the analysis to report.
                 let type_params = domains
                     .iter()
                     .map(|domain| {
-                        answers_a_type(self.env, domain).unwrap_or_else(|error| {
+                        answers_a_type(self.driver, domain).unwrap_or_else(|error| {
                             self.refused.get_or_insert(error);
                             false
                         })
@@ -1121,7 +1126,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
                         .map(|(param, _)| *param),
                 );
                 let mut step = Walk {
-                    env: &mut *self.env,
+                    driver: &mut *self.driver,
                     params: self.params.clone(),
                     vectors: self.vectors,
                     type_params: self.type_params.clone(),
@@ -1197,8 +1202,8 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
                 continue;
             }
             let body = match &name {
-                Mention::Local(local) => self.env.unfold(local),
-                Mention::Declaration(declaration) => self.env.body(declaration),
+                Mention::Local(local) => self.driver.unfold(local),
+                Mention::Declaration(declaration) => self.driver.body(declaration),
             };
             let Some(body) = body.cloned() else {
                 continue;
@@ -1209,7 +1214,7 @@ impl<'a, 'd, E: Env> Walk<'a, 'd, E> {
 
     /// Where `term` mentions this walk's targets, given that `term` itself sits at `polarity`.
     ///
-    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Env::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
+    /// Depth is bought with stack, as every walk over data-shaped depth buys it: a part's reduct is descended into one level per arrow, nothing between the levels is a loop, and the budget is spent only through [`Driver::force`], where a `FuncType` is already a weak-head value. Without the bracket the native stack goes first and the process dies, which is no refusal ([The soundness board](../../documentation/design/soundness/the-soundness-board.md)).
     fn walk(&mut self, term: &Term, polarity: Polarity) {
         recurse(|| self.walk_within(term, polarity));
     }

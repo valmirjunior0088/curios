@@ -205,7 +205,7 @@ fn imported(source: &str) -> Vec<String> {
 
 #[test]
 fn a_use_names_its_functions_and_not_its_types() {
-    let source = "use {\n    super::Error,\n    curios_analysis::{Env, answers, inner::{Deep, deeper}},\n    curios_core::{Term, refold as again},\n};\n// curios_core::reduce_closed, cited\nuse curios_num::Natural;\nuse curios_core::take_looks;\nlet zero = curios_core::Level::zero();\nlet folded = curios_core::reduce_intrinsic(&zero);\n";
+    let source = "use {\n    super::Error,\n    curios_analysis::{Driver, answers, inner::{Deep, deeper}},\n    curios_core::{Term, refold as again},\n};\n// curios_core::reduce_closed, cited\nuse curios_num::Natural;\nuse curios_core::take_looks;\nlet zero = curios_core::Level::zero();\nlet folded = curios_core::reduce_intrinsic(&zero);\n";
 
     assert_eq!(
         imported(source),

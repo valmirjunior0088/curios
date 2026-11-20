@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::{test_support::*, *},
-    curios_analysis::{Env, test_support::*},
+    curios_analysis::{Driver, test_support::*},
     curios_common::fill,
     curios_core::{Reducer, Term},
 };
@@ -113,16 +113,16 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     });
 }
 
-/// A shared analysis reads a term by plain reduction, which asks the certifier's conversion nothing: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`. Totality and positivity read terms this way, and conversion's proof irrelevance is sound because acceptance waits on totality, so what totality reads may rest on no verdict of conversion's.
+/// A shared analysis reads a term by plain reduction, which asks the certifier's conversion nothing: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Driver::force`. Totality and positivity read terms this way, and conversion's proof irrelevance is sound because acceptance waits on totality, so what totality reads may rest on no verdict of conversion's.
 ///
-/// Mutation-checked: with `Env::force` reducing as a judgment does, the respelling is `true` to the analysis.
+/// Mutation-checked: with `Driver::force` reducing as a judgment does, the respelling is `true` to the analysis.
 #[test]
 fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
     let mut certifier = certifier();
     let [guard, respelled] = asked(&mut certifier, "");
 
     guarded(&mut certifier, &guard, |certifier| {
-        let read = Env::force(certifier, &respelled).expect("reduces");
+        let read = Driver::force(certifier, &respelled).expect("reduces");
         assert_eq!(read.as_bool(), None);
         assert_eq!(
             certifier.reduce(respelled).expect("reduces").as_bool(),
@@ -147,7 +147,7 @@ fn a_reduct_is_remembered_by_the_reduction_that_took_it() {
                 .as_bool()
         };
         let read = |certifier: &mut Certifier| {
-            Env::force(certifier, &respelled)
+            Driver::force(certifier, &respelled)
                 .expect("reduces")
                 .as_bool()
         };
@@ -319,8 +319,9 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
                 .expect("reduces")
                 .as_bool()
         };
-        let read =
-            |certifier: &mut Certifier| Env::force(certifier, &probe).expect("reduces").as_bool();
+        let read = |certifier: &mut Certifier| {
+            Driver::force(certifier, &probe).expect("reduces").as_bool()
+        };
         let both = |certifier: &mut Certifier,
                     inside: &dyn Fn(&mut Certifier) -> [Option<bool>; 2]| {
             guarded(certifier, &guard, |certifier| {
@@ -348,7 +349,7 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
 
 /// A stuck fold is taken again over the atoms the certifier's own conversion holds one: an equality, an ordering and a truncated difference over `f(a + b)` and `f(b + a)` are decided, where a fold that pairs atoms by identity left each stuck and conversion was no congruence under it. The control is a call on another argument, and a fold that decides no more is left as plain reduction spells it, with nothing respelled written back.
 ///
-/// Plain reduction takes no fold again, which the reading through `Env::force` holds after the judgment's own reduct is remembered. `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
+/// Plain reduction takes no fold again, which the reading through `Driver::force` holds after the judgment's own reduct is remembered. `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
 #[test]
 fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     let mut certifier = certifier();
@@ -375,14 +376,14 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     assert_eq!(certifier.reduce(other).expect("reduces").as_bool(), None);
 
     assert_eq!(
-        Env::force(&mut certifier, &equal)
+        Driver::force(&mut certifier, &equal)
             .expect("reduces")
             .as_bool(),
         None,
         "plain reduction takes no fold again"
     );
 
-    let plain = Env::force(&mut certifier, &undecided).expect("reduces");
+    let plain = Driver::force(&mut certifier, &undecided).expect("reduces");
     assert_eq!(certifier.reduce(undecided), Ok(plain));
 }
 
@@ -439,7 +440,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
         let arm = certifier.reduce(decided.clone()).expect("reduces");
         assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
         assert_eq!(
-            Env::force(&mut certifier, decided),
+            Driver::force(&mut certifier, decided),
             Ok(arm),
             "plain reduction takes the arm too"
         );
@@ -477,7 +478,7 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
     );
 
     assert_eq!(certifier.reduce(classed.clone()), Ok(term("2")));
-    let plain = Env::force(&mut certifier, &classed).expect("reduces");
+    let plain = Driver::force(&mut certifier, &classed).expect("reduces");
     assert!(
         plain.as_nat().is_none(),
         "plain reduction classed {classed:?}"

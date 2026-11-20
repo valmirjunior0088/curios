@@ -270,9 +270,9 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     });
 }
 
-/// A shared analysis reads a term by plain reduction, which asks the elaborator's conversion nothing, in either order the two reductions are taken in: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`, so totality rests on no verdict of conversion's, and a reduct one of the two filed does not answer the other. The certifier's `whnf::question_tests` holds the first half under this name.
+/// A shared analysis reads a term by plain reduction, which asks the elaborator's conversion nothing, in either order the two reductions are taken in: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Driver::force`, so totality rests on no verdict of conversion's, and a reduct one of the two filed does not answer the other. The certifier's `whnf::question_tests` holds the first half under this name.
 ///
-/// Mutation-checked: with `Env::force` reducing as a judgment does the respelling is `true` to the analysis, and with the judgment's reduction table read whichever reduction asks, the judgment's `true` answers the analysis in the first order.
+/// Mutation-checked: with `Driver::force` reducing as a judgment does the respelling is `true` to the analysis, and with the judgment's reduction table read whichever reduction asks, the judgment's `true` answers the analysis in the first order.
 #[test]
 fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
     let mut context = context();
@@ -280,7 +280,7 @@ fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
     let judged =
         |context: &mut Context| reduce(context, asked.respelled()).map(|reduct| reduct.as_bool());
     let read = |context: &mut Context| {
-        curios_analysis::Env::force(context, &asked.respelled())
+        curios_analysis::Driver::force(context, &asked.respelled())
             .ok()
             .map(|reduct| reduct.as_bool())
     };
@@ -447,7 +447,7 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
     let judged =
         |context: &mut Context| reduce(context, probe.clone()).map(|reduct| reduct.as_bool());
     let read = |context: &mut Context| {
-        curios_analysis::Env::force(context, &probe)
+        curios_analysis::Driver::force(context, &probe)
             .ok()
             .map(|reduct| reduct.as_bool())
     };
@@ -497,7 +497,7 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     ));
     assert_eq!(decided(&mut context, other), Ok(None));
 
-    let read = curios_analysis::Env::force(&mut context, &equal).ok();
+    let read = curios_analysis::Driver::force(&mut context, &equal).ok();
     assert_eq!(
         read.map(|reduct| reduct.as_bool()),
         Some(None),
@@ -508,7 +508,7 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
         left,
         Term::intrinsic(Intrinsic::NatMul(right, Term::free_var(&asked.c))),
     ));
-    let plain = curios_analysis::Env::force(&mut context, &undecided).ok();
+    let plain = curios_analysis::Driver::force(&mut context, &undecided).ok();
     assert_eq!(reduce(&mut context, undecided).ok(), plain);
     assert!(plain.is_some());
 }
@@ -576,7 +576,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
         let arm = reduce(&mut context, decided.clone()).expect("reduces");
         assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
         assert_eq!(
-            curios_analysis::Env::force(&mut context, decided).ok(),
+            curios_analysis::Driver::force(&mut context, decided).ok(),
             Some(arm),
             "plain reduction takes the arm too"
         );
@@ -620,7 +620,7 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
 
     let classed = on(asked.call(&asked.b, &asked.a));
     assert_eq!(reduce(&mut context, classed.clone()), Ok(nat(2)));
-    let plain = curios_analysis::Env::force(&mut context, &classed).ok();
+    let plain = curios_analysis::Driver::force(&mut context, &classed).ok();
     assert!(
         plain.as_ref().is_some_and(|plain| plain.as_nat().is_none()),
         "plain reduction classed {classed:?}"

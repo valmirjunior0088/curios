@@ -4,7 +4,7 @@
 //!
 //! **A door keeps the name and the signature it had**, so typing, erasure's [`Reader`](super::Reader), the suites and the crates that call the certifier read the same functions. Where a door and its walk share a name, the walk's entry is the reading's method of that name.
 //!
-//! **A shared trait is implemented on both sides of the doors.** Shared reduction and the shared analyses call back through `Reducer`, `ClosedHost`, `Driver` and `Env`: for a reading they trust what they are handed, which the walk that called them built from what it was handed; for the certifier they are doors. Which applies is the receiver the shared code was handed.
+//! **A shared trait is implemented on both sides of the doors.** Shared reduction and the shared analyses call back through `Reducer`, `ClosedHost`, `IntrinsicDriver` and `Driver`: for a reading they trust what they are handed, which the walk that called them built from what it was handed; for the certifier they are doors. Which applies is the receiver the shared code was handed.
 //!
 //! Why the rule is held this way, and what the peers do, is the crate README's decision, *A `let` is bound for typing and read by value*.
 
@@ -13,7 +13,7 @@ mod test_support;
 
 use {
     super::{Certifier, Converted, Error, Sort, canonical_operands, resolved_spelling},
-    curios_analysis::{Classification, Env, Erased},
+    curios_analysis::{Classification, Driver, Erased},
     curios_core::{
         Advance, Applications, ClosedMemo, Cost, Free, Global, InductDecl, Intrinsic, Polarity,
         Probe, ReduceError, Reducer, StructDecl, Subterm, Term, Variance,
@@ -48,7 +48,7 @@ impl<'s> Certifier<'s> {
         self.read_unfolded(terms, read)
     }
 
-    /// Read `terms` as a graded call reads them ([`Certifier::graded`]): unfolded as [`Certifier::read_by_value`] unfolds them, but for a variable an arm's index inversion solved, which stands as written, so the size order reads nothing an inversion concluded. The size order's door ([`Env::force_graded`]).
+    /// Read `terms` as a graded call reads them ([`Certifier::graded`]): unfolded as [`Certifier::read_by_value`] unfolds them, but for a variable an arm's index inversion solved, which stands as written, so the size order reads nothing an inversion concluded. The size order's door ([`Driver::force_graded`]).
     fn read_graded<const N: usize, T>(
         &mut self,
         terms: [&Term; N],
@@ -208,7 +208,7 @@ impl ByValue<'_, '_> {
 
     /// Run `read` with reduction plain: it asks the certifier's conversion nothing, at a stuck fold, at a missed equation, at a stuck elimination's atoms or at a one-arm match of a proposition.
     ///
-    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance is sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
+    /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Driver::force`): conversion's proof irrelevance is sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
     ///
     /// **Each of the two reductions keeps its own answers.** A local-bearing reduct is remembered by the reduction that took it, and so are a sort and a comparison's verdict, which are read through reducts (`Memos`); an equation's reduced spelling is settled once for each. So what plain reduction made of a term never answers for a judgment's, nor the other way, and no answer depends on which of the two asked first.
     ///
@@ -438,7 +438,7 @@ impl ByValue<'_, '_> {
 }
 
 /// What a shared analysis a reading started may ask of it: the certifier's answers, and reduction that trusts what it is handed.
-impl Env for ByValue<'_, '_> {
+impl Driver for ByValue<'_, '_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks, over this reading.
@@ -447,11 +447,11 @@ impl Env for ByValue<'_, '_> {
     }
 
     fn assumption(&self, name: &Free) -> Option<&Term> {
-        Env::assumption(&**self, name)
+        Driver::assumption(&**self, name)
     }
 
     fn is_local(&self, name: &Free) -> bool {
-        Env::is_local(&**self, name)
+        Driver::is_local(&**self, name)
     }
 
     fn fresh(&mut self, hint: Option<&str>) -> Free {
@@ -459,44 +459,44 @@ impl Env for ByValue<'_, '_> {
     }
 
     fn unfold(&self, name: &Free) -> Option<&Term> {
-        Env::unfold(&**self, name)
+        Driver::unfold(&**self, name)
     }
 
     fn body(&self, name: &Global) -> Option<&Term> {
-        Env::body(&**self, name)
+        Driver::body(&**self, name)
     }
 
     fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
-        Env::induct_decl(&**self, name)
+        Driver::induct_decl(&**self, name)
     }
 
     fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
-        Env::struct_decl(&**self, name)
+        Driver::struct_decl(&**self, name)
     }
 
     fn polarity(&self, name: &Global, index: usize) -> Polarity {
-        Env::polarity(&**self, name, index)
+        Driver::polarity(&**self, name, index)
     }
 
     fn judged(&self, name: &Global) -> bool {
-        Env::judged(&**self, name)
+        Driver::judged(&**self, name)
     }
 
     fn variance(&self, name: &Global, index: usize) -> Variance {
-        Env::variance(&**self, name, index)
+        Driver::variance(&**self, name, index)
     }
 
     fn applications(&self, name: &Global) -> Option<Applications> {
-        Env::applications(&**self, name)
+        Driver::applications(&**self, name)
     }
 
     fn refined(&self) -> Vec<(Term, Term)> {
-        Env::refined(&**self)
+        Driver::refined(&**self)
     }
 }
 
 /// The certifier's side of the shared-analysis seam, for an analysis typing started: its reduction a door ([`ByValue`]).
-impl Env for Certifier<'_> {
+impl Driver for Certifier<'_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the certifier's conversion through the term it reads. A door, so the term is read by value, in a reading whose reduction is plain.

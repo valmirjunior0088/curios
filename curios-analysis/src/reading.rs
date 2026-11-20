@@ -3,7 +3,7 @@
 //! Every instance of a `match` reduces it to one of its arms, whose binders the head supplies — or, where definitional K selects a proposition's sole arm, the instance the `match` states — so the arms opened against fresh binders, beside what supplies their binders, bound every reduct. The goal and a list's element type stand in no reduct: an instance that reduces the `match` drops both. Strict positivity and variance read the same parts and record different things of them, so the parts are told apart here and what each walk records stays in that walk.
 
 use {
-    crate::{Env, group_totality},
+    crate::{Driver, group_totality},
     curios_core::{Arity, Carrier, Cases, Match, RecGroup, Scope, Term},
 };
 
@@ -19,10 +19,10 @@ pub struct Opened {
     pub annotations: Vec<Term>,
 }
 
-/// `matched`'s parts, each arm opened against binders minted by `env`.
+/// `matched`'s parts, each arm opened against binders minted by `driver`.
 ///
 /// Read only where the `match` stands under no binder the walk has not opened, so what an arm holds can be forced: one with a dangling index is read as written, as every form that cannot be seen through is.
-pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
+pub fn opened<D: Driver>(driver: &mut D, matched: &Match) -> Opened {
     let mut opened = Opened {
         arms: Vec::new(),
         reads_a_binder: false,
@@ -48,7 +48,7 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
                 opened.reads_a_binder |= (0..arm.arity()).any(|index| arm.body().uses(index));
                 let binders = arm
                     .hint_iter()
-                    .map(|hint| Term::free_var(&env.fresh(hint)))
+                    .map(|hint| Term::free_var(&driver.fresh(hint)))
                     .collect::<Vec<_>>();
                 opened
                     .arms
@@ -63,7 +63,7 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
                 cons_case,
             } => {
                 opened.reads_a_binder |= cons_case.uses(0);
-                let predecessor = fresh(env, cons_case, 0);
+                let predecessor = fresh(driver, cons_case, 0);
                 opened.arms.push(empty_case.clone());
                 opened.arms.push(cons_case.open(&[&predecessor]));
             }
@@ -72,7 +72,7 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
                 cons_case,
             } => {
                 opened.reads_a_binder |= cons_case.uses(0) || cons_case.uses(1);
-                let (head, tail) = (fresh(env, cons_case, 0), fresh(env, cons_case, 1));
+                let (head, tail) = (fresh(driver, cons_case, 0), fresh(driver, cons_case, 1));
                 opened.arms.push(empty_case.clone());
                 opened.arms.push(cons_case.open(&[&head, &tail]));
             }
@@ -82,7 +82,7 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
                 cons_case,
             } => {
                 opened.reads_a_binder |= cons_case.uses(0) || cons_case.uses(1);
-                let (head, tail) = (fresh(env, cons_case, 0), fresh(env, cons_case, 1));
+                let (head, tail) = (fresh(driver, cons_case, 0), fresh(driver, cons_case, 1));
                 opened.arms.push(empty_case.clone());
                 opened.arms.push(cons_case.open(&[&head, &tail]));
                 opened.annotations.push(elem.clone());
@@ -94,13 +94,13 @@ pub fn opened<E: Env>(env: &mut E, matched: &Match) -> Opened {
 }
 
 /// A fresh binder for the scope's binder at `index`, rendering as the hint it was written under.
-fn fresh<E: Env, A: Arity>(env: &mut E, scope: &Scope<A>, index: usize) -> Term {
-    Term::free_var(&env.fresh(scope.hint(index)))
+fn fresh<D: Driver, A: Arity>(driver: &mut D, scope: &Scope<A>, index: usize) -> Term {
+    Term::free_var(&driver.fresh(scope.hint(index)))
 }
 
 /// Whether a walk reads `group` by the least fixpoint of its unfolding: only where the group terminates ([`group_totality`]). Both checkers unfold only what terminates (`known_to_terminate`), and a walk opening a group that may not would spend its declaration's budget on an unfolding neither checker makes, before the declaration is refused for reaching it; such a group is read as written, as every form a walk cannot see through is. A reduction refused while deciding is the caller's to keep.
-pub fn read_by_unfolding<E: Env>(env: &mut E, group: &RecGroup) -> Result<bool, E::Error> {
-    Ok(group_totality(env, group)?.is_total())
+pub fn read_by_unfolding<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<bool, D::Error> {
+    Ok(group_totality(driver, group)?.is_total())
 }
 
 /// The least fixpoint of `step` from `seed`: `step` applied to its own result until it hands back what it was given. A walk reading a recursive group by its unfolding climbs a finite lattice from its bottom, joining each step's reading with the estimate it read under, so the loop ends.

@@ -5,7 +5,7 @@
 //! A family's answer is computed once an analysis, as the parameters that must be data for its payloads to be: a payload naming no parameter is data or not whatever the arguments, and one naming a parameter as a type asks that parameter's argument. A family met again while its own answer is being computed is taken to need every parameter, which can only answer no where the answer was yes: `Mix(T) | base(x: T) | step(y: Mix(Type))` holds a type at `step(base(Nat))`, and taken to need none of its parameters on the way round it would be data at `Mix(Nat)`.
 
 use {
-    crate::{Declarations, Env, binders, forceable, labelled},
+    crate::{Declarations, Driver, binders, forceable, labelled},
     curios_core::{
         Advance, Free, FuncType, Global, InductType, Intrinsic, StructType, Subterm, Term,
         TupleType,
@@ -58,14 +58,14 @@ impl<'d> Data<'d> {
     }
 
     /// Whether `type_` is data. A reduction the driver refuses answers no, and is kept in `refused` for the analysis to report.
-    pub fn is_data<E: Env>(
+    pub fn is_data<D: Driver>(
         &mut self,
-        env: &mut E,
+        driver: &mut D,
         type_: &Term,
-        refused: &mut Option<E::Error>,
+        refused: &mut Option<D::Error>,
     ) -> bool {
         let mut reading = Reading {
-            env,
+            driver,
             data: self,
             placeholders: Vec::new(),
             refused,
@@ -75,18 +75,18 @@ impl<'d> Data<'d> {
 }
 
 /// One question put to the classification: the variables standing for the parameters of the family being classified, by position.
-struct Reading<'a, 'd, E: Env> {
-    env: &'a mut E,
+struct Reading<'a, 'd, D: Driver> {
+    driver: &'a mut D,
     data: &'a mut Data<'d>,
     placeholders: Vec<Free>,
-    refused: &'a mut Option<E::Error>,
+    refused: &'a mut Option<D::Error>,
 }
 
-impl<E: Env> Reading<'_, '_, E> {
+impl<D: Driver> Reading<'_, '_, D> {
     fn need(&mut self, type_: &Term) -> Need {
         let type_ = match forceable(type_) {
             false => type_.clone(),
-            true => match self.env.force(type_) {
+            true => match self.driver.force(type_) {
                 Ok(reduced) => reduced,
                 Err(error) => {
                     self.refused.get_or_insert(error);
@@ -121,7 +121,7 @@ impl<E: Env> Reading<'_, '_, E> {
                 let mut cursor = telescope.cursor();
                 while let Some((_, domain)) = cursor.entry() {
                     need = need.join(self.need(&domain));
-                    cursor.advance_fresh(|hint| self.env.fresh(hint));
+                    cursor.advance_fresh(|hint| self.driver.fresh(hint));
                 }
                 let codomain = cursor.body().expect("a cursor past every entry");
                 need.join(self.need(&codomain))
@@ -131,7 +131,7 @@ impl<E: Env> Reading<'_, '_, E> {
                 let mut cursor = telescope.cursor();
                 while let Some((_, field)) = cursor.entry() {
                     need = need.join(self.need(&field));
-                    cursor.advance_fresh(|hint| self.env.fresh(hint));
+                    cursor.advance_fresh(|hint| self.driver.fresh(hint));
                 }
                 need
             }
@@ -164,7 +164,7 @@ impl<E: Env> Reading<'_, '_, E> {
             return answer.clone();
         }
         if self.data.pending.contains(name) {
-            let count = match (self.env.induct_decl(name), self.env.struct_decl(name)) {
+            let count = match (self.driver.induct_decl(name), self.driver.struct_decl(name)) {
                 (Some(declaration), _) => declaration.arity().len(),
                 (None, Some(declaration)) => declaration.arity.len(),
                 (None, None) => return None,
@@ -172,16 +172,17 @@ impl<E: Env> Reading<'_, '_, E> {
             return Some((0..count).collect());
         }
 
-        let (arity, payloads) = match (self.env.induct_decl(name), self.env.struct_decl(name)) {
+        let (arity, payloads) = match (self.driver.induct_decl(name), self.driver.struct_decl(name))
+        {
             (Some(declaration), _) => {
                 let declaration = declaration.clone();
-                let params = binders(self.env, declaration.arity());
+                let params = binders(self.driver, declaration.arity());
                 let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
                 let mut payloads = Vec::new();
                 for (_, constructor) in declaration.constructors() {
                     let payload = constructor.open(&arguments);
                     payloads.extend(
-                        labelled(self.env, &payload)
+                        labelled(self.driver, &payload)
                             .into_iter()
                             .map(|(_, type_)| type_),
                     );
@@ -190,9 +191,9 @@ impl<E: Env> Reading<'_, '_, E> {
             }
             (None, Some(declaration)) => {
                 let declaration = declaration.clone();
-                let params = binders(self.env, &declaration.arity);
+                let params = binders(self.driver, &declaration.arity);
                 let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
-                let payloads = labelled(self.env, &declaration.fields_at(&arguments))
+                let payloads = labelled(self.driver, &declaration.fields_at(&arguments))
                     .into_iter()
                     .map(|(_, type_)| type_)
                     .collect();

@@ -353,7 +353,7 @@ impl<'s> Context<'s> {
         let solution = [(*name, value.clone())];
         // Each read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable. A member of a group being checked is defined as its slot, which zonk spells as the member, so a slot reduction reads through — its member known to terminate — is read through here too, its body naming the locals the group captured.
         let reads = |local: &Free| -> Vec<Term> {
-            if !curios_analysis::Env::is_local(self, local) {
+            if !curios_analysis::Driver::is_local(self, local) {
                 return Vec::new();
             }
             let member = self.definition_body(local).and_then(|body| match &**body {
@@ -564,7 +564,7 @@ impl<'s> Context<'s> {
         self.typing.frames.scrutinee_equations()
     }
 
-    /// What the arms in force refine, each as a term naming the refined term's locals beside its value: each variable an arm refines, each projection by the term it projects, and each scrutinee equation in force under its key and its unerased spelling ([`curios_analysis::Env::refined`]).
+    /// What the arms in force refine, each as a term naming the refined term's locals beside its value: each variable an arm refines, each projection by the term it projects, and each scrutinee equation in force under its key and its unerased spelling ([`curios_analysis::Driver::refined`]).
     pub(crate) fn in_force_refinements(&self) -> Vec<(Term, Term)> {
         let frames = &self.typing.frames;
         let variables = frames

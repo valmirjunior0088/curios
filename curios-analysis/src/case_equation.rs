@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        Classes, Driver, Invert, Judge, atoms_in, atoms_of, classable, classed, classed_in,
-        intrinsics_agree, invert_indices,
+        Classes, IntrinsicDriver, Invert, Judge, atoms_in, atoms_of, classable, classed,
+        classed_in, intrinsics_agree, invert_indices,
     },
     curios_algebra::{Carrier, Operation},
     curios_common::SyntaxRegistry,
@@ -215,7 +215,7 @@ pub enum Answered {
 ///
 /// **Only two terms of one kind are put to the readers.** The chain is written for the two sides of one comparison, which have one type, and a lookup presents whatever stuck form reduction reached: a pair is read only where both produce a `Bool` or both produce a value of one carrier.
 pub fn answers(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     term: &Term,
     key: &Term,
     value: &Term,
@@ -262,7 +262,7 @@ pub fn answers(
 ///
 /// The classed spellings are read as they stand, as the pair was: each is the term it was built from with atoms replaced by reduced terms they convert with.
 pub fn answers_classed(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     term: &Term,
     key: &Term,
     value: &Term,
@@ -292,7 +292,7 @@ pub fn answers_classed(
 
 /// The value the readers give `this` against `that`, an equation's key assumed to be `value`: `value` where they hold the two equal outright, and where `value` is a `Bool`, its negation where they hold `this` equal to `negated`, the key negated.
 fn decided(
-    driver: &mut impl Driver,
+    driver: &mut impl IntrinsicDriver,
     this: &Intrinsic,
     that: &Intrinsic,
     negated: &Term,
@@ -335,7 +335,7 @@ fn produces(intrinsic: &Intrinsic) -> Option<Carrier> {
 /// A driver that takes every term as reduced already: asked to reduce one it hands it back, and what the readers build is still charged to the checker's own driver.
 struct Reduced<'a, D>(&'a mut D);
 
-impl<D: Driver> Reducer for Reduced<'_, D> {
+impl<D: IntrinsicDriver> Reducer for Reduced<'_, D> {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         Ok(term)
     }
@@ -353,7 +353,7 @@ impl<D: Driver> Reducer for Reduced<'_, D> {
     }
 }
 
-impl<D: Driver> Driver for Reduced<'_, D> {
+impl<D: IntrinsicDriver> IntrinsicDriver for Reduced<'_, D> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         self.0.prepare(intrinsic)
     }

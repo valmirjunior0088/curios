@@ -855,7 +855,7 @@ fn define_guard(certifier: &mut Certifier, guard: &Global, defined: bool) {
     .expect("a name is declared once");
 }
 
-/// A payload type reduction cannot fire is read as the arms it reduces to at every instance: `Bad`'s constructor takes `match g | false => Nat | true => … end`, and with `g` a `Bool` the certifier holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. Each arm is read where the match stands, so an arm holding `Bad` strictly admits the set and one holding it left of an arrow refuses it by the rule — not for the budget, a stuck reduction being no refusal. Defined as `true`, `g` fires the match to that arm, read the same way.
+/// A payload type reduction cannot fire is read as the arms it reduces to at every instance: `Bad`'s constructor takes `match g | false => Nat | true => … end`, and with `g` a `Bool` the certifier holds no value for, the match is stuck on a neutral and `Driver::force` hands it back as it stands. Each arm is read where the match stands, so an arm holding `Bad` strictly admits the set and one holding it left of an arrow refuses it by the rule — not for the budget, a stuck reduction being no refusal. Defined as `true`, `g` fires the match to that arm, read the same way.
 #[test]
 fn a_payload_stuck_on_a_neutral_is_read_through_its_arms() {
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
@@ -904,7 +904,7 @@ fn a_payload_stuck_on_a_neutral_is_read_through_its_arms() {
     }
 }
 
-/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the certifier holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Env::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
+/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the certifier holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Driver::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
 #[test]
 fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     let name = Global::Authored(Qualifier::from(["T"]));

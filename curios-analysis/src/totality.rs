@@ -12,7 +12,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The certifier's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
+//! Both checkers run *this* engine, through [`Driver`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The certifier's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
 //!
 //! # Discovery, grading, and closure are three things
 //!
@@ -44,7 +44,7 @@ pub use grade::{
 mod tests;
 
 use {
-    crate::Env,
+    crate::Driver,
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
@@ -62,9 +62,9 @@ use {
 /// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
 ///
 /// This is the whole of size-change termination as the elaborator applies it: collect one matrix per call site, close them under composition, and demand a decrease on the diagonal of every idempotent result — [`decide`]. A group with no recursive call at all closes to nothing and is accepted, which is how the prelude's call-free `; ih` folds pass — their recursion is the intrinsic eliminator's, already structural by construction.
-pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality, E::Error> {
+pub fn group_totality<D: Driver>(driver: &mut D, group: &RecGroup) -> Result<Totality, D::Error> {
     curios_profile::profile!("group_totality");
-    let parts = open_parts(env, group);
+    let parts = open_parts(driver, group);
     let shapes = parts
         .iter()
         .map(|part| part.shape.clone())
@@ -74,7 +74,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality,
     let mut calls = Vec::new();
     for (index, part) in parts.iter().enumerate() {
         let mut walk = Walk {
-            env,
+            driver,
             group: Some(group),
             parts: &shapes,
             arities: &arities,
@@ -99,25 +99,25 @@ const APPLICATIONS_LIMIT: usize = 64;
 /// How each part of each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no part uses otherwise than as the head of an application, a field of it applied, or handed on unchanged — at that position to a member taking a parameter there, or to a definition whose summary applies what it is handed — every application of it the part makes, graded against the part's parameters, and every one reached through a path of the group's calls, graded through the path. A member's leading lambdas are one part, and each field lambda of the record under them another ([`PartShape`]), over the member's parameters and then its own; a member's parameter a field lambda applies is applied wherever the field is called, so the leading lambdas' summary states nothing of it and the field's does.
 ///
 /// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to a definition that states nothing of it, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every part, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
-pub fn group_applications<E: Env>(
-    env: &mut E,
+pub fn group_applications<D: Driver>(
+    driver: &mut D,
     group: &RecGroup,
-) -> Result<Vec<Applications>, E::Error> {
+) -> Result<Vec<Applications>, D::Error> {
     curios_profile::profile!("group_applications");
-    let parts = open_parts(env, group);
-    summaries(env, Some(group), parts, group.length())
+    let parts = open_parts(driver, group);
+    summaries(driver, Some(group), parts, group.length())
 }
 
 /// How a definition that is no recursive group applies its parameters, as [`group_applications`] reads a member's: `None` where it applies none, and where no parameter of its leading lambdas is of a type that is applied or projected, whose body is not walked.
-pub fn definition_applications<E: Env>(
-    env: &mut E,
+pub fn definition_applications<D: Driver>(
+    driver: &mut D,
     body: &Term,
-) -> Result<Option<Applications>, E::Error> {
+) -> Result<Option<Applications>, D::Error> {
     curios_profile::profile!("definition_applications");
-    let Some(parts) = open_definition(env, body)? else {
+    let Some(parts) = open_definition(driver, body)? else {
         return Ok(None);
     };
-    let applications = summaries(env, None, parts, 1)?;
+    let applications = summaries(driver, None, parts, 1)?;
     Ok(applications
         .into_iter()
         .next()
@@ -125,12 +125,12 @@ pub fn definition_applications<E: Env>(
 }
 
 /// The summaries of `members` members whose parts are `parts`, walked as parts of `group` where there is one, and as parts of no group otherwise ([`group_applications`]).
-fn summaries<E: Env>(
-    env: &mut E,
+fn summaries<D: Driver>(
+    driver: &mut D,
     group: Option<&RecGroup>,
     parts: Vec<Part>,
     members: usize,
-) -> Result<Vec<Applications>, E::Error> {
+) -> Result<Vec<Applications>, D::Error> {
     let shapes = parts
         .iter()
         .map(|part| part.shape.clone())
@@ -141,7 +141,7 @@ fn summaries<E: Env>(
     let mut uses = Vec::new();
     for (index, part) in parts.iter().enumerate() {
         let mut walk = Walk {
-            env,
+            driver,
             group,
             parts: &shapes,
             arities: &arities,
@@ -328,8 +328,8 @@ pub fn decide(calls: Vec<Call>) -> Totality {
 }
 
 /// One member body's traversal: it finds the recursive calls, and has [`grade()`] grade each under the context its arms built.
-struct Walk<'a, E: Env> {
-    env: &'a mut E,
+struct Walk<'a, D: Driver> {
+    driver: &'a mut D,
     /// The group whose members the walk reads as callees, and none where it walks a definition that is no group, whose calls are all of other declarations.
     group: Option<&'a RecGroup>,
     /// The group's parts, which a call's path is read against ([`part_calls`]).
@@ -350,11 +350,11 @@ struct Walk<'a, E: Env> {
     tracked: Option<Tracked>,
 }
 
-impl<E: Env> Walk<'_, E> {
+impl<D: Driver> Walk<'_, D> {
     /// Record a call to member `callee` with `arguments`, graded against the caller's parameters under what the enclosing arms established.
-    fn call(&mut self, callee: usize, arguments: &[Term]) -> Result<(), E::Error> {
+    fn call(&mut self, callee: usize, arguments: &[Term]) -> Result<(), D::Error> {
         let call = grade(
-            self.env,
+            self.driver,
             &self.context,
             self.caller,
             self.params,
@@ -392,9 +392,9 @@ impl<E: Env> Walk<'_, E> {
         position: usize,
         path: Option<Vec<usize>>,
         arguments: &[Term],
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let graded = grade(
-            self.env,
+            self.driver,
             &self.context,
             self.caller,
             self.params,
@@ -412,9 +412,9 @@ impl<E: Env> Walk<'_, E> {
         position: usize,
         list: &Term,
         arity: usize,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let graded = grade(
-            self.env,
+            self.driver,
             &self.context,
             self.caller,
             self.params,
@@ -454,12 +454,12 @@ impl<E: Env> Walk<'_, E> {
         &mut self,
         telescope: Telescope<Term>,
         handed: &[CallMatrix],
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let mut cursor = telescope.cursor();
         let mut binders = Vec::new();
         while let Some((_, entry)) = cursor.entry() {
             self.walk_term(&entry)?;
-            binders.push(cursor.advance_fresh(|hint| self.env.fresh(hint)));
+            binders.push(cursor.advance_fresh(|hint| self.driver.fresh(hint)));
         }
         let body = cursor.body().expect("a cursor past every entry");
         self.context
@@ -474,7 +474,7 @@ impl<E: Env> Walk<'_, E> {
         &mut self,
         argument: &Term,
         applied: Option<&Applied>,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let Some(applied) = applied.filter(|applied| !applied.is_empty()) else {
             return self.walk_term(argument);
         };
@@ -519,7 +519,7 @@ impl<E: Env> Walk<'_, E> {
             0 => None,
             count if count == self.arities[base] => Some(
                 grade(
-                    self.env,
+                    self.driver,
                     &self.context,
                     self.caller,
                     self.params,
@@ -543,7 +543,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Walk a record literal's fields where a callee applies the record as `applied` grades, each handed what its own path is applied with.
-    fn walk_fields(&mut self, fields: &[Term], applied: &Applied) -> Result<(), E::Error> {
+    fn walk_fields(&mut self, fields: &[Term], applied: &Applied) -> Result<(), D::Error> {
         for (slot, field) in fields.iter().enumerate() {
             self.walk_argument(field, Some(&applied.field(slot)))?;
         }
@@ -551,14 +551,14 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// The reader of terms as sizes, under the context this walk has built so far.
-    fn grader(&mut self) -> Grader<'_, E> {
-        Grader::new(self.env, &self.context)
+    fn grader(&mut self) -> Grader<'_, D> {
+        Grader::new(self.driver, &self.context)
     }
 
     /// One fresh binder per position of a scope, carrying the written hints so a shape reads in the user's own names.
     fn binders<A: Arity>(&mut self, scope: &Scope<A>) -> Vec<Free> {
         (0..scope.arity())
-            .map(|index| self.env.fresh(scope.hint(index)))
+            .map(|index| self.driver.fresh(scope.hint(index)))
             .collect()
     }
 
@@ -592,7 +592,7 @@ impl<E: Env> Walk<'_, E> {
     /// Find the recursive calls in `body`, tracking the refinements that make their arguments comparable.
     ///
     /// Scope discipline holds by construction: an arm's refinement is taken on by [`Walk::scoped`], which walks the body and puts it back, so no path can drop a refinement or carry one out.
-    fn walk(&mut self, runs: &[Term]) -> Result<(), E::Error> {
+    fn walk(&mut self, runs: &[Term]) -> Result<(), D::Error> {
         self.walks(runs)?;
 
         assert!(
@@ -606,8 +606,8 @@ impl<E: Env> Walk<'_, E> {
     ///
     /// Guarded by [`recurse`] because a member body nests as deep as the source that spelled it, and a generated term is bounded by nothing this analysis controls.
     ///
-    /// **Arms are reached one at a time, and that is what makes this walk faithful.** Every arm's guard read, shape read, binder minting and body materialization happens in the arm's own call, never batched ahead of it — because those are effects on the checker driving the analysis: [`Env::force`] spends a reduction budget and [`Env::fresh`] mints an identity, so the order the arms are reached in *is* the order those effects land in. A differently-ordered spend against a nearly exhausted budget reads a different shape, which would be a verdict change with no cause in the term. The recursion gives that ordering.
-    fn walk_term(&mut self, term: &Term) -> Result<(), E::Error> {
+    /// **Arms are reached one at a time, and that is what makes this walk faithful.** Every arm's guard read, shape read, binder minting and body materialization happens in the arm's own call, never batched ahead of it — because those are effects on the checker driving the analysis: [`Driver::force`] spends a reduction budget and [`Driver::fresh`] mints an identity, so the order the arms are reached in *is* the order those effects land in. A differently-ordered spend against a nearly exhausted budget reads a different shape, which would be a verdict change with no cause in the term. The recursion gives that ordering.
+    fn walk_term(&mut self, term: &Term) -> Result<(), D::Error> {
         recurse(|| self.step(term))
     }
 
@@ -618,7 +618,7 @@ impl<E: Env> Walk<'_, E> {
         nonzero: Option<Free>,
         payloads: Vec<Free>,
         body: &Term,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         self.context.open(refines, nonzero, payloads);
         self.walk_term(body)?;
         self.context.exit();
@@ -632,7 +632,7 @@ impl<E: Env> Walk<'_, E> {
         scrutinee: Option<Free>,
         shape: Shape,
         binders: &[Free],
-    ) -> Result<Vec<(Free, Shape)>, E::Error> {
+    ) -> Result<Vec<(Free, Shape)>, D::Error> {
         if let Some(scrutinee) = scrutinee {
             return Ok(vec![(scrutinee, shape)]);
         }
@@ -652,7 +652,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Walk each of `terms`, in order.
-    fn walks<'t>(&mut self, terms: impl IntoIterator<Item = &'t Term>) -> Result<(), E::Error> {
+    fn walks<'t>(&mut self, terms: impl IntoIterator<Item = &'t Term>) -> Result<(), D::Error> {
         for term in terms {
             self.walk_term(term)?;
         }
@@ -660,7 +660,7 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Open a runtime-arity scope against fresh binders and walk its body.
-    fn open_many_walk(&mut self, scope: &Scope<Many>) -> Result<(), E::Error> {
+    fn open_many_walk(&mut self, scope: &Scope<Many>) -> Result<(), D::Error> {
         let (_, body) = self.open_many(scope);
         self.walk_term(&body)
     }
@@ -670,14 +670,14 @@ impl<E: Env> Walk<'_, E> {
         &mut self,
         telescope: Telescope<Term>,
         arguments: &[Term],
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let mut remaining = arguments.iter();
         let mut cursor = telescope.cursor();
         while let Some((hint, entry)) = cursor.entry() {
             self.walk_term(&entry)?;
             let argument = match remaining.next() {
                 Some(argument) => argument.clone(),
-                None => Term::free_var(&self.env.fresh(hint)),
+                None => Term::free_var(&self.driver.fresh(hint)),
             };
             cursor.advance(argument);
         }
@@ -693,22 +693,22 @@ impl<E: Env> Walk<'_, E> {
     /// Walk a `Func`/`FuncType` telescope: each entry, then the terminal.
     ///
     /// A loop rather than a recursion, because a telescope is a list and this iterates it. Each binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
-    fn walk_terms(&mut self, telescope: Telescope<Term>) -> Result<(), E::Error> {
+    fn walk_terms(&mut self, telescope: Telescope<Term>) -> Result<(), D::Error> {
         let mut cursor = telescope.cursor();
         while let Some((_, entry)) = cursor.entry() {
             self.walk_term(&entry)?;
-            cursor.advance_fresh(|hint| self.env.fresh(hint));
+            cursor.advance_fresh(|hint| self.driver.fresh(hint));
         }
         let terminal = cursor.body().expect("a cursor past every entry");
         self.walk_term(&terminal)
     }
 
     /// [`Walk::walk_terms`] for a `TupleType`, which has no terminal to walk — a tuple type's payload is its fields.
-    fn walk_units(&mut self, telescope: Telescope<()>) -> Result<(), E::Error> {
+    fn walk_units(&mut self, telescope: Telescope<()>) -> Result<(), D::Error> {
         let mut cursor = telescope.cursor();
         while let Some((_, entry)) = cursor.entry() {
             self.walk_term(&entry)?;
-            cursor.advance_fresh(|hint| self.env.fresh(hint));
+            cursor.advance_fresh(|hint| self.driver.fresh(hint));
         }
         Ok(())
     }
@@ -716,7 +716,7 @@ impl<E: Env> Walk<'_, E> {
     /// Walk a match's arms, in order, each under what it establishes.
     ///
     /// Nothing is read ahead: an arm's guard, shape and binders are taken in the arm's own call, which is the ordering [`Walk::walk_term`] documents.
-    fn walk_arms(&mut self, head: &Term, cases: &Cases) -> Result<(), E::Error> {
+    fn walk_arms(&mut self, head: &Term, cases: &Cases) -> Result<(), D::Error> {
         let scrutinee = refined_by_arm(head);
 
         match cases {
@@ -810,7 +810,7 @@ impl<E: Env> Walk<'_, E> {
         scrutinee: &Option<Free>,
         carriers: Carriers,
         empty_case: &Term,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let shape = Shape::node(Tag::Empty(carriers), []);
         self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
@@ -822,7 +822,7 @@ impl<E: Env> Walk<'_, E> {
         scrutinee: Option<Free>,
         carriers: Carriers,
         cons_case: &Scope<Two>,
-    ) -> Result<(), E::Error> {
+    ) -> Result<(), D::Error> {
         let (binders, body) = self.open_two(cons_case);
         let shape = Shape::elem_run(
             carriers,
@@ -833,7 +833,7 @@ impl<E: Env> Walk<'_, E> {
         self.scoped(refines, None, Vec::new(), &body)
     }
 
-    fn step(&mut self, term: &Term) -> Result<(), E::Error> {
+    fn step(&mut self, term: &Term) -> Result<(), D::Error> {
         // A call is a member reference, so a term that holds no group holds no call, and what an arm inside it establishes is scoped to that arm: there is nothing in it for the walk to find or to carry out. Asked of the node's own cache, so a value a `let` puts at every use costs one question each. And a `let`'s value walked where it is bound is passed over in the tail — see `walked`.
         if (!term.has_group() && !self.names_tracked(term)) || self.walked.contains_key(term) {
             return Ok(());
@@ -896,8 +896,13 @@ impl<E: Env> Walk<'_, E> {
                 }
                 // A call of a definition, or of a field lambda of the record its leading lambdas answer, that applies a parameter, or a field of one, as its summary states hands each argument there what each application of it establishes ([`Walk::walk_argument`]).
                 if let Subterm::Instance(instance) = &*spine_head {
-                    let handed =
-                        handed(self.env, &self.context, self.params, &instance.name, &steps)?;
+                    let handed = handed(
+                        self.driver,
+                        &self.context,
+                        self.params,
+                        &instance.name,
+                        &steps,
+                    )?;
                     if handed.iter().any(Option::is_some) {
                         for (argument, applied) in arguments.iter().zip(handed) {
                             self.walk_argument(argument, applied.as_ref())?;
@@ -1097,11 +1102,11 @@ pub fn spine(term: &Term) -> (Term, Vec<Term>) {
 /// Whether a member of a recursive group is known to terminate at its turn: `known` holds the members known to terminate so far and the member itself, each its name, type and body over the group's names, and every call among them descends. A name of the group outside `known` is no member of the group this closes, so a call to it is none and nothing here unfolds it: it stands for a member withheld or not yet reached.
 ///
 /// Both checkers take each member's turn by this, in the order the members are written, and read a member by value in its group's signatures and bodies once its turn finds it known (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). A member unfolds only where the members it reaches are known too or stand for nothing, so every unfolding either checker makes is of a definition that terminates.
-pub fn known_to_terminate<E: Env>(
-    env: &mut E,
+pub fn known_to_terminate<D: Driver>(
+    driver: &mut D,
     known: Vec<(Free, Term, Term)>,
-) -> Result<bool, E::Error> {
-    Ok(group_totality(env, &RecGroup::closing(known))?.is_total())
+) -> Result<bool, D::Error> {
+    Ok(group_totality(driver, &RecGroup::closing(known))?.is_total())
 }
 
 /// What a value of `type_` answers once applied to everything it takes: `type_` reduced, and past every function type it reduces to, each binder opened over a fresh identity, the codomain reduced again. `None` where a reduction has no value.
@@ -1109,12 +1114,12 @@ pub fn known_to_terminate<E: Env>(
 /// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — answers a sort only once forced, and so does `(n : Nat) -> U`: an alias is not a different claim.
 ///
 /// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
-pub fn codomain<E: Env>(env: &mut E, type_: &Term) -> Result<Option<Term>, E::Error> {
+pub fn codomain<D: Driver>(driver: &mut D, type_: &Term) -> Result<Option<Term>, D::Error> {
     // Peeling to a codomain answers the same question about a smaller type, so it iterates rather than re-entering: an arrow's spine is as long as its type is written.
     let mut type_ = type_.clone();
 
     loop {
-        let Some(reduced) = env.force(&type_).probed()? else {
+        let Some(reduced) = driver.force(&type_).probed()? else {
             return Ok(None);
         };
         let Subterm::FuncType(FuncType { telescope, .. }) = &*reduced else {
@@ -1122,7 +1127,7 @@ pub fn codomain<E: Env>(env: &mut E, type_: &Term) -> Result<Option<Term>, E::Er
         };
         let mut cursor = telescope.cursor();
         while !cursor.is_done() {
-            cursor.advance_fresh(|hint| env.fresh(hint));
+            cursor.advance_fresh(|hint| driver.fresh(hint));
         }
         type_ = cursor.body().expect("a cursor past every entry");
     }
@@ -1133,12 +1138,12 @@ pub fn codomain<E: Env>(env: &mut E, type_: &Term) -> Result<Option<Term>, E::Er
 /// Read through `codomain`, reduced at every step, so declaring a member through an alias is no escape from the descent gate, which is what stops a member erasure deletes from being assumed at its own type before its body is checked against it.
 ///
 /// `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`).
-pub fn yields_a_sort_where<E: Env>(
-    env: &mut E,
+pub fn yields_a_sort_where<D: Driver>(
+    driver: &mut D,
     type_: &Term,
     undetermined: &dyn Fn(Option<&Term>) -> bool,
-) -> Result<bool, E::Error> {
-    let Some(codomain) = codomain(env, type_)? else {
+) -> Result<bool, D::Error> {
+    let Some(codomain) = codomain(driver, type_)? else {
         return Ok(undetermined(None));
     };
 
@@ -1147,10 +1152,10 @@ pub fn yields_a_sort_where<E: Env>(
         Subterm::TupleType(tuple) => {
             let mut cursor = tuple.telescope.cursor();
             while let Some((_, entry)) = cursor.entry() {
-                if yields_a_sort_where(env, &entry, undetermined)? {
+                if yields_a_sort_where(driver, &entry, undetermined)? {
                     return Ok(true);
                 }
-                cursor.advance_fresh(|hint| env.fresh(hint));
+                cursor.advance_fresh(|hint| driver.fresh(hint));
             }
             Ok(false)
         }

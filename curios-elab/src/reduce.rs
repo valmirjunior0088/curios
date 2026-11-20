@@ -25,9 +25,9 @@ use {
     },
     crate::{Error, classing, is_prop, reduce_with, same_uncommitted, sort_of},
     curios_analysis::{
-        Answered, Classes, Driver, Env, Judge, ScrutineeRead, Within, answers, answers_classed,
-        apart_in_instance, atoms_within, case_target_indices, could_reduce_to, holds_no_type,
-        one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
+        Answered, Classes, Driver, IntrinsicDriver, Judge, ScrutineeRead, Within, answers,
+        answers_classed, apart_in_instance, atoms_within, case_target_indices, could_reduce_to,
+        holds_no_type, one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
         read_scrutinee_classed, refold,
     },
     curios_common::{SyntaxRegistry, recurse},
@@ -150,8 +150,8 @@ impl Reducer for Context<'_> {
 
 /// The elaborator's side of the shared-analysis seam.
 ///
-/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a placed diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`] formalizes.
-impl Env for Context<'_> {
+/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a placed diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Driver::Error`] formalizes.
+impl Driver for Context<'_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads.
@@ -1270,7 +1270,7 @@ impl Reducer for Reading<'_, '_> {
     }
 }
 
-impl Driver for Reading<'_, '_> {
+impl IntrinsicDriver for Reading<'_, '_> {
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved = zonk_solved_term_metas(self.0, &Term::intrinsic(intrinsic.clone()));
         match &*solved {

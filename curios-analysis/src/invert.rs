@@ -21,7 +21,7 @@
 mod tests;
 
 use {
-    crate::{Env, Judge, locals_beneath},
+    crate::{Driver, Judge, locals_beneath},
     curios_algebra::Deduction,
     curios_common::recurse,
     curios_core::{
@@ -164,8 +164,8 @@ fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Resu
 }
 
 /// Whether the family `name` is relevant, its declared result sort read on the nose: `Some(false)` at `Prop`, and `None` where the registry cannot answer for it, which licenses neither injectivity nor a clash.
-fn relevance<E: Env>(env: &E, name: &Global) -> Option<bool> {
-    let declaration = env.induct_decl(name)?;
+fn relevance<D: Driver>(driver: &D, name: &Global) -> Option<bool> {
+    let declaration = driver.induct_decl(name)?;
 
     Some(!matches!(
         **declaration.result_sort(),
@@ -453,10 +453,10 @@ impl<'f> Unifier<'f> {
         Ok(true)
     }
 
-    /// The occurs check, read through what is in force: whether `name` is among the locals `value` reaches — those it names, closed under the solutions found, the definitions in scope ([`Env::unfold`]), and every refinement in force whose refined term names one, its value's locals joining ([`Env::refined`]).
+    /// The occurs check, read through what is in force: whether `name` is among the locals `value` reaches — those it names, closed under the solutions found, the definitions in scope ([`Driver::unfold`]), and every refinement in force whose refined term names one, its value's locals joining ([`Driver::refined`]).
     ///
     /// Reduction brings a local into a term only through a definition, a solution or a refinement, so the closure holds every local a reader of the solution can meet: a solution that reaches its own variable ties a cycle, as `t := node(p.0)` does where an arm refined `p.0` to `node(t)`, which the certifier would read back to `t` by name. The closure reduces nothing, and it may refuse a value naming a local some refined term names without the value naming that term, which leaves an equation undecided and nothing worse.
-    fn reaches<E: Env>(&self, env: &E, value: &Term, name: &Free) -> bool {
+    fn reaches<D: Driver>(&self, driver: &D, value: &Term, name: &Free) -> bool {
         let mut pending = value.mentions().locals().copied().collect::<Vec<_>>();
         let mut seen = BTreeSet::new();
 
@@ -471,7 +471,7 @@ impl<'f> Unifier<'f> {
             {
                 pending.extend(solution.mentions().locals().copied());
             }
-            if let Some(definition) = env.unfold(&local) {
+            if let Some(definition) = driver.unfold(&local) {
                 pending.extend(definition.mentions().locals().copied());
             }
             for (refined, standing) in &self.refined {

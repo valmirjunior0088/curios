@@ -2221,7 +2221,7 @@ impl fmt::Display for Positional {
 ///
 /// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
-/// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the certifier refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+/// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the certifier refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Driver`.
 pub fn validate_stored_identities(
     definitions: &Definitions,
     mounts: &[Mount],
@@ -2279,7 +2279,7 @@ pub fn validate_stored_identities(
 ///
 /// **What a checker refuses before it mints a binder of its own.** Both checkers mint from a counter no predecessor raised — the certifier's from zero, the elaborator's from its own unit's lowering count — because no term a walk is handed from elsewhere carries a local ([`validate_stored_identities`]). A free local reaching a walk is therefore one its counter could hand out again, and the binder it mints while comparing under a telescope or eta-contracting would silently identify two terms that differ. The judgment could not see it: by the time it looks the local up, the local is bound. So the refusal is taken at the boundary, over every position a term can sit in, rather than where a judgment meets it.
 ///
-/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a certifier — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
+/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a certifier — no reduction, no conversion, no `Driver` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
 /// A walk hands in the items it judges the terms of: over a baseline, the ones whose terms are not the baseline's, the walk that filed the baseline having refused a local of its own in each of the others.
 pub fn free_locals_of<'a>(
