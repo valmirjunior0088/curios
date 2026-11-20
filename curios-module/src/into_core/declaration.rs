@@ -3,7 +3,7 @@
 use {
     super::{
         Context, FlatItem, FlatLet, FlatNominal, Lowerer, Lowering, SortSite, duplicate_field,
-        param_name, witness_concept_application,
+        telescope_label, witness_concept_application,
     },
     crate::Error,
     curios_abi::ForeignFunction,
@@ -120,12 +120,13 @@ pub(super) fn lower_declaration(
                     let lower = Lowerer::new(context, Some(name));
 
                     // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
-                    let head_binders = lower.mint(
-                        u.params.iter().map(param_name).chain(
-                            u.indices
-                                .iter()
-                                .map(|(_, n, _)| n.clone().unwrap_or_default()),
-                        ),
+                    let head_binders = lower.mint_placed(
+                        u.params
+                            .iter()
+                            .map(|param| telescope_label(param.plicity, param.label.as_ref()))
+                            .chain(u.indices.iter().map(|(_, word, _)| {
+                                telescope_label(Plicity::Explicit, word.as_ref())
+                            })),
                     );
                     let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
@@ -158,11 +159,10 @@ pub(super) fn lower_declaration(
                         .cases
                         .iter()
                         .map(|c| {
-                            let payload_binders = lower.mint(
-                                c.payload
-                                    .iter()
-                                    .map(|param| param.label.clone().unwrap_or_default()),
-                            );
+                            let payload_binders =
+                                lower.mint_placed(c.payload.iter().map(|param| {
+                                    telescope_label(param.plicity, param.label.as_ref())
+                                }));
                             let scope = [param_binders, &payload_binders].concat();
                             let mut prefixes = lower.prefixes(&scope);
                             let fields = c
@@ -262,7 +262,11 @@ pub(super) fn lower_declaration(
                 // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                 let module = context.prefixed(&s.label).without_last();
 
-                let param_binders = lower.mint(s.params.iter().map(param_name));
+                let param_binders = lower.mint_placed(
+                    s.params
+                        .iter()
+                        .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+                );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = s
                     .params
@@ -286,14 +290,11 @@ pub(super) fn lower_declaration(
                 }
 
                 // Field types, each under the fields before it, so a later field type can depend on an earlier field that has a name. The signature sugar `f(params) -> T` is undone here.
-                let field_binders = lower.mint(s.fields.iter().map(|field| {
-                    field
-                        .param
-                        .label
-                        .as_deref()
-                        .map(str::to_string)
-                        .unwrap_or_default()
-                }));
+                let field_binders = lower.mint_placed(
+                    s.fields
+                        .iter()
+                        .map(|field| telescope_label(field.plicity, field.param.label.as_ref())),
+                );
                 let field_scope = [&param_binders[..], &field_binders].concat();
                 let mut prefixes = lower.prefixes(&field_scope);
                 let field_tys = s
@@ -373,7 +374,12 @@ pub(super) fn lower_declaration(
 
                 context.record_import_scope(Some(&name));
                 let lower = Lowerer::new(context, Some(name));
-                let param_binders = lower.mint(concept.params.iter().map(param_name));
+                let param_binders = lower.mint_placed(
+                    concept
+                        .params
+                        .iter()
+                        .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+                );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = concept
                     .params
@@ -386,21 +392,13 @@ pub(super) fn lower_declaration(
                     .collect::<Result<Vec<_>, Error>>()?;
                 drop(prefixes);
 
-                // A superclass field is anonymous: it has no label, so nothing projects it or names it in a later field's type, and resolution reaches it by index.
-                let field_labels = concept
-                    .fields
-                    .iter()
-                    .map(|field| {
-                        field
-                            .label
-                            .as_ref()
-                            .map(|label| label.to_string())
-                            .unwrap_or_default()
-                    })
-                    .collect::<Vec<_>>();
-
-                // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a superclass field binds nothing). The signature sugar `f(params) -> T` is undone here.
-                let field_binders = lower.mint(field_labels.iter().cloned());
+                // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a superclass field binds nothing). The signature sugar `f(params) -> T` is undone here. A superclass field is anonymous in a program: it has no label, so nothing projects it or names it in a later field's type, and resolution reaches it by index.
+                let field_binders = lower.mint_placed(
+                    concept
+                        .fields
+                        .iter()
+                        .map(|field| telescope_label(field.plicity, field.label.as_ref())),
+                );
                 let field_scope = [&param_binders[..], &field_binders].concat();
                 let mut prefixes = lower.prefixes(&field_scope);
                 let field_tys = concept

@@ -79,8 +79,8 @@ use {
     },
     curios_document::Documentation,
     curios_surface::{
-        Apply, Argument, Entrypoint, FuncTypeParam, GroupItem, Label, Module, Name, Subterm, Term,
-        TopItem, UseGroup, spell,
+        Apply, Argument, Entrypoint, GroupItem, Label, Module, Name, Subterm, Term, TopItem,
+        UseGroup, spell,
     },
     std::{
         cell::{Cell, OnceCell, RefCell},
@@ -1337,11 +1337,6 @@ fn witness_concept_application(
         Some(span) => applied.with_span(span.clone()),
         None => applied,
     }
-}
-
-/// The name a declaration's parameter is minted under: its own, or none for a `use` parameter, which occupies a binder and names nothing.
-fn param_name(param: &FuncTypeParam) -> String {
-    param.label.clone().unwrap_or_default()
 }
 
 /// What `top_item`'s text is anchored as: the declaration of the first name it declares, or one of its module's unnamed declarations where it declares none. `None` for an item no term is lowered from.

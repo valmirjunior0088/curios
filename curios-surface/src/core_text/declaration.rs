@@ -45,10 +45,10 @@ impl DeclaredBinder {
     }
 
     /// The word this binder is written by where it has a hint or `read` says something reads it, `_` where nothing does and its decorator states something, which stands before a word and reads back as no hint, and none where it is written as its type alone.
-    fn word<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> Option<String> {
+    fn word<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> Option<crate::Label> {
         match self.named || read {
-            true => Some(frame.spelling.label(&self.label)),
-            false => (!self.core(frame).is_empty()).then(|| "_".to_string()),
+            true => Some(frame.spelling.label(&self.label).into()),
+            false => (!self.core(frame).is_empty()).then(|| "_".into()),
         }
     }
 
@@ -295,7 +295,7 @@ pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) ->
                 plicity: field.mark,
                 param: crate::TupleTypeParam {
                     core: field.core(frame),
-                    label: label.map(crate::Label::from),
+                    label,
                     func_params: None,
                     type_: sub(field.type_.clone(), frame),
                 },

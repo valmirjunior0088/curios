@@ -163,6 +163,24 @@ fn a_local_answers_where_it_is_bound_and_its_type() {
     assert_eq!(local(1), typed(false));
 }
 
+const TELESCOPE: &str = "induct Shape(A: Type): Type\n| circle(radius: A)\nend\nlet apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";
+
+/// A telescope's binder answers where it is bound and where it is read, as a function's parameter does: a family's parameter, a constructor's payload binder and a function type's parameter.
+#[test]
+fn a_telescopes_binder_answers_where_it_is_bound_and_read() {
+    let local = |written, nth| match at(TELESCOPE, written, nth, 0).map(|answer| answer.stands) {
+        Some(Stands::Local {
+            declares, bound, ..
+        }) => (declares, bound.map(|bound| bound.line_column())),
+        stands => panic!("no local stands at `{written}`: {stands:?}"),
+    };
+
+    assert_eq!(local("A", 0), (true, Some((1, 14))));
+    assert_eq!(local("A", 1), (false, Some((1, 14))));
+    assert_eq!(local("radius", 0), (true, Some((2, 10))));
+    assert_eq!(local("x", 0), (true, Some((4, 15))));
+}
+
 /// A term no name stands at answers the type it settled at, spelled where it is written: an application, where the offset stands between its arguments.
 #[test]
 fn a_term_answers_the_type_it_settled_at() {

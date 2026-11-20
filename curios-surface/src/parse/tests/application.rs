@@ -23,7 +23,7 @@ fn let_func_and_apply() {
                                 params: vec![FuncTypeParam {
                                     plicity: Plicity::Explicit,
                                     core: (),
-                                    label: Some("x".to_string()),
+                                    label: Some("x".into()),
                                     type_: Subterm::Type.into(),
                                 }],
                                 output: Subterm::Type.into(),

@@ -408,12 +408,12 @@ fn parse_binder_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
     parse_word_owning(false, unbindable).parse(state)
 }
 
-// The name a binder written `name: type` binds, read through its `:`. Past the colon the word is a binder's and nothing else's, so a word no term can read is refused there, committed, with the caret on the word: uncommitted, the term the same word opens would be tried in its place and fail at the colon, naming the colon for a mistake about the name.
-fn parse_bound_word<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+// The name a binder written `name: type` binds, read through its `:`, carrying the span of the word alone. Past the colon the word is a binder's and nothing else's, so a word no term can read is refused there, committed, with the caret on the word: uncommitted, the term the same word opens would be tried in its place and fail at the colon, naming the colon for a mistake about the name.
+fn parse_bound_word<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
     mark()
-        .and(parse_identifier)
+        .and(parse_written_word)
         .and_drop(parse_literal(":"))
-        .flat_map(|(start, word)| match unbindable(word) {
+        .flat_map(|(start, word)| match unbindable(&word) {
             None => pure(word).boxed(),
             Some(refusal) => commit(fail_from(&start, refusal)).boxed(),
         })

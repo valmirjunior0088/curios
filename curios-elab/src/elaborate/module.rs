@@ -29,9 +29,9 @@ use {
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, Declarations, Definition, DefinitionKind, Definitions, Entrypoint, Free,
-        FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Made, Minted, Names, Nominal,
-        Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
-        Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
+        FuncType, Global, InductParam, Intrinsic, Item, Items, Label, Level, Made, Minted, Names,
+        Nominal, Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
         stamp_declaration_instance, wire_term,
     },
     std::{collections::BTreeSet, rc::Rc},
@@ -104,11 +104,12 @@ fn check_telescope_entries<B: Bound>(
     ))
 }
 
-/// A case's signature as [`check_telescope_entries`] walks a telescope, but for its leading entries, which are its family's parameters: each is the family's own, as its `arity` was elaborated and at the level `param_levels` read it at, entered under the mark the case binds it at, so only the payload and the targets are checked. Checking a parameter again would read it at levels of its own, which the family would then be generalized over.
+/// A case's signature as [`check_telescope_entries`] walks a telescope, but for its leading entries, which are its family's parameters: each is the family's own, as its `arity` was elaborated and at the level `param_levels` read it at, entered under the mark the case binds it at and opened at the label the lowering wrote it with, one of `lowered` ([`written_parameters`]), so only the payload and the targets are checked. Checking a parameter again would read it at levels of its own, which the family would then be generalized over.
 fn case_telescope_entries(
     context: &mut Context,
     arity: &Telescope<Telescope<()>>,
     param_levels: &[Level],
+    lowered: &[Option<Label>],
     signature: &Telescope<Vec<Term>>,
 ) -> Result<(Members, Vec<Level>, Vec<Term>), Error> {
     let mut entries = Vec::new();
@@ -124,7 +125,8 @@ fn case_telescope_entries(
                 (rebuilt, sort.level)
             }
         };
-        let label = cursor.advance_labelled(|label| context.fresh_from(label));
+        let parameter = lowered.get(entries.len()).and_then(Option::as_ref);
+        let label = cursor.advance_labelled(|label| context.fresh_from(parameter.or(label)));
         if family.entry().is_some() {
             family.advance(Term::free_var(&label));
         }
@@ -161,18 +163,20 @@ fn check_former_type(context: &mut Context, type_: &Term) -> Result<(Term, Vec<L
     Ok((rebuilt, levels))
 }
 
-/// Open an already-elaborated telescope: assume one fresh binder per entry and hand the entries back, without checking them again.
+/// Open an already-elaborated telescope: assume one fresh binder per entry and hand the entries back, without checking them again. A leading entry is opened at the label the lowering wrote it with, one of `lowered` ([`written_parameters`]), which an elaborated telescope no longer carries.
 ///
 /// The counterpart to [`check_telescope_entries`] for a telescope that has been through elaboration once already. Re-checking such a telescope is not merely wasted work — it elaborates terms that carry universe instances a *second* time, and what a caller then files is a set of instances no earlier check ever agreed to.
 fn assume_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
+    lowered: &[Option<Label>],
 ) -> (Members, B) {
     let mut entries = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
         let mark = cursor.mark().expect("a mark stands at an entry");
-        let label = cursor.advance_labelled(|label| context.fresh_from(label));
+        let parameter = lowered.get(entries.len()).and_then(Option::as_ref);
+        let label = cursor.advance_labelled(|label| context.fresh_from(parameter.or(label)));
         context.enter(&label, &ty, mark);
         entries.push((mark, label, ty));
     }
@@ -184,6 +188,7 @@ fn elaborate_induct_constructors(
     context: &mut Context,
     name: &Global,
     param_levels: &[Level],
+    lowered: &[Option<Label>],
 ) -> Result<(), Error> {
     let Some(induct_decl) = context.induct_decl(name).cloned() else {
         return Ok(());
@@ -199,8 +204,13 @@ fn elaborate_induct_constructors(
 
         let (entries, levels, targets) = context.with_frame(|context| {
             // Under the signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
-            let (entries, levels, targets) =
-                case_telescope_entries(context, induct_decl.arity(), param_levels, signature)?;
+            let (entries, levels, targets) = case_telescope_entries(
+                context,
+                induct_decl.arity(),
+                param_levels,
+                lowered,
+                signature,
+            )?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -246,11 +256,12 @@ fn elaborate_induct_constructors(
 
 /// Rebuild a struct's registry telescopes with *elaborated* types, so the field types `erase` and later construction sites consult are saturated (implicit insertion) and reduce correctly — the struct analogue of [`elaborate_induct_constructors`], over the field telescope its parameters end in. Called once every member of the item is defined, since a field type may mention the struct itself and its siblings ([`elaborate_module_nominal`]). A name with no registry entry is an ordinary binding; no-op.
 ///
-/// `parameters` are the levels typing read the struct's parameters at, where its former's type was elaborated ([`check_former_type`]), one to each: the parameters are opened here rather than checked, so no check of their own reads them again.
+/// `parameters` are the levels typing read the struct's parameters at, where its former's type was elaborated ([`check_former_type`]), one to each: the parameters are opened here rather than checked, so no check of their own reads them again, each at the label the lowering wrote it with, one of `lowered` ([`written_parameters`]).
 fn elaborate_struct(
     context: &mut Context,
     name: &Global,
     parameters: &[Level],
+    lowered: &[Option<Label>],
 ) -> Result<(), Error> {
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
@@ -298,7 +309,8 @@ fn elaborate_struct(
     let (param_entries, field_entries, field_levels, supers) =
         context.with_frame(|context| -> Result<_, Error> {
             // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
-            let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
+            let (params, inner) =
+                assume_telescope_entries(context, struct_decl.arity.clone(), lowered);
             let (fields, field_levels, ()) = check_telescope_entries(context, inner)?;
 
             // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when every field is a proof, so that every projection lands in a `Prop`, the side irrelevance governs; it is checked here at declaration time rather than per projection, so `elaborate_proj` needs no guard.
@@ -385,6 +397,28 @@ fn elaborate_struct(
     }
 
     Ok(())
+}
+
+/// The labels the lowering wrote `name`'s parameters with, read before its entry takes its former's elaborated telescope ([`share_former_telescope`]), whose binders are elaboration's own and carry no place: what its payloads and fields are elaborated under, so a read of a parameter there answers, and a proof written there credits, the binder the declaration wrote. Nothing the declaration publishes carries them.
+fn written_parameters(context: &Context, name: &Global) -> Vec<Option<Label>> {
+    match (context.struct_decl(name), context.induct_decl(name)) {
+        (Some(record), _) => leading_labels(&record.arity, record.param_count()),
+        (None, Some(family)) => leading_labels(family.arity(), family.param_count()),
+        (None, None) => Vec::new(),
+    }
+}
+
+/// What `telescope` remembers of its first `count` binders, read off its scopes without opening them.
+fn leading_labels<B: Bound>(telescope: &Telescope<B>, count: usize) -> Vec<Option<Label>> {
+    let mut labels = Vec::with_capacity(count);
+    let mut at = telescope;
+    while labels.len() < count
+        && let Telescope::Cons(_, _, rest, ..) = at
+    {
+        labels.push(rest.label(0).copied());
+        at = rest.body();
+    }
+    labels
 }
 
 /// Replace a nominal entry's telescope with the one `type_`, its former's type as [`check_former_type`] elaborated it from the entry's spelling, came out with: a record's parameters, and a family's parameters and indices. The entry is elaborated once, as its former's type, and takes that elaboration as its own, so its telescope and its former's are one term and no second set of universe instances is filed beside the first.
@@ -683,12 +717,14 @@ fn elaborate_module_nominal(context: &mut Context, nominals: &Nominals) -> Resul
     // Each member's signature, in the order they are written: a domain reads the members written before it, and the item is refused below where one does.
     let mut types = Vec::with_capacity(names.len());
     let mut parameters = Vec::with_capacity(names.len());
+    let mut written = Vec::with_capacity(names.len());
     for name in &names {
         let outer_site = context.set_checked_site(*name);
         check_entry_totality(context, name)?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(*name));
         let (type_, levels) = check_former_type(context, &spelled(context, name, island).type_)?;
+        written.push(written_parameters(context, name));
         share_former_telescope(context, name, &type_);
         context.declare(name, &type_);
         context.define_made(name, &spelled(context, name, island).body);
@@ -698,15 +734,15 @@ fn elaborate_module_nominal(context: &mut Context, nominals: &Nominals) -> Resul
     }
 
     // Each entry's constructors or fields, once every member is defined: a payload or a field may name any of them.
-    for (name, levels) in names.iter().zip(&mut parameters) {
+    for ((name, levels), written) in names.iter().zip(&mut parameters).zip(&written) {
         let outer_site = context.set_checked_site(*name);
         context.enter_declaration(Some(*name));
         if let Some(family) = context.induct_decl(name) {
             // A family's first call is its indices where it takes no parameter.
             levels.truncate(family.param_count());
         }
-        elaborate_induct_constructors(context, name, levels)?;
-        elaborate_struct(context, name, levels)?;
+        elaborate_induct_constructors(context, name, levels, written)?;
+        elaborate_struct(context, name, levels, written)?;
         context.restore_checked_site(outer_site);
     }
     context.drain_parked()?;

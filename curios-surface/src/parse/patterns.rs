@@ -2,8 +2,8 @@ use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
         PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
-        member_ends, members, parse_binder_label, parse_block_str, parse_identifier, parse_keyword,
-        parse_label, parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
+        member_ends, members, parse_binder_label, parse_block_str, parse_keyword, parse_label,
+        parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
         parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw,
         parse_written_char, parse_written_word, refused, require_space, trimmed, unbindable,
     },
@@ -24,14 +24,12 @@ use {
 // What a plain or `@` member is where the site declares and a name is optional: `label: type`, its word under what Core text's decorator states of its binder, or the type alone. A decorator no word follows is a decorated type's, read as one.
 fn parse_declared_member<'a, D: Grammar>(
     state: ParserState<'a>,
-) -> Parsed<'a, (D::Fields, Option<String>, Term<D>)> {
+) -> Parsed<'a, (D::Fields, Option<Label>, Term<D>)> {
     D::parse_fields
-        .and(parse_identifier)
+        .and(parse_written_word)
         .and_drop(parse_literal(":"))
         .and(parse_term::<D>)
-        .map(|((core, label), type_): ((D::Fields, &str), Term<D>)| {
-            (core, Some(label.to_string()), type_)
-        })
+        .map(|((core, label), type_)| (core, Some(label), type_))
         .or(parse_term::<D>.map(|type_| (D::Fields::default(), None, type_)))
         .parse(state)
 }

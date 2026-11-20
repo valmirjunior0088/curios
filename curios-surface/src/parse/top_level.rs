@@ -555,9 +555,7 @@ pub fn parse_induct_payload_field<'a, D: Grammar>(
             Plicity::Explicit | Plicity::Implicit => D::parse_fields
                 .and(parse_bound_word)
                 .and(parse_term::<D>)
-                .map(|((core, name), type_): ((D::Fields, &str), Term<D>)| {
-                    (core, Some(name.to_string()), type_)
-                })
+                .map(|((core, name), type_)| (core, Some(name), type_))
                 .or(parse_term::<D>.map(|type_| (D::Fields::default(), None, type_)))
                 .map(move |(core, label, type_)| CasePayloadParam {
                     plicity,
@@ -645,14 +643,12 @@ pub fn parse_induct_param<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
             Plicity::Explicit | Plicity::Implicit => D::parse_fields
                 .and(parse_bound_word)
                 .and(parse_term::<D>)
-                .map(
-                    move |((core, name), type_): ((D::Fields, &str), Term<D>)| FuncTypeParam {
-                        plicity,
-                        core,
-                        label: Some(name.to_string()),
-                        type_,
-                    },
-                )
+                .map(move |((core, name), type_)| FuncTypeParam {
+                    plicity,
+                    core,
+                    label: Some(name),
+                    type_,
+                })
                 .boxed(),
         })
         .parse(state)
@@ -679,9 +675,7 @@ pub fn parse_induct_index<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
             Plicity::Explicit => D::parse_fields
                 .and(parse_bound_word)
                 .and(parse_term::<D>)
-                .map(|((core, name), ty): ((D::Fields, &str), Term<D>)| {
-                    (core, Some(name.to_string()), ty)
-                })
+                .map(|((core, name), ty)| (core, Some(name), ty))
                 .or(parse_term::<D>.map(|ty| (D::Fields::default(), None, ty)))
                 .boxed(),
             Plicity::Implicit | Plicity::Witness => {
@@ -938,7 +932,7 @@ pub fn parse_concept_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
                     doc: None,
                     plicity: Plicity::Witness,
                     core,
-                    label: label.map(Label::from),
+                    label,
                     func_params: None,
                     type_,
                 })

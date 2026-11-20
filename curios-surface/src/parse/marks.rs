@@ -6,7 +6,7 @@
 
 use {
     super::{Grammar, parse_bound_word, parse_identifier, parse_keyword, parse_literal},
-    crate::{Term, parse_term},
+    crate::{Label, Term, parse_term},
     curios_common::{Keyword, Plicity},
     curios_parse::{
         Mark, Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, pure, raise,
@@ -186,7 +186,7 @@ pub fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D
 /// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds, under what its decorator states of the binder, and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
 pub fn parse_named_premise<'a, D: Grammar>(
     start: Mark,
-) -> impl Parser<'a, Read<(D::Fields, Option<String>, Term<D>)>> {
+) -> impl Parser<'a, Read<(D::Fields, Option<Label>, Term<D>)>> {
     move |state: ParserState<'a>| {
         let premise = parse_premise::<D>(start.clone())
             .map(|read| read.map(|type_| (D::Fields::default(), None, type_)));
@@ -194,7 +194,7 @@ pub fn parse_named_premise<'a, D: Grammar>(
             true => D::parse_fields
                 .and(parse_bound_word)
                 .and(parse_term::<D>)
-                .map(|((core, label), type_)| Ok((core, Some(label.to_string()), type_)))
+                .map(|((core, label), type_)| Ok((core, Some(label), type_)))
                 .or(premise)
                 .parse(state),
             false => premise.parse(state),

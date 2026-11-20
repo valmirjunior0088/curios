@@ -172,12 +172,14 @@ pub struct Lowerer<'a, 'b> {
     saw_goal: Cell<bool>,
 }
 
-/// One written binder an unread site may be recorded of: its spelling, its identities and its span.
+/// One written binder: its spelling, its identities, its span, and whether an unread site may be recorded of it.
 struct Candidate {
     name: String,
     /// One for each time its text is lowered: an arm's body is lowered once for each of the arm's alternatives, and the binder is read where any lowering of it is.
     ids: Vec<curios_core::Free>,
     span: Span,
+    /// Whether a lint reads it: a binder a term or a parameter list binds, which nothing reading it is a fact about. A telescope's binder is kept where it stands and never linted — a Π-type's, a declaration head's, a payload's, a field's — since a reference in the declaration reads it as part of a type, and one nothing reads is how a type is written.
+    linted: bool,
 }
 
 /// One `let` whose value runs no action: what its pattern names where it is one binder with a name, where the pattern was written, and the places of the binders it writes among the declaration's candidates.
@@ -291,20 +293,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
         let used = self.used.borrow();
         let unread = |place: &usize| !candidates[*place].ids.iter().any(|id| used.contains(id));
-        let binders =
-            (0..candidates.len())
-                .filter(|place| unread(place))
-                .map(|place| match bindable(&candidates[place].name) {
-                    true => curios_core::Unread::Binder {
-                        name: candidates[place].name.clone(),
-                        at: self.context.extent(&candidates[place].span),
-                        binder: binder(&place),
-                    },
-                    false => curios_core::Unread::Wildcard {
-                        at: self.context.extent(&candidates[place].span),
-                        binder: binder(&place),
-                    },
-                });
+        let binders = (0..candidates.len())
+            .filter(|place| candidates[*place].linted && unread(place))
+            .map(|place| match bindable(&candidates[place].name) {
+                true => curios_core::Unread::Binder {
+                    name: candidates[place].name.clone(),
+                    at: self.context.extent(&candidates[place].span),
+                    binder: binder(&place),
+                },
+                false => curios_core::Unread::Wildcard {
+                    at: self.context.extent(&candidates[place].span),
+                    binder: binder(&place),
+                },
+            });
         let lets = self
             .lets
             .borrow()
@@ -356,9 +357,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         lets.push(LetCandidate { name, span, places });
     }
 
-    /// Mint one binder identity per written name, in order. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.
+    /// Mint one binder identity per name no source writes, in order — a `foreign` row's operands and what a diverging call yields. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.
     ///
-    /// An unwritten (`_` or empty) name still gets an identity — it occupies a binder position — but no reference can reach it. A binder minted here is never linted: it is a declaration telescope's, or a Π-type's, which a reference in the declaration reads as part of its type.
+    /// An unwritten (`_` or empty) name still gets an identity — it occupies a binder position — but no reference can reach it. A binder minted here is placed nowhere and never linted; a written one is minted by [`Self::mint_placed`] or [`Self::mint_written`].
     pub fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Binder> {
         names
             .into_iter()
@@ -369,10 +370,27 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// [`Self::mint`] for written binders: one that carries a span becomes a candidate, whatever its name begins with, and `_` among them, whose place a proof the elaborator writes credits as it credits a named binder's.
+    /// [`Self::mint`] for written binders a lint reads: one that carries a span becomes a candidate, whatever its name begins with, and `_` among them, whose place a proof the elaborator writes credits as it credits a named binder's.
     fn mint_written(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
+    ) -> Vec<Binder> {
+        self.mint_candidates(labels, true)
+    }
+
+    /// [`Self::mint_written`] for a telescope's binders, which no lint reads ([`Candidate::linted`]): each is kept where it stands, so it is answered where it is bound and read, as a written binder is.
+    pub fn mint_placed(
+        &self,
+        labels: impl IntoIterator<Item = (String, Option<Span>)>,
+    ) -> Vec<Binder> {
+        self.mint_candidates(labels, false)
+    }
+
+    /// Mint `labels` as written binders, each that carries a span a candidate `linted` says whether a lint reads.
+    fn mint_candidates(
+        &self,
+        labels: impl IntoIterator<Item = (String, Option<Span>)>,
+        linted: bool,
     ) -> Vec<Binder> {
         labels
             .into_iter()
@@ -395,6 +413,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                             name: name.clone(),
                             ids: Vec::new(),
                             span,
+                            linted,
                         });
                         candidates.len() - 1
                     }
@@ -524,7 +543,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         params: &[FuncTypeParam],
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        let binders = self.mint(params.iter().map(|p| p.label.clone().unwrap_or_default()));
+        let binders = self.mint_placed(
+            params
+                .iter()
+                .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+        );
         self.func_type_over(params, &binders, output)
     }
 
@@ -716,10 +739,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             ),
             // A dependent Σ-type: each field type sees the preceding fields' labels, so they lower under a progressively-extended scope. The signature sugar `f(params) -> T` is undone here.
             Subterm::TupleType(tt) => {
-                let binders = self.mint(
+                let binders = self.mint_placed(
                     tt.fields
                         .iter()
-                        .map(|f| f.label.as_deref().unwrap_or_default().to_string()),
+                        .map(|field| telescope_label(Plicity::Explicit, field.label.as_ref())),
                 );
                 let mut prefixes = self.prefixes(&binders);
                 let mut fields = Vec::with_capacity(tt.fields.len());
@@ -1240,6 +1263,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     name: name.to_string(),
                     ids: Vec::new(),
                     span,
+                    linted: true,
                 });
                 candidates.len() - 1
             }
@@ -1739,6 +1763,17 @@ impl Drop for Lowerer<'_, '_> {
 /// Whether a written binder name can be referred to. `_` and the empty label occupy a binder position but name nothing.
 fn bindable(name: &str) -> bool {
     !(name.is_empty() || name == "_")
+}
+
+/// The word a telescope's member binds, with where it is written, as [`Lowerer::mint_placed`] takes it: none for an unnamed member, and none for a `use` member, which resolution reaches whether or not a later member names it.
+pub fn telescope_label(plicity: Plicity, label: Option<&Label>) -> (String, Option<Span>) {
+    match (plicity, label) {
+        (Plicity::Explicit | Plicity::Implicit, Some(label)) => {
+            (label.to_string(), label.span().cloned())
+        }
+        (Plicity::Witness, Some(label)) => (label.to_string(), None),
+        (_, None) => (String::new(), None),
+    }
 }
 
 /// The binder names a parameter list introduces, each with where it was written — every leaf binder in each parameter's pattern, flattened, all in scope across the body. These shadow like-named module bindings; the wildcard `_` rides along but is ignored by [`Lowerer::bound`].

@@ -1498,7 +1498,7 @@ impl<D: Layout> TreePrinter<D> {
                     print_plicity(param.plicity),
                     self.field(TupleTypeParam {
                         core: param.core,
-                        label: param.label.map(Label::from),
+                        label: param.label,
                         func_params: None,
                         type_: param.type_,
                     }),

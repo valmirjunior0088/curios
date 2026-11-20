@@ -281,6 +281,59 @@ fn every_written_binder_is_placed_where_it_is_written() {
     assert_eq!(placed, [(0, "turn"), (1, "start")]);
 }
 
+/// Every binder a telescope writes is placed where it is written, as a binder a term writes is, and none is a lint's candidate: a family's parameter and index, a payload's binder, a structure's field and a concept's method, `size` and `paint` among them though nothing reads them.
+#[test]
+fn every_binder_a_telescope_writes_is_placed_and_never_linted() {
+    let (text, _) = unmarked(PROGRAM);
+    let entrypoint = text.parse::<Entrypoint>().unwrap();
+    let loader = fixture_loader();
+    let (unit, _) = into_core_entry(
+        &UnitSource::entry(&entrypoint, &loader),
+        &[],
+        syntax(),
+        None,
+    )
+    .unwrap();
+    let minted = |name: &str| {
+        unit.minted()
+            .of(&curios_core::Global::Authored(
+                curios_common::Qualifier::from([name]),
+            ))
+            .clone()
+    };
+    let placed = |name: &str| {
+        minted(name)
+            .written
+            .iter()
+            .map(|(binder, at)| {
+                let span = at
+                    .resolved(&[unit.anchors()])
+                    .expect("a binder's place resolves");
+                (binder.ordinal, text[span.start..span.end].to_string())
+            })
+            .collect::<Vec<_>>()
+    };
+    let named = |binders: &[(u32, &str)]| {
+        binders
+            .iter()
+            .map(|(ordinal, word)| (*ordinal, word.to_string()))
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        placed("Counted"),
+        named(&[(0, "Held"), (1, "size"), (2, "rest")])
+    );
+    assert_eq!(
+        placed("Pairing"),
+        named(&[(0, "Lefty"), (1, "first"), (2, "shade")])
+    );
+    assert_eq!(placed("Painted"), named(&[(0, "Canvas"), (1, "paint")]));
+    for name in ["Counted", "Pairing", "Painted"] {
+        assert_eq!(minted(name).unread, [], "{name} holds no unread site");
+    }
+}
+
 #[test]
 fn a_witness_is_declared_by_its_head_and_a_member_by_its_name() {
     let (text, _) = unmarked(PROGRAM);

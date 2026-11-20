@@ -764,7 +764,7 @@ fn parameter_types(
     params[slot] = Some(FuncTypeParam {
         plicity,
         core: (),
-        label: named.then(|| frame.word(&label)),
+        label: named.then(|| frame.word(&label).into()),
         type_: written,
     });
     Some(output)

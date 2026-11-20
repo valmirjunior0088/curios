@@ -136,12 +136,13 @@ pub struct CasePayloadParam<D: Dialect = Program> {
     pub plicity: Plicity,
     /// What the decorator before the binder's word states of the label Core keeps for it, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Core text's, and nothing in a program.
     pub core: D::Fields,
-    pub label: Option<String>,
+    /// The binder's word, carrying the span of the word alone, as [`FuncTypeParam::label`](crate::FuncTypeParam) does.
+    pub label: Option<Label>,
     pub type_: Term<D>,
 }
 
-/// One entry of an `induct` head's index telescope: what the decorator before its word states of the label Core keeps for its binder (Core text's, and nothing in a program, as [`FuncTypeParam::core`](crate::FuncTypeParam) is), its word where it has one, and its type.
-pub type InductIndex<D = Program> = (<D as Dialect>::Fields, Option<String>, Term<D>);
+/// One entry of an `induct` head's index telescope: what the decorator before its word states of the label Core keeps for its binder (Core text's, and nothing in a program, as [`FuncTypeParam::core`](crate::FuncTypeParam) is), its word where it has one, carrying the span of the word alone, and its type.
+pub type InductIndex<D = Program> = (<D as Dialect>::Fields, Option<Label>, Term<D>);
 
 /// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
 #[derive(Debug, Clone, PartialEq)]

@@ -411,7 +411,7 @@ pub fn parameter_types<D: Rendered>(
     let typed = sub(ty.clone(), frame);
     let slot = params.len();
     // What a decorator states of a binder stands before a word, so an unnamed one that states something is written as `_`, which reads back as no hint.
-    let word = (!named && !core.is_empty()).then(|| "_".to_string());
+    let word = (!named && !core.is_empty()).then(|| "_".into());
     params.push(FuncTypeParam {
         plicity,
         core,
@@ -423,7 +423,7 @@ pub fn parameter_types<D: Rendered>(
     let output = parameter_types(cursor, plicities, frame, params);
 
     if named {
-        params[slot].label = Some(frame.spelling.label(&label));
+        params[slot].label = Some(frame.spelling.label(&label).into());
     }
     output
 }

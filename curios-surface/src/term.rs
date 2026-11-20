@@ -127,7 +127,8 @@ pub struct FuncTypeParam<D: Dialect = Program> {
     pub plicity: Plicity,
     /// What the decorator before the binder's word states of the label Core keeps for it: Core text's, and nothing in a program. Written only before a word, so a member with none states nothing here.
     pub core: D::Fields,
-    pub label: Option<String>,
+    /// The binder's word, carrying the span of the word alone, so the binder is answered where it is written.
+    pub label: Option<Label>,
     pub type_: Term<D>,
 }
 
@@ -613,9 +614,9 @@ pub fn func_sugar_type_params<D: Dialect>(params: &[FuncSugarParam<D>]) -> Vec<F
             core: D::Fields::default(),
             label: match param {
                 FuncSugarParam::Bound {
-                    binder: Pattern::Binder(name),
+                    binder: Pattern::Binder(binder),
                     ..
-                } => Some(name.to_string()),
+                } => Some(binder.label.clone()),
                 FuncSugarParam::Bound {
                     binder: Pattern::Tuple(_) | Pattern::Struct { .. },
                     ..

@@ -152,6 +152,15 @@ fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
     );
 }
 
+/// A telescope's binder nothing reads is no unused binder, though it is kept where it stands: a family's parameter, a payload's binder and a function type's parameter.
+#[test]
+fn a_telescopes_binder_nothing_reads_is_not_reported() {
+    let telescopes = "induct _Shape(A: Type, Spare: Type): Type\n| dot(size: /std/Nat)\nend\nlet _apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";
+
+    let reports = of(telescopes);
+    assert!(reports.is_empty(), "{reports:?}");
+}
+
 /// A program that does not lower has nothing to read lints off: the error alone.
 #[test]
 fn a_program_that_does_not_lower_reports_the_error_alone() {
