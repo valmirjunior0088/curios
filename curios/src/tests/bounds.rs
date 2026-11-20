@@ -418,6 +418,21 @@ const ROWS: &[Row] = &[
     // A remainder at `Int`, a widened natural whose bounds conversion decides at either sign of the divisor.
     claim("x: Int", "Holds(x % +3 < +3)"),
     claim("x: Int", "Holds(+0 <= x % -3 && x % -3 < +3)"),
+    // An `Int` quotient's bounds, read as a natural's are: at either sign of the divisor, through a shift, and with a remainder lifted out of a fact, a mask's and one an equation states.
+    claim("i: Int", "Holds(2 * (i / 2) <= i && i < 2 * (i / 2) + 2)"),
+    claim(
+        "i: Int",
+        "Holds(-3 * (i / -3) <= i && i < -3 * (i / -3) + 3)",
+    ),
+    claim("i: Int, p: Holds(i < +256)", "Holds(Int/shr(i, 4) < +16)"),
+    claim(
+        "x: Int, p: Holds(Int/and(x, 15) < +10)",
+        "Holds(x < 16 * Int/shr(x, 4) + 10)",
+    ),
+    claim(
+        "x: Int, p: Holds(x % 4 == +1)",
+        "Holds(x - 4 * (x / 4) == +1)",
+    ),
     // A right shift, through the quotient by two to its count it is: both bounds at a literal count and at a symbolic one, a byte's high nibble, and a shift of an odd number and of a left shift, each by what it undoes.
     claim("x: Nat", "Holds(4 * Nat/shr(x, 2) <= x)"),
     claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 4)"),
@@ -755,10 +770,14 @@ const CONTROLS: &[Row] = &[
     // A shift's bounds one past what they are: a byte's high nibble is at most fifteen, and a shift's multiple reaches its value less the low bits, `x = 3`.
     claim("x: Nat, p: Holds(x < 256)", "Holds(Nat/shr(x, 4) < 15)"),
     claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 3)"),
-    // A value one below what its low bits allow: `x = 9`.
+    // A value one below what its low bits allow, at `Nat` and at `Int`: `x = 9`.
     claim(
         "x: Nat, p: Holds(Nat/and(x, 15) < 10)",
         "Holds(x < 16 * Nat/shr(x, 4) + 9)",
+    ),
+    claim(
+        "x: Int, p: Holds(Int/and(x, 15) < +10)",
+        "Holds(x < 16 * Int/shr(x, 4) + 9)",
     ),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.
     body(

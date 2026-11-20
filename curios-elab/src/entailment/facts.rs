@@ -1209,10 +1209,15 @@ impl<'a> Reader<'a> {
     ///
     /// The bounds are `le/add_r(d * (x / d), x % d)` and `lt/add_mul_lt(x / d, x % d, x / d + 1, d, qed, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. The second asks for `x % d < d`, which conversion decides at any divisor, where it decides the aligned `x % d + 1 <= d` only at a literal. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them. Where the divisor is no literal its multiple is a product, which linear arithmetic reads as an unknown of its own and [`products`] relate to its factors.
     ///
-    /// `Nat` alone: at `Int`, a remainder is a widened natural, whose bounds conversion decides, and a quotient's bounds are not read.
+    /// At `Int` the remainder is a widened natural and the bounds are `Int/le/add_r(d * (i / d), i % d)` and `Int/lt/add_mono_l(d * (i / d), qed)` over `i % d < |d|`, the second read at a literal divisor alone, where conversion decides that bound; the lift raises a fact by any multiple, `Int` cancelling a summand at either sign.
     fn quotients(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
-        let natural = context.syntax().entailment.natural;
-        if !in_scope(context, &[natural.below, natural.above, natural.shift]) {
+        let (natural, integer) = (
+            context.syntax().entailment.natural,
+            context.syntax().entailment.integer,
+        );
+        let at_nat = in_scope(context, &[natural.below, natural.above, natural.shift]);
+        let at_int = in_scope(context, &[integer.below, integer.above, integer.shift]);
+        if !at_nat && !at_int {
             return Ok(false);
         }
         let (mut read, positive) = (false, qed(context));
@@ -1220,6 +1225,10 @@ impl<'a> Reader<'a> {
             let mut pending: Vec<Division> = Vec::new();
             for atom in self.atoms(target) {
                 if let Some(division) = Division::of(self.views.term(&atom), &positive)
+                    && match division.carrier {
+                        Carrier::Integer => at_int,
+                        _ => at_nat,
+                    }
                     && !self.divided.contains(&division)
                     && !pending.contains(&division)
                 {
@@ -1243,24 +1252,52 @@ impl<'a> Reader<'a> {
             };
 
             let (multiple, remainder) = (division.multiple(), division.remainder());
-            let below = Term::apply(global(natural.below), [multiple.clone(), remainder.clone()]);
-            let floor = Intrinsic::NatLe(multiple.clone(), division.dividend.clone());
-            self.admit(context, floor, below, Origin::Definition)?;
-            let quotient = division.quotient();
-            let above = Term::apply(
-                global(natural.above),
-                [
-                    quotient.clone(),
-                    remainder,
-                    successor(Carrier::Natural, quotient),
-                    division.divisor.clone(),
-                    qed(context),
-                    qed(context),
-                ],
-            );
-            let ceiling = Term::intrinsic(Intrinsic::NatAdd(multiple, division.divisor.clone()));
-            let ceiling = Intrinsic::NatLt(division.dividend.clone(), ceiling);
-            self.admit(context, ceiling, above, Origin::Definition)?;
+            match division.carrier {
+                Carrier::Integer => {
+                    let below = Term::apply(
+                        global(integer.below),
+                        [multiple.clone(), division.natural.clone()],
+                    );
+                    let floor = Intrinsic::IntLe(multiple.clone(), division.dividend.clone());
+                    self.admit(context, floor, below, Origin::Definition)?;
+                    if let Some(magnitude) = division.magnitude() {
+                        let above = Term::apply_marked(
+                            global(integer.above),
+                            [
+                                (Plicity::Explicit, multiple.clone()),
+                                (Plicity::Implicit, remainder),
+                                (Plicity::Implicit, magnitude.clone()),
+                                (Plicity::Explicit, qed(context)),
+                            ],
+                        );
+                        let ceiling = Term::intrinsic(Intrinsic::IntAdd(multiple, magnitude));
+                        let ceiling = Intrinsic::IntLt(division.dividend.clone(), ceiling);
+                        self.admit(context, ceiling, above, Origin::Definition)?;
+                    }
+                }
+                _ => {
+                    let below =
+                        Term::apply(global(natural.below), [multiple.clone(), remainder.clone()]);
+                    let floor = Intrinsic::NatLe(multiple.clone(), division.dividend.clone());
+                    self.admit(context, floor, below, Origin::Definition)?;
+                    let quotient = division.quotient();
+                    let above = Term::apply(
+                        global(natural.above),
+                        [
+                            quotient.clone(),
+                            remainder,
+                            successor(Carrier::Natural, quotient),
+                            division.divisor.clone(),
+                            qed(context),
+                            qed(context),
+                        ],
+                    );
+                    let ceiling =
+                        Term::intrinsic(Intrinsic::NatAdd(multiple, division.divisor.clone()));
+                    let ceiling = Intrinsic::NatLt(division.dividend.clone(), ceiling);
+                    self.admit(context, ceiling, above, Origin::Definition)?;
+                }
+            }
 
             let cases = self
                 .read
@@ -1277,8 +1314,9 @@ impl<'a> Reader<'a> {
 
     /// What lifting `division`'s remainder out of a fact takes: the remainder's monomial, and what it denotes — `x - d * (x / d)`, the form of `x <= d * (x / d)`. `None` where the remainder does not read as one atom.
     fn lift(&mut self, context: &mut Context, division: &Division) -> Result<Option<Lift>, Error> {
-        let zero = literal(Carrier::Natural, 0u32);
-        let Some(remainder) = self.form_of(context, &division.remainder(), &zero)? else {
+        let carrier = division.carrier;
+        let zero = literal(carrier, 0u32);
+        let Some(remainder) = self.form_of(context, carrier, &division.remainder(), &zero)? else {
             return Ok(None);
         };
         let [(coefficient, monomial)] = remainder.terms.as_slice() else {
@@ -1288,14 +1326,21 @@ impl<'a> Reader<'a> {
             return Ok(None);
         }
         let monomial = monomial.clone();
-        let Some(denotes) = self.form_of(context, &division.dividend, &division.multiple())? else {
+        let Some(denotes) =
+            self.form_of(context, carrier, &division.dividend, &division.multiple())?
+        else {
             return Ok(None);
         };
+        let entailment = context.syntax().entailment;
         Ok(Some(Lift {
+            carrier,
             remainder: monomial,
             denotes,
             multiple: division.multiple(),
-            shift: context.syntax().entailment.natural.shift,
+            shift: match carrier {
+                Carrier::Integer => entailment.integer.shift,
+                _ => entailment.natural.shift,
+            },
         }))
     }
 
@@ -1479,13 +1524,18 @@ impl<'a> Reader<'a> {
     fn form_of(
         &mut self,
         context: &mut Context,
+        carrier: Carrier,
         left: &Term,
         right: &Term,
     ) -> Result<Option<LinearForm>, Error> {
-        let read = Intrinsic::NatLe(
-            self.side(context, Carrier::Natural, left)?,
-            self.side(context, Carrier::Natural, right)?,
+        let (left, right) = (
+            self.side(context, carrier, left)?,
+            self.side(context, carrier, right)?,
         );
+        let read = match carrier {
+            Carrier::Integer => Intrinsic::IntLe(left, right),
+            _ => Intrinsic::NatLe(left, right),
+        };
         Ok(self
             .views
             .read(&read)
@@ -2000,27 +2050,48 @@ fn product(
     reader.admit(context, statement, proof, origin)
 }
 
-/// A quotient or a remainder, in any spelling Core reads one in ([`Intrinsic::nat_division`]): its dividend, its divisor, and its quotient and remainder as the program wrote them, beside the program's proof that the divisor is not zero where the spelling carries one — so they are the atoms the program wrote.
+/// A quotient or a remainder, at `Nat` or at `Int`, in any spelling Core reads one in ([`Intrinsic::division`]): its dividend, its divisor, and its quotient and remainder as the facts hold them — an `Int` remainder widened — beside the natural the remainder is, written with the program's proof that the divisor is not zero where the spelling carries one, so they are the atoms the program wrote.
 #[derive(Clone, PartialEq)]
 struct Division {
+    carrier: Carrier,
     dividend: Term,
     divisor: Term,
     quotient: Term,
     remainder: Term,
+    /// The remainder as the natural `Nat/rem` or `Int/rem` answers.
+    natural: Term,
 }
 
 impl Division {
-    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold. A right shift by `k` and a mask of `k` bits divide by a power of two, which is positive at every `k`, so `qed` proves it nonzero.
+    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold; a widened `Int/rem` is read through its widening. A right shift by `k` and a mask of `k` bits divide by a power of two, which is positive at every `k`, so `qed` proves it nonzero.
     fn of(term: &Term, qed: &Term) -> Option<Self> {
-        let Subterm::Intrinsic(intrinsic) = &**term else {
+        let (read, widened) = match &**term {
+            Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => (natural, true),
+            _ => (term, false),
+        };
+        let Subterm::Intrinsic(intrinsic) = &**read else {
             return None;
         };
-        let division = intrinsic.nat_division()?;
+        let division = intrinsic.division()?;
+        let carrier = division.carrier();
+        // A widening holds a remainder at `Int` only as `Int/rem` answers one, a natural; a mask answers it widened already.
+        if widened
+            != (carrier == Carrier::Integer
+                && division.half() == Half::Remainder
+                && !division.widened())
+        {
+            return None;
+        }
         let divisor = division.divisor();
         let non_zero = match &division {
             curios_core::Division::Proved { non_zero, .. } => {
-                let zero = matches!(&*divisor, Subterm::Intrinsic(Intrinsic::Nat(literal))
-                    if literal.to_natural().is_some_and(|value| value.is_zero()));
+                let zero = match &*divisor {
+                    Subterm::Intrinsic(Intrinsic::Nat(literal)) => {
+                        literal.to_natural().is_some_and(|value| value.is_zero())
+                    }
+                    Subterm::Intrinsic(Intrinsic::Int(literal)) => literal.is_zero(),
+                    _ => false,
+                };
                 if zero {
                     return None;
                 }
@@ -2029,22 +2100,33 @@ impl Division {
             _ => qed.clone(),
         };
         let dividend = division.dividend().clone();
+        let natural = Term::intrinsic(match carrier {
+            Carrier::Integer => Intrinsic::IntRem {
+                dividend: dividend.clone(),
+                divisor: divisor.clone(),
+                non_zero,
+            },
+            _ => Intrinsic::NatRem {
+                dividend: dividend.clone(),
+                divisor: divisor.clone(),
+                non_zero,
+            },
+        });
+        let held = match carrier {
+            Carrier::Integer => Term::intrinsic(Intrinsic::NatToInt(natural.clone())),
+            _ => natural.clone(),
+        };
         let (quotient, remainder) = match division.half() {
-            Half::Quotient => (
-                term.clone(),
-                Term::intrinsic(Intrinsic::NatRem {
-                    dividend: dividend.clone(),
-                    divisor: divisor.clone(),
-                    non_zero,
-                }),
-            ),
+            Half::Quotient => (read.clone(), held),
             Half::Remainder => (division.quotient(), term.clone()),
         };
         Some(Division {
+            carrier,
             dividend,
             divisor,
             quotient,
             remainder,
+            natural,
         })
     }
 
@@ -2058,19 +2140,33 @@ impl Division {
 
     /// `d * (x / d)`, which conversion reads beside `x % d` as `x`.
     fn multiple(&self) -> Term {
-        Term::intrinsic(Intrinsic::NatMul(self.divisor.clone(), self.quotient()))
+        Term::intrinsic(match self.carrier {
+            Carrier::Integer => Intrinsic::IntMul(self.divisor.clone(), self.quotient()),
+            _ => Intrinsic::NatMul(self.divisor.clone(), self.quotient()),
+        })
+    }
+
+    /// The divisor's magnitude as a literal of the division's carrier, where the divisor is a literal: what an `Int` remainder is below, conversion deciding that bound at a literal divisor alone.
+    fn magnitude(&self) -> Option<Term> {
+        match &*self.divisor {
+            Subterm::Intrinsic(Intrinsic::Int(value)) => Some(Term::intrinsic(Intrinsic::Int(
+                Integer::from(value.magnitude()),
+            ))),
+            _ => None,
+        }
     }
 }
 
 /// A remainder lifted out of the facts: a fact over it is raised by a multiple of its quotient's multiple on both sides, which conversion reads as a fact over the dividend, and its form has the remainder replaced by what it denotes.
 #[derive(Clone)]
 pub struct Lift {
+    carrier: Carrier,
     remainder: Monomial,
     /// `x - d * (x / d)`.
     denotes: LinearForm,
     /// `d * (x / d)`.
     multiple: Term,
-    /// `le/add_mono_l`.
+    /// `le/add_mono_l`, at the carrier.
     shift: SyntaxName,
 }
 
@@ -2083,21 +2179,28 @@ impl Lift {
             .map(|(coefficient, _)| coefficient.clone())
     }
 
-    /// `fact` raised by `c * d * (x / d)` on both sides, `c` the remainder's coefficient in it, through `le/add_mono_l`: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. An `Int` fact reads a remainder only through its widening, which is left as it is: a certificate that needs it does not check, and is reported as the procedure's refusal.
+    /// `fact` raised by `c * d * (x / d)` on both sides, `c` the remainder's coefficient in it, through `le/add_mono_l` at the division's carrier: the remainder's `c` copies then stand beside as many multiples, which conversion reads as `c * x`. A fact of the other carrier holds no atom of this one and is left as it is.
     fn apply(&self, fact: &mut Fact) {
         let Some(coefficient) = self.coefficient(&fact.form) else {
             return;
         };
-        if fact.carrier != Carrier::Natural {
+        if fact.carrier != self.carrier {
             return;
         }
+        // The remainder stands on one side `|c|` times, and only as many multiples beside it recombine to the dividend, whichever side that is.
         let copies = coefficient.magnitude();
-        let raise = match copies == Natural::from(1u32) {
-            true => self.multiple.clone(),
-            false => Term::intrinsic(Intrinsic::NatMul(
-                literal(Carrier::Natural, copies),
-                self.multiple.clone(),
-            )),
+        let raise = match self.carrier {
+            _ if copies == Natural::from(1u32) => self.multiple.clone(),
+            carrier => Term::intrinsic(match carrier {
+                Carrier::Integer => {
+                    Intrinsic::IntMul(literal(Carrier::Integer, copies), self.multiple.clone())
+                }
+                _ => Intrinsic::NatMul(literal(Carrier::Natural, copies), self.multiple.clone()),
+            }),
+        };
+        let added = |left: Term, right: Term| match self.carrier {
+            Carrier::Integer => Term::intrinsic(Intrinsic::IntAdd(left, right)),
+            _ => Term::intrinsic(Intrinsic::NatAdd(left, right)),
         };
         fact.proof = Term::apply_marked(
             global(self.shift),
@@ -2108,8 +2211,8 @@ impl Lift {
                 (Plicity::Explicit, fact.proof.clone()),
             ],
         );
-        fact.left = Term::intrinsic(Intrinsic::NatAdd(raise.clone(), fact.left.clone()));
-        fact.right = Term::intrinsic(Intrinsic::NatAdd(raise, fact.right.clone()));
+        fact.left = added(raise.clone(), fact.left.clone());
+        fact.right = added(raise, fact.right.clone());
         fact.form = self.substituted(&fact.form, &coefficient);
     }
 

@@ -468,6 +468,12 @@ pub struct IntegerSyntax {
     pub sign_at_least: SyntaxName,
     /// `sign(a) <= +1`: what every case of a sign states from above.
     pub sign_at_most: SyntaxName,
+    /// `a <= a + Nat/to_int(k)`: a quotient's multiple is at most its dividend, once conversion reads `d * (i / d) + i % d` as `i`.
+    pub below: SyntaxName,
+    /// `a < b` gives `n + a < n + b`: a dividend is below its quotient's multiple raised by its divisor's magnitude, from `i % d < |d|`.
+    pub above: SyntaxName,
+    /// `a <= b` gives `n + a <= n + b`: a fact over a remainder raised to one over its dividend.
+    pub shift: SyntaxName,
 }
 
 impl IntegerSyntax {
@@ -483,6 +489,9 @@ impl IntegerSyntax {
             abs_at_least_negated,
             sign_at_least,
             sign_at_most,
+            below,
+            above,
+            shift,
         } = self;
 
         [
@@ -496,6 +505,9 @@ impl IntegerSyntax {
             abs_at_least_negated,
             sign_at_least,
             sign_at_most,
+            below,
+            above,
+            shift,
         ]
         .into_iter()
     }

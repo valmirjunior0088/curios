@@ -166,6 +166,9 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             abs_at_least_negated: registry_name(&["std", "Int", "abs", "at_least_negated"]),
             sign_at_least: registry_name(&["std", "Int", "sign", "at_least"]),
             sign_at_most: registry_name(&["std", "Int", "sign", "at_most"]),
+            below: registry_name(&["std", "Int", "le", "add_r"]),
+            above: registry_name(&["std", "Int", "lt", "add_mono_l"]),
+            shift: registry_name(&["std", "Int", "le", "add_mono_l"]),
         },
     },
 };

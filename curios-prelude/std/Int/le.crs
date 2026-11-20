@@ -45,6 +45,14 @@ pub let add(
 ) -> Bool/Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
+--- `a <= a + k` for a natural `k`: a quotient's multiple is at most its dividend, the remainder being a natural, which is how the elaborator's proofs read an `Int` quotient's bound from below.
+pub let add_r(a: Int, k: Nat) -> Bool/Holds(a <= a + Nat/to_int(k)) =
+    Bool/True/qed();
+
+--- `a <= b` gives `n + a <= n + b`: a fact over a remainder raised to one over its dividend, as the elaborator's proofs lift a remainder out of a fact.
+pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
+    p;
+
 --- An equation's bound: `a = b` gives `a <= b`.
 ---
 --- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
