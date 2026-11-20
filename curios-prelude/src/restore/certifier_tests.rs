@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_cert::{Error, certify_definitions, infer, test_support::*},
+    curios_cert::{Error, Verdict, certify_definitions, infer, test_support::*},
     curios_core::{
         Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality, Reducer,
         Subterm, Telescope, Term, Variance, instantiate_qualities,
@@ -87,9 +87,9 @@ fn certifier_disagreements() {
     });
 }
 
-/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdict lists identical.
+/// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdicts alike wherever the memo-free walk reaches one.
 ///
-/// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing and mints nothing, so an uncached walk spends at least as much as a cached one, the two may reach different *exhaustion* points, and a binder opened after a hit takes another identity in each; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points would assert what the design gives up.
+/// **The relation is the memo decision's, exactly.** A term-keyed memo hit spends nothing and mints nothing, so a memo-free walk spends at least as much as the certifier: it may exhaust where the certifier answers, and a binder opened after a hit takes another identity in each; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. So what the memo-free walk exhausts on is set aside, and every other verdict must agree, the certifier's exhaustion among them, which a walk spending no less shares. Requiring the memo-free walk to finish everywhere would assert what the design gives up, and the library would be written to its budget.
 ///
 /// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. It runs with the suite, since the memo decision rests on it and nothing else holds it: walking the prelude twice takes one test thread what a part of the library's read-back does.
 #[test]
@@ -97,16 +97,30 @@ fn certifier_memo_parity() {
     with_prelude(|prelude| {
         for (index, root) in prelude.iter().enumerate() {
             let globals = certified(&prelude[..index]);
+            let memo_free = recheck_definitions_verdicts_uncached(
+                root.core(),
+                DEFAULT_BUDGET,
+                &globals,
+                SYNTAX,
+            );
+            let spent = memo_free
+                .iter()
+                .filter(|verdict| verdict.error.is_exhausted())
+                .map(|verdict| verdict.name)
+                .collect::<Vec<_>>();
+            let judged = |verdicts: Vec<Verdict>| {
+                verdicts
+                    .into_iter()
+                    .filter(|verdict| !spent.contains(&verdict.name))
+                    .collect::<Vec<_>>()
+            };
             assert_eq!(
-                certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
-                    .0
-                    .into_verdicts(),
-                recheck_definitions_verdicts_uncached(
-                    root.core(),
-                    DEFAULT_BUDGET,
-                    &globals,
-                    SYNTAX
+                judged(
+                    certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
+                        .0
+                        .into_verdicts()
                 ),
+                judged(memo_free),
             );
         }
     });

@@ -226,13 +226,8 @@ let made_by(
     | _ => Str/concat(Str/concat(one, two), three)
     end;
 
--- What `make` makes of `c` where `c` is one of the scalars a record steps through, handed that it lies no further than the record's last; any other character stays itself. Each condition is a match of its own, so that the arm calling `make` holds `code <= r.last` as its own equation, and no fact about the record stands in scope for a match to read through.
-let chosen(
-    c: Char,
-    r: Record,
-    steps: Bool/Holds(1 <= r.step),
-    make: (Bool/Holds(Char/to_nat(c) <= r.last)) -> Str,
-) -> Str =
+-- What a record that lands among the scalars maps `c` to: where `c` is one of the scalars it steps through, the characters it makes of it; any other character stays itself.
+let onto(c: Char, r: Record, fact: Bool/Holds(lands(r))) -> Str =
     let code = Char/to_nat(c);
     match r.first <= code
     | false => Str/of_char(c)
@@ -240,16 +235,12 @@ let chosen(
         match code <= r.last
         | false => Str/of_char(c)
         | true =>
-            match stepped(code, r.first, r.step, steps)
+            match stepped(code, r.first, r.step, steps_of(r, fact))
             | false => Str/of_char(c)
-            | true => make(Bool/True/qed())
+            | true => made_by(code, r, fact, Bool/True/qed())
             end
         end
     end;
-
--- What a record that lands among the scalars maps `c` to: where `c` is one of the scalars it steps through, the characters it makes of it; any other character stays itself.
-let onto(c: Char, r: Record, fact: Bool/Holds(lands(r))) -> Str =
-    chosen(c, r, steps_of(r, fact), (before) => made_by(Char/to_nat(c), r, fact, before));
 
 --- What `c` becomes under the mapping `table` packs, every record of which lands among the scalars: the characters of the record that covers it, or `c` itself where none does.
 pub let mapping(table: Bytes, landing: Bool/Holds(every_record_lands(table)), c: Char) -> Str =
