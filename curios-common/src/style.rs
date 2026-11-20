@@ -14,8 +14,6 @@ pub enum Kind {
     Goal,
     /// An exact finding nothing stops on.
     Lint,
-    /// A text the formatter would write otherwise.
-    Format,
     /// A declaration asked about by its path, its whole text following the block.
     Declaration,
     /// A module asked about by its path, the names it exposes following the block.
@@ -35,7 +33,6 @@ impl Kind {
             Kind::Error => "error",
             Kind::Goal => "goal",
             Kind::Lint => "lint",
-            Kind::Format => "format",
             Kind::Declaration => "declaration",
             Kind::Module => "module",
             Kind::Term => "term",

@@ -171,8 +171,8 @@ fn the_panes_of_a_report_share_one_gutter() {
 #[test]
 fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
     let said = || {
-        let mut said = Said::line("not canonical");
-        said.stating("the formatter would rewrite this file");
+        let mut said = Said::line("core text");
+        said.stating("`run` reads no Core text");
         said
     };
     let reader = Style {
@@ -181,25 +181,25 @@ fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
     };
 
     assert_eq!(
-        Report::about(About::Path("/work/app/src/lib.crs".into()), said())
-            .trying("curios format src/lib.crs")
-            .rendered(Kind::Format, &reader),
+        Report::about(About::Path("/work/app/src/lib.crsc".into()), said())
+            .trying("curios wonder src/lib.crsc")
+            .rendered(Kind::Error, &reader),
         concat!(
-            "not canonical\n",
-            "│  the formatter would rewrite this file\n",
-            "├─ try; curios format src/lib.crs\n",
-            "└─ [format] src/lib.crs",
+            "core text\n",
+            "│  `run` reads no Core text\n",
+            "├─ try; curios wonder src/lib.crsc\n",
+            "└─ [error] src/lib.crsc",
         )
     );
     assert_eq!(
         Report::about(About::Named("<stdin>".into()), said())
-            .trying("curios format -")
-            .rendered(Kind::Format, &reader),
+            .trying("curios wonder --core -")
+            .rendered(Kind::Error, &reader),
         concat!(
-            "not canonical\n",
-            "│  the formatter would rewrite this file\n",
-            "├─ try; curios format -\n",
-            "└─ [format] <stdin>",
+            "core text\n",
+            "│  `run` reads no Core text\n",
+            "├─ try; curios wonder --core -\n",
+            "└─ [error] <stdin>",
         )
     );
 }

@@ -67,74 +67,20 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     );
 }
 
-/// A text the formatter would write otherwise is said once, after what the compiler says of it, with the command that rewrites it, and stops nothing: standard input by its own name, and a canonical text not at all.
+/// A text's layout is the formatter's question, never the check's: a text that compiles clean answers nothing however it is laid out, read from standard input or from a package's files.
 #[test]
-fn a_text_the_formatter_would_rewrite_is_said_once_with_the_way_out() {
-    let root = temporary("not-canonical-stdin");
-    fs::create_dir_all(&root).unwrap();
-
-    let answered = curios(
-        &root,
-        &["wonder", "-"],
-        "let   unused = 1;\n/std/print(  \"\")\n",
-    );
-
-    assert!(answered.status.success());
-    let text = stdout(&answered);
-    assert!(
-        text.ends_with(concat!(
-            "└─ [lint] <stdin>:1:7\n",
-            "\n",
-            "not canonical\n",
-            "│  the formatter would rewrite this text\n",
-            "├─ try; curios format -\n",
-            "└─ [format] <stdin>\n",
-        )),
-        "{text}"
-    );
-
-    let canonical = curios(&root, &["wonder", "-"], "/std/print(\"\")\n");
-    assert_eq!(stdout(&canonical), "");
-}
-
-/// Every file a subject is written in is asked about, as `format` would rewrite it, and each is named as its reader spells it: a package's two files that are not canonical are two reports, and a file asked about alone is one.
-#[test]
-fn each_file_the_formatter_would_rewrite_is_a_report_of_its_own() {
-    let root = project("not-canonical-files");
+fn the_check_says_nothing_of_a_texts_layout() {
+    let root = project("layout");
     write(&root, "lib.crs", "pub   mod util;\n");
     write(&root, "app.crs", "/std/print(  /app/util/word)\n");
 
     let entire = curios(&root, &["wonder"], "");
     assert!(entire.status.success());
-    assert_eq!(
-        stdout(&entire),
-        concat!(
-            "not canonical\n",
-            "│  the formatter would rewrite this file\n",
-            "├─ try; curios format lib.crs\n",
-            "└─ [format] lib.crs\n",
-            "\n",
-            "not canonical\n",
-            "│  the formatter would rewrite this file\n",
-            "├─ try; curios format app.crs\n",
-            "└─ [format] app.crs\n",
-        )
-    );
+    assert_eq!(stdout(&entire), "");
 
-    let alone = curios(&root, &["wonder", "app.crs"], "");
-    assert_eq!(
-        stdout(&alone),
-        concat!(
-            "not canonical\n",
-            "│  the formatter would rewrite this file\n",
-            "├─ try; curios format app.crs\n",
-            "└─ [format] app.crs\n",
-        )
-    );
-
-    // `lint` reads what the compilation found, which a text's layout is no part of.
-    let linted = curios(&root, &["lint"], "");
-    assert_eq!(stdout(&linted), "");
+    let read = curios(&root, &["wonder", "-"], "/std/print(  \"\")\n");
+    assert!(read.status.success());
+    assert_eq!(stdout(&read), "");
 }
 
 /// `--manifest` takes the file as it is spelled, and a bare `curios.toml` names the one in the working directory: its parent is the empty path, which is no directory to resolve on its own.

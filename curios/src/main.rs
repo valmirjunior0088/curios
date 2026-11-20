@@ -39,7 +39,7 @@ use {
         pin, scaffold,
     },
     curios_pipeline::CompileError,
-    curios_surface::{Format, Formatted},
+    curios_surface::Formatted,
     curios_wonder::{
         Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_classes,
         wonder_diagnostics, wonder_exports, wonder_false, wonder_footprint, wonder_name,
@@ -790,26 +790,13 @@ fn dispatch() -> Result<(), Failure> {
             // What standard input is written in, said once for every query and refused beside any other subject.
             let stdin = Contract::stdin_written_in(core.core, subject)?;
             match query {
-                Query::Check => {
-                    let directory = here()?;
-                    // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
-                    let (files, format) =
-                        match contract.written_in(subject, manifest, &directory, cabinet) {
-                            Ok(Rewritten::Files(files, format)) => (files, format),
-                            Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
-                            Err(_) => (Vec::new(), Format::default()),
-                        };
-
-                    wonder_diagnostics(
-                        elaboration.budget,
-                        contract
-                            .admit_any(subject, manifest, &directory, cabinet)?
-                            .read_stdin_as(stdin),
-                        &files,
-                        format,
-                        &mut Asking::checking(answered.clone()),
-                    )?
-                }
+                Query::Check => wonder_diagnostics(
+                    elaboration.budget,
+                    contract
+                        .admit_any(subject, manifest, &here()?, cabinet)?
+                        .read_stdin_as(stdin),
+                    &mut Asking::checking(answered.clone()),
+                )?,
                 Query::Tests => wonder_tests(
                     elaboration.budget,
                     contract

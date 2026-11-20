@@ -24,3 +24,4 @@
 - **A width past `MAX_LINE_WIDTH`**, and **a narrowest width no law is held at**.
 - **A flat match's span as a share of the line width**: it would move with the page, where the span is the reader's.
 - **Indentation and every other layout choice as settings**: each has one answer, and a parameter with one setting is scaffolding.
+- **`wonder`'s check saying which texts are not canonical**: a text's layout is no finding of its compilation, so the check would hold a second answer to `format --check`'s question, one no exit code turns on, the server would not publish and a probe typed on standard input would carry nearly every time.

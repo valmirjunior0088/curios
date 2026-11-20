@@ -12,13 +12,12 @@ use {
         footprint, named_stage, placed, stage, unit_stage,
     },
     curios_common::{
-        About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
-        SourceName, Style,
+        About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
     },
     curios_module::{LoadError, Overlay},
-    curios_package::{Entry, Home, Library, Program, Refused, Selection, Spelling},
+    curios_package::{Entry, Home, Library, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
-    curios_surface::{Format, Formatted, WrittenIn},
+    curios_surface::WrittenIn,
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -476,26 +475,16 @@ impl Asked {
     }
 }
 
-/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, and after them each text of it the formatter would write otherwise, `files` and standard input read within `width`, a blank line between each, `telling` told of each subject's compile as it goes.
+/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes.
 pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
-    files: &[PathBuf],
-    format: Format,
     telling: &mut dyn Telling,
 ) -> Result<(), Box<Report>> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
-    let reader = telling.reader();
-    let unformatted = uncanonical(&answers, files, format, &reader);
-
-    let mut reports = rendered(answers, budget, &overlay, telling);
-    reports.extend(
-        unformatted
-            .iter()
-            .map(|report| report.rendered(Kind::Format, &reader)),
-    );
+    let reports = rendered(answers, budget, &overlay, telling);
     if !reports.is_empty() {
         telling.answering();
         answer(format_args!("{}\n", reports.join("\n\n")));
@@ -530,55 +519,6 @@ pub fn wonder_tests(
         }
     }
     listed
-}
-
-/// Each text of a subject the formatter would write otherwise, a report a text: each of `files`, once, and the text a subject of `answers` was read from standard input as. A text the formatter refuses is none of them, since why it refuses is the compilation's to say.
-///
-/// **One report a text, never one a place**: what would move is the formatter's to show, by writing it, and the way out is one command however much moves.
-fn uncanonical(
-    answers: &[Asked],
-    files: &[PathBuf],
-    format: Format,
-    reader: &Style,
-) -> Vec<Report> {
-    let moved = |formatted| matches!(formatted, Ok(Formatted::Changed(_)));
-    let report = |about, what: &str, subject: &str| {
-        let mut said = Said::line("not canonical");
-        said.stating(format_args!("the formatter would rewrite this {what}"));
-
-        Report::about(about, said).trying(format!("curios format {subject}"))
-    };
-    let mut seen = BTreeSet::new();
-    let written = files
-        .iter()
-        .filter(|path| seen.insert(*path))
-        .filter(|path| moved(Formatted::from_path(path, format)))
-        .map(|path| report(About::Path(path.clone()), "file", &reader.spelled(path)));
-    let read = answers
-        .iter()
-        .filter_map(|asked| match &asked.subject {
-            Subject::Entry {
-                origin: Origin::Text { text, written },
-                ..
-            } => Some((text, *written)),
-            _ => None,
-        })
-        .filter(|(text, written)| {
-            moved(Formatted::from_source(
-                &Source::named(SourceName::stdin(), text.as_str()),
-                *written,
-                format,
-            ))
-        })
-        .map(|_| {
-            report(
-                About::Named(STDIN_NAME.to_string()),
-                "text",
-                Spelling::STDIN,
-            )
-        });
-
-    written.chain(read).collect()
 }
 
 /// Every answer's diagnostics, rendered, each distinct fact once.

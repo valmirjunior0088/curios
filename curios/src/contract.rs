@@ -743,26 +743,6 @@ impl Contract {
         self.rewritten(subject, manifest, directory, settings, core, cabinet)
     }
 
-    /// What [`admit_files`](Self::admit_files) would rewrite of whatever `subject` selects, for a command that takes any subject and says of each text it is written in whether the formatter would write it otherwise.
-    pub fn written_in(
-        &self,
-        subject: Option<&str>,
-        manifest: Option<&Path>,
-        directory: &Path,
-        cabinet: Option<&Path>,
-    ) -> Result<Rewritten, Box<Report>> {
-        debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
-
-        self.rewritten(
-            subject,
-            manifest,
-            directory,
-            &FormatSettings::default(),
-            false,
-            cabinet,
-        )
-    }
-
     fn rewritten(
         &self,
         subject: Option<&str>,
