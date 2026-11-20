@@ -1,4 +1,4 @@
-//! The encoder: what it refuses at index-space construction, before any byte is written, and what each function's entry of the code section measures.
+//! The encoder: what it refuses at index-space construction, before any byte is written, what each function's entry of the code section measures, and what it leaves out for holding nothing.
 
 use crate::*;
 
@@ -52,3 +52,81 @@ fn a_functions_code_size_is_its_entry_after_the_size() {
         );
     }
 }
+
+/// Each section `bytes` holds, in order, by its id, and each subsection of its name section, by its id after the section's.
+fn sections(bytes: &[u8]) -> Vec<String> {
+    fn leb(bytes: &[u8], mut at: usize) -> (usize, usize) {
+        let (mut value, mut shift) = (0, 0);
+        loop {
+            let byte = bytes[at];
+            at += 1;
+            value |= usize::from(byte & 0x7f) << shift;
+            shift += 7;
+            if byte < 0x80 {
+                return (value, at);
+            }
+        }
+    }
+
+    let mut found = Vec::new();
+    let mut at = 8;
+    while at < bytes.len() {
+        let (size, start) = leb(bytes, at + 1);
+        found.push(bytes[at].to_string());
+        if bytes[at] == 0 {
+            let (length, name) = leb(bytes, start);
+            let mut sub = name + length;
+            while sub < start + size {
+                let (sub_size, sub_start) = leb(bytes, sub + 1);
+                found.push(format!("0/{}", bytes[sub]));
+                sub = sub_start + sub_size;
+            }
+        }
+        at = start + size;
+    }
+
+    found
+}
+
+/// A section or a name subsection that would hold nothing is left out, an empty one decoding to the same module as none: no import, global, export or data section here, and of the names, the module's, its functions' and its type's alone, `$seven` naming no local.
+#[test]
+fn a_section_that_would_hold_nothing_is_left_out() {
+    let module = r#"
+        (module $m
+            (type $t (func (result i32)))
+            (func $seven (type $t)
+                i32.const 7))
+"#
+    .parse::<Module>()
+    .expect("expected a module");
+
+    assert_eq!(
+        sections(&to_bytes(&module)),
+        ["1", "3", "10", "0", "0/0", "0/1", "0/4"]
+    );
+}
+
+/// A function that names no local is no entry of the local names, which list the functions that name one.
+#[test]
+fn a_function_naming_no_local_is_no_entry_of_the_local_names() {
+    let module = r#"
+        (module $m
+            (type $t (func (result i32)))
+            (func $seven (type $t)
+                i32.const 7)
+            (func $local (type $t)
+                (local $l i32)
+                local.get $l))
+"#
+    .parse::<Module>()
+    .expect("expected a module");
+    let bytes = to_bytes(&module);
+
+    // The local names: one entry, `$local`'s, at function index 1, naming one local, `l`.
+    let entry = [0x02, 0x06, 0x01, 0x01, 0x01, 0x00, 0x01, b'l'];
+    assert!(
+        bytes.windows(entry.len()).any(|window| window == entry),
+        "the local names hold `$local`'s entry alone: {bytes:02X?}"
+    );
+}
+

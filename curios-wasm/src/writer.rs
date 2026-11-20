@@ -1179,12 +1179,20 @@ where
     }
 
     fn write_type_section(&mut self, types: &[RecType]) -> Result<()> {
+        if types.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(1, |writer| {
             writer.write_vec(types, |writer, rec_type| writer.write_rec_type(rec_type))
         })
     }
 
     fn write_import_section(&mut self, imports: &[(String, String, Import)]) -> Result<()> {
+        if imports.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(2, |writer| {
             writer.write_vec(imports, |writer, (module_name, name, import)| {
                 writer.write_import(module_name, name, import)
@@ -1193,6 +1201,10 @@ where
     }
 
     fn write_func_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
+        if funcs.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(3, |writer| {
             writer.write_vec(funcs, |writer, (_, func)| writer.write_func(func))
         })
@@ -1236,12 +1248,20 @@ where
     }
 
     fn write_global_section(&mut self, globals: &[(GlobalName, Global)]) -> Result<()> {
+        if globals.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(6, |writer| {
             writer.write_vec(globals, |writer, (_, global)| writer.write_global(global))
         })
     }
 
     fn write_export_section(&mut self, exports: &[(String, Export)]) -> Result<()> {
+        if exports.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(7, |writer| {
             writer.write_vec(exports, |writer, (name, export)| {
                 writer.write_export(name, export)
@@ -1348,6 +1368,10 @@ where
     }
 
     fn write_code_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
+        if funcs.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(10, |writer| {
             writer.write_vec(funcs, |writer, (func_name, func)| {
                 writer.write_code(func_name, func)
@@ -1356,6 +1380,10 @@ where
     }
 
     fn write_data_count_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
+        if datas.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(12, |writer| {
             writer.buffer.push_leb128_unsigned(datas.len() as u64)
         })
@@ -1384,11 +1412,41 @@ where
     }
 
     fn write_data_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
+        if datas.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(11, |writer| {
             writer.write_vec(datas, |writer, (_, segment)| {
                 writer.write_data_segment(segment)
             })
         })
+    }
+
+    /// One name subsection, written only where it names something: an empty one decodes to the same module as none.
+    fn write_name_subsection(&mut self, id: u8, names: Vec<(u64, &str)>) -> Result<()> {
+        if names.is_empty() {
+            return Ok(());
+        }
+
+        self.write_section_with(id, |writer| writer.write_name_map(names))
+    }
+
+    /// One indirect name subsection, each entry written only where it names something and the subsection only where an entry is left.
+    fn write_indirect_name_subsection(
+        &mut self,
+        id: u8,
+        entries: Vec<(u64, Vec<(u64, &str)>)>,
+    ) -> Result<()> {
+        let entries = entries
+            .into_iter()
+            .filter(|(_, names)| !names.is_empty())
+            .collect::<Vec<_>>();
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        self.write_section_with(id, |writer| writer.write_indirect_name_map(entries))
     }
 
     fn write_module_name_subsection(&mut self, module_name: &str) -> Result<()> {
@@ -1400,44 +1458,40 @@ where
         imports: &[(String, String, Import)],
         funcs: &[(FuncName, Func)],
     ) -> Result<()> {
-        self.write_section_with(1, |writer| {
-            writer.write_name_map(
-                imports
-                    .iter()
-                    .flat_map(|(_, _, import)| import.func_name())
-                    .chain(funcs.iter().map(|(func_name, _)| func_name))
-                    .map(|func_name| {
-                        (
-                            writer.indices.resolve_func(func_name) as u64,
-                            func_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = imports
+            .iter()
+            .flat_map(|(_, _, import)| import.func_name())
+            .chain(funcs.iter().map(|(func_name, _)| func_name))
+            .map(|func_name| {
+                (
+                    self.indices.resolve_func(func_name) as u64,
+                    func_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(1, names)
     }
 
     fn write_local_name_section(&mut self, funcs: &[(FuncName, Func)]) -> Result<()> {
-        self.write_section_with(2, |writer| {
-            writer.write_indirect_name_map(
-                funcs
-                    .iter()
-                    .map(|(func_name, func)| {
-                        (
-                            writer.indices.resolve_func(func_name) as u64,
-                            func.local_names()
-                                .map(|local_name| {
-                                    (
-                                        writer.indices.resolve_local(func_name, local_name) as u64,
-                                        local_name.as_str(),
-                                    )
-                                })
-                                .collect::<Vec<_>>(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = funcs
+            .iter()
+            .map(|(func_name, func)| {
+                (
+                    self.indices.resolve_func(func_name) as u64,
+                    func.local_names()
+                        .map(|local_name| {
+                            (
+                                self.indices.resolve_local(func_name, local_name) as u64,
+                                local_name.as_str(),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_indirect_name_subsection(2, names)
     }
 
     fn write_table_name_section(
@@ -1445,21 +1499,19 @@ where
         imports: &[(String, String, Import)],
         tables: &[(TableName, Table)],
     ) -> Result<()> {
-        self.write_section_with(5, |writer| {
-            writer.write_name_map(
-                imports
-                    .iter()
-                    .flat_map(|(_, _, import)| import.table_name())
-                    .chain(tables.iter().map(|(table_name, _)| table_name))
-                    .map(|table_name| {
-                        (
-                            writer.indices.resolve_table(table_name) as u64,
-                            table_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = imports
+            .iter()
+            .flat_map(|(_, _, import)| import.table_name())
+            .chain(tables.iter().map(|(table_name, _)| table_name))
+            .map(|table_name| {
+                (
+                    self.indices.resolve_table(table_name) as u64,
+                    table_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(5, names)
     }
 
     fn write_memory_name_section(
@@ -1467,21 +1519,14 @@ where
         imports: &[(String, String, Import)],
         mems: &[(MemName, MemType)],
     ) -> Result<()> {
-        self.write_section_with(6, |writer| {
-            writer.write_name_map(
-                imports
-                    .iter()
-                    .flat_map(|(_, _, import)| import.mem_name())
-                    .chain(mems.iter().map(|(mem_name, _)| mem_name))
-                    .map(|mem_name| {
-                        (
-                            writer.indices.resolve_mem(mem_name) as u64,
-                            mem_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = imports
+            .iter()
+            .flat_map(|(_, _, import)| import.mem_name())
+            .chain(mems.iter().map(|(mem_name, _)| mem_name))
+            .map(|mem_name| (self.indices.resolve_mem(mem_name) as u64, mem_name.as_str()))
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(6, names)
     }
 
     fn write_global_name_section(
@@ -1489,108 +1534,97 @@ where
         imports: &[(String, String, Import)],
         globals: &[(GlobalName, Global)],
     ) -> Result<()> {
-        self.write_section_with(7, |writer| {
-            writer.write_name_map(
-                imports
-                    .iter()
-                    .flat_map(|(_, _, import)| import.global_name())
-                    .chain(globals.iter().map(|(global_name, _)| global_name))
-                    .map(|global_name| {
-                        (
-                            writer.indices.resolve_global(global_name) as u64,
-                            global_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = imports
+            .iter()
+            .flat_map(|(_, _, import)| import.global_name())
+            .chain(globals.iter().map(|(global_name, _)| global_name))
+            .map(|global_name| {
+                (
+                    self.indices.resolve_global(global_name) as u64,
+                    global_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(7, names)
     }
 
     fn write_elem_name_section(&mut self, elems: &[(ElemName, ElemSegment)]) -> Result<()> {
-        self.write_section_with(8, |writer| {
-            writer.write_name_map(
-                elems
-                    .iter()
-                    .map(|(elem_name, _)| {
-                        (
-                            writer.indices.resolve_elem(elem_name) as u64,
-                            elem_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = elems
+            .iter()
+            .map(|(elem_name, _)| {
+                (
+                    self.indices.resolve_elem(elem_name) as u64,
+                    elem_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(8, names)
     }
 
     fn write_data_name_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
-        self.write_section_with(9, |writer| {
-            writer.write_name_map(
-                datas
-                    .iter()
-                    .map(|(data_name, _)| {
-                        (
-                            writer.indices.resolve_data(data_name) as u64,
-                            data_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = datas
+            .iter()
+            .map(|(data_name, _)| {
+                (
+                    self.indices.resolve_data(data_name) as u64,
+                    data_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(9, names)
     }
 
     fn write_type_name_section(&mut self, types: &[RecType]) -> Result<()> {
-        self.write_section_with(4, |writer| {
-            writer.write_name_map(
-                types
-                    .iter()
-                    .flat_map(|rec_type| rec_type.sub_types.iter())
-                    .map(|(type_name, _)| {
-                        (
-                            writer.indices.resolve_type(type_name) as u64,
-                            type_name.as_str(),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = types
+            .iter()
+            .flat_map(|rec_type| rec_type.sub_types.iter())
+            .map(|(type_name, _)| {
+                (
+                    self.indices.resolve_type(type_name) as u64,
+                    type_name.as_str(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.write_name_subsection(4, names)
     }
 
     fn write_field_name_section(&mut self, types: &[RecType]) -> Result<()> {
-        self.write_section_with(10, |writer| {
-            writer.write_indirect_name_map(
-                types
-                    .iter()
-                    .flat_map(|rec_type| rec_type.sub_types.iter())
-                    .filter_map(|(type_name, sub_type)| {
-                        sub_type.struct_type().map(|struct_type| {
-                            (
-                                writer.indices.resolve_type(type_name) as u64,
-                                struct_type
-                                    .fields
-                                    .iter()
-                                    .map(|(field_name, _)| {
-                                        (
-                                            writer.indices.resolve_field(type_name, field_name)
-                                                as u64,
-                                            field_name.as_str(),
-                                        )
-                                    })
-                                    .collect::<Vec<_>>(),
-                            )
-                        })
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        let names = types
+            .iter()
+            .flat_map(|rec_type| rec_type.sub_types.iter())
+            .filter_map(|(type_name, sub_type)| {
+                sub_type.struct_type().map(|struct_type| {
+                    (
+                        self.indices.resolve_type(type_name) as u64,
+                        struct_type
+                            .fields
+                            .iter()
+                            .map(|(field_name, _)| {
+                                (
+                                    self.indices.resolve_field(type_name, field_name) as u64,
+                                    field_name.as_str(),
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        self.write_indirect_name_subsection(10, names)
     }
 
     fn write_name_section(&mut self, module: &Module) -> Result<()> {
         let mut bytes = Vec::new();
 
+        let mut subsections = Vec::new();
         {
-            let mut writer = self.fork(&mut bytes);
+            let mut writer = self.fork(&mut subsections);
 
-            writer.write_name("name")?;
             writer.write_module_name_subsection(module.name())?;
             writer.write_func_name_section(module.imports(), module.funcs())?;
             writer.write_local_name_section(module.funcs())?;
@@ -1602,7 +1636,15 @@ where
             writer.write_data_name_section(module.datas())?;
             writer.write_field_name_section(module.types())?;
         }
+        if subsections.is_empty() {
+            return Ok(());
+        }
 
+        {
+            let mut writer = self.fork(&mut bytes);
+            writer.write_name("name")?;
+        }
+        bytes.extend(subsections);
         self.write_section(0, bytes)?;
 
         Ok(())

@@ -488,3 +488,17 @@ fn the_data_segment_array_operations_are_accepted() {
 "#,
     );
 }
+
+/// A module the writer leaves sections out of, each holding nothing: no import, global, export or data, so none of their sections, and no function, so neither the function section nor the code section; and one with functions and no data, so no data count section.
+#[test]
+fn a_module_without_the_sections_it_would_leave_empty_validates() {
+    validates("(module $nothing)");
+    validates(
+        r#"
+        (module $no_data
+            (type $t (func (result i32)))
+            (func $seven (type $t)
+                i32.const 7))
+"#,
+    );
+}
