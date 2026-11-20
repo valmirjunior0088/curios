@@ -1,6 +1,7 @@
 //! The native CLI selects a target before forwarding opaque arguments through the runtime.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
     std::{
         fs,
@@ -39,6 +40,7 @@ fn another_compiler_version_refuses_a_previously_cached_executable() {
     package(&root);
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env_remove(CABINET)
             .current_dir(&root)
             .arg("run")
             .output()
@@ -93,6 +95,7 @@ fn the_default_and_explicit_programs_receive_their_own_options() {
         (vec!["run", "--", "--", "mock"], "--|mock"),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env_remove(CABINET)
             .current_dir(&root)
             .args(words)
             .output()
@@ -105,6 +108,7 @@ fn the_default_and_explicit_programs_receive_their_own_options() {
 #[test]
 fn a_program_on_standard_input_receives_its_trailing_arguments() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .args(["run", "-", "--", "mock", "--help"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -130,6 +134,7 @@ fn a_non_utf8_argument_reaches_the_default_program_as_bytes() {
     let root = Temporary::new("run", "bytes");
     package(&root);
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .args(["run", "--"])
         .arg(OsString::from_vec(vec![0xff]))
@@ -170,6 +175,7 @@ fn finishing_standard_output_gives_its_reader_the_end_while_the_program_runs() {
     let root = Temporary::new("run", "finished-output");
     single(&root, FINISHED);
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .arg("run")
         .stdin(Stdio::piped())
@@ -205,6 +211,7 @@ fn a_print_after_standard_output_is_finished_ends_the_program_saying_why() {
     let root = Temporary::new("run", "printed-after");
     single(&root, PRINTED_AFTER);
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .arg("run")
         .output()

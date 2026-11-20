@@ -29,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::{bindings_of, fault, unlinked},
+    curios::{CABINET, bindings_of, fault, unlinked},
     curios_common::{Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
@@ -215,6 +215,9 @@ fn dispatch() -> Result<(), Failure> {
     let manifest = manifest.as_deref();
     let destination = mode.output().map(Path::to_path_buf);
     let destination = destination.as_deref();
+    // Read once, here, as `NO_COLOR` is, and handed to whatever opens a governing root (`curios::CABINET`).
+    let cabinet = env::var_os(CABINET).map(PathBuf::from);
+    let cabinet = cabinet.as_deref();
 
     match mode {
         Mode::Run {
@@ -233,16 +236,16 @@ fn dispatch() -> Result<(), Failure> {
                     .into());
             }
 
-            let program = contract.admit_program(subject, manifest, None, &here()?)?;
+            let program = contract.admit_program(subject, manifest, None, &here()?, cabinet)?;
 
             // The program's arguments reach it through the page's address, and its name is its first.
             if target == Target::Browser {
                 let store = program.home().and_then(|home| {
-                    let store = contract.access.filed(&home.root)?;
+                    let store = contract.access.filed(&home.cabinet)?;
 
                     Some(store.executing(&home.package, &home.executable))
                 });
-                let (files, mut tree) = built(elaboration.budget, program, store)?;
+                let (files, mut tree) = built(elaboration.budget, program, store, cabinet)?;
                 let listener = bound(port.unwrap_or(PORT))?;
                 let port = port_of(&listener)?;
 
@@ -260,7 +263,7 @@ fn dispatch() -> Result<(), Failure> {
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
             let store = program.home().and_then(|home| {
-                let store = contract.access.filed(&home.root)?;
+                let store = contract.access.filed(&home.cabinet)?;
 
                 Some(store.executing(&home.package, &home.executable))
             });
@@ -277,11 +280,11 @@ fn dispatch() -> Result<(), Failure> {
                 Target::Native,
                 Then::Nothing,
             )?;
-            let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
+            let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
             // Linked here as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
             bindings
                 .check(&foreigns)
-                .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
+                .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
             // Nothing announces the run: what follows is the program's own output.
             tree.close();
@@ -320,7 +323,7 @@ fn dispatch() -> Result<(), Failure> {
                     .into());
             }
 
-            let selection = contract.admit_any(subject, manifest, &here()?)?;
+            let selection = contract.admit_any(subject, manifest, &here()?, cabinet)?;
             let green = match target {
                 Target::Native => {
                     run_tests(elaboration.budget, selection, contract.access, &filter)?
@@ -346,7 +349,7 @@ fn dispatch() -> Result<(), Failure> {
                 goals,
             } = lint(
                 elaboration.budget,
-                contract.admit_any(subject, manifest, &here()?)?,
+                contract.admit_any(subject, manifest, &here()?, cabinet)?,
                 &mut Asking::checking(answered.clone()),
             )?;
             // The count of lints always, since it is what the command is asked for, and of what else was reported where anything was.
@@ -379,7 +382,8 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let program = contract.admit_program(subject, manifest, destination, &here()?)?;
+            let program =
+                contract.admit_program(subject, manifest, destination, &here()?, cabinet)?;
 
             // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
             let owned = output_path.is_none();
@@ -391,7 +395,7 @@ fn dispatch() -> Result<(), Failure> {
                 ),
             };
             let store = program.home().and_then(|home| {
-                let store = contract.access.filed(&home.root)?;
+                let store = contract.access.filed(&home.cabinet)?;
 
                 Some(store.executing(&home.package, &home.executable))
             });
@@ -444,15 +448,15 @@ fn dispatch() -> Result<(), Failure> {
                     } = payload_of(elaboration.budget, program, store, target, Then::More)?;
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
-                    let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
+                    let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
                     bindings
                         .check(&foreigns)
-                        .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
+                        .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
                     // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
                     let plugins = bindings
                         .bundled(curios_cranelift::serialize)
-                        .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
+                        .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
                     tree.open("write", true);
 
@@ -468,7 +472,7 @@ fn dispatch() -> Result<(), Failure> {
                     (written, tree)
                 }
                 Target::Browser => {
-                    let (files, mut tree) = built(elaboration.budget, program, store)?;
+                    let (files, mut tree) = built(elaboration.budget, program, store, cabinet)?;
 
                     tree.open("write", true);
 
@@ -499,8 +503,8 @@ fn dispatch() -> Result<(), Failure> {
                     (record, directory, tree)
                 }
                 None => {
-                    let library = contract.admit_library(subject, manifest, &here()?)?;
-                    let store = contract.access.filed(&library.root);
+                    let library = contract.admit_library(subject, manifest, &here()?, cabinet)?;
+                    let store = contract.access.filed(&library.cabinet);
                     let (record, tree) = documentation_of(
                         elaboration.budget,
                         &library.units,
@@ -539,7 +543,7 @@ fn dispatch() -> Result<(), Failure> {
             tree.outcome(format!("cd {} && curios run", directory.display()));
         }
         Mode::Curate { .. } => {
-            let entire = contract.admit_entire(subject, manifest, &here()?)?;
+            let entire = contract.admit_entire(subject, manifest, &here()?, cabinet)?;
 
             // The fetch in hand's tree, and whether its transport has delivered: each is a subject of its own, its one node open while it arrives.
             let mut fetching: Option<(Tree, bool)> = None;
@@ -585,7 +589,7 @@ fn dispatch() -> Result<(), Failure> {
         }
         Mode::Pin { row } => {
             // Found without reading the manifest's rows, since the row a pin repairs may be one the manifest cannot be read with yet: what is written is what is checked.
-            let pinning = Pinning::found(manifest, &here()?)?;
+            let pinning = Pinning::found(manifest, &here()?, cabinet)?;
             let (subject, name, repoint, check) = asked(row);
             let foreign = matches!(subject, curios_package::Subject::Foreign(_));
             let mut tree = Tree::of(&Subject::Module(name.clone()), None);
@@ -689,7 +693,8 @@ fn dispatch() -> Result<(), Failure> {
             let admitted = subjects
                 .into_iter()
                 .map(|subject| {
-                    contract.admit_files(subject, manifest, &directory, &settings, core.core)
+                    contract
+                        .admit_files(subject, manifest, &directory, &settings, core.core, cabinet)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -788,16 +793,17 @@ fn dispatch() -> Result<(), Failure> {
                 Query::Check => {
                     let directory = here()?;
                     // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
-                    let (files, format) = match contract.written_in(subject, manifest, &directory) {
-                        Ok(Rewritten::Files(files, format)) => (files, format),
-                        Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
-                        Err(_) => (Vec::new(), Format::default()),
-                    };
+                    let (files, format) =
+                        match contract.written_in(subject, manifest, &directory, cabinet) {
+                            Ok(Rewritten::Files(files, format)) => (files, format),
+                            Ok(Rewritten::Stdin(format, _)) => (Vec::new(), format),
+                            Err(_) => (Vec::new(), Format::default()),
+                        };
 
                     wonder_diagnostics(
                         elaboration.budget,
                         contract
-                            .admit_any(subject, manifest, &directory)?
+                            .admit_any(subject, manifest, &directory, cabinet)?
                             .read_stdin_as(stdin),
                         &files,
                         format,
@@ -807,7 +813,7 @@ fn dispatch() -> Result<(), Failure> {
                 Query::Tests => wonder_tests(
                     elaboration.budget,
                     contract
-                        .admit_any(subject, manifest, &here()?)?
+                        .admit_any(subject, manifest, &here()?, cabinet)?
                         .read_stdin_as(stdin),
                     &mut Asking::checking(answered.clone()),
                 )?,
@@ -817,13 +823,14 @@ fn dispatch() -> Result<(), Failure> {
                     // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
                     match contract.accepts {
                         Accepts::ProgramOrLibrary => {
-                            contract.admit_staged(subject, manifest, &here()?)?
+                            contract.admit_staged(subject, manifest, &here()?, cabinet)?
                         }
                         _ => Staged::Program(contract.admit_program(
                             subject,
                             manifest,
                             None,
                             &here()?,
+                            cabinet,
                         )?),
                     }
                     .read_stdin_as(stdin),
@@ -831,14 +838,14 @@ fn dispatch() -> Result<(), Failure> {
                 )?,
                 Query::At(place) => wonder_at(
                     elaboration.budget,
-                    contract.admit_staged(subject, manifest, &here()?)?,
+                    contract.admit_staged(subject, manifest, &here()?, cabinet)?,
                     &place,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, None) => wonder_name(
                     elaboration.budget,
                     contract
-                        .admit_scope(subject, manifest, &here()?)?
+                        .admit_scope(subject, manifest, &here()?, cabinet)?
                         .read_stdin_as(stdin),
                     &path,
                     subject,
@@ -846,7 +853,7 @@ fn dispatch() -> Result<(), Failure> {
                 )?,
                 Query::Name(path, Some(View::Exports)) => wonder_exports(
                     elaboration.budget,
-                    contract.admit_scope(subject, manifest, &here()?)?,
+                    contract.admit_scope(subject, manifest, &here()?, cabinet)?,
                     &path,
                     subject,
                     &mut Asking::reading(answered.clone()),
@@ -854,7 +861,7 @@ fn dispatch() -> Result<(), Failure> {
                 Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
                     elaboration.budget,
                     contract
-                        .admit_scope(subject, manifest, &here()?)?
+                        .admit_scope(subject, manifest, &here()?, cabinet)?
                         .read_stdin_as(stdin),
                     &path,
                     &mut Asking::reading(answered.clone()),
@@ -862,7 +869,7 @@ fn dispatch() -> Result<(), Failure> {
                 Query::Name(path, Some(View::Footprint)) => wonder_footprint(
                     elaboration.budget,
                     contract
-                        .admit_program(subject, manifest, None, &here()?)?
+                        .admit_program(subject, manifest, None, &here()?, cabinet)?
                         .read_stdin_as(stdin),
                     &path,
                     &mut Asking::reading(answered.clone()),
@@ -876,8 +883,9 @@ fn dispatch() -> Result<(), Failure> {
                             manifest,
                             None,
                             &here()?,
+                            cabinet,
                         )?),
-                        _ => contract.admit_scope(subject, manifest, &here()?)?,
+                        _ => contract.admit_scope(subject, manifest, &here()?, cabinet)?,
                     }
                     .read_stdin_as(stdin),
                     &path,
@@ -887,11 +895,11 @@ fn dispatch() -> Result<(), Failure> {
                 Query::False => wonder_false(
                     elaboration.budget,
                     contract
-                        .admit_program(subject, manifest, None, &here()?)?
+                        .admit_program(subject, manifest, None, &here()?, cabinet)?
                         .read_stdin_as(stdin),
                     &mut Asking::reading(answered.clone()),
                 )?,
-                Query::Server => serve(elaboration.budget, manifest).map_err(|words| {
+                Query::Server => serve(elaboration.budget, manifest, cabinet).map_err(|words| {
                     Refused::of("server failure")
                         .stating(words)
                         .about_named("--server")

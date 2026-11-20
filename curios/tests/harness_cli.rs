@@ -1,6 +1,7 @@
 //! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, each test a node of its subject's tree closed by how it ended, what the test wrote of its own joined by what only the runner knows — the failing body, each subject's tally, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
     std::{
         ffi::OsStr,
@@ -70,6 +71,7 @@ test effect_passes =
 
 fn curios(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .output()
@@ -79,6 +81,7 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
 /// [`curios`], with `stdin` on the compiler's standard input.
 fn fed(root: &Path, arguments: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .stdin(Stdio::piped())
@@ -248,6 +251,7 @@ test mutters =
     // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
     let mut child = {
         let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
+        command.env_remove(CABINET);
         command
             .current_dir(&root)
             .arg("test")
@@ -486,6 +490,7 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
         "use /std/{Str, Bytes, List, Show, Io, Proc};\nlet main() -> Io({}) =\nlet args = Proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .args(["run", "args.crs", "plain"])
         .arg(OsStr::from_bytes(b"\xff"))
@@ -510,6 +515,7 @@ fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
     // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
     let mut child = {
         let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
+        command.env_remove(CABINET);
         command
             .current_dir(&root)
             .args(["run", "-"])

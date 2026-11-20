@@ -1,6 +1,7 @@
 //! `run --target browser` and `test --target browser` end to end: the compiler started on a port of loopback's own, the port read off the line that says its address, and its page or its run asked for over loopback as a browser asks — the runner's part played here with canned outcomes over the run's socket, since no engine runs a page in this suite, which the page suite under Node does.
 
 use {
+    curios::CABINET,
     curios_browser::{Reply, Step},
     curios_common::{digest, test_support::*},
     std::{
@@ -54,6 +55,7 @@ struct Serving {
 impl Serving {
     fn start(root: &Path, arguments: &[&str]) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env_remove(CABINET)
             .current_dir(root)
             .args(arguments)
             .args(["--port", "0"])
@@ -472,6 +474,7 @@ fn a_port_beside_the_native_target_is_refused() {
     tested(&root);
 
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .args(["test", "--port", "1"])
         .output()

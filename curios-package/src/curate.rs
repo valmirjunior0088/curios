@@ -114,7 +114,7 @@ pub fn curate(
     governing: &Governing,
     mut told: impl FnMut(Fetch<'_>),
 ) -> Result<Curated, Box<Report>> {
-    let cabinet = governing.cabinet();
+    let cabinet = &governing.cabinet;
     let mut curated = Curated::default();
 
     // The module set converges with the trees: each round reads further manifests, so the round that fetches nothing new is also the one whose module set is complete.
@@ -138,7 +138,7 @@ pub fn curate(
             }
 
             told(Fetch::Package(&acquisition));
-            fetch(&cabinet, &acquisition, || told(Fetch::Arrived))?;
+            fetch(cabinet, &acquisition, || told(Fetch::Arrived))?;
             told(Fetch::Placed);
             curated.packages.push(acquisition);
         }
@@ -151,7 +151,7 @@ pub fn curate(
         }
 
         told(Fetch::Module(&acquisition));
-        fetch_module(&cabinet, &acquisition, || told(Fetch::Arrived))?;
+        fetch_module(cabinet, &acquisition, || told(Fetch::Arrived))?;
         told(Fetch::Placed);
         curated.modules.push(acquisition);
     }
@@ -260,7 +260,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
                         written,
                     });
 
-                    governing.cabinet().source(hash)
+                    governing.cabinet.source(hash)
                 }
                 Dependency::Path { path } => base.join(path),
                 // A member is on disk already, and governance refused every entry no manifest answers before this walk began; a name the roster lacks is `order`'s to refuse, and this walk only needs somewhere further to look.

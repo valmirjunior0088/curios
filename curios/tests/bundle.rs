@@ -3,6 +3,7 @@
 //! Those that exec what they produced run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
 
 use {
+    curios::CABINET,
     curios_common::{digest, fill, test_support::*},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, LocalName,
@@ -154,6 +155,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
 /// What `compile` says where it refuses to write `output`, run in `directory` with `arguments` after the destination; nothing is written.
 fn refused(directory: &Path, output: &Path, arguments: &[&str]) -> String {
     let compiled = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .arg("compile")
         .arg("-o")
         .arg(output)
@@ -232,6 +234,7 @@ fn an_umbrella_members_program_links_its_own_foreign_rows() {
     .expect("write the member's manifest");
 
     let run = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .arg("run")
         .current_dir(&package)
         .output()
@@ -292,6 +295,7 @@ fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
     assert!(refusal.contains(expected), "{refusal}");
 
     let mut run = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .args(["run", "-"])
         .current_dir(&*root)
         .stdin(Stdio::piped())
@@ -341,6 +345,7 @@ fn a_claim_written_after_a_run_is_refused_by_the_next() {
     let package = calling_double(&root, "claimed", &[("probe", "double")]);
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env_remove(CABINET)
             .arg("run")
             .current_dir(&package)
             .output()
@@ -375,6 +380,7 @@ fn a_claim_written_after_a_run_is_refused_by_the_next() {
 /// Compile the package at `package` to `output`, failing the test if the compiler refuses.
 fn compile(package: &Path, output: &Path) {
     let compiled = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .arg("compile")
         .arg("-o")
         .arg(output)

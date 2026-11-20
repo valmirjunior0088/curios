@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*,
+    curios::CABINET,
     std::{
         fs,
         io::Write,
@@ -16,6 +17,7 @@ fn a_reader_that_leaves_early_ends_the_question_with_nothing_said() {
     let root = temporary("reader-gone");
     fs::create_dir_all(&root).unwrap();
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(&root)
         .args(["wonder", "--stage", "wasm", "-"])
         .stdin(Stdio::piped())

@@ -9,6 +9,7 @@ use {
     curios_common::{RootKind, fill, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{open_entrypoint, read_module},
+    curios_package::Cabinet,
     curios_pipeline::{Cache, Fold},
     curios_wasm::to_bytes,
     std::path::{Path, PathBuf},
@@ -31,16 +32,22 @@ struct Invocation {
 ///
 /// The same sequence `payload_of` runs — consult, compile what must be compiled, file what was made — minus the terminal it reports to.
 fn invoke(directory: &Path, target: Option<&str>) -> Invocation {
-    invoke_over(directory, target, Vec::new())
+    invoke_over(directory, target, Vec::new(), None)
 }
 
-/// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply.
-fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource>) -> Invocation {
+/// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply, filing into the cabinet `cabinet` names or the project's own.
+fn invoke_over(
+    directory: &Path,
+    target: Option<&str>,
+    mut scope: Vec<RootSource>,
+    cabinet: Option<&Path>,
+) -> Invocation {
     let program = match curios_package::Selection::of(
         curios_package::Spelling::of(target),
         None,
         directory,
         &curios_module::Overlay::default(),
+        cabinet,
     )
     .expect("a governed package")
     {
@@ -62,11 +69,11 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     let package = home.package.clone();
     let package_root = home.package_root();
     let name = home.executable.clone();
-    let root = home.root.clone();
+    let cabinet = home.cabinet.clone();
     scope.extend(program.into_units());
 
     // Told which executable its entry is, as the command line tells it: the unit of the entry's own declarations is filed too, and is none of the units the payload counts.
-    let verdicts = Verdicts::at(root).executing(&package, &name);
+    let verdicts = Verdicts::at(cabinet).executing(&package, &name);
     let (entrypoint, loader, source) =
         open_entrypoint(&entry, Some(&package_root)).expect("the entry parses");
     let program = Program {
@@ -116,6 +123,11 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
 /// [`invoke`] over the governing package's sole executable.
 fn run(root: &Path) -> Invocation {
     invoke(root, None)
+}
+
+/// [`run`], filing into the cabinet `shared` names, as every project of a run under one named cabinet does.
+fn run_in(root: &Path, shared: &Path) -> Invocation {
+    invoke_over(root, None, Vec::new(), Some(shared))
 }
 
 /// `root`'s manifest with a path dependency on the package at `directory` appended — the only way another unit enters a compilation.
@@ -177,9 +189,7 @@ fn greeting(word: &str) -> String {
 
 /// The directory the payload family files the native slots of the project at `root` in.
 fn payloads(root: &Path) -> PathBuf {
-    root.join(".curios")
-        .join("payloads")
-        .join(Runs::Native { engine: ENGINE }.target().spelled())
+    Cabinet::of(root, None).payloads(Runs::Native { engine: ENGINE }.target())
 }
 
 /// The payload slots at `root`, counting a store that was never created as the none it holds — which is what a refusal to file leaves behind.
@@ -427,7 +437,7 @@ fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects declaring a package and an executable of one name, compiled by one compiler after one chain, always do.
 ///
-/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable. The dependency sits outside both projects and is read from that one path by each, standing in for the `sources/` tree `curate` materializes — so the *units* legitimately cross and only the payload's own record can refuse this.
+/// A cabinet is shared wherever one is named for every project a run sees, so this is reachable. The dependency sits outside both projects and is read from that one path by each, standing in for the `sources/` tree `curate` materializes — so the *units* legitimately cross and only the payload's own record can refuse this.
 #[test]
 fn a_slot_does_not_answer_for_another_projects_program() {
     let shape = temporary("aliasing-shape");
@@ -459,13 +469,11 @@ fn a_slot_does_not_answer_for_another_projects_program() {
         write(project, "curios.toml", &declared);
     }
 
-    let filed = run(&theirs);
+    let shared = temporary("aliasing-shared");
+    let filed = run_in(&theirs, &shared);
     assert!(!filed.reused);
 
-    // Copied rather than shared through `CURIOS_CACHE`, since the store's hermeticity rests on no test ever setting it — and what is under test is the verification, which cannot tell how a foreign slot arrived.
-    stage(&theirs, &mine);
-
-    let asked = run(&mine);
+    let asked = run_in(&mine, &shared);
     assert!(
         !asked.reused,
         "their record names their entry, which is not mine to have compiled"
@@ -474,25 +482,6 @@ fn a_slot_does_not_answer_for_another_projects_program() {
         asked.payload, filed.payload,
         "and what came back is my program rather than theirs"
     );
-}
-
-/// Copy every unit and payload slot `from`'s store holds into `into`'s, replacing whatever was there.
-fn stage(from: &Path, into: &Path) {
-    for (from, into) in [
-        (
-            from.join(".curios").join("verdicts"),
-            into.join(".curios").join("verdicts"),
-        ),
-        (payloads(from), payloads(into)),
-    ] {
-        let _ = fs::remove_dir_all(&into);
-        fs::create_dir_all(&into).unwrap();
-
-        for slot in fs::read_dir(&from).expect("a store with slots in it") {
-            let slot = slot.unwrap().path();
-            fs::copy(&slot, into.join(slot.file_name().unwrap())).unwrap();
-        }
-    }
 }
 
 /// A store nobody can write costs the reuse and never the verdict or the run: the compilation proceeds, a payload comes back, and the reason is kept for a caller with somewhere to say it.
@@ -542,7 +531,7 @@ fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
         read_module(root.join("supplied.crs")).expect("the supplied module parses"),
     );
 
-    let gapped = invoke_over(&root, None, vec![supplied]);
+    let gapped = invoke_over(&root, None, vec![supplied], None);
     assert!(!gapped.reused, "nothing is stored for the first invocation");
     assert_eq!(
         filed(&root),

@@ -1,9 +1,13 @@
 //! The command line before any command runs: a line that does not parse fails as a command that could not run fails, and help and the version are answers.
 
-use std::process::{Command, Output};
+use {
+    curios::CABINET,
+    std::process::{Command, Output},
+};
 
 fn curios(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .args(args)
         .output()
         .unwrap()

@@ -1,7 +1,9 @@
 //! What `curios lint` does at the command line: the report on stdout, the exit code it turns on, and the one lint decided over a package rather than a unit.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
+    curios_package::Cabinet,
     std::{
         fs,
         io::Write,
@@ -24,6 +26,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 /// Run the compiler in `root`, with the arguments given and `stdin` on its standard input.
 fn curios(root: &Path, arguments: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .stdin(Stdio::piped())
@@ -264,7 +267,9 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
 
     let refused = package("unstored");
     // A file where the slots would go.
-    write(&refused, ".curios/verdicts", "");
+    let verdicts = Cabinet::of(&refused, None).verdicts();
+    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
+    fs::write(&verdicts, "").unwrap();
     let unstored = curios(&refused, &["lint"], "");
     let narrated = String::from_utf8_lossy(&unstored.stderr);
 

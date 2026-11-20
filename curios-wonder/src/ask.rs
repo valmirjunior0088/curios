@@ -175,9 +175,9 @@ impl Asked {
             },
             Entry::File(path) => Origin::File(path.clone()),
         };
-        let store = program
-            .home()
-            .map(|home| Verdicts::at(home.root.clone()).executing(&home.package, &home.executable));
+        let store = program.home().map(|home| {
+            Verdicts::at(home.cabinet.clone()).executing(&home.package, &home.executable)
+        });
         let declares = program.declares();
         let package = program.home().map(Home::package_root);
         let named = program.named();
@@ -204,7 +204,7 @@ impl Asked {
             subject: Subject::Unit {
                 units: library.units,
             },
-            store: Some(Verdicts::at(library.root)),
+            store: Some(Verdicts::at(library.cabinet)),
         }
     }
 
@@ -741,7 +741,7 @@ fn library_stage(
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let file = asked_through(&library)?;
-    let store = Verdicts::at(library.root.clone());
+    let store = Verdicts::at(library.cabinet.clone());
 
     telling.asked(&library.named(), Some(&library.manifest));
     let reached = unit_stage(

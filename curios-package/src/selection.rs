@@ -13,7 +13,7 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, Executable, Governing, LIBRARY, Package, Products, Refused, Target,
+        Cabinet, EXECUTABLE, Executable, Governing, LIBRARY, Package, Products, Refused, Target,
         module_below, module_of, order, reachable,
     },
     curios_common::{Qualifier, Report, RootKind},
@@ -82,12 +82,13 @@ impl Selection {
         }
     }
 
-    /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks.
+    /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks, and filing into the cabinet `cabinet` names or the governing root's own.
     pub fn of(
         spelling: Spelling,
         manifest: Option<&Path>,
         directory: &Path,
         overlay: &Overlay,
+        cabinet: Option<&Path>,
     ) -> Result<Self, Box<Report>> {
         Ok(match spelling {
             // Answered before anything looks for a manifest, which is also why no manifest can govern it.
@@ -100,15 +101,15 @@ impl Selection {
                 }
                 None => Self::Program(Program::loose(Entry::Stdin(WrittenIn::Program))),
             },
-            Spelling::File(path) => placed(path, manifest, overlay)?,
+            Spelling::File(path) => placed(path, manifest, overlay, cabinet)?,
             Spelling::Name(name) => {
-                let governing = Governing::found(manifest, directory)?;
+                let governing = Governing::found(manifest, directory, cabinet)?;
                 governing.check_compiler()?;
                 let executable = named(&governing, &name)?;
                 Self::Program(program(&governing, executable)?)
             }
             Spelling::Nothing => {
-                let governing = Governing::found(manifest, directory)?;
+                let governing = Governing::found(manifest, directory, cabinet)?;
                 governing.check_compiler()?;
                 Self::Entire(Box::new(Entire { governing }))
             }
@@ -131,6 +132,7 @@ impl Entire {
         Ok(Some(Library {
             package: self.governing.package.name.clone(),
             root: self.governing.root.clone(),
+            cabinet: self.governing.cabinet.clone(),
             manifest: self.governing.manifest.clone(),
             units: order(&self.governing)?,
             through: None,
@@ -171,8 +173,10 @@ impl Entire {
 pub struct Library {
     /// The package whose library it is, which is what its pages are filed under.
     pub package: String,
-    /// The governing root, which is where the store sits.
+    /// The governing root, which is where `.curios/` sits and its pages are written beside.
     pub root: PathBuf,
+    /// The cabinet the library is filed in.
+    pub cabinet: Cabinet,
     /// The manifest that declares it, beside which its header sits — and what a report names when the invocation stands somewhere else.
     pub manifest: PathBuf,
     /// The whole scope in dependency order, the library last.
@@ -241,8 +245,10 @@ enum Scope {
 
 /// Where a declared program belongs.
 pub struct Home {
-    /// The governing root, which is where the store sits. Carried because what a compilation may reuse is a fact about the project it is in, and only the walk knows which project that is.
+    /// The governing root, which is where `.curios/` sits and the program is built beside.
     pub root: PathBuf,
+    /// The cabinet the program is filed in. Carried because what a compilation may reuse is a fact about the project it is in and who ran it, and only the walk knows which project that is.
+    pub cabinet: Cabinet,
     /// The manifest that declares it, for a report to name when the invocation stands somewhere else.
     pub manifest: PathBuf,
     /// The package that declares it. Carried beside `executable` because the two together are the one identity in a compilation that cannot collide, which is what the store addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
@@ -364,6 +370,7 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, Bo
         scope: Scope::Declared {
             home: Home {
                 root: governing.root.clone(),
+                cabinet: governing.cabinet.clone(),
                 manifest: governing.manifest.clone(),
                 package: governing.package.name.clone(),
                 directory: governing.directory.clone(),
@@ -381,6 +388,7 @@ fn placed(
     file: PathBuf,
     manifest: Option<&Path>,
     overlay: &Overlay,
+    cabinet: Option<&Path>,
 ) -> Result<Selection, Box<Report>> {
     // No `mod` line reaches Core text, so a file of it is in no unit, wherever it sits.
     if WrittenIn::of(&file) == WrittenIn::CoreText {
@@ -390,7 +398,7 @@ fn placed(
     let spelled = identity(&file);
 
     // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.
-    let Some(governing) = Governing::of_file(&file, manifest)? else {
+    let Some(governing) = Governing::of_file(&file, manifest, cabinet)? else {
         return Ok(loose(file));
     };
     let directory = identity(&governing.directory);
@@ -440,6 +448,7 @@ fn placed(
             return Ok(Selection::Library(Library {
                 package: governing.package.name.clone(),
                 root: governing.root.clone(),
+                cabinet: governing.cabinet.clone(),
                 manifest: governing.manifest.clone(),
                 units,
                 through: Some(file),

@@ -32,11 +32,12 @@ struct Reached {
     cabinet: Option<Cabinet>,
 }
 
-/// The rows of the graph of the package `manifest` declares that answer a declaration among `foreigns`, split by whether they state `target`'s table.
+/// The rows of the graph of the package `manifest` declares that answer a declaration among `foreigns`, split by whether they state `target`'s table, the graph read out of the cabinet `cabinet` names or the governing root's own.
 fn reached(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
     target: Target,
+    cabinet: Option<&Path>,
 ) -> Result<Reached, Box<Report>> {
     if foreigns
         .iter()
@@ -49,9 +50,9 @@ fn reached(
         return Ok(Reached::default());
     };
 
-    let governing = Governing::at(manifest)?;
+    let governing = Governing::at(manifest, cabinet)?;
     let mut reached = Reached {
-        cabinet: Some(governing.cabinet()),
+        cabinet: Some(governing.cabinet.clone()),
         ..Reached::default()
     };
 
@@ -148,9 +149,13 @@ fn written(directory: &Path, row: &str) -> Row {
 }
 
 /// The report of what linking refused of the program the package at `manifest` declares, for whoever links it past [`bindings_of`]: at the row that declares the module it is said of, read off the package's graph again, since a refusal is the path that can afford the walk.
-pub fn unlinked(unlinked: Unlinked, manifest: Option<&Path>) -> Box<Report> {
+pub fn unlinked(
+    unlinked: Unlinked,
+    manifest: Option<&Path>,
+    cabinet: Option<&Path>,
+) -> Box<Report> {
     let rows = manifest
-        .and_then(|manifest| Governing::at(manifest).ok())
+        .and_then(|manifest| Governing::at(manifest, cabinet).ok())
         .and_then(|governing| declared_modules(&governing).ok())
         .unwrap_or_default()
         .into_iter()
@@ -189,8 +194,9 @@ fn refused(
 pub fn bindings_of(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
+    cabinet: Option<&Path>,
 ) -> Result<ForeignBindings, Box<Report>> {
-    let reached = reached(manifest, foreigns, Target::Native)?;
+    let reached = reached(manifest, foreigns, Target::Native, cabinet)?;
     let rows = reached
         .stating
         .iter()
@@ -252,8 +258,9 @@ pub fn bindings_of(
 pub fn linked_of(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
+    cabinet: Option<&Path>,
 ) -> Result<Vec<Linked>, Box<Report>> {
-    let reached = reached(manifest, foreigns, Target::Browser)?;
+    let reached = reached(manifest, foreigns, Target::Browser, cabinet)?;
 
     let mut linked = Vec::new();
     for (package, directory, foreign) in reached.stating {

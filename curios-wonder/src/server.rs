@@ -72,8 +72,8 @@ pub const SETTLE: Duration = Duration::from_millis(150);
 /// The invariant this states is the whole design: **never wait more than a tenth of what the work it might save would cost.** A burst then costs at most a tenth of a check to coalesce, and an isolated edit is delayed by at most that — so the wait is worth having where a check is expensive and disappears where it is not, with no figure to tune per project.
 const SETTLE_SHARE: u32 = 10;
 
-/// Serve until the editor says shutdown.
-pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
+/// Serve until the editor says shutdown, filing into the cabinet `cabinet` names or each project's own.
+pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Result<(), String> {
     let (connection, io) = Connection::stdio();
 
     let capabilities = ServerCapabilities {
@@ -101,6 +101,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
             answers: Arc::clone(&answers),
             budget,
             manifest: manifest.map(Path::to_path_buf),
+            cabinet: cabinet.map(Path::to_path_buf),
             published: BTreeMap::new(),
             spent: None,
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
@@ -117,6 +118,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
         answers,
         jobs,
         manifest: manifest.map(Path::to_path_buf),
+        cabinet: cabinet.map(Path::to_path_buf),
     };
 
     // Before the loop, so the warming check is under way while the editor is still sending what it opened. A workspace the editor did not name is one nothing can be warmed for, and the first document is checked cold.
@@ -229,6 +231,8 @@ struct Server {
     jobs: mpsc::Sender<Job>,
     /// The manifest `--manifest` named, which governs what a document is formatted within as it governs what is checked.
     manifest: Option<PathBuf>,
+    /// The cabinet the command line was handed, which a governing package is opened with.
+    cabinet: Option<PathBuf>,
 }
 
 impl Server {
@@ -365,7 +369,7 @@ impl Server {
         };
         // An editor states no width the protocol carries, so the document's format is its package's, as `curios format` reads it.
         let format = FormatSettings::default()
-            .format_of_file(&path, self.manifest.as_deref())
+            .format_of_file(&path, self.manifest.as_deref(), self.cabinet.as_deref())
             .map_err(|report| report.listed())?;
 
         match Formatted::from_source(
@@ -688,6 +692,8 @@ struct Analyst {
     answers: Answers,
     budget: u64,
     manifest: Option<PathBuf>,
+    /// The cabinet the command line was handed, which a governing package is opened with.
+    cabinet: Option<PathBuf>,
     /// For each document checked, every path it last published diagnostics to — so a diagnostic that moved or vanished is cleared where it was.
     published: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// How long the last batch of checks took — what the settle before the next burst is a fraction of. `None` until one has run.
@@ -742,8 +748,14 @@ impl Analyst {
                 document.parent().unwrap_or(document),
             ),
         };
-        let asked = Selection::of(spelling, self.manifest.as_deref(), directory, overlay)
-            .and_then(Asked::every);
+        let asked = Selection::of(
+            spelling,
+            self.manifest.as_deref(),
+            directory,
+            overlay,
+            self.cabinet.as_deref(),
+        )
+        .and_then(Asked::every);
         let budget = self.budget;
         // What the document writes, read off the subject's lowering in this check's own fold: a file selects one subject, the unit that declares it or itself.
         let mut written = None;

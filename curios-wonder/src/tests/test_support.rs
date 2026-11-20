@@ -43,7 +43,7 @@ pub fn mounted_project(name: &str) -> Temporary {
 /// Both packages, in the order they are compiled in — resolved from `beta`'s declared dependency on `alpha` rather than listed, which is the only way a scope is assembled.
 pub fn mounted(root: &Path) -> Vec<curios_module::RootSource> {
     let governing =
-        curios_package::Governing::of(&root.join("b")).expect("a governed second package");
+        curios_package::Governing::of(&root.join("b"), None).expect("a governed second package");
 
     curios_package::order(&governing).expect("two resolvable units")
 }

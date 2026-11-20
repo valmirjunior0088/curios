@@ -8,7 +8,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource, open_entrypoint},
     curios_native::{ForeignBindings, test_support::*},
-    curios_package::{Entry, Selection, Spelling, Target},
+    curios_package::{Cabinet, Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, Fold, Progress},
     curios_verdict::Verdicts,
     std::{
@@ -19,8 +19,14 @@ use {
 
 /// The entry file and the units `subject` resolves to as `run` resolves it, standing in `directory`.
 fn resolved(directory: &Path, subject: Option<&str>) -> (PathBuf, Vec<RootSource>) {
-    let program = match Selection::of(Spelling::of(subject), None, directory, &Overlay::default())
-        .expect("a governed package")
+    let program = match Selection::of(
+        Spelling::of(subject),
+        None,
+        directory,
+        &Overlay::default(),
+        None,
+    )
+    .expect("a governed package")
     {
         Selection::Program(program) => program,
         Selection::Entire(entire) => entire.default_program().expect("a governed package"),
@@ -364,12 +370,12 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(Cabinet::of(&root, None));
 
     let cold = cached(&app, None, Some(&store));
     assert_eq!(cold, b"42");
     assert!(
-        root.join(".curios/verdicts").is_dir(),
+        Cabinet::of(&root, None).verdicts().is_dir(),
         "the dependency's verdict is recorded"
     );
 
@@ -380,7 +386,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     )
     .unwrap();
     assert_eq!(
-        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        cached(&app, None, Some(&Verdicts::at(Cabinet::of(&root, None)))),
         b"7"
     );
 
@@ -391,7 +397,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     )
     .unwrap();
     assert_eq!(
-        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        cached(&app, None, Some(&Verdicts::at(Cabinet::of(&root, None)))),
         cold
     );
 }
@@ -423,15 +429,15 @@ fn a_library_test_declaration_rides_through_the_store() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(Cabinet::of(&root, None));
 
     assert_eq!(cached(&app, None, Some(&store)), b"42");
     assert!(
-        root.join(".curios/verdicts").is_dir(),
+        Cabinet::of(&root, None).verdicts().is_dir(),
         "the dependency's verdict is recorded"
     );
     assert_eq!(
-        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        cached(&app, None, Some(&Verdicts::at(Cabinet::of(&root, None)))),
         b"42"
     );
 }
@@ -473,7 +479,7 @@ fn siblings(name: &str) -> Temporary {
 fn an_edit_to_one_package_leaves_a_sibling_it_cannot_read_reused() {
     let root = siblings("e2e-siblings");
     let app = root.join("app");
-    let store = || Verdicts::at(root.to_path_buf());
+    let store = || Verdicts::at(Cabinet::of(&root, None));
 
     assert_eq!(
         folded(&app, None, &store()),
@@ -531,7 +537,7 @@ fn a_unit_reached_after_different_others_is_filed_once() {
             ),
         ],
     );
-    let store = || Verdicts::at(root.to_path_buf());
+    let store = || Verdicts::at(Cabinet::of(&root, None));
 
     assert_eq!(
         folded(&root.join("left"), None, &store()),
@@ -550,7 +556,7 @@ fn a_unit_reached_after_different_others_is_filed_once() {
 
 /// The one test subject of the package at `root`, as `curios test` selects it: its library.
 fn library(root: &Path) -> TestSubject {
-    let selection = Selection::of(Spelling::of(None), None, root, &Overlay::default())
+    let selection = Selection::of(Spelling::of(None), None, root, &Overlay::default(), None)
         .expect("a governed package");
     let mut subjects = test_subjects(selection, || {
         unreachable!("the package reads nothing on standard input")

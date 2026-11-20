@@ -21,7 +21,7 @@ use {
     toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, Value},
 };
 
-/// Where `curios pin` writes: the manifest it was named or stands nearest, the directory a carried path is read from, and the root the store sits beside.
+/// Where `curios pin` writes: the manifest it was named or stands nearest, the directory a carried path is read from, and the cabinet a delivery is filed in.
 ///
 /// **Located without reading the manifest's rows**, since the row a pin is asked to repair — one missing its `hash`, or its table — is one the manifest cannot be read with yet: a governing package is a manifest read whole, which would refuse the very row the pin writes. What is held to the manifest's rules is what [`pin`] would write.
 pub struct Pinning {
@@ -29,13 +29,17 @@ pub struct Pinning {
     manifest: PathBuf,
     /// Where the manifest sits, which a carried path is relative to.
     directory: PathBuf,
-    /// The governing root, where the store sits: the umbrella's directory when one enumerates the package, and the package's otherwise.
-    root: PathBuf,
+    /// The cabinet a fetched delivery is filed in: the one whoever ran the pin named, or the governing root's own — the umbrella's directory when one enumerates the package, and the package's otherwise.
+    cabinet: Cabinet,
 }
 
 impl Pinning {
-    /// What a pin writes: the manifest `manifest` names where it names one, and the one nearest `directory` otherwise, as a command governed by it would find it.
-    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, Box<Report>> {
+    /// What a pin writes: the manifest `manifest` names where it names one, and the one nearest `directory` otherwise, as a command governed by it would find it, filing into the cabinet `cabinet` names or the governing root's own.
+    pub fn found(
+        manifest: Option<&Path>,
+        directory: &Path,
+        cabinet: Option<&Path>,
+    ) -> Result<Self, Box<Report>> {
         let manifest = match manifest {
             Some(manifest) => identity(manifest),
             None => {
@@ -66,13 +70,8 @@ impl Pinning {
         Ok(Self {
             manifest,
             directory,
-            root,
+            cabinet: Cabinet::of(&root, cabinet),
         })
-    }
-
-    /// The cabinet a fetched delivery is filed in.
-    pub fn cabinet(&self) -> Cabinet {
-        Cabinet::at(&self.root)
     }
 }
 
@@ -644,7 +643,7 @@ fn settled_foreign(
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, Box<Report>> {
-    let cabinet = pinning.cabinet();
+    let cabinet = &pinning.cabinet;
     let carried = |path: &Path| -> Result<Settled, Box<Report>> {
         let spelled = plain(path, name).map_err(|refused| written.refuse(refused))?;
         let at = pinning.directory.join(path);
@@ -672,7 +671,7 @@ fn settled_foreign(
 
     let mut fetched = |url: &str| -> Result<Settled, Box<Report>> {
         let (hash, probe) = fetched_module(
-            &cabinet,
+            cabinet,
             url,
             &format!("the foreign module `{name}`"),
             target,
@@ -739,7 +738,7 @@ fn settled_dependency(
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, Box<Report>> {
-    let cabinet = pinning.cabinet();
+    let cabinet = &pinning.cabinet;
     let agreed = |declared: &str, at: &str| -> Result<(), Box<Report>> {
         match declared == name {
             true => Ok(()),
@@ -754,7 +753,7 @@ fn settled_dependency(
     };
 
     let mut fetched = |url: &str, rev: &str| -> Result<Settled, Box<Report>> {
-        let (hash, declared) = fetched_tree(&cabinet, url, rev, written, told)?;
+        let (hash, declared) = fetched_tree(cabinet, url, rev, written, told)?;
         agreed(&declared, &format!("{url} at {rev}"))?;
 
         Ok(Settled {

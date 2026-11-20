@@ -69,13 +69,14 @@ impl FormatSettings {
             .map_err(|(setting, refused)| refused.about_named(spelled(setting).1))
     }
 
-    /// [`FormatSettings::format_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose stated compiler the running one must be, and under nothing where no package governs it.
+    /// [`FormatSettings::format_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose stated compiler the running one must be, and under nothing where no package governs it. `cabinet` is the one the invocation was handed, which a governing package is opened with and formatting never reads.
     pub fn format_of_file(
         &self,
         file: &Path,
         manifest: Option<&Path>,
+        cabinet: Option<&Path>,
     ) -> Result<Format, Box<Report>> {
-        let governing = Governing::of_file(file, manifest)?;
+        let governing = Governing::of_file(file, manifest, cabinet)?;
         if let Some(governing) = &governing {
             governing.check_compiler()?;
         }

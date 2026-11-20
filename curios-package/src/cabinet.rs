@@ -13,6 +13,15 @@ use {
     std::path::{Path, PathBuf},
 };
 
+/// The family of judged units' slots.
+const VERDICTS: &str = "verdicts";
+
+/// The family of the packs each slot's address keeps.
+const OBJECTS: &str = "objects";
+
+/// The family of precompiled payloads, a directory for each target.
+const PAYLOADS: &str = "payloads";
+
 /// What a project keeps for reuse: five families in a directory it shares with every project that names the same one.
 ///
 /// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
@@ -23,11 +32,18 @@ pub struct Cabinet {
 }
 
 impl Cabinet {
-    /// The cabinet a project at `project` files into, sharing whatever this machine offers.
-    pub fn at(project: &Path) -> Self {
+    /// The cabinet the project at `project` files into: the directory `named` names, where whoever ran the command named one for every project it sees, and the project's own otherwise.
+    ///
+    /// Named by the caller and never looked for: what names it is the command line's to read, so no cabinet a suite opens is any but the one it names.
+    pub fn of(project: &Path, named: Option<&Path>) -> Self {
         Self {
-            directory: shared().unwrap_or_else(|| project.join(PRODUCTS)),
+            directory: named.map_or_else(|| project.join(PRODUCTS), Path::to_path_buf),
         }
+    }
+
+    /// The directory the families stand in: what names this cabinet again where a governing root is opened anew, as a program's graph is walked again to link it.
+    pub fn directory(&self) -> &Path {
+        &self.directory
     }
 
     /// Where a delivery is staged while the digest that will name it is still being computed, before it is renamed onto that digest.
@@ -63,14 +79,14 @@ impl Cabinet {
 
     /// Where a judged unit is filed, under the address its mounts, what it declared and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
     pub fn verdict(&self, slot: &str) -> PathBuf {
-        self.directory.join("verdicts").join(slot)
+        self.directory.join(VERDICTS).join(slot)
     }
 
     /// Where the objects the slots at `slot` name are kept: the packs its filings wrote, beside the slot and named by what they hold.
     ///
     /// A directory for each address rather than one for the cabinet, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, and two units never write one.
     pub fn objects(&self, slot: &str) -> PathBuf {
-        self.directory.join("objects").join(slot)
+        self.directory.join(OBJECTS).join(slot)
     }
 
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
@@ -78,7 +94,7 @@ impl Cabinet {
     /// In the cabinet rather than the products, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, runs: Runs<'_>, slot: &str) -> PathBuf {
         self.directory
-            .join("payloads")
+            .join(PAYLOADS)
             .join(runs.target().spelled())
             .join(slot)
     }
@@ -87,15 +103,6 @@ impl Cabinet {
     pub fn compiler(&self) -> PathBuf {
         self.directory.join("compiler")
     }
-}
-
-/// The cabinet shared across projects, when something said where to put one.
-///
-/// **`CURIOS_CACHE` and nothing else — there is deliberately no divined default.** A toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for, and `.curios/` beside the project is the one generated directory this design admits to. So sharing is opt in: unset, every project keeps its own cabinet, which costs a re-fetch and a re-certification per project and surprises nobody. Set, two projects pinning one revision materialize and compile it once.
-///
-/// It also makes every test hermetic without asking for anything: nothing in a suite sets the variable, so nothing in a suite can reach past the directory it made.
-fn shared() -> Option<PathBuf> {
-    std::env::var_os("CURIOS_CACHE").map(PathBuf::from)
 }
 
 /// What version of the verdict family's layout a key names.

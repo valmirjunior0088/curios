@@ -42,3 +42,5 @@ serde_json = { workspace = true }
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
+# The directory a cabinet files its slots in, which the store's suite lists, removes and blocks.
+curios-package = { workspace = true, features = ["test-support"] }

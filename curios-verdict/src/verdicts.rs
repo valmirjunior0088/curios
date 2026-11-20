@@ -13,9 +13,6 @@
 #[cfg(test)]
 mod tests;
 
-#[cfg(any(test, feature = "test-support"))]
-mod test_support;
-
 mod payload;
 pub use payload::*;
 
@@ -191,10 +188,8 @@ pub struct Verdicts {
 }
 
 impl Verdicts {
-    /// The store beside `root`.
-    pub fn at(root: PathBuf) -> Self {
-        let cabinet = Cabinet::at(&root);
-
+    /// A handle filing into `cabinet`.
+    pub fn at(cabinet: Cabinet) -> Self {
         Self {
             cabinet: Some(cabinet),
             compiler: OnceCell::new(),

@@ -8,7 +8,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     curios_native::{ForeignBindings, TestEnd, test_support::*},
-    curios_package::{Selection, Spelling, Target},
+    curios_package::{Cabinet, Selection, Spelling, Target},
     curios_pipeline::compile_with_prelude,
     curios_prelude::test_support::*,
     curios_surface::{Entrypoint, Format, Formatted},
@@ -76,9 +76,12 @@ fn tests_of(subject: &[&str]) -> Qualifier {
     )
 }
 
-/// The store every test files what it compiled into, under this build's scratch directory: keyed by the test binary's own digest, as every store is keyed by its compiler's, so a rebuilt compiler finds nothing it did not compile.
+/// The cabinet every test files what it compiled into, under this build's scratch directory: keyed by the test binary's own digest, as every cabinet is keyed by its compiler's, so a rebuilt compiler finds nothing it did not compile.
 fn store() -> Verdicts {
-    Verdicts::at(Path::new(env!("CARGO_TARGET_TMPDIR")).join("claims"))
+    Verdicts::at(Cabinet::of(
+        &Path::new(env!("CARGO_TARGET_TMPDIR")).join("claims"),
+        None,
+    ))
 }
 
 /// The library's one test subject: the package at [`std_directory`] as `curios test` selects it there.
@@ -88,6 +91,7 @@ fn library() -> TestSubject {
         None,
         &std_directory(),
         &Overlay::default(),
+        None,
     )
     .unwrap_or_else(|refusal| {
         panic!(

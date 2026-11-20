@@ -33,7 +33,7 @@ fn a_lone_package_governs_itself() {
         ],
     );
 
-    let governing = Governing::of(&root).expect("a package governs the directory it is in");
+    let governing = Governing::of(&root, None).expect("a package governs the directory it is in");
 
     assert_eq!(governing.package.name, "json");
     assert!(governing.umbrella.is_none());
@@ -61,7 +61,7 @@ fn a_subdirectory_of_a_package_is_governed_by_that_package() {
     );
 
     for directory in ["parse", "."] {
-        let governing = Governing::of(&root.join(directory)).expect("the package above");
+        let governing = Governing::of(&root.join(directory), None).expect("the package above");
 
         assert_eq!(governing.package.name, "json", "{directory}");
         assert!(same_directory(&governing.directory, &root), "{directory}");
@@ -98,7 +98,7 @@ fn a_nested_package_governs_its_own_directory() {
     );
 
     for directory in ["tools", "tools/src"] {
-        let governing = Governing::of(&root.join(directory)).expect("the nearer package");
+        let governing = Governing::of(&root.join(directory), None).expect("the nearer package");
 
         assert_eq!(governing.package.name, "tools", "{directory}");
     }
@@ -109,7 +109,7 @@ fn a_nested_package_governs_its_own_directory() {
 fn a_directory_no_manifest_is_above_is_governed_by_nothing() {
     let root = tree("govern-nowhere", &[("scratch.crs", "")]);
 
-    let refusal = Governing::of(&root)
+    let refusal = Governing::of(&root, None)
         .map(|_| ())
         .expect_err("no manifest at or above the tree")
         .render();
@@ -146,7 +146,7 @@ fn an_umbrella_governs_a_member_it_enumerates() {
 
     // Enumeration may point deep, which is what gives deep organization with a flat manifest.
     for (member, name) in [("json", "json"), ("tools/cli", "cli")] {
-        let governing = Governing::of(&root.join(member)).expect("an enumerated member");
+        let governing = Governing::of(&root.join(member), None).expect("an enumerated member");
 
         assert_eq!(governing.package.name, name);
         assert!(governing.umbrella.is_some(), "{member} is enumerated");
@@ -182,7 +182,7 @@ fn an_umbrella_governs_nothing_it_does_not_enumerate() {
         ],
     );
 
-    let governing = Governing::of(&root.join("scratch")).expect("an unenumerated package");
+    let governing = Governing::of(&root.join("scratch"), None).expect("an unenumerated package");
 
     assert!(governing.umbrella.is_none());
     assert!(same_directory(&governing.root, &root.join("scratch")));
@@ -209,7 +209,7 @@ fn an_umbrella_root_is_governed_by_no_package() {
     );
 
     for directory in [".", "notes"] {
-        let refusal = Governing::of(&root.join(directory))
+        let refusal = Governing::of(&root.join(directory), None)
             .map(|_| ())
             .expect_err("an umbrella declares no package")
             .render();
@@ -252,7 +252,7 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
         ],
     );
 
-    let refusal = Governing::of(&root.join("app"))
+    let refusal = Governing::of(&root.join("app"), None)
         .map(|_| ())
         .expect_err("a member nothing declares")
         .render();
@@ -288,7 +288,7 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
         ],
     );
 
-    let refusal = Governing::of(&root.join("app"))
+    let refusal = Governing::of(&root.join("app"), None)
         .map(|_| ())
         .expect_err("one member listed twice")
         .render();

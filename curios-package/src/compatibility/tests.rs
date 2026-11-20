@@ -70,7 +70,7 @@ fn a_minimum_accepts_its_version_and_every_later_one() {
             MANIFEST,
             &format!("name = \"app\"\ncompiler = \">= {accepted}\"\n"),
         );
-        let governing = Governing::of(&root).expect("the declaration is valid");
+        let governing = Governing::of(&root, None).expect("the declaration is valid");
         order(&governing).unwrap_or_else(|error| {
             panic!(
                 "a compiler at or past the minimum is accepted: {}",
@@ -85,7 +85,7 @@ fn a_minimum_accepts_its_version_and_every_later_one() {
         MANIFEST,
         &format!("name = \"app\"\ncompiler = \">= {required}\"\n"),
     );
-    let governing = Governing::of(&root).expect("the manifest is well formed");
+    let governing = Governing::of(&root, None).expect("the manifest is well formed");
     let error = order(&governing)
         .err()
         .expect("this compiler is older than the minimum")
@@ -109,7 +109,7 @@ fn a_minimum_accepts_its_version_and_every_later_one() {
 fn a_standalone_package_states_its_own_compiler() {
     let root = Temporary::new("compatibility", "standalone");
     write(&root, MANIFEST, "name = \"app\"\n");
-    let error = Governing::of(&root)
+    let error = Governing::of(&root, None)
         .err()
         .expect("a version is required")
         .render();
@@ -148,7 +148,7 @@ fn the_running_compilers_version_is_accepted_whatever_its_build() {
             MANIFEST,
             &format!("name = \"app\"\ncompiler = \"{version}\"\n"),
         );
-        let governing = Governing::of(&root).expect("the declaration is valid");
+        let governing = Governing::of(&root, None).expect("the declaration is valid");
         order(&governing).unwrap_or_else(|error| {
             panic!(
                 "the installed compiler is the one stated: {}",
@@ -167,7 +167,7 @@ fn another_version_newer_or_older_names_the_manifest_and_both_versions() {
             MANIFEST,
             &format!("name = \"app\"\ncompiler = \"{required}\"\n"),
         );
-        let governing = Governing::of(&root).expect("the manifest is well formed");
+        let governing = Governing::of(&root, None).expect("the manifest is well formed");
         let error = order(&governing)
             .err()
             .expect("this compiler is not the one stated")
@@ -203,8 +203,8 @@ fn only_enumerated_members_inherit_the_umbrellas_compiler() {
     );
     write(&root, "member/curios.toml", "name = \"member\"\n");
     write(&root, "stray/curios.toml", "name = \"stray\"\n");
-    Governing::of(&root.join("member")).expect("the enumerated member inherits");
-    let error = Governing::of(&root.join("stray"))
+    Governing::of(&root.join("member"), None).expect("the enumerated member inherits");
+    let error = Governing::of(&root.join("stray"), None)
         .err()
         .expect("an unlisted package stands alone")
         .render();
@@ -221,7 +221,7 @@ fn only_enumerated_members_inherit_the_umbrellas_compiler() {
             "\"\n"
         ),
     );
-    let error = Governing::of(&root.join("member"))
+    let error = Governing::of(&root.join("member"), None)
         .err()
         .expect("a member cannot override its umbrella")
         .render();
@@ -241,7 +241,7 @@ fn an_inherited_other_version_is_reported_against_the_umbrella() {
         &format!("compiler = \"{}\"\nmembers = [\"member\"]\n", future()),
     );
     write(&root, "member/curios.toml", "name = \"member\"\n");
-    let governing = Governing::of(&root.join("member")).expect("the manifest is well formed");
+    let governing = Governing::of(&root.join("member"), None).expect("the manifest is well formed");
     let error = order(&governing)
         .err()
         .expect("the inherited version is not this compiler's")
@@ -271,7 +271,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     );
     write(&root, "vendor/base/curios.toml", "name = \"base\"\n");
     write(&root, "vendor/base/lib.crs", "");
-    let governing = Governing::of(&root.join("app")).expect("the root package is supported");
+    let governing = Governing::of(&root.join("app"), None).expect("the root package is supported");
     let error = order(&governing)
         .err()
         .expect("the dependency is written for another compiler")
@@ -310,6 +310,7 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
             None,
             &root,
             &Overlay::default(),
+            None,
         )
         .expect("the file is in none of the package's units");
         let Selection::Program(program) = selected else {
@@ -323,6 +324,7 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
         None,
         &root,
         &Overlay::default(),
+        None,
     )
     .err()
     .expect("a declared file uses its package's version")

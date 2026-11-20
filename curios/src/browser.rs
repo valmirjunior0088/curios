@@ -10,13 +10,14 @@ use {
     std::{collections::BTreeMap, fs, io, path::Path},
 };
 
-/// What `program` is built into for a browser: every file of its page by its page path — the module through Binaryen alone, filed in `store` as `payload_of` files it, the rows it reaches linked to the gateways its packages declare, and the page laid out by `curios-browser`, naming the program as its first argument and its title. Every file the page holds is read here, once, and what the page refuses is refused before anything is written or served.
+/// What `program` is built into for a browser: every file of its page by its page path — the module through Binaryen alone, filed in `store` as `payload_of` files it, the rows it reaches linked to the gateways its packages declare, read out of the cabinet `cabinet` names or the governing root's own, and the page laid out by `curios-browser`, naming the program as its first argument and its title. Every file the page holds is read here, once, and what the page refuses is refused before anything is written or served.
 ///
 /// The page's files come back with the subject's tree, in which its command goes on to say where the page stands: served, or written.
 pub fn built(
     budget: u64,
     program: Program,
     store: Option<Verdicts>,
+    cabinet: Option<&Path>,
 ) -> Result<(BTreeMap<String, Vec<u8>>, Tree), Failure> {
     // Kept before the program is consumed: the page names the program, stands at its package's root and links what the manifest declaring it names.
     let name = page_name(&program.named());
@@ -28,7 +29,7 @@ pub fn built(
         foreigns,
         tree,
     } = payload_of(budget, program, store, Target::Browser, Then::More)?;
-    let linked = linked_of(manifest.as_deref(), &foreigns)?;
+    let linked = linked_of(manifest.as_deref(), &foreigns, cabinet)?;
     let files = page(
         curios_browser::Program {
             name: &name,

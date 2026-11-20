@@ -10,7 +10,7 @@ fn governed(name: &str, manifest: &str) -> (Temporary, Pinning) {
     fs::create_dir_all(&root).expect("create the package directory");
     fs::write(root.join(MANIFEST), manifest).expect("write the manifest");
 
-    let pinning = Pinning::found(None, &root).expect("the package's own manifest");
+    let pinning = Pinning::found(None, &root, None).expect("the package's own manifest");
 
     (root, pinning)
 }
@@ -379,7 +379,7 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
     )
     .expect("write the dependency's manifest");
 
-    let governing = Pinning::found(None, &app).expect("the package's own manifest");
+    let governing = Pinning::found(None, &app, None).expect("the package's own manifest");
     let refusal = pin(
         &governing,
         Subject::Dependency,

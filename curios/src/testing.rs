@@ -16,7 +16,7 @@ use {
         Overlay, PackageRoot, RootSource, UnitSource, open_entrypoint, supply_entrypoint,
     },
     curios_native::{Compiled, Stop, TestEnd},
-    curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
+    curios_package::{Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
     curios_surface::{Entrypoint, Form, WrittenIn},
     curios_verdict::{Program, Verdicts},
@@ -44,9 +44,9 @@ pub fn page_name(named: &Named) -> String {
     }
 }
 
-/// Where a declared subject's test payload is filed: the governing root its store sits beside, the package it is filed under and the executable its own declarations are filed as, the name reserved in the package for the payload, and the manifest that declares it.
+/// Where a declared subject's test payload is filed: the cabinet it is filed in, the package it is filed under and the executable its own declarations are filed as, the name reserved in the package for the payload, and the manifest that declares it.
 struct Filing {
-    root: PathBuf,
+    cabinet: Cabinet,
     package: String,
     /// The entry, by the name its package gives it: what the payload is verified against.
     entry: SourceName,
@@ -80,7 +80,7 @@ pub fn test_subjects(
                 subjects.push(TestSubject::library(
                     order(governing)?,
                     &governing.package.name,
-                    &governing.root,
+                    &governing.cabinet,
                     &governing.manifest,
                 ));
             }
@@ -93,7 +93,7 @@ pub fn test_subjects(
         Selection::Library(library) => Ok(vec![TestSubject::library(
             library.units,
             &library.package,
-            &library.root,
+            &library.cabinet,
             &library.manifest,
         )]),
         Selection::Program(program) => match program.home() {
@@ -132,7 +132,12 @@ pub fn test_subjects(
 
 impl TestSubject {
     /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's last unit, compiled tested, and the tail replacing that entry schedules its tests. [`LIBRARY_KEY`] stands in for the entry text the payload is keyed on.
-    fn library(mut units: Vec<RootSource>, package: &str, root: &Path, manifest: &Path) -> Self {
+    fn library(
+        mut units: Vec<RootSource>,
+        package: &str,
+        cabinet: &Cabinet,
+        manifest: &Path,
+    ) -> Self {
         if let Some(library) = units.pop() {
             units.push(library.tested());
         }
@@ -145,7 +150,7 @@ impl TestSubject {
             text: LIBRARY_KEY.to_string(),
             entry: manifest.with_file_name(LIBRARY),
             filing: Some(Filing {
-                root: root.to_path_buf(),
+                cabinet: cabinet.clone(),
                 package: package.to_string(),
                 entry: SourceName::of(package, Path::new(LIBRARY))
                     .expect("a package's name and its header's are plain names"),
@@ -166,7 +171,7 @@ impl TestSubject {
         };
         let (entrypoint, loader, source) = opened(&entry, Some(&home.package_root()))?;
         let filing = Filing {
-            root: home.root.clone(),
+            cabinet: home.cabinet.clone(),
             package: home.package.clone(),
             entry: source
                 .name()
@@ -232,12 +237,19 @@ impl TestSubject {
         self.filing.as_ref().map(|filing| filing.manifest.as_path())
     }
 
+    /// The directory of the cabinet the subject is filed in, for one a package declares: what its package's graph is read out of where its rows are linked.
+    fn cabinet(&self) -> Option<&Path> {
+        self.filing
+            .as_ref()
+            .map(|filing| filing.cabinet.directory())
+    }
+
     /// The store the subject is filed in, opened by `open` at the governing root, and told the executable its own declarations are filed as where it is one. `None` for a loose subject, which has no project to keep anything for.
     ///
     /// One handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
-    pub fn filed(&self, open: impl FnOnce(&Path) -> Option<Verdicts>) -> Option<Verdicts> {
+    pub fn filed(&self, open: impl FnOnce(&Cabinet) -> Option<Verdicts>) -> Option<Verdicts> {
         let filing = self.filing.as_ref()?;
-        let store = open(&filing.root)?;
+        let store = open(&filing.cabinet)?;
 
         Some(match &filing.executable {
             Some(executable) => store.executing(&filing.package, executable),
@@ -391,7 +403,7 @@ impl Tested {
         let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
             .map_err(|error| fault("the program's machine code could not be read back", error))?;
         // Resolved once for the subject: its manifests are walked and its modules compiled here, and each test is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's. A loose subject has no package, so nothing declares what would answer a `foreign` of its own, and `bindings_of` refuses one it reaches, saying so.
-        let bindings = bindings_of(subject.manifest(), foreigns)?;
+        let bindings = bindings_of(subject.manifest(), foreigns, subject.cabinet())?;
 
         Ok(Some(TestRun {
             compiled,
@@ -412,7 +424,7 @@ impl Tested {
         let Payload::Module(module) = payload else {
             unreachable!("a test program is laid out for the target it was compiled for");
         };
-        let linked = linked_of(subject.manifest(), foreigns)?;
+        let linked = linked_of(subject.manifest(), foreigns, subject.cabinet())?;
 
         page(
             curios_browser::Program {

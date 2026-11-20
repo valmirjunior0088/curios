@@ -321,42 +321,47 @@ impl Standing<'_> {
 
         let admitted = match contract.accepts {
             Accepts::Program => contract
-                .admit_program(subject, None, mode.output(), directory)
+                .admit_program(subject, None, mode.output(), directory, None)
                 .map(|program| self.program(&program)),
             Accepts::ProgramOrLibrary => {
                 contract
-                    .admit_staged(subject, None, directory)
+                    .admit_staged(subject, None, directory, None)
                     .map(|staged| match staged {
                         Staged::Program(program) => self.program(&program),
                         Staged::Library(library) => self.library(&library),
                     })
             }
-            Accepts::Scope => {
-                contract
-                    .admit_scope(subject, None, directory)
-                    .map(|scope| match scope {
-                        Scope::Program(program) => self.program(&program),
-                        Scope::Library(library) => self.library(&library),
-                        Scope::Prelude => "the prelude".to_string(),
-                    })
-            }
+            Accepts::Scope => contract
+                .admit_scope(subject, None, directory, None)
+                .map(|scope| match scope {
+                    Scope::Program(program) => self.program(&program),
+                    Scope::Library(library) => self.library(&library),
+                    Scope::Prelude => "the prelude".to_string(),
+                }),
             Accepts::Library => contract
-                .admit_library(subject, None, directory)
+                .admit_library(subject, None, directory, None)
                 .map(|library| self.library(&library)),
             Accepts::Any => contract
-                .admit_any(subject, None, directory)
+                .admit_any(subject, None, directory, None)
                 .map(|selection| match selection {
                     Selection::Program(program) => self.program(&program),
                     Selection::Library(library) => self.library(&library),
                     Selection::Entire(entire) => package_entire(&entire),
                 }),
             Accepts::Entire => contract
-                .admit_entire(subject, None, directory)
+                .admit_entire(subject, None, directory, None)
                 .map(|entire| package_entire(&entire)),
             Accepts::Files => {
                 let core = matches!(mode, Mode::Format { core, .. } if core.core);
                 contract
-                    .admit_files(subject, None, directory, &FormatSettings::default(), core)
+                    .admit_files(
+                        subject,
+                        None,
+                        directory,
+                        &FormatSettings::default(),
+                        core,
+                        None,
+                    )
                     .map(|rewritten| self.rewritten(&rewritten))
             }
             Accepts::Nothing => Ok("takes no subject".to_string()),

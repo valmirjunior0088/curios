@@ -22,10 +22,15 @@ fn beside(name: &str, below: Option<&str>) -> String {
     )
 }
 
-/// What a build of `root`'s package `package` through the store at `root` was refused with, or nothing.
+/// What a build of `root`'s package `package` through `root`'s own cabinet was refused with, or nothing.
 fn built_library(root: &Path, package: &str) -> Result<(), String> {
-    let verdicts = Verdicts::at(root.to_path_buf());
-    let governing = Governing::of(&root.join(package)).expect("a governed package");
+    built_library_in(root, package, &own(root))
+}
+
+/// The same, filing into `cabinet`.
+fn built_library_in(root: &Path, package: &str, cabinet: &Cabinet) -> Result<(), String> {
+    let verdicts = Verdicts::at(cabinet.clone());
+    let governing = Governing::of(&root.join(package), None).expect("a governed package");
     let library = order(&governing).expect("a resolvable library");
 
     Fold::new(1_000_000, &library, Some(&verdicts))
@@ -96,22 +101,23 @@ fn a_proof_another_project_filed_over_a_package_of_one_name_is_judged_again_over
         root
     };
 
+    let directory = temporary("twin-shared");
+    let cabinet = shared(&directory);
     let theirs = twin("twin-theirs", "true");
-    built_library(&theirs, "top").expect("`Holds(t)` holds where `t` is `true`");
+    built_library_in(&theirs, "top", &cabinet).expect("`Holds(t)` holds where `t` is `true`");
     let mine = twin("twin-mine", "false");
-    stage(&theirs, &mine);
 
     // Each refusal names the file it stands in, under a directory of its own.
-    let refused = |root: &Path| {
-        built_library(root, "top")
+    let refused = |root: &Path, cabinet: &Cabinet| {
+        built_library_in(root, "top", cabinet)
             .expect_err("`Holds(t)` is `False` where `t` is `false`")
             .replace(&root.display().to_string(), "<root>")
     };
     let fresh = twin("twin-fresh", "false");
     assert_eq!(
-        refused(&mine),
-        refused(&fresh),
-        "a build over the shared store answers what a build with nothing stored answers"
+        refused(&mine, &cabinet),
+        refused(&fresh, &own(&fresh)),
+        "a build over the shared cabinet answers what a build with nothing stored answers"
     );
 }
 

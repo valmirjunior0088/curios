@@ -5,8 +5,9 @@
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
-    curios_package::Target,
+    curios_package::{Cabinet, Target},
     std::{
         fs,
         path::Path,
@@ -51,6 +52,7 @@ fn project(name: &str) -> Temporary {
 /// Run the compiler in `root`, with the arguments given.
 fn curios(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .output()
@@ -64,12 +66,7 @@ fn reused(output: &Output) -> bool {
 
 /// The native payload slots the project at `root` holds.
 fn slots(root: &Path) -> usize {
-    fs::read_dir(
-        root.join(".curios")
-            .join("payloads")
-            .join(Target::Native.spelled()),
-    )
-    .map_or(0, Iterator::count)
+    fs::read_dir(Cabinet::of(root, None).payloads(Target::Native)).map_or(0, Iterator::count)
 }
 
 /// The point of the thing, end to end: what the program does must not depend on whether it was compiled just now.
@@ -427,4 +424,41 @@ fn a_payload_is_not_reused_once_its_entry_no_longer_declares_what_it_names() {
         !asked.status.success(),
         "and the payload filed under the wider one does not answer for it: {said}"
     );
+}
+
+/// A cabinet named for the run takes whole what a command keeps for reuse and leaves the project's `.curios/` with what the command emits: `compile` under `CURIOS_CABINET` writes its executable beside the project, and files its units, its payload and the compiler's memo in the directory named.
+#[test]
+fn a_named_cabinet_takes_what_is_kept_and_leaves_what_is_emitted() {
+    let root = project("named");
+    let named = temporary("named-cabinet");
+
+    let compiled = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env(CABINET, named.as_os_str())
+        .current_dir(&root)
+        .arg("compile")
+        .output()
+        .expect("run the compiler");
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let generated = fs::read_dir(root.join(".curios"))
+        .expect("what `compile` emits")
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        generated,
+        ["native"],
+        "`.curios/` holds what was emitted alone"
+    );
+
+    let cabinet = Cabinet::of(&root, Some(&named));
+    assert!(
+        cabinet.verdicts().is_dir(),
+        "the units are filed in the cabinet named"
+    );
+    assert!(cabinet.payloads(Target::Native).is_dir(), "and the payload");
+    assert!(cabinet.compiler().is_file(), "and the compiler's memo");
 }

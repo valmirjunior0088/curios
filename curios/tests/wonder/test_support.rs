@@ -1,6 +1,7 @@
 //! What the transport suites share: a temporary project on disk and the `curios` process run in it.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
     std::{
         fs,
@@ -46,6 +47,7 @@ pub fn project(name: &str) -> Temporary {
 /// Run the compiler in `root`, with the arguments given and `stdin` on its standard input.
 pub fn curios(root: &Path, arguments: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .stdin(Stdio::piped())

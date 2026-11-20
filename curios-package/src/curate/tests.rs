@@ -47,9 +47,9 @@ fn a_delivery_matching_its_pin_is_placed() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    accept(&scratch, &Cabinet::at(&root), &acquisition).expect("a delivery matching its pin");
+    accept(&scratch, &Cabinet::of(&root, None), &acquisition).expect("a delivery matching its pin");
 
-    let placed = Cabinet::at(&root).source(&hash);
+    let placed = Cabinet::of(&root, None).source(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(!scratch.exists(), "the scratch directory is consumed");
 }
@@ -83,7 +83,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    let refusal = accept(&scratch, &Cabinet::at(&root), &acquisition)
+    let refusal = accept(&scratch, &Cabinet::of(&root, None), &acquisition)
         .expect_err("a tampered delivery")
         .render();
 
@@ -97,7 +97,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         "{refusal}"
     );
     assert!(
-        !Cabinet::at(&root)
+        !Cabinet::of(&root, None)
             .source(&acquisition.snapshot.hash)
             .exists(),
         "nothing is placed under a hash it does not have"
@@ -131,7 +131,7 @@ fn a_live_project_acquires_nothing() {
         ],
     );
 
-    let governing = Governing::of(&root.join("app")).unwrap();
+    let governing = Governing::of(&root.join("app"), None).unwrap();
 
     assert!(curate(&governing, |_| {}).unwrap().is_empty());
 }
@@ -160,7 +160,7 @@ fn a_pin_of_a_live_member_is_not_acquired() {
         ],
     );
 
-    let governing = Governing::of(&root.join("app")).unwrap();
+    let governing = Governing::of(&root.join("app"), None).unwrap();
 
     assert!(curate(&governing, |_| {}).unwrap().is_empty());
 }
@@ -189,7 +189,7 @@ fn a_fetchable_catalog_row_is_acquired() {
         ],
     );
 
-    let governing = Governing::of(&root.join("app")).unwrap();
+    let governing = Governing::of(&root.join("app"), None).unwrap();
     let wanted = acquisitions(&governing).unwrap().packages;
 
     assert_eq!(wanted.len(), 1, "{:?}", wanted.len());
@@ -231,7 +231,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
         ],
     );
 
-    let governing = Governing::of(&root.join("app")).unwrap();
+    let governing = Governing::of(&root.join("app"), None).unwrap();
     let wanted = acquisitions(&governing).unwrap().packages;
 
     // The catalog row itself fetches nothing, but the walk descended into it and found what it depends on.
@@ -288,9 +288,10 @@ fn a_fetched_revision_is_verified_and_placed() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    fetch(&Cabinet::at(&root), &acquisition, || {}).expect("a revision this machine is serving");
+    fetch(&Cabinet::of(&root, None), &acquisition, || {})
+        .expect("a revision this machine is serving");
 
-    let placed = Cabinet::at(&root).source(&expected);
+    let placed = Cabinet::of(&root, None).source(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(
         !placed.join(".git").exists(),
@@ -378,7 +379,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
     let refusal = fetch(
-        &Cabinet::at(&root),
+        &Cabinet::of(&root, None),
         &pinned(&origin, absent, &expected),
         || {},
     )
@@ -425,7 +426,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
                 ),
             )],
         );
-        let cabinet = Cabinet::at(&root);
+        let cabinet = Cabinet::of(&root, None);
 
         // Whichever name `git init` gave the branch is the one that exists; the other is simply absent from this remote.
         if rev == "master" || rev == "main" {
@@ -512,13 +513,13 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
         ],
     );
 
-    let governing = Governing::of(&root.join("app")).unwrap();
+    let governing = Governing::of(&root.join("app"), None).unwrap();
     let fetched = curate(&governing, |_| {}).expect("a snapshot both mirrors serve");
 
     assert_eq!(fetched.packages.len(), 1, "{fetched:?}");
     assert!(
         governing
-            .cabinet()
+            .cabinet
             .source(&expected)
             .join("lib.crs")
             .is_file()
@@ -563,7 +564,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
         ),
     };
 
-    let cabinet = Cabinet::at(&root);
+    let cabinet = Cabinet::of(&root, None);
     fetch_module(&cabinet, &acquisition, || {}).expect("a delivery matching its pin");
 
     assert_eq!(
@@ -606,7 +607,7 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
         ),
     };
 
-    let cabinet = Cabinet::at(&root);
+    let cabinet = Cabinet::of(&root, None);
     let refusal = fetch_module(&cabinet, &acquisition, || {})
         .expect_err("a delivery failing its pin")
         .render();

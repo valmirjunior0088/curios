@@ -1,6 +1,7 @@
 //! What `curios format` does at the command line: which files a target names — every file a package declares for none, a file itself, standard input for `-` — the width each is formatted within, and that `--check` writes nothing.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
     curios_surface::MIN_LINE_WIDTH,
     std::{
@@ -25,6 +26,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 /// Run the compiler in `root`, with the arguments given and `stdin` on its standard input.
 fn curios(root: &Path, arguments: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .stdin(Stdio::piped())

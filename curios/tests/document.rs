@@ -3,6 +3,7 @@
 //! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that `--std` documents the standard library the compiler embeds, and that a package without a library is refused by name.
 
 use {
+    curios::CABINET,
     curios_common::test_support::*,
     std::{
         fs,
@@ -57,6 +58,7 @@ fn project(name: &str) -> Temporary {
 /// Run the compiler in `root`, with the arguments given.
 fn curios(root: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_curios"))
+        .env_remove(CABINET)
         .current_dir(root)
         .args(arguments)
         .output()

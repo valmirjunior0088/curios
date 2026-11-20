@@ -7,7 +7,7 @@ use {
     curios_common::{Qualifier, fill, test_support::*},
     curios_core::{Anchors, Certification, Global},
     curios_module::{PackageRoot, identity, open_entrypoint},
-    curios_package::{Governing, order},
+    curios_package::{Cabinet, Governing, order},
     curios_pipeline::{Fold, Progress},
     std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
@@ -17,21 +17,36 @@ mod by_name;
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
 const ENTRY: &str = "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n";
 
+/// The cabinet the project at `root` files into where nothing names another: its own.
+fn own(root: &Path) -> Cabinet {
+    Cabinet::of(root, None)
+}
+
+/// One cabinet `shared` names, which two projects file into as two projects under one named cabinet do.
+fn shared(shared: &Path) -> Cabinet {
+    Cabinet::of(shared, Some(shared))
+}
+
 /// Whether the one mounted unit of a compilation came from the store.
 fn reused(root: &Path) -> bool {
-    reused_from(root, &root.join("shape"))
+    reused_in(root, &own(root))
+}
+
+/// The same, filing into `cabinet`.
+fn reused_in(root: &Path, cabinet: &Cabinet) -> bool {
+    reused_from(root, &root.join("shape"), cabinet)
 }
 
 /// The same, for a project whose dependency is mounted from somewhere other than beside it.
-fn reused_from(root: &Path, shape: &Path) -> bool {
-    let verdicts = Verdicts::at(root.to_path_buf());
+fn reused_from(root: &Path, shape: &Path, cabinet: &Cabinet) -> bool {
+    let verdicts = Verdicts::at(cabinet.clone());
 
     reused_through(root, shape, &verdicts)
 }
 
 /// The same, for a compilation reading through `overlay`, verified by [`Verdicts::get_overlaid`] as the `wonder` engine's is.
 fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
-    let verdicts = Verdicts::at(root.to_path_buf());
+    let verdicts = Verdicts::at(own(root));
 
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
@@ -65,7 +80,7 @@ fn reused_through(root: &Path, shape: &Path, cache: &dyn Cache) -> bool {
 
 /// What the fold did to the one mounted unit, compiled for `compiled`, through `cache`: read off the progress events, as every test here reads its answer.
 fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache, compiled: Compiled) -> Vec<String> {
-    let governing = Governing::of(shape).expect("a governed package");
+    let governing = Governing::of(shape, None).expect("a governed package");
     let library = order(&governing)
         .expect("a resolvable library")
         .into_iter()
@@ -104,14 +119,19 @@ fn folded(root: &Path) -> Vec<String> {
 
 /// [`folded`], with the one unit compiled for `compiled`.
 fn folded_as(root: &Path, compiled: Compiled) -> Vec<String> {
-    let verdicts = Verdicts::at(root.to_path_buf());
+    let verdicts = Verdicts::at(own(root));
 
     folded_through(root, &root.join("shape"), &verdicts, compiled)
 }
 
 /// What a query's fold did to the one unit, through the store read as the `wonder` engine reads it.
 fn folded_overlaid(root: &Path, overlay: &Overlay) -> Vec<String> {
-    let verdicts = Verdicts::at(root.to_path_buf());
+    folded_overlaid_in(root, overlay, &own(root))
+}
+
+/// The same, reading `cabinet`.
+fn folded_overlaid_in(root: &Path, overlay: &Overlay, cabinet: &Cabinet) -> Vec<String> {
+    let verdicts = Verdicts::at(cabinet.clone());
 
     folded_through(
         root,
@@ -143,34 +163,6 @@ fn project(name: &str) -> Temporary {
     write(&root, "exe.crs", ENTRY);
 
     root
-}
-
-/// Copy every slot `from`'s store holds into `into`'s, with the packs of objects beside each, replacing whatever was there.
-///
-/// How both cross-project tests stage a shared store: by copying rather than by setting `CURIOS_CACHE`, since the store's own hermeticity rests on no test ever setting it, and what is under test is the verification, which cannot tell how a foreign slot arrived.
-fn stage(from: &Path, into: &Path) {
-    copied(
-        &from.join(".curios/verdicts"),
-        &into.join(".curios/verdicts"),
-    );
-    copied(&from.join(".curios/objects"), &into.join(".curios/objects"));
-}
-
-/// Copy the tree `from` into `into`, replacing whatever was there.
-fn copied(from: &Path, into: &Path) {
-    let _ = fs::remove_dir_all(into);
-    fs::create_dir_all(into).unwrap();
-
-    for entry in fs::read_dir(from).expect("a store with units in it") {
-        let entry = entry.unwrap().path();
-        let to = into.join(entry.file_name().unwrap());
-        match entry.is_dir() {
-            true => copied(&entry, &to),
-            false => {
-                fs::copy(&entry, to).unwrap();
-            }
-        }
-    }
 }
 
 /// The dependency's library, saying `word`.
@@ -222,10 +214,7 @@ fn a_reused_unit_brings_its_certification_back() {
         filed: Default::default(),
         taken: Default::default(),
     };
-    let (first, second) = (
-        Verdicts::at(root.to_path_buf()),
-        Verdicts::at(root.to_path_buf()),
-    );
+    let (first, second) = (Verdicts::at(own(&root)), Verdicts::at(own(&root)));
     let (filing, taking) = (recorded(&first), recorded(&second));
 
     assert!(
@@ -253,7 +242,7 @@ fn a_reused_unit_brings_its_certification_back() {
 fn a_reused_unit_lies_in_its_packages_files() {
     let root = project("filed");
     let shape = root.join("shape");
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(own(&root));
     let taking = Taking {
         store: &store,
         taken: RefCell::new(None),
@@ -394,27 +383,27 @@ fn a_unit_is_not_reused_under_other_claims() {
 
 /// A slot filed by one project does not answer for another's source where its files hold other texts, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do: its record's names resolve to this project's files.
 ///
-/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable.
+/// A cabinet is shared wherever one is named for every project a run sees, so this is reachable.
 #[test]
 fn a_slot_does_not_answer_for_another_projects_source() {
     let mine = project("mine");
     let theirs = project("theirs");
+    let directory = temporary("not-answering-shared");
+    let cabinet = shared(&directory);
 
     write(&theirs, "shape/lib.crs", &library("theirs"));
-    reused(&theirs);
-    reused(&mine);
-
-    stage(&theirs, &mine);
+    reused_in(&mine, &cabinet);
+    reused_in(&theirs, &cabinet);
 
     assert!(
-        !reused(&mine),
+        !reused_in(&mine, &cabinet),
         "their record names texts my files do not hold"
     );
 }
 
 /// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
 ///
-/// The dependency sits outside both projects, standing in for the `sources/` tree `curate` materializes under a shared store — the only way two projects ever read one unit's source from one path. `mine` never compiles it before the staging, so a hit has nowhere to come from but the slot `theirs` filed.
+/// The dependency sits outside both projects, standing in for the `sources/` tree `curate` materializes in a shared cabinet — the only way two projects ever read one unit's source from one path. `mine` never compiles it before `theirs` does, so a hit has nowhere to come from but the slot `theirs` filed.
 #[test]
 fn a_slot_answers_for_a_dependency_both_projects_read() {
     let materialized = temporary("materialized");
@@ -431,18 +420,17 @@ fn a_slot_answers_for_a_dependency_both_projects_read() {
 
     let theirs = temporary("theirs-sharing");
     let mine = temporary("mine-sharing");
+    let directory = temporary("dependency-shared");
+    let cabinet = shared(&directory);
     write(&theirs, "exe.crs", ENTRY);
     write(&mine, "exe.crs", ENTRY);
 
     assert!(
-        !reused_from(&theirs, &materialized),
+        !reused_from(&theirs, &materialized, &cabinet),
         "nothing is stored for the first compile, which files it"
     );
-
-    stage(&theirs, &mine);
-
     assert!(
-        reused_from(&mine, &materialized),
+        reused_from(&mine, &materialized, &cabinet),
         "and the record names a path mine reads from too, so the unit crosses"
     );
 }
@@ -455,7 +443,7 @@ fn a_damaged_unit_is_not_reused() {
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
-    let slot = fs::read_dir(root.join(".curios/verdicts"))
+    let slot = fs::read_dir(own(&root).verdicts())
         .expect("a store with units in it")
         .map(|slot| slot.unwrap().path())
         .next()
@@ -478,7 +466,7 @@ fn compiling_repeatedly_files_one_slot() {
         reused(&root);
     }
 
-    let slots = fs::read_dir(root.join(".curios").join("verdicts"))
+    let slots = fs::read_dir(own(&root).verdicts())
         .expect("a store with units in it")
         .count();
 
@@ -491,7 +479,7 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
     let root = temporary("untouched");
     fs::create_dir_all(&root).unwrap();
 
-    let verdicts = Verdicts::at(root.to_path_buf());
+    let verdicts = Verdicts::at(own(&root));
     assert!(
         !root.join(".curios").exists(),
         "opening the store created its directory"
@@ -499,7 +487,7 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
 
     verdicts.compiler();
     assert!(
-        root.join(".curios").join("compiler").is_file(),
+        own(&root).compiler().is_file(),
         "asking for the identity did not write the memo"
     );
 }
@@ -538,7 +526,7 @@ fn a_lint_stores_no_copy_of_its_source() {
 
 /// The bytes of every slot the store at `root` holds.
 fn slots(root: &Path) -> Vec<Vec<u8>> {
-    let mut slots = fs::read_dir(root.join(".curios").join("verdicts"))
+    let mut slots = fs::read_dir(own(root).verdicts())
         .expect("a store with units in it")
         .map(|slot| fs::read(slot.unwrap().path()).unwrap())
         .collect::<Vec<_>>();
@@ -613,28 +601,31 @@ fn a_unit_kept_without_being_filed_leaves_the_slot_as_it_was() {
 fn another_projects_slot_is_a_baseline() {
     let mine = project("baseline-mine");
     let theirs = project("baseline-theirs");
+    let directory = temporary("baseline-shared");
+    let cabinet = shared(&directory);
 
     write(&theirs, "shape/lib.crs", &library("theirs"));
-    reused(&theirs);
-
-    stage(&theirs, &mine);
+    reused_in(&theirs, &cabinet);
 
     assert_eq!(
-        folded_overlaid(&mine, &Overlay::default()),
+        folded_overlaid_in(&mine, &Overlay::default(), &cabinet),
         ["recompiling /shape"]
     );
 }
 
-/// A slot another project filed answers for this one where this project's files hold the texts it was compiled from: the unit is the one this project would compile, so a store shared across projects compiles it once.
+/// A slot another project filed answers for this one where this project's files hold the texts it was compiled from: the unit is the one this project would compile, so a cabinet shared across projects compiles it once.
 #[test]
 fn a_slot_answers_for_another_project_holding_its_texts() {
     let mine = project("sharing-mine");
     let theirs = project("sharing-theirs");
+    let directory = temporary("sharing-shared");
+    let cabinet = shared(&directory);
 
-    assert!(!reused(&theirs), "nothing is stored for the first compile");
-    stage(&theirs, &mine);
-
-    assert!(reused(&mine));
+    assert!(
+        !reused_in(&theirs, &cabinet),
+        "nothing is stored for the first compile"
+    );
+    assert!(reused_in(&mine, &cabinet));
 }
 
 /// A project moved to another directory keeps its stored units: a record names each file by its package, and the package's files hold the texts they did wherever it stands.
@@ -647,6 +638,23 @@ fn a_moved_project_keeps_its_stored_units() {
     copied(&root, &moved);
 
     assert!(reused(&moved));
+}
+
+/// Copy the tree `from` into `into`, replacing whatever was there.
+fn copied(from: &Path, into: &Path) {
+    let _ = fs::remove_dir_all(into);
+    fs::create_dir_all(into).unwrap();
+
+    for entry in fs::read_dir(from).expect("a tree with files in it") {
+        let entry = entry.unwrap().path();
+        let to = into.join(entry.file_name().unwrap());
+        match entry.is_dir() {
+            true => copied(&entry, &to),
+            false => {
+                fs::copy(&entry, to).unwrap();
+            }
+        }
+    }
 }
 
 /// An entry with a declaration of its own, so the unit of its declarations holds something.
@@ -687,7 +695,7 @@ impl Cache for Watching<'_> {
 
 /// What a build's fold did with the unit of the entry `root` holds in `entry`, through a store told the entry is the executable `executable`, or told nothing.
 fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static str {
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(own(root));
     let store = match executable {
         Some(executable) => store.executing("app", executable),
         None => store,
@@ -696,7 +704,7 @@ fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static str {
         store: &store,
         entry: RefCell::new(None),
     };
-    let governing = Governing::of(&root.join("shape")).expect("a governed package");
+    let governing = Governing::of(&root.join("shape"), None).expect("a governed package");
     let library = order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
         open_entrypoint(&root.join(entry), Some(&PackageRoot::new("app", root)))
@@ -793,7 +801,7 @@ fn library_of_three(word: &str) -> String {
 
 /// The packs of the store at `root`, each by where it is kept.
 fn packs(root: &Path) -> Vec<PathBuf> {
-    fs::read_dir(root.join(".curios/objects"))
+    fs::read_dir(own(root).packs())
         .expect("a store with objects in it")
         .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
         .map(|pack| pack.unwrap().path())
@@ -842,7 +850,7 @@ fn a_unit_whose_objects_are_gone_is_compiled_again() {
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
-    fs::remove_dir_all(root.join(".curios/objects")).expect("the packs a filing wrote");
+    fs::remove_dir_all(own(&root).packs()).expect("the packs a filing wrote");
 
     assert!(!reused(&root), "a slot naming objects nowhere is no unit");
     assert!(reused(&root), "and the recompile writes them again");
@@ -921,8 +929,8 @@ fn chained(name: &str, body: &str) -> Temporary {
 
 /// What a build of `root`'s `top` through the store did to each unit, or what it was refused with.
 fn folded_chain(root: &Path) -> Result<Vec<String>, String> {
-    let verdicts = Verdicts::at(root.to_path_buf());
-    let governing = Governing::of(&root.join("top")).expect("a governed package");
+    let verdicts = Verdicts::at(own(root));
+    let governing = Governing::of(&root.join("top"), None).expect("a governed package");
     let library = order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
         open_entrypoint(&root.join("exe.crs"), None).expect("an openable entrypoint");

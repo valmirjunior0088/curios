@@ -30,7 +30,7 @@ pub struct Governing {
     pub directory: PathBuf,
     /// The manifest that was read: the `curios.toml` the walk found, or the file `--manifest` named — what a report names when the invocation does not stand beside it.
     pub manifest: PathBuf,
-    /// The umbrella that enumerates it, if any. Membership organizes and dependency compiles (law 3), so this decides where the store goes and what a `member` row can resolve to — never what is compiled.
+    /// The umbrella that enumerates it, if any. Membership organizes and dependency compiles (law 3), so this decides where `.curios/` goes and what a `member` row can resolve to — never what is compiled.
     pub umbrella: Option<Umbrella>,
     /// The umbrella's members by declared name, each with the directory its manifest sits in — empty when no umbrella governs, which is what makes every marker a mismatch there.
     ///
@@ -38,6 +38,8 @@ pub struct Governing {
     pub members: BTreeMap<String, PathBuf>,
     /// The governing root: the umbrella's directory when one governs, and the package's otherwise. `.curios/` sits beside it.
     pub root: PathBuf,
+    /// The cabinet the invocation files what it keeps for reuse in: the one whoever ran it named, or the root's own.
+    pub cabinet: Cabinet,
 }
 
 impl Governing {
@@ -71,23 +73,22 @@ impl Governing {
         }
     }
 
-    /// The cabinet this project files what it keeps for reuse in.
-    pub fn cabinet(&self) -> Cabinet {
-        Cabinet::at(&self.root)
-    }
-
-    /// What governs an invocation, by the manifest it named when it named one and by the one nearest `directory` otherwise.
-    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, Box<Report>> {
+    /// What governs an invocation, by the manifest it named when it named one and by the one nearest `directory` otherwise, filing into the cabinet `cabinet` names or the root's own.
+    pub fn found(
+        manifest: Option<&Path>,
+        directory: &Path,
+        cabinet: Option<&Path>,
+    ) -> Result<Self, Box<Report>> {
         match manifest {
-            Some(path) => Self::at(path),
-            None => Self::of(directory),
+            Some(path) => Self::at(path, cabinet),
+            None => Self::of(directory, cabinet),
         }
     }
 
-    /// What governs an invocation started where the process is standing.
+    /// What governs an invocation started where the process is standing, filing into the cabinet `cabinet` names or the root's own.
     ///
     /// The working directory is read here rather than by each caller, because "where the invocation started" is this lookup's own input and every caller would otherwise spell the same two lines to supply it.
-    pub fn here(manifest: Option<&Path>) -> Result<Self, Box<Report>> {
+    pub fn here(manifest: Option<&Path>, cabinet: Option<&Path>) -> Result<Self, Box<Report>> {
         let directory = std::env::current_dir().map_err(|error| {
             Refused::of("unreadable directory")
                 .stating("the working directory could not be read")
@@ -95,24 +96,24 @@ impl Governing {
                 .about_named("the working directory")
         })?;
 
-        Self::found(manifest, &directory)
+        Self::found(manifest, &directory, cabinet)
     }
 
-    /// What governs an invocation started in `directory`: the package whose manifest is nearest, at `directory` or above it.
-    pub fn of(directory: &Path) -> Result<Self, Box<Report>> {
+    /// What governs an invocation started in `directory`: the package whose manifest is nearest, at `directory` or above it, filing into the cabinet `cabinet` names or the root's own.
+    pub fn of(directory: &Path, cabinet: Option<&Path>) -> Result<Self, Box<Report>> {
         let directory = directory
             .canonicalize()
             .map_err(|error| unreadable(directory, &error))?;
 
         let (package, at) = nearest_package(&directory)?;
 
-        Self::rooted(package, at.join(MANIFEST), at)
+        Self::rooted(package, at.join(MANIFEST), at, cabinet)
     }
 
     /// What governs an invocation whose manifest was named outright, walking upward only for the umbrella.
     ///
     /// The explicit override exists for scripting, and it overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
-    pub fn at(manifest: &Path) -> Result<Self, Box<Report>> {
+    pub fn at(manifest: &Path, cabinet: Option<&Path>) -> Result<Self, Box<Report>> {
         // Canonical through `identity`, which is what reads a bare `curios.toml` as the working directory's: its parent is `""`, which canonicalizes to nothing, so canonicalizing the parent directly would refuse the file as missing.
         let manifest = identity(manifest);
 
@@ -130,16 +131,20 @@ impl Governing {
             .expect("a manifest that was read sits in a directory")
             .to_path_buf();
 
-        Self::rooted(package, manifest, directory)
+        Self::rooted(package, manifest, directory, cabinet)
     }
 
     /// What governs `file`: the package `manifest` names, which must hold it, or the package whose manifest is nearest above it. `None` where no manifest is above it, or where the first one found is an umbrella's, which declares no package — the file is then no package's.
-    pub fn of_file(file: &Path, manifest: Option<&Path>) -> Result<Option<Self>, Box<Report>> {
+    pub fn of_file(
+        file: &Path,
+        manifest: Option<&Path>,
+        cabinet: Option<&Path>,
+    ) -> Result<Option<Self>, Box<Report>> {
         let spelled = identity(file);
 
         match manifest {
             Some(named) => {
-                let governing = Self::at(named)?;
+                let governing = Self::at(named, cabinet)?;
                 if !spelled.starts_with(identity(&governing.directory)) {
                     return Err(Refused::of("outside the package")
                         .stating(format_args!(
@@ -153,7 +158,7 @@ impl Governing {
             }
             None => match spelled.parent().and_then(nearest_manifest) {
                 Some(at) => match Manifest::from_path(&at.join(MANIFEST))? {
-                    Manifest::Package(_) => Self::of(&at).map(Some),
+                    Manifest::Package(_) => Self::of(&at, cabinet).map(Some),
                     Manifest::Umbrella(_) => Ok(None),
                 },
                 None => Ok(None),
@@ -161,8 +166,13 @@ impl Governing {
         }
     }
 
-    /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it.
-    fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, Box<Report>> {
+    /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it, filing into the cabinet `cabinet` names or its root's own.
+    fn rooted(
+        package: Package,
+        manifest: PathBuf,
+        at: PathBuf,
+        cabinet: Option<&Path>,
+    ) -> Result<Self, Box<Report>> {
         let umbrella = umbrella_over(&at)?;
         let umbrella_at = umbrella
             .as_ref()
@@ -177,6 +187,7 @@ impl Governing {
                 manifest,
                 members: members(&root, &umbrella)?,
                 umbrella: Some(umbrella),
+                cabinet: Cabinet::of(&root, cabinet),
                 root,
             },
             None => Self {
@@ -184,6 +195,7 @@ impl Governing {
                 manifest,
                 umbrella: None,
                 members: BTreeMap::new(),
+                cabinet: Cabinet::of(&at, cabinet),
                 root: at.clone(),
                 directory: at,
             },

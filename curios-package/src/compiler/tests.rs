@@ -2,11 +2,11 @@ use {super::*, curios_common::test_support::*};
 
 /// A cabinet of its own, in a directory that goes away with the test, beside the guard that removes it.
 ///
-/// Hermetic without asking: nothing here sets `CURIOS_CACHE`, so the shared half falls back to the project's own directory and no test can reach a developer's real cache.
+/// Hermetic by construction: the cabinet is the project's own, which nothing names elsewhere, so no test can reach a developer's real one.
 fn cabinet(name: &str) -> (Temporary, Cabinet) {
     let root = Temporary::new("compiler", name);
     fs::create_dir_all(&root).unwrap();
-    let cabinet = Cabinet::at(&root);
+    let cabinet = Cabinet::of(&root, None);
 
     (root, cabinet)
 }

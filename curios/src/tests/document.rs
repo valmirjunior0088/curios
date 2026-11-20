@@ -381,7 +381,7 @@ fn a_constructor_calls_its_family_once_per_parameter_group() {
             ),
         ],
     );
-    let governing = Governing::found(None, &root).expect("a governed package");
+    let governing = Governing::found(None, &root, None).expect("a governed package");
     let units = order(&governing).expect("a scope");
     let vectors = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
         .expect("the package documents");
@@ -517,7 +517,7 @@ fn a_package_documents_its_interface_for_its_consumers() {
             ),
         ],
     );
-    let governing = Governing::found(None, &root).expect("a governed package");
+    let governing = Governing::found(None, &root, None).expect("a governed package");
     let units = order(&governing).expect("a scope");
 
     let documentation = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
@@ -730,7 +730,7 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
             ),
         ],
     );
-    let governing = Governing::found(None, &root).expect("a governed package");
+    let governing = Governing::found(None, &root, None).expect("a governed package");
     let units = order(&governing).expect("a scope");
     let documentation = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
         .expect("the package documents");

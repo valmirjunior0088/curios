@@ -767,7 +767,7 @@ The program's own standard input is spent on reading the source, so a read of it
 
 Everything generated lands under one `.curios/`, beside the governing manifest — the umbrella's when one governs, so its members share it — in nine entries, a product's named for the target it is built for and every other for what it holds:
 
-| Entry | Holds | Under `CURIOS_CACHE` |
+| Entry | Holds | Under `CURIOS_CABINET` |
 | --- | --- | --- |
 | `native/<package>/<name>` | what `compile` emits for the native target | stays |
 | `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory | stays |
@@ -781,9 +781,9 @@ Everything generated lands under one `.curios/`, beside the governing manifest �
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's hash scheme is a directory of its own.
+`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CABINET` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's hash scheme is a directory of its own.
 
-Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own, and nothing is written anywhere else ([why](../curios-package/README.md#the-store-goes-where-a-manifest-governs-and-nowhere-it-was-not-pointed)).
+Set `CURIOS_CABINET` to share that half across projects; unset, each project keeps its own, and nothing is written anywhere else ([why](../curios-package/README.md#the-store-goes-where-a-manifest-governs-and-nowhere-it-was-not-pointed)).
 
 ## Reusing what was already built
 

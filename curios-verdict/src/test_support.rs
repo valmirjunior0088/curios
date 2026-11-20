@@ -13,6 +13,7 @@ use {
     curios_core::{Intrinsic, Term},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
+    curios_package::Cabinet,
     curios_pipeline::{
         Cache, CompileError, Listeners, Unmade, Unread, compile_read, compile_units,
         granted_in_place, read_core_text, stood_in_for,
@@ -67,9 +68,9 @@ impl History {
         }
     }
 
-    /// The cache over the history's store, which shares nothing this machine offers: a new one for every build, as every command a build is has its own.
+    /// The cache over the history's own cabinet, which no build reads: a new one for every build, as every command a build is has its own.
     fn verdicts(&self) -> Verdicts {
-        Verdicts::alone(self.directory.join("project"))
+        Verdicts::at(Cabinet::of(&self.directory.join("project"), None))
     }
 
     /// Step the unit claiming `mount` to `text`, written as `written`, then build: every unit compiled over the ones before it as the store holds them, each through the store, which files what it compiles and offers each unit's earlier step as its baseline.

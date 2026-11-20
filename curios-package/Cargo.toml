@@ -15,7 +15,7 @@ workspace = true
 # `/std`'s TOML codec is a guest library — it runs in the compiled program — and cannot serve the
 # driver; xtask's own `toml_edit` answers for `Cargo.toml`, which is not this format's business.
 [features]
-# `Cabinet::alone`: a cabinet sharing nothing the machine offers, which the soundness board's histories file in and rewrite records of. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
+# `Cabinet`'s families by directory: what a suite lists, damages or blocks, which no product asks for. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 
 [dependencies]

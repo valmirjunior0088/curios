@@ -44,7 +44,7 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 
 ### The store goes where a manifest governs, and nowhere it was not pointed
 
-**Decision.** Everything generated lands in one `.curios/` beside the governing manifest, the umbrella's where one governs, so members share it. `CURIOS_CACHE` moves the half that says nothing about which project asked, and has no default. A source's hash scheme is a directory of its own.
+**Decision.** Everything generated lands in one `.curios/` beside the governing manifest, the umbrella's where one governs, so members share it. `CURIOS_CABINET` moves the half that says nothing about which project asked, and has no default. A source's hash scheme is a directory of its own.
 
 **Rationale.** A toolchain that writes into a home directory nobody pointed it at does what the person who ran it did not ask for. A scheme of its own lets a successor stand beside `c1` rather than replace it.
 

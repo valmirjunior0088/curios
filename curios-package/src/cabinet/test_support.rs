@@ -1,12 +1,20 @@
-//! What a suite asks of a cabinet that no product does: a cabinet of its own, whatever the machine offers.
+//! What a suite asks of a cabinet that no product does: the directory a family stands in, for a test that lists, damages or blocks what is filed there, computed as the cabinet computes the paths inside it.
 
 use super::*;
 
 impl Cabinet {
-    /// The cabinet a project at `project` uses, sharing nothing this machine offers whether or not `CURIOS_CACHE` names a cabinet: what a history of the soundness board files its units in and rewrites a record of, which must never reach a cabinet a build reads.
-    pub fn alone(project: &Path) -> Self {
-        Self {
-            directory: project.join(PRODUCTS),
-        }
+    /// The directory every unit's slot is filed in.
+    pub fn verdicts(&self) -> PathBuf {
+        self.directory.join(VERDICTS)
+    }
+
+    /// The directory the packs of every slot's address stand in.
+    pub fn packs(&self) -> PathBuf {
+        self.directory.join(OBJECTS)
+    }
+
+    /// The directory `target`'s payloads are filed in.
+    pub fn payloads(&self, target: Target) -> PathBuf {
+        self.directory.join(PAYLOADS).join(target.spelled())
     }
 }

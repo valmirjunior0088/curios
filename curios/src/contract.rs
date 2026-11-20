@@ -12,8 +12,8 @@ use {
     curios_common::{OsError, Report, STDIN_NAME},
     curios_module::Overlay,
     curios_package::{
-        Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
-        nearest_manifest,
+        Cabinet, Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection,
+        Spelling, nearest_manifest,
     },
     curios_pipeline::Stage,
     curios_surface::{Format, WrittenIn},
@@ -46,7 +46,7 @@ pub enum Accepts {
     Nothing,
 }
 
-/// How a command reaches the store of verdicts and payloads beside the package it is about.
+/// How a command reaches the cabinet of verdicts and payloads its package files into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Access {
     /// It opens none.
@@ -56,10 +56,10 @@ pub enum Access {
 }
 
 impl Access {
-    /// The store beside `root` for a build to file into — `None` for an access that opens none. A question does not open one here: the `wonder` engine opens the store beside what it is asked about.
-    pub fn filed(self, root: &Path) -> Option<Verdicts> {
+    /// The verdicts of `cabinet` for a build to file into — `None` for an access that opens none. A question does not open one here: the `wonder` engine opens the cabinet of what it is asked about.
+    pub fn filed(self, cabinet: &Cabinet) -> Option<Verdicts> {
         match self {
-            Self::Write => Some(Verdicts::at(root.to_path_buf())),
+            Self::Write => Some(Verdicts::at(cabinet.clone())),
             Self::None => None,
         }
     }
@@ -503,6 +503,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Selection, Box<Report>> {
         let spelling = match Spelling::of(subject) {
             // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
@@ -510,7 +511,7 @@ impl Contract {
             spelling => spelling,
         };
 
-        Selection::of(spelling, manifest, directory, &Overlay::default())
+        Selection::of(spelling, manifest, directory, &Overlay::default(), cabinet)
     }
 
     /// `path`, where the command reads what its name says it is written in: a command that reads no Core text refuses a `.crsc` before anything reads it, rather than reading it as the program it is not.
@@ -556,10 +557,11 @@ impl Contract {
         manifest: Option<&Path>,
         output: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Program, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
-        let program = match self.selection(subject, manifest, directory)? {
+        let program = match self.selection(subject, manifest, directory, cabinet)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
             Selection::Library(library) => {
@@ -607,14 +609,17 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Staged, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
 
-        Ok(match self.selection(subject, manifest, directory)? {
-            Selection::Program(program) => Staged::Program(program),
-            Selection::Entire(entire) => Staged::Program(entire.default_program()?),
-            Selection::Library(library) => Staged::Library(library),
-        })
+        Ok(
+            match self.selection(subject, manifest, directory, cabinet)? {
+                Selection::Program(program) => Staged::Program(program),
+                Selection::Entire(entire) => Staged::Program(entire.default_program()?),
+                Selection::Library(library) => Staged::Library(library),
+            },
+        )
     }
 
     /// The scope `subject` asks in: what [`Contract::admit_staged`] admits, but for no subject, which asks in the governing package's sole or `default` executable's scope, else its library's, and outside every package the prelude's alone.
@@ -623,6 +628,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Scope, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Scope, "{}", self.command);
 
@@ -630,15 +636,17 @@ impl Contract {
             return Ok(Scope::Prelude);
         }
 
-        Ok(match self.selection(subject, manifest, directory)? {
-            Selection::Program(program) => Scope::Program(program),
-            Selection::Library(library) => Scope::Library(library),
-            Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
-                (Ok(program), _) => Scope::Program(program),
-                (Err(_), Some(library)) => Scope::Library(library),
-                (Err(refused), None) => return Err(refused),
+        Ok(
+            match self.selection(subject, manifest, directory, cabinet)? {
+                Selection::Program(program) => Scope::Program(program),
+                Selection::Library(library) => Scope::Library(library),
+                Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
+                    (Ok(program), _) => Scope::Program(program),
+                    (Err(_), Some(library)) => Scope::Library(library),
+                    (Err(refused), None) => return Err(refused),
+                },
             },
-        })
+        )
     }
 
     /// The library `subject` selects: a library, or the package entire's own.
@@ -647,10 +655,11 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        match self.selection(subject, manifest, directory)? {
+        match self.selection(subject, manifest, directory, cabinet)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
                 Refused::of("no library")
@@ -680,10 +689,11 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Selection, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        self.selection(subject, manifest, directory)
+        self.selection(subject, manifest, directory, cabinet)
     }
 
     /// The governing package entire, which is all a command taking no subject selects.
@@ -692,10 +702,11 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Entire, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
-        match self.selection(subject, manifest, directory)? {
+        match self.selection(subject, manifest, directory, cabinet)? {
             Selection::Entire(entire) => Ok(*entire),
             Selection::Library(_) | Selection::Program(_) => Err(Refused::of("surplus subject")
                 .stating(format_args!(
@@ -715,10 +726,11 @@ impl Contract {
         directory: &Path,
         settings: &FormatSettings,
         core: bool,
+        cabinet: Option<&Path>,
     ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
-        self.rewritten(subject, manifest, directory, settings, core)
+        self.rewritten(subject, manifest, directory, settings, core, cabinet)
     }
 
     /// What [`admit_files`](Self::admit_files) would rewrite of whatever `subject` selects, for a command that takes any subject and says of each text it is written in whether the formatter would write it otherwise.
@@ -727,6 +739,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        cabinet: Option<&Path>,
     ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
@@ -736,6 +749,7 @@ impl Contract {
             directory,
             &FormatSettings::default(),
             false,
+            cabinet,
         )
     }
 
@@ -746,16 +760,17 @@ impl Contract {
         directory: &Path,
         settings: &FormatSettings,
         core: bool,
+        cabinet: Option<&Path>,
     ) -> Result<Rewritten, Box<Report>> {
         let stdin = Self::stdin_written_in(core, subject)?;
 
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
                 let path = file_subject(path)?;
-                let format = settings.format_of_file(&path, manifest)?;
+                let format = settings.format_of_file(&path, manifest, cabinet)?;
                 Rewritten::Files(vec![path], format)
             }
-            spelling => match self.selection(subject, manifest, directory)? {
+            spelling => match self.selection(subject, manifest, directory, cabinet)? {
                 Selection::Program(_) if spelling == Spelling::Stdin => {
                     Rewritten::Stdin(settings.format_under(None)?, stdin)
                 }
@@ -765,12 +780,12 @@ impl Contract {
                 }
                 // Selected through the package `selection` found, which a program and a library do not keep.
                 Selection::Library(library) => {
-                    let governing = Governing::found(manifest, directory)?;
+                    let governing = Governing::found(manifest, directory, cabinet)?;
                     let format = settings.format_under(Some(&governing))?;
                     Rewritten::Files(library.declared_files()?, format)
                 }
                 Selection::Program(program) => {
-                    let governing = Governing::found(manifest, directory)?;
+                    let governing = Governing::found(manifest, directory, cabinet)?;
                     let format = settings.format_under(Some(&governing))?;
                     Rewritten::Files(program.declared_files()?, format)
                 }

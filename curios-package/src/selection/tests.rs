@@ -24,7 +24,8 @@ fn selection(argument: Option<&str>, directory: &Path) -> Result<Selection, Stri
         spelling => spelling,
     };
 
-    Selection::of(spelling, None, directory, &Overlay::default()).map_err(|report| report.render())
+    Selection::of(spelling, None, directory, &Overlay::default(), None)
+        .map_err(|report| report.render())
 }
 
 /// The program `argument` means to a command that needs one, standing in `directory`, or the refusal it earns.
@@ -303,6 +304,7 @@ fn standard_input_is_governed_by_no_manifest() {
         Some(&root.join("curios.toml")),
         &root,
         &Overlay::default(),
+        None,
     ) else {
         panic!("a manifest cannot govern standard input");
     };
@@ -488,7 +490,7 @@ fn no_argument_selects_the_package_entire() {
     );
 
     let Selection::Entire(entire) =
-        Selection::of(Spelling::Nothing, None, &root, &Overlay::default())
+        Selection::of(Spelling::Nothing, None, &root, &Overlay::default(), None)
             .expect("a governed package")
     else {
         panic!("no argument is the package entire");
@@ -699,6 +701,7 @@ fn an_umbrella_named_outright_is_still_refused() {
         Some(&root.join("curios.toml")),
         &root,
         &Overlay::default(),
+        None,
     ) else {
         panic!("an umbrella named by hand is refused");
     };
@@ -716,6 +719,7 @@ fn a_named_manifest_places_no_file_outside_its_package() {
         Some(&root.join("app/curios.toml")),
         &root,
         &Overlay::default(),
+        None,
     ) else {
         panic!("a file outside the named package is refused");
     };

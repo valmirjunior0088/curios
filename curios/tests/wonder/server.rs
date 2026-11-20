@@ -2,7 +2,9 @@
 
 use {
     super::test_support::*,
+    curios::CABINET,
     curios_common::fill,
+    curios_package::Cabinet,
     curios_prelude::test_support::*,
     curios_surface::MIN_LINE_WIDTH,
     curios_wonder::SETTLE,
@@ -30,6 +32,7 @@ struct Editor {
 impl Editor {
     fn launch(root: &Path) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env_remove(CABINET)
             .current_dir(root)
             .args(["wonder", "--server"])
             .stdin(Stdio::piped())
@@ -507,7 +510,7 @@ fn a_warm_store_does_not_answer_for_the_buffer() {
         String::from_utf8_lossy(&built.stderr)
     );
     assert!(
-        root.join(".curios/verdicts").is_dir(),
+        Cabinet::of(&root, None).verdicts().is_dir(),
         "a build files the library's unit"
     );
 
@@ -893,7 +896,9 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
 fn the_server_says_nothing_of_a_store_that_takes_nothing() {
     let root = project("unstored");
     // A file where the slots would go.
-    write(&root, ".curios/verdicts", "");
+    let verdicts = Cabinet::of(&root, None).verdicts();
+    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
+    fs::write(&verdicts, "").unwrap();
 
     let uri = format!("file://{}", root.join("util.crs").display());
     let mut editor = Editor::launch(&root);
@@ -922,7 +927,7 @@ fn the_server_says_nothing_of_a_store_that_takes_nothing() {
 fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     let root = project("server-files");
     let slots = |root: &Path| {
-        let mut slots = fs::read_dir(root.join(".curios/verdicts"))
+        let mut slots = fs::read_dir(Cabinet::of(root, None).verdicts())
             .map(|entries| {
                 entries
                     .map(|slot| fs::read(slot.unwrap().path()).unwrap())

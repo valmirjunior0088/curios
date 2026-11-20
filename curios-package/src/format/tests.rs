@@ -163,8 +163,8 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
         ),
     );
 
-    let stated = Governing::of(&root.join("stated")).expect("a package");
-    let silent = Governing::of(&root.join("silent")).expect("a package");
+    let stated = Governing::of(&root.join("stated"), None).expect("a package");
+    let silent = Governing::of(&root.join("silent"), None).expect("a package");
 
     let none = FormatSettings::default();
     assert_eq!(
@@ -198,7 +198,7 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
         "name = \"own\"\n\n[format]\nline-width = 90\n",
     );
 
-    let member = Governing::of(&root.join("app")).expect("a member");
+    let member = Governing::of(&root.join("app"), None).expect("a member");
     assert_eq!(
         FormatSettings::default()
             .format_under(Some(&member))
@@ -206,7 +206,7 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
         Ok(width(60))
     );
 
-    let refusal = Governing::of(&root.join("own"))
+    let refusal = Governing::of(&root.join("own"), None)
         .err()
         .expect("a member restates `[format]`")
         .render();
@@ -252,20 +252,20 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
     );
     assert_eq!(
         narrow
-            .format_of_file(&root.join("loose.crs"), None)
+            .format_of_file(&root.join("loose.crs"), None, None)
             .map(|format| format.line_width),
         Ok(width(60))
     );
     // An umbrella governs only the packages it enumerates, so a file in its tree and in none of them is no package's.
     assert_eq!(
         narrow
-            .format_of_file(&root.join("work/scratch.crs"), None)
+            .format_of_file(&root.join("work/scratch.crs"), None, None)
             .map(|format| format.line_width),
         Ok(width(60))
     );
 
     let refusal = narrow
-        .format_of_file(&root.join("app/lib.crs"), None)
+        .format_of_file(&root.join("app/lib.crs"), None, None)
         .unwrap_err()
         .render();
     assert!(
@@ -278,7 +278,7 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
     );
     assert_eq!(
         FormatSettings::default()
-            .format_of_file(&root.join("app/lib.crs"), None)
+            .format_of_file(&root.join("app/lib.crs"), None, None)
             .map(|format| format.line_width),
         Ok(Width::default())
     );
@@ -299,7 +299,11 @@ fn a_file_outside_the_package_manifest_names_is_refused() {
     write(&root, "loose.crs", "");
 
     let refusal = FormatSettings::default()
-        .format_of_file(&root.join("loose.crs"), Some(&root.join("app/curios.toml")))
+        .format_of_file(
+            &root.join("loose.crs"),
+            Some(&root.join("app/curios.toml")),
+            None,
+        )
         .unwrap_err()
         .render();
     assert!(

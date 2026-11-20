@@ -15,6 +15,13 @@ pub use testing::{
     FailedCheck, TestRun, TestSubject, Tested, Verdict, opened, page_name, supplied, test_subjects,
 };
 
+/// The variable naming the cabinet every project a run sees files into, in place of each project's own.
+///
+/// **This and nothing else, and read by the command line alone — there is deliberately no divined default.** A toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for, and `.curios/` beside the project is the one generated directory this design admits to. So sharing is opt in: unset, every project keeps its own cabinet, which costs a re-fetch and a re-certification per project and surprises nobody; set, two projects pinning one revision materialize and compile it once.
+///
+/// Read once, where the command line starts, and handed to whatever opens a governing root, as `NO_COLOR` is read there: no library reads the environment, so a suite opening a cabinet opens the one it names whatever the shell running it holds, and a test that runs the command line clears the variable for the child it runs.
+pub const CABINET: &str = "CURIOS_CABINET";
+
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

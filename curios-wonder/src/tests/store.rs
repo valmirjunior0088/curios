@@ -6,6 +6,7 @@ use {
     curios_common::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource, UnitSource},
+    curios_package::Cabinet,
     curios_pipeline::{Cache, Earlier, EntryTail, Fold, Progress},
     curios_unit::Unit,
     curios_verdict::{Session, Verdicts},
@@ -49,7 +50,7 @@ fn a_question_and_a_build_file_the_same_bytes() {
 
     folded(&root, &Overlay::default());
     let asked = slots(&root);
-    fs::remove_dir_all(root.join(".curios/verdicts")).expect("the slots a question filed");
+    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a question filed");
     built(&root);
 
     assert_eq!(asked.len(), 2, "one slot per unit");
@@ -87,7 +88,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
         "both units are the store's when nothing is missing"
     );
 
-    let slots = fs::read_dir(root.join(".curios/verdicts"))
+    let slots = fs::read_dir(Cabinet::of(&root, None).verdicts())
         .expect("a store with both units in it")
         .map(|slot| slot.unwrap().path())
         .collect::<Vec<_>>();
@@ -167,7 +168,7 @@ fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
         "the next question starts from what the first filed"
     );
 
-    fs::remove_dir_all(root.join(".curios/verdicts")).expect("the slots a question filed");
+    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a question filed");
     assert_eq!(built(&root), ["compiling /alpha", "compiling /beta"]);
     assert!(
         slots(&root) == asked,
@@ -251,7 +252,7 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
 
     let root = mounted_project("rewritten");
     let overlay = Overlay::default();
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(Cabinet::of(&root, None));
     let rewriting = Rewriting {
         reached: Overlaid::over(&store, &overlay),
         file: root.join("a/lib.crs"),
@@ -367,7 +368,7 @@ fn a_session_keeps_a_unit_the_store_restored() {
         ["reused /alpha", "reused /beta"]
     );
 
-    fs::remove_dir_all(root.join(".curios/verdicts")).expect("the slots a build filed");
+    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a build filed");
     assert_eq!(
         folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
         ["recompiling /alpha", "recompiling /beta"],
@@ -523,7 +524,7 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
         root.join("b/lib.crs"),
         module.replace("\"beta\"", ""),
     )]));
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(Cabinet::of(&root, None));
     let diagnostics = diagnostics(
         DEFAULT_BUDGET,
         Subject::Unit {
@@ -554,7 +555,7 @@ fn a_store_that_cannot_be_written_answers_as_one_that_can() {
     let taken = mounted_project("unfiled-none");
     let overlay = Overlay::default();
     let asked = |root: &Path| {
-        let store = Verdicts::at(root.to_path_buf());
+        let store = Verdicts::at(Cabinet::of(root, None));
         let answer = diagnostics(
             DEFAULT_BUDGET,
             Subject::Unit {
@@ -605,7 +606,7 @@ fn assert_mismatch(diagnostics: &[crate::Diagnosis]) {
 
 /// What a build did to each of `root`'s units, filing them through the store itself.
 fn built(root: &Path) -> Vec<String> {
-    let store = Verdicts::at(root.to_path_buf());
+    let store = Verdicts::at(Cabinet::of(root, None));
 
     folded_through(root, &Overlay::default(), &store)
 }
@@ -617,7 +618,7 @@ fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
 
 /// [`folded`], compiling over what `session` kept — the store the language server hands a query.
 fn folded_reusing(root: &Path, overlay: &Overlay, session: &Session) -> Vec<String> {
-    let mut store = Verdicts::at(root.to_path_buf());
+    let mut store = Verdicts::at(Cabinet::of(root, None));
     store.reuse(session.clone());
 
     folded_through(root, overlay, &Overlaid::over(&store, overlay))
@@ -644,7 +645,7 @@ fn folded_through(root: &Path, overlay: &Overlay, cache: &dyn Cache) -> Vec<Stri
 
 /// Every record the second package reports over `overlay`, compiled over what `session` kept — the question the language server asks about a library.
 fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diagnosis> {
-    let mut store = Verdicts::at(root.to_path_buf());
+    let mut store = Verdicts::at(Cabinet::of(root, None));
     store.reuse(session.clone());
 
     diagnostics(
@@ -661,7 +662,7 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
 
 /// Every unit slot the store at `root` holds, by name, with its bytes.
 fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
-    let Ok(entries) = fs::read_dir(root.join(".curios/verdicts")) else {
+    let Ok(entries) = fs::read_dir(Cabinet::of(root, None).verdicts()) else {
         return BTreeMap::new();
     };
 
@@ -681,13 +682,15 @@ fn damaged(root: &Path) {
     for (name, mut bytes) in slots(root) {
         let last = bytes.last_mut().expect("a slot holds an artifact");
         *last ^= 0xff;
-        fs::write(root.join(".curios/verdicts").join(name), bytes).expect("a writable slot");
+        fs::write(Cabinet::of(root, None).verdicts().join(name), bytes).expect("a writable slot");
     }
 }
 
 /// Leave the store at `root` unable to take a unit: a file where its slots would go.
 fn unwritable(root: &Path) {
-    write(root, ".curios/verdicts", "");
+    let verdicts = Cabinet::of(root, None).verdicts();
+    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
+    fs::write(verdicts, "").unwrap();
 }
 
 /// An overlay holding `path`'s own text: a document an editor has open and has not yet changed.

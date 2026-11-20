@@ -10,7 +10,7 @@ fn a_materialized_tree_files_under_its_scheme() {
     let hash = TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap();
 
     assert_eq!(
-        Cabinet::at(Path::new("/w/u")).source(&hash),
+        Cabinet::of(Path::new("/w/u"), None).source(&hash),
         PathBuf::from(format!("/w/u/.curios/sources/c1/{}", "a".repeat(64)))
     );
 }
@@ -20,7 +20,7 @@ fn a_materialized_tree_files_under_its_scheme() {
 fn the_families_do_not_share_a_namespace() {
     let root = PathBuf::from("/w/u");
     let products = Products::at(root.clone());
-    let cabinet = Cabinet::at(&root);
+    let cabinet = Cabinet::of(&root, None);
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
     let module = FileHash::parse(&format!("f1:{}", "b".repeat(64))).unwrap();
@@ -222,7 +222,7 @@ fn two_engines_address_two_slots() {
 /// A browser's payload is a module any browser runs, so it needs no engine in its address, and the two targets file under two directories, neither read for the other.
 #[test]
 fn each_target_files_its_payloads_apart() {
-    let cabinet = Cabinet::at(Path::new("/w/u"));
+    let cabinet = Cabinet::of(Path::new("/w/u"), None);
 
     assert_ne!(
         cabinet.payload(Runs::Native { engine: "e" }, "key"),

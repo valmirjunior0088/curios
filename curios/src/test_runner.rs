@@ -142,7 +142,7 @@ pub fn run_tests(
 
     for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
-        let store = subject.filed(|root| access.filed(root));
+        let store = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(
             budget,
             &subject,
@@ -453,7 +453,7 @@ pub fn serve_tests(
 
     for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
-        let store = subject.filed(|root| access.filed(root));
+        let store = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(
             budget,
             &subject,
