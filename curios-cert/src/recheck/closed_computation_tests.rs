@@ -13,10 +13,10 @@ fn true_type() -> Term {
 }
 
 /// Whether `verdicts` is the closing term's refusal alone, `qed`'s `True` against an instance that did not reduce to it: the lemma admitted, so the strategy answered `c`, and the machine answering the instance otherwise than `true`.
-fn the_closing_instance_alone_is_refused(verdicts: &[Verdict]) -> bool {
+fn the_closing_instance_alone_is_refused(verdicts: &[Refusal]) -> bool {
     matches!(
         verdicts,
-        [Verdict { name: None, error: Error::Mismatch { inferred, .. } }] if **inferred == true_type()
+        [Refusal { name: None, error: Error::Mismatch { inferred, .. } }] if **inferred == true_type()
     )
 }
 
@@ -52,7 +52,7 @@ let /lemma : (
 // The machine evaluates a substituend before it substitutes it, and one whose evaluation errors falls back to its spelling in its own slot, as the strategy substitutes it as written: `b` reads `c`, and the closing instance is `Holds(false)`. A fallback that stood the spelling, or the error, anywhere else would answer `b` otherwise, and one that let the error through refuses the closing term by `Reduce`, which is the mutation check: `Machine::catch` returning every error outright.
 #[test]
 fn a_substituend_whose_evaluation_errors_falls_back_in_its_own_slot() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARGUMENT_THAT_ERRORS_BESIDE_THE_ONE_READ}",
         PROPOSITIONS,
         AN_ARGUMENT_THAT_ERRORS_BESIDE_THE_ONE_READ
@@ -113,7 +113,7 @@ let /lemma : (
 // The machine leaves a proof as written where its binder says it binds one: the constructor's wrapper at its proof binder, the arm at the payload `Pk`'s declaration states is a proof, and the `let` at its proof binder, so the recursion no budget evaluates is never run and `b` reads `c`. Mutation checks: `ClosedHost::payload_proofs` answering no marks for the certifier, and `Machine::let_advance` ignoring `binds_proof`, each run the proof and refuse the closing term by `Reduce`.
 #[test]
 fn a_proof_payload_and_a_let_bound_proof_are_left_as_written_beside_the_data_read() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PROOF_BOUND_AS_WRITTEN_BESIDE_THE_DATA_READ}",
         PROPOSITIONS,
         A_PROOF_BOUND_AS_WRITTEN_BESIDE_THE_DATA_READ
@@ -168,7 +168,7 @@ let /lemma : (
 // A name at a universe instance passed at a `use` position is bound as that name, as the strategy substitutes it, so its value is never run and `b` reads `c`. Passed at a plain position the same instance is evaluated, and the closing term is refused by `Reduce`; the mutation check is `Machine::beta` marking no witness written, which refuses it so here too.
 #[test]
 fn a_witness_named_at_an_instance_is_left_as_written_beside_the_data_read() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_WITNESS_AT_AN_INSTANCE_BESIDE_THE_DATA_READ}",
         PROPOSITIONS,
         A_WITNESS_AT_AN_INSTANCE_BESIDE_THE_DATA_READ
@@ -271,7 +271,7 @@ let /lemma : (
 // A match with one arm and no catch-all is its arm with its scrutinee unread where the arm names no payload, and where it names one, bound to what the instance the match states says of it, each payload off the index that pins it: `x != 5 || y != 9` is `false`, and the cast's arm reads `c`. Mutation checks: `ClosedHost::stated_payload` answering `None` runs the proofs, refusing the closing term by `Reduce`; `pinned_instance` reading the binders off the indices in reverse makes the closing instance `true`, which `qed` then inhabits.
 #[test]
 fn a_match_that_reads_nothing_of_its_proof_answers_as_the_strategy_does() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${MATCHES_THAT_READ_NOTHING_OF_THEIR_PROOF}",
         PROPOSITIONS,
         MATCHES_THAT_READ_NOTHING_OF_THEIR_PROOF
@@ -307,7 +307,7 @@ let /elsewhere : /std/Bool/Holds(
 // The machine trusts the instance a closed match states, which typing holds to the scrutinee's own type: `/elsewhere`'s match is refused where it is typed, `R2(5, 9)` against the `R2(7, 1)` it states.
 #[test]
 fn a_match_stating_an_instance_its_scrutinee_does_not_have_is_refused_where_it_is_typed() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_MATCH_STATING_ANOTHER_INSTANCE}",
         PROPOSITIONS,
         A_MATCH_STATING_ANOTHER_INSTANCE
@@ -317,8 +317,8 @@ fn a_match_stating_an_instance_its_scrutinee_does_not_have_is_refused_where_it_i
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(elsewhere), error: Error::Mismatch { .. } },
-                Verdict { name: None, error: Error::Mismatch { .. } },
+                Refusal { name: Some(elsewhere), error: Error::Mismatch { .. } },
+                Refusal { name: None, error: Error::Mismatch { .. } },
             ] if *elsewhere == global("elsewhere")
         ),
         "{verdicts:?}"
@@ -365,7 +365,7 @@ let /lemma : (
 // Eta under the hosts' own probe contracts a literal only where it forwards each of its binders, in order and under its mark, to a head that names none: a literal forwarding them out of order, one forwarding a binder twice and one whose head names its binder are applied as they are, and each reads `c`. Contracted, the first is `/second(c, true)`, which is `true`; the mutation check is `eta_head` asking only that each argument be one of the binders, which admits the closing term.
 #[test]
 fn a_literal_that_only_looks_like_an_eta_redex_is_applied_as_it_is() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${LITERALS_THAT_ONLY_LOOK_LIKE_ETA_REDEXES}",
         PROPOSITIONS,
         LITERALS_THAT_ONLY_LOOK_LIKE_ETA_REDEXES
@@ -426,7 +426,7 @@ let /lemma : (
 // An arm binds the values of a constructed value's payload, the certifier's rule on both sides: in order, past the family's parameter, with the implicit payload ahead of the plain ones and the one whose evaluation errors falling back to its spelling, so `b` reads `c`. The mutation check is `Machine::dispatch` running the payload without catching, which refuses the closing term by `Reduce`.
 #[test]
 fn an_arm_binds_a_constructed_values_payload_in_order_past_a_parameter_and_an_implicit() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARM_OVER_A_PARAMETER_AN_IMPLICIT_AND_AN_ERROR}",
         PROPOSITIONS,
         AN_ARM_OVER_A_PARAMETER_AN_IMPLICIT_AND_AN_ERROR
@@ -487,7 +487,7 @@ let /lemma : (
 // One run reaches `parity(3)` forced, as an equation's operand, where it is filed under its value, and plainly, as an empty fold's initial value, where it is its own folded spelling and filed nowhere; the fold's answer is then forced against `parity(4)`. A memo or a `Tap` answering one demand with the other's value, or one call with the other's, would make `1 == 0` hold; each call keeps its own, and the conjunction is `false`.
 #[test]
 fn two_recursive_calls_reached_at_both_demands_in_one_run_keep_their_own_values() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_CALLS_AT_BOTH_DEMANDS_IN_ONE_RUN}",
         PROPOSITIONS,
         TWO_CALLS_AT_BOTH_DEMANDS_IN_ONE_RUN
@@ -530,7 +530,7 @@ let /w : {
 #[test]
 fn an_arm_whose_dispatch_resolves_to_a_closed_comparison_leaves_nothing_the_declaration_reads_after_it()
  {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARM_UNDER_A_DISPATCH_RESOLVING_TO_A_CLOSED_COMPARISON}",
         PROPOSITIONS,
         AN_ARM_UNDER_A_DISPATCH_RESOLVING_TO_A_CLOSED_COMPARISON
@@ -539,7 +539,7 @@ fn an_arm_whose_dispatch_resolves_to_a_closed_comparison_leaves_nothing_the_decl
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
+            [Refusal { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
         ),
         "{verdicts:?}"
     );
@@ -616,7 +616,7 @@ let /p : /std/Bool/Holds(
 // A match and a projection force what they read, so where an intrinsic answers a recursive call the machine forces the call before either reads it, as the strategy forces what `whnf` answers: `y`'s and `p`'s instances are `True`, `c3`'s type is `Bool` and `S` is a sort. Handed the fold's answer at the weak demand, a match or a projection stands on the unforced call, `Frame::RecGuard` reads `f`'s step as neutral, and `y`, `s` and `p` are refused. `curios`'s `tests::rules::sequence` puts the program to both checkers under this name.
 #[test]
 fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL}",
         PROPOSITIONS,
         A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL
@@ -643,7 +643,7 @@ let /w : (P: (n: #NatType) -> Type, p: P(/f(0))) -> P(#NatAdd(/f(0), 1)) =
 // An operand a fold reads forced whose value is a folded recursive call is forced on the machine's own stack, so a recursion through an intrinsic's operand nests no native frame per level: `f(0) + 1` unfolds until the budget runs out, and `w` is refused by `Reduce`, as its open spelling at a variable `n` is, besides being refused for reading a partial `f` in a type. Forced through the host's own reduction instead, each level started a machine of its own on the native stack, and the run died of a stack overflow before the budget ran out.
 #[test]
 fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING}",
         PROPOSITIONS,
         A_PARTIAL_CALL_COMPARED_WITH_ITS_UNFOLDING
@@ -653,9 +653,9 @@ fn a_recursion_through_an_operand_runs_out_of_budget_and_not_of_stack() {
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(exhausted), error: Error::Reduce(ReduceError::Exhausted { .. }) },
-                Verdict { name: Some(partial), error: Error::NotTotal { .. } },
-                Verdict { name: None, .. },
+                Refusal { name: Some(exhausted), error: Error::Reduce(ReduceError::Exhausted { .. }) },
+                Refusal { name: Some(partial), error: Error::NotTotal { .. } },
+                Refusal { name: None, .. },
             ] if *exhausted == global("w") && *partial == global("w")
         ),
         "{verdicts:?}"
@@ -683,7 +683,7 @@ let /typed : #{goal = Prop} match /loop(()) | c() => #{node = InductType} /std/B
 // No value of `/F(1)` is `c`, so reduction reaches the ruled-out arm only through a scrutinee that is no value, a call not known to terminate, and totality is what stands between the module and `False`: the proof and the type that reach `/loop` are refused, and the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality` puts the program to the elaborator under this name.
 #[test]
 fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_RULED_OUT_ARM_OVER_A_PARTIAL_CALL}",
         PROPOSITIONS,
         A_RULED_OUT_ARM_OVER_A_PARTIAL_CALL
@@ -693,9 +693,9 @@ fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call()
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(forged), error: Error::NotTotal { reached: Some(first), .. } },
-                Verdict { name: Some(typed), error: Error::NotTotal { reached: Some(second), .. } },
-                Verdict { name: None, error: Error::NotTotal { reached: Some(third), .. } },
+                Refusal { name: Some(forged), error: Error::NotTotal { reached: Some(first), .. } },
+                Refusal { name: Some(typed), error: Error::NotTotal { reached: Some(second), .. } },
+                Refusal { name: None, error: Error::NotTotal { reached: Some(third), .. } },
             ] if *forged == global("forged")
                 && *first == global("loop")
                 && *typed == global("typed")

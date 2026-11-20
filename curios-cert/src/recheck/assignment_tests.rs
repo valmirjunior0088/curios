@@ -377,8 +377,8 @@ let /up : (
 "#;
 
 /// The verdicts on `text` put after the propositions it names.
-fn verdicts(text: &str) -> Vec<Verdict> {
-    core_text_verdicts(&fill!(
+fn refusals(text: &str) -> Vec<Refusal> {
+    core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TEXT}",
         PROPOSITIONS,
         TEXT = text
@@ -387,7 +387,7 @@ fn verdicts(text: &str) -> Vec<Verdict> {
 
 /// Whether some verdict refuses `name` at the one assignment `sort`, by a refusal `refusal` holds of.
 fn refused_at(
-    verdicts: &[Verdict],
+    verdicts: &[Refusal],
     name: &str,
     sort: Quality,
     refusal: fn(&Error) -> bool,
@@ -410,7 +410,7 @@ fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
         ("a definition", TWO_VALUES_ONE_BY_A_DEFINITION),
         ("a recursive group", TWO_VALUES_ONE_BY_A_GROUP),
     ] {
-        let verdicts = verdicts(text);
+        let verdicts = refusals(text);
 
         assert!(
             refused_at(&verdicts, "same", Quality::Type, |error| matches!(
@@ -425,7 +425,7 @@ fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
 /// A registry entry typed by what irrelevance grants is judged at the assignment that grants nothing, as a definition is. Mutation-check: cut `at_every_sort` to its first assignment, the one stating `Prop`, and the module is admitted at `False`.
 #[test]
 fn an_entry_well_typed_at_prop_alone_is_refused_at_type() {
-    let verdicts = verdicts(AN_ENTRY_WELL_TYPED_AT_PROP_ALONE);
+    let verdicts = refusals(AN_ENTRY_WELL_TYPED_AT_PROP_ALONE);
 
     assert!(
         refused_at(&verdicts, "Through", Quality::Type, |error| matches!(
@@ -441,14 +441,14 @@ fn an_entry_well_typed_at_prop_alone_is_refused_at_type() {
 /// Mutation-check: drop the comparison of sorts from `Certifier::instances_eq`, and the module is admitted at `False`.
 #[test]
 fn a_sort_is_compared_whatever_a_familys_vector_says_of_its_levels() {
-    let verdicts = verdicts(TWO_INSTANCES_APART_IN_A_SORT);
+    let verdicts = refusals(TWO_INSTANCES_APART_IN_A_SORT);
 
     assert!(
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(up), error: Error::Mismatch { .. } },
-                Verdict { name: Some(down), error: Error::Mismatch { .. } },
+                Refusal { name: Some(up), error: Error::Mismatch { .. } },
+                Refusal { name: Some(down), error: Error::Mismatch { .. } },
             ] if *up == global("up") && *down == global("down")
         ),
         "{verdicts:?}"
@@ -460,12 +460,12 @@ fn a_sort_is_compared_whatever_a_familys_vector_says_of_its_levels() {
 /// Mutation-check: let `curios-analysis`'s `Unifier::unify_node` take two variants of a `Prop`-sorted family apart by their tags, and the module is admitted at `False`.
 #[test]
 fn no_case_is_impossible_between_two_proofs_a_sort_left_to_a_caller_indexes() {
-    let verdicts = verdicts(TWO_PROOFS_AT_AN_INDEX_OF_A_SORT_LEFT_TO_A_CALLER);
+    let verdicts = refusals(TWO_PROOFS_AT_AN_INDEX_OF_A_SORT_LEFT_TO_A_CALLER);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(bad), error: Error::MissingArm { family, tag } }]
+            [Refusal { name: Some(bad), error: Error::MissingArm { family, tag } }]
                 if *bad == global("bad") && *family == global("Is") && *tag == Atom::from("yes")
         ),
         "{verdicts:?}"
@@ -475,7 +475,7 @@ fn no_case_is_impossible_between_two_proofs_a_sort_left_to_a_caller_indexes() {
 /// A nominal node states as many sorts as its family leaves, a family's type and a constructor's value alike, as `sort_tests::an_occurrence_states_every_sort_its_declaration_leaves` holds an occurrence of a definition to.
 #[test]
 fn a_nominal_node_states_every_sort_its_family_leaves() {
-    let verdicts = verdicts(NOMINAL_NODES_SHORT_OF_A_SORT_OR_PAST_ONE);
+    let verdicts = refusals(NOMINAL_NODES_SHORT_OF_A_SORT_OR_PAST_ONE);
 
     for (name, actual) in [
         ("a_type_stating_none", 0),
@@ -504,7 +504,7 @@ fn a_nominal_node_states_every_sort_its_family_leaves() {
 /// Mutation-check: drop `open_sort` from `universe_residue`, and each declaration is refused only at its assignments, under `AtSorts`.
 #[test]
 fn a_sort_no_declaration_binds_is_refused_at_every_route_before_any_judgment() {
-    let verdicts = verdicts(A_SORT_NO_DECLARATION_BINDS);
+    let verdicts = refusals(A_SORT_NO_DECLARATION_BINDS);
 
     for name in [
         "in_a_member",
@@ -529,7 +529,7 @@ fn a_sort_no_declaration_binds_is_refused_at_every_route_before_any_judgment() {
 /// Mutation-check: cut `at_every_sort` to its last assignment, the one stating `Type`, and `/spin` is refused at no assignment; obligation (V) still refuses the closing term, which reaches a definition enclosing a group that does not descend.
 #[test]
 fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts() {
-    let verdicts = verdicts(A_GROUP_INSIDE_A_TERM);
+    let verdicts = refusals(A_GROUP_INSIDE_A_TERM);
 
     assert!(
         refused_at(&verdicts, "spin", Quality::Prop, |error| matches!(
@@ -543,12 +543,12 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
 /// A parameter's polarity is decided on the entry as stated, where a match on an equation at a sort left to the caller stands and is read through its arm, which holds the parameter left of an arrow: a family that does so at `Prop` alone is never composed through as positive in it. The route to `False` stands but for `/G`. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_where_the_arm_puts_it() {
-    let verdicts = verdicts(A_PARAMETER_BEHIND_A_MATCH);
+    let verdicts = refusals(A_PARAMETER_BEHIND_A_MATCH);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(g), error: Error::NotPositive { name, .. } }]
+            [Refusal { name: Some(g), error: Error::NotPositive { name, .. } }]
                 if *g == global("G") && *name == global("G")
         ),
         "{verdicts:?}"
@@ -560,7 +560,7 @@ fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_where_the_arm_puts_
 /// Mutation-check: have the variance walk read a match as mentioning no level, and `/up` is accepted.
 #[test]
 fn a_level_the_arm_of_a_standing_match_holds_is_held_by_its_family() {
-    let verdicts = verdicts(A_LEVEL_IN_THE_ARM_OF_A_MATCH);
+    let verdicts = refusals(A_LEVEL_IN_THE_ARM_OF_A_MATCH);
 
     assert!(
         verdicts

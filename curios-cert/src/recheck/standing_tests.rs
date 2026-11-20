@@ -20,7 +20,7 @@ fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification().reads(&global("five")),
         certification.reads(&global("five")),
@@ -49,7 +49,7 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification().totality(&global("three")),
         Some(Totality::Total),
@@ -114,7 +114,7 @@ fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification().reads(&global("corollary")),
         certification.reads(&global("corollary")),
@@ -130,7 +130,7 @@ fn a_read_of_a_generated_definitions_body_falls_with_an_edit_to_it() {
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_ne!(
         rechecked.certification().reads(&global("corollary")),
         certification.reads(&global("corollary")),
@@ -147,7 +147,7 @@ fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
 
         let rechecked = walked_over(&edited, &baseline, &certification);
 
-        assert_eq!(rechecked.verdicts(), Vec::new());
+        assert_eq!(rechecked.refusals(), Vec::new());
         assert_ne!(
             rechecked.certification().reads(&global("corollary")),
             certification.reads(&global("corollary")),
@@ -227,7 +227,7 @@ fn a_declaration_to_judge_takes_a_stores_verdict_where_every_part_it_read_stands
 
     let rechecked = walked_among(&written(), &baseline, &certification, Some(&store));
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(rechecked.certification(), &first);
 }
 
@@ -260,7 +260,7 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
         1,
         "the cabinet holds a verdict of the item",
     );
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification(),
         walked(&respelled).certification()
@@ -357,13 +357,13 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
     let over = walked_over(&edited, &baseline, &certification);
 
     assert_eq!(
-        over.verdicts(),
+        over.refusals(),
         Vec::new(),
         "the edited module is admitted over the baseline, D judged again at G's republished value sort",
     );
     assert_eq!(
-        over.verdicts(),
-        whole.verdicts(),
+        over.refusals(),
+        whole.refusals(),
         "a whole compile of the edited module gives D the same verdict",
     );
     assert_eq!(
@@ -402,7 +402,7 @@ fn a_reader_of_a_moved_value_sort_is_stated_the_sort_a_whole_compile_states() {
     assert_eq!(stated_value_sort(&whole, "L"), Some(type_at(5)));
 
     let over = walked_over(&edited, &baseline, &certification);
-    assert_eq!(over.verdicts(), Vec::new());
+    assert_eq!(over.refusals(), Vec::new());
     assert_eq!(
         stated_value_sort(&over, "L"),
         stated_value_sort(&whole, "L")
@@ -425,6 +425,6 @@ fn a_later_walk_states_an_alias_the_sort_its_value_inhabits() {
     let scope = AlreadyJudged::with(&stated, &record);
     let later = text_certified_over(A_LATER_ALIAS, &scope.globals());
 
-    assert_eq!(later.verdicts(), Vec::new());
+    assert_eq!(later.refusals(), Vec::new());
     assert_eq!(stated_value_sort(&later, "M"), Some(type_at(5)));
 }

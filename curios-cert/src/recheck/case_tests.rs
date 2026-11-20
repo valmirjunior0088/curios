@@ -48,7 +48,7 @@ end
 // The payload of `A(0)`'s case is typed at `A`'s own parameter instantiated at `0`, a `Holds(0 == 1)`, which `qed` does not inhabit: the value is refused where the term the module closes with builds it.
 #[test]
 fn a_case_reads_its_own_familys_parameter_in_a_group() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CASE_OF_A_FAMILY_IN_A_GROUP}",
         PROPOSITIONS,
         A_CASE_OF_A_FAMILY_IN_A_GROUP
@@ -57,7 +57,7 @@ fn a_case_reads_its_own_familys_parameter_in_a_group() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -102,7 +102,7 @@ let /read : (
 #[test]
 fn a_match_stating_its_scrutinee_at_another_level_is_refused() {
     let verdicts_at = |level: usize| {
-        core_text_verdicts(&fill!(
+        core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${lift}",
             PROPOSITIONS,
             lift = fill!(A_MATCH_STATING_AN_INSTANCE_OF_LIFT, level)
@@ -186,7 +186,7 @@ let /Code : (
 // An absent arm is excused only by a definite clash, and inversion concludes none at a `Prop`-valued position, where irrelevance makes `Two/a()` and `Two/b()` one value: `tb` is missing, and the arm reduction would take untyped is refused with it. `curios`'s `tests::rules::index` puts the same proposition to the elaborator under this name.
 #[test]
 fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARM_OMITTED_AT_A_PROPOSITION_VALUED_INDEX}",
         PROPOSITIONS,
         AN_ARM_OMITTED_AT_A_PROPOSITION_VALUED_INDEX
@@ -195,7 +195,7 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: None, error: Error::MissingArm { family, tag } }]
+            [Refusal { name: None, error: Error::MissingArm { family, tag } }]
                 if *family == global("T") && *tag == Atom::from("tb")
         ),
         "{verdicts:?}"
@@ -242,7 +242,7 @@ let /data :
 // `never_taken` asks the unifier that excuses an absent arm, which concludes no clash between two of a proposition's constructors: `prop`'s `b` arm is typed and refused, while `data`'s `r` arm, at a relevant family's other case, stands untyped.
 #[test]
 fn an_arm_at_another_case_of_a_proposition_is_typed() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${ARMS_AT_ANOTHER_CASE}",
         PROPOSITIONS,
         ARMS_AT_ANOTHER_CASE
@@ -300,7 +300,7 @@ let /through : (
 #[test]
 fn a_refinement_read_through_a_let_is_kept_only_where_its_target_fits_its_variable() {
     let verdicts_at = |sort: &str| {
-        core_text_verdicts(&fill!(
+        core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${through}",
             PROPOSITIONS,
             through = fill!(A_REFINEMENT_THROUGH_A_LET, sort)
@@ -389,7 +389,7 @@ let /excused : (
 // Mutation-checked at `check_induct_arms`: with the coverage loop taken out, neither `only_zero` nor `only_succ` is refused.
 #[test]
 fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET}",
         PROPOSITIONS,
         AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET
@@ -483,7 +483,7 @@ let /undecided : (n: #NatType) ->
 // Mutation-checked at `unless_never_taken`: with a refused arm withdrawn whatever its scrutinee computes to, `taken` and `undecided` are admitted.
 #[test]
 fn an_ill_typed_arm_is_excused_only_where_no_reduction_takes_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ILL_TYPED_ARM_UNDER_THREE_SCRUTINEES}",
         PROPOSITIONS,
         AN_ILL_TYPED_ARM_UNDER_THREE_SCRUTINEES
@@ -704,7 +704,7 @@ let /filled : (
 // Mutation-checked at `Cancelled::<Natural, _>::deduction` (`curios-algebra/src/combination.rs`): with an impossible arm asking only that the emptied side's constant be zero, `self.left.constant.is_zero()` for `self.left.is_zero()` and its mirror, `/sum`, `/product` and `/difference` are excused. At `Word::against_identity` (`curios-algebra/src/word.rs`): with a window and a chunk counted positive, `/window`, `/chunks` and `/fill` are excused.
 #[test]
 fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARM_ABSENT_WHERE_A_CARRIERS_INDEX_MAY_MEET_ITS_TARGET}",
         PROPOSITIONS,
         AN_ARM_ABSENT_WHERE_A_CARRIERS_INDEX_MAY_MEET_ITS_TARGET
@@ -806,7 +806,7 @@ let /apart : (
 // Mutation-checked at `Run for Vec<E>` (`curios-algebra/src/word.rs`): with `DECIDED` true, the two runs' heads clash, `/absurd` is excused and the walk returns no verdict.
 #[test]
 fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_LISTS_OF_PROOFS_THAT_IRRELEVANCE_HOLDS_ONE}",
         PROPOSITIONS,
         TWO_LISTS_OF_PROOFS_THAT_IRRELEVANCE_HOLDS_ONE
@@ -815,7 +815,7 @@ fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(absurd), error: Error::MissingArm { family, tag } }]
+            [Refusal { name: Some(absurd), error: Error::MissingArm { family, tag } }]
                 if *absurd == global("absurd")
                     && *family == global("Ix")
                     && *tag == Atom::from("mk")
@@ -858,7 +858,7 @@ let /drain : (
 // Mutation-checked at `unify_node` (`curios-analysis/src/invert.rs`): with its `Prop`-sorted family answering by tags, `Wit/triv()` against `Wit/s(v)` clashes, `nil` is excused and the walk returns no verdict.
 #[test]
 fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_RECURSION_ON_A_PROPOSITIONS_CASE}",
         PROPOSITIONS,
         A_RECURSION_ON_A_PROPOSITIONS_CASE
@@ -1062,7 +1062,7 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
         ("falias", "Pwit"),
     ];
 
-    let omitted = core_text_verdicts(&fill!(
+    let omitted = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${INDICES_HOLDING_PROOFS}\n${RECURSIONS_OMITTING_BASE}",
         PROPOSITIONS,
         INDICES_HOLDING_PROOFS,
@@ -1082,7 +1082,7 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
         );
     }
 
-    let written = core_text_verdicts(&fill!(
+    let written = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${INDICES_HOLDING_PROOFS}\n${RECURSIONS_WRITING_BASE}",
         PROPOSITIONS,
         INDICES_HOLDING_PROOFS,
@@ -1101,7 +1101,7 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
 /// A value of a case its family does not declare is refused as that case, by the family and the tag: the family is declared, and naming it undeclared would send a reader to look for a declaration that is there. Mutation-checked: with the lookup refusing the family as undeclared, the error is `Undeclared`.
 #[test]
 fn a_value_of_a_case_its_family_does_not_declare_is_refused_by_the_tag() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n#{node = Variant} /std/Bool/False/mk()\n",
         PROPOSITIONS
     ));
@@ -1109,7 +1109,7 @@ fn a_value_of_a_case_its_family_does_not_declare_is_refused_by_the_tag() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::UndeclaredCase { family, tag },
             }] if *family == Global::Authored(Qualifier::from(["std", "Bool", "False"]))
@@ -1193,7 +1193,7 @@ let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x
 // Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. So each case stays mandatory, and the eight refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage` puts the program to the elaborator under this name, with its control. Mutation-checked: with the `Variant` arm of `Unifier::unify_node` (`curios-analysis/src/invert.rs`) deciding a proposition's constructors by their tags, the declarations over lists of proofs are excused and this fails.
 #[test]
 fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_LISTS_THAT_MEET_THEIR_CASE_AT_SOME_VALUE}",
         PROPOSITIONS,
         TWO_LISTS_THAT_MEET_THEIR_CASE_AT_SOME_VALUE
@@ -1243,7 +1243,7 @@ let /forged : /std/Bool/Holds(/pick(#{node = Variant} /Box/mk(true, false))) =
 // A constructor value's payload and an arm's binders are each counted against the case's signature, so the long value and the long arm are refused by their counts, under the names that hold them.
 #[test]
 fn a_value_and_an_arm_one_payload_past_their_case_are_refused_by_their_counts() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_VALUE_AND_AN_ARM_ONE_PAYLOAD_LONG}",
         PROPOSITIONS,
         A_VALUE_AND_AN_ARM_ONE_PAYLOAD_LONG
@@ -1282,7 +1282,7 @@ let /character: (c: #{node = StructType} /C()) -> /std/Bool/Holds(
 // A dispatch on a projection records its equation on the projection and refines nothing in its default, which is checked at the scrutinee itself: `qed` is refused there, under `character`, and the closing term, which stands at `False`, is admitted, so `character`'s refusal is all that stands between the module and `False`.
 #[test]
 fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CHARACTER_DISPATCH_DEFAULT}",
         PROPOSITIONS,
         A_CHARACTER_DISPATCH_DEFAULT
@@ -1291,7 +1291,7 @@ fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(character), error: Error::Mismatch { .. } }] if *character == global("character")
+            [Refusal { name: Some(character), error: Error::Mismatch { .. } }] if *character == global("character")
         ),
         "{verdicts:?}"
     );
@@ -1317,7 +1317,7 @@ let /string: (s: #{node = StructType} /S()) -> /std/Bool/Holds(
 // A split of a projected run checks its cons arm at a byte ahead of a tail, where the bytes are no empty run: `qed` is refused there, under `string`, and the closing term is admitted.
 #[test]
 fn a_string_runs_cons_arm_is_checked_at_the_cons() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_STRING_RUNS_CONS_ARM}",
         PROPOSITIONS,
         A_STRING_RUNS_CONS_ARM
@@ -1326,7 +1326,7 @@ fn a_string_runs_cons_arm_is_checked_at_the_cons() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(string), error: Error::Mismatch { .. } }] if *string == global("string")
+            [Refusal { name: Some(string), error: Error::Mismatch { .. } }] if *string == global("string")
         ),
         "{verdicts:?}"
     );
@@ -1352,7 +1352,7 @@ let /guarded: (c: #{node = StructType} /C()) -> /std/Bool/Holds(
 // The `false` arm is checked at the guard's failure, where the goal is `Holds(false)`: `qed` is refused there, under `guarded`, and the closing term is admitted.
 #[test]
 fn a_guards_fall_through_is_checked_where_the_guard_failed() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GUARDS_FALL_THROUGH}",
         PROPOSITIONS,
         A_GUARDS_FALL_THROUGH
@@ -1361,7 +1361,7 @@ fn a_guards_fall_through_is_checked_where_the_guard_failed() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(guarded), error: Error::Mismatch { .. } }] if *guarded == global("guarded")
+            [Refusal { name: Some(guarded), error: Error::Mismatch { .. } }] if *guarded == global("guarded")
         ),
         "{verdicts:?}"
     );
@@ -1419,7 +1419,7 @@ let /reduced: (
 // The projection is typed where the outer arm's equation makes `x` a `/C`, and the inner default is checked at the scrutinee itself: `qed` is refused there, under `reduced`, and the closing term is admitted.
 #[test]
 fn a_character_dispatch_on_a_type_an_arm_reduces_is_checked_at_its_scrutinee() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_DISPATCH_ON_A_TYPE_AN_ARM_REDUCES}",
         PROPOSITIONS,
         A_DISPATCH_ON_A_TYPE_AN_ARM_REDUCES
@@ -1428,7 +1428,7 @@ fn a_character_dispatch_on_a_type_an_arm_reduces_is_checked_at_its_scrutinee() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(reduced), error: Error::Mismatch { .. } }] if *reduced == global("reduced")
+            [Refusal { name: Some(reduced), error: Error::Mismatch { .. } }] if *reduced == global("reduced")
         ),
         "{verdicts:?}"
     );

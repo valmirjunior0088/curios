@@ -71,18 +71,18 @@ end
     )
 }
 
-fn refusals(text: &str) -> Vec<Verdict> {
-    text_verdicts(text)
+fn refusals(text: &str) -> Vec<Refusal> {
+    text_refusals(text)
 }
 
 /// Whether the identity put at two instances was itself refused: the walk's own verdict on the pair, apart from anything the reconciliation says of the declaration.
-fn coercion_refused(verdicts: &[Verdict]) -> bool {
+fn coercion_refused(verdicts: &[Refusal]) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name == Some(global("coerce")) && matches!(verdict.error, Error::Mismatch { .. })
     })
 }
 
-fn denied(verdicts: &[Verdict], family: Global, level: usize) -> bool {
+fn denied(verdicts: &[Refusal], family: Global, level: usize) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.error
             == Error::VarianceDenied {
@@ -266,7 +266,7 @@ end
         )
     };
     let judged = |text: &str, scope: &AlreadyJudged| {
-        fixture_verdicts(&core_text_module(text), BUDGET, &scope.globals(), SYNTAX)
+        fixture_refusals(&core_text_module(text), BUDGET, &scope.globals(), SYNTAX)
     };
     let walked_scope = |scope: &str| already_judged(&core_text_module(scope));
     let over_wrap = held(
@@ -314,7 +314,7 @@ end
 }
 
 /// Whether every refusal is the coercion's: the declarations the fixture forges were accepted, so a refused coercion is the walk's verdict on the instances and not the echo of a family it refused.
-fn only_the_coercion_refused(verdicts: &[Verdict]) -> bool {
+fn only_the_coercion_refused(verdicts: &[Refusal]) -> bool {
     coercion_refused(verdicts)
         && verdicts
             .iter()
@@ -383,7 +383,7 @@ end
 }
 
 /// Whether `name` was refused for a conversion that did not hold.
-fn mismatched(verdicts: &[Verdict], name: Global) -> bool {
+fn mismatched(verdicts: &[Refusal], name: Global) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name == Some(name) && matches!(verdict.error, Error::Mismatch { .. })
     })
@@ -496,7 +496,7 @@ let /moved : (n: #NatType, h: #{node = InductType, universes = {levels = [1]}} /
 // A level a group in a payload holds is compared, and one a reduction of the group removes is not: granted irrelevant, `held(0, Type 0) : Held@{1}(0)` read at `Held@{0}(0)` would hold `Type 0` at `Type 0`. So `lowered` is refused, `Lied` is denied the irrelevance it carries, and `moved` stands.
 #[test]
 fn a_level_a_group_in_a_payload_holds_is_invariant() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${LEVELS_A_GROUP_HOLDS}",
         PROPOSITIONS,
         LEVELS_A_GROUP_HOLDS
@@ -543,7 +543,7 @@ let /held : (n: #NatType, x: (#{universes = {levels = [0, 0]}} /f)(#NatType, n))
 // Two instances of one group apart only at a position no unfolding holds unfold to terms apart only there, again and again, so they are one: `same` stands, its two calls stuck on `n` and apart in `v` alone. Apart where the zero arm answers a `Type`, two unequal ground levels are two terms, and `held` is refused.
 #[test]
 fn a_group_compares_at_the_levels_its_unfolding_holds() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GROUP_AT_TWO_INSTANCES}",
         PROPOSITIONS,
         A_GROUP_AT_TWO_INSTANCES

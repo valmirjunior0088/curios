@@ -3,12 +3,12 @@
 use {super::test_support::*, crate::*, curios_common::fill};
 
 /// `text` after the propositions it names, put at `False`.
-fn verdicts_of(text: &str) -> Vec<Verdict> {
-    core_text_verdicts(&fill!("${PROPOSITIONS}\n${text}", PROPOSITIONS, text))
+fn refusals_of(text: &str) -> Vec<Refusal> {
+    core_text_refusals(&fill!("${PROPOSITIONS}\n${text}", PROPOSITIONS, text))
 }
 
 /// Whether `name` was refused for a conversion that did not hold.
-fn mismatched(verdicts: &[Verdict], name: &str) -> bool {
+fn mismatched(verdicts: &[Refusal], name: &str) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name == Some(global(name)) && matches!(verdict.error, Error::Mismatch { .. })
     })
@@ -36,12 +36,12 @@ end
 // Mutation-check: have `curios-analysis`'s `unify_node` answer `Clash` for a name against a literal, and the module is admitted whole.
 #[test]
 fn a_case_whose_target_names_a_definition_stored_after_the_match_is_owed_its_arm() {
-    let verdicts = verdicts_of(A_TARGET_NAMING_A_LATER_DEFINITION);
+    let verdicts = refusals_of(A_TARGET_NAMING_A_LATER_DEFINITION);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::MissingArm { family, .. } }]
+            [Refusal { name: Some(name), error: Error::MissingArm { family, .. } }]
                 if *name == global("E") && *family == global("F")
         ),
         "{verdicts:?}"
@@ -69,12 +69,12 @@ struct /S: pub Prop { n: #NatType }
 // Mutation-check: have `check_non_informative` read no field, and the module is admitted whole.
 #[test]
 fn a_prop_record_read_by_irrelevance_before_it_is_judged_is_refused_for_its_informative_field() {
-    let verdicts = verdicts_of(IRRELEVANCE_BEFORE_A_PROP_RECORD);
+    let verdicts = refusals_of(IRRELEVANCE_BEFORE_A_PROP_RECORD);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::Informative { .. } }] if *name == global("S")
+            [Refusal { name: Some(name), error: Error::Informative { .. } }] if *name == global("S")
         ),
         "{verdicts:?}"
     );
@@ -97,7 +97,7 @@ end
 // Two refusals, each standing alone: the arm binds `b` to `5` at the solution's own type, so `E` is refused for the body it hands back at `Bool`; and `P` is refused for a target its index does not type, which its own judgment checks wherever it is stored.
 #[test]
 fn a_singleton_read_off_an_index_before_its_family_types_the_target_is_refused_at_both() {
-    let verdicts = verdicts_of(A_SINGLETON_READ_BEFORE_ITS_TARGET_IS_TYPED);
+    let verdicts = refusals_of(A_SINGLETON_READ_BEFORE_ITS_TARGET_IS_TYPED);
 
     assert!(mismatched(&verdicts, "E"), "{verdicts:?}");
     assert!(mismatched(&verdicts, "P"), "{verdicts:?}");
@@ -148,13 +148,13 @@ let /E : /std/Bool/Holds(
 // Stored before `F`, the run binds every payload reduced, `h` among them; stored after, it binds `h` as written. A mark decides no reduct, so the item is judged alike in both, and the one refusal is the closing term's, a proof of `True` put at `False`. No mutation is claimed: no mark the walk could state moves this verdict, which is what the test holds.
 #[test]
 fn a_run_through_a_family_before_its_marks_are_stated_is_judged_as_one_after() {
-    let before = verdicts_of(A_RUN_BEFORE_THE_MARKS_ARE_STATED);
-    let after = verdicts_of(A_RUN_AFTER_THE_MARKS_ARE_STATED);
+    let before = refusals_of(A_RUN_BEFORE_THE_MARKS_ARE_STATED);
+    let after = refusals_of(A_RUN_AFTER_THE_MARKS_ARE_STATED);
 
     assert!(
         matches!(
             &before[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -187,7 +187,7 @@ end
 // Mutation-check: have `Environment::variance` answer from the vector an entry carries where no walk filed one, and `Cast` is admitted.
 #[test]
 fn a_comparison_before_a_familys_vector_is_filed_is_invariant_whatever_its_entry_carries() {
-    let verdicts = verdicts_of(A_CAST_BEFORE_THE_VECTOR_IS_FILED);
+    let verdicts = refusals_of(A_CAST_BEFORE_THE_VECTOR_IS_FILED);
 
     assert!(mismatched(&verdicts, "Cast"), "{verdicts:?}");
     assert!(
@@ -221,7 +221,7 @@ end
 // Mutation-check: have `Certifier::check_instance` check an instance's width alone, and `E` is admitted.
 #[test]
 fn an_instance_of_a_family_stored_after_it_is_held_to_the_familys_scheme() {
-    let verdicts = verdicts_of(AN_INSTANCE_BEFORE_ITS_SCHEME_IS_JUDGED);
+    let verdicts = refusals_of(AN_INSTANCE_BEFORE_ITS_SCHEME_IS_JUDGED);
 
     assert!(
         verdicts
@@ -255,12 +255,12 @@ end
 // Mutation-check: have `check_signature` skip its size condition, and the module is admitted whole.
 #[test]
 fn a_descent_through_a_family_stored_after_the_group_is_refused_at_the_familys_size() {
-    let verdicts = verdicts_of(A_DESCENT_THROUGH_A_LATER_OVERSIZED_PAYLOAD);
+    let verdicts = refusals_of(A_DESCENT_THROUGH_A_LATER_OVERSIZED_PAYLOAD);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::Oversized { .. } }] if *name == global("F")
+            [Refusal { name: Some(name), error: Error::Oversized { .. } }] if *name == global("F")
         ),
         "{verdicts:?}"
     );
@@ -294,14 +294,14 @@ end
 // Mutation-check: have the certifier's `Driver::judged` answer yes for every family, and the module is admitted whole.
 #[test]
 fn a_record_and_a_family_declared_apart_that_hold_each_other_negatively_are_each_refused() {
-    let verdicts = verdicts_of(CURRY_THROUGH_A_RECORD_DECLARED_BEFORE);
+    let verdicts = refusals_of(CURRY_THROUGH_A_RECORD_DECLARED_BEFORE);
 
     assert!(
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(a), error: Error::NotPositive { .. } },
-                Verdict { name: Some(b), error: Error::NotPositive { .. } },
+                Refusal { name: Some(a), error: Error::NotPositive { .. } },
+                Refusal { name: Some(b), error: Error::NotPositive { .. } },
             ] if *a == global("A") && *b == global("B")
         ),
         "{verdicts:?}"

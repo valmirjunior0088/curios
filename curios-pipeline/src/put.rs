@@ -12,7 +12,7 @@ use {
         CompileError, EntryTail, Examined, Refused, Refuted, examine_entrypoint, globals,
         program_refusal, read_core_text,
     },
-    curios_cert::{Verdict, certify_program},
+    curios_cert::certify_program,
     curios_common::{Report, Source, SyntaxRegistry, Variants},
     curios_core::{Global, Program, Term, Universes},
     curios_module::RootSource,
@@ -64,7 +64,10 @@ pub enum Refusal {
         reported: String,
     },
     /// The certifier's refusal, of the item or registry entry it names, with the report a compilation makes of it.
-    Certifier { verdict: Verdict, reported: String },
+    Certifier {
+        refusal: curios_cert::Refusal,
+        reported: String,
+    },
 }
 
 impl Refusal {
@@ -94,10 +97,10 @@ impl Refusal {
 
                 format!("elaborator {}", variants.join(" "))
             }
-            Refusal::Certifier { verdict, .. } => format!(
+            Refusal::Certifier { refusal, .. } => format!(
                 "certifier `{}` {}",
-                verdict.error.variant_name(),
-                standing_at(verdict.name.as_ref())
+                refusal.error.variant_name(),
+                standing_at(refusal.name.as_ref())
             ),
         }
     }
@@ -265,7 +268,7 @@ pub fn put_program(
                 })
                 .chain(verdicts.into_iter().map(|Refuted { verdict, reported }| {
                     Refusal::Certifier {
-                        verdict,
+                        refusal: verdict,
                         reported: Report::render_all(&reported),
                     }
                 }))
@@ -307,7 +310,7 @@ pub fn put_core_text(
     Ok(Some(Put {
         answer: Answer::Judged(
             rechecked
-                .into_verdicts()
+                .into_refusals()
                 .into_iter()
                 .map(|verdict| Refusal::Certifier {
                     reported: program_refusal(
@@ -318,7 +321,7 @@ pub fn put_core_text(
                         syntax,
                     )
                     .to_string(),
-                    verdict,
+                    refusal: verdict,
                 })
                 .collect(),
         ),

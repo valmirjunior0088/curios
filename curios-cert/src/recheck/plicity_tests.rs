@@ -66,12 +66,12 @@ fn marked_case(honest: bool, payload: usize) -> String {
 #[test]
 fn a_constructors_mark_decides_nothing_of_its_value() {
     assert_eq!(
-        text_verdicts(&marked_case(true, 1)),
-        text_verdicts(&marked_case(false, 1)),
+        text_refusals(&marked_case(true, 1)),
+        text_refusals(&marked_case(false, 1)),
         "a mark no rule reads outside an arm changed a verdict",
     );
     assert_eq!(
-        text_verdicts(&marked_case(false, 1)),
+        text_refusals(&marked_case(false, 1)),
         Vec::new(),
         "both sides must be accepted, or the equality above is two refusals agreeing",
     );
@@ -80,7 +80,7 @@ fn a_constructors_mark_decides_nothing_of_its_value() {
 /// The control for the fixture above: under the same lying plicity vector, an ordinary error is still caught.
 #[test]
 fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
-    let verdicts = text_verdicts(&marked_case(false, 0));
+    let verdicts = text_refusals(&marked_case(false, 0));
 
     assert!(
         refuses(&verdicts, Some("value"), miscounted(Counted::Payload, 1, 0)),
@@ -95,13 +95,13 @@ fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
 fn an_argument_stands_under_its_parameters_mark() {
     let mark = "";
     assert_eq!(
-        text_verdicts(&fill!(MARKED_ARGUMENT, mark)),
+        text_refusals(&fill!(MARKED_ARGUMENT, mark)),
         Vec::new(),
         "an argument under its parameter's own mark was refused",
     );
 
     let mark = "@";
-    let refused = text_verdicts(&fill!(MARKED_ARGUMENT, mark));
+    let refused = text_refusals(&fill!(MARKED_ARGUMENT, mark));
     assert!(
         refuses(&refused, Some("held"), |error| matches!(
             error,
@@ -122,7 +122,7 @@ fn an_argument_stands_under_its_parameters_mark() {
 #[test]
 fn an_arm_binds_under_its_payloads_marks() {
     let arm = "mk(@a)";
-    let refused = text_verdicts(&fill!(ARM, arm));
+    let refused = text_refusals(&fill!(ARM, arm));
 
     assert!(
         refuses(&refused, Some("held"), |error| matches!(
@@ -167,13 +167,13 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
 
     built(honest);
     assert_eq!(
-        text_verdicts(&fill!(ETA_FORMED, declared = honest)),
+        text_refusals(&fill!(ETA_FORMED, declared = honest)),
         Vec::new(),
         "an η-form whose binder takes another mark than its former's was refused at the node it builds",
     );
 
     built(lying);
-    let refused = text_verdicts(&fill!(ETA_FORMED, declared = lying));
+    let refused = text_refusals(&fill!(ETA_FORMED, declared = lying));
     assert!(
         refuses(&refused, Some("held"), |error| matches!(
             error,
@@ -190,13 +190,13 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
 fn a_function_forwarding_across_a_mark_is_not_taken_at_the_type_it_contracts_to() {
     let mark = "@";
     assert_eq!(
-        text_verdicts(&fill!(FORWARDING, mark)),
+        text_refusals(&fill!(FORWARDING, mark)),
         Vec::new(),
         "a function forwarding across a mark was refused at its own hidden-headed type",
     );
 
     let mark = "";
-    let refused = text_verdicts(&fill!(FORWARDING, mark));
+    let refused = text_refusals(&fill!(FORWARDING, mark));
     for item in ["by_name", "by_literal"] {
         assert!(
             refuses(&refused, Some(item), |error| matches!(

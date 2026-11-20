@@ -18,7 +18,7 @@ fn method() -> Global {
 /// A method named by its path is the node lowering writes before elaboration settles it on a dictionary, so the certifier meets it as elaboration-only: no constant stands at the method's type for it to be typed by.
 #[test]
 fn a_method_named_by_its_path_is_refused_as_elaboration_only() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${BOTTOMED}\n#{node = Method}\n/C/bot",
         PROPOSITIONS,
         BOTTOMED
@@ -35,7 +35,7 @@ fn a_method_named_by_its_path_is_refused_as_elaboration_only() {
 /// A method is its concept's field, and no definition: named as a declaration, its path names nothing the certifier holds.
 #[test]
 fn a_method_named_as_a_declaration_names_nothing() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${BOTTOMED}\n/C/bot",
         PROPOSITIONS,
         BOTTOMED
@@ -62,7 +62,7 @@ let /T/mk : /std/Bool/False =
 /// A definition under a constructor's name declares the name a second time, the family's form declaring it already, and the walk refuses the module whole for it before judging anything.
 #[test]
 fn a_definition_under_a_constructors_name_is_a_second_declaration_of_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${CONSTRUCTOR_STATED_AT_FALSE}",
         PROPOSITIONS,
         CONSTRUCTOR_STATED_AT_FALSE
@@ -71,7 +71,7 @@ fn a_definition_under_a_constructors_name_is_a_second_declaration_of_it() {
 
     assert_eq!(
         verdicts,
-        [Verdict {
+        [Refusal {
             name: Some(constructor),
             error: Error::Redeclared(constructor),
         }]
@@ -155,7 +155,7 @@ fn two_cases_a_form_states_under_one_tag_are_refused_as_it_is_read() {
 /// A former's name is typed as its entry spells it: `/Box`, a record of one parameter, is a function from a type to a type, so a definition of that type stands at it, and one claiming it is a type is refused under its own name.
 #[test]
 fn a_former_is_typed_as_its_entry_spells_it() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 struct /Box(A: Type): pub Type {
     held: A,
@@ -170,7 +170,7 @@ let /claimed: Type = /Box;
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), .. }] if *name == Global::Authored(Qualifier::from(["claimed"]))
+            [Refusal { name: Some(name), .. }] if *name == Global::Authored(Qualifier::from(["claimed"]))
         ),
         "{verdicts:?}"
     );

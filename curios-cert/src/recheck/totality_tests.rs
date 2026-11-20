@@ -54,7 +54,7 @@ fn carried_proof_definitions() -> Definitions {
 #[test]
 fn a_definition_reaching_a_partial_one_is_accepted() {
     assert_eq!(
-        text_verdicts(LIBRARY),
+        text_refusals(LIBRARY),
         Vec::new(),
         "a definition reaching a partial one was refused",
     );
@@ -66,7 +66,7 @@ fn reaches() -> Global {
 }
 
 /// Whether `verdicts` refuse `held : Vouched` for reaching `reaches` — the refusal a walk owes the proof whenever it knows `reaches` is partial.
-fn refuses_the_proof_reaching_partiality(verdicts: &[Verdict]) -> bool {
+fn refuses_the_proof_reaching_partiality(verdicts: &[Refusal]) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
             && matches!(
@@ -80,8 +80,8 @@ fn refuses_the_proof_reaching_partiality(verdicts: &[Verdict]) -> bool {
 }
 
 /// The walk over `judged`, the library mounted beneath it as the compile path mounts a unit — with `certification` as the record filed beside it.
-fn carried_beneath(judged: &Definitions, certification: &Certification) -> Vec<Verdict> {
-    fixture_verdicts(
+fn carried_beneath(judged: &Definitions, certification: &Certification) -> Vec<Refusal> {
+    fixture_refusals(
         judged,
         1_000_000,
         &AlreadyJudged::with(&reaching_library(false), certification).globals(),
@@ -93,7 +93,7 @@ fn carried_beneath(judged: &Definitions, certification: &Certification) -> Vec<V
 #[test]
 fn a_carried_units_totality_is_read_from_the_certifiers_record() {
     let library = text_certified(LIBRARY);
-    assert_eq!(library.verdicts(), Vec::new(), "the library is certified");
+    assert_eq!(library.refusals(), Vec::new(), "the library is certified");
     assert_eq!(
         library.certification().totality(&reaches()),
         Some(Totality::Partial)
@@ -105,7 +105,7 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
         "carried beneath its record, the proof reaching a partial definition must be refused: {carried:?}",
     );
 
-    let judged = fixture_verdicts(&reaching_library(true), BUDGET, &Globals::default(), SYNTAX);
+    let judged = fixture_refusals(&reaching_library(true), BUDGET, &Globals::default(), SYNTAX);
     assert!(
         refuses_the_proof_reaching_partiality(&judged),
         "judged fresh, the same proof must be refused for reaching a partial definition: {judged:?}",
@@ -118,7 +118,7 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
 #[test]
 fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
     let at_an_argument = |proof: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             "${VOUCHED}${LIBRARY}\nlet /held: #NatType =\n    ((p: #{node = InductType} /Vouched()) => 0)(${proof});",
             VOUCHED,
             LIBRARY,
@@ -203,7 +203,7 @@ fn a_record_answers_for_no_name_its_unit_does_not_declare() {
 #[test]
 fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
     for (first, second) in [("zeta", "alpha"), ("alpha", "zeta")] {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             r#"${VOUCHED}
 let /${first}: (n: #NatType) -> #NatType =
     #{node = Rec}

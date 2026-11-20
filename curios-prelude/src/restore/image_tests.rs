@@ -274,7 +274,7 @@ fn stored_prelude_measurements() {
             println!(
                 "  certifying the unit          {:>10.1?}  ({} refusals)",
                 certification,
-                rechecked.verdicts().len()
+                rechecked.refusals().len()
             );
             println!(
                 "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",

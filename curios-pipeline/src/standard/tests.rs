@@ -1622,7 +1622,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         };
         // A verdict is of a declaration written beside a `let`, the others standing on the archive's.
         let uncertified = judged
-            .verdicts()
+            .refusals()
             .iter()
             .filter_map(|verdict| beside.get(&verdict.name?))
             .map(|(name, _)| *name)
@@ -1652,15 +1652,15 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 names(&known_declined)
             ));
         }
-        if uncertified != known_uncertified || uncertified.len() != judged.verdicts().len() {
+        if uncertified != known_uncertified || uncertified.len() != judged.refusals().len() {
             found.push(format!(
                 "of the {} declarations written beside a `let` the certifier refuses {}, those of {:?}, where {:?} are the `let`s of this part known to be refused theirs:\n{}",
                 beside.len(),
-                judged.verdicts().len(),
+                judged.refusals().len(),
                 names(&uncertified),
                 names(&known_uncertified),
                 judged
-                    .verdicts()
+                    .refusals()
                     .iter()
                     .map(|verdict| {
                         format!(

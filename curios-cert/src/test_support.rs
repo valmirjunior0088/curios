@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        Certifier, Filed, Globals, Rechecked, Verdict, certify_definitions_over,
-        recheck::verdicts_from,
+        Certifier, Filed, Globals, Rechecked, Refusal, certify_definitions_over,
+        recheck::refusals_from,
     },
     curios_common::{Candidates, SyntaxRegistry, fill},
     curios_core::{
@@ -68,7 +68,7 @@ impl Put<'_> {
         entry: Option<&Entrypoint>,
     ) -> Rechecked<Definitions> {
         self.under(|globals| {
-            verdicts_from(
+            refusals_from(
                 &mut Certifier::new(self.budget, self.syntax),
                 definitions,
                 entry,
@@ -284,13 +284,13 @@ pub fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
 /// [`certify_definitions`](crate::certify_definitions)'s verdicts with the certifier's evaluation memos off.
 ///
 /// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
-pub fn recheck_definitions_verdicts_uncached(
+pub fn recheck_definitions_refusals_uncached(
     definitions: &Definitions,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> Vec<Verdict> {
-    verdicts_from(
+) -> Vec<Refusal> {
+    refusals_from(
         &mut Certifier::uncached(budget, syntax),
         definitions,
         None,
@@ -298,5 +298,5 @@ pub fn recheck_definitions_verdicts_uncached(
         None,
     )
     .module()
-    .into_verdicts()
+    .into_refusals()
 }

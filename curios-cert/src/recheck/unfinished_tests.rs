@@ -75,7 +75,7 @@ fn unrefused(residue: &str, refuses: impl Fn(&Error) -> bool) -> Vec<String> {
     PLACES
         .iter()
         .filter_map(|(place, name, text)| {
-            let verdicts = core_text_verdicts(&placed(text, residue));
+            let verdicts = core_text_refusals(&placed(text, residue));
             let held = verdicts
                 .iter()
                 .any(|verdict| verdict.name == standing(*name) && refuses(&verdict.error));
@@ -145,7 +145,7 @@ fn an_unfinished_type_the_closing_term_is_put_at_is_refused() {
         ("#{binding = Bound(0)} _", &not_closed),
     ] {
         let program = stated(&placed("0\n: ${residue}", residue));
-        let verdicts = fixture_verdicts(&program, BUDGET, &Globals::default(), SYNTAX);
+        let verdicts = fixture_refusals(&program, BUDGET, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts

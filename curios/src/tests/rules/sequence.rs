@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::tests::test_support::*,
-    curios_cert::Verdict,
+    curios_cert::Refusal,
     curios_common::Qualifier,
     curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term},
     curios_elab::DEFAULT_BUDGET,
@@ -360,7 +360,7 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     assert!(
         matches!(
             verdicts.as_slice(),
-            [Verdict { name: Some(refused), error: curios_cert::Error::Mismatch { .. } }] if *refused == name
+            [Refusal { name: Some(refused), error: curios_cert::Error::Mismatch { .. } }] if *refused == name
         ),
         "the certifier refuses the forged `c` alone, as a mismatch: {verdicts:?}"
     );

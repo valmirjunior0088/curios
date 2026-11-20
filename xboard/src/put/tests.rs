@@ -46,7 +46,7 @@ fn a_module_is_admitted_at_a_type_its_term_has() {
         .built(|scope| certify_program(&program, DEFAULT_BUDGET, &globals(scope), SYNTAX).0)
         .expect("a history of no step builds");
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn core_text_that_states_another_type_for_its_term_is_refused_by_the_reader() {
     assert!(
         !stated.refusals().is_empty()
             && stated.refusals().iter().all(
-                |refusal| matches!(refusal, Refusal::Certifier { verdict, .. } if verdict.name.is_none())
+                |put| matches!(put, Refusal::Certifier { refusal, .. } if refusal.name.is_none())
             ),
         "{:?}",
         stated.refusals()

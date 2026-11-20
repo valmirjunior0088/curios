@@ -491,8 +491,8 @@ let /generic : (
 "#;
 
 /// The verdicts on `text` put after the propositions it names.
-fn verdicts(text: &str) -> Vec<Verdict> {
-    core_text_verdicts(&fill!(
+fn refusals(text: &str) -> Vec<Refusal> {
+    core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TEXT}",
         PROPOSITIONS,
         TEXT = text
@@ -500,17 +500,17 @@ fn verdicts(text: &str) -> Vec<Verdict> {
 }
 
 /// Whether `verdicts` is one `Mismatch`, in `name`: the route to `False` stands but for it.
-fn one_mismatch_in(verdicts: &[Verdict], name: &str) -> bool {
+fn one_mismatch_in(verdicts: &[Refusal], name: &str) -> bool {
     matches!(
         verdicts,
-        [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == global(name)
+        [Refusal { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == global(name)
     )
 }
 
 /// A hidden member takes no position among the members an author writes and every position among a value's slots: the literal's eta compares `k`. Mutation-checked: with `struct_eta` walking a literal's plain fields alone, the module is admitted at `False`.
 #[test]
 fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
-    let verdicts = verdicts(A_HIDDEN_FIELD_KEEPS_A_STRUCT_LITERAL_APART_FROM_A_NEUTRAL);
+    let verdicts = refusals(A_HIDDEN_FIELD_KEEPS_A_STRUCT_LITERAL_APART_FROM_A_NEUTRAL);
 
     assert!(one_mismatch_in(&verdicts, "cast"), "{verdicts:?}");
 }
@@ -518,7 +518,7 @@ fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
 /// What one inhabitant reads of a struct is every field its declaration holds, a hidden one among them. Mutation-checked: with `fields_inhabited_once` passing a hidden field over, the module is admitted at `False`.
 #[test]
 fn two_neutrals_at_a_struct_whose_relevant_field_is_hidden_stay_apart() {
-    let verdicts = verdicts(TWO_NEUTRALS_AT_A_STRUCT_WHOSE_RELEVANT_FIELD_IS_HIDDEN_STAY_APART);
+    let verdicts = refusals(TWO_NEUTRALS_AT_A_STRUCT_WHOSE_RELEVANT_FIELD_IS_HIDDEN_STAY_APART);
 
     assert!(one_mismatch_in(&verdicts, "cast"), "{verdicts:?}");
 }
@@ -526,12 +526,12 @@ fn two_neutrals_at_a_struct_whose_relevant_field_is_hidden_stay_apart() {
 /// The singleton rung asks every payload to be pinned, a hidden one as a plain one. Mutation-checked: with `wholly_pinned` asked of the plain payloads alone, the module is admitted at `False`.
 #[test]
 fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
-    let verdicts = verdicts(A_HIDDEN_PAYLOAD_NO_INDEX_PINS_IS_NOT_READ_OUT_OF_A_PROOF);
+    let verdicts = refusals(A_HIDDEN_PAYLOAD_NO_INDEX_PINS_IS_NOT_READ_OUT_OF_A_PROOF);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(read), error: Error::LargeElimination(family) }]
+            [Refusal { name: Some(read), error: Error::LargeElimination(family) }]
                 if *read == global("read") && *family == global("Q")
         ),
         "{verdicts:?}"
@@ -541,12 +541,12 @@ fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
 /// A slot is typed off what it is a slot of, and a family's value is no tuple, so the flat view reduction reads a payload through is never one a typed term reaches.
 #[test]
 fn a_proofs_payload_is_read_by_no_tuple_slot() {
-    let verdicts = verdicts(A_PROOFS_PAYLOAD_IS_READ_BY_NO_TUPLE_SLOT);
+    let verdicts = refusals(A_PROOFS_PAYLOAD_IS_READ_BY_NO_TUPLE_SLOT);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(get), error: Error::NotATuple(_) }] if *get == global("get")
+            [Refusal { name: Some(get), error: Error::NotATuple(_) }] if *get == global("get")
         ),
         "{verdicts:?}"
     );
@@ -555,7 +555,7 @@ fn a_proofs_payload_is_read_by_no_tuple_slot() {
 /// One inhabitant read off a shape a case made lives as long as the case.
 #[test]
 fn a_shape_one_arm_decides_answers_in_no_other_arm() {
-    let verdicts = verdicts(A_SHAPE_ONE_ARM_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
+    let verdicts = refusals(A_SHAPE_ONE_ARM_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
 
     assert!(one_mismatch_in(&verdicts, "leak"), "{verdicts:?}");
 }
@@ -563,7 +563,7 @@ fn a_shape_one_arm_decides_answers_in_no_other_arm() {
 /// A sort read off a declaration at an argument a case refined lives as long as the case.
 #[test]
 fn a_sort_one_arm_decides_answers_in_no_other_arm() {
-    let verdicts = verdicts(A_SORT_ONE_ARM_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
+    let verdicts = refusals(A_SORT_ONE_ARM_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
 
     assert!(one_mismatch_in(&verdicts, "leak"), "{verdicts:?}");
 }
@@ -571,7 +571,7 @@ fn a_sort_one_arm_decides_answers_in_no_other_arm() {
 /// A `let` bound ahead of the split is read by value, so its sort is the one each case gives its value.
 #[test]
 fn a_sort_a_let_decides_answers_in_no_other_arm() {
-    let verdicts = verdicts(A_SORT_A_LET_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
+    let verdicts = refusals(A_SORT_A_LET_DECIDES_ANSWERS_IN_NO_OTHER_ARM);
 
     assert!(one_mismatch_in(&verdicts, "leak"), "{verdicts:?}");
 }
@@ -579,12 +579,12 @@ fn a_sort_a_let_decides_answers_in_no_other_arm() {
 /// A declaration that leaves a sort to its caller is judged at each assignment, and at `Type` the box's field is relevant.
 #[test]
 fn a_struct_at_a_sort_left_to_a_caller_has_one_inhabitant_only_at_prop() {
-    let verdicts = verdicts(A_STRUCT_AT_A_SORT_LEFT_TO_A_CALLER_HAS_ONE_INHABITANT_ONLY_AT_PROP);
+    let verdicts = refusals(A_STRUCT_AT_A_SORT_LEFT_TO_A_CALLER_HAS_ONE_INHABITANT_ONLY_AT_PROP);
 
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(generic), error: Error::AtSorts { sorts, refusal } }]
+            [Refusal { name: Some(generic), error: Error::AtSorts { sorts, refusal } }]
                 if *generic == global("generic")
                     && sorts[..] == [Quality::Type]
                     && matches!(**refusal, Error::Mismatch { .. })

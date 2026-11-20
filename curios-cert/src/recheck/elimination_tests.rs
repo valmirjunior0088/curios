@@ -156,7 +156,7 @@ let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> {} =
 #[test]
 fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
     let sort = "(((s: Type) => s)(Prop))";
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         "${TWO_HELD}${FORGED_FROM_HELD}",
         TWO_HELD = fill!(TWO_HELD, sort),
         FORGED_FROM_HELD
@@ -175,7 +175,7 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
 #[test]
 fn an_empty_elimination_where_a_propositions_two_constructors_differ_is_refused() {
     let sort = "Prop";
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         "${TWO_HELD}${FORGED_FROM_HELD}",
         TWO_HELD = fill!(TWO_HELD, sort),
         FORGED_FROM_HELD
@@ -194,7 +194,7 @@ fn an_empty_elimination_where_a_propositions_two_constructors_differ_is_refused(
 #[test]
 fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
     let sort = "Type";
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${TWO_HELD}
 let /vacuous: (h: #{node = InductType} /Held()(#{node = Variant} /Two/b())) ->
     #{node = InductType}
@@ -222,7 +222,7 @@ let /vacuous: (h: #{node = InductType} /Held()(#{node = Variant} /Two/b())) ->
 /// Mutation-checked, which is what makes this a forgery rather than a refusal: with the coverage loop's `MissingArm` suppressed, the walk returns **zero** verdicts over this module, so the entry is certified at `False`.
 #[test]
 fn a_sole_arm_elimination_must_still_rule_out_the_constructors_it_omits() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${PIN}
 let /forged: (p: #{node = InductType} /Pin()(1)) -> #{node = InductType} /False() =
     (p: #{node = InductType} /Pin()(1)) =>
@@ -248,7 +248,7 @@ let /forged: (p: #{node = InductType} /Pin()(1)) -> #{node = InductType} /False(
 /// The control: the same two constructors at `Pin(0)`, where `no` is impossible and `yes` is the arm reduction takes. The sole-arm elimination must stay accepted, since it is the form a cast along a proof is written in; refusing every match with one arm is how the refusal above would be reached with a brick.
 #[test]
 fn a_sole_arm_elimination_whose_omissions_are_ruled_out_is_still_accepted() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${PIN}
 let /cast: (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) ->
     #{node = InductType}
@@ -295,7 +295,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
 #[test]
 fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
     let cases = "| mk(): (#{node = Variant} /Two/a())\n| mk2(): (#{node = Variant} /Two/a())";
-    let verdicts = text_verdicts(&fill!(SHADOWED, cases));
+    let verdicts = text_refusals(&fill!(SHADOWED, cases));
 
     assert!(
         verdicts.is_empty(),
@@ -319,7 +319,7 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
 #[test]
 fn a_goal_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
     let sort = "Prop";
-    let verdicts = text_verdicts(&fill!(EXTRACTED, sort));
+    let verdicts = text_refusals(&fill!(EXTRACTED, sort));
 
     assert!(
         refuses(&verdicts, Some("extract"), |error| matches!(
@@ -334,7 +334,7 @@ fn a_goal_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
 #[test]
 fn an_honest_goal_still_refuses_the_large_elimination() {
     let sort = "Type";
-    let verdicts = text_verdicts(&fill!(EXTRACTED, sort));
+    let verdicts = text_refusals(&fill!(EXTRACTED, sort));
 
     assert!(
         refuses(&verdicts, Some("extract"), |error| *error
@@ -353,7 +353,7 @@ fn an_honest_goal_still_refuses_the_large_elimination() {
 #[test]
 fn a_vacuous_elimination_still_has_its_goal_checked() {
     // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous; `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play. The codomain is honest, and the ordering is what keeps this about the goal: `check` reaches `infer` before it can subsume, and `infer` runs `check_cases` — hence the goal clause — before the result is compared.
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 induct /Two: pub Type
 | a()
@@ -422,7 +422,7 @@ fn no_type_position_admits_a_lying_goal() {
             "let /probe: (b: #BoolType) -> {} =\n    (b: #BoolType) =>\n        #{node = Rec}\n        (let y: ${lying} = 0;\n        ());",
         ),
     ] {
-        let verdicts = text_verdicts(&fill!(text, lying));
+        let verdicts = text_refusals(&fill!(text, lying));
 
         assert!(
             refuses(&verdicts, Some("probe"), |error| matches!(
@@ -445,14 +445,14 @@ fn an_irrelevant_level_changes_no_elimination() {
     );
     let (case, arm) = ("| mk(): (0)", "| mk() => 7");
     for level in [0, 1] {
-        let two = text_verdicts(&fill!(LEVELLED, cases, arms, level));
+        let two = text_refusals(&fill!(LEVELLED, cases, arms, level));
         assert!(
             refuses(&two, Some("extract"), |error| *error
                 == Error::LargeElimination(global("P"))),
             "{two:?}"
         );
 
-        let one = text_verdicts(&fill!(LEVELLED, cases = case, arms = arm, level));
+        let one = text_refusals(&fill!(LEVELLED, cases = case, arms = arm, level));
         assert_eq!(one, Vec::new());
     }
 }
@@ -461,7 +461,7 @@ fn an_irrelevant_level_changes_no_elimination() {
 #[test]
 fn an_arm_is_not_excused_by_an_irrelevant_level() {
     let excused = |arms: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /Wrap(A: #{level = u} Type): pub #{level = u} Type
@@ -507,7 +507,7 @@ let /read: (
 /// `whnf`'s gate is `!term.has_local_free()`, where the closed machine's `accelerable` and `curios-elab`'s own `closed` also require no metavariable. So a match whose scrutinee is a metavariable and whose other parts name no local is closed to this reducer and open to the other two, and the closed branch of the sole-arm rule is the one with no comparison in it: `stated_payload` hands the payload over where `unread_payload` would put the stated instance beside the one the constructor builds and decline. What keeps the two from parting over a verdict is not the gate but the boundary in front of it — `Zonked::project` refuses a program carrying elaboration's own syntax, and `infer` refuses a `Metavar` with `NotCore` where a judgment meets one — and this holds that boundary, the fixture reaching the walk with `Zonked` bypassed as every fixture here does.
 #[test]
 fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${PINNED}
 let /bad: #{node = InductType} /False() =
     #{goal = #{node = InductType} /False(), cases = {stated = #{node = InductType} /Pinned()(0, 1)}}
@@ -533,7 +533,7 @@ let /bad: #{node = InductType} /False() =
 #[test]
 fn an_arm_whose_arity_its_constructor_denies_is_refused() {
     let arm = "mk(x, y)";
-    let verdicts = text_verdicts(&fill!(PINNED_ARM, PINNED, arm));
+    let verdicts = text_refusals(&fill!(PINNED_ARM, PINNED, arm));
 
     assert!(
         refuses(
@@ -551,7 +551,7 @@ fn an_arm_whose_arity_its_constructor_denies_is_refused() {
 #[test]
 fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
     let arm = "mk(x)";
-    let verdicts = text_verdicts(&fill!(PINNED_ARM, PINNED, arm));
+    let verdicts = text_refusals(&fill!(PINNED_ARM, PINNED, arm));
 
     assert!(
         !verdicts.iter().any(|verdict| matches!(
@@ -569,14 +569,14 @@ fn an_arm_at_its_constructors_arity_is_not_refused_for_its_arity() {
 #[test]
 fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
     let variable = "#{level = 7} Type";
-    let fitting = text_verdicts(&fill!(REFINED, variable));
+    let fitting = text_refusals(&fill!(REFINED, variable));
     assert!(
         fitting.is_empty(),
         "a refinement whose target inhabits the variable's own type was dropped: {fitting:?}",
     );
 
     let variable = "Type";
-    let collapsing = text_verdicts(&fill!(REFINED, variable));
+    let collapsing = text_refusals(&fill!(REFINED, variable));
     assert!(
         refuses(&collapsing, Some("read"), |error| matches!(
             error,
@@ -594,7 +594,7 @@ fn an_index_refinement_is_kept_only_where_its_target_fits_its_variable() {
 #[test]
 fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
     let variable = "#{universes = {levels = [0]}} /Universe";
-    let collapsing = text_verdicts(&fill!(REFINED_AT, variable));
+    let collapsing = text_refusals(&fill!(REFINED_AT, variable));
     assert!(
         refuses(&collapsing, Some("read"), |error| matches!(
             error,
@@ -605,14 +605,14 @@ fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
 
     let variable = "#{universes = {levels = [6]}} /Universe";
     assert_eq!(
-        text_verdicts(&fill!(REFINED_AT, variable)),
+        text_refusals(&fill!(REFINED_AT, variable)),
         Vec::new(),
         "a refinement whose target inhabits the type the instance states was dropped",
     );
 
     let variable = "#{level = u + 1} Type";
     assert_eq!(
-        text_verdicts(&fill!(REFINED_AT, variable)),
+        text_refusals(&fill!(REFINED_AT, variable)),
         Vec::new(),
         "the reading a capture would have left was refused for some other reason",
     );

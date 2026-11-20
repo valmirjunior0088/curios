@@ -9,10 +9,10 @@ use {
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
-fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
+fn redeclares(verdicts: &[Refusal], name: &Global) -> bool {
     matches!(
         verdicts,
-        [Verdict { name: Some(owner), error: Error::Redeclared(redeclared) }]
+        [Refusal { name: Some(owner), error: Error::Redeclared(redeclared) }]
             if owner == name && redeclared == name
     )
 }
@@ -38,7 +38,7 @@ let /reader: #NatType =
 /// Mutation-checked against the environment's question: with an item's held name never asked after, the module is judged, and `shadowed` is refused where the walk writes it and no sooner.
 #[test]
 fn a_definition_differing_from_the_environments_is_refused() {
-    let alone = text_verdicts(SHADOWING);
+    let alone = text_refusals(SHADOWING);
     assert!(
         refuses(&alone, Some("reader"), |error| matches!(
             error,
@@ -47,7 +47,7 @@ fn a_definition_differing_from_the_environments_is_refused() {
         "the control stopped refusing: `reader : Nat` must not accept a `Bool`-typed `shadowed`: {alone:?}",
     );
 
-    let verdicts = over_the_environment(SHADOWING).into_verdicts();
+    let verdicts = over_the_environment(SHADOWING).into_refusals();
     assert!(
         redeclares(&verdicts, &global("shadowed")),
         "a definition differing from the environment's under its name was not refused for the name: {verdicts:?}",
@@ -70,7 +70,7 @@ end
 fn a_registry_entry_differing_from_the_environments_is_refused() {
     let oversized = fill!(SHADOWING_FAMILY, domain = "#{level = 5} Type");
 
-    let alone = text_verdicts(&oversized);
+    let alone = text_refusals(&oversized);
     assert!(
         refuses(&alone, Some("Shadowed"), |error| matches!(
             error,
@@ -79,7 +79,7 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
         "the control stopped refusing: a `Type 5` payload exceeds a family declared at `Type 0`: {alone:?}",
     );
 
-    let verdicts = over_the_environment(&oversized).into_verdicts();
+    let verdicts = over_the_environment(&oversized).into_refusals();
     assert!(
         redeclares(&verdicts, &global("Shadowed")),
         "a registry entry differing from the environment's under its name was not refused for the name: {verdicts:?}",
@@ -102,14 +102,14 @@ end
 "#;
 
 /// What the walk says of [`STORED_IN_THE_WRAPPER`] over [`WRAPPER`] at `held`, a unit well formed on its own, in scope as the walk over it filed it.
-fn stored_verdicts(held: &str) -> Vec<Verdict> {
+fn stored_refusals(held: &str) -> Vec<Refusal> {
     let unit = core_text_module(&fill!(WRAPPER, held));
 
-    text_verdicts_over(STORED_IN_THE_WRAPPER, &already_judged(&unit).globals())
+    text_refusals_over(STORED_IN_THE_WRAPPER, &already_judged(&unit).globals())
 }
 
 /// Whether `Outer` was refused as negative in itself.
-fn outer_not_positive(verdicts: &[Verdict]) -> bool {
+fn outer_not_positive(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("Outer"), |error| {
         matches!(error, Error::NotPositive { .. })
     })
@@ -124,14 +124,14 @@ fn outer_not_positive(verdicts: &[Verdict]) -> bool {
 /// Mutation-checked against the environment's construction: keeping the vector each entry carries accepts `Outer`.
 #[test]
 fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
-    let verdicts = stored_verdicts("(taken: A) -> #NatType");
+    let verdicts = stored_refusals("(taken: A) -> #NatType");
     assert!(
         outer_not_positive(&verdicts),
         "`Outer` was accepted on a `Strict` its entry's stamp claims: {verdicts:?}",
     );
 
     assert_eq!(
-        stored_verdicts("A"),
+        stored_refusals("A"),
         Vec::new(),
         "the control stopped holding: `Outer` stores itself strictly",
     );
@@ -156,7 +156,7 @@ fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
     ];
 
     for (carrier, held) in carriers {
-        let verdicts = stored_verdicts(held);
+        let verdicts = stored_refusals(held);
         assert!(
             outer_not_positive(&verdicts),
             "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims: {verdicts:?}",
@@ -184,7 +184,7 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
     ));
 
     let refused = rechecked
-        .verdicts()
+        .refusals()
         .iter()
         .map(|verdict| match &verdict.error {
             Error::Redeclared(redeclared) => (verdict.name, Some(*redeclared)),
@@ -212,12 +212,12 @@ let /Shadowed: #NatType =
 #[test]
 fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
     assert_eq!(
-        text_verdicts(DEFINITION_UNDER_THE_FAMILY),
+        text_refusals(DEFINITION_UNDER_THE_FAMILY),
         Vec::new(),
         "the control stopped certifying: the definition is well typed standing alone",
     );
 
-    let verdicts = over_the_environment(DEFINITION_UNDER_THE_FAMILY).into_verdicts();
+    let verdicts = over_the_environment(DEFINITION_UNDER_THE_FAMILY).into_refusals();
     assert!(
         redeclares(&verdicts, &global("Shadowed")),
         "a definition under a family's name was not refused for the name: {verdicts:?}",
@@ -238,12 +238,12 @@ and /fresh: #NatType =
 #[test]
 fn a_group_the_environment_holds_in_part_is_refused() {
     assert_eq!(
-        text_verdicts(GROUP_HELD_IN_PART),
+        text_refusals(GROUP_HELD_IN_PART),
         Vec::new(),
         "the control stopped certifying: the group is well formed standing alone",
     );
 
-    let verdicts = over_the_environment(GROUP_HELD_IN_PART).into_verdicts();
+    let verdicts = over_the_environment(GROUP_HELD_IN_PART).into_refusals();
     assert!(
         redeclares(&verdicts, &global("shadowed")),
         "a group held in part was not refused for the name the environment holds: {verdicts:?}",
@@ -290,19 +290,19 @@ and /shadowed: #NatType =
 /// Mutation-checked against the set of names already declared: with it never consulted the module is judged, and `p` is refused where the walk writes it again and no sooner.
 #[test]
 fn a_name_declared_by_two_items_is_refused() {
-    let once = text_verdicts(&fill!(A_STATEMENT, again = ""));
+    let once = text_refusals(&fill!(A_STATEMENT, again = ""));
     assert!(
         refuses(&once, None, |error| matches!(error, Error::Mismatch { .. })),
         "the control stopped refusing: `thm : Holds` does not close a program at `Absurd`: {once:?}",
     );
 
-    let twice = text_verdicts(&fill!(A_STATEMENT, again = THE_STATEMENT_AGAIN));
+    let twice = text_refusals(&fill!(A_STATEMENT, again = THE_STATEMENT_AGAIN));
     assert!(
         redeclares(&twice, &global("p")),
         "a name declared by two items was not refused: {twice:?}",
     );
 
-    let repeated = text_verdicts(A_GROUP_NAMING_A_MEMBER_TWICE);
+    let repeated = text_refusals(A_GROUP_NAMING_A_MEMBER_TWICE);
     assert!(
         redeclares(&repeated, &global("shadowed")),
         "a group naming one member twice was not refused: {repeated:?}",
@@ -330,7 +330,7 @@ struct /Bad: pub Type {
 /// Mutation-checked against the set of names already declared: with it never consulted the module is judged, `Bad` is refused where the walk writes it again, and the record is analysed with the item that declares it, `NotPositive` beside the name's refusal.
 #[test]
 fn a_name_under_a_family_and_a_record_is_refused() {
-    let alone = text_verdicts(&fill!(A_RECORD_NEGATIVE_IN_ITSELF, family = ""));
+    let alone = text_refusals(&fill!(A_RECORD_NEGATIVE_IN_ITSELF, family = ""));
     assert!(
         refuses(&alone, Some("Bad"), |error| matches!(
             error,
@@ -339,7 +339,7 @@ fn a_name_under_a_family_and_a_record_is_refused() {
         "the control stopped refusing: the record names itself to the left of an arrow: {alone:?}",
     );
 
-    let both = text_verdicts(&fill!(
+    let both = text_refusals(&fill!(
         A_RECORD_NEGATIVE_IN_ITSELF,
         family = "\ninduct /Bad: pub Type\nend\n"
     ));
@@ -376,20 +376,20 @@ let /alias: Type =
 "#;
 
 /// What the walk says of `text` over [`ALIAS`] at `decorator`, mounted beside the record a walk over the undecorated unit files: what `decorator` states of the alias is bytes no walk wrote, mounted as a forger would, so what the mount reads of a mark is seen.
-fn over_the_alias(text: &str, decorator: &str) -> Vec<Verdict> {
+fn over_the_alias(text: &str, decorator: &str) -> Vec<Refusal> {
     let unit = core_text_module(&fill!(ALIAS, decorator));
     let record = walked(&core_text_module(&fill!(ALIAS, decorator = "")))
         .certification()
         .clone();
 
-    text_verdicts_over(text, &AlreadyJudged::with(&unit, &record).globals())
+    text_refusals_over(text, &AlreadyJudged::with(&unit, &record).globals())
 }
 
 /// Whether `verdicts` is `symbol`'s refusal as a mismatch, and nothing else.
-fn only_mismatched(verdicts: &[Verdict], symbol: &str) -> bool {
+fn only_mismatched(verdicts: &[Refusal], symbol: &str) -> bool {
     matches!(
         verdicts,
-        [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == global(symbol)
+        [Refusal { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == global(symbol)
     )
 }
 
@@ -473,7 +473,7 @@ let /G : (b2: #BoolType) -> Prop =
 #[test]
 fn the_registrys_reflection_is_not_declared_again() {
     let environment = core_text_module(PROPOSITIONS);
-    let verdicts = core_text_verdicts_over(
+    let verdicts = core_text_refusals_over(
         HOLDS_RESTATED_TO_GAUGE_A_BYTE,
         &already_judged(&environment).globals(),
     );

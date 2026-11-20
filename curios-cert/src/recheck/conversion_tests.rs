@@ -43,7 +43,7 @@ let /second : (p: #NatType, q: #NatType, a: #NatType, b: #NatType, m: #NatType) 
         /std/Bool/True/qed()"#,
         inner = inner,
     ));
-    let refused = |verdicts: &[Verdict]| {
+    let refused = |verdicts: &[Refusal]| {
         verdicts.iter().any(|verdict| {
             verdict.name == Some(global("second"))
                 && matches!(verdict.error, Error::Mismatch { .. })
@@ -57,9 +57,9 @@ let /second : (p: #NatType, q: #NatType, a: #NatType, b: #NatType, m: #NatType) 
                 true => Certifier::uncached(BUDGET, SYNTAX),
             };
             let verdicts =
-                super::verdicts_from(&mut certifier, definitions, None, &Globals::default(), None)
+                super::refusals_from(&mut certifier, definitions, None, &Globals::default(), None)
                     .module()
-                    .into_verdicts();
+                    .into_refusals();
             assert!(
                 refused(&verdicts),
                 "the outer pair asked {asked}, with the memos off: {uncached}, holds: {verdicts:?}",

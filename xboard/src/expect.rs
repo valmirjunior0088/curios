@@ -50,8 +50,8 @@ impl Expected {
                     named(member.raised().variant_name()) && stands(member.declared_in())
                 })
             }
-            (Checker::Certifier, Refusal::Certifier { verdict, .. }) => {
-                named(verdict.error.variant_name()) && stands(verdict.name.as_ref())
+            (Checker::Certifier, Refusal::Certifier { refusal, .. }) => {
+                named(refusal.error.variant_name()) && stands(refusal.name.as_ref())
             }
             _ => false,
         }
@@ -83,9 +83,11 @@ fn nearest(answer: &Answer, by: Checker) -> String {
                 .find(|refusal| refusal.by() == by)
                 .or(refusals.first())
             {
-                Some(refusal @ Refusal::Certifier { verdict, .. }) => {
-                    (refusal.named(), words(verdict))
-                }
+                Some(
+                    refusal @ Refusal::Certifier {
+                        refusal: certified, ..
+                    },
+                ) => (refusal.named(), words(certified)),
                 Some(refusal) => (refusal.named(), refusal.to_string()),
                 None => return "admitted".to_string(),
             }

@@ -90,16 +90,16 @@ impl Walked for Program {
 }
 
 /// The whole-module walk over a fixture: the modules built here are adversarial by design, some carrying what only elaboration leaves, and the certifier's own refusals are the thing under test.
-pub fn fixture_verdicts(
+pub fn fixture_refusals(
     fixture: &impl Walked,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
-) -> Vec<Verdict> {
-    fixture_certified(fixture, budget, globals, syntax).into_verdicts()
+) -> Vec<Refusal> {
+    fixture_certified(fixture, budget, globals, syntax).into_refusals()
 }
 
-/// [`fixture_verdicts`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
+/// [`fixture_refusals`], with the record the walk leaves — for a fixture that mounts what one walk concluded beneath another.
 pub fn fixture_certified(
     fixture: &impl Walked,
     budget: u64,
@@ -214,13 +214,13 @@ pub fn text_certified_over(text: &str, globals: &Globals) -> Rechecked<Definitio
 }
 
 /// The verdicts of [`text_certified`].
-pub fn text_verdicts(text: &str) -> Vec<Verdict> {
-    text_certified(text).into_verdicts()
+pub fn text_refusals(text: &str) -> Vec<Refusal> {
+    text_certified(text).into_refusals()
 }
 
 /// The verdicts of [`text_certified_over`].
-pub fn text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
-    text_certified_over(text, globals).into_verdicts()
+pub fn text_refusals_over(text: &str, globals: &Globals) -> Vec<Refusal> {
+    text_certified_over(text, globals).into_refusals()
 }
 
 /// [`text_certified`] with each judgment restored to `budget`.
@@ -231,7 +231,7 @@ pub fn text_certified_within(text: &str, budget: u64) -> Rechecked<Definitions> 
 }
 
 /// Whether `verdicts` refuse the declaration named `name` at the root, or the closing term where it is `None`, by an error `refusal` admits.
-pub fn refuses(verdicts: &[Verdict], name: Option<&str>, refusal: impl Fn(&Error) -> bool) -> bool {
+pub fn refuses(verdicts: &[Refusal], name: Option<&str>, refusal: impl Fn(&Error) -> bool) -> bool {
     verdicts
         .iter()
         .any(|verdict| verdict.name == name.map(global) && refusal(&verdict.error))
@@ -254,25 +254,25 @@ pub fn core_text_module(text: &str) -> Definitions {
 }
 
 /// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
-pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
+pub fn core_text_refusals_over(text: &str, globals: &Globals) -> Vec<Refusal> {
     Put {
         globals: Some(globals),
         ..put()
     }
     .core_text(text)
     .unwrap_or_else(|unread| panic!("{unread:?}"))
-    .into_verdicts()
+    .into_refusals()
 }
 
 /// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
-pub fn core_text_verdicts(text: &str) -> Vec<Verdict> {
-    core_text_verdicts_over(text, &Globals::default())
+pub fn core_text_refusals(text: &str) -> Vec<Refusal> {
+    core_text_refusals_over(text, &Globals::default())
 }
 
 /// `module` walked with nothing in scope and no baseline: the walk that files a baseline's record.
 pub fn walked(definitions: &Definitions) -> Rechecked<Definitions> {
     let rechecked = fixture_certified(definitions, BUDGET, &Globals::default(), SYNTAX);
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
 
     rechecked
 }
@@ -289,13 +289,13 @@ pub trait Answered {
 impl Answered for Rechecked<Definitions> {
     fn certification(&self) -> &Certification {
         self.accepted()
-            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.verdicts()))
+            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.refusals()))
             .certification()
     }
 
     fn definitions(&self) -> &Definitions {
         self.accepted()
-            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.verdicts()))
+            .unwrap_or_else(|| panic!("the walk refused the module: {:?}", self.refusals()))
             .as_definitions()
     }
 }

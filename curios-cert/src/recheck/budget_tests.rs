@@ -65,7 +65,7 @@ fn spent() -> Global {
 /// Mutation-checked against the restore: with the analysis run on what the judgment before it left, `Good` is refused for the budget.
 #[test]
 fn positivity_is_judged_on_its_own_budget() {
-    let verdicts = text_certified_within(SPENT_BESIDE_AN_ALIASED_PAYLOAD, 100_000).into_verdicts();
+    let verdicts = text_certified_within(SPENT_BESIDE_AN_ALIASED_PAYLOAD, 100_000).into_refusals();
 
     assert!(
         verdicts.iter().any(|verdict| verdict.name == Some(spent())
@@ -105,7 +105,7 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 
     let cheap = certified(1, BETWEEN);
     assert_eq!(
-        cheap.verdicts(),
+        cheap.refusals(),
         Vec::new(),
         "the control stopped holding: the short budget must type the module"
     );
@@ -113,18 +113,18 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 
     let cut = certified(COSTLY, BETWEEN);
     assert!(
-        cut.verdicts().len() == 1
-            && cut.verdicts()[0].name == Some(held())
+        cut.refusals().len() == 1
+            && cut.refusals()[0].name == Some(held())
             && matches!(
-                cut.verdicts()[0].error,
+                cut.refusals()[0].error,
                 Error::Reduce(ReduceError::Exhausted { .. })
             ),
         "the walk must run out, and nothing else: {:?}",
-        cut.verdicts(),
+        cut.refusals(),
     );
 
     let whole = certified(COSTLY, 1_000_000);
-    assert_eq!(whole.verdicts(), Vec::new());
+    assert_eq!(whole.refusals(), Vec::new());
     assert_eq!(whole.certification().variances(&held()), irrelevant);
 }
 
@@ -135,7 +135,7 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 fn no_budget_accepts_a_proof_typed_group_that_does_not_descend() {
     let mut by_the_rule = 0;
     for budget in [1, 2, 10, 100, 1_000, 10_000, 1_000_000] {
-        let verdicts = text_certified_within(PROOF_TYPED_NULLARY_GROUP, budget).into_verdicts();
+        let verdicts = text_certified_within(PROOF_TYPED_NULLARY_GROUP, budget).into_refusals();
         assert!(
             !verdicts.is_empty(),
             "at a budget of {budget} the walk found nothing to refuse: {verdicts:?}",

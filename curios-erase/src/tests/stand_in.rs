@@ -53,9 +53,9 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
-        rechecked.verdicts().is_empty(),
+        rechecked.refusals().is_empty(),
         "{:?}",
-        rechecked.verdicts()
+        rechecked.refusals()
     );
     certifier.read(|reader| {
         assert_eq!(reader.head(&reference("lemma")), Ok(reference("lemma")));

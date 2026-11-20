@@ -54,7 +54,7 @@ let /forged: #{node = InductType} /False() =
 /// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::certifier::infer::eliminate::large_elimination_tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
-    let verdicts = text_verdicts(TYPE_CARRYING_PROPOSITION);
+    let verdicts = text_refusals(TYPE_CARRYING_PROPOSITION);
 
     assert!(
         refuses(&verdicts, Some("unbox"), |error| matches!(
@@ -78,7 +78,7 @@ let /bad: #{node = InductType} /Held() =
 "#;
 
 /// What the walk says of [`A_PROOF_CARRYING`] at `carried`, read where a row's form is made: against the registry these suites judge under, with no unit in scope.
-fn carried_verdicts(carried: &str) -> Vec<Verdict> {
+fn carried_refusals(carried: &str) -> Vec<Refusal> {
     let scope = FormScope::over(SYNTAX, []);
     let put = Put {
         scope: Some(&scope),
@@ -88,11 +88,11 @@ fn carried_verdicts(carried: &str) -> Vec<Verdict> {
         .read(&fill!(A_PROOF_CARRYING, carried))
         .unwrap_or_else(|unread| panic!("{unread:?}"));
 
-    put.module(&definitions, entry.as_ref()).into_verdicts()
+    put.module(&definitions, entry.as_ref()).into_refusals()
 }
 
 /// Whether `bad` was refused as a proof not known to terminate that reaches no definition.
-fn bad_refused_with_no_definition_to_blame(verdicts: &[Verdict]) -> bool {
+fn bad_refused_with_no_definition_to_blame(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("bad"), |error| {
         matches!(
             error,
@@ -113,7 +113,7 @@ fn bad_refused_with_no_definition_to_blame(verdicts: &[Verdict]) -> bool {
 /// The control is the same module with `Io/pure(())` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts = carried_verdicts("#{node = Foreign} /exit(@{}, #Byte(0))");
+    let verdicts = carried_refusals("#{node = Foreign} /exit(@{}, #Byte(0))");
 
     assert!(
         bad_refused_with_no_definition_to_blame(&verdicts),
@@ -126,7 +126,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
 /// The walk types the group with the binders around it opened, and notes the verdict against every position and definition it was typed within — the only place the two can be joined, since the term holding the group spells it closed. Mutation-checked: a group closing without that note leaves the proof accepted.
 #[test]
 fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts = carried_verdicts("#{node = Rec} (let wait: #IoType({}) = wait; wait)");
+    let verdicts = carried_refusals("#{node = Rec} (let wait: #IoType({}) = wait; wait)");
 
     assert!(
         bad_refused_with_no_definition_to_blame(&verdicts),
@@ -138,7 +138,7 @@ fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(
-        carried_verdicts("#IoPure({}, ())"),
+        carried_refusals("#IoPure({}, ())"),
         Vec::new(),
         "an ordinary proof at a unit-carrying proposition was refused",
     );
@@ -197,7 +197,7 @@ let /boom: #{node = InductType} /False() =
 /// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the goal lied about: a `Nat` at `Type 0` checked against the `Prop` the goal claims.
 #[test]
 fn a_proposition_may_not_carry_a_computed_relevant_field() {
-    let verdicts = text_verdicts(A_COMPUTED_RELEVANT_FIELD);
+    let verdicts = text_refusals(A_COMPUTED_RELEVANT_FIELD);
 
     assert!(
         refuses(&verdicts, Some("Wrap"), |error| matches!(
@@ -228,7 +228,7 @@ let /wrapped: #{node = StructType} /Wrap(true) =
 /// The control: the same computed field type with `Prop`-sorted arms still declares, so the guard above refuses a goal that lies rather than every field a declaration has to reduce to read.
 #[test]
 fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
-    assert_eq!(text_verdicts(A_COMPUTED_PROOF), Vec::new());
+    assert_eq!(text_refusals(A_COMPUTED_PROOF), Vec::new());
 }
 
 /// `Vouched : Prop | qed(u : {})`, the group of one member `lemma : Vouched = qed(())` marked no proof, and `corollary : Vouched = lemma`.
@@ -256,11 +256,11 @@ let /lemma: #NatType =
 #[test]
 fn a_groups_member_is_stated_a_proof_where_its_type_is_a_proposition() {
     let stated = text_certified(A_PROOF_GROUP);
-    assert_eq!(stated.verdicts(), Vec::new());
+    assert_eq!(stated.refusals(), Vec::new());
     assert_eq!(member_proofs(stated.definitions(), "lemma"), [true]);
 
     let stated = text_certified(A_GROUP_MARKED_A_PROOF_AT_NAT);
-    assert_eq!(stated.verdicts(), Vec::new());
+    assert_eq!(stated.refusals(), Vec::new());
     assert_eq!(member_proofs(stated.definitions(), "lemma"), [false]);
 }
 
@@ -299,7 +299,7 @@ let /H : (x: /T) -> Prop = (x: /T) => /std/Bool/Holds(x);
 // A definition's value sort is a publication `Sort::of` reads with nothing run, ahead of the irrelevance gate: read as the decorator states it, `/T` would be a proposition, `true` and `false` one at it, and the two calls of `/H` one by their spines, so the closing term would stand at `Holds(false)`, which is `False`. The certifier states the sort `/T`'s value inhabits itself, `Type`, and the two calls stay apart.
 #[test]
 fn a_value_sort_a_module_states_decides_no_comparison() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${FORGED_VALUE_SORT}",
         PROPOSITIONS,
         FORGED_VALUE_SORT
@@ -308,7 +308,7 @@ fn a_value_sort_a_module_states_decides_no_comparison() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -358,7 +358,7 @@ let /H : (
 // Mutation-check: let the certifier's large-elimination guard take a proposition of one constructor into a type whatever its payloads, as though each were pinned, and the module is admitted whole.
 #[test]
 fn a_proposition_holding_a_payload_at_its_callers_sort_is_not_taken_apart_into_a_type() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PAYLOAD_AT_THE_CALLERS_SORT}",
         PROPOSITIONS,
         A_PAYLOAD_AT_THE_CALLERS_SORT
@@ -367,7 +367,7 @@ fn a_proposition_holding_a_payload_at_its_callers_sort_is_not_taken_apart_into_a
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: Some(name),
                 error: Error::LargeElimination(family)
             }] if *name == global("H") && *family == global("Box")
@@ -478,7 +478,7 @@ let /in_a_groups_tail : #NatType =
 // Mutation-checked at `Certifier::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
 #[test]
 fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PROOF_OR_TYPE_AT_EACH_POSITION}",
         PROPOSITIONS,
         A_PROOF_OR_TYPE_AT_EACH_POSITION
@@ -539,7 +539,7 @@ let /held : Type =
 // Mutation-checked at `subsumes`: with two sorts compared by their levels whatever their qualities, `held` types.
 #[test]
 fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PROPOSITION_AT_A_TYPE_PARAMETER}",
         PROPOSITIONS,
         A_PROPOSITION_AT_A_TYPE_PARAMETER
@@ -608,7 +608,7 @@ let /f : (
 // Mutation-checked at `guard_large_elimination` (`curios-cert/src/certifier/infer/eliminate.rs`): with the singleton rung excusing a payload whose type is a proposition, as Lean's subsingleton elimination does, `/f` is admitted.
 #[test]
 fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PROPOSITION_HOLDING_A_PROOF_TAKEN_INTO_DATA}",
         PROPOSITIONS,
         A_PROPOSITION_HOLDING_A_PROOF_TAKEN_INTO_DATA
@@ -710,7 +710,7 @@ fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_mem
         ),
         (A_SIGNATURE_READING_ITS_SIBLING, "d", Erased::Type),
     ] {
-        let verdicts = core_text_verdicts(&fill!(
+        let verdicts = core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${A_FALSE_CONCEPT}\n${module}",
             PROPOSITIONS,
             A_FALSE_CONCEPT,
@@ -749,7 +749,7 @@ let /named : #NatType =
 #[test]
 fn a_signature_naming_a_member_that_does_not_descend_is_a_type_that_does_not_terminate() {
     let named = |parameter: &str| {
-        core_text_verdicts(&fill!(
+        core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${GROUP}",
             PROPOSITIONS,
             GROUP = fill!(A_SIGNATURE_NAMING_A_LOOP, parameter)
@@ -806,7 +806,7 @@ fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
             false => Certifier::new(BUDGET, SYNTAX),
             true => Certifier::uncached(BUDGET, SYNTAX),
         };
-        let verdicts = super::verdicts_from(
+        let verdicts = super::refusals_from(
             &mut certifier,
             &definitions,
             None,
@@ -814,7 +814,7 @@ fn an_erased_half_read_under_one_arm_answers_nothing_under_its_sibling() {
             None,
         )
         .module()
-        .into_verdicts();
+        .into_refusals();
         assert!(
             verdicts.iter().any(|verdict| {
                 verdict.name == Some(global("d"))

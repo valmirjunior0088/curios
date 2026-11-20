@@ -2,7 +2,7 @@
 
 use {
     super::{test_support::*, *},
-    curios_cert::{Error, Verdict, certify_definitions, infer, test_support::*},
+    curios_cert::{Error, Refusal, certify_definitions, infer, test_support::*},
     curios_core::{
         Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Polarity, Quality, Reducer,
         Subterm, Telescope, Term, Variance, instantiate_qualities,
@@ -61,7 +61,7 @@ fn certifier_disagreements() {
         for (index, root) in prelude.iter().enumerate() {
             let globals = certified(&prelude[..index]);
             let (rechecked, _) = certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
-            verdicts.extend(rechecked.into_verdicts());
+            verdicts.extend(rechecked.into_refusals());
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -97,7 +97,7 @@ fn certifier_memo_parity() {
     with_prelude(|prelude| {
         for (index, root) in prelude.iter().enumerate() {
             let globals = certified(&prelude[..index]);
-            let memo_free = recheck_definitions_verdicts_uncached(
+            let memo_free = recheck_definitions_refusals_uncached(
                 root.core(),
                 DEFAULT_BUDGET,
                 &globals,
@@ -108,7 +108,7 @@ fn certifier_memo_parity() {
                 .filter(|verdict| verdict.error.is_exhausted())
                 .map(|verdict| verdict.name)
                 .collect::<Vec<_>>();
-            let judged = |verdicts: Vec<Verdict>| {
+            let judged = |verdicts: Vec<Refusal>| {
                 verdicts
                     .into_iter()
                     .filter(|verdict| !spent.contains(&verdict.name))
@@ -118,7 +118,7 @@ fn certifier_memo_parity() {
                 judged(
                     certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
                         .0
-                        .into_verdicts()
+                        .into_refusals()
                 ),
                 judged(memo_free),
             );
@@ -209,9 +209,9 @@ fn the_certifier_types_a_declared_type_at_each_value_of_a_parameter() {
             let (rechecked, mut certifier) =
                 certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
             assert!(
-                rechecked.verdicts().is_empty(),
+                rechecked.refusals().is_empty(),
                 "{:?}",
-                rechecked.verdicts()
+                rechecked.refusals()
             );
 
             for definition in root.core().items.iter().flat_map(Item::definitions) {

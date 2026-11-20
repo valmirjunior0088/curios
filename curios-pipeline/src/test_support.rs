@@ -7,7 +7,7 @@ use {
         EntryTail, Examined, Obligation, Refused, elaborate_entry, examine_entrypoint, globals,
         lower_entry,
     },
-    curios_cert::{Certifier, Verdict, certify_program},
+    curios_cert::{Certifier, Refusal, certify_program},
     curios_common::SyntaxRegistry,
     curios_core::{Consumption, Program},
     curios_elab::{Context, Established},
@@ -28,11 +28,11 @@ pub fn recheck_measured<T>(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     read: impl FnOnce(&Certifier<'_>) -> T,
-) -> (Vec<Verdict>, T) {
+) -> (Vec<Refusal>, T) {
     let globals = globals(predecessors);
     let (rechecked, certifier) = certify_program(program, budget, &globals, *syntax);
 
-    (rechecked.into_verdicts(), read(&certifier))
+    (rechecked.into_refusals(), read(&certifier))
 }
 
 /// Put `program` to the independent certifier with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built: the compile path's rechecking, in the environment [`globals`] assembles for it, for a suite that puts a program whole.
@@ -41,10 +41,10 @@ pub fn recheck(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
-) -> Vec<Verdict> {
+) -> Vec<Refusal> {
     certify_program(program, budget, &globals(predecessors), *syntax)
         .0
-        .into_verdicts()
+        .into_refusals()
 }
 
 /// A program type-checked and not yet put to the certifier.
@@ -141,7 +141,7 @@ pub fn recheck_with_prelude_measured<T>(
     program: &curios_core::Program,
     budget: u64,
     read: impl FnOnce(&curios_cert::Certifier<'_>) -> T,
-) -> (Vec<curios_cert::Verdict>, T) {
+) -> (Vec<curios_cert::Refusal>, T) {
     with_prelude(|prelude| {
         recheck_measured(program, budget, Predecessors::over(prelude), &SYNTAX, read)
     })
@@ -151,6 +151,6 @@ pub fn recheck_with_prelude_measured<T>(
 pub fn recheck_with_prelude(
     program: &curios_core::Program,
     budget: u64,
-) -> Vec<curios_cert::Verdict> {
+) -> Vec<curios_cert::Refusal> {
     with_prelude(|prelude| recheck(program, budget, Predecessors::over(prelude), &SYNTAX))
 }

@@ -4,7 +4,7 @@ use {
     super::*,
     crate::*,
     curios_abi::ForeignStore,
-    curios_cert::{Error, Verdict},
+    curios_cert::{Error, Refusal},
     curios_common::{Qualifier, RootKind, fill},
     curios_core::{Anchors, Definitions, Entrypoint, Global, Program, Term, Universes},
     curios_pipeline::{Earlier, Read, test_support::*},
@@ -17,7 +17,7 @@ fn named(path: &str) -> Global {
 }
 
 /// What the certifier says of `proof`, Core text closing with a term, put at `/std/Bool/False` over the prelude and every unit `history` built, through the walk a compilation puts a program to.
-fn put(history: &History, proof: &str) -> Vec<Verdict> {
+fn put(history: &History, proof: &str) -> Vec<Refusal> {
     history
         .built(|predecessors| {
             let file = proof.parse::<CoreFile>().expect("the proof parses");
@@ -41,7 +41,7 @@ fn put(history: &History, proof: &str) -> Vec<Verdict> {
 }
 
 /// Whether `verdicts` refuse the closing term as reaching what is not known to terminate.
-fn refused_as_partial(verdicts: &[Verdict]) -> bool {
+fn refused_as_partial(verdicts: &[Refusal]) -> bool {
     verdicts
         .iter()
         .any(|verdict| verdict.name.is_none() && matches!(verdict.error, Error::NotTotal { .. }))
@@ -986,7 +986,7 @@ fn no_fix_of_loop(unit: &str, at: &str) -> String {
 }
 
 /// Whether `verdicts` refuse the closing term for its type alone: a mismatch there, and nothing it reaches read as not known to terminate.
-fn refused_for_its_equation_alone(verdicts: &[Verdict]) -> bool {
+fn refused_for_its_equation_alone(verdicts: &[Refusal]) -> bool {
     verdicts
         .iter()
         .any(|verdict| verdict.name.is_none() && matches!(verdict.error, Error::Mismatch { .. }))

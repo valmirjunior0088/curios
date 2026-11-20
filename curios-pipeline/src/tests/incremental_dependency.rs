@@ -244,7 +244,7 @@ end
 ";
 
 /// `module`, elaborated already, put to the certifier alone with the prelude and then `units` in scope.
-fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
+fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cert::Refusal> {
     with_prelude(|prelude| {
         let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
 
@@ -252,7 +252,7 @@ fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cer
 
         curios_cert::certify_definitions(definitions, DEFAULT_BUDGET, &globals, SYNTAX)
             .0
-            .into_verdicts()
+            .into_refusals()
     })
 }
 

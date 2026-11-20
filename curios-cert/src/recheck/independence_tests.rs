@@ -9,7 +9,7 @@ use {super::test_support::*, crate::*};
 /// The list is asserted whole, so the test says both halves at once: the lie is reported, and nothing that rests on it is — a walk that dropped the lie's verdict would admit this module at an empty proposition.
 #[test]
 fn a_declaration_admitted_on_a_refused_declarations_definition_leaves_the_module_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 induct /Absurd: pub Prop
 end
@@ -43,7 +43,7 @@ let /truth: #{node = InductType} /Absurd() =
 #[test]
 fn a_family_admitted_through_a_refused_declarations_vector_leaves_the_module_refused() {
     // `Shape` carries a type too large for it, and `Knot` wraps itself in a `Shape`.
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 induct /Shape(A: Type): pub Type
 | mk(a: A, t: Type)

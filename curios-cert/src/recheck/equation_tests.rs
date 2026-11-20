@@ -33,7 +33,7 @@ let /w : {
 // No arm's restatement answers a closed comparison, so the dead arm leaves nothing behind it: it is refused and withdrawn as one reduction never takes, and `/w`'s second component, checked after it, finds `Holds(G(3) <= 2)` uninhabited. Remembered for the declaration as the restatement would answer it inside the arm, `G(3) <= 2` would be `true` there, and `/w.1`, which the module closes with and which stands at `False`, would be a proof of it: the closing term is admitted, and `/w`'s refusal is all that stands between the module and `False`. `closed_computation_tests` holds the same of a dispatch's resolved spelling.
 #[test]
 fn an_arms_restatement_naming_no_local_leaves_nothing_the_declaration_reads_after_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_RESTATEMENT_NAMING_NO_LOCAL}",
         PROPOSITIONS,
         A_RESTATEMENT_NAMING_NO_LOCAL
@@ -42,7 +42,7 @@ fn an_arms_restatement_naming_no_local_leaves_nothing_the_declaration_reads_afte
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
+            [Refusal { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
         ),
         "{verdicts:?}"
     );
@@ -114,7 +114,7 @@ const A_GUARD_SETTLED_UNDER_AN_INNER_ARMS_EQUATION: &str = r#"
 // Mutation-checked at `Scope::in_force_innermost_first`: with a settlement withholding the equation it settles alone, and not those inside it, the module is admitted.
 #[test]
 fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GUARD_SETTLED_UNDER_AN_INNER_ARMS_EQUATION}",
         PROPOSITIONS,
         A_GUARD_SETTLED_UNDER_AN_INNER_ARMS_EQUATION
@@ -123,7 +123,7 @@ fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm()
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -175,7 +175,7 @@ end
 // Neither the arm's equation nor its restatement outlives the arm, nor what reduction remembered of a term under them: `after` is refused. Kept past the arm, either would type `after`, and at `n := 0`, `w := (_) => b`, that is `Holds(false)`, so the closing term would be admitted at `False`.
 #[test]
 fn an_arms_own_equation_restated_at_its_index_solution_answers_nothing_after_the_arm() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_ARMS_OWN_EQUATION_RESTATED}",
         PROPOSITIONS,
         AN_ARMS_OWN_EQUATION_RESTATED
@@ -184,7 +184,7 @@ fn an_arms_own_equation_restated_at_its_index_solution_answers_nothing_after_the
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -261,7 +261,7 @@ const A_READERS_ANSWER_UNDER_A_SPLIT: &str = r#"
 // Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted, the recorded guard settling inside the split.
 #[test]
 fn a_readers_answer_through_a_restated_guard_answers_nothing_after_the_split() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_READERS_ANSWER_UNDER_A_SPLIT}",
         PROPOSITIONS,
         A_READERS_ANSWER_UNDER_A_SPLIT
@@ -270,7 +270,7 @@ fn a_readers_answer_through_a_restated_guard_answers_nothing_after_the_split() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -360,7 +360,7 @@ const A_CONVERSIONS_ANSWER_UNDER_A_SPLIT: &str = r#"
 // Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted, the recorded guard settling inside the split.
 #[test]
 fn a_conversions_answer_through_a_restated_guard_answers_nothing_after_the_split() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CONVERSIONS_ANSWER_UNDER_A_SPLIT}",
         PROPOSITIONS,
         A_CONVERSIONS_ANSWER_UNDER_A_SPLIT
@@ -369,7 +369,7 @@ fn a_conversions_answer_through_a_restated_guard_answers_nothing_after_the_split
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -397,7 +397,7 @@ let /w : (g: (b: #BoolType) -> #BoolType, e: #BoolType, h: /std/Bool/Holds(g(e))
 // A refused arm is withdrawn where its scrutinee computes to another case, and `g(e)` is computed with the `true` arm's bracket and its sibling's closed, so it stands stuck and the `true` arm's refusal stands. Read where the `false` arm's equation still answered it, or off a reduct remembered under that equation, `g(e)` would be `false`, the `true` arm would be withdrawn untyped, and the closing term, `/w` at the identity, would be admitted at `False`: `/w`'s refusal is all that stands between the module and `False`. `curios`'s `tests::rules::arm` holds the elaborator to the same program.
 #[test]
 fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_REFUSED_ARM_BESIDE_ITS_SIBLINGS_EQUATION}",
         PROPOSITIONS,
         A_REFUSED_ARM_BESIDE_ITS_SIBLINGS_EQUATION
@@ -406,7 +406,7 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
+            [Refusal { name: Some(w), error: Error::Mismatch { .. } }] if *w == global("w")
         ),
         "{verdicts:?}"
     );
@@ -449,14 +449,14 @@ let /f : (x: #NatType, h: /std/Bool/Holds(#NatLt(/G(x), 5))) -> #BoolType =
 // An equation an arm restated stands aside until the arm closes, past every bracket the arm opens inside: `match h` names only a proof, so its typing asks the equations in force for their reduced spellings, and the recorded `G(x) < 5`, revived there by the `let`'s bracket, was settled by name while `x` is bound by value, which aborted the walk. Standing aside, it is asked nothing, and `/f` is admitted.
 #[test]
 fn a_restatement_stands_aside_past_the_brackets_its_arm_closes() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_RESTATEMENT_PAST_A_BRACKET_OF_ITS_ARM}",
         PROPOSITIONS,
         A_RESTATEMENT_PAST_A_BRACKET_OF_ITS_ARM
     ));
 
     assert!(
-        matches!(&verdicts[..], [Verdict { name: None, .. }]),
+        matches!(&verdicts[..], [Refusal { name: None, .. }]),
         "{verdicts:?}"
     );
 }
@@ -482,7 +482,7 @@ let /f : (x: #FltType, y: #FltType) -> /M(#FltLt(x, y), x, y) =
 // Against a NaN both directions of an ordered comparison are false, so a `Flt` comparison has no dual the refinement probe may ask its guard under, and the false arm's `Holds(y <= x)` is left standing: `qed` is refused there, the one refusal between the module and `False`. `curios`'s `tests::rules::arm` puts the program to the elaborator under this name, over `Nat`, where the mirror is the guard's negation, as its control.
 #[test]
 fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR}",
         PROPOSITIONS,
         A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR
@@ -491,7 +491,7 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(f), error: Error::Mismatch { .. } }] if *f == global("f")
+            [Refusal { name: Some(f), error: Error::Mismatch { .. } }] if *f == global("f")
         ),
         "{verdicts:?}"
     );
@@ -535,7 +535,7 @@ struct /C: pub Type { code: #NatType }
 // The guard's spelling is settled with the arm's equation withheld, which leaves it the stuck match whatever the arm knows: `one` holds inside the arm, and the `qed` after the split is refused at `Holds(k(0))`, as the module's closing term.
 #[test]
 fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GUARD_SETTLED_UNDER_A_CHARACTER_ARM}",
         PROPOSITIONS,
         A_GUARD_SETTLED_UNDER_A_CHARACTER_ARM
@@ -544,7 +544,7 @@ fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -606,7 +606,7 @@ let /G: (u: (e: #NatType) -> #NatType, v: (e: #NatType) -> #NatType, i: #NatType
 // A definition's body is closed, so what it reads of the split's locals is what the guard hands it: the guard names `h`, `p` and `q`, whose types name `c`, the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, where the guard is `k(1)`, `true`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`. A member of a group standing in a term reads what it captures with no guard naming it, which the board's ticket filed at af2b2d825 holds.
 #[test]
 fn a_guard_through_a_definition_answers_nothing_after_the_split() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GUARD_THROUGH_A_DEFINITION_UNDER_A_SPLIT}",
         PROPOSITIONS,
         A_GUARD_THROUGH_A_DEFINITION_UNDER_A_SPLIT
@@ -615,7 +615,7 @@ fn a_guard_through_a_definition_answers_nothing_after_the_split() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -695,7 +695,7 @@ end
 // A variable an index inversion solved is bound to its solution and the guard is recorded by value, so it names `h`, `p` and `q`, whose types name `c`: the split restates it, its spelling settled inside goes with the restatement, and the `qed` after the split is refused at `Holds(k(0))`. Kept past the split, at `c := false`, `k := (n) => n == 1`, the goal is `Holds(0 == 1)`, so the closing term would be admitted at `False`.
 #[test]
 fn a_guard_over_an_inversions_solutions_answers_nothing_after_the_split() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GUARD_OVER_INVERSIONS_UNDER_A_SPLIT}",
         PROPOSITIONS,
         A_GUARD_OVER_INVERSIONS_UNDER_A_SPLIT
@@ -704,7 +704,7 @@ fn a_guard_over_an_inversions_solutions_answers_nothing_after_the_split() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -739,14 +739,14 @@ let /f : (i: #IntType) -> /M(#IntEql(i, -1), #IntEql(i, +2)) =
 
 #[test]
 fn an_integers_dispatch_types_each_arm_at_its_key_and_its_catch_all_past_them() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${AN_INTEGERS_DISPATCH_UNDER_ITS_KEYS}",
         PROPOSITIONS,
         AN_INTEGERS_DISPATCH_UNDER_ITS_KEYS
     ));
 
     assert!(
-        matches!(&verdicts[..], [Verdict { name: None, .. }]),
+        matches!(&verdicts[..], [Refusal { name: None, .. }]),
         "{verdicts:?}"
     );
 }

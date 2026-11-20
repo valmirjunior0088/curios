@@ -12,7 +12,7 @@ use {
 };
 
 /// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the certifier, not the wrapper, is what must catch the mutation.
-fn recheck(program: &Program, budget: u64) -> Vec<curios_cert::Verdict> {
+fn recheck(program: &Program, budget: u64) -> Vec<curios_cert::Refusal> {
     recheck_with_prelude(program, budget)
 }
 /// Programs whose items sit at deliberately varied types — intrinsic, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.

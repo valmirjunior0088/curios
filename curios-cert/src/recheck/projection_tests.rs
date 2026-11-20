@@ -23,7 +23,7 @@ bad(#{node = Variant} /Bad/c(/Fn { (A: Prop) => (x: A) => x })))
 /// A field applied is read no further, a record being no family whose function-typed fields sizing keeps below it, so the recursion does not descend even with the structure judged as it is declared; and the structure is sized above the propositions its field ranges over, so `/Fn` is refused where it is declared and `/Bad`, holding it, is none of them.
 #[test]
 fn a_field_applied_at_its_holders_family_is_not_below_the_holder() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_FIELD_OVER_EVERY_PROPOSITION}",
         PROPOSITIONS,
         A_FIELD_OVER_EVERY_PROPOSITION

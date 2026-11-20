@@ -7,7 +7,7 @@ Measured on 2026-11-20:
 - The curios-papers project's cabinet holds 148M in the layout `d1b828364` and `e35c93f80` moved away from, which no compiler reads. Of its nine verdicts, filed on 11-13, 11-15 and 11-17 by three compiler builds, six were dead before the move.
 - The compilers of `dc1f25fa4` and `19d53645f`, which differ in the CPS optimizer alone, file `/std`'s test unit as one byte-identical pack of 88,879,924 bytes beside index files that differ, and the cabinet holds the pack twice, at two addresses.
 
-The words are uneven besides. *Slot* names this place and, in the back end, a row's field position (102 files there, 37 in the cabinet's crates). *Object* names a content-addressed piece of a stored unit where a compiler's *object* is the compiled unit itself. *Verdict* names a checker's judgment, a refusal (`curios_cert::Verdict`), a test's outcome, and the cabinet's crate, handle, family and file. `curios-verdict`'s `//!` still calls a unit's place a one-file slot, which it has not been since `e35c93f80`.
+The words are uneven besides. *Slot* names this place and, in the back end, a row's field position (102 files there, 37 in the cabinet's crates). *Object* names a content-addressed piece of a stored unit where a compiler's *object* is the compiled unit itself. *Verdict* names a checker's judgment, a test's outcome, and the cabinet's crate, handle, family and file. `curios-verdict`'s `//!` still calls a unit's place a one-file slot, which it has not been since `e35c93f80`.
 
 The next step is stage 1.
 

@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*,
-    curios_cert::Verdict,
+    curios_cert::Refusal,
     curios_common::{Qualifier, Variants},
     curios_core::{Global, Polarity, Term, WitnessKey},
     curios_elab::DEFAULT_BUDGET,
@@ -15,7 +15,7 @@ use {
 /// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the certifier's where the elaborator built it a module.
 pub struct Refusals {
     elaborator: Vec<curios_elab::Error>,
-    certifier: Vec<Verdict>,
+    certifier: Vec<Refusal>,
     /// Whether the certifier judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
     judged: bool,
 }

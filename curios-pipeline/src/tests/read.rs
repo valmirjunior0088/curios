@@ -6,7 +6,7 @@ use {
         After, CompileError, Earlier, Read, Unmade, Unread, compile_read, read_core_text,
         test_support::*,
     },
-    curios_cert::{Error, Verdict},
+    curios_cert::Error,
     curios_common::{About, Mount, Qualifier, RootKind, Source, Style},
     curios_core::{Anchors, Entrypoint, Global, Intrinsic, Program, Term, Universes},
     curios_elab::DEFAULT_BUDGET,
@@ -193,7 +193,7 @@ const CROSSED: &str =
     "((h: /lib/H(false)) => h)(((k: /lib/H(true)) => k)(#{node = Variant} /sys/Bool/True/qed()))\n";
 
 /// What the certifier says of the term `text` closes with, read as Core text over the prelude and `units` and put at `False` as a module built by hand is.
-fn closing_over(units: &[&Unit], text: &str) -> Vec<Verdict> {
+fn closing_over(units: &[&Unit], text: &str) -> Vec<curios_cert::Refusal> {
     with_prelude(|prelude| {
         let scope = prelude
             .iter()
@@ -231,7 +231,7 @@ fn a_value_sort_a_unit_arrives_with_is_not_what_a_unit_after_it_reads() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [curios_cert::Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -258,7 +258,7 @@ fn a_value_sort_an_item_its_baseline_holds_arrives_with_is_the_baselines() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [curios_cert::Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]

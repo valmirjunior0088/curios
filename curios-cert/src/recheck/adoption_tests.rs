@@ -22,7 +22,7 @@ fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_chan
 
     assert_eq!(
         rechecked
-            .verdicts()
+            .refusals()
             .iter()
             .map(|verdict| verdict.name)
             .collect::<Vec<_>>(),
@@ -46,7 +46,7 @@ fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
         &certification,
     );
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification(),
         walked(&reading_definitions("#NatType", "7")).certification()
@@ -71,7 +71,7 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
     );
     let (places, now) = (Places::of(&baseline), Places::of(&edited));
 
-    let rechecked = super::verdicts_from(
+    let rechecked = super::refusals_from(
         &mut Certifier::new(BUDGET, SYNTAX),
         &edited,
         None,
@@ -90,11 +90,11 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
 
     assert!(
         matches!(
-            rechecked.verdicts(),
-            [Verdict { name: Some(name), error: Error::Redeclared(_) }] if *name == global("shadowed")
+            rechecked.refusals(),
+            [Refusal { name: Some(name), error: Error::Redeclared(_) }] if *name == global("shadowed")
         ),
         "a name the environment declares was written over a baseline: {:?}",
-        rechecked.verdicts()
+        rechecked.refusals()
     );
 }
 
@@ -131,14 +131,14 @@ fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_i
 
     assert!(
         whole
-            .verdicts()
+            .refusals()
             .iter()
             .any(|verdict| verdict.name == Some(global("user"))
                 && matches!(verdict.error, Error::UniverseInstance { .. })),
         "the control stopped refusing: `user`'s instance does not discharge `u + 2 <= v`: {:?}",
-        whole.verdicts()
+        whole.refusals()
     );
-    assert_eq!(over.verdicts(), whole.verdicts());
+    assert_eq!(over.refusals(), whole.refusals());
 }
 
 /// A declaration the walk does not visit is read once the walk has passed its place: `alias` respelled to name `five`, stored after it, finds it unbound, as a walk over every declaration does, though nothing `five` read moved and the walk adopts `five` without visiting it.
@@ -159,13 +159,13 @@ fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
 
     assert!(
         whole
-            .verdicts()
+            .refusals()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Undeclared(_))),
         "a walk over every declaration finds `five` undeclared at `alias`: {:?}",
-        whole.verdicts()
+        whole.refusals()
     );
-    assert_eq!(over.verdicts(), whole.verdicts());
+    assert_eq!(over.refusals(), whole.refusals());
 }
 
 /// A module that is the baseline's is adopted whole: every entry comes back as the baseline's record holds it, the mark with it.
@@ -176,7 +176,7 @@ fn a_declaration_whose_terms_and_reads_stand_takes_the_baselines_verdict() {
 
     let rechecked = walked_over(&baseline, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(rechecked.certification(), &certification);
 }
 
@@ -216,7 +216,7 @@ fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_s
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     for name in ["base", "middle", "top"] {
         assert_eq!(
             rechecked.certification().totality(&global(name)),
@@ -243,7 +243,7 @@ fn an_adopted_verdict_is_the_baselines_partiality_included() {
 
     let rechecked = walked_over(&baseline, &baseline, &certification);
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     assert_eq!(
         rechecked.certification().totality(&global("five")),
         Some(Totality::Partial),
@@ -363,7 +363,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
 
     let forged = certified(Totality::Total);
     let scope = AlreadyJudged::with(&mounted, &forged);
-    let admitted = text_verdicts_over(reader, &scope.globals());
+    let admitted = text_refusals_over(reader, &scope.globals());
     assert_eq!(
         admitted,
         Vec::new(),
@@ -373,7 +373,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
     // The control: the same record, honest, refuses — so the admission rode on the lie.
     let honest = certified(Totality::Partial);
     let honest_scope = AlreadyJudged::with(&mounted, &honest);
-    let refused = text_verdicts_over(reader, &honest_scope.globals());
+    let refused = text_refusals_over(reader, &honest_scope.globals());
     assert!(
         refused
             .iter()
@@ -416,7 +416,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
     );
     let record = walked(&honest).certification().clone();
     let scope = AlreadyJudged::with(&honest, &record);
-    let verdicts = |text: &str| text_verdicts_over(text, &scope.globals());
+    let verdicts = |text: &str| text_refusals_over(text, &scope.globals());
 
     // The arm's body is typed, so what the goal is decides: a body the refined goal does not admit is refused.
     let bogus = verdicts(&refining("/L", "Type", "0"));
@@ -432,18 +432,18 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
     // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `goal_at` reads the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
     for assumed in ["Type", "#{level = 1} Type", "#{level = 5} Type"] {
         assert_eq!(
-            text_verdicts(&refining("#{level = 4} Type", assumed, "#{level = 3} Type")),
+            text_refusals(&refining("#{level = 4} Type", assumed, "#{level = 3} Type")),
             Vec::new(),
             "the goal is the target with the variable assumed at {assumed}",
         );
         assert!(
-            !text_verdicts(&refining("#{level = 4} Type", assumed, "0")).is_empty(),
+            !text_refusals(&refining("#{level = 4} Type", assumed, "0")).is_empty(),
             "and a body the target does not admit is refused at {assumed}",
         );
     }
 
     // The refusal that stops the route: the arm is reachable only through a value of the family at the target, and the target does not inhabit the sort the variable is assumed at, which `subsumes` decides off the declared type and not off any publication.
-    let applied = text_verdicts(&fill!(
+    let applied = text_refusals(&fill!(
         "${refined}${APPLYING}",
         refined = refining("#{level = 4} Type", "Type", "#{level = 3} Type"),
         APPLYING
@@ -481,20 +481,20 @@ fn a_carried_variance_the_walk_denies_is_refused_over_its_baseline_as_over_none(
     let whole = walked_whole(&claimed);
     assert!(
         whole
-            .verdicts()
+            .refusals()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
         "a whole walk refuses the carried irrelevance: {:?}",
-        whole.verdicts(),
+        whole.refusals(),
     );
 
     let over = walked_over(&claimed, &truthful, &certification);
     assert!(
-        over.verdicts()
+        over.refusals()
             .iter()
             .any(|verdict| matches!(verdict.error, Error::VarianceDenied { .. })),
         "and the walk over the baseline adopts the carried irrelevance: {:?}",
-        over.verdicts(),
+        over.refusals(),
     );
 }
 
@@ -515,13 +515,13 @@ fn a_groups_universe_context_dropped_is_judged_again_as_a_whole_compile_judges_i
 
     let whole = walked_whole(&edited);
     assert!(
-        !whole.verdicts().is_empty(),
+        !whole.refusals().is_empty(),
         "a whole walk refuses the group whose declaration assumes nothing: {:?}",
-        whole.verdicts(),
+        whole.refusals(),
     );
 
     let over = walked_over(&edited, &baseline, &certification);
-    assert_eq!(over.verdicts(), whole.verdicts());
+    assert_eq!(over.refusals(), whole.refusals());
 }
 
 /// `carrier.{u, v, w, x} : <the record a one-member group computes> = <the four products>`, as a one-member top-level group whose context states `${constraints}`: Hurkens' paradox's `bottom`, `small_universe`, `over` and `pi`, as `xboard`'s formation ticket for a group read under its reader's constraints spells them.
@@ -658,13 +658,13 @@ fn hurkens_paradox_through_a_group_offered_without_its_context_is_refused() {
 
     let over = walked_over(&offered, &baseline, &certification);
     assert!(
-        !over.verdicts().is_empty(),
+        !over.refusals().is_empty(),
         "the walk adopted a group its context no longer licenses",
     );
-    assert_eq!(over.verdicts(), walked_whole(&offered).verdicts());
+    assert_eq!(over.refusals(), walked_whole(&offered).refusals());
 
     let judged = AlreadyJudged::with(&baseline, &certification);
-    let refused = text_verdicts_over(PARADOX, &judged.globals());
+    let refused = text_refusals_over(PARADOX, &judged.globals());
     assert!(
         refused
             .iter()
@@ -695,7 +695,7 @@ fn an_item_made_again_is_handed_back_with_the_baselines_statements_under_its_own
 
     let rechecked = walked_over(&edited, &baseline, stated.certification());
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     let handed = rechecked
         .definitions()
         .items
@@ -770,7 +770,7 @@ fn items_made_again_in_each_others_places_take_the_statements_of_their_own_names
 
     let rechecked = walked_over(&Definitions { items }, &baseline, stated.certification());
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     let statements = |name: &str| {
         let body = rechecked
             .definitions()

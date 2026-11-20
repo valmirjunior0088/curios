@@ -8,7 +8,7 @@ use {
         erasure_reported, globals_after, judged, recheck_over,
     },
     curios_abi::ForeignStore,
-    curios_cert::{Rechecked, Verdict, certify_definitions},
+    curios_cert::{Rechecked, Refusal, certify_definitions},
     curios_common::{Mount, Qualifier, Report, RootKind, Said, Source, Span, SyntaxRegistry},
     curios_core::{
         Anchor, Anchored, Anchors, Definitions, Entrypoint, Global, Intrinsic, Places, Program,
@@ -210,7 +210,7 @@ pub fn enter_core_text(
 /// Why a unit read from Core text was not made: the certifier refused it, what elaboration would have solved among what it refuses, or it could not be erased. Each held by pointer, a refusal being the large case of what a compile answers.
 #[derive(Debug)]
 pub enum Unmade {
-    Certifier(Box<Verdict>),
+    Certifier(Box<Refusal>),
     Erased(Box<curios_erase::Error>),
 }
 

@@ -32,7 +32,7 @@ end
 #[test]
 fn a_registry_index_target_is_checked_rather_than_believed() {
     let target = "#{id = 7, origin = Hole} ?";
-    let verdicts = text_verdicts(&fill!(INDEXED, target));
+    let verdicts = text_refusals(&fill!(INDEXED, target));
 
     assert!(
         refuses(&verdicts, Some("Indexed"), |error| matches!(
@@ -49,7 +49,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
     let target = "0";
 
     assert_eq!(
-        text_verdicts(&fill!(INDEXED, target)),
+        text_refusals(&fill!(INDEXED, target)),
         Vec::new(),
         "the boundary pass refused a registry entry that carries nothing elaboration-only",
     );
@@ -69,7 +69,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 #[test]
 fn a_partial_proof_in_a_registry_index_target_is_refused() {
     let target = "#{node = Rec}\n    (let p: #{node = InductType} /Held() = p;\n    p)";
-    let verdicts = text_verdicts(&fill!(INDEXED_BY_PROOF, target));
+    let verdicts = text_refusals(&fill!(INDEXED_BY_PROOF, target));
 
     assert!(
         refuses(&verdicts, Some("Indexed"), |error| {
@@ -87,7 +87,7 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
     let target = "#{node = Variant} /Held/qed()";
 
     assert_eq!(
-        text_verdicts(&fill!(INDEXED_BY_PROOF, target)),
+        text_refusals(&fill!(INDEXED_BY_PROOF, target)),
         Vec::new(),
         "a constructor aimed at a genuine proof was refused",
     );
@@ -97,7 +97,7 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
 #[test]
 fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     // The sort is the *second* parameter, so an occurrence's second level decides it: `Foo.{u, u}` claimed at `Type v`, whose sort is `Type u`, and nothing may conflate the two.
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {parameter_count = 2}}
 induct /Foo: pub #{level = v} Type
@@ -124,7 +124,7 @@ let /held: #{level = v} Type =
 #[test]
 fn an_entrys_obligation_is_reported_under_the_item_that_declares_it() {
     for (followed, after) in [(true, "\nlet /after: #NatType = 0;"), (false, "")] {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             r#"
 let /sink: (n: #NatType) -> #NatType =
     #{node = Rec}
@@ -154,7 +154,7 @@ ${after}"#,
 /// A family's index types are type positions its entry's typing records, checked under the item that declares the family: `Indexed`'s one index is typed `((g : (Nat) -> Nat) => Nat)(reaches)`, which names the partial `reaches` as written, and is refused under `Indexed`. A former is made of its entry and checked as no definition, so the entry's typing is the one place an index type is read.
 #[test]
 fn a_partial_index_type_is_refused_under_its_family() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 let /sink: (n: #NatType) -> #NatType =
     #{node = Rec}

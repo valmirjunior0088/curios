@@ -3,14 +3,14 @@
 use {super::test_support::*, crate::*, curios_common::fill, curios_core::Polarity};
 
 /// Whether `verdicts` refuse the item `symbol` by an error `refused` holds of.
-fn refuses(verdicts: &[Verdict], symbol: &str, refused: impl Fn(&Error) -> bool) -> bool {
+fn refuses(verdicts: &[Refusal], symbol: &str, refused: impl Fn(&Error) -> bool) -> bool {
     verdicts
         .iter()
         .any(|verdict| verdict.name == Some(global(symbol)) && refused(&verdict.error))
 }
 
 /// Whether `verdicts` refuse nothing under `symbol`.
-fn stands(verdicts: &[Verdict], symbol: &str) -> bool {
+fn stands(verdicts: &[Refusal], symbol: &str) -> bool {
     !verdicts
         .iter()
         .any(|verdict| verdict.name == Some(global(symbol)))
@@ -31,7 +31,7 @@ let /raised : #{level = 1} Type = Type;
 /// Each sort is refused at the level of its own type, and `Type 0` stands at `Type 1`.
 #[test]
 fn no_sort_inhabits_itself_at_any_level() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${SORTS_AT_THEIR_OWN_LEVEL}",
         PROPOSITIONS,
         SORTS_AT_THEIR_OWN_LEVEL
@@ -83,7 +83,7 @@ let /lifted : #NatType = 0;
 /// A context assumed is a hypothesis set `entails` answers every level question under, so one with no model is refused before anything is judged under it, wherever its loop runs; each loop less its closing constraint stands.
 #[test]
 fn a_universe_context_with_no_model_through_several_parameters_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${CONTEXTS_WITH_NO_MODEL}",
         PROPOSITIONS,
         CONTEXTS_WITH_NO_MODEL
@@ -149,7 +149,7 @@ let /fits : #{level = 1} Type = #{universes = {levels = [0, 1]}} /T;
 /// An instance chosen to collapse two levels is refused wherever it is read, under the reader's own context and none left by an item before it, the node of a family whose scheme states the constraint included; `T@{0, 1}` stands.
 #[test]
 fn an_instance_is_held_to_its_scheme_under_the_readers_own_context() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${INSTANCES_BELOW_THEIR_SCHEME}",
         PROPOSITIONS,
         INSTANCES_BELOW_THEIR_SCHEME
@@ -181,7 +181,7 @@ let /upward : (x: #NatType) -> #{level = 1} Type = (x: #NatType) => Type;
 /// Cumulativity lifts a codomain and never lowers one, compares a domain by conversion, and takes no proposition where a type is wanted: `/domain` is the shape that would size `g(Type 0)`, a `Type 1`, at `Type 0`. A family lifted upward stands.
 #[test]
 fn cumulativity_takes_no_type_to_a_lower_level() {
-    let verdicts = core_text_verdicts(&fill!("${PROPOSITIONS}\n${LOWERED}", PROPOSITIONS, LOWERED));
+    let verdicts = core_text_refusals(&fill!("${PROPOSITIONS}\n${LOWERED}", PROPOSITIONS, LOWERED));
 
     for symbol in ["codomain", "domain", "proptype", "propdown"] {
         assert!(
@@ -217,7 +217,7 @@ let /piUp : (S: #{level = 1} Type, F: (x: S) -> Type) -> #{level = 1} Type =
 /// A product stands a level above what it quantifies over, so none of the four the paradox needs is impredicative, and each stands one level up.
 #[test]
 fn hurkens_carrier_stands_a_level_above_the_types_it_quantifies_over() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${HURKENS_CARRIER}",
         PROPOSITIONS,
         HURKENS_CARRIER
@@ -256,7 +256,7 @@ end
 /// `Prop` is predicative: a record of a proposition and its proof is a `Type 1`, and a declared proposition is sized as a type is, a payload its index pins and a proof-valued field among the domains it bounds. A large elimination out of `/I` and Abel and Coquand's cast need the declarations at `Prop 0`.
 #[test]
 fn a_proposition_quantifying_over_propositions_stands_a_level_above_them() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${PROPOSITIONS_OVER_THEIR_SORT}",
         PROPOSITIONS,
         PROPOSITIONS_OVER_THEIR_SORT
@@ -296,7 +296,7 @@ let /kept : (P: (x: (#{universes = {qualities = [Type, Prop]}} /Sel)(#NatType, /
 /// A type known for a proposition by its declaration is read at the qualities its instance states, each in the place its declaration binds it, so `Sel@{Prop, Type}(True, Nat)` is `Nat`, no proposition, and `/swap` is refused.
 #[test]
 fn an_instance_states_each_sort_where_its_declaration_binds_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_SORTS_LEFT_TO_A_CALLER}",
         PROPOSITIONS,
         TWO_SORTS_LEFT_TO_A_CALLER
@@ -343,7 +343,7 @@ let /T : (p: #{node = InductType} /Two()) -> Type =
 /// The large-elimination guard refuses `/T`, and nothing else is refused: the closing term types at `False` once `/T` is admitted.
 #[test]
 fn two_constructors_of_a_proposition_compute_no_type_a_coercion_could_cross() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_PROOFS_TWO_TYPES}",
         PROPOSITIONS,
         TWO_PROOFS_TWO_TYPES
@@ -352,7 +352,7 @@ fn two_constructors_of_a_proposition_compute_no_type_a_coercion_could_cross() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::LargeElimination(family) }]
+            [Refusal { name: Some(name), error: Error::LargeElimination(family) }]
                 if *name == global("T") && *family == global("Two")
         ),
         "{verdicts:?}"
@@ -412,7 +412,7 @@ let /readPin : (b: #BoolType, p: #{node = InductType} /Pin()(b)) -> #BoolType =
 /// A proposition is taken apart into data only where its index targets pin every payload, a target being the payload itself and nothing built around it: `/read` and `/readUnder` are refused, `/readPin` stands, and the closing term types at `False` once `/read` is admitted.
 #[test]
 fn a_payload_no_index_pins_is_read_out_of_no_proposition() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${UNPINNED_PAYLOADS}",
         PROPOSITIONS,
         UNPINNED_PAYLOADS
@@ -422,8 +422,8 @@ fn a_payload_no_index_pins_is_read_out_of_no_proposition() {
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(read), error: Error::LargeElimination(bx) },
-                Verdict { name: Some(under), error: Error::LargeElimination(family) },
+                Refusal { name: Some(read), error: Error::LargeElimination(bx) },
+                Refusal { name: Some(under), error: Error::LargeElimination(family) },
             ] if *read == global("read")
                 && *bx == global("Bx")
                 && *under == global("readUnder")
@@ -475,7 +475,7 @@ end
 /// Each family is refused at the polarity it reaches itself at, a `Strict` vector its entry states being read by nothing: a merely positive occurrence, as Cantor's argument needs, at `Pos`; through `/W`'s parameter at the `Neg` the certifier computed; behind a stuck match, read through the arm that holds it left of an arrow, at `Neg`; and through what reduction leaves of a projection, a `let` and an application at `Neg`.
 #[test]
 fn a_family_reaching_itself_through_any_non_strict_shape_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${NOT_STRICTLY_POSITIVE}",
         PROPOSITIONS,
         NOT_STRICTLY_POSITIVE
@@ -539,7 +539,7 @@ let /small : Type =
 /// A family no vector is filed for yet is read invariant in every level, so `A` holds the level `B` holds and the coercion is refused; `/small` is refused for nothing of its own.
 #[test]
 fn a_level_reaching_a_family_declared_later_is_compared_as_that_family_holds_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${LEVEL_THROUGH_A_LATER_FAMILY}",
         PROPOSITIONS,
         LEVEL_THROUGH_A_LATER_FAMILY
@@ -588,7 +588,7 @@ let /count : (n: #NatType) -> /std/Bool/True =
 /// The limit is sized under its family, so `/O0` is refused where it is declared and `/O1`'s limit takes no `/O1`; a predecessor read through a definition grades below its argument only under an arm that rules zero out, so `/spin` does not descend and `/count` stands.
 #[test]
 fn an_ordinal_over_its_own_universe_is_refused_where_it_is_sized_or_applied() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${ORDINALS}",
         PROPOSITIONS,
         ORDINALS
@@ -638,7 +638,7 @@ and /shifted : #{level = v} Type = #{universes = {levels = [v, v]}} /Smaller;
 /// Mutation-checked at `synth_neutral`'s `Instance` arm: with `check_instance` dropped, `/collapse` stands.
 #[test]
 fn a_member_named_through_its_sibling_is_held_to_its_items_scheme() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GROUP_READ_THROUGH_A_SIBLING}",
         PROPOSITIONS,
         A_GROUP_READ_THROUGH_A_SIBLING
@@ -737,7 +737,7 @@ fn a_typing_that_needs_itself_is_refused() {
         (A_FAMILY_WHOSE_PAYLOAD_TYPES_ITSELF_OVER_ITS_PARAMETER, "A"),
     ] {
         let verdicts =
-            core_text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+            core_text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
 
         assert!(
             refuses(&verdicts, family, |error| matches!(

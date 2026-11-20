@@ -17,7 +17,7 @@ let /bad: #{node = InductType} /Absurd() =
 "#;
 
 /// Whether `verdicts` refuse `bad` for a group that does not descend.
-fn bad_does_not_descend(verdicts: &[Verdict]) -> bool {
+fn bad_does_not_descend(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("bad"), |error| {
         matches!(error, Error::NotDescending { .. })
     })
@@ -46,7 +46,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
         ),
         ("a body that is not of the declared type", "()", &mismatched),
     ] {
-        let verdicts = text_verdicts(&fill!(SELECTION, body));
+        let verdicts = text_refusals(&fill!(SELECTION, body));
 
         assert!(
             refuses(&verdicts, Some("bad"), refusal),
@@ -60,7 +60,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
 /// `rec f : (Nat) -> Nat = (n) => f(n)` does not descend, and that is legal — a program that loops is a program rather than an unsoundness, and the obligations bite only where erasure deletes. Refusing every member selection would close the witness above and take this with it.
 #[test]
 fn a_member_of_a_legal_group_is_still_accepted() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 let /ok: (n: #NatType) -> #NatType =
     #{node = Rec}
@@ -80,7 +80,7 @@ let /ok: (n: #NatType) -> #NatType =
 #[test]
 fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
     let body = "#ListFold(#NatType, #{node = InductType} /Absurd(), #List(#NatType, []), x, (y: #NatType, acc: #{node = InductType} /Absurd()) => acc)";
-    let verdicts = text_verdicts(&fill!(SELECTION, body));
+    let verdicts = text_refusals(&fill!(SELECTION, body));
 
     assert!(
         bad_does_not_descend(&verdicts),
@@ -93,7 +93,7 @@ fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
 /// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`.
 #[test]
 fn a_projection_past_a_tuples_components_is_refused() {
-    let verdicts = text_verdicts("let /bad: #NatType = (0, 1).7;");
+    let verdicts = text_refusals("let /bad: #NatType = (0, 1).7;");
 
     assert!(
         refuses(
@@ -108,7 +108,7 @@ fn a_projection_past_a_tuples_components_is_refused() {
 /// A member whose declared type is a sort cannot both keep its folded spelling under forcing and descend.
 #[test]
 fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 let /held: (y: (t: #{level = 1} Type) -> #{level = 1} Type) -> #{level = 1} Type =
     (y: (t: #{level = 1} Type) -> #{level = 1} Type) =>
@@ -135,7 +135,7 @@ let /held: (y: (t: #{level = 1} Type) -> #{level = 1} Type) -> #{level = 1} Type
 #[test]
 fn a_member_named_at_its_instance_inside_its_group_is_undeclared() {
     let grouped = |body: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 induct /Absurd: pub Prop
 end
@@ -211,7 +211,7 @@ let /bad: #{node = InductType} /Absurd() =
 "#,
         ),
     ] {
-        let verdicts = text_verdicts(text);
+        let verdicts = text_refusals(text);
 
         assert!(
             bad_does_not_descend(&verdicts),
@@ -255,7 +255,7 @@ let /g : (n: #NatType) ->
 // Mutation-checked at the `Apply` rule of `infer_within`: with no call recorded for an application whose head is a member, `g` descends and is not refused.
 #[test]
 fn a_member_named_only_in_its_own_goal_is_a_call_its_group_must_descend_on() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_MEMBER_NAMED_IN_ITS_OWN_GOAL}",
         PROPOSITIONS,
         A_MEMBER_NAMED_IN_ITS_OWN_GOAL
@@ -295,7 +295,7 @@ let /again : (n: #NatType) ->
 // The binder stands for `n` and the arm's case for the binder, so whichever of the two facts the size order holds, the call's argument is the parameter it stands at and nothing below it. `curios`'s `tests::rules::totality_descent` puts the program to the elaborator under this name.
 #[test]
 fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CALL_HANDING_BACK_A_LAMBDAS_BINDER}",
         PROPOSITIONS,
         A_CALL_HANDING_BACK_A_LAMBDAS_BINDER
@@ -344,7 +344,7 @@ and /witness : (
 // Mutation-checked at `Certifier::infer_hit` and `Certifier::check_hit`: answering a term that names a member of a group whose body is being checked, the body's `loop(0)` is answered from the signature, no call is recorded, the group closes total and `loop(5)` is admitted at `False`.
 #[test]
 fn a_call_typed_first_in_a_siblings_signature_is_recorded_in_the_body() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CALL_TYPED_FIRST_IN_A_SIBLINGS_SIGNATURE}",
         PROPOSITIONS,
         A_CALL_TYPED_FIRST_IN_A_SIBLINGS_SIGNATURE
@@ -389,7 +389,7 @@ const A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT: &str = r#"
 // A call is graded by plain reduction, whose local-bearing reducts are filed apart from a judgment's: the reduct the annotation's comparison took is no answer to the grading, the call is unknown, and the member, a type, does not descend.
 #[test]
 fn a_call_below_its_parameter_only_to_a_judgment_does_not_descend() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT}",
         PROPOSITIONS,
         A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT
@@ -450,7 +450,7 @@ let /control : /std/Bool/Holds(true) =
 // Mutation-checked at `check_group`: with no member read by value, `/outer` and `/control` are refused `Mismatch`.
 #[test]
 fn a_member_known_to_terminate_is_read_by_value_in_its_groups_bodies() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_SIBLING_READ_IN_A_BODY}",
         PROPOSITIONS,
         A_SIBLING_READ_IN_A_BODY
@@ -487,7 +487,7 @@ let /outer : (n: #NatType) -> #NatType =
 // Mutation-checked at `check_group`: with each member assumed, and its body checked, at its signature read through the folded group, and no member read by value, `/outer` is refused `Mismatch`, `T(0)` at the local against `T(0)` at the group.
 #[test]
 fn a_lambda_typed_at_a_sibling_stands() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_LAMBDA_TYPED_AT_A_SIBLING}",
         PROPOSITIONS,
         A_LAMBDA_TYPED_AT_A_SIBLING
@@ -518,7 +518,7 @@ let /read : #BoolType =
 // Mutation-checked at `check_group`: with no member read by value, `/read` is refused `Mismatch`.
 #[test]
 fn a_member_of_a_group_that_owes_no_descent_is_read_once_known_to_terminate() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_VALUE_READING_A_SIBLING}",
         PROPOSITIONS,
         A_VALUE_READING_A_SIBLING
@@ -557,7 +557,7 @@ let /withheld : #BoolType =
 // Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `/withheld` stands.
 #[test]
 fn a_member_on_a_cycle_that_does_not_descend_stands_for_nothing_in_its_bodies() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_MEMBER_WITHHELD}",
         PROPOSITIONS,
         A_MEMBER_WITHHELD
@@ -588,7 +588,7 @@ let /listing : #NatType =
 // Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `c`'s body unfolds `b` into a list of itself without end and `/listing` is refused for its budget.
 #[test]
 fn a_group_listing_itself_is_refused_for_not_descending() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GROUP_LISTING_ITSELF}",
         PROPOSITIONS,
         A_GROUP_LISTING_ITSELF
@@ -650,7 +650,7 @@ and /h : (n: #NatType) ->
 // Mutation-checked at `Calls::names_member`: with a remembered typing answering for a term that names a member, `h`'s typing of its goal is answered by the one `g`'s filled, the call is never recorded, and the group stands.
 #[test]
 fn a_call_two_goals_state_is_recorded_in_each_body() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CALL_TWO_GOALS_STATE}",
         PROPOSITIONS,
         A_CALL_TWO_GOALS_STATE
@@ -734,7 +734,7 @@ and /h : (
 // Reading the cast's payload below the proof is sound — a proof of `S(i)` ranks above `i` at its least derivation, `mk` over a derivation of `i`'s proposition — so what refuses the loop is the other half: nothing in the size order reads `S/mk(w)` at or below `w`, so the base arm's call starts no thread back to `s` and the group does not descend. `curios`'s `tests::rules::totality` puts the program to both checkers under this name.
 #[test]
 fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX}",
         PROPOSITIONS,
         A_PAYLOAD_A_CAST_READS_OFF_A_PROOFS_INDEX
@@ -778,7 +778,7 @@ let /X : (
 // The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to be put at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality` puts the program to the elaborator under this name.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_TYPE_RECURSING_THROUGH_A_CAST_ON_THE_INDEX_IT_READS}",
         PROPOSITIONS,
         A_TYPE_RECURSING_THROUGH_A_CAST_ON_THE_INDEX_IT_READS
@@ -819,7 +819,7 @@ f(#{node = Variant} /W/base(), #{node = Variant} /std/Bool/True/qed()))
 #[test]
 fn a_dead_case_of_an_applied_lambdas_binder_is_no_descent() {
     let group = |dead: &str, live: &str| {
-        core_text_verdicts(&fill!(
+        core_text_refusals(&fill!(
             "${PROPOSITIONS}\n${GROUP}",
             PROPOSITIONS,
             GROUP = fill!(A_GROUP_SPLITTING_AN_APPLIED_LAMBDAS_BINDER, dead, live)
@@ -862,7 +862,7 @@ let /through_inner : /std/Bool/False =
 // A call an outer member's name makes from an inner group's body is recorded against the outer member and graded under its parameters: `q(n)` at `n` does not descend, whatever the inner group does.
 #[test]
 fn a_call_an_inner_group_makes_to_an_outer_member_does_not_descend() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_CALL_THROUGH_AN_INNER_GROUP}",
         PROPOSITIONS,
         A_CALL_THROUGH_AN_INNER_GROUP
@@ -891,7 +891,7 @@ let /knot : /std/Bool/False =
 // A member known at its turn only for the members before it is still on a cycle the group does not descend on: the verdict its typed calls close to names the group, and the error held back for a body is returned after it, so the group is refused whichever of the two a body meets first.
 #[test]
 fn a_knot_across_turns_is_refused_for_not_descending() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_KNOT_ACROSS_TURNS}",
         PROPOSITIONS,
         A_KNOT_ACROSS_TURNS
@@ -926,7 +926,7 @@ let /f: (c: #BoolType) -> #NatType =
                 end;
         m(()));
 "#;
-    let verdicts = text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+    let verdicts = text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
 
     assert_eq!(
         verdicts,
@@ -943,7 +943,7 @@ fn a_member_named_under_an_instance_decorator_in_its_own_body_is_a_call_of_the_m
 let /spin: (n: #NatType) -> #{node = InductType} /std/Bool/False() =
     (n: #NatType) => (#{universes = {levels = [], qualities = []}} /spin)(n);
 "#;
-    let verdicts = text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
+    let verdicts = text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module));
     assert!(
         refuses(&verdicts, Some("spin"), |error| matches!(
             error,

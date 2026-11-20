@@ -60,7 +60,7 @@ end
 "#;
 
 /// Whether `verdicts` refuse `held` for a count, `actual` where `expected` was.
-fn held_miscounted(verdicts: &[Verdict], counted: Counted, expected: usize, actual: usize) -> bool {
+fn held_miscounted(verdicts: &[Refusal], counted: Counted, expected: usize, actual: usize) -> bool {
     refuses(
         verdicts,
         Some("held"),
@@ -69,7 +69,7 @@ fn held_miscounted(verdicts: &[Verdict], counted: Counted, expected: usize, actu
 }
 
 /// Whether `verdicts` refuse `name` for a term found at `Nat` where `True` was expected: an index the declaration types at `True`.
-fn a_nat_index_at_true(verdicts: &[Verdict], name: &str) -> bool {
+fn a_nat_index_at_true(verdicts: &[Refusal], name: &str) -> bool {
     refuses(verdicts, Some(name), |error| {
         matches!(error, Error::Mismatch { inferred, expected }
             if **inferred == term("#NatType")
@@ -93,7 +93,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
         ("no indices", "(#NatType)", Counted::Indices, 0),
         ("two indices", "(#NatType)(0, 0)", Counted::Indices, 2),
     ] {
-        let verdicts = text_verdicts(&fill!(OCCURRENCE, occurrence));
+        let verdicts = text_refusals(&fill!(OCCURRENCE, occurrence));
 
         assert!(
             held_miscounted(&verdicts, counted, 1, actual),
@@ -108,7 +108,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
     let occurrence = "(#NatType)(0)";
 
     assert_eq!(
-        text_verdicts(&fill!(OCCURRENCE, occurrence)),
+        text_refusals(&fill!(OCCURRENCE, occurrence)),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -139,7 +139,7 @@ fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
             2,
         ),
     ] {
-        let verdicts = text_verdicts(&text);
+        let verdicts = text_refusals(&text);
 
         assert!(
             held_miscounted(&verdicts, Counted::Parameters, 1, actual),
@@ -152,12 +152,12 @@ fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
 #[test]
 fn a_nominal_value_at_its_declared_arity_is_accepted() {
     assert_eq!(
-        text_verdicts(&record_held("/S(#NatType) { 3 }")),
+        text_refusals(&record_held("/S(#NatType) { 3 }")),
         Vec::new(),
         "a record literal at exactly its declared parameters was refused",
     );
     assert_eq!(
-        text_verdicts(&variant_held("(@#NatType, 3)")),
+        text_refusals(&variant_held("(@#NatType, 3)")),
         Vec::new(),
         "a constructor application at exactly its declared parameters was refused",
     );
@@ -180,7 +180,7 @@ fn a_nominal_value_types_its_parameters() {
             variant_held(&fill!("(@${ill_typed}, 3)", ill_typed)),
         ),
     ] {
-        let verdicts = text_verdicts(&text);
+        let verdicts = text_refusals(&text);
 
         assert!(
             refuses(&verdicts, Some("held"), |error| {
@@ -208,7 +208,7 @@ fn a_nominal_value_types_its_parameters() {
 /// With the declared type typed rather than classified, `infer` refuses the lambda case as `Arity { expected: 2, actual: 1 }` — naming the defect — where reduction going stuck alone would leave a generic `Unclassified`. Both verdicts are accepted here, since which rule reaches the fault first is not what the fixture pins.
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 let /f: (a: #NatType, b: #NatType) -> Type =
     (a: #NatType, b: #NatType) => #NatType;
@@ -228,7 +228,7 @@ let /held: /f(3) =
 #[test]
 fn a_saturated_application_in_a_type_position_is_accepted() {
     // `f(3, 4)` reduces to `Nat`, so `held : f(3, 4) = 3` is an ordinary well-typed item.
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 let /f: (a: #NatType, b: #NatType) -> Type =
     (a: #NatType, b: #NatType) => #NatType;
@@ -292,7 +292,7 @@ let /held: (
         ),
     ] {
         // The demonstrated defect is the *abort*: `certify_definitions` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
-        let verdicts = catch_unwind(AssertUnwindSafe(|| text_verdicts(&text)))
+        let verdicts = catch_unwind(AssertUnwindSafe(|| text_refusals(&text)))
             .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
         assert!(
@@ -308,7 +308,7 @@ fn an_arm_matching_its_payload_still_reduces() {
     let one = "mk(a)";
 
     assert_eq!(
-        text_verdicts(&fill!(ARM, arm = one)),
+        text_refusals(&fill!(ARM, arm = one)),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -327,7 +327,7 @@ fn an_arm_matching_its_payload_still_reduces() {
 /// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
 #[test]
 fn a_nominal_occurrence_types_its_arguments() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${EQUALITY}
 induct /False: pub Prop
 end
@@ -363,7 +363,7 @@ let /boom: #{node = InductType} /False() =
 /// The control: an index that really is a `Nat` still types, so the guard above rejects a wrong argument rather than every argument.
 #[test]
 fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 induct /Held: (n: #NatType) -> pub Type
 | yes(): (0)
@@ -385,7 +385,7 @@ let /held: #{node = InductType} /Held()(0) =
 #[test]
 fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     // v : {Eq(True, 0, 1)} = (refl(True, qed()))
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${EQUALITY}
 let /v: {b: #{node = InductType} /Eq(#{node = InductType} /True())(0, 1)} =
     (#{node = Variant} /Eq/refl(@#{node = InductType} /True(), #{node = Variant} /True/qed()),);
@@ -432,7 +432,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
 /// The same forgery, smuggled in as a `List` split's carrier element type, which the split states and the walk reads by converting it with its scrutinee's: `Eq(@True)(v, w)` over two `Nat`s converts with `Eq(@True)(qed(), qed())`, so the cons arm's head stands at the forged equation, and eliminating it at `(Held(v)) -> Held(w)` reads both indices at its case. Every body states its binders, and the refl arm's `Held(z)` is a `Nat` index typed at `True`, which refuses it; typed where the split states it, the element type is refused first, a `Nat` at `True`. The empty arm is ill-typed and withdrawn, the scrutinee computing to a cons.
 #[test]
 fn a_bogus_occurrence_behind_a_carriers_element_type_is_refused() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"${EQUALITY}
 induct /False: pub Prop
 end

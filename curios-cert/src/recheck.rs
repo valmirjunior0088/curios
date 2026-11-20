@@ -115,13 +115,13 @@ use {
 ///
 /// **Not one per item, and not always an item.** A declaration is judged several ways, so one failing two of them yields two verdicts; and a registry entry is refused under its own name, which is no item of [`Definitions::items`]. A caller counting these against `items.len()` is comparing two different rosters.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Verdict {
+pub struct Refusal {
     /// What failed: an item, or the registry entry a declaration pass refused — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
     pub name: Option<Global>,
     pub error: Error,
 }
 
-impl Verdict {
+impl Refusal {
     /// The refusal as a reader is told it, written by `notation` ([`Error::rendered`]), and, where the declaration was refused at one assignment of the sorts it leaves to its caller, the type `definitions` holds under the verdict's name restated at that assignment.
     pub fn rendered(&self, definitions: &Definitions, notation: &dyn Notation) -> String {
         let stated = match (&self.error, self.name) {
@@ -144,20 +144,20 @@ pub enum Rechecked<T> {
     /// The walk refused nothing of the module.
     Accepted(Accepted<T>),
     /// Every refusal the walk reached, never none. A refused walk leaves no record: a unit carrying a refusal is never filed, so nothing could read one.
-    Refused(Vec<Verdict>),
+    Refused(Vec<Refusal>),
 }
 
 impl<T> Rechecked<T> {
     /// Every refusal the walk reached: none where it accepted the module.
-    pub fn verdicts(&self) -> &[Verdict] {
+    pub fn refusals(&self) -> &[Refusal] {
         match self {
             Rechecked::Accepted(_) => &[],
             Rechecked::Refused(verdicts) => verdicts,
         }
     }
 
-    /// [`Rechecked::verdicts`], kept.
-    pub fn into_verdicts(self) -> Vec<Verdict> {
+    /// [`Rechecked::refusals`], kept.
+    pub fn into_refusals(self) -> Vec<Refusal> {
         match self {
             Rechecked::Accepted(_) => Vec::new(),
             Rechecked::Refused(verdicts) => verdicts,
@@ -227,7 +227,7 @@ impl Accepted<Program> {
 
 /// What a walk reached, before it answers: every refusal, the record of what it concluded, and the module and closing term as it stated them. Answered as the module it accepted where it refused nothing, and as its refusals alone otherwise.
 pub struct Walk {
-    verdicts: Vec<Verdict>,
+    verdicts: Vec<Refusal>,
     certification: Certification,
     definitions: Definitions,
     entrypoint: Option<Entrypoint>,
@@ -294,7 +294,7 @@ pub fn certify_definitions<'s>(
     syntax: SyntaxRegistry,
 ) -> (Rechecked<Definitions>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
-    let rechecked = verdicts_from(&mut certifier, definitions, None, globals, None).module();
+    let rechecked = refusals_from(&mut certifier, definitions, None, globals, None).module();
 
     (rechecked, certifier)
 }
@@ -311,7 +311,7 @@ pub fn certify_definitions_over<'s>(
     syntax: SyntaxRegistry,
 ) -> (Rechecked<Definitions>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
-    let rechecked = verdicts_from(
+    let rechecked = refusals_from(
         &mut certifier,
         definitions,
         None,
@@ -335,7 +335,7 @@ pub fn certify_program<'s>(
     syntax: SyntaxRegistry,
 ) -> (Rechecked<Program>, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
-    let rechecked = verdicts_from(
+    let rechecked = refusals_from(
         &mut certifier,
         &program.definitions,
         Some(&program.entrypoint),
@@ -532,13 +532,13 @@ fn struct_residue(declaration: &StructDecl) -> Option<Error> {
 /// **Whatever it declares under a held name.** What the environment holds was judged by the walk that built it and is read where it stands, so a module has no reason to carry one of its declarations, and one that does is refused as any other redeclaration is: no comparison decides that two declarations under one name are one.
 ///
 /// **Refused whole.** A module that redeclares offers the rest of itself no environment to be judged in, so nothing of it is: the verdicts handed back are its redeclarations and nothing else, each naming its declaration, a group by its first member as everywhere.
-fn redeclarations(definitions: &Definitions, globals: &Globals) -> Vec<Verdict> {
+fn redeclarations(definitions: &Definitions, globals: &Globals) -> Vec<Refusal> {
     curios_profile::profile!("redeclarations");
     let mut refused: BTreeSet<Global> = BTreeSet::new();
     let mut redeclared = Vec::new();
     let mut refuse = |name: &Global| {
         if refused.insert(*name) {
-            redeclared.push(Verdict {
+            redeclared.push(Refusal {
                 name: Some(*name),
                 error: Error::Redeclared(*name),
             });
@@ -571,7 +571,7 @@ fn entries_among<'a, D>(
     registry.iter().filter(|(name, _)| among.contains(*name))
 }
 
-pub fn verdicts_from<'s>(
+pub fn refusals_from<'s>(
     certifier: &mut Certifier<'s>,
     definitions: &Definitions,
     entry: Option<&Entrypoint>,
@@ -655,7 +655,7 @@ fn verdicts_within<'s>(
     // A case whose counts are not its family's is refused here, whole, as a redeclaration is: every reader of a case opens its parameters at the family's, the family's own positivity and an arm judged before it among them, so no judgment of the module may run first.
     let miscounted = entries_among(&inducts, &checked)
         .filter_map(|(name, declaration)| {
-            check_case_counts(declaration).err().map(|error| Verdict {
+            check_case_counts(declaration).err().map(|error| Refusal {
                 name: Some(*name),
                 error,
             })
@@ -678,28 +678,28 @@ fn verdicts_within<'s>(
 
     // The certifier mints its binders from zero, so a free local in a term it judges is one it could mint again while comparing under a telescope or eta-contracting — a capture, after which the judgment sees a bound variable and never an unbound one. So a local is refused here, at the boundary, over every position a term can sit in but those of the declarations the baseline holds term for term, which the walk that filed the baseline held to this rule.
     for (owner, local) in free_locals_of(judged_items()) {
-        verdicts.push(Verdict {
+        verdicts.push(Refusal {
             name: owner,
             error: Error::Unbound(local),
         });
     }
     // A bound variable no scope binds is refused over the same positions, and no judgment could take the refusal instead: `Mentions` answers nothing for one, so a rule could read it only as the variable it is not — `infer`'s refuses it, and every reader past it answers as for a term it cannot type — and the index denotes whatever the depth it is read at gives it, so what a rule would judge is not what the module carries.
     for (owner, reach) in open_positions_of(judged_items()) {
-        verdicts.push(Verdict {
+        verdicts.push(Refusal {
             name: owner,
             error: Error::NotClosed { reach },
         });
     }
     if let Some(entry) = entry {
         for local in entry.free_locals() {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: None,
                 error: Error::Unbound(local),
             });
         }
         let reach = entry.reach();
         if reach != 0 {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: None,
                 error: Error::NotClosed { reach },
             });
@@ -716,7 +716,7 @@ fn verdicts_within<'s>(
         .collect::<Vec<_>>();
     for (name, context) in contexts {
         if let Some(error) = universe_verdict(context) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(name),
                 error,
             });
@@ -725,7 +725,7 @@ fn verdicts_within<'s>(
     for item in judged_items() {
         for definition in item.definitions() {
             if let Some(error) = universe_verdict(&definition.universe_context) {
-                verdicts.push(Verdict {
+                verdicts.push(Refusal {
                     name: Some(definition.name),
                     error,
                 });
@@ -736,7 +736,7 @@ fn verdicts_within<'s>(
     // A registry entry is data; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
     for (name, declaration) in entries_among(&inducts, &checked) {
         if let Some(error) = induct_residue(declaration) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });
@@ -744,7 +744,7 @@ fn verdicts_within<'s>(
     }
     for (name, declaration) in entries_among(&structs, &checked) {
         if let Some(error) = struct_residue(declaration) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });
@@ -754,7 +754,7 @@ fn verdicts_within<'s>(
     let places = OnceCell::new();
     for place in walk.iter().copied() {
         for (name, member) in indexed_by_its_cycle(definitions, place, &places) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(name),
                 error: Error::IndexedByItsGroup { member },
             });
@@ -770,7 +770,7 @@ fn verdicts_within<'s>(
                 .or_else(|| universe_escape(&definition.type_, count))
                 .or_else(|| universe_escape(&definition.body, count))
             {
-                verdicts.push(Verdict {
+                verdicts.push(Refusal {
                     name: Some(definition.name),
                     error,
                 });
@@ -792,14 +792,14 @@ fn verdicts_within<'s>(
             })
             .or_else(|| universe_escape(&entry.body, 0))
     {
-        verdicts.push(Verdict { name: None, error });
+        verdicts.push(Refusal { name: None, error });
     }
 
     // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The environment refuses a name it holds, which the refusal above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform. Over a baseline the entries of the declarations the walk does not visit are the baseline's, which answers for each from the start.
     // Each family stating no payload a proof, until the declaration that declares it is judged and states its own (`certifier::stating`): the walk reads nothing a module says of a mark.
     for (name, declaration) in &inducts {
         if let Err(error) = certifier.declare_induct(name, &unstated_entry(declaration)) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });
@@ -807,7 +807,7 @@ fn verdicts_within<'s>(
     }
     for (name, declaration) in &structs {
         if let Err(error) = certifier.declare_struct(name, declaration) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });
@@ -975,7 +975,7 @@ fn verdicts_within<'s>(
                         (proof, value_sort)
                     }
                     Err(error) => {
-                        verdicts.push(Verdict {
+                        verdicts.push(Refusal {
                             name: Some(definition.name),
                             error,
                         });
@@ -989,7 +989,7 @@ fn verdicts_within<'s>(
                             None,
                             &definition.universe_context,
                         ) {
-                            verdicts.push(Verdict {
+                            verdicts.push(Refusal {
                                 name: Some(definition.name),
                                 error,
                             });
@@ -1027,7 +1027,7 @@ fn verdicts_within<'s>(
                         proofs
                     }
                     Err(error) => {
-                        verdicts.push(Verdict {
+                        verdicts.push(Refusal {
                             name: item_name,
                             error,
                         });
@@ -1042,7 +1042,7 @@ fn verdicts_within<'s>(
                                 None,
                                 &universes,
                             ) {
-                                verdicts.push(Verdict {
+                                verdicts.push(Refusal {
                                     name: item_name,
                                     error,
                                 });
@@ -1071,7 +1071,7 @@ fn verdicts_within<'s>(
                         former.value_sort.as_ref(),
                         &former.universe_context,
                     ) {
-                        verdicts.push(Verdict {
+                        verdicts.push(Refusal {
                             name: item_name,
                             error,
                         });
@@ -1116,7 +1116,7 @@ fn verdicts_within<'s>(
                 None,
                 &constructor.universe_context,
             ) {
-                verdicts.push(Verdict {
+                verdicts.push(Refusal {
                     name: item_name,
                     error,
                 });
@@ -1126,13 +1126,13 @@ fn verdicts_within<'s>(
         // Obligations (T) and (V) over every position the item's judgment recorded, its entries' typings among them, so each is refused under the item that declares it rather than under the next one judged. An entry's positions reach only names declared before it, each classified by now.
         let (drained, failure) = certifier.take_checked();
         if let Some(error) = failure {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: item_name,
                 error,
             });
         }
         if let Err(error) = check_positions(certifier, &drained, &totals, &mut local_memo) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: item_name,
                 error,
             });
@@ -1164,7 +1164,7 @@ fn verdicts_within<'s>(
             None => Err(Error::UntypedEntry),
         };
         if let Err(error) = checked {
-            verdicts.push(Verdict { name: None, error });
+            verdicts.push(Refusal { name: None, error });
         }
     }
 
@@ -1172,10 +1172,10 @@ fn verdicts_within<'s>(
     certifier.take_reads();
     let (drained, failure) = certifier.take_checked();
     if let Some(error) = failure {
-        verdicts.push(Verdict { name: None, error });
+        verdicts.push(Refusal { name: None, error });
     }
     if let Err(error) = check_positions(certifier, &drained, &totals, &mut local_memo) {
-        verdicts.push(Verdict { name: None, error });
+        verdicts.push(Refusal { name: None, error });
     }
 
     let totality = |name: &Global| match totals.partial(certifier, name) {
@@ -1703,7 +1703,7 @@ fn stands(
 }
 
 /// Take the verdict a cabinet's records hold of `item`: what the walk states of it, as it states what it judges, and each name standing at its type with its real body, as the walk leaves an item it does not judge; what the walk refuses of it is handed back with it.
-fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
+fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Refusal>) {
     let mut refusals = Vec::new();
     certifier.restore_budget();
     let stated = stated_marks(certifier, item);
@@ -1723,7 +1723,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
             ) {
                 Ok(Stated { proof, value_sort }) => (proof, value_sort),
                 Err(error) => {
-                    refusals.push(Verdict {
+                    refusals.push(Refusal {
                         name: Some(definition.name),
                         error,
                     });
@@ -1745,7 +1745,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
                 .collect::<Vec<_>>();
             let proofs = state_rec_group(certifier, &members, rec.group(), rec.universe_context())
                 .unwrap_or_else(|error| {
-                    refusals.push(Verdict {
+                    refusals.push(Refusal {
                         name: members.first().map(|(name, _)| *name),
                         error,
                     });
@@ -1782,7 +1782,7 @@ fn put(definitions: &mut Definitions, place: usize, item: Item) {
 
 /// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the names that record calls partial, and the polarity vector of each registry entry the item declares.
 struct Adopted {
-    refusals: Vec<Verdict>,
+    refusals: Vec<Refusal>,
     reads: Vec<(Global, Reads)>,
     partial: Vec<Global>,
     vectors: Vec<(Global, Vec<Polarity>)>,
@@ -1803,7 +1803,7 @@ fn adopt(
         refusals: names
             .iter()
             .filter_map(|name| certifier.adopt(name).err())
-            .map(|error| Verdict {
+            .map(|error| Refusal {
                 name: names.first().copied(),
                 error,
             })
@@ -1857,9 +1857,9 @@ fn carried(item: &Item) -> (BTreeMap<Global, InductDecl>, BTreeMap<Global, Struc
 }
 
 /// The verdict a refused positivity analysis is reported as.
-fn positivity_verdict(refusal: PositivityRefusal<Error>) -> Verdict {
+fn positivity_refusal(refusal: PositivityRefusal<Error>) -> Refusal {
     match refusal {
-        PositivityRefusal::NotPositive(refusal) => Verdict {
+        PositivityRefusal::NotPositive(refusal) => Refusal {
             name: Some(refusal.name),
             error: Error::NotPositive {
                 name: refusal.name,
@@ -1867,14 +1867,14 @@ fn positivity_verdict(refusal: PositivityRefusal<Error>) -> Verdict {
                 polarity: refusal.polarity,
             },
         },
-        PositivityRefusal::HoldsItself(refusal) => Verdict {
+        PositivityRefusal::HoldsItself(refusal) => Refusal {
             name: Some(refusal.name),
             error: Error::HoldsItself {
                 name: refusal.name,
                 part: refusal.part,
             },
         },
-        PositivityRefusal::Exhausted { name, error } => Verdict {
+        PositivityRefusal::Exhausted { name, error } => Refusal {
             name: Some(name),
             error,
         },
@@ -1896,7 +1896,7 @@ fn accept(
     certifier: &mut Certifier,
     inducts: &BTreeMap<Global, InductDecl>,
     structs: &BTreeMap<Global, StructDecl>,
-    verdicts: &mut Vec<Verdict>,
+    verdicts: &mut Vec<Refusal>,
     reads: &mut BTreeMap<Global, Reads>,
     polarities: &mut BTreeMap<Global, Vec<Polarity>>,
     variances: &mut BTreeMap<Global, Vec<Variance>>,
@@ -1913,14 +1913,14 @@ fn accept(
                 polarities.insert(name, vector);
             }
         }
-        Err(refusal) => verdicts.push(positivity_verdict(refusal)),
+        Err(refusal) => verdicts.push(positivity_refusal(refusal)),
     }
 
     certifier.restore_budget();
     let recomputed = variance_vectors(certifier, Declarations::of(inducts, structs));
     match recomputed.exhausted {
         // A refused reduction read its term as invariant throughout, so what the walk computed past it may be the budget's: nothing is filed, the entries answer invariant from then on, and the budget is what is reported.
-        Some((walked, error)) => verdicts.push(Verdict {
+        Some((walked, error)) => verdicts.push(Refusal {
             name: Some(walked),
             error,
         }),
@@ -1942,7 +1942,7 @@ fn accept(
                             != Some(&Variance::Irrelevant)
                 });
                 if let Some((level, _)) = denied {
-                    verdicts.push(Verdict {
+                    verdicts.push(Refusal {
                         name: Some(*name),
                         error: Error::VarianceDenied { name: *name, level },
                     });
@@ -1958,7 +1958,7 @@ fn accept(
     certifier.restore_budget();
     for (name, declaration) in inducts {
         if let Err(error) = check_induct_decl(certifier, declaration) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });
@@ -1966,7 +1966,7 @@ fn accept(
     }
     for (name, declaration) in structs {
         if let Err(error) = check_struct_decl(certifier, declaration) {
-            verdicts.push(Verdict {
+            verdicts.push(Refusal {
                 name: Some(*name),
                 error,
             });

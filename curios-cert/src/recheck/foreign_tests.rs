@@ -20,7 +20,7 @@ let /held: ${claimed} =
 "#;
 
 /// What the walk says of [`FORGED_ROW`] at `claimed`, read where a row's form is made: against the registry these suites judge under, with no unit in scope.
-fn forged_verdicts(claimed: &str) -> Vec<Verdict> {
+fn forged_refusals(claimed: &str) -> Vec<Refusal> {
     let scope = FormScope::over(SYNTAX, []);
     let put = Put {
         scope: Some(&scope),
@@ -30,11 +30,11 @@ fn forged_verdicts(claimed: &str) -> Vec<Verdict> {
         .read(&fill!(FORGED_ROW, claimed))
         .unwrap_or_else(|unread| panic!("{unread:?}"));
 
-    put.module(&definitions, entry.as_ref()).into_verdicts()
+    put.module(&definitions, entry.as_ref()).into_refusals()
 }
 
 /// Whether `held` was refused as a mismatch: a call's type is the one its row builds, whatever is claimed of it.
-fn held_mismatched(verdicts: &[Verdict]) -> bool {
+fn held_mismatched(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("held"), |error| {
         matches!(error, Error::Mismatch { .. })
     })
@@ -52,7 +52,7 @@ fn held_mismatched(verdicts: &[Verdict]) -> bool {
 #[test]
 fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     let claimed = "#{node = InductType} /False()";
-    let verdicts = forged_verdicts(claimed);
+    let verdicts = forged_refusals(claimed);
 
     assert!(
         held_mismatched(&verdicts),
@@ -66,7 +66,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     let claimed = "#IoType(#NatType)";
 
     assert_eq!(
-        forged_verdicts(claimed),
+        forged_refusals(claimed),
         Vec::new(),
         "the boundary refused a host call at the type its own wire signature denotes",
     );
@@ -76,7 +76,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 #[test]
 fn a_foreign_row_cannot_be_held_at_another_wire_type() {
     let claimed = "#IoType(#ListType(#BytesType))";
-    let verdicts = forged_verdicts(claimed);
+    let verdicts = forged_refusals(claimed);
 
     assert!(
         held_mismatched(&verdicts),
@@ -99,7 +99,7 @@ let /gone : (A: Prop) -> A =
 /// Mutation-checked at `curios_core::foreign_produced`: with a diverging row's result handed back bare rather than in `Io`, the declaration types and no mismatch is refused under `/gone`.
 #[test]
 fn a_declaration_beside_a_row_cannot_take_its_answer_out_of_io() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${ANSWERED_OUTSIDE_IO}",
         PROPOSITIONS,
         ANSWERED_OUTSIDE_IO
@@ -126,7 +126,7 @@ let /gone : #IoType(#BoolType) =
 /// A call's operands are counted against its row before the row's result is read: a row that does not return reads its result off the call's first operand, so a call holding none is refused by its count where reading the result first aborted the walk.
 #[test]
 fn a_call_of_a_row_is_counted_before_its_result_is_read() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_DIVERGING_CALL_OF_NO_OPERAND}",
         PROPOSITIONS,
         A_DIVERGING_CALL_OF_NO_OPERAND
@@ -136,7 +136,7 @@ fn a_call_of_a_row_is_counted_before_its_result_is_read() {
         matches!(
             &verdicts[..],
             [
-                Verdict {
+                Refusal {
                     name: Some(gone),
                     error: Error::Arity {
                         counted: Counted::Arguments,
@@ -144,7 +144,7 @@ fn a_call_of_a_row_is_counted_before_its_result_is_read() {
                         actual: 0
                     }
                 },
-                Verdict { name: None, .. },
+                Refusal { name: None, .. },
             ] if *gone == global("gone")
         ),
         "{verdicts:?}"

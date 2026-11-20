@@ -25,7 +25,7 @@ const NARROWED_PAST_ITS_DOMAIN: &str = r#"
 // Mutation-checked at `Intrinsic::signature`: with the `NatToByte` row's bound stated as `holds(Self::Bool(true))` rather than over its `nat` operand, the bound types, and no mismatch is refused.
 #[test]
 fn a_narrowing_bound_is_a_proof_about_its_own_operand() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${NARROWED_PAST_ITS_DOMAIN}",
         PROPOSITIONS,
         NARROWED_PAST_ITS_DOMAIN
@@ -34,7 +34,7 @@ fn a_narrowing_bound_is_a_proof_about_its_own_operand() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]
@@ -66,7 +66,7 @@ fn a_narrowing_and_a_division_past_their_domains_are_stuck_under_hypotheses_stat
     ));
 
     assert_eq!(
-        fixture_verdicts(&module, BUDGET, &Globals::default(), SYNTAX),
+        fixture_refusals(&module, BUDGET, &Globals::default(), SYNTAX),
         Vec::new()
     );
 }
@@ -88,7 +88,7 @@ let /gone : #NatType = 0;
 // What the suspension is, whatever it waits on, is a description of a proof of `False`, `Io(False)`, which nothing eliminates: the closing term is refused where a proof of `False` is asked, and as reaching an exit besides.
 #[test]
 fn a_description_waiting_on_a_handle_no_host_gave_proves_nothing() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${SUSPENDED_ON_A_FORGED_HANDLE}",
         PROPOSITIONS,
         SUSPENDED_ON_A_FORGED_HANDLE
@@ -163,7 +163,7 @@ let /gone : #NatType = 0;
 // Mutation-checked at `check_cases`: with a `Bool` case form no longer held to a `Bool` scrutinee, `split` types and is not refused.
 #[test]
 fn a_description_is_taken_apart_by_no_elimination() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_DESCRIPTION_TAKEN_APART}",
         PROPOSITIONS,
         A_DESCRIPTION_TAKEN_APART
@@ -218,7 +218,7 @@ let /together : (c: #ByteType, d: #ByteType) ->
 // A strip whose residuals hold runs and single bytes alone clashes them by their lengths, which is a disequality the free monoid has: so `/apart` types, and `/together`, whose runs are one length, stays the stuck `==` its bytes leave, and is the one refusal between the module and `False`. `curios`'s `tests::rules::sequence` puts the program to the elaborator under this name.
 #[test]
 fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${TWO_BYTE_RUNS_OF_ONE_LENGTH_AND_OF_TWO}",
         PROPOSITIONS,
         TWO_BYTE_RUNS_OF_ONE_LENGTH_AND_OF_TWO
@@ -227,7 +227,7 @@ fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(together), error: Error::Mismatch { .. } }]
+            [Refusal { name: Some(together), error: Error::Mismatch { .. } }]
                 if *together == global("together")
         ),
         "{verdicts:?}"

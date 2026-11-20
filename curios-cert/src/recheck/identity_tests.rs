@@ -20,7 +20,7 @@ fn stray(index: u64) -> Free {
 }
 
 /// Whether the walk refused `name` for the stray local at `index`.
-fn unbound(verdicts: &[Verdict], name: Option<Global>, index: u64) -> bool {
+fn unbound(verdicts: &[Refusal], name: Option<Global>, index: u64) -> bool {
     verdicts.iter().any(|verdict| {
         verdict.name == name
             && matches!(&verdict.error, Error::Unbound(found) if *found == stray(index))
@@ -28,7 +28,7 @@ fn unbound(verdicts: &[Verdict], name: Option<Global>, index: u64) -> bool {
 }
 
 /// Whether the walk refused `name` for a bound variable no scope binds.
-fn unclosed(verdicts: &[Verdict], name: Option<Global>) -> bool {
+fn unclosed(verdicts: &[Refusal], name: Option<Global>) -> bool {
     verdicts
         .iter()
         .any(|verdict| verdict.name == name && matches!(&verdict.error, Error::NotClosed { .. }))
@@ -40,7 +40,7 @@ fn unclosed(verdicts: &[Verdict], name: Option<Global>) -> bool {
 #[test]
 fn a_definition_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             r#"
 let /held: (x: #NatType) -> #NatType =
     (x: #NatType) => #{binding = Free(${index})} stray;
@@ -59,7 +59,7 @@ let /held: (x: #NatType) -> #NatType =
 #[test]
 fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             r#"
 #{value_sort = ((y: #NatType) => Type)(#{binding = Free(${index})} stray)}
 let /held: Type = #NatType;
@@ -92,7 +92,7 @@ fn a_stated_value_sort_is_read_by_nothing() {
             "#{value_sort = ${stated}}\nlet /held: Type = #NatType;",
             stated
         ));
-        assert_eq!(rechecked.verdicts(), Vec::new(), "{said}");
+        assert_eq!(rechecked.refusals(), Vec::new(), "{said}");
         let Item::Let(definition) = &rechecked.definitions().items[0] else {
             panic!("the module holds one definition");
         };
@@ -104,7 +104,7 @@ fn a_stated_value_sort_is_read_by_nothing() {
 #[test]
 fn an_entry_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             "((x: #NatType) => #{binding = Free(${index})} stray)(0)\n: #NatType",
             index
         ));
@@ -134,7 +134,7 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
             "let /held: #NatType =\n    let x: #NatType = 0;\n    #{binding = Bound(0)} _;",
         ),
     ] {
-        let verdicts = text_verdicts(text);
+        let verdicts = text_refusals(text);
 
         assert!(
             unclosed(&verdicts, Some(held())),
@@ -146,7 +146,7 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
 /// The entry is held closed as the module's items are, since it is judged in the same walk by the same rule.
 #[test]
 fn an_entry_holding_a_loose_bound_variable_is_refused() {
-    let verdicts = text_verdicts("#{binding = Bound(0)} _\n: #NatType");
+    let verdicts = text_refusals("#{binding = Bound(0)} _\n: #NatType");
 
     assert!(
         unclosed(&verdicts, None),

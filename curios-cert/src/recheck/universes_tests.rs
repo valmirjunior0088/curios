@@ -82,7 +82,7 @@ let /held: ${claimed} =
 "#;
 
 /// Whether `verdicts` refuse `reads` as a mismatch.
-fn reads_mismatched(verdicts: &[Verdict]) -> bool {
+fn reads_mismatched(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("reads"), |error| {
         matches!(error, Error::Mismatch { .. })
     })
@@ -93,7 +93,7 @@ fn reads_mismatched(verdicts: &[Verdict]) -> bool {
 /// `Certifier::assume_universes` takes the item's own constraints as given, and `entails` answers `≤` questions under them — so a context containing `u + 1 ≤ u` lets every level relation through, and `check_instance` stops discharging anything. Deciding satisfiability is `satisfiable`'s, a second implementation beside the elaborator's solver; this asks whether the walk refuses such a context before assuming it.
 #[test]
 fn an_unsatisfiable_universe_context_is_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         "#{universe_context = {parameter_count = 1, constraints = [u + 1 <= u]}}\nlet /held: #NatType = 0;",
     );
 
@@ -112,7 +112,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
 #[test]
 fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     // `x` is the fourth parameter, of a declaration that declares one.
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         "#{universe_context = {parameter_count = 1, constraints = [x <= u]}}\nlet /held: #NatType = 0;",
     );
 
@@ -148,7 +148,7 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
             "induct /Levelled: pub #{level = #{id = 0} ?} Type\nend",
         ),
     ] {
-        let verdicts = text_verdicts(text);
+        let verdicts = text_refusals(text);
 
         assert!(
             refuses(&verdicts, Some(refused), |error| matches!(
@@ -200,7 +200,7 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
     };
     for (label, refused, site) in sites {
         let looping = ", constraints = [u + 1 <= u]";
-        let verdicts = text_verdicts(&program(site, looping));
+        let verdicts = text_refusals(&program(site, looping));
         assert!(
             refuses(&verdicts, Some(refused), |error| matches!(
                 error,
@@ -209,7 +209,7 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
             "{label}: the walk assumed a set with no instance in the naturals: {verdicts:?}",
         );
         assert_eq!(
-            text_verdicts(&program(site, "")),
+            text_refusals(&program(site, "")),
             Vec::new(),
             "{label}: the same fixture stating no constraint was refused",
         );
@@ -237,7 +237,7 @@ fn a_sort_stating_neither_prop_nor_type_is_refused() {
                 fill!("induct /Levelled: pub (${sort})\nend", sort),
             ),
         ] {
-            let verdicts = text_verdicts(&text);
+            let verdicts = text_refusals(&text);
 
             assert!(
                 refuses(&verdicts, Some(refused), |error| matches!(
@@ -264,7 +264,7 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
         ),
     ] {
         assert_eq!(
-            text_verdicts(text),
+            text_refusals(text),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -294,7 +294,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             "induct /Levelled: pub #{level = u} Type\nend",
         ),
     ] {
-        let verdicts = text_verdicts(text);
+        let verdicts = text_refusals(text);
 
         assert!(
             refuses(&verdicts, Some(refused), |error| matches!(
@@ -320,7 +320,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
         ),
     ] {
         assert_eq!(
-            text_verdicts(text),
+            text_refusals(text),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -339,7 +339,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 #[test]
 fn a_universe_instance_narrower_than_its_scheme_is_refused() {
     let levels = "u";
-    let verdicts = text_verdicts(&fill!(LEVELLED_AT, levels));
+    let verdicts = text_refusals(&fill!(LEVELLED_AT, levels));
 
     assert!(
         refuses(
@@ -357,7 +357,7 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
     let levels = "u, u";
 
     assert_eq!(
-        text_verdicts(&fill!(LEVELLED_AT, levels)),
+        text_refusals(&fill!(LEVELLED_AT, levels)),
         Vec::new(),
         "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
     );
@@ -375,12 +375,12 @@ fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
         ("a family's sort", fill!(FAMILY_AT, instance, claimed)),
         ("a definition's type", fill!(LIFTED_AT, instance, claimed)),
     ] {
-        let verdicts = text_verdicts(&text);
+        let verdicts = text_refusals(&text);
 
         assert!(
             matches!(
                 verdicts.as_slice(),
-                [Verdict {
+                [Refusal {
                     name: Some(name),
                     error: Error::Reduce(ReduceError::Universe(UniverseError::OffsetOverflow)),
                 }] if *name == global("held")
@@ -400,7 +400,7 @@ fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
         ("a definition's type", fill!(LIFTED_AT, instance, claimed)),
     ] {
         assert_eq!(
-            text_verdicts(&text),
+            text_refusals(&text),
             Vec::new(),
             "{label}: the certifier refused an instance whose successors all fit",
         );
@@ -430,7 +430,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
             "does not satisfy its scheme",
         ),
     ] {
-        let verdicts = text_verdicts(&fill!(
+        let verdicts = text_refusals(&fill!(
             "${SCHEME}\n#{universe_context = {parameter_count = 2}}\nlet /user: #{level = v} Type =\n    ${body};",
             SCHEME,
             body
@@ -451,12 +451,12 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
 #[test]
 fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     assert_eq!(
-        text_verdicts(SCHEME),
+        text_refusals(SCHEME),
         Vec::new(),
         "the universe scheme was refused standing alone",
     );
     assert_eq!(
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             "${SCHEME}\n#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}\nlet /user: #{level = v} Type =\n    #{universes = {levels = [u, v]}} /A;",
             SCHEME
         )),
@@ -464,7 +464,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         "an occurrence discharging its scheme's constraint was refused",
     );
     assert_eq!(
-        text_verdicts("let /zero: #NatType = 0;\nlet /echo: #NatType = /zero;"),
+        text_refusals("let /zero: #NatType = 0;\nlet /echo: #NatType = /zero;"),
         Vec::new(),
         "a bare occurrence of a monomorphic definition was refused",
     );
@@ -505,7 +505,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
             ),
             10_000_000,
         )
-        .into_verdicts();
+        .into_refusals();
 
         assert!(
             refuses(&verdicts, Some("coerce"), |error| matches!(
@@ -535,7 +535,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
             ),
             10_000_000,
         )
-        .verdicts(),
+        .refusals(),
         Vec::new(),
         "a case equation stopped refining the occurrence it scrutinized",
     );
@@ -549,7 +549,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
 #[test]
 fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
     let module = |claimed: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{universe_context = {parameter_count = 1}}
 let /carrier:
@@ -586,7 +586,7 @@ let /reads: #{level = ${claimed}} Type =
 #[test]
 fn an_exported_member_type_is_read_at_the_occurrences_instance() {
     let module = |claimed: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{node = Rec, universe_context = {parameter_count = 1}}
 let /carrier: #{level = u + 1} Type =
@@ -620,7 +620,7 @@ let /reads: #{level = ${claimed}} Type =
 #[test]
 fn a_stored_body_is_forced_at_its_instances_levels() {
     let type_ = "#{universes = {levels = [5]}} /carrier";
-    let module = |value: &str| text_verdicts(&fill!(STORED, declared = type_, value));
+    let module = |value: &str| text_refusals(&fill!(STORED, declared = type_, value));
 
     let verdicts = module("#{level = 6} Type");
     assert!(
@@ -660,7 +660,7 @@ let /published: #{level = 7} Type =
             said
         ));
 
-        assert_eq!(rechecked.verdicts(), Vec::new(), "{said:?}");
+        assert_eq!(rechecked.refusals(), Vec::new(), "{said:?}");
         let Item::Let(definition) = &rechecked.definitions().items[1] else {
             panic!("`published` is the module's second item");
         };
@@ -681,7 +681,7 @@ let /published: #{level = 7} Type =
 #[test]
 fn a_registry_field_type_is_read_at_the_occurrences_instance() {
     let module = |claimed: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{universe_context = {parameter_count = 1}}
 struct /R: pub #{level = u + 2} Type {
@@ -726,7 +726,7 @@ let /reads: #{level = ${claimed}} Type =
 fn a_group_members_level_names_only_its_items_universe_parameters() {
     // The reader pins its own second parameter at zero: the level a captured `param 1` would be read at, and the one the member's own instance must answer instead.
     let module = |parameters: usize, instance: &str, claimed: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{node = Rec, universe_context = {parameter_count = ${parameters}}}
 let /held: #{level = v + 2} Type =
@@ -768,7 +768,7 @@ let /reads: #{universes = {levels = [${instance}]}} /held =
 fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_saturated() {
     let (top, below) = (TOP, TOP - 1);
     let module = |parameters: usize, constraint: &str, type_: &str, value: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             "#{universe_context = {parameter_count = ${parameters}, constraints = [${constraint}]}}\nlet /held: ${declared} =\n    ${value};",
             parameters,
             constraint,
@@ -868,7 +868,7 @@ let /cast : (
 // Mutation-checked at `Memos::begin_declaration`: with the declaration's verdicts left standing, `cast` is admitted.
 #[test]
 fn a_verdict_under_one_declarations_constraints_is_no_answer_under_anothers() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_VERDICT_UNDER_ANOTHER_DECLARATIONS_CONSTRAINTS}",
         PROPOSITIONS,
         A_VERDICT_UNDER_ANOTHER_DECLARATIONS_CONSTRAINTS
@@ -878,8 +878,8 @@ fn a_verdict_under_one_declarations_constraints_is_no_answer_under_anothers() {
         matches!(
             &verdicts[..],
             [
-                Verdict { name: Some(cast), error: Error::Mismatch { .. } },
-                Verdict { name: None, error: Error::Mismatch { .. } },
+                Refusal { name: Some(cast), error: Error::Mismatch { .. } },
+                Refusal { name: None, error: Error::Mismatch { .. } },
             ] if *cast == global("cast")
         ),
         "{verdicts:?}"
@@ -941,7 +941,7 @@ let /goalLowered : (n: #NatType) -> #{level = 7} Type =
 /// Mutation-checked: with `RecGroup::traverse` visiting no member scope where `instantiate_universes` substitutes, `nestedHonest` and `goalHonest` are refused.
 #[test]
 fn a_group_nested_in_a_group_or_named_by_a_goal_is_read_at_its_instances_levels() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${GROUPS_IN_A_GROUP_AND_A_GOAL}",
         PROPOSITIONS,
         GROUPS_IN_A_GROUP_AND_A_GOAL

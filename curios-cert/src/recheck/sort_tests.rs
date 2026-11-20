@@ -10,7 +10,7 @@ use {
 };
 
 /// The refusal a verdict reached at one assignment, with the assignment: `None` for a refusal that names none.
-fn at_sorts(verdict: &Verdict) -> Option<(&[Quality], &Error)> {
+fn at_sorts(verdict: &Refusal) -> Option<(&[Quality], &Error)> {
     match &verdict.error {
         Error::AtSorts { sorts, refusal } => Some((sorts, refusal)),
         _ => None,
@@ -55,7 +55,7 @@ let /id: (A: Sort, a: A) -> A =
 #[test]
 fn one_definition_is_used_at_a_type_and_at_a_proposition() {
     let node = "";
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         "${HELD}${USED_AT_BOTH}",
         HELD,
         USED_AT_BOTH = fill!(USED_AT_BOTH, node)
@@ -91,7 +91,7 @@ end
                 ),
             ),
         ] {
-            let verdicts = text_verdicts(&text);
+            let verdicts = text_refusals(&text);
             assert!(
                 verdicts.iter().any(|verdict| matches!(
                     at_sorts(verdict),
@@ -107,7 +107,7 @@ end
 #[test]
 fn a_definition_well_typed_at_every_sort_is_accepted() {
     let (node, sort) = ("", "Sort");
-    let verdicts = text_verdicts(&fill!(BACK, node, sort));
+    let verdicts = text_refusals(&fill!(BACK, node, sort));
 
     assert!(verdicts.is_empty(), "{verdicts:?}");
 }
@@ -117,7 +117,7 @@ fn a_definition_well_typed_at_every_sort_is_accepted() {
 fn a_refusal_at_one_sort_restates_the_declaration_at_it() {
     let (node, sort) = ("", "Prop");
     let definitions = core_text_module(&fill!(BACK, node, sort));
-    let reports = fixture_verdicts(&definitions, BUDGET, &Globals::default(), SYNTAX)
+    let reports = fixture_refusals(&definitions, BUDGET, &Globals::default(), SYNTAX)
         .iter()
         .map(|verdict| {
             verdict.rendered(
@@ -186,7 +186,7 @@ let /user: #NatType =
         ),
     ];
     for (label, text, expected) in cases {
-        let verdicts = text_verdicts(&text);
+        let verdicts = text_refusals(&text);
 
         assert!(
             refuses(&verdicts, Some("user"), expected),
@@ -198,7 +198,7 @@ let /user: #NatType =
 /// A quality parameter past the ones its declaration leaves is bound by nothing: no assignment the declaration is judged at reaches it.
 #[test]
 fn a_sort_past_the_ones_a_declaration_leaves_is_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {quality_count = 1}}
 let /past: (A: #{quality = Param(1)} Sort) -> #{quality = Param(1)} Sort =
@@ -218,7 +218,7 @@ let /past: (A: #{quality = Param(1)} Sort) -> #{quality = Param(1)} Sort =
 /// A family over a sort its caller states is one declaration, held at a type and at a proposition: its telescopes are typed at each assignment, and what is decided of the declaration as data — its polarities, its variances — reads no sort.
 #[test]
 fn a_family_over_a_sort_holds_data_and_proofs() {
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         r#"
 #{universe_context = {quality_count = 1}}
 induct /Box(A: Sort): pub Type
@@ -243,7 +243,7 @@ let /a_proof:
 /// A family's own sort is one sort whatever a use states: the rules that tell a proof from data by a declaration read the sort it declares, as written.
 #[test]
 fn a_family_whose_own_sort_is_left_to_its_caller_is_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {quality_count = 1}}
 induct /Box(A: Sort): pub (Sort)
@@ -265,7 +265,7 @@ end
 #[test]
 fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     let coercion = |to: &str| {
-        text_verdicts(&fill!(
+        text_refusals(&fill!(
             r#"
 #{universe_context = {quality_count = 1}}
 induct /Tagged: pub Type
@@ -297,7 +297,7 @@ let /coerce: (x: #{node = InductType, universes = {qualities = [Prop]}} /Tagged(
 #[test]
 fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
     let node = "node = Rec, ";
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         "${HELD}${USED_AT_BOTH}",
         HELD,
         USED_AT_BOTH = fill!(USED_AT_BOTH, node)
@@ -310,7 +310,7 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
 #[test]
 fn a_declaration_leaves_no_more_sorts_than_the_limit() {
     let stated = UniverseContext::QUALITY_LIMIT + 1;
-    let verdicts = text_verdicts(&fill!(
+    let verdicts = text_refusals(&fill!(
         "#{universe_context = {quality_count = ${stated}}}\nlet /many: #NatType = 0;",
         stated
     ));
@@ -327,7 +327,7 @@ fn a_declaration_leaves_no_more_sorts_than_the_limit() {
 /// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart: judged at `Prop` the match is a proof's, and at `Type` it is the large elimination the guard refuses, so the definition is refused at that assignment. `curios`'s `tests::rules::subsumption` puts the same proposition to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 induct /Two: pub Prop
 | a()
@@ -353,7 +353,7 @@ let /pick: (A: Sort, t: #{node = InductType} /Two(), x: A, y: A) -> A =
 /// A proposition carries only proofs at every assignment of the sorts it leaves: `struct W(A: Sort): Prop { a: A }` holds a proof at `Prop` and a value at `Type`, where any two of its values would be one with their fields apart, so it is refused at that assignment. `curios`'s `tests::rules::subsumption` puts the same structure to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {quality_count = 1}}
 struct /W(A: Sort): pub Prop {
@@ -374,7 +374,7 @@ struct /W(A: Sort): pub Prop {
 /// A value at a sort left to a caller is a proof at the use that states `Prop`, so a recursion answering one owes a proof's descent: `rec spin(A: Sort, n: Nat) -> A = spin(A, n)` is a proof's recursion at `Prop`, where it does not descend, and is refused at that assignment alone.
 #[test]
 fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{node = Rec, universe_context = {quality_count = 1}}
 let /spin: (A: Sort, n: #NatType) -> A =
@@ -394,7 +394,7 @@ let /spin: (A: Sort, n: #NatType) -> A =
 /// A recursive group's members state no sort its context does not leave: `rec id(A: Sort, a: A) -> A` under a context leaving none is refused, its members being read as definitions under the group's own context.
 #[test]
 fn a_group_stating_a_sort_its_context_does_not_leave_is_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{node = Rec}
 let /id: (A: Sort, a: A) -> A =
@@ -422,7 +422,7 @@ let /T: Type =
 "#,
     );
 
-    assert_eq!(rechecked.verdicts(), Vec::new());
+    assert_eq!(rechecked.refusals(), Vec::new());
     let Item::Let(definition) = &rechecked.definitions().items[0] else {
         panic!("the module holds one definition");
     };
@@ -432,7 +432,7 @@ let /T: Type =
 /// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and the match is read through its arm, so the occurrence is refused whatever a use states. `curios`'s `tests::rules::positivity_computed_type` puts the same declaration to the elaborator under this name. Rename both or neither.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {quality_count = 1}}
 induct /Eq(A: Sort): (x: A, y: A) -> pub Prop
@@ -475,7 +475,7 @@ end
 /// A level carried only by a match that stands is held: `induct Lv(@A: Sort, x: A, y: A, h: Eq(x, y)): Type u | mk(f: match h | refl(@z) => Nat end) end` holds `u` in its goal alone, where conversion compares two such matches, since at `Type` a match on `h` stands whatever `x` and `y` are. So two instances of `Lv` at `Type` apart in `u` are two types, and a value of one is no value of the other.
 #[test]
 fn a_level_a_standing_match_carries_is_held_by_its_family() {
-    let verdicts = text_verdicts(
+    let verdicts = text_refusals(
         r#"
 #{universe_context = {quality_count = 1}}
 induct /Eq(A: Sort): (x: A, y: A) -> pub Prop
@@ -551,7 +551,7 @@ end
 // A payload at a sort its family leaves to its caller is a proof at `Prop` and data at `Type`, and what its constructor states of it is stated once, of the declaration as written, and read at every assignment. At `Type` the closed match reads the payload `false` as data, so the closing term stands at `Holds(false)`, which is `False`, and `qed` is refused there: a payload bound at `Type` by what holds at `Prop`, as a proof no judgment reads, is still the value the match hands on. No mutation is claimed: it pins the reduct a closed computation reaches through such a payload, the verdict nearest the mark `certifier::stating::tests::a_binder_at_a_sort_left_to_the_caller_binds_no_proof` holds.
 #[test]
 fn a_payload_at_a_sort_left_to_the_caller_is_read_as_data_at_type() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_PAYLOAD_READ_AT_TYPE}",
         PROPOSITIONS,
         A_PAYLOAD_READ_AT_TYPE
@@ -560,7 +560,7 @@ fn a_payload_at_a_sort_left_to_the_caller_is_read_as_data_at_type() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict {
+            [Refusal {
                 name: None,
                 error: Error::Mismatch { .. }
             }]

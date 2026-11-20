@@ -193,7 +193,7 @@ pub fn erase_to_anf(source: &str) -> curios_anf::Module {
         let Rechecked::Accepted(program) = rechecked else {
             panic!(
                 "the elaborated program is certified: {:?}",
-                rechecked.verdicts()
+                rechecked.refusals()
             );
         };
         erase_program(

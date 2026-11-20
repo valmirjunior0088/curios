@@ -7,7 +7,7 @@ use {
     super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
     curios_abi::{ForeignStore, TEST_ANSWER, WireType},
     curios_anf::lower_to_cps,
-    curios_cert::{Accepted, Globals, Rechecked, Verdict, certify_definitions, certify_program},
+    curios_cert::{Accepted, Globals, Rechecked, Refusal, certify_definitions, certify_program},
     curios_common::{
         About, Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
     },
@@ -416,7 +416,7 @@ pub fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Glob
 
 /// The compile error a certifier verdict is reported as: the refusal, named for the item it is about where there is one, and placed where `anchors`, the refused unit's own and then those of the units in its scope, say its name is written.
 pub fn certifier_refusal(
-    verdict: &Verdict,
+    verdict: &Refusal,
     definitions: &curios_core::Definitions,
     scope: &[&curios_core::Lexicon],
     anchors: &[&Anchors],
@@ -439,7 +439,7 @@ pub fn certifier_refusal(
 
 /// The compile error a certifier verdict over a program is reported as: the refusal, named for the item it is about, or for the entrypoint where it names none, and placed where `anchors`, the program's own and then those of the units in its scope, say it is written.
 pub fn program_refusal(
-    verdict: &Verdict,
+    verdict: &Refusal,
     definitions: &curios_core::Definitions,
     lexicons: &[&curios_core::Lexicon],
     anchors: &[&Anchors],
@@ -538,7 +538,7 @@ pub struct Obligation {
 /// One refusal the certifier reached over a program put whole: its verdict, and the reports a compilation makes of it, placed where the refused declaration is written.
 #[derive(Debug)]
 pub struct Refuted {
-    pub verdict: Verdict,
+    pub verdict: Refusal,
     pub reported: Vec<Report>,
 }
 
@@ -1430,7 +1430,7 @@ pub fn examine_entrypoint(
     Ok(Examined {
         obligations,
         verdicts: rechecked
-            .into_verdicts()
+            .into_refusals()
             .into_iter()
             .map(|verdict| Refuted {
                 reported: program_refusal(

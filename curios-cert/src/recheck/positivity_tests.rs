@@ -151,7 +151,7 @@ end
 // Mutation-checked at `curios-analysis`'s positivity walk: reading nothing through `ListType` admits the module whole.
 #[test]
 fn curry_through_a_list_is_refused_at_the_family_alone() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${CURRY_THROUGH_A_LIST}",
         PROPOSITIONS,
         CURRY_THROUGH_A_LIST
@@ -160,7 +160,7 @@ fn curry_through_a_list_is_refused_at_the_family_alone() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::NotPositive { .. } }] if *name == global("Bad")
+            [Refusal { name: Some(name), error: Error::NotPositive { .. } }] if *name == global("Bad")
         ),
         "{verdicts:?}"
     );
@@ -177,7 +177,7 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
         ("a cell", "#CellType(#{node = StructType} /Bad())"),
         ("a channel", "#ChannelType(#{node = StructType} /Bad())"),
     ] {
-        let verdicts = core_text_verdicts(&fill!(
+        let verdicts = core_text_refusals(&fill!(
             "${PROPOSITIONS}\nstruct /Bad: pub Type { held: ${held} }\n\n/std/Bool/False",
             PROPOSITIONS,
             held
@@ -223,7 +223,7 @@ struct /S(G: (A: Type) -> Type): pub Type {
 // Nothing says how a parameter uses its argument, so the record reaching itself as one is read as reaching itself at `Mixed`: the record is refused, and the closing term, which types once it is admitted, is refused for nothing of its own.
 #[test]
 fn a_record_reaching_itself_through_its_own_parameter_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${CURRY_THROUGH_A_PARAMETER}",
         PROPOSITIONS,
         CURRY_THROUGH_A_PARAMETER
@@ -232,7 +232,7 @@ fn a_record_reaching_itself_through_its_own_parameter_is_refused() {
     assert!(
         matches!(
             &verdicts[..],
-            [Verdict { name: Some(name), error: Error::NotPositive { .. } }] if *name == global("S")
+            [Refusal { name: Some(name), error: Error::NotPositive { .. } }] if *name == global("S")
         ),
         "{verdicts:?}"
     );
@@ -279,7 +279,7 @@ end
 // Positivity walks no index binder type, which is sound only because a former's domains name nothing that holds the declaration: a family indexed by a family that holds it is induction-induction, which no decision admits. Each is refused under the declaration whose former names the other, declared in one group or apart, before or after the family that holds it, and a record's parameter alike, where positivity, which reads a family not yet judged at `Mixed`, refuses only the order that walks the holder first. `curios`'s `tests::rules::positivity_index` puts the grouped shape to the elaborator under this name.
 #[test]
 fn a_family_is_indexed_by_nothing_that_holds_it() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${INDEXED_BY_WHAT_HOLDS_IT}",
         PROPOSITIONS,
         INDEXED_BY_WHAT_HOLDS_IT
@@ -327,7 +327,7 @@ struct /Shrink(A: Type): pub Type { next: #{node = InductType} /Opt(#{node = Str
 // A record that holds itself through its fields alone has no finite value, and the size order reads a field strictly below its record, so it is refused where it is declared, whichever way the path back is spelled; a family between ends the path, and the records holding themselves through one stand. `curios`'s `tests::rules::totality_projection` puts the same records to the elaborator under this name.
 #[test]
 fn a_record_holding_itself_through_fields_alone_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${HOLDING_ITSELF}",
         PROPOSITIONS,
         HOLDING_ITSELF
@@ -338,7 +338,7 @@ fn a_record_holding_itself_through_fields_alone_is_refused() {
         .iter()
         .filter(|verdict| verdict.name.is_some())
         .map(|verdict| match verdict {
-            Verdict {
+            Refusal {
                 name: Some(name),
                 error: Error::HoldsItself { .. },
             } => Some(*name),
@@ -383,7 +383,7 @@ end
 // The arm reads the binder its head supplies, so the head is read at `Mixed` and `/G`, holding a `/D` whose head holds `/G`, reaches itself both ways. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
 #[test]
 fn a_head_carrying_a_type_into_an_arm_is_read_at_mixed() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_HEAD_CARRYING_A_TYPE}",
         PROPOSITIONS,
         A_HEAD_CARRYING_A_TYPE
@@ -421,7 +421,7 @@ end
 // An index at `Nat` is a datum, which no type parameter of the family reaches, but a declaration it names is read where it stands: a datum may take a value of one apart. Read past, as a type parameter is, `/T` would be admitted holding a datum about itself that a definition placed before it computes.
 #[test]
 fn a_datum_taking_its_family_apart_reaches_the_family() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_DATUM_TAKING_ITS_FAMILY_APART}",
         PROPOSITIONS,
         A_DATUM_TAKING_ITS_FAMILY_APART
@@ -472,7 +472,7 @@ end
 // Mutation-checked at `curios-analysis`'s summary: recording a member's own parameters alone admits `/G`.
 #[test]
 fn a_group_closed_over_the_declarations_parameter_is_read_by_its_unfolding() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_GROUP_CLOSED_OVER_THE_PARAMETER}",
         PROPOSITIONS,
         A_GROUP_CLOSED_OVER_THE_PARAMETER
@@ -509,7 +509,7 @@ end
 // The definition is read where it is used, its recursion by the fixpoint of its unfolding, and no vector filed for it answers: `/B` stands left of an arrow in every unfolding, so the pair is refused, whichever family is walked first.
 #[test]
 fn a_recursive_definition_before_two_families_reaches_the_second_through_its_body() {
-    let verdicts = core_text_verdicts(&fill!(
+    let verdicts = core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${A_DEFINITION_BEFORE_BOTH}",
         PROPOSITIONS,
         A_DEFINITION_BEFORE_BOTH

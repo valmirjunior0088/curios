@@ -5,7 +5,6 @@ mod tests;
 
 use {
     crate::{Proof, Step, Witness},
-    curios_cert::Verdict,
     curios_common::{Report, Source},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
@@ -97,7 +96,7 @@ fn put_proof(predecessors: Predecessors<'_>, proof: &Proof) -> Result<Put, Strin
 }
 
 /// The certifier's own words for `verdict`, on no place: what a report quotes of a certifier's refusal, and what a step's refusal is reported as, its reading being the history's.
-pub fn words(verdict: &Verdict) -> String {
+pub fn words(verdict: &curios_cert::Refusal) -> String {
     verdict.error.rendered(&Spelling::default()).to_string()
 }
 
@@ -159,7 +158,7 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Put(curios_pipeline::Answer::Judged(vec![Refusal::Certifier {
                 reported: words(&verdict),
-                verdict: *verdict,
+                refusal: *verdict,
             }]))
         }
         Unbuilt::Unmade(Unmade::Erased(error)) => step(format!("{error:?}"), true),

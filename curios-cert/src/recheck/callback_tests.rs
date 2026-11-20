@@ -28,7 +28,7 @@ let /spin: (n: #NatType) -> #{node = InductType} /T() =
 #[test]
 fn a_callback_applied_through_an_alias_at_a_value_not_below_is_not_graded_below() {
     let zero = "#{node = Variant} /T/t()";
-    let control = text_verdicts(&fill!(THROUGH_A_CALLBACK, zero));
+    let control = text_refusals(&fill!(THROUGH_A_CALLBACK, zero));
     assert_eq!(
         control,
         Vec::new(),
@@ -36,7 +36,7 @@ fn a_callback_applied_through_an_alias_at_a_value_not_below_is_not_graded_below(
     );
 
     let zero = "let g: (#NatType) -> #{node = InductType} /T() = f; g(#NatAdd(n, 1))";
-    let verdicts = text_verdicts(&fill!(THROUGH_A_CALLBACK, zero));
+    let verdicts = text_refusals(&fill!(THROUGH_A_CALLBACK, zero));
     assert!(
         refuses(&verdicts, Some("spin"), |error| matches!(
             error,
@@ -83,7 +83,7 @@ fn a_callback_handed_to_a_member_whose_body_binds_no_parameter_is_graded_as_unre
             relay,
             callback
         );
-        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+        text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
     };
     for relay in ["/apply", "/pick(0)"] {
         let refused = verdicts(relay, "f");
@@ -127,7 +127,7 @@ let /loop: (n: #NatType) -> /Next =
 fn a_member_whose_second_list_is_a_definitions_value_is_graded_over_both_its_lambdas() {
     let verdicts = |call: &str| {
         let module = fill!(A_SECOND_LIST_THAT_IS_A_DEFINITIONS_VALUE, call);
-        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+        text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
     };
 
     let refused = verdicts("/loop(n)(f)");
@@ -198,8 +198,8 @@ let /spin: (t: #{node = InductType} /Never()) -> /std/Bool/False =
 "#;
 
 /// The verdicts on [`CALLBACKS_OUT_OF_AN_EMPTY_TYPE`] with `spin` handing its callee `spin`.
-fn spin_verdicts(spin: &str) -> Vec<Verdict> {
-    core_text_verdicts(&fill!(
+fn spin_refusals(spin: &str) -> Vec<Refusal> {
+    core_text_refusals(&fill!(
         "${PROPOSITIONS}\n${CALLBACKS}",
         PROPOSITIONS,
         CALLBACKS = fill!(CALLBACKS_OUT_OF_AN_EMPTY_TYPE, spin)
@@ -207,7 +207,7 @@ fn spin_verdicts(spin: &str) -> Vec<Verdict> {
 }
 
 /// Whether `verdicts` refuse `spin` for a group that does not descend.
-fn spin_does_not_descend(verdicts: &[Verdict]) -> bool {
+fn spin_does_not_descend(verdicts: &[Refusal]) -> bool {
     refuses(verdicts, Some("spin"), |error| {
         matches!(error, Error::NotDescending { .. })
     })
@@ -216,12 +216,12 @@ fn spin_does_not_descend(verdicts: &[Verdict]) -> bool {
 // A bound a callback is handed stays with its binders: `each` stands `c` below `t`, and the lambda the callback answers binds `e` to `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder` puts the program to both checkers under this name. The control recurses on `c`.
 #[test]
 fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
-    let attack = spin_verdicts(
+    let attack = spin_refusals(
         "/each(0, t, t, (c: #{node = InductType} /Never()) => (e: #{node = InductType} /Never()) => /spin(e))",
     );
     assert!(spin_does_not_descend(&attack), "{attack:?}");
 
-    let control = spin_verdicts(
+    let control = spin_refusals(
         "/each(0, t, t, (c: #{node = InductType} /Never()) => (e: #{node = InductType} /Never()) => /spin(c))",
     );
     assert!(
@@ -236,12 +236,12 @@ fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
 // Each argument of a call is bounded by the applications of its own parameter: `split` stands `p`'s binder below `t` and `q`'s at `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder` puts the program to both checkers under this name. The control's `q` callback recurses on what a `more` of `t` holds.
 #[test]
 fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
-    let attack = spin_verdicts(
+    let attack = spin_refusals(
         "/split(1, t, t, (c: #{node = InductType} /Never()) => /spin(c), (e: #{node = InductType} /Never()) => /spin(e))",
     );
     assert!(spin_does_not_descend(&attack), "{attack:?}");
 
-    let control = spin_verdicts(
+    let control = spin_refusals(
         "/split(1, t, t, (c: #{node = InductType} /Never()) => /spin(c), (e: #{node = InductType} /Never()) => #{goal = /std/Bool/False} match t | more(y) => /spin(y) end)",
     );
     assert!(
@@ -275,7 +275,7 @@ let /spin: (n: #NatType) -> #{node = InductType} /std/Bool/True() =
 fn a_projections_steps_reach_no_application_typed_inside_its_head() {
     let verdicts = |spin: &str| {
         let module = fill!(A_PROJECTION_BESIDE_A_SUMMARIZED_CALL, spin);
-        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+        text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
     };
     for (head, spin) in [
         (
@@ -316,7 +316,7 @@ let /spin: (n: #NatType, m: #NatType) -> #{node = InductType} /std/Bool/False() 
 fn a_member_whose_lambdas_are_not_its_types_telescope_is_refused_before_its_calls_are_graded() {
     let verdicts = |lambdas: &str| {
         let module = fill!(A_MEMBER_WHOSE_LAMBDAS_ARE_NOT_ITS_TYPES, lambdas);
-        text_verdicts(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
+        text_refusals(&fill!("${PROPOSITIONS}\n${module}", PROPOSITIONS, module))
     };
 
     let control = verdicts("(n: #NatType, m: #NatType)");

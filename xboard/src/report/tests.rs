@@ -3,7 +3,6 @@
 use {
     super::*,
     crate::*,
-    curios_cert::Verdict,
     curios_common::Qualifier,
     curios_core::Global,
     curios_pipeline::{Checker, Refusal},
@@ -31,10 +30,10 @@ fn judged(refusals: Vec<Refusal>) -> Answer {
 }
 
 /// The certifier's refusal by `verdict`, reported in its own words.
-fn refusal_of(verdict: Verdict) -> Refusal {
+fn refusal_of(verdict: curios_cert::Refusal) -> Refusal {
     Refusal::Certifier {
         reported: words(&verdict),
-        verdict,
+        refusal: verdict,
     }
 }
 
@@ -44,7 +43,7 @@ fn admitted() -> Answer {
 
 /// The certifier's refusal of the entry by `error`.
 fn by_certifier(error: curios_cert::Error) -> Answer {
-    judged(vec![refusal_of(Verdict { name: None, error })])
+    judged(vec![refusal_of(curios_cert::Refusal { name: None, error })])
 }
 
 /// The elaborator's refusal by `error`, while it was still building the module.
@@ -120,7 +119,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
             error: curios_elab::Error::Poisoned,
             reported: "a diagnostic".to_string(),
         },
-        refusal_of(Verdict {
+        refusal_of(curios_cert::Refusal {
             name: None,
             error: curios_cert::Error::UntypedEntry,
         }),
@@ -191,7 +190,7 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
         )],
         ..forged()
     };
-    let in_g = judged(vec![refusal_of(Verdict {
+    let in_g = judged(vec![refusal_of(curios_cert::Refusal {
         name: Some(declared("g")),
         error: curios_cert::Error::UntypedEntry,
     })]);
