@@ -508,3 +508,52 @@ fn a_place_no_file_holds_is_no_location_an_editor_is_handed() {
         diagnostic.message
     );
 }
+
+/// What `range` covers of `buffer`, a buffer of ASCII lines, where a character is a byte.
+fn covered(buffer: &str, range: &Range) -> String {
+    let offset = |position: Position| {
+        buffer
+            .split_inclusive('\n')
+            .take(position.line as usize)
+            .map(str::len)
+            .sum::<usize>()
+            + position.character as usize
+    };
+
+    buffer[offset(range.start)..offset(range.end)].to_string()
+}
+
+/// A selection grows from the innermost term holding a position through each term around it to its declaration, and a position between two declarations is held by none. Mutation-checked: with every term inside the last one kept whether or not it holds the position, the chain runs into the parameter's type.
+#[test]
+fn a_selection_grows_through_each_term_around_a_position_to_its_declaration() {
+    let program = "pub let double(x: Nat) -> Nat = x + x * 2;\n\n/std/print(\"ok\")\n";
+    let checked = checked(program);
+    let mut grown = Vec::new();
+    let mut selection = selected(
+        program,
+        &checked,
+        program.find("2;").expect("the program writes it"),
+    );
+    while let Some(range) = selection {
+        grown.push(covered(program, &range.range));
+        selection = range.parent.map(|parent| *parent);
+    }
+
+    assert_eq!(
+        grown,
+        [
+            "2",
+            "x * 2",
+            "x + x * 2",
+            "pub let double(x: Nat) -> Nat = x + x * 2;"
+        ]
+    );
+    assert_eq!(
+        selected(
+            program,
+            &checked,
+            program.find("\n\n").expect("a blank line") + 1
+        ),
+        None
+    );
+}

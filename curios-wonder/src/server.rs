@@ -39,15 +39,16 @@ use {
         FileSystemWatcher, GlobPattern, GotoDefinitionParams, GotoDefinitionResponse, Hover,
         HoverContents, HoverParams, HoverProviderCapability, InitializeParams, Location,
         MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
-        RegistrationParams, ServerCapabilities, SymbolKind, TextDocumentSyncCapability,
-        TextDocumentSyncKind, TextEdit, Uri,
+        RegistrationParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
+        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
+        Uri,
         notification::{
             DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
         },
         request::{
             DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, RegisterCapability,
-            Request,
+            Request, SelectionRangeRequest,
         },
     },
     std::{
@@ -82,6 +83,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
+        selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         ..ServerCapabilities::default()
     };
     let initialization = connection
@@ -267,6 +269,12 @@ impl Server {
                         id,
                         serde_json::from_value::<DocumentSymbolParams>(params)
                             .map(|params| valued(serde_json::to_value(self.symbols(&params)))),
+                    ),
+                    SelectionRangeRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<SelectionRangeParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.selections(&params)))),
                     ),
                     // Every other request is declined in the capabilities, so one that arrives anyway gets the protocol's "not found" rather than silence.
                     _ => reply_unhandled(connection, id, &method),
@@ -461,6 +469,29 @@ impl Server {
         })
     }
 
+    /// The ranges a selection grows through at each position asked, innermost first ([`selected`]). A position no checked text holds answers the empty range at it, since the protocol answers each position asked.
+    fn selections(&self, params: &SelectionRangeParams) -> Vec<SelectionRange> {
+        let held = self.held(&params.text_document.uri);
+
+        params
+            .positions
+            .iter()
+            .map(|position| {
+                held.as_ref()
+                    .and_then(|(buffer, checked)| {
+                        selected(buffer, checked, offset_of(buffer, *position))
+                    })
+                    .unwrap_or(SelectionRange {
+                        range: Range {
+                            start: *position,
+                            end: *position,
+                        },
+                        parent: None,
+                    })
+            })
+            .collect()
+    }
+
     /// What a document declares, as an outline: none for a document nothing has checked yet.
     fn symbols(&self, params: &DocumentSymbolParams) -> DocumentSymbolResponse {
         DocumentSymbolResponse::Nested(
@@ -565,6 +596,48 @@ fn answered_at(buffer: &str, checked: &Placed, offset: usize) -> Option<(Answer,
         let answer = checked.answer(written, offset.checked_add_signed(-moved)?)?;
 
         Some((answer, moved))
+    })
+}
+
+/// The selection at `offset` of `buffer` and each one it grows to, by what the buffer's last check left: the terms of the text that holds the offset, innermost first, then the text itself. Nothing where no text stands there as it was checked.
+///
+/// The terms come a term before the ones it holds (`Written::terms`), so the ones holding the offset run from the outermost in; a term beside the last one kept, as one starting where its sibling ends does at the offset they share, is passed over, so each range holds the next.
+fn selected(buffer: &str, checked: &Placed, offset: usize) -> Option<SelectionRange> {
+    let standing = Standing::of(checked.texts.first()?.text.source.text(), buffer);
+
+    checked.texts.iter().find_map(|written| {
+        let moved = standing.moved(&written.text)?;
+        let at = offset.checked_add_signed(-moved)?;
+        let holds =
+            |outer: &Span, start: usize, end: usize| outer.start <= start && end <= outer.end;
+        if !holds(&written.text, at, at) {
+            return None;
+        }
+
+        let mut chain = vec![&written.text];
+        for term in &written.terms {
+            let innermost = chain.last().expect("the text heads the chain");
+            if holds(term, at, at) && holds(innermost, term.start, term.end) {
+                chain.push(term);
+            }
+        }
+
+        chain
+            .into_iter()
+            .try_fold(None::<SelectionRange>, |parent, span| {
+                let range = Range {
+                    start: position_of(buffer, span.start.checked_add_signed(moved)?),
+                    end: position_of(buffer, span.end.checked_add_signed(moved)?),
+                };
+
+                Some(match parent {
+                    Some(outer) if outer.range == range => Some(outer),
+                    parent => Some(SelectionRange {
+                        range,
+                        parent: parent.map(Box::new),
+                    }),
+                })
+            })?
     })
 }
 
