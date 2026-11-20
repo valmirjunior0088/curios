@@ -110,11 +110,9 @@ pub fn erase_unit(
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let certification = definitions.certification();
         let definitions = definitions.as_definitions();
         let places = curios_core::Places::of(definitions);
-        certifier
-            .read(|reader| erase_items(reader, scope, (definitions, &places, certification), None))
+        certifier.read(|reader| erase_items(reader, scope, (definitions, &places), None))
     })
 }
 
@@ -127,17 +125,9 @@ pub fn erase_unit_over(
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
-        let certification = definitions.certification();
         let definitions = definitions.as_definitions();
         let over = ErasedOver::new(baseline, definitions, scope);
-        certifier.read(|reader| {
-            erase_items(
-                reader,
-                scope,
-                (definitions, baseline.now, certification),
-                Some(over),
-            )
-        })
+        certifier.read(|reader| erase_items(reader, scope, (definitions, baseline.now), Some(over)))
     })
 }
 
@@ -153,12 +143,7 @@ pub fn erase_program(
         let places = curios_core::Places::of(definitions);
         let (body, type_) = program.entry();
         certifier.read(|reader| {
-            let own = erase_items(
-                reader,
-                scope,
-                (definitions, &places, program.certification()),
-                None,
-            )?;
+            let own = erase_items(reader, scope, (definitions, &places), None)?;
             let entry = {
                 let externals = |name: &curios_core::Global, sorts: Sorts| {
                     own.find(name, sorts).or_else(|| scope.find(name, sorts))
@@ -180,17 +165,13 @@ pub fn erase_program(
     })
 }
 
-/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name, and `certification` is the record of its definitions. What erasing each item read is kept with the unit ([`AskedItems`]): of the declarations around it, their signatures and bodies through the certifier's reads and their kinds off their items, of each erased form it read how a name is bound in, of each erased form its evaluation ran, the form whole, and of each name whose totality decided whether what it left is observable, its signature.
+/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name. What erasing each item read is kept with the unit ([`AskedItems`]): of the declarations around it, their signatures and bodies through the certifier's reads and their kinds off their items, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
 ///
 /// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure read, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
 pub fn erase_items(
     reader: &mut Reader,
     scope: Erasures<'_>,
-    (definitions, places, certification): (
-        &curios_core::Definitions,
-        &curios_core::Places,
-        &curios_core::Certification,
-    ),
+    (definitions, places): (&curios_core::Definitions, &curios_core::Places),
     mut over: Option<ErasedOver<'_>>,
 ) -> Result<ErasedUnit, Error> {
     let shared = over.as_ref().and_then(|over| {
@@ -247,13 +228,8 @@ pub fn erase_items(
                 record
             }
             (None, None) => {
-                let (erased, read) = erase_forms(
-                    reader,
-                    scope,
-                    (&unit, certification),
-                    (definitions, places),
-                    item,
-                )?;
+                let (erased, read) =
+                    erase_forms(reader, scope, &unit, (definitions, places), item)?;
                 // One sample for each item erased, with how much its erasure read.
                 curios_profile::sample!("erase::asked", read.len());
                 unit.push(place, item, erased);
@@ -381,14 +357,13 @@ fn foreign_parts<'t>(
 fn erase_forms(
     reader: &mut Reader,
     scope: Erasures<'_>,
-    (unit, certification): (&ErasedUnit, &curios_core::Certification),
+    unit: &ErasedUnit,
     (definitions, places): (&curios_core::Definitions, &curios_core::Places),
     item: &curios_core::Item,
 ) -> Result<(ErasedForms, Asked), Error> {
     let names = item.declared_names();
     let mut asked = Asking::of(&names);
     let mut forms = Vec::new();
-    let mut observable = false;
     for sorts in Sorts::every(left_open(item)) {
         let (erased_read, constructors_read) = (RefCell::new(Vec::new()), RefCell::new(Vec::new()));
         let externals = |name: &curios_core::Global, sorts: Sorts| {
@@ -410,16 +385,12 @@ fn erase_forms(
         for name in erased_read.take() {
             asked.note(name, Part::Binding);
         }
-        // What the item's top-level statements compute is computed here, and its trace says what that ran whether or not it could be finished, and whose verdicts decided whether what it left is observable.
-        let erased = match evaluate(scope, (unit, certification), (&erased, sorts)) {
+        // What the item's top-level statements compute is computed here, and its trace says what that ran whether or not it could be finished.
+        let erased = match evaluate(scope, unit, (&erased, sorts)) {
             Some(evaluation) => {
                 for name in &evaluation.ran {
                     asked.note(*name, Part::Forms);
                 }
-                for name in evaluation.judged {
-                    asked.note(name, Part::Signature);
-                }
-                observable |= evaluation.observable;
                 match evaluation.erased {
                     Some(evaluated) => {
                         for (name, _) in evaluated.environment().imported_rows() {
@@ -435,7 +406,7 @@ fn erase_forms(
         };
         forms.push(erased);
     }
-    let forms = ErasedForms::of(forms, observable)
+    let forms = ErasedForms::of(forms)
         .unwrap_or_else(|error| panic!("an erased form failed to archive: {error}"));
 
     Ok((forms, asked.asked))

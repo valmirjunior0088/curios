@@ -230,7 +230,7 @@ fn stepping(by: usize) -> (curios_core::Definitions, ErasedUnit) {
     (unit, erased)
 }
 
-/// A top-level value is computed where its unit is erased: `stepped` is `step(4)`, and its erased form is the `5` that comes to, naming nothing of `step`. So the unit holds no item whose initialization is observable, and a program links `stepped` where it names it and `step` where it applies it.
+/// A top-level value is computed where its unit is erased: `stepped` is `step(4)`, and its erased form is the `5` that comes to, naming nothing of `step`. So a program links `stepped` where it names it and `step` where it applies it.
 #[test]
 fn a_top_level_value_is_computed_where_its_unit_is_erased() {
     let (_, unit) = stepping(1);
@@ -238,7 +238,6 @@ fn a_top_level_value_is_computed_where_its_unit_is_erased() {
         .find(&nominal("stepped"), Sorts::NONE)
         .expect("the unit declares it");
 
-    assert_eq!(unit.observable().count(), 0);
     assert!(stepped.functions().is_empty() && stepped.values().is_empty());
     assert_eq!(
         curios_anf::test_support::shape(stepped.module()),

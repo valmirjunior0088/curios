@@ -282,7 +282,7 @@ impl<'a> ErasedOver<'a> {
                     .object(&made.forms)
                     .filter(|form| form.member.is_none())?;
 
-                Some((Held::stored(form).ok()?, Rc::clone(&record)))
+                Some((Held::stored(form), Rc::clone(&record)))
             })
     }
 

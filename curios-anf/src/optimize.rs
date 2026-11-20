@@ -3,7 +3,6 @@
 //! Pruning, the fold of suspension tests in a program that cannot suspend, compile-time partial evaluation with literal-spine specialization beside it, reconstruction recovery, the monoid worker/wrapper rebase, and the inversion of a structural recursion into its fold. General structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to CPS, which runs after the lowering; ANF's leverage is what it still knows: don't hand CPS work it can delete (pruning), run what compile time has already decided (partial evaluation), and make a loop of a recursion that would take a frame an element, re-based around a monoid (worker/wrapper) or read as the fold its peel splits (inversion).
 
 mod prune;
-pub use prune::observable_since;
 use prune::*;
 
 mod evaluate;

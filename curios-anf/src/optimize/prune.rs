@@ -1,6 +1,6 @@
 //! Reachability pruning — the shrink-before-lower pass.
 //!
-//! A linked program's item chain carries every item of its own and what its items and its entry reach of its scope, with the items of its scope the link takes for their evaluation; lowering them and running CPS's whole-module fixpoint over them is this stage's dominant cost, and CPS cannot recover the loss: item granularity dissolves into the entry's code at CPS conversion. A top-level item is kept where it is **reachable** — it binds something the entry block (or a kept item) transitively references — and dropped otherwise, whatever its evaluation may do: a program computes a top-level value the first time it reads it ([`lower_to_cps`](crate::lower_to_cps)), so one nothing reads it never computes.
+//! A linked program's item chain carries every item of its own and what its items and its entry reach of its scope; lowering them and running CPS's whole-module fixpoint over them is this stage's dominant cost, and CPS cannot recover the loss: item granularity dissolves into the entry's code at CPS conversion. A top-level item is kept where it is **reachable** — it binds something the entry block (or a kept item) transitively references — and dropped otherwise, whatever its evaluation may do: a program computes a top-level value the first time it reads it ([`lower_to_cps`](crate::lower_to_cps)), so one nothing reads it never computes.
 //!
 //! Function and value reachability are mutually dependent, so both close together over the item reference graph, seeded by the entry block's free references. Kept items retain their original order (definition before use), everything owned only by dropped items is tombstoned, and the pruned module re-verifies. Deterministic: identity order everywhere.
 
@@ -9,8 +9,7 @@ mod tests;
 
 use {
     crate::{
-        Analysis, Atom, BlockId, FunctionId, Mark, Module, RecGroupId, Statement, StatementId,
-        Summary, Terminator, ValueId,
+        Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Terminator, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -37,25 +36,6 @@ impl Subtree {
     fn free_values(&self) -> impl Iterator<Item = ValueId> + '_ {
         self.used_values.difference(&self.bound_values).copied()
     }
-}
-
-/// Whether evaluating any of `module`'s items at or past `mark` is observable under the effect summary (`evaluation_observable`): what the link asks of what an item's evaluation where its unit is erased leaves, in the module it was evaluated in, its functions marked total as a program's are.
-pub fn observable_since(module: &Module, mark: &Mark) -> bool {
-    let analysis = Analysis::analyze(module);
-    let summary = Summary::analyze(module, &analysis);
-
-    module.items()[mark.items()..]
-        .iter()
-        .any(|&item| evaluation_observable(module, &summary, item))
-}
-
-/// Whether evaluating `item`, a top-level statement, is observable under `summary`: a trap, an exit, a host call, a state access, an observable allocation, a call that may not end, or a call reaching one.
-fn evaluation_observable(module: &Module, summary: &Summary, item: StatementId) -> bool {
-    module.statement(item).is_some_and(|statement| {
-        summary
-            .statement_behavior(module, statement)
-            .is_observable()
-    })
 }
 
 /// Drop the items the program does not reach, a recursive group with its web among them.

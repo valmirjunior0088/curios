@@ -894,6 +894,8 @@ A top-level `let` states its type, by an annotation or as a function's parameter
 
 That is also what tells an item from the final term: in a program, a top-level `let` with no annotation is no item but a local `let` that opens the final term. A top-level definition's value is checked at the type its annotation states. A local binding shares the region around it, and an annotation gives its value no region of its own.
 
+A top-level value is computed the first time the program reads it, once, and not at all where nothing reads it, as a recursive value is: a program that never reads a value whose computation does not end runs to its end, and one that reads it stops where it reads it. Why: [A top-level value is computed where its unit is compiled](design/compilation/a-top-level-value-is-computed-where-its-unit-is-compiled.md).
+
 ```crs
 use /std/{Nat, Option};
 

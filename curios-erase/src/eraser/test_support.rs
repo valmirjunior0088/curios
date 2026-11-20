@@ -2,16 +2,11 @@
 
 use {super::unit::erase_items, crate::*, curios_cert::Reader};
 
-/// `module`'s items erased through `reader` with nothing in scope and no baseline: the walk `erase_unit` runs inside the certifier's read, with the reader handed to the suite. No record of the unit's verdicts is handed with it, so whether what an item's evaluation leaves is observable is decided with none of its functions marked total.
+/// `module`'s items erased through `reader` with nothing in scope and no baseline: the walk `erase_unit` runs inside the certifier's read, with the reader handed to the suite.
 pub fn erase_through(
     reader: &mut Reader,
     definitions: &curios_core::Definitions,
     places: &curios_core::Places,
 ) -> Result<ErasedUnit, Error> {
-    erase_items(
-        reader,
-        Erasures::nothing(),
-        (definitions, places, &curios_core::Certification::default()),
-        None,
-    )
+    erase_items(reader, Erasures::nothing(), (definitions, places), None)
 }

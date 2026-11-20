@@ -228,13 +228,11 @@ pub struct ErasedForms {
     forms: Vec<ErasedItem>,
     /// Which of `forms` each assignment erases to, by the assignment's index ([`Sorts::index`]).
     at: Vec<u32>,
-    /// Whether the item's initialization is observable: a form its evaluation where its unit is erased left computing, and what it left is kept for its effect by the rule a program's prune keeps an item by (`evaluate`). What every program its unit is in scope of links and runs as it starts, whether or not it names the item.
-    observable: bool,
 }
 
 impl ErasedForms {
-    /// The forms an item erased to, one at each of its assignments in [`Sorts::every`]' order, those whose archives agree held once, `observable` where its initialization is.
-    pub(super) fn of(erased: Vec<ErasedItem>, observable: bool) -> Result<Self, String> {
+    /// The forms an item erased to, one at each of its assignments in [`Sorts::every`]' order, those whose archives agree held once.
+    pub(super) fn of(erased: Vec<ErasedItem>) -> Result<Self, String> {
         let mut forms = Vec::<ErasedItem>::new();
         let mut archives = Vec::<Vec<u8>>::new();
         let mut at = Vec::with_capacity(erased.len());
@@ -251,11 +249,7 @@ impl ErasedForms {
             at.push(index as u32);
         }
 
-        Ok(Self {
-            forms,
-            at,
-            observable,
-        })
+        Ok(Self { forms, at })
     }
 
     /// The form at `sorts`, where the item leaves as many sorts as `sorts` states.
@@ -297,11 +291,6 @@ impl ErasedForms {
         self.at.iter().map(|index| &self.forms[*index as usize])
     }
 
-    /// Whether the item's initialization is observable — see the field.
-    pub(super) fn observable(&self) -> bool {
-        self.observable
-    }
-
     /// Whether an item that names `name` reads these forms and `other`'s alike: at every assignment ([`ErasedItem::read_alike`]).
     pub(super) fn read_alike(&self, other: &ErasedForms, name: &curios_core::Global) -> bool {
         self.at.len() == other.at.len()
@@ -340,15 +329,12 @@ struct ErasedIndex {
     items: Ordered<Rc<Form>>,
     /// The place of the item that declares each name.
     declared: Persistent<curios_core::Global, i64>,
-    /// The places of the items whose initialization is observable ([`ErasedForms::observable`]): what a program links whether or not it names them.
-    observable: Ordered<()>,
 }
 
-/// An erased unit's index as it is stored: each name by the rank of the item declaring it among the unit's items, and the ranks of the items whose initialization is observable, ascending.
+/// An erased unit's index as it is stored: each name by the rank of the item declaring it among the unit's items.
 #[curios_archive::archived]
 struct RankedIndex {
     declared: BTreeMap<curios_core::Global, u32>,
-    observable: Vec<u32>,
 }
 
 /// How an erased unit's index is archived: as a [`RankedIndex`], each place given as its item's rank. A unit restored holds its items at their ranks.
@@ -382,7 +368,6 @@ impl curios_archive::Proxy<ErasedIndex> for Ranking {
                 .iter()
                 .map(|(name, at)| (*name, rank(*at)))
                 .collect(),
-            observable: index.observable.iter().map(|(at, _)| rank(at)).collect(),
         }
     }
 
@@ -390,9 +375,6 @@ impl curios_archive::Proxy<ErasedIndex> for Ranking {
         let mut index = ErasedIndex::default();
         for (name, rank) in stored.declared {
             index.declared.insert(name, i64::from(rank));
-        }
-        for rank in stored.observable {
-            index.observable.insert(i64::from(rank), ());
         }
 
         Ok(index)
@@ -445,7 +427,6 @@ impl ErasedUnit {
 
     /// `item`'s erased forms, made here, at `place`, in place of what was held there.
     pub(super) fn push(&mut self, place: usize, item: &curios_core::Item, erased: ErasedForms) {
-        let observable = erased.observable();
         self.keep(
             place,
             item,
@@ -454,22 +435,15 @@ impl ErasedUnit {
                     erased: Deferred::held(erased),
                     digest: None,
                 }),
-                observable,
             },
         );
     }
 
-    /// `item`'s erased form as another unit holds it, at `place`, in place of what was held there. The form is not read: whether it initializes observably is the holder's to say.
+    /// `item`'s erased form as another unit holds it, at `place`, in place of what was held there. The form is not read.
     pub(super) fn keep(&mut self, place: usize, item: &curios_core::Item, held: Held) {
         let at = position(place);
         for name in item.declared_names() {
             self.index.declared.insert(name, at);
-        }
-        match held.observable {
-            true => self.index.observable.insert(at, ()),
-            false => {
-                self.index.observable.remove(at);
-            }
         }
         self.index.items.insert(at, held.erased);
     }
@@ -478,7 +452,6 @@ impl ErasedUnit {
     pub(super) fn forget(&mut self, place: usize, names: &[curios_core::Global]) {
         let at = position(place);
         self.index.items.remove(at);
-        self.index.observable.remove(at);
         for name in names {
             if self.index.declared.get(name) == Some(&at) {
                 self.index.declared.remove(name);
@@ -521,13 +494,12 @@ impl ErasedUnit {
         self.item(self.place(name)?).at(sorts)
     }
 
-    /// The erased form of the item declaring `name`, as this unit holds it, with whether it initializes observably: what a unit compiled over this one keeps, reading nothing.
+    /// The erased form of the item declaring `name`, as this unit holds it: what a unit compiled over this one keeps, reading nothing.
     pub(super) fn held(&self, name: &curios_core::Global) -> Option<Held> {
         let place = self.place(name)?;
 
         Some(Held {
             erased: Rc::clone(self.form(place)),
-            observable: self.index.observable.get(position(place)).is_some(),
         })
     }
 
@@ -553,11 +525,6 @@ impl ErasedUnit {
     /// The digest of the erased forms of the item at `place`, whole, as they are stored.
     pub fn form_digest(&self, place: usize) -> Result<String, String> {
         self.form(place).object().map(|object| object.digest.hex())
-    }
-
-    /// The places of the items whose initialization is observable, ascending.
-    pub(super) fn observable(&self) -> impl Iterator<Item = usize> {
-        self.index.observable.iter().map(|(at, _)| place_of(at))
     }
 
     /// This unit with `asked` as what erasing each of its items read.
@@ -620,9 +587,7 @@ impl ErasedUnit {
             return Err("an erased form is stored alone".to_string());
         }
         let named = |at: i64| usize::try_from(at).is_ok_and(|place| place < items.len());
-        if !self.index.declared.iter().all(|(_, at)| named(*at))
-            || !self.index.observable.iter().all(|(at, _)| named(at))
-        {
+        if !self.index.declared.iter().all(|(_, at)| named(*at)) {
             return Err("a unit's erased forms are fewer than its index names".to_string());
         }
 
@@ -642,23 +607,21 @@ impl ErasedUnit {
     }
 }
 
-/// An item's erased forms as a unit holds them, with whether its initialization is observable: what another unit keeps of them without reading them.
+/// An item's erased forms as a unit holds them: what another unit keeps of them without reading them.
 #[derive(Debug, Clone)]
 pub struct Held {
     erased: Rc<Form>,
-    observable: bool,
 }
 
 impl Held {
-    /// The erased form `object` holds, as a cabinet keeps it, with whether its item initializes observably: what a unit takes from a candidate, stored again as the bytes it was read from.
-    pub fn stored(object: Object) -> Result<Held, String> {
-        let erased = Rc::new(Form {
-            erased: Deferred::stored(object.bytes),
-            digest: Some(object.digest),
-        });
-        let observable = erased.erased.get()?.observable();
-
-        Ok(Held { erased, observable })
+    /// The erased form `object` holds, as a cabinet keeps it, read when something first asks for it: what a unit takes from a candidate, stored again as the bytes it was read from.
+    pub fn stored(object: Object) -> Held {
+        Held {
+            erased: Rc::new(Form {
+                erased: Deferred::stored(object.bytes),
+                digest: Some(object.digest),
+            }),
+        }
     }
 }
 
@@ -818,11 +781,6 @@ impl<'a> Erasures<'a> {
     /// The units' erased forms, in dependency order.
     pub(super) fn units(&self) -> &'a [&'a ErasedUnit] {
         self.erased
-    }
-
-    /// The records of the units in scope, in order: what marks a function of their items' evaluations total.
-    pub(super) fn certifications(&self) -> &'a [&'a curios_core::Certification] {
-        self.certifications
     }
 
     /// The unit and the place of the item declaring `name`, where a unit in scope declares it.

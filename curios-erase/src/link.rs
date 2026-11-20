@@ -1,8 +1,6 @@
 //! Linking a program: the erased forms it reaches, appended to one module in the order their items evaluate.
 //!
-//! **A program links what it reaches.** Its own items, its entry, and of its scope the items those import, transitively. An item of the scope the program never names is no part of the module the back half lowers, so a program is not handed a library to drop.
-//!
-//! **And what initializes observably, whether or not it is named.** A top-level value whose evaluation is observable runs before the entry in every program its unit is in scope of, which is the language's meaning and not this pass's to change. What one computes was computed where its unit was erased, wherever that could be finished, and where it could not, whether what is left is observable was decided there too, by the rule a program's prune keeps an item by (`evaluate`); here every item whose initialization is observable is linked with what it reaches. One that still computes and is not observable is linked by a program that names it, as any item is, and by no other, whose prune would drop it.
+//! **A program links what it reaches, and nothing else.** Its own items, its entry, and of its scope the items those import, transitively. An item of the scope the program never names is no part of the module the back half lowers, so a program is not handed a library to drop: a program computes a top-level value the first time it reads it (`curios_anf::lower_to_cps`), so one it never names it never computes, whatever computing it would do.
 //!
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
@@ -205,21 +203,6 @@ impl Linking {
         self.module.mark()
     }
 
-    /// Mark total every function of a linked form's evaluation that `certification` classifies so, as a program's are ([`ErasedProgram::mark_total`]).
-    pub fn mark_total(&mut self, certification: &curios_core::Certification) {
-        mark_evaluations_total(&mut self.module, &self.evaluating, certification);
-    }
-
-    /// The names whose totality marking the module reads: those of every linked item with a function of its evaluation.
-    pub fn evaluated_names(&self) -> BTreeSet<curios_core::Global> {
-        self.evaluating.values().flatten().copied().collect()
-    }
-
-    /// Whether a prune would keep what the module holds past `mark` for its effect ([`curios_anf::observable_since`]): asked once its functions are marked, as a program's prune asks.
-    pub fn observable_since(&self, mark: &curios_anf::Mark) -> bool {
-        curios_anf::observable_since(&self.module, mark)
-    }
-
     /// Run what the module holds past `mark` ([`curios_anf::evaluate_since`]), answering whether that finished.
     pub fn evaluate_since(&mut self, mark: &curios_anf::Mark) -> bool {
         curios_anf::evaluate_since(&mut self.module, mark)
@@ -400,12 +383,8 @@ pub fn mark_evaluations_total(
     }
 }
 
-/// What `roots` take of each of `units`: the items they import, transitively, and, where `observable`, every item whose initialization is observable with what it imports; and, of the declarations whose rows any of those import, the rows.
-pub fn reached<'a>(
-    units: &[&ErasedUnit],
-    roots: impl Iterator<Item = &'a ErasedItem>,
-    observable: bool,
-) -> Reached {
+/// What `roots` take of each of `units`: the items they import, transitively, and, of the declarations whose rows any of those import, the rows.
+pub fn reached<'a>(units: &[&ErasedUnit], roots: impl Iterator<Item = &'a ErasedItem>) -> Reached {
     let mut reached = Reached {
         items: vec![BTreeSet::new(); units.len()],
         rows: vec![BTreeSet::new(); units.len()],
@@ -416,14 +395,6 @@ pub fn reached<'a>(
     for root in roots {
         items.extend(places(units, root.values().iter().chain(root.functions())));
         rows.extend(places(units, root.environment().imported_rows()));
-    }
-    if observable {
-        for (unit, erased) in units.iter().enumerate() {
-            for place in erased.observable() {
-                let forms = erased.item(place).forms().count();
-                items.extend((0..forms).map(|form| (unit, (place, form))));
-            }
-        }
     }
     while let Some((unit, at)) = items.pop() {
         if reached.items[unit].insert(at) {
@@ -456,15 +427,6 @@ pub fn link(
     let reached = reached(
         scope.units(),
         own.items().flat_map(|item| item.forms()).chain([entry]),
-        true,
-    );
-    curios_profile::sample!(
-        "link::observable",
-        scope
-            .units()
-            .iter()
-            .map(|unit| unit.observable().count())
-            .sum::<usize>()
     );
     curios_profile::sample!(
         "link::reached",
