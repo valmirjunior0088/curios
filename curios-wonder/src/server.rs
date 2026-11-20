@@ -35,21 +35,21 @@ use {
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
         DidChangeWatchedFilesParams, DidChangeWatchedFilesRegistrationOptions,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
-        DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
-        FileSystemWatcher, FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability,
-        GlobPattern, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
-        HoverParams, HoverProviderCapability, InitializeParams, Location, MarkupContent,
-        MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
-        RegistrationParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
-        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
-        Uri,
+        DocumentFormattingParams, DocumentLink, DocumentLinkOptions, DocumentLinkParams,
+        DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse, FileSystemWatcher,
+        FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability, GlobPattern,
+        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
+        HoverProviderCapability, InitializeParams, Location, MarkupContent, MarkupKind, OneOf,
+        Position, PublishDiagnosticsParams, Range, Registration, RegistrationParams,
+        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, ServerCapabilities,
+        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
         },
         request::{
-            DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDefinition, HoverRequest,
-            RegisterCapability, Request, SelectionRangeRequest,
+            DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
+            GotoDefinition, HoverRequest, RegisterCapability, Request, SelectionRangeRequest,
         },
     },
     std::{
@@ -86,6 +86,10 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
         document_symbol_provider: Some(OneOf::Left(true)),
         selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+        document_link_provider: Some(DocumentLinkOptions {
+            resolve_provider: Some(false),
+            work_done_progress_options: Default::default(),
+        }),
         ..ServerCapabilities::default()
     };
     let initialization = connection
@@ -283,6 +287,12 @@ impl Server {
                         id,
                         serde_json::from_value::<FoldingRangeParams>(params)
                             .map(|params| valued(serde_json::to_value(self.folds(&params)))),
+                    ),
+                    DocumentLinkRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<DocumentLinkParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.links(&params)))),
                     ),
                     // Every other request is declined in the capabilities, so one that arrives anyway gets the protocol's "not found" rather than silence.
                     _ => reply_unhandled(connection, id, &method),
@@ -507,6 +517,33 @@ impl Server {
             .unwrap_or_default()
     }
 
+    /// Each segment of a document's paths that reaches a module, linked to the line of its `mod` line that names it ([`linked`]), the line written into the link as `#L` and its number, which an editor opens a file at: none for a document nothing has checked yet.
+    fn links(&self, params: &DocumentLinkParams) -> Vec<DocumentLink> {
+        let Some((buffer, checked)) = self.held(&params.text_document.uri) else {
+            return Vec::new();
+        };
+
+        linked(buffer, &checked)
+            .into_iter()
+            .filter_map(|(range, declared)| {
+                let location = self.located(declared)?;
+                let target = Uri::from_str(&format!(
+                    "{}#L{}",
+                    location.uri.as_str(),
+                    location.range.start.line + 1
+                ))
+                .ok()?;
+
+                Some(DocumentLink {
+                    range,
+                    target: Some(target),
+                    tooltip: None,
+                    data: None,
+                })
+            })
+            .collect()
+    }
+
     /// What a document declares, as an outline: none for a document nothing has checked yet.
     fn symbols(&self, params: &DocumentSymbolParams) -> DocumentSymbolResponse {
         DocumentSymbolResponse::Nested(
@@ -679,6 +716,30 @@ fn folded(buffer: &str, checked: &Placed) -> Vec<FoldingRange> {
                 kind: None,
                 collapsed_text: None,
             })
+        })
+        .collect()
+}
+
+/// Each segment of `buffer`'s paths that reaches a module, where it stands in the buffer, beside where the module's `mod` line names it, by what the buffer's last check left: none for a module no such line declares, a mount's root among them, nor for a segment the buffer was edited at since.
+fn linked<'a>(buffer: &str, checked: &'a Placed) -> Vec<(Range, &'a Span)> {
+    let Some(first) = checked.texts.first() else {
+        return Vec::new();
+    };
+    let standing = Standing::of(first.text.source.text(), buffer);
+
+    checked
+        .texts
+        .iter()
+        .flat_map(|written| &written.modules)
+        .filter_map(|(segment, module)| {
+            let moved = standing.moved(segment)?;
+            let declared = checked.modules.get(module)?.as_ref()?;
+            let range = Range {
+                start: position_of(buffer, segment.start.checked_add_signed(moved)?),
+                end: position_of(buffer, segment.end.checked_add_signed(moved)?),
+            };
+
+            Some((range, declared))
         })
         .collect()
 }

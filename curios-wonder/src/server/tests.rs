@@ -569,3 +569,21 @@ fn a_declaration_over_several_lines_folds_and_one_on_a_line_does_not() {
 
     assert_eq!(folds, [(2, 3)]);
 }
+
+/// A segment of a path that reaches a module the program declares links to where its `mod` line names it, and the mount a `use` line starts from links nowhere. Mutation-checked: with a segment linked to itself, the link at `Shapes` lands on the call.
+#[test]
+fn a_path_through_a_module_links_to_where_its_mod_line_names_it() {
+    let program = "use /std/{Nat};\n\nmod Shapes\n    use /std/{Nat};\n\n    pub let side() -> Nat = 3;\nend\n\n/std/print(Nat/to_str(Shapes/side()))\n";
+    let checked = checked(program);
+    let links = linked(program, &checked)
+        .into_iter()
+        .map(|(range, declared)| (covered(program, &range), declared.start))
+        .collect::<Vec<_>>();
+    let named = program.find("mod Shapes").expect("the program declares it") + 4;
+
+    assert!(links.contains(&("Shapes".to_string(), named)), "{links:?}");
+    assert!(
+        links.iter().all(|(segment, _)| segment != "std"),
+        "{links:?}"
+    );
+}
