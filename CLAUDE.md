@@ -37,6 +37,6 @@ Every other fact is on disk: `documentation/language.md` for the surface languag
 
 ## Where the rest is
 
-- `.claude/rules/` loads by itself when a matching file is read: the Rust, Curios and documentation conventions, and one file per area of the workspace with what a change there must also inspect.
+- `.claude/rules/` holds the Rust, Curios and documentation conventions, and one file per area of the workspace with what a change there must also inspect. The harness loads one where its Read tool opens a matching file and at no other reading: open the first file you touch in an area with that tool, whatever you read the rest with.
 - `.claude/commands/` holds what a session is asked to run by name; what a session does unprompted is stated here or in a rule.
 - Before proposing a capability, read the applicable findings and specifications under `documentation/roadmap/`. Before changing a public contract — a pipeline stage, the host ABI, the runtime, the JavaScript harness, the embedded standard library — trace it to its consumers.
