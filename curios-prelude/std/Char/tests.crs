@@ -1,5 +1,5 @@
 -- The `Char` surface past its scalar boundaries: the ASCII case conversions and the hexadecimal digit, each of which builds its character with the proof that its code is a scalar value.
-use /std/{Str, Char, List, Test};
+use /std/{Str, Char, List, Bool, Test};
 
 -- Each conversion flips a letter at either end of the alphabet, and leaves the characters just outside it, the other case and a letter past ASCII as they are.
 test ascii_case_flips_letters_and_nothing_beside_them =
@@ -44,6 +44,16 @@ test to_casefold_is_the_full_folding =
         Test/equal(Char/to_casefold('ς'), "σ"),
         Test/equal(Char/to_casefold('ﬃ'), "ffi"),
         Test/equal(Char/to_casefold('1'), "1")]);
+
+-- The case predicates are the database's: a letter past ASCII has its case, a titlecase letter is neither upper nor lower, a letter Unicode 18.0.0 adds is a letter, and a digit is no letter.
+test the_case_predicates_are_the_database_s =
+    Test/all([
+        Test/assert("é is lower", Char/is_lower('é')),
+        Test/assert("É is upper", Char/is_upper('É')),
+        Test/assert("ǅ is not upper", Bool/not(Char/is_upper('ǅ'))),
+        Test/assert("ǅ is not lower", Bool/not(Char/is_lower('ǅ'))),
+        Test/assert("U+0558 is a letter", Char/is_alpha('\u{558}')),
+        Test/assert("1 is no letter", Bool/not(Char/is_alpha('1')))]);
 
 -- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
 test hex_digit_spells_a_nibble_modulo_sixteen =

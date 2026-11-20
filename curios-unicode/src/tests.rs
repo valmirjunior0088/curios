@@ -62,6 +62,8 @@ fn every_table_s_runs_ascend_apart() {
     assert!(ascend_apart(WHITE_SPACE.iter().copied()));
     assert!(ascend_apart(CASED.iter().copied()));
     assert!(ascend_apart(CASE_IGNORABLE.iter().copied()));
+    assert!(ascend_apart(LOWERCASE.iter().copied()));
+    assert!(ascend_apart(UPPERCASE.iter().copied()));
 }
 
 /// What the database says of a few scalars, one from each kind of answer.

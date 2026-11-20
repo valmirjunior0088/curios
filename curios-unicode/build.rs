@@ -569,6 +569,18 @@ fn main() {
     binary_table(&mut out, "CASED", "Cased", &binary(&derived, "Cased"));
     binary_table(
         &mut out,
+        "LOWERCASE",
+        "Lowercase",
+        &binary(&derived, "Lowercase"),
+    );
+    binary_table(
+        &mut out,
+        "UPPERCASE",
+        "Uppercase",
+        &binary(&derived, "Uppercase"),
+    );
+    binary_table(
+        &mut out,
         "CASE_IGNORABLE",
         "Case_Ignorable",
         &binary(&derived, "Case_Ignorable"),

@@ -147,6 +147,18 @@ let fold_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/fold)) =
 pub let to_casefold(c: Char) -> Str =
     unicode/mapping(/sys/unicode/fold, fold_lands, c);
 
+--- Whether `c` is `Lowercase`, as the database states: a lower letter of any script, or a character it counts among them; `is_ascii_lower` asks of `a`–`z` alone.
+pub let is_lower(c: Char) -> Bool =
+    unicode/held(/sys/unicode/lowercase, c);
+
+--- Whether `c` is `Uppercase`, as the database states: an upper letter of any script, or a character it counts among them; a titlecase letter such as `ǅ` is neither, and `is_ascii_upper` asks of `A`–`Z` alone.
+pub let is_upper(c: Char) -> Bool =
+    unicode/held(/sys/unicode/uppercase, c);
+
+--- Whether `c` is `Alphabetic`, as the database states: a letter of any script, or a mark or number it counts among them — what an identifier begins with. `is_ascii_alpha` asks of `a`–`z` and `A`–`Z` alone.
+pub let is_alpha(c: Char) -> Bool =
+    unicode/held(/sys/unicode/alphabetic, c);
+
 --- Whether `c` is `Cased`: a letter with case, or one the database counts among them.
 pub let is_cased(c: Char) -> Bool =
     unicode/held(/sys/unicode/cased, c);

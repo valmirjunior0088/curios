@@ -1,10 +1,10 @@
 //! The tables as `/sys` carries them: a property's a run of seven bytes a range, a mapping's a record of seventeen, and each class set the codes its classes are read by.
 
 use crate::{
-    CASE_IGNORABLE, CASED, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION,
-    EXTENDED_PICTOGRAPHIC, EastAsianWidth, FOLD, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING,
-    GraphemeBreak, INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING, IndicConjunctBreak, LOWER,
-    UPPER,
+    ALPHABETIC, CASE_IGNORABLE, CASED, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING,
+    EMOJI_PRESENTATION, EXTENDED_PICTOGRAPHIC, EastAsianWidth, FOLD, GRAPHEME_BREAK,
+    GRAPHEME_BREAK_MISSING, GraphemeBreak, INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING,
+    IndicConjunctBreak, LOWER, LOWERCASE, UPPER, UPPERCASE,
 };
 
 /// How many bytes a run takes packed: its first scalar and its last, three bytes each, least significant first, then its class's code.
@@ -102,6 +102,18 @@ pub fn packed_tables() -> Vec<PackedTable> {
         PackedTable {
             name: "case_ignorable",
             bytes: binary(CASE_IGNORABLE),
+        },
+        PackedTable {
+            name: "lowercase",
+            bytes: binary(LOWERCASE),
+        },
+        PackedTable {
+            name: "uppercase",
+            bytes: binary(UPPERCASE),
+        },
+        PackedTable {
+            name: "alphabetic",
+            bytes: binary(ALPHABETIC),
         },
     ]
 }

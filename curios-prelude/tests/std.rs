@@ -13,8 +13,8 @@ use {
     curios_prelude::test_support::*,
     curios_surface::{Entrypoint, Format, Formatted},
     curios_unicode::{
-        east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
-        is_extended_pictographic, test_support::*,
+        east_asian_width, grapheme_break, indic_conjunct_break, is_alphabetic,
+        is_emoji_presentation, is_extended_pictographic, test_support::*,
     },
     curios_verdict::Verdicts,
     curios_wonder::{Severity, Subject, diagnostics},
@@ -445,14 +445,17 @@ const PROPERTIES: [&str; 2] = [
             Spell/spell(Char/is_extended_pictographic(c)),
             Spell/spell(Char/is_emoji_presentation(c)),
             Spell/spell(Char/is_cased(c)),
-            Spell/spell(Char/is_case_ignorable(c))]);
+            Spell/spell(Char/is_case_ignorable(c)),
+            Spell/spell(Char/is_lower(c)),
+            Spell/spell(Char/is_upper(c)),
+            Spell/spell(Char/is_alpha(c))]);
     "#,
 ];
 
 /// `curios-unicode`'s answer for `scalar`, spelled as [`PROPERTIES`] prints `/std/Char`'s.
 fn database(scalar: char) -> String {
     format!(
-        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {} {} {}",
+        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {} {} {} {} {} {}",
         grapheme_break(scalar).sys_name(),
         indic_conjunct_break(scalar).sys_name(),
         east_asian_width(scalar).sys_name(),
@@ -460,6 +463,9 @@ fn database(scalar: char) -> String {
         is_emoji_presentation(scalar),
         is_cased(scalar),
         is_case_ignorable(scalar),
+        is_lowercase(scalar),
+        is_uppercase(scalar),
+        is_alphabetic(scalar),
     )
 }
 
