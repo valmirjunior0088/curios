@@ -825,7 +825,7 @@ pub fn eliminate_dead_loops(module: &mut Module) -> bool {
 
 /// A loop whose body observes nothing, as [`eliminate_dead_loops`] reads one: the one continuation every way out of it goes to, and the nodes of its body.
 ///
-/// The body is read node by node: a construction, any operation bound by a `let` — one partial in the language among them, its trap ruled out by the proof a total program holds for it and owed to no program that never runs it — a known call [`Module::may_drop_call`] admits, a jump within the loop or out to its exit, a switch, and nested definitions. A call through a closure, a foreign or host row, a cell, a channel, an effectful intrinsic call and a halt each observe. Every cycle the body's continuations make passes through one marked terminating: a loop inside it that is no total recursion's — a partial callee contification put there — may never end, and its absence is what dropping the loop would observe.
+/// The body is read node by node: a construction, any operation bound by a `let` — one partial in the language among them, its trap ruled out by the proof a total program holds for it and owed to no program that never runs it — a known call [`Module::may_drop_call`] admits, a jump within the loop or out to its exit, a switch, and nested definitions. A call through a closure, a foreign or host row, a cell, a channel, an effectful intrinsic call and a halt each observe. Every cycle the body's continuations make is closed by a back edge of one marked terminating, a transfer into it from itself or from a continuation its body nests: a loop inside it that is no total recursion's — a partial callee contification put there — may never end, though each of its rounds enter a total loop and resume at its exit, and its absence is what dropping the loop would observe.
 struct DeadLoop {
     exit: ContinuationId,
     region: BTreeSet<NodeId>,
@@ -842,6 +842,7 @@ impl DeadLoop {
             region: BTreeSet::new(),
             exit: None,
             edges: BTreeMap::new(),
+            binders: BTreeMap::new(),
             at: entry,
         };
         while let Some((at, owner)) = walk.pending.pop() {
@@ -859,6 +860,11 @@ impl DeadLoop {
                     body,
                 } => {
                     walk.inside.extend(continuations.iter().copied());
+                    walk.binders.extend(
+                        continuations
+                            .iter()
+                            .map(|continuation| (*continuation, owner)),
+                    );
                     walk.pending.push((*body, owner));
                 }
                 Node::ApplyFun {
@@ -891,7 +897,7 @@ impl DeadLoop {
         }
         let exit = walk.exit?;
         module.continuation(exit)?;
-        if walk.cycles_past_a_terminating_loop() {
+        if walk.cycles_past_terminating_back_edges() {
             return None;
         }
         Some(DeadLoop {
@@ -901,7 +907,7 @@ impl DeadLoop {
     }
 }
 
-/// The walk [`DeadLoop::of`] makes: the continuations the loop's body defines, the ones it has entered, the nodes still to read, each with the continuation whose body it stands in, and read, the one continuation outside it a way out has reached, and the transfers between the loop's own continuations, from the one whose body is being read.
+/// The walk [`DeadLoop::of`] makes: the continuations the loop's body defines, the ones it has entered, the nodes still to read, each with the continuation whose body it stands in, and read, the one continuation outside it a way out has reached, the transfers between the loop's own continuations, from the one whose body is being read, and the continuation whose body binds each the loop's body defines.
 struct LoopWalk<'m> {
     module: &'m Module,
     inside: BTreeSet<ContinuationId>,
@@ -910,6 +916,7 @@ struct LoopWalk<'m> {
     region: BTreeSet<NodeId>,
     exit: Option<ContinuationId>,
     edges: BTreeMap<ContinuationId, BTreeSet<ContinuationId>>,
+    binders: BTreeMap<ContinuationId, ContinuationId>,
     at: ContinuationId,
 }
 
@@ -934,17 +941,29 @@ impl LoopWalk<'_> {
         }
     }
 
-    /// Whether the loop's continuations make a cycle through none marked terminating: one standing beside the marked ones once they are taken out, found by a depth-first walk over the rest.
-    fn cycles_past_a_terminating_loop(&self) -> bool {
-        let kept = |continuation: &ContinuationId| {
-            !self
+    /// Whether the loop's continuations make a cycle no back edge of one marked terminating closes: one standing once each marked continuation's own back edges, the transfers into it from itself or from a continuation its body nests, are taken out, found by a depth-first walk over the rest. A cycle that passes through a marked loop, entering it and resuming at its exit, is the loop's around it, which the walk keeps.
+    fn cycles_past_terminating_back_edges(&self) -> bool {
+        // Whether `from` is `to` or a continuation `to`'s body nests, by the `LetCont`s the walk read.
+        let nested = |from: ContinuationId, to: ContinuationId| {
+            let mut at = Some(from);
+            while let Some(continuation) = at {
+                if continuation == to {
+                    return true;
+                }
+                at = self.binders.get(&continuation).copied();
+            }
+            false
+        };
+        let kept = |from: ContinuationId, to: &ContinuationId| {
+            !(self
                 .module
-                .continuation(*continuation)
+                .continuation(*to)
                 .is_some_and(|definition| definition.terminates)
+                && nested(from, *to))
         };
         let mut finished = BTreeSet::new();
         let mut open = BTreeSet::new();
-        for start in self.entered.iter().filter(|c| kept(c)) {
+        for start in &self.entered {
             if finished.contains(start) {
                 continue;
             }
@@ -963,7 +982,7 @@ impl LoopWalk<'_> {
                 }
                 stack.push((continuation, true));
                 for next in self.edges.get(&continuation).into_iter().flatten() {
-                    if !kept(next) || finished.contains(next) {
+                    if !kept(continuation, next) || finished.contains(next) {
                         continue;
                     }
                     if open.contains(next) {

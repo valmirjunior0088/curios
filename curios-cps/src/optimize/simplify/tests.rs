@@ -759,6 +759,113 @@ fn a_loop(terminates: bool, calling: bool) -> (Module, NodeId, ContinuationId) {
     (module, entering, exit)
 }
 
+/// `main(n)` enters `walk`, a loop marked terminating whose answer nothing reads, inside which `step`, a loop no mark covers, enters `inner`, a loop marked terminating, and resumes at `inner`'s exit, `resumed`, which rounds `step` again or leaves `walk`: `step`'s cycle passes through `inner`, entering it and resuming at its exit, and closes by `step`'s own back edge.
+fn a_partial_loop_through_a_total_one() -> (Module, NodeId, ContinuationId) {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let n = module.add_value(None);
+    let [exit, walk, step, inner, inner_again, resumed, step_again] =
+        [(); 7].map(|()| module.reserve_continuation());
+    let jump = |module: &mut Module, target: ContinuationId| {
+        module.add_node(Node::ApplyCont(Edge {
+            target,
+            args: vec![],
+        }))
+    };
+    let test = |module: &mut Module, zero: ContinuationId, other: ContinuationId| {
+        module.add_node(Node::Switch {
+            scrutinee: Atom::Value(n),
+            cases: BTreeMap::from([(
+                0,
+                Edge {
+                    target: zero,
+                    args: vec![],
+                },
+            )]),
+            default: Some(Edge {
+                target: other,
+                args: vec![],
+            }),
+        })
+    };
+    let bound = |module: &mut Module, continuations: Vec<ContinuationId>, body: NodeId| {
+        module.add_node(Node::LetCont {
+            continuations,
+            body,
+        })
+    };
+    let define = |module: &mut Module,
+                  continuation: ContinuationId,
+                  name: &str,
+                  body: NodeId,
+                  terminates: bool| {
+        module.define_continuation(
+            continuation,
+            Continuation {
+                lineage: None,
+                debug_name: Some(name.into()),
+                params: vec![],
+                body,
+                terminates,
+            },
+        );
+    };
+
+    let exit_body = module.add_node(Node::ApplyCont(Edge {
+        target: main_return,
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
+    }));
+    define(&mut module, exit, "exit", exit_body, false);
+    let body = jump(&mut module, inner);
+    define(&mut module, inner_again, "inner_again", body, false);
+    let tested = test(&mut module, inner_again, resumed);
+    let body = bound(&mut module, vec![inner_again], tested);
+    define(&mut module, inner, "inner", body, true);
+    let body = jump(&mut module, step);
+    define(&mut module, step_again, "step_again", body, false);
+    let tested = test(&mut module, step_again, exit);
+    let body = bound(&mut module, vec![step_again], tested);
+    define(&mut module, resumed, "resumed", body, false);
+    let entering = jump(&mut module, inner);
+    let body = bound(&mut module, vec![inner, resumed], entering);
+    define(&mut module, step, "step", body, false);
+    let entering = jump(&mut module, step);
+    let body = bound(&mut module, vec![step], entering);
+    define(&mut module, walk, "walk", body, true);
+    let entering_walk = jump(&mut module, walk);
+    let body = bound(&mut module, vec![exit, walk], entering_walk);
+    module.define_function(
+        main,
+        Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![n],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    (module, entering_walk, walk)
+}
+
+/// A loop marked terminating stays, its answer unread, where a loop inside it that no mark covers cycles through a marked one, entering it and resuming at its exit: the cycle is the unmarked loop's, closed by its own back edge, which no termination covers. The marked loop inside, which observes nothing either, is the one the pass drops.
+///
+/// Mutation-checked: with every marked continuation taken out of the cycle check, `walk` is entered no more.
+#[test]
+fn a_dead_loop_whose_partial_loop_cycles_through_a_total_one_stays() {
+    let (mut module, entering_walk, walk) = a_partial_loop_through_a_total_one();
+    eliminate_dead_loops(&mut module);
+    assert!(matches!(
+        module.node(entering_walk),
+        Some(Node::ApplyCont(Edge { target, .. })) if *target == walk
+    ));
+    module.verify().unwrap();
+}
+
 /// A loop marked terminating whose answer nothing reads and whose body observes nothing is entered no more: the jump into it goes to its exit, padded to the exit's arity, and the module still verifies.
 #[test]
 fn a_dead_loop_marked_terminating_is_entered_no_more() {

@@ -73,6 +73,29 @@ fn a_total_walk_nothing_reads_leaves_no_loop() {
     }
 }
 
+/// A total walk handed a partial function stays, its answer unread, where the function's loop enters a total one each round and resumes at its exit: `g` is contified into the walk's loop and `h`'s into `g`'s, so `g`'s cycle passes through `h`'s marked loop, and closes by `g`'s own back edge, which no termination covers. Run, the program never ends.
+///
+/// Mutation-checked: with every marked continuation taken out of the cycle check, the walk goes.
+#[test]
+fn a_total_walk_whose_partial_step_cycles_through_a_total_loop_stays() {
+    let module = optimized(
+        r#"
+        use /std/{Nat, Proc, List};
+        let f(k: (Nat) -> Nat, n: Nat) -> Nat =
+            let go(m: Nat, acc: Nat) -> Nat = match m | 0 => acc | p + 1 => go(p, k(acc)) end;
+            go(n, 1);
+        let h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => h(k) + 1 end;
+        let g(n: Nat) -> Nat = match h(n) == 0 | true => 0 | false => g(n + 1) end;
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let _ = f(g, List/len(arguments) + 3);
+            /std/print("done");
+        entry()
+        "#,
+    );
+    assert!(holds(&module, "/g"), "{module}");
+}
+
 /// A walk no checker proves terminating stays, its answer unread: the loop carries no termination to drop it by.
 #[test]
 fn a_walk_not_known_to_terminate_stays() {
