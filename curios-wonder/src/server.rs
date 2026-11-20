@@ -36,9 +36,10 @@ use {
         DidChangeWatchedFilesParams, DidChangeWatchedFilesRegistrationOptions,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
         DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
-        FileSystemWatcher, GlobPattern, GotoDefinitionParams, GotoDefinitionResponse, Hover,
-        HoverContents, HoverParams, HoverProviderCapability, InitializeParams, Location,
-        MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
+        FileSystemWatcher, FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability,
+        GlobPattern, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents,
+        HoverParams, HoverProviderCapability, InitializeParams, Location, MarkupContent,
+        MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
         RegistrationParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
         ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
         Uri,
@@ -47,8 +48,8 @@ use {
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
         },
         request::{
-            DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, RegisterCapability,
-            Request, SelectionRangeRequest,
+            DocumentSymbolRequest, FoldingRangeRequest, Formatting, GotoDefinition, HoverRequest,
+            RegisterCapability, Request, SelectionRangeRequest,
         },
     },
     std::{
@@ -84,6 +85,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         document_symbol_provider: Some(OneOf::Left(true)),
         selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+        folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
         ..ServerCapabilities::default()
     };
     let initialization = connection
@@ -275,6 +277,12 @@ impl Server {
                         id,
                         serde_json::from_value::<SelectionRangeParams>(params)
                             .map(|params| valued(serde_json::to_value(self.selections(&params)))),
+                    ),
+                    FoldingRangeRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<FoldingRangeParams>(params)
+                            .map(|params| valued(serde_json::to_value(self.folds(&params)))),
                     ),
                     // Every other request is declined in the capabilities, so one that arrives anyway gets the protocol's "not found" rather than silence.
                     _ => reply_unhandled(connection, id, &method),
@@ -492,6 +500,13 @@ impl Server {
             .collect()
     }
 
+    /// Where a document folds ([`folded`]): none for a document nothing has checked yet.
+    fn folds(&self, params: &FoldingRangeParams) -> Vec<FoldingRange> {
+        self.held(&params.text_document.uri)
+            .map(|(buffer, checked)| folded(buffer, &checked))
+            .unwrap_or_default()
+    }
+
     /// What a document declares, as an outline: none for a document nothing has checked yet.
     fn symbols(&self, params: &DocumentSymbolParams) -> DocumentSymbolResponse {
         DocumentSymbolResponse::Nested(
@@ -639,6 +654,33 @@ fn selected(buffer: &str, checked: &Placed, offset: usize) -> Option<SelectionRa
                 })
             })?
     })
+}
+
+/// One fold for each text of `buffer` that spans more than one line, by what its last check left: a declaration's, or the term a program closes with, where it stands in the buffer as it was checked.
+fn folded(buffer: &str, checked: &Placed) -> Vec<FoldingRange> {
+    let Some(first) = checked.texts.first() else {
+        return Vec::new();
+    };
+    let standing = Standing::of(first.text.source.text(), buffer);
+
+    checked
+        .texts
+        .iter()
+        .filter_map(|written| {
+            let moved = standing.moved(&written.text)?;
+            let start = position_of(buffer, written.text.start.checked_add_signed(moved)?);
+            let end = position_of(buffer, written.text.end.checked_add_signed(moved)?);
+
+            (start.line < end.line).then_some(FoldingRange {
+                start_line: start.line,
+                start_character: Some(start.character),
+                end_line: end.line,
+                end_character: Some(end.character),
+                kind: None,
+                collapsed_text: None,
+            })
+        })
+        .collect()
 }
 
 /// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, a local by its name and a term by its text; then each fact a block states of it a line ([`Answer::facts`]); then the prose above a declaration.

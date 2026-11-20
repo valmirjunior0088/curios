@@ -557,3 +557,15 @@ fn a_selection_grows_through_each_term_around_a_position_to_its_declaration() {
         None
     );
 }
+
+/// A declaration written over several lines folds from its first line to its last, and one written on one line does not. Mutation-checked: with a text folded on its one line too, the one-line declaration folds.
+#[test]
+fn a_declaration_over_several_lines_folds_and_one_on_a_line_does_not() {
+    let program = "pub let one(x: Nat) -> Nat = x;\n\npub let two(x: Nat) -> Nat =\n    x + x;\n\n/std/print(\"ok\")\n";
+    let folds = folded(program, &checked(program))
+        .into_iter()
+        .map(|fold| (fold.start_line, fold.end_line))
+        .collect::<Vec<_>>();
+
+    assert_eq!(folds, [(2, 3)]);
+}
