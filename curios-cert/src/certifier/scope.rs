@@ -5,7 +5,7 @@
 //! `mark` and `retract` are `pub(super)` and the certifier's bracket is their only caller anywhere, opened by `Certifier::scoped` and by a reading's `ByValue::scoped` — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    curios_analysis::{could_reduce_to, reads_solved, records_case_equation},
+    curios_analysis::{reads_solved, records_case_equation},
     curios_core::{Free, Term},
     std::collections::HashMap,
 };
@@ -380,21 +380,24 @@ impl Scope {
             .map(|entry| entry.value.clone())
     }
 
-    /// The equations in force whose reduced spelling is settled and that `candidate` could be a reduct of, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
-    pub fn settled_refinements(
-        &self,
-        candidate: &Term,
-        proofs: &[Free],
-        plain: bool,
-    ) -> Vec<(usize, Term, Term)> {
+    /// The equations in force a stuck form may be put to, as their positions and their keys: each no arm has restated. What [`could_answer`](curios_analysis::could_answer) is asked of, once a probe, to admit the positions the two lookups below read.
+    pub fn keys_in_force(&self) -> Vec<(usize, Term)> {
+        self.refinements[..self.in_force()]
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.restated_at.is_none())
+            .map(|(index, entry)| (index, entry.key.clone()))
+            .collect()
+    }
+
+    /// The equations in force among `admitted` whose reduced spelling is settled, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
+    pub fn settled_refinements(&self, admitted: &[usize], plain: bool) -> Vec<(usize, Term, Term)> {
         let plain = usize::from(plain);
         self.refinements[..self.in_force()]
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_, entry)| {
-                entry.restated_at.is_none() && could_reduce_to(&entry.key, candidate, proofs)
-            })
+            .filter(|(index, _)| admitted.contains(index))
             .filter_map(|(index, entry)| match &entry.reducts[plain] {
                 Reduct::Known(Some(reduct)) => Some((index, reduct.clone(), entry.value.clone())),
                 _ => None,
@@ -402,40 +405,22 @@ impl Scope {
             .collect()
     }
 
-    /// The innermost equation in force whose reduced spelling has not been asked for and *could* be `candidate`, as its position and the term to reduce.
+    /// The innermost equation in force among `admitted` whose reduced spelling has not been asked for, as its position and the term to reduce.
     ///
     /// The position is always inside the current limit, which is what lets [`Scope::hide_refinements_from`] take it as the new limit rather than the smaller of the two: a settlement can only ever reach further out than the one it is nested in.
     ///
     /// **Reading the limit here is also what makes the settlement loop finite**, and that is a second job rather than a restatement of the first. An entry being settled is outside the limit for the whole of its own reduction, so a probe reached from inside cannot select it again; relaxing this while keeping the probes' half sends `refined_reduct` back into the entry it is already settling.
-    /// **`candidate` is what decides whether the reduction happens at all**, and without that test the deferral buys nothing. A settlement is the whole cost the two-tier key exists to avoid, and a probe reached under freshly opened binders — `Sort::of` walking a telescope, an arm body's own erasure obligations — presents a stuck form on almost every reduction, so *some* term would trigger a settlement in any arm whatever. What [`could_reduce_to`] tests is the one thing a reduct's spelling cannot lie about.
-    pub fn unasked_refinement(
-        &self,
-        candidate: &Term,
-        proofs: &[Free],
-        plain: bool,
-    ) -> Option<(usize, Term)> {
+    /// **`admitted` is what decides whether the reduction happens at all**, and without that test the deferral buys nothing. A settlement is the whole cost the two-tier key exists to avoid, and a probe reached under freshly opened binders — `Sort::of` walking a telescope, an arm body's own erasure obligations — presents a stuck form on almost every reduction, so *some* term would trigger a settlement in any arm whatever. What [`could_answer`](curios_analysis::could_answer) tests is the one thing a reduct's spelling cannot lie about: the binders conversion reads of it.
+    pub fn unasked_refinement(&self, admitted: &[usize], plain: bool) -> Option<(usize, Term)> {
         let plain = usize::from(plain);
         self.refinements[..self.in_force()]
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, entry)| {
-                entry.restated_at.is_none()
-                    && matches!(entry.reducts[plain], Reduct::Unasked)
-                    && could_reduce_to(&entry.key, candidate, proofs)
+            .find(|(index, entry)| {
+                admitted.contains(index) && matches!(entry.reducts[plain], Reduct::Unasked)
             })
             .map(|(index, entry)| (index, entry.key.clone()))
-    }
-
-    /// How many equations in force `candidate` could be a reduct of — what a profile counts a missed probe by.
-    #[cfg(feature = "profile")]
-    pub fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
-        self.refinements[..self.in_force()]
-            .iter()
-            .filter(|entry| {
-                entry.restated_at.is_none() && could_reduce_to(&entry.key, candidate, proofs)
-            })
-            .count()
     }
 
     /// Record what the equation at `index` reduces to, or that reducing it refused.

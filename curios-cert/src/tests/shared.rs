@@ -33,7 +33,7 @@ const ROSTER: [&str; 63] = [
     "curios_analysis::connectives_agree_classed",
     "curios_analysis::convert_classed",
     "curios_analysis::convert_intrinsics",
-    "curios_analysis::could_reduce_to",
+    "curios_analysis::could_answer",
     "curios_analysis::decide",
     "curios_analysis::definition_applications",
     "curios_analysis::foreign_congruence",

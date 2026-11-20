@@ -1189,12 +1189,6 @@ impl<'s> Certifier<'s> {
         self.scope.refinement_of(term)
     }
 
-    /// How many equations in force `candidate` could be a reduct of.
-    #[cfg(feature = "profile")]
-    pub(crate) fn reachable_refinements(&self, candidate: &Term, proofs: &[Free]) -> usize {
-        self.scope.reachable_refinements(candidate, proofs)
-    }
-
     /// Whether any arm's case equation is currently assumed ([`Scope::has_refinements`]).
     pub(crate) fn has_refinements(&self) -> bool {
         self.scope.has_refinements()

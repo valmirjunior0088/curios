@@ -13,7 +13,7 @@ use {
 const IMPORTS: &str =
     "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
-/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in.
+/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through.
 const DEFINITIONS: &str =
     "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
 let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
@@ -21,9 +21,10 @@ let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [
 let small(n: Nat) -> Bool = n < 10;
 let tiny(n: Nat) -> Bool = small(n);
 let Naturals: Type = Nat;
-induct Tag: (Bool) -> Type | yes(): (true) end";
+induct Tag: (Bool) -> Type | yes(): (true) end
+struct Pair: Type { left: Nat, right: Nat }";
 
-/// The binders every cell is stated under. Two proofs of one bound, two functions and a higher-order one give the atoms that convert without being identical.
+/// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical.
 const BINDERS: &[Binder] = &[
     Binder {
         name: "a",
@@ -58,6 +59,11 @@ const BINDERS: &[Binder] = &[
     Binder {
         name: "p2",
         type_: "Holds(a < 10)",
+        needs: &["a"],
+    },
+    Binder {
+        name: "h",
+        type_: "(Nat) -> Holds(a < 10)",
         needs: &["a"],
     },
     Binder {
@@ -263,19 +269,24 @@ const GUARDS: &[Guard] = &[
         dual: None,
         refused: &[],
     },
-    // What the filter in front of an equation still gives up: `c` stands where reduction erases it, and it is no proof.
+    // A binder the guard does not name, where conversion does not read it: `c` stands where reducing an argument erases it, in an operand and in a projection, and inside a proof, an application of the proof binder `h`. The filter in front of an equation reads past each as conversion does.
     Guard {
         guard: "f(b) < 10",
         respelled: "f(b + 0 * c) < 10",
         dual: Some("10 <= f(b + 0 * c)"),
-        refused: &[
-            Arm::Qed,
-            Arm::Proved,
-            Arm::Term,
-            Arm::Type,
-            Arm::Dual,
-            Arm::Index,
-        ],
+        refused: &[],
+    },
+    Guard {
+        guard: "f(b) < 10",
+        respelled: "f(Pair { left = b, right = c }.left) < 10",
+        dual: Some("10 <= f(Pair { left = b, right = c }.left)"),
+        refused: &[],
+    },
+    Guard {
+        guard: "w(a, p1) < 5",
+        respelled: "w(a, h(c)) < 5",
+        dual: Some("5 <= w(a, h(c))"),
+        refused: &[],
     },
 ];
 

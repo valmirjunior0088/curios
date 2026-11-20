@@ -26,7 +26,7 @@ use {
     crate::{Error, classing, is_prop, reduce_with, same_uncommitted, sort_of},
     curios_analysis::{
         Answered, Classes, Driver, IntrinsicDriver, Judge, ScrutineeRead, Within, answers,
-        answers_classed, apart_in_instance, atoms_within, case_target_indices, could_reduce_to,
+        answers_classed, apart_in_instance, atoms_within, case_target_indices, could_answer,
         holds_no_type, one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
         read_scrutinee_classed, refold,
     },
@@ -40,10 +40,7 @@ use {
         accelerable, eta_head, instantiate_universes, probe_spellings, project_erased_universes,
         project_literal, reduce_closed, reduce_intrinsic, switch_arm, weak_head_value,
     },
-    std::{
-        cell::OnceCell,
-        collections::{BTreeSet, HashMap},
-    },
+    std::collections::{BTreeSet, HashMap},
 };
 
 #[cfg(feature = "profile")]
@@ -972,7 +969,7 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Option<Term> {
 ///
 /// So each entry is compared at the form reduction itself gives it — weak-head, operands canonical where it is a tagged comparison, solved metavariables materialized, universes erased — exactly as the certifier settles and compares. A reduct's dual and its spelling across the successor seam are the shared rule's to answer ([`answered`]), so no spelling but the probe's own is compared with a reduct here. The settled spellings are asked first, innermost first, and only when none answers is the innermost entry not yet asked settled, one at a time, until one answers or none is left: a settlement is the one cost here, and a probe an already-settled spelling answers pays none.
 ///
-/// **What decides whether to settle at all is the certifier's filter**: an entry is a candidate only if the probe names no local its key does not, since reduction can drop a local and never introduce one. Without it, every stuck form under a binder some other judgment opened would settle some key in any arm. And the probe must bear a local itself, as the certifier's must: a local-free term has nothing an arm's equation could be about that reduction would not already have decided.
+/// **What decides whether to settle at all is the certifier's filter**: an entry is a candidate only if the probe reads no local its key does not, as conversion reads it (`curios_analysis::could_answer`). Without it, every stuck form under a binder some other judgment opened would settle some key in any arm. And the probe must bear a local itself, as the certifier's must: a local-free term has nothing an arm's equation could be about that reduction would not already have decided.
 fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, ReduceError> {
     if !context.has_scrutinee_refinements()
         || !value.has_local_free()
@@ -987,14 +984,13 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     let proofs = proofs_named(context, &probe)?;
     // The spelling a settled entry is compared at: the probe's own, its universes erased.
     let compared = project_erased_universes(&probe);
-    // The probe as the certifier spells it, which the filter in front of every entry reads: spelled where the filter first asks and kept for the lookup, as the certifier keeps its candidate. A settlement made in between commits nothing, so the spelling stands.
-    let probe_spelling = OnceCell::new();
+    let admitted = admitted(context, &probe, &proofs)?;
 
     // The entries already put to the shared rule, so each is asked once however many settlements the loop makes.
     let mut consulted = Vec::new();
 
     loop {
-        let unsettled = match scan_settled(context, &probe, &probe_spelling, &compared, &proofs)? {
+        let unsettled = match scan_settled(context, &probe, &compared, &admitted)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
@@ -1004,26 +1000,13 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
             Scan::Miss => None,
         };
         // The settled spellings once more, by the rule both reducers share, before another settlement is paid for: the certifier's order.
-        if let Some(answer) = answered(
-            context,
-            value,
-            &probe,
-            &probe_spelling,
-            &proofs,
-            &mut consulted,
-        )? {
+        if let Some(answer) = answered(context, value, &probe, &admitted, &mut consulted)? {
             return Ok(Some(answer));
         }
         let Some((frame, key, original)) = unsettled else {
-            // What a lookup that asked conversion would have been put to: the entries this stuck form could be a reduct of, each settled and none answering.
+            // What a lookup that asked conversion would have been put to: the entries this stuck form could be the term of, each settled and none answering.
             #[cfg(feature = "profile")]
-            if let asked @ 1.. = context
-                .visible_scrutinee_entries()
-                .filter(|(_, _, entry)| {
-                    could_settle(context, &entry.original, &probe, &probe_spelling, &proofs)
-                })
-                .count()
-            {
+            if let asked @ 1.. = admitted.len() {
                 curios_profile::sample!("reduce::missed_lookup", asked);
             }
             return Ok(None);
@@ -1069,22 +1052,19 @@ fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, Reduce
     Ok(taken)
 }
 
-/// What the shared rule says of a stuck reduct against each settled entry it could be a reduct of, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The certifier asks the same function at the same point.
+/// What the shared rule says of a stuck reduct against each settled entry among `admitted`, innermost first: a term the carriers' readers hold equal to an entry's reduced spelling, or to that spelling negated, is the entry's term (`curios_analysis::answers`). The certifier asks the same function at the same point.
 ///
 /// Read at the unerased spellings, since the readers compare numbers up to universe instances themselves, and declined where the two disagree on an instance both sides have decided and conversion compares ([`levels_clash_to_conversion`]): past a key the certifier answers by asking its conversion, to which a level a nominal family is irrelevant in is no difference.
 fn answered(
     context: &mut Context,
     value: &Term,
     probe: &Term,
-    probe_spelling: &OnceCell<Term>,
-    proofs: &[Free],
+    admitted: &[(usize, Term)],
     consulted: &mut Vec<(usize, Term)>,
 ) -> Result<Option<Term>, ReduceError> {
     let settled = context
         .visible_scrutinee_entries()
-        .filter(|(_, _, entry)| {
-            could_settle(context, &entry.original, probe, probe_spelling, proofs)
-        })
+        .filter(|(frame, key, _)| is_admitted(admitted, *frame, key))
         .filter_map(
             |(frame, key, entry)| match context.settled_key(frame, key) {
                 Some(Some(settled)) => Some((
@@ -1151,22 +1131,49 @@ pub fn answered_guard(
     Ok(answer.and_then(|answer| answer.as_bool()))
 }
 
-/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), both read as the certifier spells them ([`Context::certifier_spelling`]), as the certifier's own filter reads its own: the probe's spelling is made once for the lookup and kept in `probe_spelling`, as the certifier keeps its candidate's. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the certifier's does not. A local definition left named reads the other way, on either side: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation, and a form over `n` names no `m` where the guard is read over it, where the certifier, which holds both by value, answers each.
-fn could_settle(
-    context: &Context,
-    original: &Term,
+/// The entries in view `probe` could be the term of (`curios_analysis::could_answer`), as their frames and keys, each asked once a probe by plain reduction: the scrutinee recorded as an entry's original and the probe both read as the certifier spells them ([`Context::certifier_spelling`]), as the certifier's own filter reads its own. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the certifier's does not. A local definition left named reads the other way, on either side: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation, and a form over `n` names no `m` where the guard is read over it, where the certifier, which holds both by value, answers each.
+fn admitted(
+    context: &mut Context,
     probe: &Term,
-    probe_spelling: &OnceCell<Term>,
     proofs: &[Free],
-) -> bool {
-    could_reduce_to(
-        &context.certifier_spelled(original),
-        probe_spelling.get_or_init(|| context.certifier_spelled(probe)),
-        proofs,
-    )
+) -> Result<Vec<(usize, Term)>, ReduceError> {
+    let entries = context
+        .visible_scrutinee_entries()
+        .map(|(frame, key, entry)| {
+            (
+                frame,
+                key.clone(),
+                context.certifier_spelled(&entry.original),
+            )
+        })
+        .collect::<Vec<_>>();
+    let Some(outermost) = entries.iter().map(|(frame, _, _)| *frame).min() else {
+        return Ok(Vec::new());
+    };
+    let candidate = context.certifier_spelled(probe);
+    // Read with every entry withheld and asking nothing, as the certifier reads it: a part the filter reduces is a reduction no probe interrupts, so probes do not nest as deep as the form goes.
+    context.with_refinements_withheld_from(outermost, |context| {
+        context.plainly(|context| {
+            let mut admitted = Vec::new();
+            for (frame, key, spelled) in entries {
+                if could_answer(context, &spelled, &candidate, proofs)? {
+                    admitted.push((frame, key));
+                }
+            }
+
+            Ok(admitted)
+        })
+    })
 }
 
-/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The certifier's `proofs_named`, by the elaborator's own classifier: the filter this answers for tests a local alone (`could_reduce_to`).
+/// Whether the entry `key` registered in `frame` is among `admitted`.
+fn is_admitted(admitted: &[(usize, Term)], frame: usize, key: &Term) -> bool {
+    admitted
+        .iter()
+        .any(|(admitted, admitted_key)| *admitted == frame && admitted_key == key)
+}
+
+/// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The certifier's `proofs_named`, by the elaborator's own classifier: the filter this answers for passes them over (`curios_analysis::could_answer`).
 ///
 /// Each binder is asked once and remembered for the declaration, by plain reduction, and counted not a proof while it is being asked. One whose type still holds an unsolved metavariable is not known to be a proof and is asked again, since a solution may make it one.
 fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, ReduceError> {
@@ -1297,13 +1304,13 @@ impl IntrinsicDriver for Reading<'_, '_> {
 enum Scan {
     /// A settled spelling is the probe's: the entry's value.
     Answer(Term),
-    /// Nothing settled answered, and this is the innermost entry the probe could be a reduct of that has never been settled.
+    /// Nothing settled answered, and this is the innermost admitted entry that has never been settled.
     Settle {
         frame: usize,
         key: Term,
         original: Term,
     },
-    /// Nothing settled answered, and nothing the probe could be a reduct of is left to settle.
+    /// Nothing settled answered, and no admitted entry is left to settle.
     Miss,
 }
 
@@ -1311,9 +1318,8 @@ enum Scan {
 fn scan_settled(
     context: &mut Context,
     probe: &Term,
-    probe_spelling: &OnceCell<Term>,
     compared: &Term,
-    proofs: &[Free],
+    admitted: &[(usize, Term)],
 ) -> Result<Scan, ReduceError> {
     let mut unsettled = None;
     let mut spelled = Vec::new();
@@ -1327,9 +1333,7 @@ fn scan_settled(
             }
             Some(None) => {}
             None => {
-                if unsettled.is_none()
-                    && could_settle(context, &entry.original, probe, probe_spelling, proofs)
-                {
+                if unsettled.is_none() && is_admitted(admitted, frame, key) {
                     unsettled = Some((frame, key.clone(), entry.original.clone()));
                 }
             }

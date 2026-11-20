@@ -375,13 +375,13 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does(
     );
 }
 
-/// A reduct that *drops* a local is still reached, which is the direction `curios_analysis::could_reduce_to` must not be strict in.
+/// A reduct that *drops* a local is still reached, which is the direction `curios_analysis::could_answer` must not be strict in.
 ///
-/// The filter deciding whether a settlement is worth performing tests that the candidate's locals are a *subset* of the key's, and subset rather than equality is the whole of what it can afford to claim: reduction may drop a local — the second projection of two, an argument a body ignores — while it can never introduce one, since it substitutes only closed definition bodies and subterms of the term it is reducing. Reading the test as equality, or as "the candidate mentions every local the key does", loses exactly this equation, and loses it silently: the arm simply stops refining.
+/// The filter deciding whether a settlement is worth performing tests that every binder the candidate reads is one the key names, and that one-way test is the whole of what it can afford to claim: reduction may drop a local — the second projection of two, an argument a body ignores — while it can never introduce one, since it substitutes only closed definition bodies and subterms of the term it is reducing. Reading the test both ways, as "the candidate reads every local the key does", loses exactly this equation, and loses it silently: the arm simply stops refining.
 ///
 /// `second(n, m)` mentions both binders and reduces to `m` alone, so the candidate's locals are a strict subset of the key's. That is a shape a filter tightened by one word would refuse.
 ///
-/// Mutation-checked with the tightening itself — the subset read as set equality — which moves this fixture and no other. Relaxing the filter the other way, to admit everything, moves nothing at all: it is a cost filter, and what says it is doing its job is `curios`' `scrutinee_refinement_measurements` rather than any assertion here.
+/// Tightened that way — the candidate held to read every binder the key names — the filter leaves `/std` failing to elaborate, `/std/Int/hash` among others, so the prelude's build holds the direction before this suite runs; this fixture states it at its smallest. Relaxing the filter the other way, to admit everything, moves nothing here: it is a cost filter, and what holds it to its job is `curios`' `tests::unfolding::a_guard_over_a_web_puts_forms_over_other_binders_to_no_equation`.
 #[test]
 fn a_reduct_that_drops_a_local_is_still_reached() {
     let mut certifier = certifier();

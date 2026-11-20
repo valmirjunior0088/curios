@@ -273,26 +273,23 @@ impl ByValue<'_, '_> {
         self.certifier.scope.refinement_of_reduct(term, self.plain)
     }
 
-    /// The equations in force whose reduced spelling this reading's reduction settled and that `candidate` could be a reduct of, innermost first, each as its position, that spelling and its value.
-    pub(crate) fn settled_refinements(
-        &self,
-        candidate: &Term,
-        proofs: &[Free],
-    ) -> Vec<(usize, Term, Term)> {
-        self.certifier
-            .scope
-            .settled_refinements(candidate, proofs, self.plain)
+    /// The equations in force a stuck form may be put to, as their positions and keys (`Scope::keys_in_force`).
+    pub(crate) fn keys_in_force(&self) -> Vec<(usize, Term)> {
+        self.certifier.scope.keys_in_force()
     }
 
-    /// The innermost equation in force whose reduced spelling this reading's reduction has not asked for and could be `candidate`, as its position and the term to reduce.
-    pub(crate) fn unasked_refinement(
-        &self,
-        candidate: &Term,
-        proofs: &[Free],
-    ) -> Option<(usize, Term)> {
+    /// The equations in force among `admitted` whose reduced spelling this reading's reduction settled, innermost first, each as its position, that spelling and its value.
+    pub(crate) fn settled_refinements(&self, admitted: &[usize]) -> Vec<(usize, Term, Term)> {
         self.certifier
             .scope
-            .unasked_refinement(candidate, proofs, self.plain)
+            .settled_refinements(admitted, self.plain)
+    }
+
+    /// The innermost equation in force among `admitted` whose reduced spelling this reading's reduction has not asked for, as its position and the term to reduce.
+    pub(crate) fn unasked_refinement(&self, admitted: &[usize]) -> Option<(usize, Term)> {
+        self.certifier
+            .scope
+            .unasked_refinement(admitted, self.plain)
     }
 
     /// The remembered weak-head reduct of `term` this reading's reduction took, per entry point, handed back for nothing.
@@ -322,7 +319,7 @@ impl ByValue<'_, '_> {
         ))
     }
 
-    /// The binders `term` names that are themselves proofs: opened at a proposition, so conversion reads them nowhere, and a stuck form naming one the key of an equation does not may still be that key's term (`curios_analysis::could_reduce_to`).
+    /// The binders `term` names that are themselves proofs: opened at a proposition, so conversion reads them nowhere, and a stuck form naming one the key of an equation does not may still be that key's term (`curios_analysis::could_answer`).
     ///
     /// **Each binder is asked once**, where a stuck form naming it first reaches the equations in force, and remembered with the binder. It is asked by plain reduction, which no question interrupts, and counted not a proof while it is being asked, so a type whose classification comes back to its own binder ends there, toward refusal. A failure that is no exhaustion of the budget is that the binder is not known to be a proof.
     pub(crate) fn proofs_named(&mut self, term: &Term) -> Result<Vec<Free>, ReduceError> {

@@ -27,7 +27,7 @@ use {
     super::{ByValue, Certifier, asked_classes, asked_within, stated_payload, unread_payload},
     curios_analysis::{
         Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead, answers, answers_classed, atoms_within,
-        read_operands, read_scrutinee, read_scrutinee_classed, refold,
+        could_answer, read_operands, read_scrutinee, read_scrutinee_classed, refold,
     },
     curios_common::recurse,
     curios_core::{
@@ -293,6 +293,7 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
     let canonical = canonical_operands(certifier, value)?;
     // The binders the form names that are proofs, which the filter in front of every equation passes over.
     let proofs = certifier.proofs_named(&canonical)?;
+    let admitted = admitted(certifier, &canonical, &proofs)?;
 
     // The equations already put to the shared rule, so each is asked once however many settlements the loop makes.
     let mut consulted = Vec::new();
@@ -302,7 +303,7 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
             return Ok(Some(refined));
         }
         // The settled spellings once more, by the rule both reducers share: a term the carriers' readers hold equal to a key, or to a key negated, is the key's term, and so is one the certifier's own conversion says is.
-        for (index, reduct, value) in certifier.settled_refinements(&canonical, &proofs) {
+        for (index, reduct, value) in certifier.settled_refinements(&admitted) {
             if consulted.contains(&index) {
                 continue;
             }
@@ -312,10 +313,10 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
             }
         }
 
-        let Some((index, key)) = certifier.unasked_refinement(&canonical, &proofs) else {
-            // What a lookup that asked conversion would have been put to: the equations this stuck form could be a reduct of, each settled and none answering.
+        let Some((index, key)) = certifier.unasked_refinement(&admitted) else {
+            // What a lookup that asked conversion would have been put to: the equations this stuck form could be the term of, each settled and none answering.
             #[cfg(feature = "profile")]
-            if let asked @ 1.. = certifier.reachable_refinements(&canonical, &proofs) {
+            if let asked @ 1.. = admitted.len() {
                 curios_profile::sample!("whnf::missed_lookup", asked);
             }
             return Ok(None);
@@ -323,6 +324,29 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
 
         certifier.settle_refinement(index, key)?;
     }
+}
+
+/// The positions of the equations in force `candidate` could be the term of (`curios_analysis::could_answer`), each asked once a probe: what the probe puts it to, and settles. `proofs` is the binders `candidate` names that are proofs.
+///
+/// **Read with every equation withheld and asking nothing** ([`ByValue::withholding`], [`ByValue::plainly`]). A part the filter reduces is then a reduction no probe interrupts: with the equations in force, reducing a stuck part would probe them in turn, its own filter reducing the part's parts, and probes would nest as deep as the form goes. A part only an equation takes apart is read as it stands, toward refusal, and what the bracket read goes with it.
+fn admitted(
+    certifier: &mut ByValue,
+    candidate: &Term,
+    proofs: &[Free],
+) -> Result<Vec<usize>, ReduceError> {
+    let keys = certifier.keys_in_force();
+    certifier.withholding(0, |certifier| {
+        certifier.plainly(|certifier| {
+            let mut admitted = Vec::new();
+            for (index, key) in keys {
+                if could_answer(certifier, &key, candidate, proofs)? {
+                    admitted.push(index);
+                }
+            }
+
+            Ok(admitted)
+        })
+    })
 }
 
 /// What the equation at `index` says of the stuck form `term`, its reduced spelling `key` and its case `value`: the shared rule's answer, and where the rule hands a question back, the certifier's conversion's — unless reduction is plain, which asks nothing.

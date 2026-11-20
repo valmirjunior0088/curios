@@ -58,7 +58,7 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
 }
 
 /// The hypotheses the tests of what reduction asks conversion share: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
-const ASKED: &str = "a: #NatType, b: #NatType, c: #NatType, f: (x: #NatType) -> #NatType, h: (flag: #BoolType) -> #NatType";
+const ASKED: &str = "a: #NatType, b: #NatType, c: #NatType, f: (x: #NatType) -> #NatType, h: (flag: #BoolType) -> #NatType, u: (g: (x: #NatType) -> #NatType) -> #NatType";
 
 /// `f(a + b) < 10`, the guard.
 const GUARD: &str = "#NatLt(f(#NatAdd(a, b)), 10)";
@@ -203,7 +203,7 @@ fn a_question_is_answered_by_reduction_that_asks_nothing() {
 const PROVED: &str =
     "a: #NatType, bound: Prop, w: (n: #NatType, at: bound) -> #NatType, p1: bound, p2: bound";
 
-/// A guard answers a call under another proof of its bound, and so does a match on the call itself. `w(a, p2) < 10` is the scrutinee `w(a, p1) < 10` to the certifier's conversion, which reads no proof, and it names a proof the key does not: so it is no reduct of the key. The filter that keeps settlement rare (`curios_analysis::could_reduce_to`) counts the binders a form names that the key does not, and passes over one that is itself a proof.
+/// A guard answers a call under another proof of its bound, and so does a match on the call itself. `w(a, p2) < 10` is the scrutinee `w(a, p1) < 10` to the certifier's conversion, which reads no proof, and it names a proof the key does not: so it is no reduct of the key. The filter that keeps settlement rare (`curios_analysis::could_answer`) counts the binders a form reads that the key does not, and passes over one that is itself a proof.
 ///
 /// `curios-elab`'s `reduce::question_tests` holds this proposition under this name, and `curios`'s `tests::respelling` puts the programs through both checkers. Mutation-checked: with a proof counted as any other binder, both forms stay stuck.
 #[test]
@@ -238,16 +238,41 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
     );
 }
 
-/// A form naming a binder the key does not, outside a proof, is put to no equation: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10` and names `c`, which is no proof, so the filter that keeps settlement rare counts it and the form stays stuck. That is what the filter still gives up, stated so that moving it is seen; the control is the conversion itself, which holds the two equal with no arm standing.
+/// A form naming a binder the key does not, where reducing an argument erases it, is answered: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10`, and its argument `b + 0 * c`, reduced, names no `c`, so the filter that keeps settlement rare reads past it as conversion does, and the guard's equation answers the form.
 ///
-/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name. Mutation-checked: with the filter passing every binder, the form is asked about and is `true`.
+/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name. Mutation-checked: with the filter counting every binder a form names, a proof apart, the form stays stuck.
 #[test]
-fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
+fn a_binder_an_arguments_reduction_erases_is_read_past() {
     let mut certifier = certifier();
     let [guard, respelled] = under(
         &mut certifier,
         ASKED,
         "#NatLt(f(b), 10), #NatLt(f(#NatAdd(b, #NatMul(0, c))), 10)",
+    );
+
+    assert_eq!(
+        convert(&mut certifier, &term("#BoolType"), &guard, &respelled),
+        Ok(true),
+        "the two convert, or the answer below is no reading past the binder"
+    );
+    guarded(&mut certifier, &guard, |certifier| {
+        assert_eq!(
+            certifier.reduce(respelled).expect("reduces").as_bool(),
+            Some(true)
+        );
+    });
+}
+
+/// A form naming a binder the key does not beneath a lambda's binder is put to no equation: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, but the filter reduces nothing beneath a binder of the form's, so it counts `c` and the form stays stuck. That is what the filter still gives up, stated so that moving it is seen; the control is the conversion itself, which holds the two equal with no arm standing.
+///
+/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
+#[test]
+fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
+    let mut certifier = certifier();
+    let [guard, respelled] = under(
+        &mut certifier,
+        ASKED,
+        "#NatLt(u((x: #NatType) => x), 10), #NatLt(u((x: #NatType) => #NatAdd(x, #NatMul(0, c))), 10)",
     );
 
     assert_eq!(

@@ -141,6 +141,8 @@ pub enum Consumed {
     ///
     /// The second door onto the same reduction, and the one no refinement key reaches, in both checkers; what keeps it flat is weak-head reduction's, the closed machine's and the decision diagram's, not the inverter's, as [`scrutinee_refinement_measurements`] states. [`numerics`] is the same door over `Nat`, whose fold laws read both operands.
     Proved,
+    /// Scrutinized by a `match` at that binder whose arm compares forms of the web at two other binders: stuck forms naming binders the case equation's subject does not, which the filter in front of the equation puts to none (`curios_analysis::could_answer`).
+    Compared,
 }
 
 /// The declaration that consumes a web named `top{suffix}`, which is the only thing that differs between the arms of both measurements below.
@@ -155,6 +157,18 @@ fn consumer(suffix: &str, consumed: Consumed) -> String {
         ),
         Consumed::Proved => format!(
             "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =\n    match e | refl(@z) => \"y\" end;\n\n"
+        ),
+        Consumed::Compared => format!(
+            "let probe{suffix}(n: Nat, m: Nat, k: Nat) -> Str =
+    match top{suffix}(n)
+    | true =>
+        let _: Eq()(top{suffix}(m) || top{suffix}(k), top{suffix}(m) || top{suffix}(k)) = Eq/refl();
+        let _: Eq()(top{suffix}(m + k), top{suffix}(k + m)) = Eq/refl();
+        let _: Eq()(top{suffix}(m * 2) && top{suffix}(k), top{suffix}(m * 2) && top{suffix}(k)) = Eq/refl();
+        let _: Bool/Holds(top{suffix}(n) || top{suffix}(m)) = Bool/True/qed();
+        \"y\"
+    | false => \"n\"
+    end;\n\n"
         ),
     }
 }
@@ -519,6 +533,18 @@ fn a_proved_web_of_twenty_definitions_compiles() {
         outcome,
         Ok(()),
         "the proved web of twenty definitions compiles"
+    );
+}
+
+/// The compared door at twenty definitions: under a guard on the web at `n`, an arm comparing forms of the web at `m` and `k`. Each of its stuck forms names a binder the guard does not where conversion reads it, so the filter in front of the equation puts it to none, and the arm costs what it would under no guard. Not a measurement — a refusal to regress: put to the equation, each form would settle the guard's web and be classed against it, which runs the declaration out of its budget at this size.
+#[test]
+fn a_guard_over_a_web_puts_forms_over_other_binders_to_no_equation() {
+    let (outcome, _) = compile_only(&predicates(20, Consumed::Compared, true));
+
+    assert_eq!(
+        outcome,
+        Ok(()),
+        "the compared web of twenty definitions compiles"
     );
 }
 

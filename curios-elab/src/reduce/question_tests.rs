@@ -175,6 +175,7 @@ struct Asked {
     c: Free,
     f: Free,
     h: Free,
+    u: Free,
 }
 
 impl Asked {
@@ -185,6 +186,7 @@ impl Asked {
             c: context.fresh(Some("c")),
             f: context.fresh(Some("f")),
             h: context.fresh(Some("h")),
+            u: context.fresh(Some("u")),
         };
         let x = context.fresh(Some("x"));
         let flag = context.fresh(Some("flag"));
@@ -198,7 +200,22 @@ impl Asked {
         );
         context.assume(
             &asked.h,
-            &Term::func_type([(flag, Term::intrinsic(Intrinsic::BoolType))], nat_type),
+            &Term::func_type(
+                [(flag, Term::intrinsic(Intrinsic::BoolType))],
+                nat_type.clone(),
+            ),
+        );
+        let g = context.fresh(Some("g"));
+        let y = context.fresh(Some("x"));
+        context.assume(
+            &asked.u,
+            &Term::func_type(
+                [(
+                    g,
+                    Term::func_type([(y, nat_type.clone())], nat_type.clone()),
+                )],
+                nat_type,
+            ),
         );
         asked
     }
@@ -402,11 +419,11 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
     });
 }
 
-/// A form naming a binder the scrutinee does not, outside a proof, is put to no entry: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10` and names `c`, which is no proof, so the form stays stuck. The certifier's `whnf::question_tests` holds this proposition under this name.
+/// A form naming a binder the scrutinee does not, where reducing an argument erases it, is answered: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10`, and its argument `b + 0 * c`, reduced, names no `c`, so the filter reads past it as conversion does. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
-/// Mutation-checked: with the filter passing every binder, the form is asked about and is `true`.
+/// Mutation-checked: with the filter counting every binder a form names, a proof apart, the form stays stuck.
 #[test]
-fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
+fn a_binder_an_arguments_reduction_erases_is_read_past() {
     let mut context = context();
     let asked = Asked::over(&mut context);
     let below = |argument: Term| {
@@ -418,6 +435,39 @@ fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
     let respelled = below(Term::intrinsic(Intrinsic::nat_add(
         Term::free_var(&asked.b),
         Term::intrinsic(erased),
+    )));
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    assert_eq!(
+        convert(&mut context, &bool_type, &guard, &respelled),
+        Ok(true),
+        "the two convert, or the answer below is no reading past the binder"
+    );
+    assumed(&mut context, guard, truth, |context| {
+        assert_eq!(
+            reduce(context, respelled).map(|reduct| reduct.as_bool()),
+            Ok(Some(true))
+        );
+    });
+}
+
+/// A form naming a binder the scrutinee does not beneath a lambda's binder is put to no entry: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, but the filter reduces nothing beneath a binder of the form's, so it counts `c` and the form stays stuck. That is what the filter still gives up, stated so that moving it is seen. The certifier's `whnf::question_tests` holds this proposition under this name.
+#[test]
+fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let x = context.fresh(Some("x"));
+    let below = |body: Term| {
+        let lambda = Term::func([(x, nat_type.clone())], body);
+        let call = Term::apply(Term::free_var(&asked.u), [lambda]);
+        Term::intrinsic(Intrinsic::nat_lt(call, nat(10)))
+    };
+    let guard = below(Term::free_var(&x));
+    let respelled = below(Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&x),
+        Term::intrinsic(Intrinsic::NatMul(nat(0), Term::free_var(&asked.c))),
     )));
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
     let truth = Term::intrinsic(Intrinsic::Bool(true));

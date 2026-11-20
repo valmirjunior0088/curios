@@ -9,12 +9,12 @@ use {
         classed_in, intrinsics_agree, invert_indices,
     },
     curios_algebra::{Carrier, Operation},
-    curios_common::SyntaxRegistry,
+    curios_common::{SyntaxRegistry, recurse},
     curios_core::{
-        Cases, Cost, Declaration, Free, Intrinsic, Keys, Nat, ReduceError, Reducer, Subterm, Term,
-        bool_value, is_bool_connective,
+        Bound, Cases, Cost, Declaration, Free, Intrinsic, Keys, Nat, ReduceError, Reducer, Subterm,
+        Term, bool_value, is_bool_connective,
     },
-    std::{mem, slice},
+    std::{collections::HashMap, mem, slice},
 };
 
 /// How many application layers a dispatched scrutinee is opened through to reach the spelling it resolves to: each step consumes one layer of an elaborated dispatch, and a spine that has not settled in this many is not a dispatch.
@@ -153,26 +153,160 @@ pub fn read_scrutinee_classed(
     Ok(bool_value(reducer, &classed)?.map(|value| Term::intrinsic(Intrinsic::Bool(value))))
 }
 
-/// Whether `candidate` could be the term `key` reduces to, as conversion reads a term — tested without reducing anything. `proofs` is the binders `candidate` names that are themselves proofs.
+/// Whether an equation keyed on `key` could answer `candidate`: whether `candidate` could be a term conversion holds equal to a reduct of `key`, read as conversion reads it and reducing only what conversion would reduce to compare it. `proofs` is the binders `candidate` names that are themselves proofs. The reduction is the caller's, and plain.
 ///
-/// Reduction substitutes only closed definition bodies and subterms of the term it is reducing, so it can introduce a *global* name and can drop a local, but can never introduce a local the term did not already mention. A candidate naming a binder the key does not is therefore one no reduct of the key will ever equal, whatever the key reduces to.
+/// Reduction substitutes only closed definition bodies and subterms of the term it is reducing, so it can introduce a *global* name and can drop a local, but can never introduce a local the term did not already mention. A reduct of the key names no binder the key does not.
 ///
-/// **A binder that is a proof is passed over.** An equation answers what conversion holds equal to its scrutinee, and a term that converts with a reduct of the key without being one can name a binder the key does not, where conversion does not read it. What conversion does not read is a proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So the binders counted are the ones that are no proofs, and each checker says which those are.
+/// **A binder counts where conversion reads it.** Conversion compares two stuck forms part by part, reducing an argument of a stuck application and a field of a constructed value before it compares them, so a binder one names that its reduction erases is one it never reads — `f(b + 0 * c)` is `f(b)` to it, and so is `f(Pair { left = b, right = c }.left)` — and it reads no proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So a binder the key does not name ends the test where it stands as a variable in a part reduction has left — the candidate as reduction leaves a stuck form, and its head, a fold's operands, a projection's head and a match's scrutinee, each as reduction left it — and an argument or a field that names one is reduced ([`Reducer::reduce_forced`]) and read in turn. A binder that is a proof is passed over, and so is an application of one, which is a proof too; each checker says which binders are proofs.
 ///
-/// **What it still gives up.** A binder standing inside a proof term that is no variable, or in an argument reduction would erase — `f(b + 0 * c)` beside `f(b)` — is counted though conversion would not read it. The filter fails toward refusal there, and both checkers read it on one spelling with one account of what a proof is, so they fail together.
+/// **What it still gives up.** A part beneath a binder of the candidate's — a lambda's body, a match's arm — and a type are read as they stand, reducing nothing below them, where conversion compares bodies reduced: `u((x) => x + 0 * c)` counts `c`. One-sided, a reading that reduced there would reduce without the other side to stop it, where conversion stops at the first difference: a recursive group unfolds to a body that holds the group again. And a proof that is no application of a proof binder is read like any term. The filter fails toward refusal there, and both checkers read it on one spelling with one account of what a proof is, so they fail together.
 ///
-/// That makes this a filter and not a rule: every candidate an eager key would match still passes it, because such a candidate *is* a reduct of the key. What it excludes is the traffic — every stuck form produced under a binder some other judgment opened, which is most of what a probe at a stuck reduct sees.
+/// That makes this a filter and not a rule: every candidate an eager key would match still passes it, because such a candidate *is* a reduct of the key. What it excludes is the traffic — every stuck form produced under a binder some other judgment opened, which is most of what a probe at a stuck reduct sees — most of it at the first such binder, standing as an operand reduction has already left, before anything is reduced.
 ///
 /// Globals are deliberately not tested, and the asymmetry is the point: a reduct's globals are not bounded by the key's, so testing them would exclude exactly the unfoldings a settlement exists to perform.
 ///
-/// Relaxing it to admit everything refuses nothing that holds, and admits the respellings named above — what it costs is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equation_scope_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
-pub fn could_reduce_to(key: &Term, candidate: &Term, proofs: &[Free]) -> bool {
-    let allowed = key.mentions();
+/// Admitting every form refuses nothing that holds, and costs what it puts to the equations: under a guard over a web of definitions, an arm whose stuck forms name other binders settles and classes each of them against the web, which `curios`' `tests::unfolding::a_guard_over_a_web_puts_forms_over_other_binders_to_no_equation` holds within the default budget. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equation_scope_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
+pub fn could_answer(
+    reducer: &mut impl Reducer,
+    key: &Term,
+    candidate: &Term,
+    proofs: &[Free],
+) -> Result<bool, ReduceError> {
+    let named = key.mentions();
+    let foreign = |name: &Free| !named.contains(name) && !proofs.contains(name);
+    let mut walk = Walk {
+        foreign: &foreign,
+        proofs,
+        read: HashMap::new(),
+    };
 
-    candidate
-        .mentions()
-        .locals()
-        .all(|name| allowed.contains(name) || proofs.contains(name))
+    walk.reads(reducer, candidate, Stands::Left)
+}
+
+/// How a part of a stuck form stands to reduction, which is how [`could_answer`] reads it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Stands {
+    /// As reduction left it: read as it stands, its arguments and fields reduced.
+    Left,
+    /// Where conversion reduces it before comparing it: an argument of a stuck application, a field of a constructed value.
+    Unreduced,
+    /// Beneath a binder of the form's, or a type: read as it stands, and nothing below it reduced.
+    Beneath,
+}
+
+/// One [`could_answer`] walk: the binders it counts, the proofs it passes over, and what it has read of each part.
+///
+/// **A part is read once, however many paths reach it.** A stuck form is a graph, a part shared by many of its parts, and read once per path it would be read as many times as the graph has paths, which grows with the product of its sharing. Keyed by the part's identity and how it stands, each answer is kept with the part itself, so no identity is reused while the walk holds it.
+struct Walk<'w, F> {
+    foreign: &'w F,
+    proofs: &'w [Free],
+    read: HashMap<(usize, Stands), (Term, bool)>,
+}
+
+impl<F: Fn(&Free) -> bool> Walk<'_, F> {
+    /// Whether `term` reads no binder the walk counts, as [`could_answer`] reads it where it `stands`.
+    fn reads(
+        &mut self,
+        reducer: &mut impl Reducer,
+        term: &Term,
+        stands: Stands,
+    ) -> Result<bool, ReduceError> {
+        if !term.mentions().locals().any(self.foreign) {
+            return Ok(true);
+        }
+        let at = (term.identity(), stands);
+        if let Some((_, read)) = self.read.get(&at) {
+            return Ok(*read);
+        }
+        let read = recurse(|| self.reads_part(reducer, term, stands))?;
+        self.read.insert(at, (term.clone(), read));
+
+        Ok(read)
+    }
+
+    fn reads_part(
+        &mut self,
+        reducer: &mut impl Reducer,
+        term: &Term,
+        stands: Stands,
+    ) -> Result<bool, ReduceError> {
+        let stands = match stands {
+            Stands::Unreduced if term.reach() == 0 => {
+                let forced = reducer.reduce_forced(term.clone())?;
+                return self.reads(reducer, &forced, Stands::Left);
+            }
+            Stands::Unreduced => Stands::Beneath,
+            stands => stands,
+        };
+        match &**term {
+            Subterm::Var(_) => return Ok(false),
+            _ if spine_head(term).is_some_and(|head| self.proofs.contains(head)) => {
+                return Ok(true);
+            }
+            _ => {}
+        }
+        // How each part of one reduction left stands: its head and a fold's operands as they are, its arguments and fields where conversion reduces them, and everything else — a binder's body, a type — beneath.
+        let (left, unreduced) = match (stands, &**term) {
+            (Stands::Beneath, _) => (Vec::new(), Vec::new()),
+            (_, Subterm::Apply(apply)) => (
+                vec![apply.head.identity()],
+                apply.params().map(Term::identity).collect(),
+            ),
+            (_, Subterm::Intrinsic(_)) => {
+                let mut operands = Vec::new();
+                term.any_child_term(&mut |operand| {
+                    operands.push(operand.identity());
+                    false
+                });
+                (operands, Vec::new())
+            }
+            (_, Subterm::Proj(proj)) => (vec![proj.head.identity()], Vec::new()),
+            (_, Subterm::Match(matched)) => (vec![matched.head.identity()], Vec::new()),
+            (_, Subterm::Variant(variant)) => (
+                Vec::new(),
+                variant.payload.iter().map(Term::identity).collect(),
+            ),
+            (_, Subterm::Struct(record)) => (
+                Vec::new(),
+                record.fields.iter().map(Term::identity).collect(),
+            ),
+            (_, Subterm::Tuple(tuple)) => (
+                Vec::new(),
+                tuple.fields.iter().map(Term::identity).collect(),
+            ),
+            _ => (Vec::new(), Vec::new()),
+        };
+        let mut parts = Vec::new();
+        term.any_child_term(&mut |child| {
+            let identity = child.identity();
+            let stands = match (left.contains(&identity), unreduced.contains(&identity)) {
+                (true, _) => Stands::Left,
+                (false, true) => Stands::Unreduced,
+                (false, false) => Stands::Beneath,
+            };
+            parts.push((child.clone(), stands));
+            false
+        });
+        for (part, stands) in parts {
+            if !self.reads(reducer, &part, stands)? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+}
+
+/// The local an application spine is headed by, where a local heads it.
+fn spine_head(term: &Term) -> Option<&Free> {
+    let mut head = term;
+    while let Subterm::Apply(apply) = &**head {
+        head = &apply.head;
+    }
+    match &**head {
+        Subterm::Var(var) => var.as_free(),
+        _ => None,
+    }
 }
 
 /// Whether `value`, the value an arm's equation assumes of its scrutinee, is of a carrier whose values hold no type: the literal of a truth value, a number, a byte, a float or a packed sequence, a successor over a pattern among them. There a universe instance is no part of the value ([`curios_core::same_atom`]), so a stuck call met whole and the equation's reduced spelling apart in their head's instance alone are one where their arguments are ([`one_up_to_instances`](crate::one_up_to_instances)). A list's value and a constructed one may hold a type.
