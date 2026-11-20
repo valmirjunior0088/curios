@@ -29,6 +29,9 @@ pub use guards::*;
 mod inline;
 pub use inline::*;
 
+mod merge;
+pub use merge::*;
+
 mod protocol;
 pub use protocol::*;
 
@@ -187,6 +190,11 @@ pub fn optimize(module: &mut Module) {
     debug_assert!(
         converged.is_some(),
         "cont optimization did not converge within {ROUND_LIMIT} rounds"
+    );
+
+    // Once the fixpoint has settled, each class of equal continuations is kept once: before it, a body the inliner would copy into each of its callers is merged first and copied again.
+    curios_profile::profile!(
+        "cps::merge_equal_continuations" => merge_equal_continuations(module)
     );
 
     module
