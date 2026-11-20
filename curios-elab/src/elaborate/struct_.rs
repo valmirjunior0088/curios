@@ -326,6 +326,7 @@ fn elaborate_struct_entries(
                 fields.len(),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
             ));
         }
         false => entries
@@ -358,6 +359,14 @@ fn elaborate_struct_entries(
         .filter(|(position, _)| slots[*position] == Plicity::Explicit)
         .map(|(_, label)| *label)
         .collect();
+
+    for (mark, label, field) in &written {
+        if let (Plicity::Explicit, Some(label)) = (mark, label)
+            && let Some(unmarked) = unmarked(name, &labels, &slots, label)
+        {
+            return Err(unmarked.at_opt(field.extent()));
+        }
+    }
 
     if plain.len() != plain_labels.len() {
         // Where every written entry carries its label, the labels say which fields are absent and which are no field of the struct; a positional literal says only how many it wrote, so what it lacks is the declared tail.
@@ -395,12 +404,24 @@ fn elaborate_struct_entries(
             ),
         };
 
+        // A plain entry past the plain fields may be meant for a hidden one, so a structure's `@` fields are named with the count; a concept's hidden fields are superclass edges, written `use`, and none is named.
+        let hidden = match plain.len() > plain_labels.len() {
+            true => labels
+                .iter()
+                .zip(&slots)
+                .filter(|(_, mark)| **mark == Plicity::Implicit)
+                .map(|(label, _)| label.to_string())
+                .collect(),
+            false => Vec::new(),
+        };
+
         return Err(Error::wrong_number_of_fields(
             *name,
             plain_labels.len(),
             plain.len(),
             missing,
             surplus,
+            hidden,
         ));
     }
 
@@ -493,6 +514,15 @@ fn elaborate_struct_entries(
         Term::struct_at(*name, universes.clone(), resolved.clone(), elaborated),
         Term::struct_type_at(*name, universes, resolved),
     ))
+}
+
+/// The refusal of a plain entry `written` labels, where the label is a hidden field's of `name`: a hidden field is written under its mark wherever it is written, so one written as a plain field is that, and no unknown field.
+fn unmarked(name: &Global, labels: &[&str], slots: &[Plicity], written: &str) -> Option<Error> {
+    labels
+        .iter()
+        .zip(slots)
+        .any(|(label, slot)| *slot == Plicity::Implicit && *label == written)
+        .then(|| Error::hidden_field_unmarked(*name, written.to_string()))
 }
 
 /// The labelled fields in order as a literal writes them, a hidden one under its mark: what a refusal of a misnamed hidden entry lists.
@@ -663,6 +693,9 @@ pub fn elaborate_struct_spread(
                             ));
                         }
                         None => {
+                            if let Some(unmarked) = unmarked(name, &labels, &slots, written) {
+                                return Err(unmarked);
+                            }
                             return Err(Error::unknown_struct_field(
                                 *name,
                                 written.to_string(),

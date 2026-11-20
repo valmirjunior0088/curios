@@ -885,13 +885,19 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    /// A struct literal supplies the wrong number of fields: the declared labels it leaves out and the written ones the declaration lacks, where the literal's labels say which.
+    /// A struct literal supplies the wrong number of fields: the declared labels it leaves out and the written ones the declaration lacks, where the literal's labels say which, and the labels of its hidden fields, an empty one for a field declared as its type alone, where a plain entry was written past the plain fields.
     WrongNumberOfFields {
         name: Global,
         expected: usize,
         got: usize,
-        missing: Vec<String>,
-        surplus: Vec<String>,
+        missing: Box<[String]>,
+        surplus: Box<[String]>,
+        hidden: Box<[String]>,
+    },
+    /// A struct literal writes a hidden field by its label with no mark, as a plain field is written.
+    HiddenFieldUnmarked {
+        name: Global,
+        label: String,
     },
     /// A nominal type whose declaration is absent from the registry.
     UnknownDeclaration {
@@ -1237,6 +1243,7 @@ variants!(Error {
     NotAStructType,
     StructArityMismatch,
     WrongNumberOfFields,
+    HiddenFieldUnmarked,
     UnknownDeclaration,
     UnknownStructField,
     UseEntryOutsideConcept,
@@ -1705,14 +1712,20 @@ impl Error {
         got: usize,
         missing: Vec<String>,
         surplus: Vec<String>,
+        hidden: Vec<String>,
     ) -> Self {
         Self::WrongNumberOfFields {
             name,
             expected,
             got,
-            missing,
-            surplus,
+            missing: missing.into_boxed_slice(),
+            surplus: surplus.into_boxed_slice(),
+            hidden: hidden.into_boxed_slice(),
         }
+    }
+
+    pub fn hidden_field_unmarked(name: Global, label: String) -> Self {
+        Self::HiddenFieldUnmarked { name, label }
     }
 
     /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.

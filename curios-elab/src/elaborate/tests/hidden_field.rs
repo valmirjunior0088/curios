@@ -187,6 +187,56 @@ fn a_hidden_entry_that_misaligns_is_refused() {
     ));
 }
 
+// A hidden field written by its label as a plain one is that field unmarked, and no field the structure lacks.
+#[test]
+fn a_hidden_field_written_as_a_plain_one_is_refused_as_unmarked() {
+    let mut context = context();
+    register_marked(&mut context);
+    let labelled = marked_literal([
+        (StructEntry::Field(Some("n".into())), nat_lit(3)),
+        (StructEntry::Field(Some("x".into())), nat_lit(5)),
+    ]);
+
+    assert!(matches!(
+        elaborate(&mut context, &labelled, Mode::Infer),
+        Err(Error::HiddenFieldUnmarked { label, .. }) if label == "n"
+    ));
+}
+
+// An override after a spread is held to the same rule: a hidden field written as a plain one is that field unmarked.
+#[test]
+fn a_hidden_field_overridden_as_a_plain_one_is_refused_as_unmarked() {
+    let mut context = context();
+    let marked = register_marked(&mut context);
+    let value = context.fresh(Some("v"));
+    context.assume(&value, &marked);
+    let spread = marked_literal([
+        (StructEntry::Spread, Term::free_var(&value)),
+        (StructEntry::Field(Some("n".into())), nat_lit(7)),
+    ]);
+
+    assert!(matches!(
+        elaborate(&mut context, &spread, Mode::Infer),
+        Err(Error::HiddenFieldUnmarked { label, .. }) if label == "n"
+    ));
+}
+
+// A plain entry written past the plain fields may be meant for a hidden one, so the count names the hidden fields beside it.
+#[test]
+fn a_plain_entry_past_the_plain_fields_names_the_hidden_ones() {
+    let mut context = context();
+    register_marked(&mut context);
+    let positional = marked_literal([
+        (StructEntry::Field(None), nat_lit(3)),
+        (StructEntry::Field(None), nat_lit(5)),
+    ]);
+
+    assert!(matches!(
+        elaborate(&mut context, &positional, Mode::Infer),
+        Err(Error::WrongNumberOfFields { hidden, .. }) if hidden[..] == ["n"]
+    ));
+}
+
 // A spread copies the plain fields and never a hidden one: left out it is inferred anew, and written it is held to its field as in any literal.
 #[test]
 fn a_spread_never_copies_a_hidden_field() {

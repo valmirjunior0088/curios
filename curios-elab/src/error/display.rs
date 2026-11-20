@@ -1158,6 +1158,7 @@ impl Displayed<'_> {
                 got,
                 missing,
                 surplus,
+                hidden,
             } => {
                 f.text("field count mismatch");
                 f.stating(format_args!(
@@ -1172,6 +1173,26 @@ impl Displayed<'_> {
                 if !surplus.is_empty() {
                     f.stating(format_args!("no such field: {}", codes(surplus)));
                 }
+                // A plain entry past the plain fields may be a hidden field written as a plain one: each is shown as it is written, under its mark.
+                if !hidden.is_empty() {
+                    f.stating(format_args!(
+                        "hidden: {}",
+                        codes(hidden.iter().map(|label| match label.is_empty() {
+                            true => "@...".to_string(),
+                            false => format!("@{label} = ..."),
+                        }))
+                    ));
+                    f.stating("a hidden field is written under `@`, or left out");
+                }
+            }
+            Error::HiddenFieldUnmarked { name, label } => {
+                f.text("unmarked field");
+                f.stating(format_args!(
+                    "`{label}` is a hidden field of `{}`",
+                    spelling.symbol(name)
+                ));
+                f.stating("a hidden field is written under `@`, or left out");
+                f.stating(format_args!("write it `@{label} = ...`"));
             }
             Error::UnknownDeclaration { name } => {
                 f.text("unknown declaration");
