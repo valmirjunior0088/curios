@@ -13,6 +13,9 @@ use {
     std::path::{Path, PathBuf},
 };
 
+/// The directory of `.curios/` a project's own cabinet is, where nothing names another.
+const OWN: &str = "cabinet";
+
 /// The family of judged units' slots.
 const VERDICTS: &str = "verdicts";
 
@@ -37,7 +40,7 @@ impl Cabinet {
     /// Named by the caller and never looked for: what names it is the command line's to read, so no cabinet a suite opens is any but the one it names.
     pub fn of(project: &Path, named: Option<&Path>) -> Self {
         Self {
-            directory: named.map_or_else(|| project.join(PRODUCTS), Path::to_path_buf),
+            directory: named.map_or_else(|| project.join(PRODUCTS).join(OWN), Path::to_path_buf),
         }
     }
 

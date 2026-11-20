@@ -2,29 +2,30 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds nine families, each in its own subtree rather than sharing one namespace, and each named for what it holds: the three a command emits, named for the target it is built for, and the [cabinet](crate::Cabinet)'s six, named for what they hold:
+//! It holds what a command emits, a family for each target and one for documentation, beside the [cabinet](crate::Cabinet), which holds whole what is kept for reuse, each family in its own subtree rather than sharing one namespace:
 //!
 //! ```text
 //! .curios/
-//!   native/         json/serve      what `curios compile` emits for the native target
-//!   browser/        json/serve/     what it emits for a browser: the page's directory
-//!   documentation/  json/           what `curios document` emits
-//!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
-//!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
-//!   verdicts/       <slot>          judged units, one file per unit and compiler
-//!   objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
-//!   payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
-//!                   browser/<slot>  and, natively, engine
-//!   compiler                        this machine's memo of its compiler's digest
+//!   native/           json/serve      what `curios compile` emits for the native target
+//!   browser/          json/serve/     what it emits for a browser: the page's directory
+//!   documentation/    json/           what `curios document` emits
+//!   cabinet/
+//!     sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
+//!     foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
+//!     verdicts/       <slot>          judged units, one file per unit and compiler
+//!     objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
+//!     payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
+//!                     browser/<slot>  and, natively, engine
+//!     compiler                        this machine's memo of the digest of the compiler running now
 //! ```
 //!
-//! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Cabinet::staging`](crate::Cabinet::staging).
+//! One transient entry passes through the cabinet beside its families: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Cabinet::staging`](crate::Cabinet::staging).
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CABINET` moves the cabinet's families — never `native/`, `browser/` or `documentation/`, which belong to the package that declared them — into a cabinet keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once.
+//! That tree is what a project gets when nothing points elsewhere. A cabinet named for every project a run sees (`CURIOS_CABINET`, which the command line reads) stands in for `cabinet/` whole — never for `native/`, `browser/` or `documentation/`, which belong to the package that declared them — so two projects pinning one revision materialize and compile it once, and a project shares, moves or clears what it keeps for reuse as one directory.
 //!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every other family is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every family of the cabinet is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
 
 #[cfg(test)]
 mod tests;

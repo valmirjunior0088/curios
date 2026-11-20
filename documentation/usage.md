@@ -765,25 +765,25 @@ The program's own standard input is spent on reading the source, so a read of it
 
 ## Where things go
 
-Everything generated lands under one `.curios/`, beside the governing manifest — the umbrella's when one governs, so its members share it — in nine entries, a product's named for the target it is built for and every other for what it holds:
+Everything generated lands under one `.curios/`, beside the governing manifest — the umbrella's when one governs, so its members share it: what a command emits, named for the target it is built for or for documentation, beside the cabinet, `cabinet/`, which holds whole what is kept for reuse, each of its families named for what it holds:
 
-| Entry | Holds | Under `CURIOS_CABINET` |
-| --- | --- | --- |
-| `native/<package>/<name>` | what `compile` emits for the native target | stays |
-| `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory | stays |
-| `documentation/<package>/` | what `document` emits | stays |
-| `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | moves |
-| `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | moves |
-| `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | moves |
-| `objects/<slot>/<pack>` | what each verdict slot names, in packs beside it named by what they hold | moves |
-| `payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own | moves |
-| `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | moves |
+| Entry | Holds |
+| --- | --- |
+| `native/<package>/<name>` | what `compile` emits for the native target |
+| `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory |
+| `documentation/<package>/` | what `document` emits |
+| `cabinet/sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against |
+| `cabinet/foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way |
+| `cabinet/verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations |
+| `cabinet/objects/<slot>/<pack>` | what each verdict slot names, in packs beside it named by what they hold |
+| `cabinet/payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own |
+| `cabinet/compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary |
 
-One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
+One transient entry passes through the cabinet beside its families: [`pin`](#pin) stages a delivery at `cabinet/pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CABINET` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's hash scheme is a directory of its own.
+What a command emits belongs to the package that declared it, nested under its name so two members of one umbrella never collide, and always stays in the project's `.curios/`. What the cabinet holds is keyed by what it is, never by which project asked, so it can be shared, and a project moves or clears it as one directory: a cleared cabinet costs the next command the work it held and nothing else. A source's hash scheme is a directory of its own.
 
-Set `CURIOS_CABINET` to share that half across projects; unset, each project keeps its own, and nothing is written anywhere else ([why](../curios-package/README.md#the-store-goes-where-a-manifest-governs-and-nowhere-it-was-not-pointed)).
+Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a command sees, in place of each one's own `cabinet/`, so projects share what they keep for reuse; unset, each project keeps its own. `.curios/` and the cabinet it names are the only directories the toolchain writes into ([why](../curios-package/README.md#curios-goes-where-a-manifest-governs-and-its-cabinet-nowhere-it-was-not-pointed)).
 
 ## Reusing what was already built
 

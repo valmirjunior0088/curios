@@ -42,13 +42,13 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 
 **Rejected.** A separate `add`, a second spelling of the same act; writing `member` and `catalog` rows from the command line; a network client vendored into the compiler; a `hash` for fetched modules alone.
 
-### The store goes where a manifest governs, and nowhere it was not pointed
+### `.curios/` goes where a manifest governs, and its cabinet nowhere it was not pointed
 
-**Decision.** Everything generated lands in one `.curios/` beside the governing manifest, the umbrella's where one governs, so members share it. `CURIOS_CABINET` moves the half that says nothing about which project asked, and has no default. A source's hash scheme is a directory of its own.
+**Decision.** Everything generated lands in one `.curios/` beside the governing manifest, the umbrella's where one governs, so members share it: what a command emits, by target, beside the cabinet, which holds whole what is kept for reuse. `CURIOS_CABINET` names a directory to stand in for the cabinet, and has no default; the command line reads it and hands it to what opens a governing root, and no library reads the environment. A source's hash scheme is a directory of its own.
 
-**Rationale.** A toolchain that writes into a home directory nobody pointed it at does what the person who ran it did not ask for. A scheme of its own lets a successor stand beside `c1` rather than replace it.
+**Rationale.** A toolchain that writes into a home directory nobody pointed it at does what the person who ran it did not ask for. What is kept for reuse is keyed by what it is and says nothing about which project asked, so one directory of it is shared, moved or cleared whole, and told from what a command emits by the tree rather than by a table, as Cargo keeps its intermediates in a `build-dir` apart from its `target-dir` and Zig keeps `.zig-cache` apart from `zig-out`. A variable read where the command line starts leaves every cabinet a library or a suite opens the one it was handed. A scheme of its own lets a successor stand beside `c1` rather than replace it.
 
-**Rejected.** A default cache directory divined from the environment.
+**Rejected.** A default cache directory divined from the environment. The families kept for reuse side by side with what a command emits, which only the reference's table told apart. The variable read where a cabinet is opened, which made a suite's hermeticity the shell's.
 
 ### `new` starts a package whole
 
