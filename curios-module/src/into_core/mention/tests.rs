@@ -270,7 +270,7 @@ fn every_written_binder_is_placed_where_it_is_written() {
         .of(&twice)
         .written
         .iter()
-        .map(|(binder, at)| {
+        .map(|(binder, at, _)| {
             let span = at
                 .resolved(&[unit.anchors()])
                 .expect("a binder's place resolves");
@@ -305,7 +305,7 @@ fn every_binder_a_telescope_writes_is_placed_and_never_linted() {
         minted(name)
             .written
             .iter()
-            .map(|(binder, at)| {
+            .map(|(binder, at, _)| {
                 let span = at
                     .resolved(&[unit.anchors()])
                     .expect("a binder's place resolves");

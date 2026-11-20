@@ -74,6 +74,20 @@ pub struct WrittenBinder {
     pub ordinal: u32,
 }
 
+/// What a written binder binds, read off the form that binds it: what a question about a place answers it as, where it is bound and where it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Binds {
+    /// A local, answered as one: a binder a term, a parameter list or a telescope's parameters bind.
+    Local,
+    /// A structure's field, answered as the field.
+    Field,
+    /// A tuple type's field, answered as a field of no structure.
+    TupleField,
+    /// A concept's method, answered as the method's declaration.
+    Method,
+}
+
 impl WrittenBinder {
     /// This binder re-keyed to `renamed` where it is written in the definition `name`: a witness's, whose name is given anew by every lowering.
     pub fn renamed(&self, name: &Global, renamed: Global) -> Self {

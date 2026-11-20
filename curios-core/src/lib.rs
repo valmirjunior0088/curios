@@ -143,7 +143,9 @@ mod lint;
 pub use lint::{ArchivedLint, ArchivedLintKind, Lint, LintKind};
 
 mod unread;
-pub use unread::{ArchivedUnread, ArchivedWrittenBinder, Unread, WrittenBinder};
+pub use unread::{
+    ArchivedBinds, ArchivedUnread, ArchivedWrittenBinder, Binds, Unread, WrittenBinder,
+};
 
 mod unresolved;
 pub use unresolved::{

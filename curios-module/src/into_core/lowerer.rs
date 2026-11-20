@@ -180,6 +180,8 @@ struct Candidate {
     span: Span,
     /// Whether a lint reads it: a binder a term or a parameter list binds, which nothing reading it is a fact about. A telescope's binder is kept where it stands and never linted — a Π-type's, a declaration head's, a payload's, a field's — since a reference in the declaration reads it as part of a type, and one nothing reads is how a type is written.
     linted: bool,
+    /// What it binds, which a place answers it as.
+    binds: curios_core::Binds,
 }
 
 /// One `let` whose value runs no action: what its pattern names where it is one binder with a name, where the pattern was written, and the places of the binders it writes among the declaration's candidates.
@@ -285,7 +287,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .iter()
                 .enumerate()
                 .filter_map(|(place, candidate)| {
-                    Some((binder(&place), self.context.extent(&candidate.span)?))
+                    Some((
+                        binder(&place),
+                        self.context.extent(&candidate.span)?,
+                        candidate.binds,
+                    ))
                 }),
         );
         if self.saw_goal.get() {
@@ -375,22 +381,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
     ) -> Vec<Binder> {
-        self.mint_candidates(labels, true)
+        self.mint_candidates(labels, true, curios_core::Binds::Local)
     }
 
-    /// [`Self::mint_written`] for a telescope's binders, which no lint reads ([`Candidate::linted`]): each is kept where it stands, so it is answered where it is bound and read, as a written binder is.
+    /// [`Self::mint_written`] for a telescope's binders, which no lint reads ([`Candidate::linted`]), each binding what `binds` says: each is kept where it stands, so it is answered where it is bound and read, as a written binder is.
     pub fn mint_placed(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
+        binds: curios_core::Binds,
     ) -> Vec<Binder> {
-        self.mint_candidates(labels, false)
+        self.mint_candidates(labels, false, binds)
     }
 
-    /// Mint `labels` as written binders, each that carries a span a candidate `linted` says whether a lint reads.
+    /// Mint `labels` as written binders binding what `binds` says, each that carries a span a candidate `linted` says whether a lint reads.
     fn mint_candidates(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
         linted: bool,
+        binds: curios_core::Binds,
     ) -> Vec<Binder> {
         labels
             .into_iter()
@@ -414,6 +422,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                             ids: Vec::new(),
                             span,
                             linted,
+                            binds,
                         });
                         candidates.len() - 1
                     }
@@ -547,6 +556,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             params
                 .iter()
                 .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+            curios_core::Binds::Local,
         );
         self.func_type_over(params, &binders, output)
     }
@@ -743,6 +753,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     tt.fields
                         .iter()
                         .map(|field| telescope_label(Plicity::Explicit, field.label.as_ref())),
+                    curios_core::Binds::TupleField,
                 );
                 let mut prefixes = self.prefixes(&binders);
                 let mut fields = Vec::with_capacity(tt.fields.len());
@@ -1264,6 +1275,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     ids: Vec::new(),
                     span,
                     linted: true,
+                    binds: curios_core::Binds::Local,
                 });
                 candidates.len() - 1
             }

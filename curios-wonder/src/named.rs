@@ -21,8 +21,8 @@ use {
     },
     curios_common::{Code, Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
-        Anchors, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey, Imports,
-        Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
+        Anchors, Binds, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey,
+        Imports, Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
         UnitPaths, WitnessKey, WrittenBinder,
     },
     curios_document::{Documentation, ModuleDocumentation},
@@ -124,8 +124,8 @@ pub struct Written {
     pub types: BTreeMap<Global, String>,
     /// Each place a written binder of the text is bound at or read, in no order: where it is bound from the lowering, where it is read from what elaboration settled ([`Placed::establish`]).
     pub locals: Vec<Local>,
-    /// Where each written binder of the text is bound.
-    pub bound: BTreeMap<WrittenBinder, Span>,
+    /// Where each written binder of the text is bound, and what it binds ([`Binds`]), which it is answered as.
+    pub bound: BTreeMap<WrittenBinder, (Span, Binds)>,
     /// The type each written binder was opened at, spelled for a reader standing in the text.
     pub binders: BTreeMap<WrittenBinder, String>,
     /// The type each term settled at, by where it stands, spelled for a reader standing in the text: none for a declaration elaboration settled nothing of, and none of the term a program closes with.
@@ -225,7 +225,11 @@ impl Answer {
             .chain(typed(type_))
             .collect(),
             Stands::Field { of, type_, .. } => [Fact {
-                lead: "field of".to_string(),
+                lead: match of {
+                    Some(_) => "field of",
+                    None => "field",
+                }
+                .to_string(),
                 values: of.iter().map(|of| Code(of).to_string()).collect(),
             }]
             .into_iter()
@@ -298,23 +302,60 @@ impl Placed {
             .filter(|local| holds(&local.written))
             .min_by_key(|local| (narrowest(&local.written), local.declares))
         {
-            let bound = written.bound.get(&local.binder).cloned();
+            let (bound, binds) = match written.bound.get(&local.binder) {
+                Some((bound, binds)) => (Some(bound.clone()), *binds),
+                None => (None, Binds::Local),
+            };
             let named = bound.as_ref().unwrap_or(&local.written);
+            let name = named.source.text()[named.start..named.end].to_string();
             let type_ = match local.declares {
                 true => written.binders.get(&local.binder),
                 false => written
                     .settled
                     .get(&(local.written.start, local.written.end)),
+            }
+            .cloned();
+            // A binder that declares a member answers as the member: what a reader asks of a field or a method their declaration's later members read is the member it names, as a projection or a call elsewhere answers it.
+            let declaration = local.binder.declaration;
+            let stands = match binds {
+                Binds::Field | Binds::TupleField => Stands::Field {
+                    label: name,
+                    of: declaration
+                        .filter(|_| binds == Binds::Field)
+                        .and_then(|structure| self.declarations.get(&structure))
+                        .map(|structure| structure.asked.clone()),
+                    bound,
+                    type_,
+                },
+                Binds::Method => match declaration
+                    .and_then(|concept| member(concept, &name))
+                    .and_then(|method| Some((method, self.declarations.get(&method)?)))
+                {
+                    Some((method, described)) => Stands::Declaration {
+                        declares: local.declares,
+                        described: Described {
+                            type_: written.types.get(&method).cloned(),
+                            ..described.clone()
+                        },
+                    },
+                    None => Stands::Local {
+                        declares: local.declares,
+                        name,
+                        bound,
+                        type_,
+                    },
+                },
+                Binds::Local => Stands::Local {
+                    declares: local.declares,
+                    name,
+                    bound,
+                    type_,
+                },
             };
 
             return Some(Answer {
                 range: local.written.clone(),
-                stands: Stands::Local {
-                    declares: local.declares,
-                    name: named.source.text()[named.start..named.end].to_string(),
-                    bound,
-                    type_: type_.cloned(),
-                },
+                stands,
             });
         }
         let term = written
@@ -585,11 +626,13 @@ impl Reading {
                 let bound = passage
                     .binders()
                     .into_iter()
-                    .filter_map(|(binder, at)| Some((binder, at.resolved(&anchors)?)))
+                    .filter_map(|(binder, at, binds)| {
+                        Some((binder, (at.resolved(&anchors)?, binds)))
+                    })
                     .collect::<BTreeMap<_, _>>();
                 let locals = bound
                     .iter()
-                    .map(|(binder, at)| Local {
+                    .map(|(binder, (at, _))| Local {
                         written: at.clone(),
                         binder: *binder,
                         declares: true,
@@ -1388,6 +1431,14 @@ fn carrier_former(head: &HeadKey) -> Option<Global> {
         IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
         IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
         _ => None,
+    }
+}
+
+/// The member `label` of `owner`, a concept's method by the concept: declared in the namespace its owner's name opens. `None` for an owner that is no authored declaration.
+fn member(owner: Global, label: &str) -> Option<Global> {
+    match owner {
+        Global::Authored(path) => Some(Global::Authored(path.with(label))),
+        Global::Witness(_) => None,
     }
 }
 

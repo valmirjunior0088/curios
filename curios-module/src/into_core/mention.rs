@@ -337,7 +337,13 @@ impl Text<'_> {
     }
 
     /// Where each written binder of the declarations written here, or of the term a program closes with, stands ([`curios_core::Mints::written`]): none on a `use` or a `mod` line, which binds nothing.
-    pub fn binders(&self) -> Vec<(curios_core::WrittenBinder, curios_core::Extent)> {
+    pub fn binders(
+        &self,
+    ) -> Vec<(
+        curios_core::WrittenBinder,
+        curios_core::Extent,
+        curios_core::Binds,
+    )> {
         self.mints()
             .into_iter()
             .flat_map(|mints| mints.written.iter().copied())

@@ -127,6 +127,7 @@ pub(super) fn lower_declaration(
                             .chain(u.indices.iter().map(|(_, word, _)| {
                                 telescope_label(Plicity::Explicit, word.as_ref())
                             })),
+                        curios_core::Binds::Local,
                     );
                     let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
@@ -159,10 +160,12 @@ pub(super) fn lower_declaration(
                         .cases
                         .iter()
                         .map(|c| {
-                            let payload_binders =
-                                lower.mint_placed(c.payload.iter().map(|param| {
+                            let payload_binders = lower.mint_placed(
+                                c.payload.iter().map(|param| {
                                     telescope_label(param.plicity, param.label.as_ref())
-                                }));
+                                }),
+                                curios_core::Binds::Local,
+                            );
                             let scope = [param_binders, &payload_binders].concat();
                             let mut prefixes = lower.prefixes(&scope);
                             let fields = c
@@ -266,6 +269,7 @@ pub(super) fn lower_declaration(
                     s.params
                         .iter()
                         .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+                    curios_core::Binds::Local,
                 );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = s
@@ -294,6 +298,7 @@ pub(super) fn lower_declaration(
                     s.fields
                         .iter()
                         .map(|field| telescope_label(field.plicity, field.param.label.as_ref())),
+                    curios_core::Binds::Field,
                 );
                 let field_scope = [&param_binders[..], &field_binders].concat();
                 let mut prefixes = lower.prefixes(&field_scope);
@@ -379,6 +384,7 @@ pub(super) fn lower_declaration(
                         .params
                         .iter()
                         .map(|param| telescope_label(param.plicity, param.label.as_ref())),
+                    curios_core::Binds::Local,
                 );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = concept
@@ -398,6 +404,7 @@ pub(super) fn lower_declaration(
                         .fields
                         .iter()
                         .map(|field| telescope_label(field.plicity, field.label.as_ref())),
+                    curios_core::Binds::Method,
                 );
                 let field_scope = [&param_binders[..], &field_binders].concat();
                 let mut prefixes = lower.prefixes(&field_scope);

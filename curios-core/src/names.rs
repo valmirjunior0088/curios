@@ -11,8 +11,8 @@ mod tests;
 
 use {
     crate::{
-        Extent, Lint, UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenBinder,
-        WrittenSort,
+        Binds, Extent, Lint, UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey,
+        WrittenBinder, WrittenSort,
     },
     curios_common::{
         Digest, Filed, InKeyOrder, InfixOp, Object, Plicity, Qualifier, Records, Sorted, Symbol,
@@ -186,8 +186,8 @@ pub struct Mints {
     pub qualities: Vec<Option<WrittenSort>>,
     /// Every written site of the declaration no written name reads, each by the definition it is written in ([`Unread`]): what elaboration decides the binder lints from where it files the declaration's record, beside what the proofs it wrote read. Held here, as `unbound` is, because a written binder's place means something within its declaration alone.
     pub unread: Vec<Unread>,
-    /// Where each written binder of the declaration stands, read or not: what a local answers it is bound at. Held here, as `unread` is, because a written binder's place means something within its declaration alone.
-    pub written: Vec<(WrittenBinder, Extent)>,
+    /// Where each written binder of the declaration stands, read or not, and what it binds ([`Binds`]): what a place answers it is bound at, and answers it as. Held here, as `unread` is, because a written binder's place means something within its declaration alone.
+    pub written: Vec<(WrittenBinder, Extent, Binds)>,
     /// Every use of a written binder that hides what the module's scope binds under its name ([`Hiding`]): what a mismatch at the use names beside its report. Held here, as `written` is.
     pub hides: Vec<Hiding>,
     /// Every name the lowering resolved into a node rather than into a term, where it is written: a literal's or a structure pattern's head, which no lowered term holds at its place. What a place's answer reads beside the names its terms write. Held here, as `written` is.
@@ -210,17 +210,10 @@ impl Mints {
             written: self
                 .written
                 .iter()
-                .map(|(binder, at)| (binder.renamed(name, renamed), *at))
+                .map(|(binder, at, binds)| (binder.renamed(name, renamed), *at, *binds))
                 .collect(),
             ..self.clone()
         }
-    }
-
-    /// Where the written binder `binder` stands, where the lowering placed it.
-    pub fn bound_at(&self, binder: &WrittenBinder) -> Option<Extent> {
-        self.written
-            .iter()
-            .find_map(|(written, at)| (written == binder).then_some(*at))
     }
 }
 

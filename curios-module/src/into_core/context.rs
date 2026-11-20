@@ -632,8 +632,14 @@ pub struct Declaring {
     unbound: RefCell<BTreeMap<curios_core::Free, curios_core::Unresolved>>,
     // Every written site of the declaration being lowered no written name reads: what `curios-elab` decides the binder lints from. The declaration's, since a written binder's place is.
     unread: RefCell<Vec<curios_core::Unread>>,
-    // Where every written binder of the declaration being lowered stands, read or not: what a local answers it is bound at. The declaration's, as its unread sites are.
-    written: RefCell<Vec<(curios_core::WrittenBinder, curios_core::Extent)>>,
+    // Where every written binder of the declaration being lowered stands, read or not, and what it binds: what a place answers it is bound at, and answers it as. The declaration's, as its unread sites are.
+    written: RefCell<
+        Vec<(
+            curios_core::WrittenBinder,
+            curios_core::Extent,
+            curios_core::Binds,
+        )>,
+    >,
     // Every use of a written binder of the declaration being lowered that hides what the module's scope binds under its name. The declaration's, as its written binders are.
     hides: RefCell<Vec<curios_core::Hiding>>,
     // Every name the declaration being lowered resolved into a node rather than a term, where it is written. The declaration's, as its written binders are.
@@ -833,7 +839,13 @@ impl<'a> Context<'a> {
     /// Record where each of `binders`, written binders of the declaration being lowered, stands, beside what it minted.
     pub fn written(
         &self,
-        binders: impl IntoIterator<Item = (curios_core::WrittenBinder, curios_core::Extent)>,
+        binders: impl IntoIterator<
+            Item = (
+                curios_core::WrittenBinder,
+                curios_core::Extent,
+                curios_core::Binds,
+            ),
+        >,
     ) {
         self.shared.declaring.written.borrow_mut().extend(binders);
     }

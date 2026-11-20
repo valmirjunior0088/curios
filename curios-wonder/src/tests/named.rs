@@ -181,6 +181,43 @@ fn a_telescopes_binder_answers_where_it_is_bound_and_read() {
     assert_eq!(local("x", 0), (true, Some((4, 15))));
 }
 
+const MEMBERS: &str = "struct Sized(n: /std/Nat): Type {\n    size: /std/Nat,\n    count: /std/Eq()(size, n),\n}\nconcept Shown(T: Type): Type {\n    shown: (value: T) -> /std/Nat,\n    again: (value: T) -> /std/Eq()(shown(value), shown(value)),\n}\nlet pairs: Type = {n: /std/Nat, p: /std/Eq()(n, n)};\n/std/print(\"\")";
+
+/// A binder that declares a member answers as the member, where it is written and where a later member reads it: a structure's field as the field of its structure, a tuple type's field as a field of none, and a concept's method as the method.
+#[test]
+fn a_members_binder_answers_as_the_member() {
+    let field = |written, within| match at(MEMBERS, written, 0, within).map(|answer| answer.stands)
+    {
+        Some(Stands::Field {
+            label, of, bound, ..
+        }) => (label, of, bound.map(|bound| bound.line_column())),
+        stands => panic!("no field stands at `{written}`: {stands:?}"),
+    };
+    let sized = |line_column| {
+        (
+            "size".to_string(),
+            Some("/Sized".to_string()),
+            Some(line_column),
+        )
+    };
+    let tupled = |line_column| ("n".to_string(), None, Some(line_column));
+
+    assert_eq!(field("size: ", 0), sized((2, 5)));
+    assert_eq!(field("(size, n)", 1), sized((2, 5)));
+    assert_eq!(field("{n: ", 1), tupled((9, 20)));
+    assert_eq!(field("(n, n)", 1), tupled((9, 20)));
+    match at(MEMBERS, "Eq()(shown", 0, 5).map(|answer| answer.stands) {
+        Some(Stands::Declaration {
+            declares: false,
+            described,
+        }) => assert_eq!(
+            (described.asked.as_str(), described.declared),
+            ("/Shown/shown", Declared::Method)
+        ),
+        stands => panic!("no method stands at its later field's read: {stands:?}"),
+    }
+}
+
 /// A term no name stands at answers the type it settled at, spelled where it is written: an application, where the offset stands between its arguments.
 #[test]
 fn a_term_answers_the_type_it_settled_at() {
