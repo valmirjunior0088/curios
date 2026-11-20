@@ -4,8 +4,8 @@ paths:
   - "curios-native/src/host.rs"
   - "curios-native/src/os_host*"
   - "curios-native/src/os_host/**"
-  - "curios-native/src/mock_host*"
-  - "curios-native/src/mock_host/**"
+  - "curios-native/src/test_support/mock_host*"
+  - "curios-native/src/test_support/mock_host/**"
   - "curios-browser/src/**"
 ---
 

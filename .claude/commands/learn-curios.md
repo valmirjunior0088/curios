@@ -52,7 +52,7 @@ Steer around these, and where they hit one say the gap is the language's, not th
 - A name is bound once and never assigned: `x = x + 1` is refused as a `syntax error` that expected `;` in a body and the end of the file at a program's end, with no word of `let` (`documentation/language.md`, "Local `let`").
 - An effect before the last is sequenced as `let _ = …!;` (`documentation/language.md`, "Sequencing and effects").
 - A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-prelude/std/Fmt.crs`).
-- A program's arguments arrive as bytes (`curios-prelude/std/proc.crs`).
+- A program's arguments arrive as bytes (`curios-prelude/std/Proc.crs`).
 - `3 - 5` is `0` (`documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md`).
 - A mismatch prints both sides as the compiler holds them, so `n + n` reads `2 * n` (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`).
 
