@@ -15,7 +15,7 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 ### The four laws
 
 1. **Declaration decides; location does not.** Modules exist because a header declares `mod`, artifacts because the manifest declares them, members because the umbrella enumerates them — a file nothing names is inert, wherever it sits. The two exceptions are a package's own `lib.crs` and `exe.crs`, whose presence beside the manifest is their declaration, for the reason `layout.rs` states.
-2. **Identity is declared exactly once, by its owner.** A package names itself, every consumer refers to it by that name, and the filesystem spells structure, never names; no identity meaningful only in the compilation that assigned it is ever stored.
+2. **Identity is declared exactly once, by its owner.** A package names itself, every consumer refers to it by that name, so two dependents on one package share it rather than compiling it twice, and the filesystem spells structure, never names; no identity meaningful only in the compilation that assigned it is ever stored.
 3. **Membership organizes; dependency compiles.** The umbrella's tree decides where `.curios/` goes and what a marker may resolve to; only declared dependencies order compilation, and neither implies the other. Declared dependencies also bound it: a unit may name the prefixes its manifest declares and `/std`, and nothing else — a transitive dependency is in the fold, and writing its prefix is refused by name.
 4. **A refusal fires early and names both parties.** Conflicts, collisions, cycles and missing obligations are diagnosed before elaboration, against the file somebody wrote, never surfaced as an unbound name or a conversion failure holding no span.
 
@@ -57,6 +57,14 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 **Rationale.** An editor's language server checks a document while its user builds in a terminal, and a lock makes one wait on the other: rust-analyzer gives Cargo a target directory of its own for that reason ([rust-analyzer FAQ](https://rust-analyzer.github.io/book/faq.html)), and Lake took its build lock out, since an interrupted build left it stale and it held the editor behind the terminal ([`Lake.Util.Lock`](https://lean-lang.org/doc/api/Lake/Util/Lock.html)). A whole file renamed into place is what the cabinet's writes already are, and what Go's build does with a binary it moves into place, so a lock buys nothing a reader needs: the price is the work two invocations repeat, which a cabinet hit spares the next.
 
 **Rejected.** A lock on the directory, Cargo's, which queues the editor behind the terminal and leaves a stale file to an interrupted run. A write in place, which a running executable refuses as a busy text file and a concurrent reader can read half written.
+
+### A manifest is read strictly
+
+**Decision.** A `curios.toml` declares a package or an umbrella, never both; a key the reader does not take is refused; a path it states is spelled plainly, relative to the manifest, with no `.`, `..` or leading `/`; and no `git` or `rev` begins with `-`.
+
+**Rationale.** A package is a namespace for definitions and an umbrella one for packages, and an umbrella whose first member is a package is one directory away from it. A misspelled key refused is an error where one taken is a setting that silently did nothing. The checks that keep a file in one unit compare a path as written, so a path has one spelling. `curate` hands a `git` and a `rev` to `git` as positional arguments, which would read a leading `-` as an option.
+
+**Rejected.** A manifest that is both, as Cargo's root package beside its `[workspace]` table is; an unknown key warned of, as Cargo warns of an unused manifest key, which a build that succeeds scrolls away.
 
 ### `new` starts a package whole
 
