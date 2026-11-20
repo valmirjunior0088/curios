@@ -248,7 +248,7 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
             concat!(
                 "compiler = \"",
                 env!("CARGO_PKG_VERSION"),
-                "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+                "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
             ),
         );
         write(&root, "lib.crs", "pub let word : /std/Str = \"clean\";\n");

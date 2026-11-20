@@ -105,8 +105,8 @@ impl Selection {
             Spelling::Name(name) => {
                 let governing = Governing::found(manifest, directory, cabinet)?;
                 governing.check_compiler()?;
-                let executable = named(&governing, &name)?;
-                Self::Program(program(&governing, executable)?)
+                let (name, executable) = named(&governing, &name)?;
+                Self::Program(program(&governing, name, executable)?)
             }
             Spelling::Nothing => {
                 let governing = Governing::found(manifest, directory, cabinet)?;
@@ -139,22 +139,24 @@ impl Entire {
         }))
     }
 
-    /// Every program it declares, in declaration order.
+    /// Every program it declares, by name.
     pub fn programs(&self) -> Result<Vec<Program>, Box<Report>> {
         self.governing
             .package
             .executables
             .iter()
-            .map(|executable| program(&self.governing, executable))
+            .map(|(name, executable)| program(&self.governing, name, executable))
             .collect()
     }
 
     /// The program no argument means to a command that needs one: the sole one, or the one `default` names.
     pub fn default_program(&self) -> Result<Program, Box<Report>> {
-        program(&self.governing, sole(&self.governing)?)
+        let (name, executable) = sole(&self.governing)?;
+
+        program(&self.governing, name, executable)
     }
 
-    /// Every file the package is written in: its library's, then each program's, in declaration order.
+    /// Every file the package is written in: its library's, then each program's, by the program's name.
     pub fn declared_files(&self) -> Result<Vec<PathBuf>, Box<Report>> {
         let mut files = match self.library()? {
             Some(library) => library.declared_files()?,
@@ -363,8 +365,12 @@ impl Program {
     }
 }
 
-/// `executable`, declared by the package `governing` governs, and everything needed to compile it.
-fn program(governing: &Governing, executable: &Executable) -> Result<Program, Box<Report>> {
+/// The executable `name`, declared as `executable` by the package `governing` governs, and everything needed to compile it.
+fn program(
+    governing: &Governing,
+    name: &str,
+    executable: &Executable,
+) -> Result<Program, Box<Report>> {
     Ok(Program {
         entry: Entry::File(governing.directory.join(&executable.path)),
         scope: Scope::Declared {
@@ -374,7 +380,7 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, Bo
                 manifest: governing.manifest.clone(),
                 package: governing.package.name.clone(),
                 directory: governing.directory.clone(),
-                executable: executable.name.clone(),
+                executable: name.to_string(),
             },
             declares: reachable(&governing.package),
             units: order(governing)?,
@@ -405,10 +411,10 @@ fn placed(
     let package = PackageRoot::new(&governing.package.name, &directory);
 
     // A file is a unit's when its `mod` chain reaches it, and roots that sit in one directory share it: the package's directory holds the library's modules and those of every executable beside the manifest alike. Where a file sits says which roots may declare it, and only their chains say which does; the package's reading has already refused a file two of them reach.
-    for executable in &governing.package.executables {
+    for (name, executable) in &governing.package.executables {
         let entry = identity(&governing.directory.join(&executable.path));
         if spelled == entry {
-            return Ok(Selection::Program(program(&governing, executable)?));
+            return Ok(Selection::Program(program(&governing, name, executable)?));
         }
 
         let namespace = RootSource::namespace_of(&entry);
@@ -417,7 +423,7 @@ fn placed(
                 .is_some_and(|module| entry_declares(&entry, &module, &package, overlay));
         if declared {
             return Ok(Selection::Program(
-                program(&governing, executable)?.selected_through(file),
+                program(&governing, name, executable)?.selected_through(file),
             ));
         }
     }
@@ -485,23 +491,22 @@ fn entry_declares(
         .unwrap_or(true)
 }
 
-/// The executable `name` names in the package `governing` governs.
-fn named<'a>(governing: &'a Governing, name: &str) -> Result<&'a Executable, Box<Report>> {
+/// The executable `name` names in the package `governing` governs, by the name it is keyed by.
+fn named<'a>(
+    governing: &'a Governing,
+    name: &str,
+) -> Result<(&'a str, &'a Executable), Box<Report>> {
     let package = &governing.package;
-    if let Some(executable) = package
-        .executables
-        .iter()
-        .find(|executable| executable.name == name)
-    {
-        return Ok(executable);
+    if let Some((name, executable)) = package.executables.get_key_value(name) {
+        return Ok((name.as_str(), executable));
     }
 
-    // The package's own name is declared by a file's presence rather than by a row, so the refusal names the file: this is the one name `Document::package` lets a `default` state without a row behind it, and the reader who wrote that `default` has to be told what declares it.
+    // The package's own name is declared by a file's presence rather than by a key, so the refusal names the file: this is the one name `Document::package` lets a `default` state without a key behind it, and the reader who wrote that `default` has to be told what declares it.
     let refused = match name == package.name {
         true => Refused::of("unknown executable")
             .stating(format_args!("`{name}` has no executable of its own"))
             .stating(format_args!(
-                "no `{EXECUTABLE}` sits beside the manifest, and no `[[executables]]` row declares one by that name"
+                "no `{EXECUTABLE}` sits beside the manifest, and no `[executables]` key declares one by that name"
             )),
         false => Refused::of("unknown executable").stating(format_args!(
             "`{}` declares no executable named `{name}`",
@@ -512,22 +517,23 @@ fn named<'a>(governing: &'a Governing, name: &str) -> Result<&'a Executable, Box
     Err(candidates(refused, package).about_path(&governing.manifest))
 }
 
-/// The executable no argument means: the sole one, or the one `default` names.
-fn sole(governing: &Governing) -> Result<&Executable, Box<Report>> {
+/// The executable no argument means, by its name: the sole one, or the one `default` names.
+fn sole(governing: &Governing) -> Result<(&str, &Executable), Box<Report>> {
     let package = &governing.package;
     if let Some(default) = &package.default {
         return named(governing, default);
     }
 
-    match package.executables.as_slice() {
-        [executable] => Ok(executable),
-        [] => Err(Refused::of("no executable")
+    let mut declared = package.executables.iter();
+    match (declared.next(), declared.next()) {
+        (Some((name, executable)), None) => Ok((name.as_str(), executable)),
+        (None, _) => Err(Refused::of("no executable")
             .stating(format_args!("`{}` declares no executable", package.name))
             .stating(format_args!(
-                "add `{EXECUTABLE}`, or declare one with `[[executables]]`"
+                "add `{EXECUTABLE}`, or declare one in `[executables]`"
             ))
             .about_path(&governing.manifest)),
-        _ => Err(candidates(
+        (Some(_), Some(_)) => Err(candidates(
             Refused::of("ambiguous executable").stating(format_args!(
                 "`{}` declares more than one executable and no `default`",
                 package.name
@@ -539,18 +545,19 @@ fn sole(governing: &Governing) -> Result<&Executable, Box<Report>> {
     }
 }
 
-/// `refused`, resting as well on the executables `package` does declare, which leaves the reader somewhere to go: each by its name, and the package's own by the file that declares it, since no row does.
+/// `refused`, resting as well on the executables `package` does declare, which leaves the reader somewhere to go: each by its name, and the package's own by the file that declares it, since no key does.
 fn candidates(refused: Refused, package: &Package) -> Refused {
-    match package.executables.as_slice() {
-        [] => refused,
-        executables => refused.stating(format_args!(
+    match package.executables.is_empty() {
+        true => refused,
+        false => refused.stating(format_args!(
             "it declares: {}",
-            executables
+            package
+                .executables
                 .iter()
                 .map(
-                    |executable| match executable.path == Path::new(EXECUTABLE) {
-                        true => format!("`{}`, by `{EXECUTABLE}`", executable.name),
-                        false => format!("`{}`", executable.name),
+                    |(name, executable)| match executable.path == Path::new(EXECUTABLE) {
+                        true => format!("`{name}`, by `{EXECUTABLE}`"),
+                        false => format!("`{name}`"),
                     }
                 )
                 .collect::<Vec<_>>()

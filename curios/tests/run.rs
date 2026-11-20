@@ -29,7 +29,15 @@ entry()
 
 fn package(root: &Path) {
     fs::create_dir_all(root).unwrap();
-    fs::write(root.join("curios.toml"), concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"echo\"\ndefault = \"chosen\"\n[[executables]]\nname = \"chosen\"\n[[executables]]\nname = \"other\"\n")).unwrap();
+    fs::write(
+        root.join("curios.toml"),
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"echo\"\ndefault = \"chosen\"\n[executables]\nchosen = {}\nother = {}\n"
+        ),
+    )
+    .unwrap();
     fs::write(root.join("chosen.crs"), ECHO).unwrap();
     fs::write(root.join("other.crs"), "/std/print(\"wrong executable\")").unwrap();
 }
@@ -152,7 +160,7 @@ fn single(root: &Path, program: &str) {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"streams\"\ndefault = \"main\"\n[[executables]]\nname = \"main\"\n"
+            "\"\nname = \"streams\"\ndefault = \"main\"\n[executables]\nmain = {}\n"
         ),
     )
     .unwrap();

@@ -42,9 +42,9 @@ Neither stem is part of a name ([Modules](language.md#modules)), so a package's 
 
 One name is reserved: a package named `std` is the standard library. Compiled first, it takes the archived `/std`'s place — compiled over it, with everything the edit did not reach reused — and everything after it is compiled against it; anywhere else in a compilation it collides with the archived root as any other claim on `/std` does. It is how the standard library is worked on, not a way to swap one under a dependency.
 
-Everything else is declared, in the rows [the manifest](#the-manifest) states. A declared row always wins over the found file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program; and with more than one executable and no `default`, a bare `curios run` refuses rather than guessing.
+Everything else is declared, in the tables [the manifest](#the-manifest) states. A declared executable always wins over the found file, so `hello = { path = "…" }` in `[executables]` overrides the `exe.crs` convention for the package's own program; and with more than one executable and no `default`, a bare `curios run` refuses rather than guessing.
 
-**A file is one unit's.** The library and every executable beside the manifest load their modules from one directory, and a row may point anywhere below it, so a file two units' `mod` chains reach is refused before anything is compiled, naming both: a module both declare would be compiled twice as two unrelated modules, and a program's file declared as a module would be both. A module the library and a program both want lives in the library, which every executable of the package reaches by the package's name:
+**A file is one unit's.** The library and every executable beside the manifest load their modules from one directory, and an executable's `path` may point anywhere below it, so a file two units' `mod` chains reach is refused before anything is compiled, naming both: a module both declare would be compiled twice as two unrelated modules, and a program's file declared as a module would be both. A module the library and a program both want lives in the library, which every executable of the package reaches by the package's name:
 
 ```
 `parse.crs` is a module of the library and of the executable "tool": a file is one unit's, so declare it in the library alone, and reach it from the other through `/hello/parse`
@@ -69,7 +69,7 @@ The dispatch is lexical and never probes the disk: an executable's name is a sin
 
 `run` and `compile` are the only commands that need a program's **own** file: a module of one is refused, naming the executable to run instead, and a library is refused as the non-program it is. Everywhere else a module reaches its unit as readily as the entry does, which is what lets a question or a lint be asked about the file in front of you.
 
-A loose file brings no project with it — no dependencies, not even the library of the package it sits in ([An argument names one subject](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)). When a scratch program does want the library, one `[[executables]]` line gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[[foreign]]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is taken the same way: a `mod` line declares one written as a module, and an `[[executables]]` row one written as a program.
+A loose file brings no project with it — no dependencies, not even the library of the package it sits in ([An argument names one subject](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)). When a scratch program does want the library, one `[executables]` key gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[[foreign]]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is taken the same way: a `mod` line declares one written as a module, and an `[executables]` key one written as a program.
 
 ## The surface
 
@@ -596,10 +596,10 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `name` | required: the package's canonical name, its mount prefix and every consumer's only way to refer to it |
 | `compiler` | required for a standalone package: the Curios version it is written for, a bare SemVer version, or the oldest one, after `>=`; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
-| `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
+| `default` | which executable a bare `run`, `compile` or `test` means; it may name a key of `[executables]` or the package's own `exe.crs` program |
 | `[format]` | how [`format`](#format) writes the package's files: `line-width`, the columns a line is written within, 50 through 100; `flat-match-width` and `flat-match-arms`, the most columns and arms a match keeps on one line; an umbrella member inherits this from its umbrella instead |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
-| `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
+| `[executables]` | one entry per program beyond `exe.crs`, keyed by the name `run` takes: `path` when the file is not `<name>.crs` |
 | `[[foreign]]` | one row per provider of this package's [`foreign` declarations](language.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
 
 ```toml
@@ -607,15 +607,12 @@ name = "hello"
 compiler = "0.16.9"
 default = "bench"
 
-[[executables]]
-name = "bench"            # compiled from bench.crs
-
-[[executables]]
-name = "serve"
-path = "tools/serve.crs"  # unless the row says otherwise
+[executables]
+bench = {}                            # compiled from bench.crs
+serve = { path = "tools/serve.crs" }  # unless the entry says otherwise
 ```
 
-An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the checks that keep a file in one unit compare it as written. Its own modules load from the directory it sits in, so a program with modules of its own and a directory to itself is `path = "tools/serve/serve.crs"` beside `tools/serve/*.crs`.
+An executable is named by one identifier, its key, which is what keeps `run <name>` apart from `run <file>.crs`; a name written twice is refused where it is written again, as TOML refuses any key written twice. An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the checks that keep a file in one unit compare it as written. Its own modules load from the directory it sits in, so a program with modules of its own and a directory to itself is `path = "tools/serve/serve.crs"` beside `tools/serve/*.crs`.
 
 `compiler` states the one version a package is written for, or the oldest: `compiler = "0.16.9"` accepts that version and no other, and `compiler = ">= 0.16.9"` that version and every later one, each by SemVer precedence, so build metadata is ignored and a pre-release is a version of its own. No other comparison is read. A later compiler may refuse a package or read it otherwise, so a minimum is its author's word that the package is meant to outlive the compiler that built it, as a library others pin is. A compiler the field does not accept is refused before compilation or cached execution, naming the manifest, the version it states and the running one. Every dependency is checked against its own effective version too, so a pinned dependency is one that accepts the compiler that builds it. A standalone package must state one: there is no implicit version, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
 

@@ -57,7 +57,7 @@ fn a_package_with_no_library_header_has_no_library() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"json\"\n\n[[executables]]\nname = \"serve\"\n"
+            "\"\nname = \"json\"\n\n[executables]\nserve = {}\n"
         ),
         &[("serve.crs", "")],
     );
@@ -147,7 +147,7 @@ fn a_program_the_library_declares_as_a_module_is_refused() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\n"
+            "\"\nname = \"json\"\n\n[executables]\nparse = {}\n"
         ),
         &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
     );
@@ -172,7 +172,7 @@ fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n"
+            "\"\nname = \"json\"\n\n[executables]\nfoo = { path = \"exe.crs\" }\n"
         ),
         &[("exe.crs", "")],
     );
@@ -203,7 +203,7 @@ fn an_unparseable_header_still_leaves_the_executables_checked() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n"
+            "\"\nname = \"json\"\n\n[executables]\nfoo = { path = \"exe.crs\" }\n"
         ),
         &[("lib.crs", "pub let ="), ("exe.crs", "")],
     );
@@ -226,7 +226,7 @@ fn an_executable_below_the_root_reads_its_modules_where_it_sits() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n"
+            "\"\nname = \"json\"\n\n[executables]\nparse = { path = \"tools/parse.crs\" }\n"
         ),
         &[
             ("lib.crs", "pub mod parse;"),
@@ -247,7 +247,7 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n"
+            "\"\nname = \"nested\"\n\n[executables]\ntool = { path = \"app/main.crs\" }\n"
         ),
         &[
             ("lib.crs", "pub mod app;"),

@@ -222,7 +222,11 @@ fn tested(root: &Path) {
     fs::create_dir_all(root).unwrap();
     fs::write(
         root.join("curios.toml"),
-        concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"quiet\"\n"),
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\nquiet = {}\n"
+        ),
     )
     .unwrap();
     fs::write(

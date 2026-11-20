@@ -2,9 +2,9 @@
 //!
 //! [`curios_module::RootSource`] states the layout rule every header obeys: a unit's root reads its modules from the directory it sits in, and a module below it from its stem directory. A package's library header sits beside the manifest, so its namespace is the manifest's directory: `lib` enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory, a qualified name's tail and its path the same string and only the head mapped to the manifest, which is what names that namespace (law 2).
 //!
-//! The consequence enforced below is that **a file is one unit's**: the library and every executable beside the manifest read their modules from the package's directory alike, and a row may point anywhere below it, so a file two units' `mod` chains reach is a refusal naming both (law 4).
+//! The consequence enforced below is that **a file is one unit's**: the library and every executable beside the manifest read their modules from the package's directory alike, and an executable's `path` may point anywhere below it, so a file two units' `mod` chains reach is a refusal naming both (law 4).
 //!
-//! **A package has a library when `lib.crs` sits beside its manifest, and its own executable when `exe.crs` does.** These are the two places location decides rather than declaration, and both are deliberate: neither is an artifact a package opts into, they are the two things a package *is*, and a manifest entry admitting to either would be ceremony. `[[executables]]` remains for everything else — a second program, or one compiled from a path of its own — and a row always wins over the file.
+//! **A package has a library when `lib.crs` sits beside its manifest, and its own executable when `exe.crs` does.** These are the two places location decides rather than declaration, and both are deliberate: neither is an artifact a package opts into, they are the two things a package *is*, and a manifest entry admitting to either would be ceremony. `[executables]` keys everything else — a second program, or one compiled from a path of its own — and a key always wins over the file.
 //!
 //! The objection that a vanished default "fails by silently not being there" does not hold: delete `exe.crs` and `curios run` refuses, naming the package and saying it declares no executable. Both failures are loud; they are merely loud in different places.
 
@@ -173,11 +173,11 @@ pub fn package_source(
     Ok(source)
 }
 
-/// One unit's claim on a file: who claims it, whether as the program compiled from it or as a module its `mod` chain reaches, and the `[[executables]]` row that makes the claim, for an executable.
+/// One unit's claim on a file: who claims it, whether as the program compiled from it or as a module its `mod` chain reaches, and the `[executables]` key that makes the claim, for an executable.
 struct Claim {
     claimant: String,
     entry: bool,
-    row: Option<usize>,
+    key: Option<String>,
 }
 
 /// Who claims the library's files.
@@ -204,31 +204,27 @@ fn one_unit_each(
             let claim = Claim {
                 claimant: LIBRARY_CLAIMANT.to_string(),
                 entry: false,
-                row: None,
+                key: None,
             };
             (file, claim)
         });
-    let executable_files = package
-        .executables
-        .iter()
-        .enumerate()
-        .flat_map(|(row, executable)| {
-            let entry = directory.join(&executable.path);
-            let modules = open_entrypoint(&entry, Some(root))
-                .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
-                .unwrap_or_default();
+    let executable_files = package.executables.iter().flat_map(|(name, executable)| {
+        let entry = directory.join(&executable.path);
+        let modules = open_entrypoint(&entry, Some(root))
+            .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
+            .unwrap_or_default();
 
-            iter::once((entry, true))
-                .chain(modules.into_iter().map(|file| (file, false)))
-                .map(move |(file, entry)| {
-                    let claim = Claim {
-                        claimant: package.describe(executable),
-                        entry,
-                        row: Some(row),
-                    };
-                    (file, claim)
-                })
-        });
+        iter::once((entry, true))
+            .chain(modules.into_iter().map(|file| (file, false)))
+            .map(move |(file, entry)| {
+                let claim = Claim {
+                    claimant: package.describe(name, executable),
+                    entry,
+                    key: Some(name.clone()),
+                };
+                (file, claim)
+            })
+    });
 
     let mut claimed = BTreeMap::<PathBuf, Claim>::new();
     for (file, claim) in library_files.chain(executable_files) {
@@ -243,7 +239,7 @@ fn one_unit_each(
     Ok(())
 }
 
-/// Why `file` cannot be in the units of `earlier` and `later` both, and what would put it in one: at the row of the program compiled from it where one of the two is, the later of two, and about the file where both reach it as a module.
+/// Why `file` cannot be in the units of `earlier` and `later` both, and what would put it in one: at the key of the program compiled from it where one of the two is, the later of two, and about the file where both reach it as a module.
 fn refusal(
     package: &Package,
     directory: &Path,
@@ -253,15 +249,15 @@ fn refusal(
 ) -> Box<Report> {
     let spelled = file.strip_prefix(directory).unwrap_or(file).display();
     let twice = Refused::of("file claimed twice");
-    let at_row = |refused: Refused, claim: &Claim| match claim.row {
-        Some(row) => refused
-            .entry([Step::key("executables"), Step::Row(row)])
+    let at_key = |refused: Refused, claim: &Claim| match &claim.key {
+        Some(key) => refused
+            .entry(["executables", key.as_str()])
             .located_at(&directory.join(MANIFEST)),
         None => refused.about_path(file),
     };
 
     match (earlier.entry, later.entry) {
-        (true, true) => at_row(
+        (true, true) => at_key(
             twice
                 .stating(format_args!(
                     "{} and {} are both compiled from `{spelled}`",
@@ -283,7 +279,7 @@ fn refusal(
             }
             .unwrap_or_else(|| "a module".to_string());
 
-            at_row(
+            at_key(
                 twice
                     .stating(format_args!(
                         "{} is compiled from `{spelled}`",

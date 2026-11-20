@@ -89,7 +89,7 @@ fn a_bare_run_means_the_sole_executable() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -109,7 +109,11 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"),
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n\n[executables]\nserve = {}\nbench = {}\n"
+            ),
         ));
         files
     });
@@ -127,7 +131,11 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\ndefault = \"bench\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"),
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\ndefault = \"bench\"\n\n[executables]\nserve = {}\nbench = {}\n"
+            ),
         ));
         files
     });
@@ -146,7 +154,7 @@ fn a_name_selects_a_declared_executable() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"tools/bench.crs\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\nbench = { path = \"tools/bench.crs\" }\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -179,7 +187,7 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -226,7 +234,7 @@ fn a_declared_executable_builds_beside_its_governing_root() {
             ),
             (
                 "json/curios.toml",
-                "name = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
+                "name = \"json\"\n\n[executables]\nserve = {}\n",
             ),
             ("json/lib.crs", ""),
             ("json/serve.crs", ""),
@@ -258,7 +266,7 @@ fn a_dash_is_standard_input_everywhere() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -323,7 +331,7 @@ fn a_package_of_programs_alone_runs_them() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("app/serve.crs", ""),
@@ -356,7 +364,7 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -396,7 +404,7 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("serve.crs", ""),
@@ -406,7 +414,7 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
 
     let refusal = entry(None, &root).expect_err("two executables and no default");
     assert!(
-        refusal.contains("it declares: `serve`, `app`, by `exe.crs`"),
+        refusal.contains("it declares: `app`, by `exe.crs`, `serve`"),
         "{refusal}"
     );
 }
@@ -422,7 +430,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\ndefault = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -432,7 +440,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
 
     let refusal = entry(None, &root).expect_err("no exe.crs to mean");
     assert!(
-        refusal.starts_with("unknown executable\n│  `app` has no executable of its own\n│  no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name\n│  it declares: `serve`\n"),
+        refusal.starts_with("unknown executable\n│  `app` has no executable of its own\n│  no `exe.crs` sits beside the manifest, and no `[executables]` key declares one by that name\n│  it declares: `serve`\n"),
         "{refusal}"
     );
 
@@ -464,12 +472,12 @@ fn a_bare_command_on_a_package_of_a_library_alone_says_how_to_declare_one() {
 
     let refusal = entry(None, &root).expect_err("no executable to mean");
     assert!(
-        refusal.starts_with("no executable\n│  `app` declares no executable\n│  add `exe.crs`, or declare one with `[[executables]]`\n"),
+        refusal.starts_with("no executable\n│  `app` declares no executable\n│  add `exe.crs`, or declare one in `[executables]`\n"),
         "{refusal}"
     );
 }
 
-/// No argument selects the package entire: its library, and then every program it declares, in order.
+/// No argument selects the package entire: its library, and then every program it declares, by name.
 #[test]
 fn no_argument_selects_the_package_entire() {
     let root = tree(
@@ -480,7 +488,7 @@ fn no_argument_selects_the_package_entire() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\nbench = {}\n"
                 ),
             ),
             ("lib.crs", ""),
@@ -510,7 +518,7 @@ fn no_argument_selects_the_package_entire() {
                 .as_str()
         })
         .collect::<Vec<_>>();
-    assert_eq!(names, vec!["serve", "bench"]);
+    assert_eq!(names, vec!["bench", "serve"]);
 }
 
 /// A module the library's header declares is placed in the library, selected through that file.
@@ -552,7 +560,7 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
@@ -614,7 +622,7 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n"
+                    "\"\nname = \"tool\"\n\n[executables]\nserve = { path = \"tools/serve.crs\" }\n"
                 ),
             ),
             ("exe.crs", "/std/print(\"\")\n"),

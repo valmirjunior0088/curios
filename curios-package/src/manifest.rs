@@ -35,7 +35,7 @@ pub const MANIFEST: &str = "curios.toml";
 /// The library header a package's `name` obligates, beside the manifest. Its stem enters no qualified name: the manifest names that namespace, so `lib` is a spelling nothing can refer to.
 pub const LIBRARY: &str = "lib.crs";
 
-/// The package's own executable, found beside the manifest when no `[[executables]]` row claims the package's name. Like [`LIBRARY`], presence is the declaration and the stem enters no qualified name.
+/// The package's own executable, found beside the manifest when no `[executables]` key claims the package's name. Like [`LIBRARY`], presence is the declaration and the stem enters no qualified name.
 pub const EXECUTABLE: &str = "exe.crs";
 
 /// The extension every Curios source file carries, which is what makes an executable's declared name enough to locate it.
@@ -109,42 +109,38 @@ pub struct Package {
     pub default: Option<String>,
     /// What this package depends on, by the canonical name each dependency declares for itself.
     pub dependencies: BTreeMap<String, Dependency>,
-    /// The entry programs this package declares, in the order written.
-    pub executables: Vec<Executable>,
+    /// The entry programs this package declares, by the name each is run by: a single legal identifier, which is what keeps `curios run <name>` and `curios run <file>.crs` two spaces that cannot overlap.
+    pub executables: BTreeMap<String, Executable>,
     /// What implements this package's `foreign` declarations, in the order written. Empty for the overwhelming majority of packages, which declare none.
     pub foreign: Vec<Foreign>,
 }
 
 impl Package {
-    /// This package, plus its own executable when `exe.crs` sits in `directory` and no row already claims that name.
+    /// This package, plus its own executable when `exe.crs` sits in `directory` and no key already claims that name.
     ///
     /// **Presence is the declaration, exactly as it is for `lib.crs`**, for the reasons the `layout` module states.
     ///
-    /// A row wins over the file: somebody who wrote `[[executables]]` for this name meant the path they gave.
+    /// A key wins over the file: somebody who wrote this name in `[executables]` meant the path it gives.
     fn discovered(mut self, directory: &Path) -> Self {
-        let claimed = self
-            .executables
-            .iter()
-            .any(|executable| executable.name == self.name);
-
-        if !claimed && directory.join(EXECUTABLE).is_file() {
-            self.executables.push(Executable {
-                name: self.name.clone(),
-                path: PathBuf::from(EXECUTABLE),
-            });
+        if !self.executables.contains_key(&self.name) && directory.join(EXECUTABLE).is_file() {
+            self.executables.insert(
+                self.name.clone(),
+                Executable {
+                    path: PathBuf::from(EXECUTABLE),
+                },
+            );
         }
 
         self
     }
 
-    /// `executable` as a refusal names it: a row by its name, and the package's own program by the file that declares it. Presence is that program's declaration, so a reader who wrote no row for it would otherwise look for the name in the manifest and not find it there.
-    pub fn describe(&self, executable: &Executable) -> String {
-        match executable.name == self.name && executable.path == Path::new(EXECUTABLE) {
+    /// The executable `name` as a refusal names it: one the manifest keys by its name, and the package's own program by the file that declares it. Presence is that program's declaration, so a reader who wrote no key for it would otherwise look for the name in the manifest and not find it there.
+    pub fn describe(&self, name: &str, executable: &Executable) -> String {
+        match name == self.name && executable.path == Path::new(EXECUTABLE) {
             true => format!(
-                "the package's own executable `{}` that `{EXECUTABLE}` beside the manifest declares",
-                executable.name
+                "the package's own executable `{name}` that `{EXECUTABLE}` beside the manifest declares"
             ),
-            false => format!("the executable `{}`", executable.name),
+            false => format!("the executable `{name}`"),
         }
     }
 }
@@ -162,12 +158,10 @@ pub struct Umbrella {
     pub catalog: BTreeMap<String, Dependency>,
 }
 
-/// One declared entry program: a name to run it by, and the file it is compiled from.
+/// One declared entry program, which [`Package::executables`] keys by the name it is run by: the file it is compiled from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Executable {
-    /// A single legal identifier, which is what keeps `curios run <name>` and `curios run <file>.crs` two spaces that cannot overlap.
-    pub name: String,
-    /// `<name>.crs` beside the manifest, unless the row stated one — or `exe.crs` for the package's own executable, which is found rather than declared. Deriving a path from a declared name is not disk discovery: for a row, declaration still decides existence.
+    /// `<name>.crs` beside the manifest, unless its key's table stated one — or `exe.crs` for the package's own executable, which is found rather than declared. Deriving a path from a declared name is not disk discovery: for a key, declaration still decides existence.
     pub path: PathBuf,
 }
 
@@ -223,7 +217,7 @@ struct Document {
     description: Option<String>,
     default: Option<String>,
     dependencies: Option<BTreeMap<String, DependencyRow>>,
-    executables: Option<Vec<ExecutableRow>>,
+    executables: Option<BTreeMap<String, ExecutableRow>>,
     foreign: Option<Vec<ForeignRow>>,
     members: Option<Vec<String>>,
     catalog: Option<BTreeMap<String, DependencyRow>>,
@@ -275,19 +269,18 @@ impl Document {
         };
         let name = canonical(&spelling).map_err(|refused| refused.value(["name"]))?;
 
-        let mut executables = Vec::new();
-        for (index, row) in self.executables.unwrap_or_default().into_iter().enumerate() {
-            let placed =
-                |refused: Refused| refused.under([Step::key("executables"), Step::Row(index)]);
-            executables.push(row.executable(&executables).map_err(placed)?);
+        let mut executables = BTreeMap::new();
+        for (written, row) in self.executables.unwrap_or_default() {
+            let executable = row
+                .executable(&written)
+                .map_err(|refused| refused.under(["executables", written.as_str()]))?;
+            executables.insert(written, executable);
         }
 
         // `default` is a reference like any other, so a dangling one is refused here rather than discovered by a `curios run` that finds nothing. The package's own name is exempt: it is the one name [`Package::discovered`] may still add, from an `exe.crs` this pass cannot see — and when that file turns out to be absent too, `curios run` refuses it by name before anything elaborates.
         if let Some(default) = &self.default
             && default != &name
-            && !executables
-                .iter()
-                .any(|executable| &executable.name == default)
+            && !executables.contains_key(default)
         {
             return Err(Refused::of("unknown executable")
                 .stating(format_args!("`default` names `{default}`"))
@@ -914,35 +907,33 @@ fn plain_relative(path: &str, subject: &str) -> Result<PathBuf, Refused> {
     }
 }
 
-/// One `[[executables]]` row as TOML spells it.
+/// One `[executables]` entry as TOML spells it, under the name it is run by.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExecutableRow {
-    name: String,
     path: Option<String>,
 }
 
 impl ExecutableRow {
-    /// This row as a declared entry program, against the ones already declared before it.
-    fn executable(self, declared: &[Executable]) -> Result<Executable, Refused> {
-        let Self { name, path } = self;
+    /// This entry as the entry program `name` declares, its refusals written of the entry, which whoever reads the table places at its key.
+    fn executable(self, name: &str) -> Result<Executable, Refused> {
+        let Self { path } = self;
 
-        if !is_identifier(&name) {
+        if !is_identifier(name) {
             return Err(Refused::of("invalid name")
                 .stating(format_args!(
                     "the executable `{name}` is not named by one identifier"
                 ))
-                .stating("`curios run` could not tell it from a file argument")
-                .value(["name"]));
+                .stating("`curios run` could not tell it from a file argument"));
         }
 
-        // One rule for every row, including the package's own: a declared executable is compiled from the file named after it. `exe.crs` is not a default here — it is what `Package::discovered` finds when *no* row claims the package's name, so writing a row always means what it says and never silently redirects an existing package's file.
+        // One rule for every key, including the package's own name: a declared executable is compiled from the file named after it. `exe.crs` is not a default here — it is what `Package::discovered` finds when *no* key claims the package's name, so writing a key always means what it says and never silently redirects an existing package's file.
         let path = path.map_or_else(
             || PathBuf::from(format!("{name}.{EXTENSION}")),
             PathBuf::from,
         );
 
-        // A row names a file inside its package by the path the package spells, plainly: every check below compares that spelling, and `./lib.crs` or `app/../lib.crs` would walk past the two refusals under it to fail later as a parse error inside the header (law 4). Resolving the spelling instead would resolve `..` lexically through symlinks the package cannot see.
+        // An entry names a file inside its package by the path the package spells, plainly: the check below compares that spelling, and `./lib.crs` or `app/../lib.crs` would walk past it to fail later as a parse error inside the header (law 4). Resolving the spelling instead would resolve `..` lexically through symlinks the package cannot see.
         if let Some(component) = path
             .components()
             .find(|component| !matches!(component, Component::Normal(_)))
@@ -960,16 +951,6 @@ impl ExecutableRow {
                 .value(["path"]));
         }
 
-        if let Some(previous) = declared.iter().find(|executable| executable.name == name) {
-            return Err(Refused::of("duplicate executable")
-                .stating(format_args!("`{name}` is declared twice"))
-                .stating(format_args!(
-                    "from `{}` and from `{}`",
-                    previous.path.display(),
-                    path.display()
-                )));
-        }
-
         // The library header is the library's root, so no program is compiled from it.
         if path == Path::new(LIBRARY) {
             return Err(Refused::of("misplaced executable")
@@ -977,7 +958,7 @@ impl ExecutableRow {
                 .stating("that file is the package's library header"));
         }
 
-        Ok(Executable { name, path })
+        Ok(Executable { path })
     }
 }
 

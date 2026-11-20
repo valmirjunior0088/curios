@@ -243,7 +243,7 @@ fn a_written_row_disturbs_nothing_beside_it() {
     let manifest = concat!(
         "# the package\ncompiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\npath = \"serve.crs\"\n"
+        "\"\nname = \"app\"\n\n[executables]\nserve = { path = \"serve.crs\" }\n"
     );
     let (root, governing) = governed("undisturbed", manifest);
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
@@ -260,8 +260,10 @@ fn a_written_row_disturbs_nothing_beside_it() {
 
     let written = fs::read_to_string(&governing.manifest).expect("read it back");
     assert!(written.contains("# the package"), "{written}");
-    assert!(written.contains("[[executables]]"), "{written}");
-    assert!(written.contains("name = \"serve\""), "{written}");
+    assert!(
+        written.contains("[executables]\nserve = { path = \"serve.crs\" }\n"),
+        "{written}"
+    );
     assert!(
         written.contains(concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"")),
         "{written}"

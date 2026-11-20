@@ -31,7 +31,7 @@ pub fn project(name: &str) -> Temporary {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(&root, "lib.crs", "pub mod util;\n");

@@ -36,7 +36,7 @@ fn project(name: &str) -> Temporary {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(&root, "lib.crs", "pub let word : /std/Str = \"reused\";\n");
@@ -282,7 +282,7 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[executables]\napp = {{}}\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
             &*dep,
             compiler = env!("CARGO_PKG_VERSION")
         ),
@@ -348,7 +348,7 @@ fn layered(name: &str, entry: &str) -> (Temporary, Temporary, Temporary) {
 /// A manifest for the package `name`, declaring the executable `app` where `name` is `app`, and a path dependency on each of `dependencies`.
 fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
     let executables = match name {
-        "app" => "\n[[executables]]\nname = \"app\"\n",
+        "app" => "\n[executables]\napp = {}\n",
         _ => "",
     };
     let rows = dependencies

@@ -165,7 +165,7 @@ fn project(name: &str) -> Temporary {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(&root, "lib.crs", &library("library"));
@@ -358,7 +358,7 @@ fn two_executables_occupy_two_slots() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"one\"\n\n[[executables]]\nname = \"two\"\n"
+            "\"\nname = \"app\"\n\n[executables]\none = {}\ntwo = {}\n"
         ),
     );
     write(&root, "lib.crs", &library("shared"));
@@ -455,7 +455,7 @@ fn a_slot_does_not_answer_for_another_projects_program() {
     let manifest = concat!(
         "compiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n"
+        "\"\nname = \"tool\"\n\n[executables]\ntool = {}\n"
     );
     let (mine, theirs) = (temporary("aliasing-mine"), temporary("aliasing-theirs"));
     write(&mine, "curios.toml", manifest);

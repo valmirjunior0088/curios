@@ -16,12 +16,9 @@ fn a_package_parses() {
             http = { source = "git", url = "https://example/http", rev = "abc123", hash = "c1:${digest}" }
             tools = { source = "path", path = "../tools" }
 
-            [[executables]]
-            name = "serve"
-
-            [[executables]]
-            name = "bench"
-            path = "tools/bench.crs"
+            [executables]
+            serve = {}
+            bench = { path = "tools/bench.crs" }
         "#,
         digest = "a".repeat(64)
     )) else {
@@ -34,16 +31,20 @@ fn a_package_parses() {
     // A declared name locates its file; an explicit path overrides it.
     assert_eq!(
         package.executables,
-        vec![
-            Executable {
-                name: "serve".to_string(),
-                path: PathBuf::from("serve.crs"),
-            },
-            Executable {
-                name: "bench".to_string(),
-                path: PathBuf::from("tools/bench.crs"),
-            },
-        ]
+        BTreeMap::from([
+            (
+                "bench".to_string(),
+                Executable {
+                    path: PathBuf::from("tools/bench.crs"),
+                }
+            ),
+            (
+                "serve".to_string(),
+                Executable {
+                    path: PathBuf::from("serve.crs"),
+                }
+            ),
+        ])
     );
 
     assert_eq!(
@@ -162,30 +163,23 @@ fn an_executable_named_by_no_identifier_is_refused() {
         r#"
             name = "json"
 
-            [[executables]]
-            name = "run-me"
+            [executables]
+            run-me = {}
         "#,
     );
 
     assert!(refusal.contains("not named by one identifier"), "{refusal}");
 }
 
+/// A manifest still written as rows of `[[executables]]` meets the reader's own refusal: an array is written where a table is read.
 #[test]
-fn an_executable_declared_twice_is_refused() {
-    let refusal = refuse(
-        r#"
-            name = "json"
+fn executables_written_as_rows_are_refused_as_an_array() {
+    let refusal = refuse("name = \"json\"\n\n[[executables]]\nname = \"serve\"\n");
 
-            [[executables]]
-            name = "serve"
-
-            [[executables]]
-            name = "serve"
-            path = "other.crs"
-        "#,
+    assert_eq!(
+        refusal,
+        "invalid value\n  written: an array\n  `executables` is a table"
     );
-
-    assert!(refusal.contains("declared twice"), "{refusal}");
 }
 
 /// The package root has one stem space, and the library header already holds a stem in it.
@@ -195,26 +189,26 @@ fn an_executable_over_the_library_header_is_refused() {
         r#"
             name = "json"
 
-            [[executables]]
-            name = "lib"
+            [executables]
+            lib = {}
         "#,
     );
 
     assert!(refusal.contains("library header"), "{refusal}");
 }
 
-/// The stem-space refusals compare a row's path by spelling, so a spelling that names the same file another way — `./lib.crs`, `app/../lib.crs`, an absolute path — is refused where the row is read rather than walked past to a parse error inside the header.
+/// The stem-space refusal compares an executable's path by spelling, so a spelling that names the same file another way — `./lib.crs`, `app/../lib.crs`, an absolute path — is refused where the entry is read rather than walked past to a parse error inside the header.
 #[test]
 fn an_executable_path_that_is_not_plain_is_refused() {
     for path in ["./lib.crs", "app/../lib.crs", "/tmp/app.crs", "./app.crs"] {
-        let refusal = refuse(&format!(
+        let refusal = refuse(&fill!(
             r#"
                 name = "json"
 
-                [[executables]]
-                name = "app"
-                path = "{path}"
+                [executables]
+                app = { path = "${path}" }
             "#,
+            path
         ));
 
         assert!(

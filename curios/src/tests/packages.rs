@@ -114,7 +114,7 @@ fn a_package_runs_its_sole_executable() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n"
+                    "\"\nname = \"hello\"\n\n[executables]\nhello = {}\n"
                 ),
             ),
             (
@@ -141,7 +141,7 @@ fn a_librarys_modules_read_from_the_manifests_directory() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+                    "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
                 ),
             ),
             ("lib.crs", "pub mod parse;\n"),
@@ -177,7 +177,7 @@ fn a_member_reaches_another_member_through_its_umbrella() {
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[executables]\napp = {}\n",
             ),
             (
                 "app/lib.crs",
@@ -208,7 +208,7 @@ fn a_package_with_no_library_still_runs_its_program() {
             ("base/lib.crs", "pub let word : /std/Str = \"tool\";\n"),
             (
                 "tool/curios.toml",
-                "name = \"tool\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"tool\"\n",
+                "name = \"tool\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[executables]\ntool = {}\n",
             ),
             ("tool/tool.crs", "/std/print(/base/word)\n"),
         ],
@@ -228,7 +228,7 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n"
+                    "\"\nname = \"hello\"\n\n[executables]\nhello = {}\n"
                 ),
             ),
             ("lib.crs", "pub let greeting : /std/Str = \"library\";\n"),
@@ -297,7 +297,7 @@ fn a_loose_program_names_std_and_is_refused_sys() {
 #[test]
 fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
     let base = "pub concept Tag(A: Type): pub Type {\n    tag(A) -> /std/Nat,\n}\n\npub induct Thing: pub Type\n| mk()\nend\n";
-    let manifest = "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n";
+    let manifest = "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[executables]\napp = {}\n";
     let package = |name: &str, library: &str, program: &str| {
         tree(
             name,
@@ -364,7 +364,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[executables]\napp = {}\n",
             ),
             ("app/app.crs", "/std/print(/std/Nat/to_str(/base/answer))\n"),
         ],
@@ -423,7 +423,7 @@ fn a_library_test_declaration_rides_through_the_cabinet() {
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[executables]\napp = {}\n",
             ),
             ("app/app.crs", "/std/print(/std/Nat/to_str(/base/answer))\n"),
         ],
@@ -461,7 +461,7 @@ fn siblings(name: &str) -> Temporary {
             ("beta/lib.crs", "pub let two : /std/Nat = 2;\n"),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+                "name = \"app\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[executables]\napp = {}\n",
             ),
             (
                 "app/lib.crs",
@@ -521,7 +521,7 @@ fn a_unit_reached_after_different_others_is_filed_once() {
             ("beta/lib.crs", "pub let two : /std/Nat = 2;\n"),
             (
                 "left/curios.toml",
-                "name = \"left\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"left\"\n",
+                "name = \"left\"\n\n[dependencies]\nalpha = { source = \"member\" }\nbeta = { source = \"member\" }\n\n[executables]\nleft = {}\n",
             ),
             (
                 "left/left.crs",
@@ -529,7 +529,7 @@ fn a_unit_reached_after_different_others_is_filed_once() {
             ),
             (
                 "right/curios.toml",
-                "name = \"right\"\n\n[dependencies]\nbeta = { source = \"member\" }\n\n[[executables]]\nname = \"right\"\n",
+                "name = \"right\"\n\n[dependencies]\nbeta = { source = \"member\" }\n\n[executables]\nright = {}\n",
             ),
             (
                 "right/right.crs",

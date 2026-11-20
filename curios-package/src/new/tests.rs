@@ -22,11 +22,8 @@ fn a_scaffolded_package_is_one_this_crate_reads() {
     assert_eq!(package.compiler, Some(CompilerVersion::current()));
 
     assert_eq!(package.executables.len(), 1);
-    assert_eq!(
-        package.executables[0].name,
-        root.file_name().unwrap().to_string_lossy()
-    );
-    assert!(root.join(package.executables[0].path.clone()).is_file());
+    let executable = &package.executables[&*root.file_name().unwrap().to_string_lossy()];
+    assert!(root.join(&executable.path).is_file());
 
     assert!(source.is_some(), "the library header resolves");
     assert!(root.join(LIBRARY).is_file());

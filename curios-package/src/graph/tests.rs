@@ -223,7 +223,7 @@ fn a_dependency_with_no_library_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n"
+                    "\"\nname = \"tool\"\n\n[executables]\ntool = {}\n"
                 ),
             ),
             ("tool/tool.crs", ""),

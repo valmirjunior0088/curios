@@ -35,7 +35,7 @@ fn project(name: &str) -> Temporary {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(
@@ -176,7 +176,7 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(
@@ -406,7 +406,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(
@@ -577,7 +577,7 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(
@@ -621,7 +621,7 @@ fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(&root, "lib.crs", "pub let zero: /std/Nat = 0;\n");
@@ -641,7 +641,7 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"other\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\nother = {}\n"
         ),
     );
     write(
@@ -686,7 +686,7 @@ fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            "\"\nname = \"app\"\n\n[executables]\napp = {}\n"
         ),
     );
     write(

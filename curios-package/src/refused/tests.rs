@@ -32,22 +32,33 @@ fn a_refusal_stands_where_its_keys_lead() {
 
     let missing = reported("name = \"app\"\n\n[dependencies]\njson = { source = \"git\" }\n");
     assert_eq!(placed(&missing), ("json".to_string(), (4, 1)));
+
+    let path = reported(
+        "name = \"app\"\n\n[executables]\nserve = {}\nbench = { path = \"../bench.crs\" }\n",
+    );
+    assert_eq!(placed(&path), ("\"../bench.crs\"".to_string(), (5, 18)));
+
+    let named = reported("name = \"app\"\n\n[executables]\nrun-me = {}\n");
+    assert_eq!(named.headline, "invalid name");
+    assert_eq!(placed(&named), ("run-me".to_string(), (4, 1)));
+}
+
+/// A key written twice is TOML's refusal, standing at the second; a table written as an array of rows is the reader's, standing at its header.
+#[test]
+fn a_key_written_twice_and_an_array_where_a_table_is_read_stand_where_they_are_written() {
+    let twice =
+        reported("name = \"app\"\n\n[executables]\nserve = {}\nserve = { path = \"other.crs\" }\n");
+    assert_eq!(twice.headline, "syntax error");
+    assert_eq!(placed(&twice), ("serve".to_string(), (5, 1)));
+
+    let rows = reported("name = \"app\"\n\n[[executables]]\nname = \"serve\"\n");
+    assert_eq!(rows.headline, "invalid value");
+    assert_eq!(placed(&rows), ("[[executables]]".to_string(), (3, 1)));
 }
 
 /// A row of an array is found by its position, and what it states by the keys beneath it.
 #[test]
 fn a_row_is_found_by_its_position() {
-    let twice = reported(
-        "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"serve\"\npath = \"other.crs\"\n",
-    );
-    assert_eq!(twice.headline, "duplicate executable");
-    assert_eq!(placed(&twice).1.0, 6);
-
-    let path = reported(
-        "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"../bench.crs\"\n",
-    );
-    assert_eq!(placed(&path), ("\"../bench.crs\"".to_string(), (8, 8)));
-
     let hash = reported(
         "name = \"app\"\n\n[[foreign]]\nname = \"digest\"\n\n[foreign.native]\npath = \"digest.wasm\"\nhash = \"sha1:0\"\n",
     );
