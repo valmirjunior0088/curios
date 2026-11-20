@@ -238,6 +238,29 @@ fn an_edited_entry_is_not_reused() {
     );
 }
 
+/// What an interrupted filing left staged beside the payloads is taken away by the next filing there once no filing could still be writing it, and a staging younger than that is left to the filer it may belong to.
+#[test]
+fn a_filing_sweeps_a_staging_older_than_any_filing() {
+    let root = project("swept");
+    run(&root);
+
+    let aged = payloads(&root).join("aged.1.part");
+    let fresh = payloads(&root).join("fresh.2.part");
+    fs::write(&aged, "half a payload").unwrap();
+    fs::write(&fresh, "half a payload").unwrap();
+    fs::File::options()
+        .write(true)
+        .open(&aged)
+        .and_then(|file| file.set_modified(SystemTime::now() - crate::GRACE))
+        .unwrap();
+
+    write(&root, "app.crs", "/std/print(\"rewritten\")\n");
+    assert!(!run(&root).reused, "an edited entry files again");
+
+    assert!(!aged.exists(), "a staging past the grace is swept");
+    assert!(fresh.exists(), "a staging within it is left");
+}
+
 /// A module the entry declares joins the compilation through the loader, and is recorded there. It cannot join without the entry's own text changing — that is the read-set closure — but a *changed* one has to be caught here.
 #[test]
 fn an_edited_module_of_the_entry_is_not_reused() {

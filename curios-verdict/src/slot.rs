@@ -3,15 +3,22 @@
 //! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together (`curios_unit::framed`), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none.
 //!
 //! **A slot is read as far as its record first.** Whether a slot may be believed is decided by its record, which is small, and what is behind it is read only where the record agrees: a question about text an editor holds edited misses on the record alone, and the artifact behind it stays unread.
+//!
+//! **What a filer stopped short of is swept where it was staged** ([`sweep`]): a staging file is never renamed by anyone but the process that wrote it, so one that process left is taken away once it is older than any filing takes — a pack's by its address's collection, a payload's by the filing that lands a payload beside it.
 
 use {
+    crate::GRACE,
     curios_unit::{PREAMBLE, framed, record_length},
     std::{
         fs::{self, File},
         io::{self, Read},
         path::Path,
+        time::SystemTime,
     },
 };
+
+/// What a staging file's name ends with: a file written whole beside the name it is renamed onto, which nothing reads under this one.
+pub const STAGING: &str = "part";
 
 /// A slot opened as far as its record, the artifact behind it unread until something asks for it.
 pub struct Opened {
@@ -55,7 +62,7 @@ pub fn opened(slot: &Path) -> Option<Opened> {
 ///
 /// **Written beside and renamed into place, which is the whole of it.** The file is complete before it bears the slot's name, and a rename replaces one name atomically, so a reader — this compiler or another filing the same slot at the same moment — sees the old slot, the new one, or none, and never a record beside an artifact it was not made from. A record and an artifact in two files would need their writes ordered so that every interrupted state reads as a miss, and the record to carry the artifact's digest to survive two compilers racing on one slot; one rename removes both cases rather than arguing about them.
 ///
-/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name, and is overwritten by the next write from the same process.
+/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name; the filing that lands a payload takes one away beside it ([`sweep`]).
 ///
 /// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
 pub fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
@@ -68,7 +75,7 @@ pub fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
         .map_err(at)?;
     fs::create_dir_all(family).map_err(at)?;
 
-    let staged = slot.with_extension(format!("{}.part", std::process::id()));
+    let staged = slot.with_extension(format!("{}.{STAGING}", std::process::id()));
     fs::write(&staged, framed(record, artifact)).map_err(at)?;
 
     fs::rename(&staged, slot).map_err(|error| {
@@ -76,4 +83,24 @@ pub fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&staged);
         at(error)
     })
+}
+
+/// Take away every staging file in `directory` last written [`GRACE`] or more before `now`: what a filer that stopped short left, since no filing takes that long and no other process renames it into place.
+pub fn sweep(directory: &Path, now: SystemTime) -> io::Result<()> {
+    for entry in fs::read_dir(directory)?.flatten() {
+        let staged = entry.path();
+        let part = staged
+            .extension()
+            .is_some_and(|extension| extension == STAGING);
+        let aged = || {
+            fs::metadata(&staged)
+                .and_then(|metadata| metadata.modified())
+                .is_ok_and(|written| now.duration_since(written).unwrap_or_default() >= GRACE)
+        };
+        if part && aged() {
+            let _ = fs::remove_file(&staged);
+        }
+    }
+
+    Ok(())
 }

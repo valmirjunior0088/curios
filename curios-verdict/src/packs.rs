@@ -10,7 +10,7 @@
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where an object is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
 //!
-//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): an object the address's slot has not named for five days is dropped from its pack, each address keeping a table of the objects a collection found its slot not naming, with when one first did. A read writes nothing. Every time is asked of the clock the handle was opened at.
+//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): an object the address's slot has not named for five days is dropped from its pack, each address keeping a table of the objects a collection found its slot not naming, with when one first did, and a staging file five days old is swept ([`sweep`]). A read writes nothing. Every time is asked of the clock the handle was opened at.
 //!
 //! Why a slot's objects are kept in packs at its address, merged so and collected so, is the crate `README.md`'s.
 
@@ -18,6 +18,7 @@
 mod tests;
 
 use {
+    crate::{STAGING, sweep},
     curios_archive::Bytes,
     curios_common::{Candidates, Digest, Facet, Object, candidate_prefix},
     curios_unit::{Pack, pack_name, pack_names, packed, repacked},
@@ -26,7 +27,7 @@ use {
         collections::{BTreeMap, BTreeSet},
         fs::{self, File},
         io,
-        path::{Path, PathBuf},
+        path::PathBuf,
         rc::Rc,
         time::{Duration, SystemTime},
     },
@@ -44,8 +45,8 @@ const COLLECTION: &str = "collection";
 /// How long an address goes between collections.
 const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// How long an object goes unnamed by its address's slot before a collection drops it.
-const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
+/// How long an object goes unnamed by its address's slot before a collection drops it, and a staging file stands before it is swept ([`sweep`]).
+pub const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 
 /// The packs of one address.
 pub struct Packs {
@@ -146,16 +147,7 @@ impl Packs {
                 }
             }
         }
-        // What a filer that stopped short left staged is never renamed into place, and nothing reads it.
-        for entry in fs::read_dir(&self.directory)?.flatten() {
-            let staged = entry.path();
-            let part = staged
-                .extension()
-                .is_some_and(|extension| extension == "part");
-            if part && modified(&staged).is_some_and(|written| self.since(written) >= GRACE) {
-                let _ = fs::remove_file(&staged);
-            }
-        }
+        sweep(&self.directory, self.now)?;
         self.listed.borrow_mut().take();
 
         self.collected(&collection)
@@ -165,7 +157,7 @@ impl Packs {
     fn collected(&self, collection: &Collection) -> io::Result<()> {
         fs::create_dir_all(&self.directory)?;
         let path = self.directory.join(COLLECTION);
-        let staged = path.with_extension(format!("{}.part", std::process::id()));
+        let staged = path.with_extension(format!("{}.{STAGING}", std::process::id()));
         fs::write(&staged, collection.bytes())?;
         fs::rename(&staged, &path).inspect_err(|_| {
             let _ = fs::remove_file(&staged);
@@ -190,7 +182,8 @@ impl Packs {
         let name = pack_name(&bytes);
         let path = self.path(&name);
         if !path.exists() {
-            let staged = path.with_extension(format!("{EXTENSION}.{}.part", std::process::id()));
+            let staged =
+                path.with_extension(format!("{EXTENSION}.{}.{STAGING}", std::process::id()));
             fs::write(&staged, &bytes).map_err(at)?;
             fs::rename(&staged, &path).map_err(|error| {
                 let _ = fs::remove_file(&staged);
@@ -350,13 +343,6 @@ impl Candidates for Packs {
     fn object(&self, digest: &Digest) -> Option<Object> {
         self.find(digest)
     }
-}
-
-/// When the file at `path` was last changed: `None` where it cannot be asked.
-fn modified(path: &Path) -> Option<SystemTime> {
-    fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
 }
 
 /// What an address's last collection found: when it ran, and each object it found the slot not naming, with when a collection first did.

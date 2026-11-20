@@ -1,4 +1,4 @@
-use {super::*, curios_common::test_support::*};
+use {super::*, curios_common::test_support::*, std::path::Path};
 
 /// One object of its own bytes.
 fn object(text: &str) -> Object {

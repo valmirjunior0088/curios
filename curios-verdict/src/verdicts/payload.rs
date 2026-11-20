@@ -11,13 +11,13 @@ mod tests;
 
 use {
     super::resolved,
-    crate::{Verdicts, chained, replace, unchanged},
+    crate::{Verdicts, chained, replace, sweep, unchanged},
     curios_abi::ForeignStore,
     curios_common::{Qualifier, SourceName, digest},
     curios_module::{RootSource, UnitSource},
     curios_package::{Runs, payload_slot},
     curios_unit::{recorded, segments},
-    std::{collections::BTreeSet, fs, io},
+    std::{collections::BTreeSet, fs, io, time::SystemTime},
 };
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
@@ -127,12 +127,17 @@ impl Verdicts {
             foreigns: foreigns.clone(),
         };
 
+        let path = store.payload(runs, &slot);
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| replace(&store.payload(runs, &slot), &record, bytes));
+            .and_then(|record| replace(&path, &record, bytes));
 
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());
+        }
+        // What an interrupted filing left staged beside the target's payloads, swept by the filing that lands one there: each is a whole executable, and no other process renames it. Best effort, as the filing is.
+        if let Some(payloads) = path.parent() {
+            let _ = sweep(payloads, SystemTime::now());
         }
     }
 }
