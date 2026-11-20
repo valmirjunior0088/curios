@@ -92,7 +92,7 @@ fn check_telescope_entries<B: Bound>(
     while let Some((_, ty)) = cursor.entry() {
         let mark = cursor.mark().expect("a mark stands at an entry");
         let (rebuilt, sort) = check_is_sort(context, &ty)?;
-        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        let label = cursor.advance_labelled(|label| context.fresh_from(label));
         context.enter(&label, &rebuilt, mark);
         entries.push((mark, label, rebuilt));
         levels.push(sort.level);
@@ -124,7 +124,7 @@ fn case_telescope_entries(
                 (rebuilt, sort.level)
             }
         };
-        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        let label = cursor.advance_labelled(|label| context.fresh_from(label));
         if family.entry().is_some() {
             family.advance(Term::free_var(&label));
         }
@@ -172,7 +172,7 @@ fn assume_telescope_entries<B: Bound>(
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
         let mark = cursor.mark().expect("a mark stands at an entry");
-        let label = cursor.advance_fresh(|hint| context.fresh(hint));
+        let label = cursor.advance_labelled(|label| context.fresh_from(label));
         context.enter(&label, &ty, mark);
         entries.push((mark, label, ty));
     }

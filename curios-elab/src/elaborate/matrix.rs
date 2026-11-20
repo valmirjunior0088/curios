@@ -26,7 +26,7 @@ use {
     curios_common::{Plicity, recurse},
     curios_core::{
         Arm, Atom, Elements, Ending, FieldLabel, Free, Guard, InductArm, Intrinsic, IntrinsicHead,
-        Keyed, Keys, Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType,
+        Keyed, Keys, Label, Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
     },
     curios_num::{Integer, Natural},
@@ -72,9 +72,6 @@ pub fn elaborate_matrix(
 
     compiler.whole(context, mode)
 }
-
-/// One of a row's binders as its body's telescope labels it: the name it is written with, and where the lowering wrote it among its declaration's binders.
-type Label = (Option<String>, Option<u32>);
 
 /// What a row writes at one column beside the place of the first binder it writes there among its row's, or nothing where the compiler put the column under a pattern another row wrote, which the row reads as a binder that binds nothing.
 type Cell<'m> = Option<(Shape<'m>, usize)>;
@@ -450,8 +447,8 @@ struct Compiler<'m> {
     arm_of: Vec<usize>,
     /// The match as it is written, which a report of one of its dispatches is placed at.
     term: &'m Term,
-    /// Each row's binders, as its body labels them.
-    labels: Vec<Vec<Label>>,
+    /// Each row's binders, as its body's telescope labels them: the name each is written with, and where the lowering wrote it among its declaration's binders, or `None` for a body built without labels.
+    labels: Vec<Vec<Option<Label>>>,
     /// How the match is read where it stands, which a row's own walk reads its outermost case under.
     mode: Mode,
     /// The frames that stand where the match is entered, which a row's own walk stands on.
@@ -886,8 +883,8 @@ impl<'m> Compiler<'m> {
 
     /// The pattern of the row at `row` as it is written.
     fn written(&self, row: usize) -> String {
-        let mut names = self.labels[row].iter().map(|(hint, _)| {
-            curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string())).into()
+        let mut names = self.labels[row].iter().map(|label| {
+            curios_surface::Label::from(label.as_ref().and_then(Label::hint).unwrap_or("_")).into()
         });
 
         written_pattern(&self.row(row).pattern, &mut names, std::convert::identity).to_string()
@@ -1182,7 +1179,7 @@ impl<'m> Compiler<'m> {
         if !matches!(self.row(row).pattern, Pattern::Binder) {
             return None;
         }
-        let binder = self.labels[row].first()?.0.clone()?;
+        let binder = self.labels[row].first()?.as_ref()?.hint()?.to_string();
         let constructor = split.constructor_named(context, &binder)?;
 
         Some(Error::MatrixDefaultNamesAConstructor {
@@ -2101,10 +2098,7 @@ impl<'m> Compiler<'m> {
                 let value = opened(value, values);
                 let first = values.len();
                 let names = (first..first + pattern.binders())
-                    .map(|place| {
-                        let (hint, written) = &self.labels[row][place];
-                        context.fresh_written(hint.as_deref(), *written)
-                    })
+                    .map(|place| context.fresh_written(self.labels[row][place].as_ref()))
                     .collect::<Vec<_>>();
                 values.extend(names.iter().map(Term::free_var));
                 let passed = self.passing(context, row, index + 1, values, failed);
@@ -2634,9 +2628,7 @@ impl<'m> Compiler<'m> {
 
     /// A fresh local for the binder at `place` of the row `line` is, under the label the row wrote it with.
     fn name(&self, context: &mut Context, line: &Line<'m>, place: usize) -> Free {
-        let (hint, written) = &self.labels[line.row][place];
-
-        context.fresh_for(hint.as_deref(), *written)
+        context.fresh_from(self.labels[line.row][place].as_ref())
     }
 
     /// A name a row writes at a column the tree reads, bound to the column. The row that cannot fail is read apart, once the rows before it are ([`Compiler::unfailing`]), so nothing is bound for it here.
@@ -2654,10 +2646,10 @@ impl<'m> Compiler<'m> {
 
     /// Bind the binder at `place` to `value` ahead of the row's body.
     fn bind(&self, context: &mut Context, line: &mut Line<'m>, place: usize, value: Term) {
-        let (hint, written) = &self.labels[line.row][place];
-        let name = context.fresh_written(hint.as_deref(), *written);
+        let label = self.labels[line.row][place].as_ref();
+        let name = context.fresh_written(label);
         // The `let` it is bound by is the matrix's, and a pattern's binder a slot, which a lint asks only whether it binds `{}`.
-        context.note_pattern_site(*written);
+        context.note_pattern_site(label.and_then(Label::written));
         line.taken[place] = Some(Term::free_var(&name));
         line.lets.push((name, value));
     }
@@ -2676,15 +2668,15 @@ fn walk_awaited<R>(
 }
 
 /// The labels of a row's binders, off its body's telescope.
-fn labels(row: &Row) -> Vec<Label> {
+fn labels(row: &Row) -> Vec<Option<Label>> {
     let Subterm::Func(func) = &*row.body else {
         unreachable!("a row's body is a function over its binders");
     };
 
     let mut labels = Vec::with_capacity(func.telescope.len());
     let mut cursor = func.telescope.cursor();
-    while let Some((hint, domain)) = cursor.entry() {
-        labels.push((hint.map(str::to_string), cursor.written()));
+    while let Some((_, domain)) = cursor.entry() {
+        labels.push(cursor.label().copied());
         // A row's binder has no type written, so nothing after it reads what stands in its place here.
         cursor.advance(domain);
     }

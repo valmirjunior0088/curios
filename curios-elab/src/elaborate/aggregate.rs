@@ -6,7 +6,7 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Bound, Extent, Field, InductType, Level, Proj, Quality, Sort, StructType, Subterm,
+        Advance, Bound, Extent, Field, InductType, Level, Proj, Quality, Sort, StructType, Subterm,
         Telescope, Term, Tuple, TupleType, Variant, instantiate_universes,
         stamp_declaration_instance,
     },
@@ -35,7 +35,8 @@ pub fn elaborate_tuple_type(
     // The first field at a quality nothing has solved, for the pair it makes with a second ([`UniverseSolver::note_quality_join`]).
     let mut open: Option<Quality> = None;
     context.with_frame(|context| {
-        tt.telescope.walk_producing(|_, hint, ty| {
+        let mut cursor = tt.telescope.cursor();
+        while let Some((_, ty)) = cursor.entry() {
             let (field, field_sort) = check_is_sort(context, &ty)?;
             let field_quality = context.universes().quality(field_sort.quality);
             if !field_quality.is_ground() {
@@ -49,13 +50,13 @@ pub fn elaborate_tuple_type(
             }
             quality = Sort::join(quality, field_sort.quality);
             levels.push(field_sort.level);
-            let name = context.fresh(hint);
-            let x = Term::free_var(&name);
+            // A field the text writes is a written binder, read by the fields after it.
+            let name = cursor.advance_labelled(|label| context.fresh_from(label));
             // The *rebuilt* field type, as in `elaborate_func_type`.
             context.assume(&name, &field);
             fields.push((name, field));
-            Ok::<_, Error>(x)
-        })
+        }
+        Ok::<_, Error>(())
     })?;
 
     // A tuple type's sort: `Prop` when it has a field and every one is a proposition, so a record of proofs checks against `Prop`, and `Type` otherwise, the unit `{}` at zero. Sized from its fields' sorts as typing read each, as a function type is and for its reason.

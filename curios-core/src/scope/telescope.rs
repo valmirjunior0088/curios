@@ -623,12 +623,22 @@ pub trait Advance {
     /// The hint of the binder about to be stepped past, which a fresh binder is named after.
     fn hint(&self) -> Option<&str>;
 
+    /// What the scope remembers of the binder about to be stepped past — its hint, and where its declaration wrote it — or `None` for a scope built without labels.
+    fn label(&self) -> Option<&Label>;
+
     /// Step past the current binder, opening it at `arg`.
     fn advance(&mut self, arg: Term);
 
     /// Step past the current binder at a fresh one `fresh` mints from its hint, and hand that binder back — so a binder is always named after the entry it stands for.
     fn advance_fresh(&mut self, fresh: impl FnOnce(Option<&str>) -> Free) -> Free {
         let binder = fresh(self.hint());
+        self.advance(Term::free_var(&binder));
+        binder
+    }
+
+    /// [`Advance::advance_fresh`] handing `fresh` the binder's label whole, so a binder opened from a written one is minted from its hint and its place together, and never from one without the other.
+    fn advance_labelled(&mut self, fresh: impl FnOnce(Option<&Label>) -> Free) -> Free {
+        let binder = fresh(self.label());
         self.advance(Term::free_var(&binder));
         binder
     }
@@ -640,6 +650,10 @@ impl<B: Bound> Advance for Cursor<'_, B> {
             Telescope::Cons(_, _, rest, ..) => rest.first_hint(),
             Telescope::Done(_) => None,
         }
+    }
+
+    fn label(&self) -> Option<&Label> {
+        Cursor::label(self)
     }
 
     fn advance(&mut self, arg: Term) {
@@ -693,6 +707,10 @@ impl<'a, B: Bound> Lockstep<'a, B> {
 impl<B: Bound> Advance for Lockstep<'_, B> {
     fn hint(&self) -> Option<&str> {
         Advance::hint(&self.left)
+    }
+
+    fn label(&self) -> Option<&Label> {
+        Advance::label(&self.left)
     }
 
     fn advance(&mut self, arg: Term) {

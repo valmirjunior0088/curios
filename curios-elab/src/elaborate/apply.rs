@@ -35,8 +35,7 @@ pub fn elaborate_func_type_sized(
             let (domain, domain_sort) = check_is_sort(context, &ty)?;
             levels.push(domain_sort.level);
             // A definition sugar's parameter is one written binder in its type and in its lambda, so a proof written under it here credits it as one written in the body does.
-            let written = cursor.written();
-            let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
+            let name = cursor.advance_labelled(|label| context.fresh_from(label));
             // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
             if mark == Plicity::Witness {
                 check_witness_domain(context, &domain)?;

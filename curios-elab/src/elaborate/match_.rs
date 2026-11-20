@@ -319,7 +319,7 @@ fn elaborate_nat_match(
         check_as(context, zero_case, mode.at(expected))
     })?;
 
-    let predecessor = context.fresh_for(succ_case.hint(0), succ_case.written(0));
+    let predecessor = context.fresh_from(succ_case.label(0));
     let successor = split.successor(context, &predecessor, |context, expected| {
         let body = succ_case.open(&[&Term::free_var(&predecessor)]);
 
@@ -544,8 +544,8 @@ fn elaborate_sequence_match(
     })?;
 
     let binders = [
-        context.fresh_for(cons_case.hint(0), cons_case.written(0)),
-        context.fresh_for(cons_case.hint(1), cons_case.written(1)),
+        context.fresh_from(cons_case.label(0)),
+        context.fresh_from(cons_case.label(1)),
     ];
     let cons = split.cons(context, &binders, |context, expected| {
         let [atom, tail] = &binders;
@@ -1383,9 +1383,7 @@ fn elaborate_induct_match(
         let labels = fills
             .iter()
             .map(|fill| match fill {
-                Some(member) => {
-                    context.fresh_for(scope.body().hint(*member), scope.body().written(*member))
-                }
+                Some(member) => context.fresh_from(scope.body().label(*member)),
                 None => context.fresh(None),
             })
             .collect::<Vec<_>>();

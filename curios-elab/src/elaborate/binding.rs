@@ -12,8 +12,9 @@ use {
     curios_common::{InfixOp, Plicity, Symbol, recurse},
     curios_core::{
         Advance, ArgumentSite, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey,
-        Infix, Instance, Intrinsic, Let, MetavarId, Names, Nat, NumLit, Numeral, Probe, Proj, Rec,
-        Subterm, Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole, method_labels,
+        Infix, Instance, Intrinsic, Label, Let, MetavarId, Names, Nat, NumLit, Numeral, Probe,
+        Proj, Rec, Subterm, Telescope, Term, Transient, WitnessKey, WitnessOrigin, WitnessRole,
+        method_labels,
     },
     curios_num::{Floating, Integer, Rounding},
     std::collections::BTreeMap,
@@ -53,8 +54,9 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
                     (type_elaborated, body_elaborated)
                 }
             };
-            let label = context.fresh_for(let_.tail().hint(index), let_.tail().written(index));
-            let place = let_.tail().written(index);
+            let written = let_.tail().label(index);
+            let label = context.fresh_from(written);
+            let place = written.and_then(Label::written);
             let binding = context.site_binding(place, region.as_ref());
             context.open_site(place, &type_elaborated, binding);
 
@@ -1288,15 +1290,14 @@ pub fn elaborate_func_check(
             let name = match fill {
                 // A binder was written for this slot. Unify the *rebuilt* written annotation against the expected domain (`expect` reduces both sides; an omitted annotation is a hole `check` births and `expect` solves to the expected domain).
                 Some(_) => {
-                    let (w_hint, w_domain) = written
+                    let (_, w_domain) = written
                         .entry()
                         .expect("the alignment matched a written binder to this slot");
                     let w_domain = check_is_sort(context, &w_domain)?.0;
                     expect(context, term, &w_domain, &e_domain)?;
                     let place = written.written();
-                    let name = context.fresh_for(w_hint, place);
+                    let name = written.advance_labelled(|label| context.fresh_from(label));
                     context.open_site(place, &w_domain, Binding::Slot);
-                    written.advance(Term::free_var(&name));
                     name
                 }
                 // A hidden slot no binder was written for: a real fresh bound variable, checked at the expected domain.
@@ -1372,9 +1373,9 @@ pub fn elaborate_func_infer(
             };
 
             let plicity = plicities[domains.len()];
-            let written = cursor.written();
-            let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
-            context.open_site(written, &domain, Binding::Slot);
+            let place = cursor.written();
+            let name = cursor.advance_labelled(|label| context.fresh_from(label));
+            context.open_site(place, &domain, Binding::Slot);
             if plicity == Plicity::Witness {
                 check_witness_domain(context, &domain)?;
             }

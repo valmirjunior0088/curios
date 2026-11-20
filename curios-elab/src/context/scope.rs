@@ -10,7 +10,7 @@ use {
     curios_analysis::{meets_one_of, reads_one_of, records_case_equation},
     curios_common::Plicity,
     curios_core::{
-        Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
+        Advance, DefinitionKind, Free, Global, HeadTag, Label, Mention, RecGroup, Subterm, Term,
         Universes, project_erased_universes,
     },
     std::rc::Rc,
@@ -21,13 +21,15 @@ impl<'s> Context<'s> {
     ///
     /// The counter starts above every index the declaration's lowering minted ([`Context::seed`]), so a lowered binder and an elaborated one can never be the same identity.
     pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
-        self.fresh_for(hint, None)
+        Free::local(self.typing.fresh_names.fresh(), hint)
     }
 
-    /// [`Context::fresh`] for a local opened from a scope's binder, recording where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
-    pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
-        let local = Free::local(self.typing.fresh_names.fresh(), hint);
-        if let Some(written) = written {
+    /// A local opened from the scope's binder `label` states, named after its hint, recording where the lowering wrote that binder among its declaration's written binders, where it did: so a place reading the local answers the binder, and a proof that reads it credits the binder a lint names ([`Context::credit`]).
+    ///
+    /// **The label is taken whole**, so a binder's place reaches the local with its hint and never apart from it. What every walk elaborating written terms under a scope opens its binders by — a function type's, a lambda's, a `let`'s, a match's arms and rows, a declaration's telescope — where a walk that compares, reduces or types under a scope opens them by [`Context::fresh`], recording nothing a proof could credit.
+    pub(crate) fn fresh_from(&mut self, label: Option<&Label>) -> Free {
+        let local = self.fresh(label.and_then(Label::hint));
+        if let Some(written) = label.and_then(Label::written) {
             self.underway
                 .credits
                 .open(local, self.underway.declaration, written);
@@ -35,11 +37,12 @@ impl<'s> Context<'s> {
         local
     }
 
-    /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as the binder of a `let` the matrix compiler writes ahead of a row's body is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
-    pub(crate) fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
+    /// [`Context::fresh_from`] for a binder a scope is closed over before anything reads it, as the binder of a `let` the matrix compiler writes ahead of a row's body is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits.
+    pub(crate) fn fresh_written(&mut self, label: Option<&Label>) -> Free {
         let index = self.typing.fresh_names.fresh();
+        let hint = label.and_then(Label::hint);
 
-        match written {
+        match label.and_then(Label::written) {
             Some(written) => Free::local_written(index, hint, written),
             None => Free::local(index, hint),
         }

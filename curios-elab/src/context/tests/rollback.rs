@@ -6,7 +6,8 @@ use {
     curios_common::Qualifier,
     curios_core::{
         CalleeId, DefinitionKind, Free, Global, Intrinsic, Level, MetavarId, Minted, Mints, Nat,
-        Term, UniverseConstraintOrigin, UniverseMetaId, UniverseRole, Universes, WitnessOrigin,
+        One, Scope, Term, UniverseConstraintOrigin, UniverseMetaId, UniverseRole, Universes,
+        WitnessOrigin,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -292,7 +293,10 @@ fn a_proof_credits_the_written_binder_a_local_was_opened_from_and_a_rollback_wit
     let mut context = context();
     let declaration = Global::Authored(Qualifier::from(["f"]));
     context.enter_item(Some(declaration));
-    let opened = context.fresh_for(Some("p"), Some(2));
+    // A scope over a binder the lowering wrote second among the declaration's, whose label carries that place.
+    let written = Free::local_written(0, Some("p"), 2);
+    let scope = Scope::close(One, &[&written], Term::free_var(&written));
+    let opened = context.fresh_from(scope.label(0));
     let unrelated = context.fresh(Some("q"));
 
     let mark = context.solution_mark();
