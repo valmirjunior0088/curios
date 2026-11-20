@@ -587,3 +587,25 @@ fn a_path_through_a_module_links_to_where_its_mod_line_names_it() {
         "{links:?}"
     );
 }
+
+/// A concept's and a type's witnesses are where they are written, read off the name at either, and a method's name, which is neither, answers none. Mutation-checked: answering where the declaration itself is written, as definition does, the concept's name answers the concept.
+#[test]
+fn a_concept_and_a_type_answer_the_witnesses_they_take_part_in() {
+    let program = "use /std/{Str};\n\npub concept Named(A: Type): pub Type {\n    name(A) -> Str,\n}\n\npub struct Point: Type {\n    x: Str,\n}\n\nsatisfy Named(Point) {\n    name = (p) => p.x,\n}\n\n/std/print(Named/name(Point { x = \"here\" }))\n";
+    let checked = checked(program);
+    let head = program
+        .find("Named(Point)")
+        .expect("the program writes the witness's head");
+    let at = |written: &str| {
+        witnessed_at(
+            program,
+            &checked,
+            program.rfind(written).expect("the program writes it"),
+        )
+        .map(|places| places.iter().map(|place| place.start).collect::<Vec<_>>())
+    };
+
+    assert_eq!(at("Named/"), Some(vec![head]));
+    assert_eq!(at("Point {"), Some(vec![head]));
+    assert_eq!(at("name("), None);
+}

@@ -39,17 +39,19 @@ use {
         DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse, FileSystemWatcher,
         FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability, GlobPattern,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, Location, MarkupContent, MarkupKind, OneOf,
-        Position, PublishDiagnosticsParams, Range, Registration, RegistrationParams,
-        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, ServerCapabilities,
-        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        HoverProviderCapability, ImplementationProviderCapability, InitializeParams, Location,
+        MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
+        RegistrationParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
+        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
+        Uri,
         notification::{
             DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
         },
         request::{
             DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
-            GotoDefinition, HoverRequest, RegisterCapability, Request, SelectionRangeRequest,
+            GotoDefinition, GotoImplementation, GotoImplementationParams, HoverRequest,
+            RegisterCapability, Request, SelectionRangeRequest,
         },
     },
     std::{
@@ -86,6 +88,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
         document_symbol_provider: Some(OneOf::Left(true)),
         selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
         folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+        implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
         document_link_provider: Some(DocumentLinkOptions {
             resolve_provider: Some(false),
             work_done_progress_options: Default::default(),
@@ -288,6 +291,13 @@ impl Server {
                         serde_json::from_value::<FoldingRangeParams>(params)
                             .map(|params| valued(serde_json::to_value(self.folds(&params)))),
                     ),
+                    GotoImplementation::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<GotoImplementationParams>(params).map(|params| {
+                            valued(serde_json::to_value(self.implementations(&params)))
+                        }),
+                    ),
                     DocumentLinkRequest::METHOD => respond(
                         connection,
                         id,
@@ -443,6 +453,20 @@ impl Server {
         };
 
         self.located(place).map(GotoDefinitionResponse::Scalar)
+    }
+
+    /// Where each witness of the concept or the type named at a position of a document is written ([`witnessed_at`]). Nothing where no name stands there, for a declaration that is neither, and where the declaration it stands in was edited since the document's last check.
+    fn implementations(&self, params: &GotoImplementationParams) -> Option<GotoDefinitionResponse> {
+        let asked = &params.text_document_position_params;
+        let (buffer, checked) = self.held(&asked.text_document.uri)?;
+        let places = witnessed_at(buffer, &checked, offset_of(buffer, asked.position))?;
+
+        Some(GotoDefinitionResponse::Array(
+            places
+                .iter()
+                .filter_map(|place| self.located(place))
+                .collect(),
+        ))
     }
 
     /// What stands at a position of a document, as `wonder --at` answers it ([`markup`]), over the range it covers in the buffer. Nothing where nothing stands there, and where the declaration it stands in was edited since the document's last check.
@@ -742,6 +766,22 @@ fn linked<'a>(buffer: &str, checked: &'a Placed) -> Vec<(Range, &'a Span)> {
             Some((range, declared))
         })
         .collect()
+}
+
+/// Where each witness of the concept or the type named at `offset` of `buffer` is written, its head, by what the buffer's last check left ([`Described::witnesses`]): nothing where no name stands there, and nothing for a declaration that is neither a concept nor a type.
+fn witnessed_at(buffer: &str, checked: &Placed, offset: usize) -> Option<Vec<Span>> {
+    let (answer, _) = answered_at(buffer, checked, offset)?;
+    let Stands::Declaration { described, .. } = answer.stands else {
+        return None;
+    };
+
+    Some(
+        described
+            .witnesses?
+            .into_iter()
+            .filter_map(|witness| witness.place)
+            .collect(),
+    )
 }
 
 /// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, a local by its name and a term by its text; then each fact a block states of it a line ([`Answer::facts`]); then the prose above a declaration.
