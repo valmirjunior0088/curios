@@ -16,7 +16,7 @@ use {
 
 /// Collapse every nest whose calls all apply it in turn, to the depth every call applies, answering whether one was.
 ///
-/// Nests are independent: a level is bound inside the one before it, a call's resumes are entered by calls of its function alone, and a collapse moves bodies without rewriting them, so one snapshot admits them all.
+/// Nests are independent: a level is bound inside the one before it, a call's resumes are entered by calls of its function alone, and a collapse rewrites only its own levels' nodes and its calls' applications, each read as it then stands, so one snapshot admits them all.
 pub fn uncurry_nests(module: &mut Module) -> bool {
     let facts = Facts::of(module);
     let entries = module.continuation_entries();
@@ -80,7 +80,6 @@ struct Application {
     node: NodeId,
     args: Vec<Atom>,
     result: ValueId,
-    after: ContinuationId,
 }
 
 fn plan(
@@ -215,7 +214,6 @@ fn applications(
             node,
             args: args.clone(),
             result: *result,
-            after: *after,
         });
         at = *after;
     }
@@ -294,12 +292,16 @@ fn collapse(module: &mut Module, nest: Nest) {
             args.extend(passed);
         }
     }
-    // What the call now returns is the answer every application made, so each resume hands it on to the next.
+    // What the call now returns is the answer every application made, so each resume hands it on to the next: the one the application returns to as it now stands, which the collapse of the nest whose innermost tail it stands in has retargeted, this one's or one collapsed before it.
     for application in applications.into_values().flatten() {
+        let Some(Node::ApplyFun { return_to, .. }) = module.node(application.node) else {
+            unreachable!("an application stays a call until its nest collapses");
+        };
+        let after = *return_to;
         module.set_node(
             application.node,
             Node::ApplyCont(Edge {
-                target: application.after,
+                target: after,
                 args: vec![Atom::Value(application.result)],
             }),
         );

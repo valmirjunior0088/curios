@@ -226,3 +226,111 @@ fn a_nest_named_as_a_value_stays_as_written() {
     assert!(!uncurry_nests(&mut module));
     assert_eq!(module.function(g).unwrap().params.len(), 1);
 }
+
+/// Define `outer` as a nest one level deep whose innermost level applies a call in its tail, the application returning where that level returns: `outer(y0) = (y1) => callee(y1)(y1)`.
+fn tail_applying(module: &mut Module, outer: FunctionId, callee: FunctionId) {
+    let outer_return = module.reserve_continuation();
+    let y0 = module.add_value(None);
+    let inner = module.reserve_function();
+    let inner_return = module.reserve_continuation();
+    let y1 = module.add_value(None);
+    let returned = module.add_value(None);
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(returned),
+        args: vec![Atom::Value(y1)],
+        return_to: inner_return,
+    });
+    let resume = continuation(module, vec![returned], apply);
+    let called = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(y1)],
+        return_to: resume,
+    });
+    let inner_body = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: called,
+    });
+    module.define_function(
+        inner,
+        Function {
+            lineage: None,
+            debug_name: None,
+            params: vec![y1],
+            return_cont: inner_return,
+            body: inner_body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    let handed = jump(module, outer_return, vec![Atom::Fun(inner)]);
+    let outer_body = module.add_node(Node::LetFun {
+        functions: vec![inner],
+        body: handed,
+    });
+    module.define_function(
+        outer,
+        Function {
+            lineage: None,
+            debug_name: None,
+            params: vec![y0],
+            return_cont: outer_return,
+            body: outer_body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+}
+
+/// `main(a) = f(a)(a)`, `f` a nest one deep whose innermost level applies in its tail a call of itself where `itself`, and otherwise a call of `g`, a nest one deep bound before it whose collapse comes after `f`'s.
+fn calling_in_the_innermost_tail(itself: bool) -> Module {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let a = module.add_value(Some("a".into()));
+    // `f` is reserved before `g`, so it is collapsed first.
+    let f = module.reserve_function();
+    let g = (!itself).then(|| nest(&mut module, 1));
+    tail_applying(&mut module, f, g.unwrap_or(f));
+    let body = applied_in_turn(&mut module, f, &Atom::Value(a), 1, |module, result| {
+        jump(module, main_return, vec![Atom::Value(result)])
+    });
+    let mut body = module.add_node(Node::LetFun {
+        functions: vec![f],
+        body,
+    });
+    if let Some(g) = g {
+        body = module.add_node(Node::LetFun {
+            functions: vec![g],
+            body,
+        });
+    }
+    module.define_function(
+        main,
+        Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![a],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// An application standing in a collapsed nest's innermost tail resumes where that nest's function now returns, the nest its own or another collapsed before it: the module verifies.
+///
+/// Mutation-checked: with each application jumping to the resume the plan read, both modules leave a jump to a removed continuation.
+#[test]
+fn an_application_in_a_collapsed_innermost_tail_resumes_where_the_function_returns() {
+    for itself in [false, true] {
+        let mut module = calling_in_the_innermost_tail(itself);
+        assert!(uncurry_nests(&mut module));
+        module
+            .verify()
+            .unwrap_or_else(|error| panic!("itself = {itself}: {error:?}\n{module}"));
+    }
+}

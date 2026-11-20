@@ -124,6 +124,17 @@ fn a_closure_one_arm_returns_through_a_call_is_not_absorbed() {
     );
 }
 
+/// A recursive performance whose answer is dropped compiles: the recursion's own call stands in the innermost tail of the nest its `Io` makes, so the application it resumes into is rewritten after that nest's collapse removed the level it returned to, and it jumps where the collapsed function returns.
+#[test]
+fn a_recursive_performance_whose_answer_is_dropped_compiles() {
+    wat(r#"
+        use /std/{Io, Nat};
+        let spin(n: Nat) -> Io({}) = let m = Io/pure(n + 1)!; spin(m);
+        let entry() -> Io({}) = let _ = spin(0)!; /std/print("done");
+        entry()
+        "#);
+}
+
 /// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
 ///
 /// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
