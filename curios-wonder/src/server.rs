@@ -23,13 +23,15 @@
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Answer, Asked, Diagnosed, Diagnosis, Placed, Severity, Silent, Stands},
+    crate::{
+        Answer, Asked, Diagnosed, Diagnosis, Ended, Placed, Severity, Silent, Stands, Telling,
+    },
     curios_common::{Source, Span, Style, is_identifier_char},
     curios_core::Declared,
     curios_module::Overlay,
-    curios_package::{EXTENSION, FormatSettings, MANIFEST, Selection, Spelling},
+    curios_package::{EXTENSION, FormatSettings, MANIFEST, Named, Selection, Spelling},
     curios_surface::{Formatted, WrittenIn},
-    curios_verdict::Session,
+    curios_verdict::{Session, Verdicts},
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
@@ -40,10 +42,12 @@ use {
         FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability, GlobPattern,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
         HoverProviderCapability, ImplementationProviderCapability, InitializeParams, Location,
-        MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
-        RegistrationParams, SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability,
-        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
-        Uri,
+        MarkupContent, MarkupKind, NumberOrString, OneOf, Position, ProgressParams,
+        ProgressParamsValue, PublishDiagnosticsParams, Range, Registration, RegistrationParams,
+        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, ServerCapabilities,
+        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
+        WorkDoneProgressReport,
         notification::{
             DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
@@ -51,7 +55,7 @@ use {
         request::{
             DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
             GotoDefinition, GotoImplementation, GotoImplementationParams, HoverRequest,
-            RegisterCapability, Request, SelectionRangeRequest,
+            RegisterCapability, Request, SelectionRangeRequest, WorkDoneProgressCreate,
         },
     },
     std::{
@@ -101,6 +105,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
     let params: InitializeParams =
         serde_json::from_value(initialization).map_err(|error| error.to_string())?;
     // Asked once the session is initialized and before any notification is read, so no change on disk falls between the two.
+    let progress = reports_progress(&params);
     if watches_on_request(&params) {
         register_watchers(&connection)?;
     }
@@ -115,6 +120,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
             cabinet: cabinet.map(Path::to_path_buf),
             published: BTreeMap::new(),
             spent: None,
+            progress: progress.then_some(0),
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
             sender: {
                 let sender = connection.sender.clone();
@@ -166,6 +172,91 @@ fn shutting_down(connection: &Connection, message: &Message) -> Result<bool, Str
             .handle_shutdown(request)
             .map_err(|error| error.to_string()),
         _ => Ok(false),
+    }
+}
+
+/// Whether the client takes progress the server begins, which is what a check's narration is sent as.
+fn reports_progress(params: &InitializeParams) -> bool {
+    params
+        .capabilities
+        .window
+        .as_ref()
+        .and_then(|window| window.work_done_progress)
+        .unwrap_or(false)
+}
+
+/// A document's check told the editor as it goes, as `wonder` narrates a question's: a progress begun as each subject is taken on, under a token the client is asked to create, a report for each unit the fold compiles, named by the prefix it claims, and an end once its compile is over. What the client answers to the creation is a response the loop drops, and a progress is told under the token at once, as servers commonly do.
+struct Reporting<'a> {
+    sender: &'a (dyn Fn(Message) -> Result<(), String> + Send),
+    /// How many progresses the session has told, the last one's token among them.
+    told: &'a mut u64,
+}
+
+impl Reporting<'_> {
+    fn token(&self) -> NumberOrString {
+        NumberOrString::String(format!("curios/check/{}", self.told))
+    }
+
+    fn tell(&self, value: WorkDoneProgress) {
+        // A client gone is the protocol thread's to notice: a progress lost on the way out says nothing a reader still waits for.
+        let _ = (self.sender)(Message::Notification(lsp_server::Notification::new(
+            lsp_types::notification::Progress::METHOD.to_string(),
+            ProgressParams {
+                token: self.token(),
+                value: ProgressParamsValue::WorkDone(value),
+            },
+        )));
+    }
+}
+
+impl Telling for Reporting<'_> {
+    fn asked(&mut self, named: &Named, _: Option<&Path>) {
+        *self.told += 1;
+        let _ = (self.sender)(Message::Request(lsp_server::Request::new(
+            RequestId::from(format!("curios/check/{}", self.told)),
+            WorkDoneProgressCreate::METHOD.to_string(),
+            WorkDoneProgressCreateParams {
+                token: self.token(),
+            },
+        )));
+        let subject = match named {
+            Named::Library(name) | Named::Executable(name) => name.clone(),
+            Named::File(path) => path.display().to_string(),
+            Named::Stdin => "<stdin>".to_string(),
+        };
+        self.tell(WorkDoneProgress::Begin(WorkDoneProgressBegin {
+            title: "Checking".to_string(),
+            message: Some(subject),
+            cancellable: Some(false),
+            percentage: None,
+        }));
+    }
+
+    fn step(&mut self, progress: curios_pipeline::Progress<'_>, _: Option<&Verdicts>) {
+        let (curios_pipeline::Progress::Compiling(prefix)
+        | curios_pipeline::Progress::Recompiling(prefix)) = progress
+        else {
+            return;
+        };
+        self.tell(WorkDoneProgress::Report(WorkDoneProgressReport {
+            message: Some(format!("compiling {}", prefix.join())),
+            cancellable: Some(false),
+            percentage: None,
+        }));
+    }
+
+    fn ended(&mut self, _: Ended) {
+        self.tell(WorkDoneProgress::End(WorkDoneProgressEnd { message: None }));
+    }
+
+    fn answering(&mut self) {}
+
+    fn reader(&self) -> Style {
+        Style::plain()
+    }
+
+    fn bystander(&self) -> Style {
+        Style::plain()
     }
 }
 
@@ -913,6 +1004,8 @@ struct Analyst {
     /// How long the last batch of checks took — what the settle before the next burst is a fraction of. `None` until one has run.
     spent: Option<Duration>,
     sender: Box<dyn Fn(Message) -> Result<(), String> + Send>,
+    /// How many progresses this session has told, where the client takes them: what each next token is numbered by. `None` where the client advertises no work-done progress, which then hears none.
+    progress: Option<u64>,
 }
 
 impl Analyst {
@@ -984,7 +1077,18 @@ impl Analyst {
                         ..
                     } = match raised {
                         Raised::Warming => asked.diagnosed(budget, overlay, &mut Silent),
-                        Raised::Document => asked.checked(budget, overlay, document, &mut Silent),
+                        Raised::Document => match &mut self.progress {
+                            Some(told) => asked.checked(
+                                budget,
+                                overlay,
+                                document,
+                                &mut Reporting {
+                                    sender: &*self.sender,
+                                    told,
+                                },
+                            ),
+                            None => asked.checked(budget, overlay, document, &mut Silent),
+                        },
                     };
                     written.get_or_insert(texts);
 

@@ -609,3 +609,71 @@ fn a_concept_and_a_type_answer_the_witnesses_they_take_part_in() {
     assert_eq!(at("Point {"), Some(vec![head]));
     assert_eq!(at("name("), None);
 }
+
+/// A check is told the editor as it goes where the client takes progress: a progress begun under a token the client is asked to create, a report for each unit the fold compiles and none for one it reuses or for the program, and an end; a client that advertises none is told none. Mutation-checked: with a report at a reused unit too, the reused prefix is reported.
+#[test]
+fn a_check_is_told_as_a_progress_reporting_each_unit_compiled() {
+    let sent = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sender: Box<dyn Fn(Message) -> Result<(), String> + Send> = {
+        let sent = Arc::clone(&sent);
+        Box::new(move |message| {
+            sent.lock()
+                .expect("the test holds the lock alone")
+                .push(message);
+            Ok(())
+        })
+    };
+    let mut told = 0;
+    let compiled = curios_common::Qualifier::from(["app"]);
+    let reused = curios_common::Qualifier::from(["std"]);
+    let mut reporting = Reporting {
+        sender: &*sender,
+        told: &mut told,
+    };
+    reporting.asked(&curios_package::Named::Stdin, None);
+    reporting.step(curios_pipeline::Progress::Reused(&reused), None);
+    reporting.step(curios_pipeline::Progress::Compiling(&compiled), None);
+    reporting.step(curios_pipeline::Progress::Entry { held: false }, None);
+    reporting.ended(Ended::Done);
+
+    let heard = sent
+        .lock()
+        .expect("the test holds the lock alone")
+        .iter()
+        .map(|message| match message {
+            Message::Request(request) => request.method.clone(),
+            Message::Notification(notification) => {
+                match serde_json::from_value::<ProgressParams>(notification.params.clone())
+                    .expect("a progress")
+                    .value
+                {
+                    ProgressParamsValue::WorkDone(WorkDoneProgress::Begin(begun)) => {
+                        format!("begin {}", begun.message.unwrap_or_default())
+                    }
+                    ProgressParamsValue::WorkDone(WorkDoneProgress::Report(report)) => {
+                        format!("report {}", report.message.unwrap_or_default())
+                    }
+                    ProgressParamsValue::WorkDone(WorkDoneProgress::End(_)) => "end".to_string(),
+                }
+            }
+            Message::Response(_) => "response".to_string(),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        heard,
+        [
+            "window/workDoneProgress/create".to_string(),
+            "begin <stdin>".to_string(),
+            format!("report compiling {}", compiled.join()),
+            "end".to_string(),
+        ]
+    );
+
+    let mut params = lsp_types::InitializeParams::default();
+    assert!(!reports_progress(&params));
+    params.capabilities.window = Some(lsp_types::WindowClientCapabilities {
+        work_done_progress: Some(true),
+        ..Default::default()
+    });
+    assert!(reports_progress(&params));
+}
