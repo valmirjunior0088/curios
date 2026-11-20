@@ -2,6 +2,7 @@
 
 use {
     curios_archive::{Bytes, parted},
+    curios_common::Qualifier,
     curios_document::Documentation,
     curios_unit::{
         ArchivedRecord, ArchivedUnit, Pack, Record, Unit, apart_parts, halves, segments,
@@ -126,6 +127,11 @@ pub fn documentation() -> Vec<Documentation> {
     curios_profile::profile!("restore_documentation");
     curios_archive::from_bytes::<Vec<Documentation>>(DOCUMENTATION_BYTES)
         .unwrap_or_else(|error| panic!("the prelude's documentation failed to restore: {error}"))
+}
+
+/// The prefix each of the prelude's roots claims, in the fold's order — `/sys`, then `/std` — read off the roots' names, so a caller asking which root a unit takes the place of restores none of them. A root claims the one prefix its name spells, which the crate's tests hold to the mounts of the unit restored for it.
+pub fn root_prefixes() -> [Qualifier; 2] {
+    ROOTS.map(|(root, _, _)| Qualifier::from([root]))
 }
 
 /// Borrow this thread's restored prelude, certified, as the ordered predecessors every compilation starts from — `/sys` then `/std`, each unit carrying the certifier's record of its definitions.

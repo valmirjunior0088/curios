@@ -8,9 +8,9 @@ use {
     curios_abi::ForeignStore,
     curios_common::{OsError, Report, STDIN_NAME, Source, Style},
     curios_document::Documentation,
-    curios_module::{PackageRoot, RootSource, UnitSource},
+    curios_module::{PackageRoot, RootSource},
     curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
-    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage},
+    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, fold_sources},
     curios_surface::Entrypoint,
     curios_verdict::Verdicts,
     curios_wasm::Module,
@@ -84,8 +84,8 @@ pub fn payload_of(
             )
         });
 
-    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about which units the compilation holds: the probe refuses a unit the cabinet may not file, and the write must refuse the same one.
-    let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
+    // The sources the fold compiles, handed to both halves of the payload family, which is what keeps the three agreeing about which units the compilation holds and where each is filed: the probe refuses a unit the cabinet may not file, and the write must refuse the same one.
+    let sources = fold_sources(&units);
 
     if let Some((cache, program)) = &filed
         && let Some((payload, foreigns)) = cache.payload_get(program, &sources, runs)

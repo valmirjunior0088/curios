@@ -89,6 +89,28 @@ fn every_authored_source_is_lint_clean() {
 /// **The standard library declares every row a host answers, as the host answers it.**
 ///
 /// A host's rows are `foreign` declarations of `/std`, linked by name. One declared in another module than `curios-abi` states, or at another signature, is a program that does not link, found only by the program that reaches the row; this finds it for every row.
+/// Each root claims the one prefix its name spells, so `root_prefixes`, read off the names alone, says what the restored units mount: what lets a fold's sources be stated without restoring the prelude.
+#[test]
+fn each_root_claims_the_prefix_its_name_spells() {
+    with_prelude(|units| {
+        let mounted = units
+            .iter()
+            .map(|unit| {
+                unit.mounts()
+                    .iter()
+                    .map(|mount| mount.prefix)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let named = root_prefixes()
+            .into_iter()
+            .map(|prefix| vec![prefix])
+            .collect::<Vec<_>>();
+
+        assert_eq!(mounted, named);
+    });
+}
+
 #[test]
 fn the_library_declares_every_row_a_host_answers() {
     with_prelude(|units| {

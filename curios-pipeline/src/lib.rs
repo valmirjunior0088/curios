@@ -34,7 +34,7 @@ pub use put::{Answer, Checker, Put, Refusal, put_core_text, put_program, standin
 
 mod standard;
 pub use standard::{
-    Fold, compile_with_prelude, granted_in_place, prelude_documentation, stood_in_for,
+    Fold, compile_with_prelude, fold_sources, granted_in_place, prelude_documentation, stood_in_for,
 };
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_pipeline::test_support::recheck_with_prelude` says at its use site that the caller reached for scaffolding rather than product API.

@@ -15,7 +15,7 @@ use {
     curios_common::{Qualifier, Source},
     curios_document::Documentation,
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource, document_unit},
-    curios_prelude::with_prelude,
+    curios_prelude::{root_prefixes, with_prelude},
     curios_unit::{Predecessors, Unit},
     std::sync::Arc,
 };
@@ -507,7 +507,8 @@ impl<'a> Fold<'a> {
 
         with_prelude(|prelude| {
             // The prelude's roots are in scope unconditionally, with one exception: a package named `std` is the standard library, by the meaning of the name. It takes the archived root's place — the root is withheld, the package is compiled over the archived unit as its baseline and sees what the root could see — and every unit after it is compiled against it, addressed in the cabinet after it. Any other unit claiming a prefix a root mounts collides with it and is refused, exactly as two source units claiming one prefix are. What this is not is a way to swap standard libraries under a dependency: a dependency means what it means against the `/std` it was compiled after, which is why the name is reserved rather than the scope made a parameter.
-            let withheld = stood_in_for(prelude, units);
+            let withheld =
+                stood_in_for(&root_prefixes(), units).map(|index| (index, prelude[index]));
             let roots = prelude
                 .iter()
                 .enumerate()
@@ -517,21 +518,10 @@ impl<'a> Fold<'a> {
 
             // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines — read for that unit's packages, so the texts a lowering over it keeps lie in the package's own files.
             let offered = withheld.map(|(_, root)| root.clone().read_for(units[0].packages()));
-            // Every unit of a fold whose first unit stands in for a root is compiled over the stand-in, which a cabinet keeps apart from the archived root.
-            let mounted = |unit| match withheld {
-                Some((_, root)) => UnitSource::mounted(unit).over_stand_in(prefixes_of(root)),
-                None => UnitSource::mounted(unit),
-            };
-            let sources = units
-                .iter()
+            let sources = fold_sources(units)
+                .into_iter()
                 .enumerate()
-                .map(|(index, unit)| match withheld {
-                    Some((index_of_root, _)) if index == 0 => (
-                        mounted(unit).seeing(granted_in_place(prelude, index_of_root, unit)),
-                        offered.as_ref(),
-                    ),
-                    _ => (mounted(unit), None),
-                })
+                .map(|(index, source)| (source, offered.as_ref().filter(|_| index == 0)))
                 .collect::<Vec<_>>();
             let produced = compile_units(
                 budget,
@@ -546,11 +536,6 @@ impl<'a> Fold<'a> {
             then(&roots, &sources, produced, &mut progress)
         })
     }
-}
-
-/// The prefixes `root` claims: what a unit standing in for it claims in its place.
-fn prefixes_of(root: &Unit) -> Vec<Qualifier> {
-    root.mounts().iter().map(|mount| mount.prefix).collect()
 }
 
 /// The prefixes of the archived root the first of a fold's `sources` stands in for, where it does: what every unit of the fold, its entry among them, is compiled over.
@@ -571,28 +556,48 @@ fn entry_source<'a>(
     }
 }
 
-/// The last archived root, when the first of `units` claims a prefix it mounts: the root that unit takes the place of.
+/// The source each of `units` is compiled from in a fold: over the archived root the first takes the place of, where it takes one ([`stood_in_for`]), every unit of the fold, and that first unit seeing what the root could see ([`granted_in_place`]).
 ///
-/// The first unit alone, because its predecessors are then exactly the roots before the withheld one — the ones the archived unit was compiled against — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
-pub fn stood_in_for<'a>(prelude: &[&'a Unit], units: &[RootSource]) -> Option<(usize, &'a Unit)> {
-    let claims = units.first()?.mounts();
-    let (index, root) = prelude.iter().copied().enumerate().next_back()?;
+/// **Stated once, so a unit has one address.** A unit's slot is a function of its source, so the fold compiling and filing a unit, a payload's probe naming the units it was made from and the payload's filing all read their sources here, and each names a unit by the slot the others do. It reads the roots' prefixes alone and restores none of the prelude, so a probe that hits pays nothing for it.
+pub fn fold_sources(units: &[RootSource]) -> Vec<UnitSource<'_>> {
+    let roots = root_prefixes();
+    let withheld = stood_in_for(&roots, units);
 
-    root.mounts()
+    units
         .iter()
-        .any(|mount| claims.iter().any(|claim| claim.prefix == mount.prefix))
-        .then_some((index, root))
+        .enumerate()
+        .map(|(index, unit)| {
+            let source = UnitSource::mounted(unit);
+            match withheld {
+                Some(root) if index == 0 => source
+                    .over_stand_in(vec![roots[root]])
+                    .seeing(granted_in_place(&roots, root, unit)),
+                Some(root) => source.over_stand_in(vec![roots[root]]),
+                None => source,
+            }
+        })
+        .collect()
 }
 
-/// What the unit standing in for the archived root at `withheld` may name: every root before it, which the archived unit could see, beside whatever the unit declared itself.
+/// Which of the archived roots, claiming `roots` in the fold's order, the first of `units` takes the place of: the last, where the first unit claims its prefix.
+///
+/// The first unit alone, because its predecessors are then exactly the roots before the withheld one — the ones the archived unit was compiled against — and a later unit's would not be; a package named `std` placed later in a fold collides as any other claim does. And the last root alone, because the roots after a withheld one would have been compiled against it: a claim on an earlier root — a package named `sys`, which nothing could name anyway — is left to collide with it as any claim does.
+pub fn stood_in_for(roots: &[Qualifier], units: &[RootSource]) -> Option<usize> {
+    let claims = units.first()?.mounts();
+    let (index, root) = roots.iter().enumerate().next_back()?;
+
+    claims
+        .iter()
+        .any(|claim| claim.prefix == *root)
+        .then_some(index)
+}
+
+/// What the unit standing in for the archived root at `withheld`, of the roots claiming `roots`, may name: every root before it, which the archived unit could see, beside whatever the unit declared itself.
 ///
 /// The roots before it are granted whether or not the unit declared them, because the one that matters is closed: `/sys` is in no unit's default set and the standard library reaches it by declaring it, and a package's manifest cannot declare it.
-pub fn granted_in_place(prelude: &[&Unit], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
+pub fn granted_in_place(roots: &[Qualifier], withheld: usize, unit: &RootSource) -> Vec<Qualifier> {
     let source = UnitSource::mounted(unit);
-    let mut prefixes = prelude[..withheld]
-        .iter()
-        .flat_map(|root| root.mounts().iter().map(|mount| mount.prefix))
-        .collect::<Vec<_>>();
+    let mut prefixes = roots[..withheld].to_vec();
     prefixes.extend(source.declared().unwrap_or(&[]).iter().cloned());
 
     prefixes

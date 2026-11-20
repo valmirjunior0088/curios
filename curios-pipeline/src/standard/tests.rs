@@ -16,7 +16,7 @@ use {
     curios_module::{
         Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_prelude::{test_support::*, with_prelude},
+    curios_prelude::{root_prefixes, test_support::*, with_prelude},
     curios_surface::{
         Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod,
         build_rename, display_names,
@@ -1069,30 +1069,25 @@ fn supplied(prefix: &str) -> RootSource {
 /// The name is the claim: a package named `std` takes the archived root's place wherever it is read from, and however it arrived.
 #[test]
 fn a_package_named_std_takes_the_archived_roots_place() {
-    with_prelude(|prelude| {
-        for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
-            let (index, root) = stood_in_for(prelude, &[claim]).expect("a package named std");
+    let roots = root_prefixes();
+    for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
+        let index = stood_in_for(&roots, &[claim]).expect("a package named std");
 
-            assert_eq!(index + 1, prelude.len(), "the last root, /std");
-            assert_eq!(root.mounts()[0].prefix, Qualifier::from(["std"]));
-        }
-    });
+        assert_eq!(index + 1, roots.len(), "the last root, /std");
+        assert_eq!(roots[index], Qualifier::from(["std"]));
+    }
 }
 
 #[test]
 fn a_package_named_otherwise_takes_no_roots_place() {
-    with_prelude(|prelude| {
-        assert!(stood_in_for(prelude, &[supplied("other")]).is_none());
-        assert!(stood_in_for(prelude, &[]).is_none());
-    });
+    assert!(stood_in_for(&root_prefixes(), &[supplied("other")]).is_none());
+    assert!(stood_in_for(&root_prefixes(), &[]).is_none());
 }
 
 /// Only the last root can be taken, since the roots after a withheld one were compiled against it: a claim on the compiler's own root, which nothing could name anyway, collides with it as any claim does.
 #[test]
 fn a_package_named_sys_collides_with_the_compilers_own_root() {
-    with_prelude(|prelude| {
-        assert!(stood_in_for(prelude, &[supplied("sys")]).is_none());
-    });
+    assert!(stood_in_for(&root_prefixes(), &[supplied("sys")]).is_none());
 
     let error = compile_with_units(&[("sys", "pub let a : /std/Nat = 1;")], "0")
         .expect_err("the compiler's own root is in scope");
@@ -1103,9 +1098,7 @@ fn a_package_named_sys_collides_with_the_compilers_own_root() {
 /// A unit after the first has predecessors the archived unit was never compiled against, so it is not the one that takes the root's place — and it collides, as any later claim does.
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
-    with_prelude(|prelude| {
-        assert!(stood_in_for(prelude, &[supplied("other"), std_from_its_tree()]).is_none());
-    });
+    assert!(stood_in_for(&root_prefixes(), &[supplied("other"), std_from_its_tree()]).is_none());
 
     let error = compile_with_units(
         &[
@@ -1121,11 +1114,29 @@ fn only_the_first_unit_can_take_a_roots_place() {
 
 #[test]
 fn a_withheld_root_is_granted_the_roots_before_it() {
-    with_prelude(|prelude| {
-        let prefixes = granted_in_place(prelude, prelude.len() - 1, &std_from_its_tree());
+    let roots = root_prefixes();
+    let prefixes = granted_in_place(&roots, roots.len() - 1, &std_from_its_tree());
 
-        assert!(prefixes.contains(&Qualifier::from(["sys"])));
-    });
+    assert!(prefixes.contains(&Qualifier::from(["sys"])));
+}
+
+/// Every unit of a fold whose first unit takes a root's place is compiled over the stand-in, and the first sees what the root could see: the sources a payload's probe and its filing name the units by are the ones the fold compiles, so a package named `std` is found where it was filed.
+#[test]
+fn a_folds_sources_carry_the_stand_in_its_first_unit_takes() {
+    let units = [std_from_its_tree(), supplied("other")];
+    let sources = fold_sources(&units);
+    let std = [Qualifier::from(["std"])];
+
+    assert_eq!(sources[0].stand_in(), Some(&std[..]));
+    assert_eq!(sources[1].stand_in(), Some(&std[..]));
+    assert!(
+        sources[0]
+            .declared()
+            .is_some_and(|declared| declared.contains(&Qualifier::from(["sys"])))
+    );
+
+    let units = [supplied("other")];
+    assert_eq!(fold_sources(&units)[0].stand_in(), None);
 }
 
 /// The archived unit is offered to the unit taking its root's place and to no other, and the offer reaches the cache, which decides what becomes of it.

@@ -12,12 +12,10 @@ use {
     curios_abi::{ForeignStore, HostOps, TEST_ANSWER},
     curios_browser::page,
     curios_common::{Qualifier, Report, STDIN_NAME, Source, SourceName},
-    curios_module::{
-        Overlay, PackageRoot, RootSource, UnitSource, open_entrypoint, supply_entrypoint,
-    },
+    curios_module::{Overlay, PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
-    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
+    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, fold_sources},
     curios_surface::{Entrypoint, Form, WrittenIn},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_MOUNT, not_a_program},
@@ -267,11 +265,7 @@ impl TestSubject {
         observe: impl FnMut(Stage<'_>),
         progress: impl FnMut(Progress<'_>),
     ) -> Result<Tested, CompileError> {
-        let sources = self
-            .units
-            .iter()
-            .map(UnitSource::mounted)
-            .collect::<Vec<_>>();
+        let sources = fold_sources(&self.units);
         let program = self.filing.as_ref().map(|filing| Program {
             package: &filing.package,
             executable: &filing.reserved,

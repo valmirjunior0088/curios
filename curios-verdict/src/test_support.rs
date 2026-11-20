@@ -9,19 +9,19 @@ mod tests;
 
 use {
     crate::Verdicts,
-    curios_common::{Qualifier, Source, test_support::Temporary},
+    curios_common::{Source, test_support::Temporary},
     curios_core::{Intrinsic, Term},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_package::Cabinet,
     curios_pipeline::{
-        Cache, CompileError, Listeners, Unmade, Unread, compile_read, compile_units,
-        granted_in_place, read_core_text, stood_in_for,
+        Cache, CompileError, Listeners, Unmade, Unread, compile_read, compile_units, fold_sources,
+        read_core_text, stood_in_for,
     },
-    curios_prelude::with_prelude,
+    curios_prelude::{root_prefixes, with_prelude},
     curios_surface::{FormScope, ReadError, WrittenIn},
     curios_unit::{Predecessors, Unit},
-    std::{fs, path::PathBuf, slice},
+    std::{fs, path::PathBuf},
 };
 
 /// Why a build stopped: at the unit claiming `mount`, for `why`.
@@ -106,41 +106,46 @@ impl History {
         let (units, stand_in) = self.walked(&verdicts)?;
 
         Ok(with_prelude(|prelude| {
-            let scope = roots(prelude, stand_in.as_ref().map(|(index, _)| *index))
-                .chain(&units)
-                .collect::<Vec<_>>();
+            let scope = roots(prelude, stand_in).chain(&units).collect::<Vec<_>>();
             then(Predecessors::over(&scope))
         }))
     }
 
-    /// Every unit in the order its first step came, each compiled through `verdicts` over the prelude and the units before it; with the index of the archived root the first unit stands in for, where it claims a prefix the last root mounts, as a package named `std` first in a fold does.
-    fn walked(&self, verdicts: &Verdicts) -> Result<(Vec<Unit>, Option<StandIn>), Stopped> {
+    /// Every unit in the order its first step came, each compiled through `verdicts` over the prelude and the units before it, from the source the standard fold compiles it from (`fold_sources`); with the index of the archived root the first unit stands in for, where it takes one, as a package named `std` first in a fold does.
+    fn walked(&self, verdicts: &Verdicts) -> Result<(Vec<Unit>, Option<usize>), Stopped> {
+        let texts = self
+            .units
+            .iter()
+            .map(|(mount, _, file)| {
+                fs::read_to_string(file).map_err(|error| Stopped {
+                    mount: mount.clone(),
+                    why: Unbuilt::Stored(error.to_string()),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mounted = self
+            .units
+            .iter()
+            .zip(&texts)
+            .map(|((mount, _, file), text)| RootSource::one_file(mount, file, text))
+            .collect::<Vec<_>>();
+        let stand_in = stood_in_for(&root_prefixes(), &mounted);
+
         let mut units = Vec::new();
-        let mut stand_in: Option<StandIn> = None;
-        for (position, (mount, written, file)) in self.units.iter().enumerate() {
-            let stopped = |why: Unbuilt| Stopped {
-                mount: mount.clone(),
-                why,
-            };
-            let text = fs::read_to_string(file)
-                .map_err(|error| stopped(Unbuilt::Stored(error.to_string())))?;
-            let root = RootSource::one_file(mount, file, &text);
+        for (position, (((mount, written, _), text), (root, seeing))) in self
+            .units
+            .iter()
+            .zip(&texts)
+            .zip(mounted.iter().zip(fold_sources(&mounted)))
+            .enumerate()
+        {
             let unit = with_prelude(|prelude| {
-                // The root a first unit stands in for is withheld, and the unit is compiled over the roots before it, seeing what the root could see and offered its archived unit as a baseline, as the standard fold compiles a package named `std`.
-                let standing = (position == 0)
-                    .then(|| stood_in_for(prelude, slice::from_ref(&root)))
-                    .flatten();
-                if let Some((index, archived)) = standing {
-                    let prefixes = archived.mounts().iter().map(|mount| mount.prefix);
-                    stand_in = Some((index, prefixes.collect()));
-                }
-                let scope = roots(prelude, stand_in.as_ref().map(|(index, _)| *index))
-                    .chain(&units)
-                    .collect::<Vec<_>>();
+                let scope = roots(prelude, stand_in).chain(&units).collect::<Vec<_>>();
                 let predecessors = Predecessors::over(&scope);
-                let seeing = source_of(prelude, &root, position, stand_in.as_ref());
-                let offered =
-                    standing.map(|(_, archived)| archived.clone().read_for(root.packages()));
+                // The unit taking a root's place is offered its archived unit as a baseline, as the standard fold offers it.
+                let offered = stand_in
+                    .filter(|_| position == 0)
+                    .map(|index| prelude[index].clone().read_for(root.packages()));
                 match written {
                     WrittenIn::Program => compile_units(
                         DEFAULT_BUDGET,
@@ -153,37 +158,17 @@ impl History {
                     )
                     .map(|mut compiled| compiled.pop().expect("a unit was compiled"))
                     .map_err(Unbuilt::Compiled),
-                    WrittenIn::CoreText => read(verdicts, predecessors, &seeing, &text),
+                    WrittenIn::CoreText => read(verdicts, predecessors, &seeing, text),
                 }
             })
-            .map_err(stopped)?;
+            .map_err(|why| Stopped {
+                mount: mount.clone(),
+                why,
+            })?;
             units.push(unit);
         }
 
         Ok((units, stand_in))
-    }
-}
-
-/// The archived root a history's first unit stands in for: its index among the prelude's roots, and the prefixes it claims.
-type StandIn = (usize, Vec<Qualifier>);
-
-/// The source of the unit `root` at `position` of a history whose first unit stands in for an archived root, where one does: compiled over the stand-in, and the stand-in itself seeing what the root could see, as the standard fold builds each.
-fn source_of<'r>(
-    prelude: &[&Unit],
-    root: &'r RootSource,
-    position: usize,
-    stand_in: Option<&StandIn>,
-) -> UnitSource<'r> {
-    let source = UnitSource::mounted(root);
-    match stand_in {
-        None => source,
-        Some((index, prefixes)) => {
-            let source = source.over_stand_in(prefixes.clone());
-            match position {
-                0 => source.seeing(granted_in_place(prelude, *index, root)),
-                _ => source,
-            }
-        }
     }
 }
 

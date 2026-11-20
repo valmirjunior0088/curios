@@ -8,7 +8,7 @@
 mod tests;
 
 mod restore;
-pub use restore::{documentation, with_prelude};
+pub use restore::{documentation, root_prefixes, with_prelude};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_prelude::test_support::std_directory` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]
