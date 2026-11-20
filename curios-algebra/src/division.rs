@@ -2,7 +2,7 @@
 //!
 //! Every law here is unconditional — it holds for every value of every atom, over a divisor its caller's division states nonzero — and that is what admits it into a fold. `(a + b) / n = a / n + b / n` is not one: `1 / 2 + 1 / 2` is `0`, not `1`, and a law holding for only some values of a symbolic part would be a false definitional equation.
 //!
-//! **The floor and the Euclidean split are read at ℕ.** Each counts the whole divisors a part carries by the bounds of what it leaves, which are read of naturals; ℤ's division is Euclid's too, and what it shares here is what reads no sign: a zero dividend, a dividend that is its divisor, and an exact multiple ([`signed_cofactor`]).
+//! **The floor and the Euclidean split hold at ℤ as at ℕ.** ℤ's division is Euclid's, its remainder in `[0, |n|)` whatever either sign, so a constant carries its whole divisors whatever any other summand is ([`signed_floor_law`]), and a sum splits where every summand is a multiple of the divisor or a natural bounded above ([`signed_euclid_split`]). What reads no sign is shared outright: a zero dividend, a dividend that is its divisor, and an exact multiple ([`signed_cofactor`]).
 
 use curios_num::{Integer, Natural};
 
@@ -89,4 +89,25 @@ pub fn euclid_split(
         whole: floor / divisor,
         rest,
     })
+}
+
+/// The floor law at ℤ, by Euclid's division: a constant `c` carries `c / n` whole divisors and leaves `c % n`, in `[0, |n|)`, whatever the rest of the dividend is, so `(i + c) / n = c / n + (i + c % n) / n` and `(i + c) % n = (i + c % n) % n` at every `i` and either sign of `n`. The whole divisors and what is left, or `None` where the constant carries none, so the rest cannot fire the law a second time.
+pub fn signed_floor_law(constant: &Integer, divisor: &Integer) -> Option<(Integer, Integer)> {
+    let whole = constant.div(divisor).ok()?;
+    let rest = constant.rem(divisor).ok()?;
+    (!whole.is_zero()).then_some((whole, rest))
+}
+
+/// The Euclidean split at ℤ, by Euclid's division: the constant's whole divisors and what it leaves, where that remainder and the bounds of the summands that are no multiple of the divisor — each a natural, at least zero — together stay below the divisor's magnitude, so the dividend's remainder is theirs at every value of its atoms. `None` where they reach it.
+pub fn signed_euclid_split(
+    constant: &Integer,
+    divisor: &Integer,
+    residual_bounds: impl IntoIterator<Item = Natural>,
+) -> Option<(Integer, Natural)> {
+    let whole = constant.div(divisor).ok()?;
+    let rest = constant.rem(divisor).ok()?.magnitude();
+    let ceiling = residual_bounds
+        .into_iter()
+        .fold(rest.clone(), |ceiling, bound| ceiling + bound);
+    (ceiling < divisor.magnitude()).then_some((whole, rest))
 }

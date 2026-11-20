@@ -232,6 +232,7 @@ impl Intrinsic {
                 ],
                 nat_type(),
             ),
+            // Euclid's remainder lies in `[0, |d|)`, so it is a natural; the quotient is an integer.
             Self::IntDiv { divisor, .. } | Self::IntRem { divisor, .. } => sig(
                 vec![
                     Operand::At(int_type()),
@@ -241,7 +242,10 @@ impl Intrinsic {
                         Term::intrinsic(Self::Int(Integer::from(0))),
                     ))),
                 ],
-                int_type(),
+                match self {
+                    Self::IntRem { .. } => nat_type(),
+                    _ => int_type(),
+                },
             ),
 
             // Conversions preserve the number, never the bits — a bit view belongs to the explicit `Bytes` casts below.

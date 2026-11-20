@@ -336,7 +336,7 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         documented(
             &[
-                "What `a` leaves after dividing by `b`, Euclid's remainder, in `[0, |b|)` whatever either sign, under the evidence that `b` is not zero.",
+                "What `a` leaves after dividing by `b`, Euclid's remainder: a natural below `b`'s magnitude whatever either sign, under the evidence that `b` is not zero.",
             ],
             guarded_binary("rem", syntax, |dividend, divisor, non_zero| {
                 Intrinsic::IntRem {

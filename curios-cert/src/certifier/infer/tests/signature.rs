@@ -340,6 +340,13 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
             curios_algebra::Operation::Absolute => {
                 (vec![carried(curios_algebra::Carrier::Integer)], carrier)
             }
+            curios_algebra::Operation::Residue => (
+                vec![
+                    carried(curios_algebra::Carrier::Integer),
+                    carried(curios_algebra::Carrier::Integer),
+                ],
+                carrier,
+            ),
             curios_algebra::Operation::Fused(_) => (
                 vec![carrier.clone(), carrier.clone(), carrier.clone()],
                 carrier,

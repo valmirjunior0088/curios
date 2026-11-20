@@ -3,12 +3,14 @@
 //! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`](super::laws), or nothing.
 
 use {
-    super::operand_bound,
+    super::{nat_bound, operand_bound},
     crate::{
-        Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, int_exact_quotient, int_is_zero,
-        int_terms, same_atom,
+        Cost, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, int_exact_quotient,
+        int_from_linear, int_is_zero, int_linear, int_sum, int_terms, same_atom,
     },
-    curios_algebra::{Carrier, Divided, Half},
+    curios_algebra::{
+        Carrier, Divided, Half, signed_cofactor, signed_euclid_split, signed_floor_law,
+    },
     curios_num::{Floating, Integer, Natural},
 };
 
@@ -106,7 +108,7 @@ pub fn reduce_int_binary(
 
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero leaves the division stuck — mathematically undefined, and past the domain its bound states, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 ///
-/// Beside the two-literal fold stand the laws ℤ's division shares with ℕ's that read no sign. The floor law and the Euclidean split read a remainder's bounds, which are read at ℕ alone.
+/// Beside the two-literal fold stand ℕ's laws, which Euclid's division keeps at ℤ: those that read no sign, an exact multiple, and at a literal divisor the Euclidean split ([`int_euclid_split`]) and then the floor law (`curios-algebra`'s `signed_floor_law`), the remainder a natural throughout.
 pub fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -114,9 +116,17 @@ pub fn reduce_int_division(
     half: Half,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
-    let fold: fn(&Integer, &Integer) -> Option<Integer> = match half {
-        Half::Quotient => |dividend, divisor| dividend.div(divisor).ok(),
-        Half::Remainder => |dividend, divisor| dividend.rem(divisor).ok(),
+    // The remainder lies in `[0, |d|)`, a natural, and the quotient is an integer.
+    let fold: fn(&Integer, &Integer) -> Option<Intrinsic> = match half {
+        Half::Quotient => |dividend, divisor| dividend.div(divisor).ok().map(Intrinsic::Int),
+        Half::Remainder => |dividend, divisor| {
+            let remainder = dividend.rem(divisor).ok()?;
+            Some(Intrinsic::Nat(Nat::new(remainder.magnitude())))
+        },
+    };
+    let zero = || match half {
+        Half::Quotient => Subterm::Intrinsic(Intrinsic::Int(Integer::from(0i32))),
+        Half::Remainder => Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)),
     };
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
@@ -129,7 +139,7 @@ pub fn reduce_int_division(
     if let (Some(l), Some(r)) = (left.as_int(), right.as_int())
         && let Some(folded) = fold(&l, &r)
     {
-        return Ok(Subterm::Intrinsic(Intrinsic::Int(folded)));
+        return Ok(Subterm::Intrinsic(folded));
     }
 
     // The laws that read no sign, the ones ℤ's division shares with ℕ's: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend that is its divisor to `1` with remainder `0`, on the division's own precondition that the divisor is nonzero.
@@ -141,7 +151,7 @@ pub fn reduce_int_division(
     };
     if let Some(divided) = divided {
         return Ok(match divided {
-            Divided::Zero => Subterm::Intrinsic(Intrinsic::Int(Integer::from(0i32))),
+            Divided::Zero => zero(),
             Divided::Dividend => Term::unwrap_or_clone(left),
             Divided::One => Subterm::Intrinsic(Intrinsic::Int(Integer::from(1i32))),
         });
@@ -154,12 +164,61 @@ pub fn reduce_int_division(
         if let Some(quotient) = int_exact_quotient(&left, &divisor) {
             return Ok(match half {
                 Half::Quotient => Term::unwrap_or_clone(quotient),
-                Half::Remainder => Subterm::Intrinsic(Intrinsic::Int(Integer::from(0i32))),
+                Half::Remainder => zero(),
             });
+        }
+        if let Some((quotient, remainder)) = int_euclid_split(&left, &divisor) {
+            return Ok(Term::unwrap_or_clone(match half {
+                Half::Quotient => quotient,
+                Half::Remainder => remainder,
+            }));
+        }
+
+        // The floor law alone, for a dividend the split could not close: peel the whole divisors the constant certainly carries and leave the rest divided.
+        let (constant, summands) = int_terms(&left);
+        if let Some((whole, rest)) = signed_floor_law(&constant, &divisor) {
+            let rest = int_from_linear(rest, int_linear(summands));
+            let peeled = Term::intrinsic(rebuild(rest, right.clone()));
+            return Ok(Term::unwrap_or_clone(match half {
+                Half::Quotient => int_sum(&peeled, &Term::intrinsic(Intrinsic::Int(whole))),
+                Half::Remainder => peeled,
+            }));
         }
     }
 
     Ok(Subterm::Intrinsic(rebuild(left, right)))
+}
+
+/// A reduced dividend split against a nonzero literal divisor by Euclid's division into `(quotient, remainder)`, an integer and a natural, or `None` where the division is not forced: every monomial either a multiple of the divisor, which contributes its cofactor to the quotient, or a widened natural under a positive coefficient, whose bound ([`nat_bound`]) it adds to what the remainder may reach (`curios-algebra`'s `signed_euclid_split`). That is what makes `(2 · i + 1) / 2` reduce to `i` and its remainder to `1`.
+fn int_euclid_split(dividend: &Term, divisor: &Integer) -> Option<(Term, Term)> {
+    let (constant, summands) = int_terms(dividend);
+    let mut quotient = Vec::new();
+    let mut residual = Vec::new();
+    let mut bounds = Vec::new();
+    for (coefficient, factors) in int_linear(summands) {
+        if let Some(cofactor) = signed_cofactor(&coefficient, divisor) {
+            quotient.push((cofactor, factors));
+            continue;
+        }
+        let [factor] = factors.as_slice() else {
+            return None;
+        };
+        let Subterm::Intrinsic(Intrinsic::NatToInt(natural)) = &**factor else {
+            return None;
+        };
+        if coefficient.sign() != Integer::from(1i32) {
+            return None;
+        }
+        let scale = coefficient.magnitude();
+        bounds.push(scale.clone() * nat_bound(natural)?);
+        residual.push(Nat::scaled(scale, natural.clone()));
+    }
+
+    let (whole, rest) = signed_euclid_split(&constant, divisor, bounds)?;
+    Some((
+        int_from_linear(whole, quotient),
+        Nat::sum_over_floor(residual, rest),
+    ))
 }
 
 /// `Flt` operations fold on literal operands by calling the model, `curios_num::Floating` — binary64 computed exactly over unbounded integers and rounded once, rather than whatever the compiler's host computes. There is no decline gate: the model pins every choice IEEE leaves open, which NaN an operation answers included, and the runtime is held to the same clauses, so `1.0 + 1.0` is `2.0`, `1.0 / 0.0` is `+inf`, `0.0 / 0.0` is the default NaN, and each is true of the running program. A symbolic operand rebuilds the neutral term.

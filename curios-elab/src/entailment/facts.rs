@@ -1209,7 +1209,7 @@ impl<'a> Reader<'a> {
     ///
     /// The bounds are `le/add_r(d * (x / d), x % d)` and `lt/add_mul_lt(x / d, x % d, x / d + 1, d, qed, qed)`, whose types hold the remainder beside its quotient's multiple, which conversion reads as the dividend; their stated sides hold neither. The second asks for `x % d < d`, which conversion decides at any divisor, where it decides the aligned `x % d + 1 <= d` only at a literal. A division is read only once no other still to be read divides its remainder, so the bounds of `(x % 4096) / 64`, which hold `x % 4096`, are read before that remainder is lifted out of them. Where the divisor is no literal its multiple is a product, which linear arithmetic reads as an unknown of its own and [`products`] relate to its factors.
     ///
-    /// `Nat` alone: at `Int`, conversion decides Euclid's identity and neither of a remainder's bounds.
+    /// `Nat` alone: at `Int`, a remainder is a widened natural, whose bounds conversion decides, and a quotient's bounds are not read.
     fn quotients(&mut self, context: &mut Context, target: Option<&Target>) -> Result<bool, Error> {
         let natural = context.syntax().entailment.natural;
         if !in_scope(context, &[natural.below, natural.above, natural.shift]) {

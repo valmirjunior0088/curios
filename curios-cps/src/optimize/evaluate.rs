@@ -78,7 +78,7 @@ pub fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
             int(0)?.mul_within(int(1)?, FOLD_ALLOWANCE_BITS)?,
         )),
         Intrinsic::IntDiv => Some(Literal::Int(int(0)?.div(int(1)?).ok()?)),
-        Intrinsic::IntRem => Some(Literal::Int(int(0)?.rem(int(1)?).ok()?)),
+        Intrinsic::IntRem => Some(Literal::Nat(int(0)?.rem(int(1)?).ok()?.magnitude())),
         Intrinsic::IntLt => bool_(int(0)? < int(1)?),
         Intrinsic::IntLe => bool_(int(0)? <= int(1)?),
         Intrinsic::IntAnd => Some(Literal::Int(int(0)?.clone() & int(1)?.clone())),

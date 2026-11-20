@@ -988,12 +988,13 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             non_zero: qed(),
         })
     };
+    // `%` at `Int`: the widening of Euclid's remainder, a natural.
     let int_rem = |dividend: Term, divisor: Term| {
-        Term::intrinsic(Intrinsic::IntRem {
+        Term::intrinsic(Intrinsic::NatToInt(Term::intrinsic(Intrinsic::IntRem {
             dividend,
             divisor,
             non_zero: qed(),
-        })
+        })))
     };
     let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
     let nat_pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
@@ -1880,6 +1881,49 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             "i % -1 = 0",
             int_rem(i.clone(), integer(-1)),
             integer(0),
+            ints(),
+        ),
+        // Euclid's division keeps ℕ's laws at ℤ, at either sign of the divisor: the split of a multiple beside a constant below it, and the floor law peeling a constant's whole divisors.
+        (
+            "(2 * i + 1) / 2 = i",
+            int_div(
+                int_add(int_mul(integer(2), i.clone()), integer(1)),
+                integer(2),
+            ),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "(2 * i + 1) % 2 = +1",
+            int_rem(
+                int_add(int_mul(integer(2), i.clone()), integer(1)),
+                integer(2),
+            ),
+            integer(1),
+            ints(),
+        ),
+        (
+            "(i + 5) / 2 = (i + 1) / 2 + 2",
+            int_div(int_add(i.clone(), integer(5)), integer(2)),
+            int_add(
+                int_div(int_add(i.clone(), integer(1)), integer(2)),
+                integer(2),
+            ),
+            ints(),
+        ),
+        (
+            "(i + 5) / -2 = (i + 1) / -2 - 2",
+            int_div(int_add(i.clone(), integer(5)), integer(-2)),
+            int_add(
+                int_div(int_add(i.clone(), integer(1)), integer(-2)),
+                integer(-2),
+            ),
+            ints(),
+        ),
+        (
+            "(i + 5) % -2 = (i + 1) % -2",
+            int_rem(int_add(i.clone(), integer(5)), integer(-2)),
+            int_rem(int_add(i.clone(), integer(1)), integer(-2)),
             ints(),
         ),
         (

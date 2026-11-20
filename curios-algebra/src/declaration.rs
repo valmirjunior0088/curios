@@ -85,9 +85,11 @@ pub enum Operation {
     Negation,
     /// A magnitude under another value's sign: the magnitude, then the value the sign is read off.
     Copysign,
+    /// An integer's remainder by Euclid's division, a natural: declared at the naturals, over the integer dividend and divisor. It is below the divisor's magnitude and dominated by neither operand, which may be negative.
+    Residue,
 }
 
-/// What one operand of an operation was observed to be: an upper bound on every value it takes, and its value when it is a literal. A caller observes only what [`Operation::bound_reads`] asks for; anything else may be left `None`.
+/// What one operand of an operation was observed to be: an upper bound on every value it takes, and its value when it is a literal — an integer's magnitude, which is all an operation declared at the naturals over integers reads of one. A caller observes only what [`Operation::bound_reads`] asks for; anything else may be left `None`.
 #[derive(Clone, Debug, Default)]
 pub struct Observed {
     pub bound: Option<Natural>,
@@ -104,7 +106,7 @@ impl Operation {
             Operation::Difference => (&[0], &[]),
             Operation::Quotient => (&[0], &[1]),
             Operation::ShiftRight => Operation::Quotient.bound_reads(),
-            Operation::Remainder => (&[], &[1]),
+            Operation::Remainder | Operation::Residue => (&[], &[1]),
             Operation::And | Operation::Or | Operation::Xor => (&[0, 1], &[]),
             Operation::Min | Operation::Max => (&[0, 1], &[]),
             _ => (&[], &[]),
@@ -121,7 +123,8 @@ impl Operation {
             Operation::Conversion {
                 from: Carrier::Byte,
             } => Some(Natural::from(u8::MAX)),
-            Operation::Remainder => {
+            // A residue is below its divisor's magnitude, the literal a caller observes of an integer.
+            Operation::Remainder | Operation::Residue => {
                 let divisor = literal(1)?;
                 (!divisor.is_zero()).then(|| divisor - Natural::one())
             }

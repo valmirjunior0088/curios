@@ -1087,7 +1087,7 @@ fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<Fold> {
             (nat(right, 1)).then_some(Fold::Literal(Literal::Nat(Natural::zero())))
         }
         Intrinsic::IntRem => {
-            (int(right, 1)).then_some(Fold::Literal(Literal::Int(Integer::from(0u32))))
+            (int(right, 1)).then_some(Fold::Literal(Literal::Nat(Natural::zero())))
         }
         Intrinsic::NatAnd => {
             (nat(right, 0) || nat(left, 0)).then_some(Fold::Literal(Literal::Nat(Natural::zero())))

@@ -22,7 +22,10 @@ mod declaration;
 pub use declaration::{Carrier, Observed, Operation};
 
 mod division;
-pub use division::{Divided, FloorSplit, Half, cofactor, euclid_split, floor_law, signed_cofactor};
+pub use division::{
+    Divided, FloorSplit, Half, cofactor, euclid_split, floor_law, signed_cofactor,
+    signed_euclid_split, signed_floor_law,
+};
 
 mod euclid;
 pub use euclid::{Recombination, Wanted};

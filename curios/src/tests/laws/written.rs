@@ -875,7 +875,7 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        // What `Int` shares with `Nat`, and what it does not: `Int` divides as Euclid does and shifts right arithmetically.
+        // What `Int` shares with `Nat`, and what it does not: `Int` divides as Euclid does, its remainder a natural, and shifts right arithmetically.
         name: "Int, the families it shares with Nat",
         binders: "i: Int, j: Int, k: Int, n: Nat, p: Int/NonZero(j)",
         held: &[
@@ -884,23 +884,25 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(i / -1, +0 - i)",
             "Eq()(i % -1, +0)",
             "Eq()(Int/div(+0, j, @p), +0)",
-            "Eq()(Int/rem(+0, j, @p), +0)",
+            "Eq()(Int/rem(+0, j, @p), 0)",
             "Eq()(Int/div(j, j, @p), +1)",
-            "Eq()(Int/rem(j, j, @p), +0)",
+            "Eq()(Int/rem(j, j, @p), 0)",
             "Eq()((i * 2) / 2, i)",
             "Eq()((i * 2) % 2, +0)",
             "Eq()((i * -6) / 2, i * -3)",
             "Eq()((i * 2) / -2, +0 - i)",
             "Eq()((i * 4 + k * 6 + 8) / 2, i * 2 + k * 3 + 4)",
             "Eq()((i * 4 + k * 6 + 8) % -2, +0)",
-        ],
-        refused: &[
-            // Candidates no stage moves, each true of Euclid's division: a remainder lies from zero to below its divisor's magnitude, so an odd number's is `1`, and the floor law and the Euclidean split count whole divisors at every sign. Conversion reads none of them, since it reads no `Int` remainder as the natural it is.
+            // Euclid's division keeps `Nat`'s laws: a remainder is a natural below its divisor's magnitude, so an odd number's is `1`, and the floor law and the Euclidean split count whole divisors at every sign.
             "Eq()(i % 3 < +3, true)",
             "Eq()(+0 <= i % 3, true)",
+            "Eq()(i % -3 < +3, true)",
             "Eq()((i * 2 + 1) % 2, +1)",
             "Eq()((i + 2) / 2, 1 + i / 2)",
             "Eq()((2 * i + 1) / 2, i)",
+            "Eq()((i + 5) / -2, (i + 1) / -2 - 2)",
+        ],
+        refused: &[
             // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero, where nothing dominates: a difference, a bitwise `and`, an arithmetic shift and a quotient each pass their operand (`k = -1`; `i = -2, k = +1`; `i = -3, n = 1`; `i = -3`).
             "Eq()(i - k <= i, true)",
             "Eq()(Int/and(i, k) <= i, true)",

@@ -1377,11 +1377,16 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             divisor: r,
             ..
         } => IntrinsicForm::Infix(operator("/"), l, r),
+        // A natural, which `%` at `Int` widens: the operator spells the widening, and the remainder alone its `/sys` function.
         Intrinsic::IntRem {
             dividend: l,
             divisor: r,
             ..
-        } => IntrinsicForm::Infix(operator("%"), l, r),
+        } => IntrinsicForm::Call {
+            path: "Int/rem".into(),
+            implicits: vec![],
+            explicits: vec![l, r],
+        },
         Intrinsic::IntLt(l, r) => IntrinsicForm::Infix(operator("<"), l, r),
         Intrinsic::IntLe(l, r) => IntrinsicForm::Infix(operator("<="), l, r),
         Intrinsic::IntAnd(l, r) => IntrinsicForm::Call {
@@ -1500,6 +1505,16 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
+        // `%` at `Int` is the widening of Euclid's remainder, a natural, and is written as the operator.
+        Intrinsic::NatToInt(i) if matches!(i.as_intrinsic(), Some(Intrinsic::IntRem { .. })) => {
+            let Some(Intrinsic::IntRem {
+                dividend, divisor, ..
+            }) = i.into_intrinsic()
+            else {
+                unreachable!()
+            };
+            IntrinsicForm::Infix(operator("%"), dividend, divisor)
+        }
         Intrinsic::NatToInt(i) => IntrinsicForm::Call {
             path: "Nat/to_int".into(),
             implicits: vec![],

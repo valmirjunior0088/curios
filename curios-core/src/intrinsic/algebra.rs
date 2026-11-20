@@ -278,8 +278,8 @@ impl Intrinsic {
             Intrinsic::IntRem {
                 dividend, divisor, ..
             } => declared(
-                Carrier::Integer,
-                Operation::Remainder,
+                Carrier::Natural,
+                Operation::Residue,
                 Operands::Two([dividend, divisor]),
             ),
             Intrinsic::IntAnd(left, right) => declared(

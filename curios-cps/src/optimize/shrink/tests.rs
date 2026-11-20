@@ -225,7 +225,7 @@ fn identity_folds_hand_an_absorbing_result_to_its_reader() {
         (
             Intrinsic::IntRem,
             Literal::Int(Integer::from(1)),
-            Literal::Int(Integer::from(0)),
+            Literal::Nat(Natural::from(0u32)),
         ),
     ];
     for (op, literal, expected) in cases {

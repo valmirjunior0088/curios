@@ -415,6 +415,9 @@ const ROWS: &[Row] = &[
     ),
     claim("x: Nat, y: Nat, p: Holds(y < 3)", "Holds(x % 5 + y < 7)"),
     claim("x: Nat", "Holds(x / 64 + x / 64 <= x)"),
+    // A remainder at `Int`, a widened natural whose bounds conversion decides at either sign of the divisor.
+    claim("x: Int", "Holds(x % +3 < +3)"),
+    claim("x: Int", "Holds(+0 <= x % -3 && x % -3 < +3)"),
     // A right shift, through the quotient by two to its count it is: both bounds at a literal count and at a symbolic one, a byte's high nibble, and a shift of an odd number and of a left shift, each by what it undoes.
     claim("x: Nat", "Holds(4 * Nat/shr(x, 2) <= x)"),
     claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 4)"),
@@ -790,8 +793,6 @@ const CONTROLS: &[Row] = &[
     // A magnitude widened back with nothing said of its operand, which is the operand's negation below zero; and the sign of an operand a fact holds only at least zero, which is zero at zero.
     claim("a: Int", "Holds(Nat/to_int(Int/abs(a)) <= a)"),
     claim("a: Int, p: Holds(+0 <= a)", "Holds(+0 < Int/sign(a))"),
-    // A remainder by a literal at `Int`, whose bounds conversion does not decide there.
-    claim("x: Int", "Holds(x % +3 < +3)"),
     // Rewriting under a function by an equation, which is congruence rather than arithmetic.
     claim(
         "f: (Nat) -> Nat, r: Nat, s: Nat, e: Eq()(r, s), p: Holds(f(r) < 10)",

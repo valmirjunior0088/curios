@@ -184,7 +184,7 @@ satisfy Div(Int) {
 --- The divisor must be nonzero.
 satisfy Rem(Int) {
     Ok(b) = NonZero(b),
-    rem = rem,
+    rem(a, b, @ok) = Nat/to_int(rem(a, b, @ok)),
 }
 
 satisfy Show(Int) {

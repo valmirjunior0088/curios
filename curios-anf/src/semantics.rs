@@ -482,8 +482,12 @@ impl Semantics {
                 Operation::IntDiv => {
                     return Some(scalar_result(int(0)?.div(int(1)?), Constant::Int));
                 }
+                // Euclid's remainder, a natural.
                 Operation::IntRem => {
-                    return Some(scalar_result(int(0)?.rem(int(1)?), Constant::Int));
+                    return Some(scalar_result(
+                        int(0)?.rem(int(1)?).map(|remainder| remainder.magnitude()),
+                        Constant::Nat,
+                    ));
                 }
                 Operation::IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
                 Operation::IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),

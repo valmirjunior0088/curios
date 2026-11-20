@@ -31,8 +31,8 @@ const EDGES: &[Edge] = &[
     },
     Edge {
         operation: "Int/rem",
-        inside: "let edge: Int = Int/rem(+1, -1);",
-        outside: "let edge: Int = Int/rem(+1, +0);",
+        inside: "let edge: Nat = Int/rem(+1, -1);",
+        outside: "let edge: Nat = Int/rem(+1, +0);",
     },
     Edge {
         operation: "Nat/to_byte",

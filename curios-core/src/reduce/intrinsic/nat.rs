@@ -105,7 +105,12 @@ fn nat_bound_within(term: &Term, known: &mut HashMap<usize, Option<Natural>>) ->
                             .flatten(),
                         literal: literals
                             .contains(&at)
-                            .then(|| operand.as_nat().and_then(|value| value.to_natural()))
+                            .then(|| {
+                                operand
+                                    .as_nat()
+                                    .and_then(|value| value.to_natural())
+                                    .or_else(|| operand.as_int().map(|value| value.magnitude()))
+                            })
                             .flatten(),
                     })
                     .collect::<Vec<_>>();

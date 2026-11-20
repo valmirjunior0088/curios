@@ -330,11 +330,15 @@ fn int_euclid_pair(
             let [factor] = summand.origin.factors.as_slice() else {
                 return None;
             };
+            // Euclid's remainder is a natural, so a sum of integers holds it widened.
+            let Subterm::Intrinsic(Intrinsic::NatToInt(widened)) = &**factor else {
+                return None;
+            };
             let Subterm::Intrinsic(Intrinsic::IntRem {
                 dividend,
                 divisor,
                 non_zero,
-            }) = &**factor
+            }) = &**widened
             else {
                 return None;
             };
