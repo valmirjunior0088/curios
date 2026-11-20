@@ -2,7 +2,10 @@
 //!
 //! A caller maps each of its concrete operations to an [`Operation`] over a [`Carrier`] — or to nothing, which is opaque — and reads what it needs from the mapping: which operands bound the result, which operands the result never exceeds, which conversion undoes which. The mapping is the caller's; what each kind means is this module's, stated once for every operation of that kind.
 
-use curios_num::{Natural, Rounding};
+use {
+    crate::power_of_two,
+    curios_num::{Natural, Rounding},
+};
 
 /// The carrier an operation is over. Ordered as declared, as an operation is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -44,6 +47,7 @@ pub enum Operation {
     Or,
     Xor,
     ShiftLeft,
+    /// The quotient by two to its count, on ℕ: every bound of it is [`Operation::Quotient`]'s, read at that divisor.
     ShiftRight,
     /// A base raised to an exponent, both naturals.
     Power,
@@ -98,7 +102,8 @@ impl Operation {
         match self {
             Operation::Sum | Operation::Product => (&[0, 1], &[]),
             Operation::Difference => (&[0], &[]),
-            Operation::Quotient | Operation::ShiftRight => (&[0], &[1]),
+            Operation::Quotient => (&[0], &[1]),
+            Operation::ShiftRight => Operation::Quotient.bound_reads(),
             Operation::Remainder => (&[], &[1]),
             Operation::And | Operation::Or | Operation::Xor => (&[0, 1], &[]),
             Operation::Min | Operation::Max => (&[0, 1], &[]),
@@ -128,12 +133,21 @@ impl Operation {
                     None => Some(bound),
                 }
             }
+            // A count past the bound's width divides the bound to zero as that width does, so the divisor is built no wider than the bound is.
             Operation::ShiftRight => {
                 let bound = bound(0)?;
-                match literal(1) {
-                    Some(amount) => Some(&bound >> &amount),
-                    None => Some(bound),
-                }
+                let width = Natural::from(bound.bits());
+                let divisor = literal(1).and_then(|count| power_of_two(&count.min(width)));
+                Operation::Quotient.upper_bound(&[
+                    Observed {
+                        bound: Some(bound),
+                        literal: None,
+                    },
+                    Observed {
+                        bound: None,
+                        literal: divisor,
+                    },
+                ])
             }
             Operation::And => match (bound(0), bound(1)) {
                 (Some(left), Some(right)) => Some(left.min(right)),
@@ -240,7 +254,8 @@ impl Operation {
     /// Every pair is unconditional, as [`Operation::upper_bound`]'s arms are, and for the same reason: a caller turns a dominator into a verdict.
     pub fn dominators(self) -> &'static [(usize, bool)] {
         match self {
-            Operation::Difference | Operation::Quotient | Operation::ShiftRight => &[(0, false)],
+            Operation::Difference | Operation::Quotient => &[(0, false)],
+            Operation::ShiftRight => Operation::Quotient.dominators(),
             Operation::Remainder => &[(0, false), (1, true)],
             Operation::And => &[(0, false), (1, false)],
             _ => &[],

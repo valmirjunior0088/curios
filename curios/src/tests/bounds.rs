@@ -415,6 +415,20 @@ const ROWS: &[Row] = &[
     ),
     claim("x: Nat, y: Nat, p: Holds(y < 3)", "Holds(x % 5 + y < 7)"),
     claim("x: Nat", "Holds(x / 64 + x / 64 <= x)"),
+    // A right shift, through the quotient by two to its count it is: both bounds at a literal count and at a symbolic one, a byte's high nibble, and a shift of an odd number and of a left shift, each by what it undoes.
+    claim("x: Nat", "Holds(4 * Nat/shr(x, 2) <= x)"),
+    claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 4)"),
+    claim(
+        "x: Nat, k: Nat",
+        "Holds(Nat/pow(2, k) * Nat/shr(x, k) <= x)",
+    ),
+    claim(
+        "x: Nat, k: Nat",
+        "Holds(x < Nat/pow(2, k) * Nat/shr(x, k) + Nat/pow(2, k))",
+    ),
+    claim("x: Nat, p: Holds(x < 256)", "Holds(Nat/shr(x, 4) < 16)"),
+    claim("x: Nat", "Holds(Nat/shr(2 * x + 1, 1) == x)"),
+    claim("x: Nat, k: Nat", "Holds(Nat/shr(Nat/shl(x, k), k) == x)"),
     // A strict bound over a remainder from its loose one and a disequality: the disequality's split is on the goal's comparison, whose arms decide the goal, so the goal's own split is that one.
     claim(
         "k: Nat, at: Nat, d: Nat, p: Holds(d <= (k + at) % 16), q: Holds((k + at) % 16 != d)",
@@ -730,6 +744,9 @@ const CONTROLS: &[Row] = &[
     claim("x: Nat, p: Holds(Bool/not(x < 10))", "Holds(x < 11)"),
     // A fact too weak for the goal.
     claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i < n)"),
+    // A shift's bounds one past what they are: a byte's high nibble is at most fifteen, and a shift's multiple reaches its value less the low bits, `x = 3`.
+    claim("x: Nat, p: Holds(x < 256)", "Holds(Nat/shr(x, 4) < 15)"),
+    claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 3)"),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.
     body(
         "x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)",

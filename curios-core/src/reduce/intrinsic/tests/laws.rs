@@ -997,6 +997,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     };
     let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
     let nat_pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
+    let nat_shr = |value: Term, count: Term| Term::intrinsic(Intrinsic::NatShr(value, count));
     let nat_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMin(left, right));
     let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
     let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
@@ -1695,6 +1696,74 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             ),
             x.clone(),
             nats(),
+        ),
+        // A right shift by `k` is the quotient by `2ᵏ`, read through the division's view: the split and the floor law at a literal count, and Euclid's recombination pairing a remainder with the shift's multiple at a literal count, at a symbolic one, at `y + 1`, whose shift the fold takes in two steps and whose power to a product, and through a nest of divisions by powers of two.
+        (
+            "shr(4 * x + 3, 2) = x",
+            nat_shr(plus(mul(lit(4), x.clone()), lit(3)), lit(2)),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "shr(x + 9, 2) = shr(x + 1, 2) + 2",
+            nat_shr(plus(x.clone(), lit(9)), lit(2)),
+            plus(nat_shr(plus(x.clone(), lit(1)), lit(2)), lit(2)),
+            nats(),
+        ),
+        (
+            "16 * shr(x, 4) + x % 16 = x",
+            plus(
+                mul(lit(16), nat_shr(x.clone(), lit(4))),
+                nat_rem(x.clone(), lit(16), qed()),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0))],
+                vec![(&nat_x, lit(15))],
+                vec![(&nat_x, lit(16))],
+                vec![(&nat_x, lit(37))],
+            ],
+        ),
+        (
+            "pow(2, y) * shr(x, y) + x % pow(2, y) = x",
+            plus(
+                mul(nat_pow(lit(2), y.clone()), nat_shr(x.clone(), y.clone())),
+                nat_rem(x.clone(), nat_pow(lit(2), y.clone()), qed()),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(5)), (&nat_y, lit(1))],
+                vec![(&nat_x, lit(37)), (&nat_y, lit(3))],
+            ],
+        ),
+        (
+            "pow(2, y + 1) * shr(x, y + 1) + x % pow(2, y + 1) = x",
+            plus(
+                mul(
+                    nat_pow(lit(2), plus(y.clone(), lit(1))),
+                    nat_shr(x.clone(), plus(y.clone(), lit(1))),
+                ),
+                nat_rem(x.clone(), nat_pow(lit(2), plus(y.clone(), lit(1))), qed()),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(1)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(37)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "8 * shr(x / 4, 1) + x % 8 = x",
+            plus(
+                mul(lit(8), nat_shr(nat_div(x.clone(), lit(4), qed()), lit(1))),
+                nat_rem(x.clone(), lit(8), qed()),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(7))],
+                vec![(&nat_x, lit(8))],
+                vec![(&nat_x, lit(45))],
+            ],
         ),
         (
             "(i / 3) * 3 + i % 3 = i",

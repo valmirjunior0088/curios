@@ -89,8 +89,8 @@ pub use universe::{
 
 mod intrinsic;
 pub use intrinsic::{
-    ArchivedIntrinsic, Declaration, Intrinsic, IntrinsicHead, Operand, Operands, Produced,
-    Signature, foreign_operands, foreign_produced, foreign_signature, wire_term,
+    ArchivedIntrinsic, Declaration, Division, Intrinsic, IntrinsicHead, Operand, Operands,
+    Produced, Signature, foreign_operands, foreign_produced, foreign_signature, wire_term,
 };
 
 mod spine;

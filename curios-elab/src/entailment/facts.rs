@@ -1215,11 +1215,11 @@ impl<'a> Reader<'a> {
         if !in_scope(context, &[natural.below, natural.above, natural.shift]) {
             return Ok(false);
         }
-        let mut read = false;
+        let (mut read, positive) = (false, qed(context));
         loop {
             let mut pending: Vec<Division> = Vec::new();
             for atom in self.atoms(target) {
-                if let Some(division) = Division::of(self.views.term(&atom))
+                if let Some(division) = Division::of(self.views.term(&atom), &positive)
                     && !self.divided.contains(&division)
                     && !pending.contains(&division)
                 {
@@ -2000,47 +2000,52 @@ fn product(
     reader.admit(context, statement, proof, origin)
 }
 
-/// A quotient or a remainder: its dividend, its divisor, and the program's proof that the divisor is not zero — so the quotient and the remainder rebuilt from it are the atoms the program wrote.
+/// A quotient or a remainder, in any spelling Core reads one in ([`Intrinsic::nat_division`]): its dividend, its divisor, the program's proof that the divisor is not zero, and its quotient as the program wrote it — so the quotient and the remainder rebuilt from it are the atoms the program wrote.
 #[derive(Clone, PartialEq)]
 struct Division {
     dividend: Term,
     divisor: Term,
     non_zero: Term,
+    quotient: Term,
 }
 
 impl Division {
-    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold.
-    fn of(term: &Term) -> Option<Self> {
-        let Subterm::Intrinsic(
-            Intrinsic::NatDiv {
-                dividend,
-                divisor,
-                non_zero,
-            }
-            | Intrinsic::NatRem {
-                dividend,
-                divisor,
-                non_zero,
-            },
-        ) = &**term
-        else {
+    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold. A right shift by `k` is the quotient by `pow(2, k)`, which is positive at every `k`, so `qed` proves it nonzero.
+    fn of(term: &Term, qed: &Term) -> Option<Self> {
+        let Subterm::Intrinsic(intrinsic) = &**term else {
             return None;
         };
-        let zero = matches!(&**divisor, Subterm::Intrinsic(Intrinsic::Nat(literal))
-            if literal.to_natural().is_some_and(|value| value.is_zero()));
-        (!zero).then(|| Division {
-            dividend: dividend.clone(),
-            divisor: divisor.clone(),
-            non_zero: non_zero.clone(),
-        })
+        match intrinsic.nat_division()? {
+            curios_core::Division::Proved {
+                dividend,
+                divisor,
+                non_zero,
+                ..
+            } => {
+                let zero = matches!(&*divisor, Subterm::Intrinsic(Intrinsic::Nat(literal))
+                    if literal.to_natural().is_some_and(|value| value.is_zero()));
+                (!zero).then(|| Division {
+                    quotient: Term::intrinsic(Intrinsic::NatDiv {
+                        dividend: dividend.clone(),
+                        divisor: divisor.clone(),
+                        non_zero: non_zero.clone(),
+                    }),
+                    dividend,
+                    divisor,
+                    non_zero,
+                })
+            }
+            curios_core::Division::Shifted { value, count } => Some(Division {
+                dividend: value,
+                divisor: Term::intrinsic(Intrinsic::NatPow(literal(Carrier::Natural, 2u32), count)),
+                non_zero: qed.clone(),
+                quotient: term.clone(),
+            }),
+        }
     }
 
     fn quotient(&self) -> Term {
-        Term::intrinsic(Intrinsic::NatDiv {
-            dividend: self.dividend.clone(),
-            divisor: self.divisor.clone(),
-            non_zero: self.non_zero.clone(),
-        })
+        self.quotient.clone()
     }
 
     fn remainder(&self) -> Term {

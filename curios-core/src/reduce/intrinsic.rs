@@ -679,6 +679,7 @@ pub fn reduce_intrinsic(
                 )?,
                 |l, r| shift_laws(l, r, intrinsic),
             );
+            let shifted = then_power_division(reducer, shifted)?;
             then_split_shift(reducer, shifted, Intrinsic::NatShr)
         }
         Intrinsic::IntType => Ok(Subterm::Intrinsic(Intrinsic::IntType)),

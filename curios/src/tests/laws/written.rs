@@ -528,6 +528,17 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/shl(1, x) == 0, false)",
             "Eq()(0 < Nat/shl(x + 1, y), true)",
             "Eq()(1 <= Nat/shl(1, x) * Nat/shl(1, y), true)",
+            // A right shift is the quotient by two to its count, read where a division is read: the split and the floor law at a literal count, and Euclid's recombination at a literal count, at a symbolic one, at `x + 1`, whose shift folds to a nest and whose power to a product, at `x + z` and `2 * x`, beside a quotient and at multiplicity two.
+            "Eq()(Nat/shr(x * 4, 2), x)",
+            "Eq()(Nat/shr(4 * x + 3, 2), x)",
+            "Eq()(Nat/shr(x + 9, 2), Nat/shr(x + 1, 2) + 2)",
+            "Eq()(16 * Nat/shr(y, 4) + y % 16, y)",
+            "Eq()(Nat/pow(2, x) * Nat/shr(y, x) + y % Nat/pow(2, x), y)",
+            "Eq()(Nat/pow(2, x + 1) * Nat/shr(y, x + 1) + y % Nat/pow(2, x + 1), y)",
+            "Eq()(Nat/pow(2, x + z) * Nat/shr(y, x + z) + y % Nat/pow(2, x + z), y)",
+            "Eq()(Nat/pow(2, 2 * x) * Nat/shr(y, 2 * x) + y % Nat/pow(2, 2 * x), y)",
+            "Eq()(Nat/pow(2, x) * Nat/shr(y, x) + y % Nat/pow(2, x) + y / 3, y + y / 3)",
+            "Eq()(2 * Nat/pow(2, x) * Nat/shr(y, x) + 2 * (y % Nat/pow(2, x)), 2 * y)",
         ],
         refused: &[
             // A candidate no stage moves: a value is at most itself shifted, a product by a factor that is at least one.
@@ -535,9 +546,10 @@ const CARRIERS: &[Carrier] = &[
             // The controls, and neither is a law: a product in the count is no product of powers, `2¹` against `2 · 2` at `x = y = 1`; and a factor nothing is known of takes a product over a power to zero.
             "Eq()(Nat/shl(1, x * y), Nat/shl(1, x) * Nat/shl(1, y))",
             "Eq()(0 < x * Nat/shl(1, y), true)",
-            // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
-            "Eq()(Nat/shr(x * 4, 2), x)",
-            // The control, and not a law: a right shift drops the low bit a left shift does not restore, so `x = 1` comes back as `0`.
+            // The controls beside the recombination, and none is a law: a remainder by another power (`y = 8`), another dividend (`x = 0, y = 16`), a shift one past the power its remainder is by (`x = 0, y = 1`), and a right shift's low bit, which a left shift does not restore (`x = 1`).
+            "Eq()(16 * Nat/shr(y, 4) + y % 8, y)",
+            "Eq()(16 * Nat/shr(y, 4) + x % 16, x)",
+            "Eq()(Nat/pow(2, x) * Nat/shr(y, x + 1) + y % Nat/pow(2, x), y)",
             "Eq()(Nat/shl(Nat/shr(x, 1), 1), x)",
         ],
     },

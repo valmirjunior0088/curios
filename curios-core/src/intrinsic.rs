@@ -1,6 +1,9 @@
 mod algebra;
 pub use algebra::*;
 
+mod division;
+pub use division::*;
+
 mod signature;
 pub use signature::*;
 

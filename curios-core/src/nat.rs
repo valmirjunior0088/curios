@@ -1,11 +1,11 @@
 use {
     super::{
-        Atoms, Declaration, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term,
+        Atoms, Declaration, Division, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term,
         product_bound, same_atom, sum_bound,
     },
     curios_algebra::{
-        Cancelled, Carrier, Combination, Deduction, Monomial, Operation, Progress, Recombination,
-        Summand, Wanted, distribute,
+        Cancelled, Carrier, Combination, Deduction, Half, Monomial, Operation, Progress,
+        Recombination, Summand, Wanted, distribute,
     },
     curios_common::recurse,
     curios_num::Natural,
@@ -583,22 +583,33 @@ impl Nat {
         })
     }
 
-    /// One factor against another up to universe instances, as [`Nat::linear`] keys them, and a quotient against a quotient up to its proof.
+    /// One factor against another up to universe instances, as [`Nat::linear`] keys them, and a quotient against a quotient in any of its spellings ([`Intrinsic::nat_division`]): on its dividend and divisor, the proof it carries not being part of the number, or as one quotient by a power of two ([`PowerQuotient`]), so `x / 16` is `shr(x, 4)` and `x / (2 · pow(2, k))` is `shr(shr(x, k), 1)`.
     fn same_factor(left: &Term, right: &Term) -> bool {
         let same = |left: &Term, right: &Term| same_atom(Carrier::Natural, left, right);
-        match (&**left, &**right) {
+        let quotient = |term: &Term| match &**term {
+            Subterm::Intrinsic(intrinsic) => intrinsic
+                .nat_division()
+                .filter(|division| division.half() == Half::Quotient),
+            _ => None,
+        };
+        match (quotient(left), quotient(right)) {
             (
-                Subterm::Intrinsic(Intrinsic::NatDiv {
+                Some(Division::Proved {
                     dividend: left_dividend,
                     divisor: left_divisor,
                     ..
                 }),
-                Subterm::Intrinsic(Intrinsic::NatDiv {
+                Some(Division::Proved {
                     dividend: right_dividend,
                     divisor: right_divisor,
                     ..
                 }),
-            ) => same(left_dividend, right_dividend) && same(left_divisor, right_divisor),
+            ) if same(&left_dividend, &right_dividend) && same(&left_divisor, &right_divisor) => {
+                true
+            }
+            (Some(_), Some(_)) => PowerQuotient::of(left)
+                .zip(PowerQuotient::of(right))
+                .is_some_and(|(left, right)| left.same(&right)),
             _ => same(left, right),
         }
     }
@@ -805,6 +816,100 @@ impl Nat {
             Progress::Summands => cancelled.left.summands.len() + cancelled.right.summands.len(),
             Progress::Nothing | Progress::Constant => 0,
         }
+    }
+}
+
+/// A quotient by a power of two read as one: its innermost dividend, under the count its divisor is two to, summed over every right shift and every division by a power of two nested in it — `shr(x / 4, k)` is `x` under `k + 2`, a nest being one quotient by the product of its divisors on ℕ. The count is held as a literal floor beside each monomial's coefficient, so two spellings of one count compare alike.
+struct PowerQuotient {
+    dividend: Term,
+    floor: Natural,
+    monomials: Vec<(Natural, Term)>,
+}
+
+impl PowerQuotient {
+    /// `term` read so; `None` where it is no quotient by a power of two.
+    fn of(term: &Term) -> Option<Self> {
+        let mut read = PowerQuotient {
+            dividend: term.clone(),
+            floor: Natural::zero(),
+            monomials: Vec::new(),
+        };
+        let mut nested = false;
+        while let Subterm::Intrinsic(intrinsic) = &*read.dividend {
+            let dividend = match intrinsic.nat_division() {
+                Some(Division::Shifted { value, count }) => {
+                    read.add_count(&count);
+                    value
+                }
+                Some(Division::Proved {
+                    dividend,
+                    divisor,
+                    half: Half::Quotient,
+                    ..
+                }) if read.add_power(&divisor) => dividend,
+                _ => break,
+            };
+            read.dividend = dividend;
+            nested = true;
+        }
+        nested.then_some(read)
+    }
+
+    /// A count as the fold leaves it, a floor over summands, each read as a coefficient on a monomial.
+    fn add_count(&mut self, count: &Term) {
+        let (floor, inner) = Nat::decompose(count);
+        self.floor += &floor;
+        for summand in Nat::summands(&inner) {
+            let (coefficient, monomial) = Nat::literal_factor(&summand);
+            match self
+                .monomials
+                .iter_mut()
+                .find(|(_, known)| same_atom(Carrier::Natural, known, &monomial))
+            {
+                Some((sum, _)) => *sum += &coefficient,
+                None => self.monomials.push((coefficient, monomial)),
+            }
+        }
+    }
+
+    /// The count `divisor` is two to, where it is one: a literal power of two times powers of two to a count each, as the fold leaves `pow(2, k + 1)`. `false`, and nothing added, otherwise.
+    fn add_power(&mut self, divisor: &Term) -> bool {
+        let (coefficient, factors) = Nat::monomial(divisor);
+        let Some(floor) = coefficient.power_of_two_exponent() else {
+            return false;
+        };
+        let two = Natural::from(2u32);
+        let exponents = factors
+            .iter()
+            .map(|factor| match &**factor {
+                Subterm::Intrinsic(Intrinsic::NatPow(base, exponent))
+                    if base.as_nat().and_then(|base| base.to_natural()) == Some(two.clone()) =>
+                {
+                    Some(exponent.clone())
+                }
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(exponents) = exponents else {
+            return false;
+        };
+        self.floor += &Natural::from(floor);
+        for exponent in &exponents {
+            self.add_count(exponent);
+        }
+        true
+    }
+
+    /// One dividend under one count.
+    fn same(&self, other: &PowerQuotient) -> bool {
+        same_atom(Carrier::Natural, &self.dividend, &other.dividend)
+            && self.floor == other.floor
+            && self.monomials.len() == other.monomials.len()
+            && self.monomials.iter().all(|(coefficient, monomial)| {
+                other.monomials.iter().any(|(theirs, known)| {
+                    theirs == coefficient && same_atom(Carrier::Natural, known, monomial)
+                })
+            })
     }
 }
 

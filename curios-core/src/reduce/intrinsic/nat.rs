@@ -295,29 +295,12 @@ pub fn reduce_nat_division(
         });
     }
 
-    if let Some(divisor) = &divisor {
-        reducer.spend(sum_bound(Nat::summands(&Nat::decompose(&left).1).len()))?;
-        if let Some((quotient, remainder)) = nat_euclid_split(&left, divisor) {
-            return Ok(Term::unwrap_or_clone(match euclid {
-                Euclid::Quotient => quotient,
-                Euclid::Remainder => remainder,
-            }));
-        }
-
-        // The floor law alone, for a dividend the split could not close: peel the whole divisors the floor certainly carries and leave the rest neutral.
-        let (floor, inner) = Nat::decompose(&left);
-        if let Some(FloorSplit { whole, rest }) = floor_law(&floor, divisor) {
-            let peeled = Term::intrinsic(euclid.rebuild(
-                Nat::rebuild(rest, inner),
-                right.clone(),
-                non_zero.clone(),
-            ));
-
-            return Ok(Term::unwrap_or_clone(match half {
-                Half::Quotient => Nat::rebuild(whole, peeled),
-                Half::Remainder => peeled,
-            }));
-        }
+    if let Some(divisor) = &divisor
+        && let Some(divided) = literal_division(reducer, &left, divisor, half, |rest| {
+            euclid.rebuild(rest, right.clone(), non_zero.clone())
+        })?
+    {
+        return Ok(Term::unwrap_or_clone(divided));
     }
 
     Ok(Subterm::Intrinsic(euclid.rebuild(
@@ -325,6 +308,75 @@ pub fn reduce_nat_division(
         right,
         non_zero.clone(),
     )))
+}
+
+/// A half of the division of a symbolic `dividend` by the literal `divisor`, by the laws a literal divisor admits: the Euclidean split ([`nat_euclid_split`]), then the floor law alone for a dividend the split could not close, which peels the whole divisors the floor certainly carries and leaves the rest divided by `divided`, in the spelling the division was read in. `None` where neither law applies.
+///
+/// Every spelling of a division by a literal takes its laws here — `/` and `%` beside their proof, and a right shift by a literal count as the quotient by its power of two ([`then_power_division`]) — so when a quotient folds is decided once.
+fn literal_division(
+    reducer: &mut impl Reducer,
+    dividend: &Term,
+    divisor: &Natural,
+    half: Half,
+    divided: impl FnOnce(Term) -> Intrinsic,
+) -> Result<Option<Term>, ReduceError> {
+    reducer.spend(sum_bound(Nat::summands(&Nat::decompose(dividend).1).len()))?;
+    if let Some((quotient, remainder)) = nat_euclid_split(dividend, divisor) {
+        return Ok(Some(match half {
+            Half::Quotient => quotient,
+            Half::Remainder => remainder,
+        }));
+    }
+
+    let (floor, inner) = Nat::decompose(dividend);
+    let Some(FloorSplit { whole, rest }) = floor_law(&floor, divisor) else {
+        return Ok(None);
+    };
+    let peeled = Term::intrinsic(divided(Nat::rebuild(rest, inner)));
+    Ok(Some(match half {
+        Half::Quotient => Nat::rebuild(whole, peeled),
+        Half::Remainder => peeled,
+    }))
+}
+
+/// A division its fold left neutral, in a spelling whose divisor is two to a literal count — a right shift, as [`Intrinsic::nat_division`] reads one — folded by the laws of a literal divisor ([`literal_division`]), what is left divided again in that spelling: the shift's laws are the quotient's, read through no rule of the shift's own.
+///
+/// **The power is what this rule builds, and it is charged before it exists**, under the [`shift_bound`] [`then_coefficient`] pays for a left shift's coefficient, so `shr(x, 400000000)` is refused rather than allocated. A count past a `u64` declines, as there.
+pub fn then_power_division(
+    reducer: &mut impl Reducer,
+    result: Subterm,
+) -> Result<Subterm, ReduceError> {
+    let Subterm::Intrinsic(intrinsic) = &result else {
+        return Ok(result);
+    };
+    let Some(division) = intrinsic.nat_division() else {
+        return Ok(result);
+    };
+    let Some(count) = division.count().and_then(|count| count.as_nat()) else {
+        return Ok(result);
+    };
+    let Some(exponent) = count.as_literal() else {
+        return Ok(result);
+    };
+    let Ok(amount) = u64::try_from(exponent) else {
+        return Ok(result);
+    };
+    reducer.spend(shift_bound(1, Some(amount)))?;
+    let Some(divisor) = power_of_two(exponent) else {
+        return Ok(result);
+    };
+
+    let divided = literal_division(
+        reducer,
+        division.dividend(),
+        &divisor,
+        division.half(),
+        |rest| division.of(rest),
+    )?;
+    Ok(match divided {
+        Some(divided) => Term::unwrap_or_clone(divided),
+        None => result,
+    })
 }
 
 /// Reduce both operands of a `Nat` binary intrinsic, then either `fold` the two literals or `rebuild` the neutral term from the reduced operands.
