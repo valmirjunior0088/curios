@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Write `bytes` to `path` whole ([module](self)).
+/// Write `bytes` to `path` whole: to a staging name beside it, then renamed into its place.
 pub fn write_whole(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_whole_prepared(path, bytes, |_| Ok(()))
 }

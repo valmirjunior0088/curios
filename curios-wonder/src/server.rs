@@ -892,7 +892,7 @@ fn linked<'a>(buffer: &str, checked: &'a Placed) -> Vec<(Range, &'a Span)> {
         .collect()
 }
 
-/// Where each witness of the concept or the type named at `offset` of `buffer` is written, its head, by what the buffer's last check left ([`Described::witnesses`]): nothing where no name stands there, and nothing for a declaration that is neither a concept nor a type.
+/// Where each witness of the concept or the type named at `offset` of `buffer` is written, its head, by what the buffer's last check left ([`Described::witnesses`](crate::Described::witnesses)): nothing where no name stands there, and nothing for a declaration that is neither a concept nor a type.
 fn witnessed_at(buffer: &str, checked: &Placed, offset: usize) -> Option<Vec<Span>> {
     let (answer, _) = answered_at(buffer, checked, offset)?;
     let Stands::Declaration { described, .. } = answer.stands else {
