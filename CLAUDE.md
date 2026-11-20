@@ -40,6 +40,7 @@ Every other fact is on disk: `documentation/language.md` for the surface languag
   - `curios-cps`, `curios-emit` or `curios-wasm`: the corpus tests that reach it, `curios-prelude`'s.
   - A file of an `x*` crate, or a `pub` item one of them reads: `cargo xtask tools lint`, and `cargo xtask tools test` where a test of theirs covers it, since the workspace's steps leave the `x*` crates out.
   - A link in a doc comment, written or its target renamed: `cargo xtask docs build`, last, the one step that follows a link.
+  - Test code alone, after a run of the suite every other test of which passed: the tests it changed, by name, and the suite again only once production code moves.
   - Doc comments alone: `cargo xtask format` and `cargo xtask docs build`, and no lint.
   - Markdown alone: nothing, and it is committed at once.
 - No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
