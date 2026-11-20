@@ -5,9 +5,9 @@ use {
     std::sync::Arc,
 };
 
-/// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
+/// items: pure_unused = NatAdd(1,1); used = 2; spin() = spin(); diverging_unused = spin(); effectful_unused = Foreign(...); entry returns used. What the entry reaches stays and every other item drops, whatever its evaluation does: a program computes a top-level value where it first reads it, so one nothing reads never runs.
 #[test]
-fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
+fn keeps_what_the_entry_reaches_and_drops_every_other_item() {
     let mut builder = Builder::new();
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let _pure_unused = builder.item_value(
@@ -19,6 +19,26 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     );
     let two = builder.constant(Constant::Nat(Natural::from(2u32)));
     let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
+    // A function that calls itself, not marked total: a call of it may not end.
+    let spin = builder.reserve_function();
+    builder.open_block();
+    let again = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(spin),
+            arguments: vec![],
+        },
+    );
+    let spin_body = builder.seal_block(Terminator::Return(Atom::Value(again)));
+    builder.define_function(spin, Some("spin".into()), vec![], spin_body);
+    builder.item_functions(vec![spin]);
+    let _diverging_unused = builder.item_value(
+        Some("diverging_unused".into()),
+        Rhs::Apply {
+            callee: Atom::Function(spin),
+            arguments: vec![],
+        },
+    );
     let row = Arc::new(ForeignFunction {
         name: "/beep".into(),
         signature: WireSignature {
@@ -51,10 +71,16 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     optimize(&mut module);
 
     let printed = module.to_string();
-    assert!(!printed.contains("pure_unused"), "{printed}");
-    assert!(printed.contains("effectful_unused"), "{printed}");
-    // `used`, the effectful call, and the empty list its lane takes.
-    assert_eq!(module.items().len(), 3, "{printed}");
+    for dropped in [
+        "pure_unused",
+        "diverging_unused",
+        "effectful_unused",
+        "spin",
+    ] {
+        assert!(!printed.contains(dropped), "{dropped}: {printed}");
+    }
+    // `used`, the one item the entry reaches.
+    assert_eq!(module.items().len(), 1, "{printed}");
 }
 
 /// A dead function web (mutually recursive combinators, never referenced) drops whole; a reached recursive group survives whole.

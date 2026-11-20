@@ -3,8 +3,7 @@
 use {super::*, crate::*, curios_num::Natural};
 
 fn finish(module: &mut Module) {
-    let analysis = Analysis::analyze(module);
-    super::super::prune_unreachable(module, &analysis);
+    super::super::prune_unreachable(module);
     module.compact();
     module
         .verify()

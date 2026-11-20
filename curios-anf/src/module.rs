@@ -11,8 +11,8 @@ use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
         ForeignId, Function, FunctionId, ProductFields, ProductId, ProductSchema, RecGroup,
-        RecGroupId, RegisterShape, Remap, Rhs, Role, Semantics, Statement, StatementId, Terminator,
-        ValueId, VariantFamily, lookup,
+        RecGroupId, RegisterShape, Remap, Rhs, Role, Statement, StatementId, Terminator, ValueId,
+        VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
     curios_common::Arena,
@@ -161,14 +161,10 @@ impl Module {
             .map(|import| &import.interface)
     }
 
-    /// Whether evaluating one of this module's items at initialization could be observable, as far as the item alone says: it applies something, whose behaviour is the callee's and so the linked program's to say, it evaluates blocks of its own, or what it does is observable in itself. A group of functions, a recursive group and a construction over atoms are none of these whatever they name, so a module of nothing else is one no program has to link for its own sake.
+    /// Whether one of this module's items computes ([`Rhs::computes`]). A group of functions, a recursive group and a construction over atoms compute nothing whatever they name, so a module of nothing else holds its values as they stand, with nothing left to evaluate.
     pub fn computes(&self) -> bool {
         self.items.iter().any(|&item| match self.statement(item) {
-            Some(Statement::Let { rhs, .. }) => {
-                matches!(rhs, Rhs::Apply { .. } | Rhs::Intrinsic { .. })
-                    || !rhs.sub_blocks().is_empty()
-                    || Semantics::local_behavior(rhs).is_observable()
-            }
+            Some(Statement::Let { rhs, .. }) => rhs.computes(),
             Some(Statement::Functions { .. } | Statement::Rec { .. }) | None => false,
         })
     }

@@ -248,7 +248,7 @@ fn the_restored_prelude_carries_a_record_covering_every_definition() {
 
 /// A sealed program's functions are marked total from the certifier's records of everything it was erased from — the prelude's and the entry's own — and from nothing else: erasure marks nothing, so every mark here is one a record justified.
 ///
-/// A record speaks of an item's evaluation, the functions nested in it included, and of no performance and no machinery ([`curios_anf::Role`]), so the check runs by role and by name: no function that performs a description or runs one is marked, though the crossing `Proc/args` reaches puts machinery in an item the prelude classifies total; the entry's total definition is marked with the loop it defines, and its partial one with its loop is not; and the prelude contributes marks at all. Mutation-checked: marking from no unit's record in scope fails the prelude's half, marking only the functions a name is bound to fails the nested loop's, and marking whatever the role fails the machinery's.
+/// A record speaks of an item's evaluation, the functions nested in it included, and of no performance and no machinery ([`curios_anf::Role`]), so the check runs by role and by name: no function that performs a description or runs one is marked, though the crossing `Proc/args` reaches puts machinery in an item the prelude classifies total; of the definitions `subject` reaches, which the entry prints, the total one is marked with the loop it defines, and its partial one with its loop is not; and the prelude contributes marks at all. Mutation-checked: marking from no unit's record in scope fails the prelude's half, marking only the functions a name is bound to fails the nested loop's, and marking whatever the role fails the machinery's.
 #[test]
 fn a_sealed_program_marks_its_functions_from_the_certifiers_records() {
     let source = "use /std/{Nat, List, Proc};
@@ -265,7 +265,7 @@ let subject : /std/Nat = double(2) + spin(0);
 
 let entry() -> /std/Io({}) =
     let _ = List/len(Proc/args()!);
-    /std/Io/pure(());
+    /std/print(Nat/to_str(subject));
 
 entry()
 ";

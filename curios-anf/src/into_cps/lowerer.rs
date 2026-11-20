@@ -36,6 +36,44 @@ pub struct Lowerer<'a> {
     carry: Option<curios_cps::FunctionId>,
     /// The step every host call answered later suspends through, built and bound as `carry` is.
     later: Option<curios_cps::FunctionId>,
+    /// The top-level statements lowered by need ([`lowered_by_need`]).
+    by_need: BTreeSet<StatementId>,
+}
+
+/// What runs when a knot's member is first forced.
+#[derive(Clone, Copy)]
+enum Initializer {
+    /// A recursive group's computed member: its block.
+    Block(BlockId),
+    /// A top-level statement lowered by need: the statement, which binds the member it computes.
+    Statement(StatementId),
+}
+
+/// The top-level statements a program computes where it first reads them: each `let` that computes ([`Rhs::computes`]), and each that reads a value one before it binds or a top-level group's computed member, which binding it where it stands would force. Every other is bound where it stands: an alias or a construction over what is bound ahead can neither diverge nor trap, so no program tells it from one computed by need.
+fn lowered_by_need(source: &Module) -> BTreeSet<StatementId> {
+    let mut by_need = BTreeSet::new();
+    let mut needed = BTreeSet::new();
+    for &item in source.items() {
+        match source.statement(item) {
+            Some(Statement::Let { result, rhs }) => {
+                let reads_needed = rhs
+                    .operands()
+                    .iter()
+                    .any(|atom| matches!(atom, Atom::Value(value) if needed.contains(value)));
+                if rhs.computes() || reads_needed {
+                    by_need.insert(item);
+                    needed.insert(*result);
+                }
+            }
+            Some(Statement::Rec { group }) => {
+                if let Some(group) = source.rec_group(*group) {
+                    needed.extend(group.values.iter().map(|member| member.value));
+                }
+            }
+            Some(Statement::Functions { .. }) | None => {}
+        }
+    }
+    by_need
 }
 
 /// Where a `let` stands in its block: the value it binds, and what follows it — the statements after it, the terminator closing the block and the continuation the block delivers to. What a binding becomes is read off all four together: one nothing follows but its own return delivers straight to the target, and every other opens a continuation for the rest.
@@ -58,6 +96,7 @@ impl<'a> Lowerer<'a> {
             emitter: Emitter::new(source),
             carry: None,
             later: None,
+            by_need: lowered_by_need(source),
         }
     }
 
@@ -139,9 +178,31 @@ impl Lowerer<'_> {
                 lowerer.lower_terminator(terminator, target)
             });
         };
+        if self.by_need.contains(&first)
+            && let Some(&Statement::Let { result, .. }) = self.source.statement(first)
+        {
+            return self.lower_knot(
+                &[],
+                &[(result, Initializer::Statement(first))],
+                rest,
+                terminator,
+                target,
+            );
+        }
+        self.lower_statement(first, rest, terminator, target)
+    }
+
+    /// Lower `statement` where it stands, forcing first each member it reads that its path has not, and then `rest`.
+    fn lower_statement(
+        &mut self,
+        statement: StatementId,
+        rest: &[StatementId],
+        terminator: &Terminator,
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let statement = self
             .source
-            .statement(first)
+            .statement(statement)
             .expect("live statement")
             .clone();
         let members = match &statement {
@@ -273,47 +334,49 @@ impl Lowerer<'_> {
                 .add_node(curios_cps::Node::LetFun { functions, body });
         }
 
-        self.lower_knot(&group, rest, terminator, target)
+        let values: Vec<(ValueId, Initializer)> = group
+            .values
+            .iter()
+            .map(|member| (member.value, Initializer::Block(member.init)))
+            .collect();
+        self.lower_knot(&group.functions, &values, rest, terminator, target)
     }
 
-    /// Tie a recursive knot by need. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. A read of a member calls its force right before the statement that reads it, on each path that reads it and no earlier on it (see [`Lowerer::with_cell_reads`]), so an arm that does not read a member does not compute it.
+    /// Tie a knot by need: a recursive group's, `functions` beside its computed `values`, or a top-level statement's, a knot of its own. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. A read of a member calls its force right before the statement that reads it, on each path that reads it and no earlier on it (see [`Lowerer::with_cell_reads`]), so an arm that does not read a member does not compute it.
     ///
-    /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator does for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program agrees with both on every forward reference, whatever the verifier can or cannot see through. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
+    /// Forcing on first use is what the language means by a recursive value and by a top-level one, and what the compile-time evaluator does for a closed knot and an item — `force_toplevel` treats either as a CAF with a cycle guard — so the erased program agrees with both on every forward reference, whatever the verifier can or cannot see through. What makes by need *sound* is that an initializer performs no effect, the rule the verifier holds a group's to and what a top-level value is: running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
     ///
     /// Function members are lowered before any member is forced, so each forces what it reads at its own read, as any function does (see [`Lowerer::define_function`]), and a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: patching only *escaping* member closures at a ready point would miss a closure born inside an initializer that merely *calls* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — which would capture the computed value before it exists, where nothing below the CPS verifier's lexical scope rules could see it.
     fn lower_knot(
         &mut self,
-        group: &RecGroup,
+        functions: &[FunctionId],
+        values: &[(ValueId, Initializer)],
         rest: &[StatementId],
         terminator: &Terminator,
         target: curios_cps::ContinuationId,
     ) -> curios_cps::NodeId {
-        let members: Vec<KnotMember> = group
-            .values
+        let members: Vec<KnotMember> = values
             .iter()
-            .map(|member| {
+            .map(|&(value, _)| {
                 let knot = KnotMember {
                     result: self.emitter.add_value(None),
                     initializer: self.emitter.add_value(None),
                     force: self.emitter.reserve_function(),
                 };
-                self.emitter.note_knot_member(member.value, knot);
+                self.emitter.note_knot_member(value, knot);
                 knot
             })
             .collect();
-        for (member, knot) in group.values.iter().zip(&members) {
+        for (&(value, _), knot) in values.iter().zip(&members) {
             self.emitter
-                .define_force(*knot, self.emitter.arena_value_name(member.value));
+                .define_force(*knot, self.emitter.arena_value_name(value));
         }
 
         // The members are in the map before any body below is lowered, so a read of a computed sibling — from a function member, a thunk, or the rest — forces it where it stands.
-        let functions = self.lower_function_group(&group.functions);
-        let thunks: Vec<curios_cps::FunctionId> = group
-            .values
+        let functions = self.lower_function_group(functions);
+        let thunks: Vec<curios_cps::FunctionId> = values
             .iter()
-            .map(|member| {
-                self.define_thunk(member.init, self.emitter.arena_value_name(member.value))
-            })
+            .map(|&(value, init)| self.define_thunk(value, init))
             .collect();
 
         let mut body = self.lower_statements(rest, terminator, target);
@@ -407,11 +470,25 @@ impl Lowerer<'_> {
         body
     }
 
-    /// A member's initializer as a nullary function: what its channel holds until something forces it. It forces each member it reads where it reads it, so a member it depends on is computed when it is needed — the by-need order, found by running rather than computed ahead.
-    fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cps::FunctionId {
+    /// `value`'s initializer as a nullary function: what its channel holds until something forces it. It forces each member it reads where it reads it, so a member it depends on is computed when it is needed — the by-need order, found by running rather than computed ahead.
+    fn define_thunk(&mut self, value: ValueId, init: Initializer) -> curios_cps::FunctionId {
         let thunk = self.emitter.reserve_function();
         let return_cont = self.emitter.reserve_continuation();
-        let body = self.lower_block(init, return_cont);
+        let body = match init {
+            Initializer::Block(block) => self.lower_block(block, return_cont),
+            Initializer::Statement(statement) => {
+                // The statement binds the member inside its initializer alone, and the binding goes after it, so every read outside forces.
+                let body = self.lower_statement(
+                    statement,
+                    &[],
+                    &Terminator::Return(Atom::Value(value)),
+                    return_cont,
+                );
+                self.emitter.restore_value(value, None);
+                body
+            }
+        };
+        let hint = self.emitter.arena_value_name(value);
         self.emitter.define_function(
             thunk,
             curios_cps::Function {

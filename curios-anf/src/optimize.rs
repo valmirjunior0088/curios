@@ -21,7 +21,7 @@ use suspension::*;
 mod reconstruct;
 use reconstruct::*;
 
-use super::{Analysis, Mark, Module};
+use super::{Mark, Module};
 
 /// The rounds a fold of closed applications runs at most. A curried chain folds one application per round. A cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all of them, because each reified closure copy carries closed applications of its own into the next round.
 const ROUNDS: usize = 8;
@@ -34,13 +34,11 @@ const ROUNDS: usize = 8;
 ///
 /// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the link already gave.
 pub fn optimize(module: &mut Module) {
-    let analysis = Analysis::analyze(module);
-    prune_unreachable(module, &analysis);
+    prune_unreachable(module);
     compact(module);
     // Before anything reads the arms a fold orphans: the evaluation's own verification refuses an orphan, and its budgets would count one.
     if fold_suspension_tests(module) {
-        let analysis = Analysis::analyze(module);
-        prune_unreachable(module, &analysis);
+        prune_unreachable(module);
         compact(module);
     }
     // What keeps the rounds from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
@@ -58,8 +56,7 @@ pub fn optimize(module: &mut Module) {
     rebase_monoid_recursion(module);
     // After the rebase, which makes an accumulator's loop of a recursion a monoid closes, where the fold would keep the order of its combines.
     invert_structural_recursion(module);
-    let analysis = Analysis::analyze(module);
-    prune_unreachable(module, &analysis);
+    prune_unreachable(module);
     compact(module);
 }
 

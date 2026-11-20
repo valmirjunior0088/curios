@@ -386,6 +386,15 @@ impl Semantics {
     }
 }
 
+impl Rhs {
+    /// Whether this right-hand side, standing at the top level, may do more than build a value from what is bound: it applies something, whose behaviour is the callee's to say, it evaluates blocks of its own, or what it does is observable in itself. A program computes such a statement where it first reads it ([`lower_to_cps`](crate::lower_to_cps)), and binds any other where it stands, which no program can tell apart: an alias or a construction over atoms can neither diverge nor trap.
+    pub fn computes(&self) -> bool {
+        matches!(self, Rhs::Apply { .. } | Rhs::Intrinsic { .. })
+            || !self.sub_blocks().is_empty()
+            || Semantics::local_behavior(self).is_observable()
+    }
+}
+
 /// The outcome of constant-folding an operation over fully-known operands. The three cases stay distinct because control-flow simplification depends on the difference: a known trap must survive as an explicit computation — never dead code, never a compile-time panic, never [`Unknown`].
 ///
 /// [`Unknown`]: FoldOutcome::Unknown

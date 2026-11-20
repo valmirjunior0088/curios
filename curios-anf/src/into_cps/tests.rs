@@ -962,6 +962,163 @@ fn a_knot_member_read_only_by_an_item_is_kept() {
     );
 }
 
+/// `f() = 1`, an item `x = f()` and the functions `g() = x` and `h() = x`, read by an entry `g() + h()`.
+fn read_twice() -> curios_cps::Module {
+    let mut builder = Builder::new();
+    let f = builder.reserve_function();
+    builder.open_block();
+    let one = nat(&mut builder, 1);
+    let body = builder.seal_block(Terminator::Return(one));
+    builder.define_function(f, Some("f".into()), vec![], body);
+    builder.item_functions(vec![f]);
+    let x = builder.item_value(
+        Some("x".into()),
+        Rhs::Apply {
+            callee: Atom::Function(f),
+            arguments: vec![],
+        },
+    );
+    let readers: Vec<FunctionId> = ["g", "h"]
+        .into_iter()
+        .map(|name| {
+            let reader = builder.reserve_function();
+            builder.open_block();
+            let body = builder.seal_block(Terminator::Return(Atom::Value(x)));
+            builder.define_function(reader, Some(name.into()), vec![], body);
+            reader
+        })
+        .collect();
+    builder.item_functions(readers.clone());
+    builder.open_block();
+    let [g, h] = [readers[0], readers[1]].map(|reader| {
+        builder.let_value(
+            None,
+            Rhs::Apply {
+                callee: Atom::Function(reader),
+                arguments: vec![],
+            },
+        )
+    });
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(g), Atom::Value(h)],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.set_entry(entry);
+    lowered(&builder.finalize().expect("verifies"))
+}
+
+/// The function of `cps` its lowering named `name`, with its identity.
+fn named<'m>(
+    cps: &'m curios_cps::Module,
+    name: &str,
+) -> Option<(curios_cps::FunctionId, &'m curios_cps::Function)> {
+    cps.function_ids()
+        .filter_map(|id| Some((id, cps.function(id)?)))
+        .find(|(_, function)| function.debug_name.as_deref() == Some(name))
+}
+
+/// How many calls of `function` `cps` makes.
+fn calls_of(cps: &curios_cps::Module, function: curios_cps::FunctionId) -> usize {
+    cps.nodes()
+        .iter()
+        .flatten()
+        .filter(|node| {
+            matches!(node, curios_cps::Node::ApplyFun { callee: curios_cps::Callee::Known(callee), .. } if *callee == function)
+        })
+        .count()
+}
+
+/// A top-level value that computes is a knot of its own: its statement is its one initializer, which its force alone runs, so nothing applies `f` but that initializer, and each function that reads `x` forces it.
+#[test]
+fn a_top_level_value_that_computes_is_run_by_its_force_alone() {
+    let cps = read_twice();
+    let (f, _) = named(&cps, "f").expect("f is lowered");
+    let (init, initializer) =
+        named(&cps, "x/init").unwrap_or_else(|| panic!("x is lowered by need: {cps}"));
+    let (force, _) = named(&cps, "x/force").expect("x has a force");
+
+    assert!(
+        matches!(executable(&cps, initializer.body), curios_cps::Node::ApplyFun { callee: curios_cps::Callee::Known(callee), .. } if *callee == f),
+        "x's initializer applies f: {cps}"
+    );
+    assert_eq!(calls_of(&cps, f), 1, "{cps}");
+    assert_eq!(
+        calls_of(&cps, init),
+        0,
+        "the initializer is run through its channel: {cps}"
+    );
+    assert_eq!(calls_of(&cps, force), 2, "g and h each force x: {cps}");
+}
+
+/// What only builds from what is bound ahead is bound where it stands, and what builds from a value lowered by need is lowered so, since binding it where it stands would force that value: `table`, a row of constants, is no knot, and `held`, a row holding `x`, is one.
+#[test]
+fn a_construction_is_by_need_where_it_holds_a_value_lowered_so() {
+    let mut builder = Builder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Pair".into()),
+        fields: ProductFields::Declared(vec![
+            Field::opaque(Some("left".into())),
+            Field::opaque(Some("right".into())),
+        ]),
+    });
+    let f = builder.reserve_function();
+    builder.open_block();
+    let one = nat(&mut builder, 1);
+    let body = builder.seal_block(Terminator::Return(one));
+    builder.define_function(f, Some("f".into()), vec![], body);
+    builder.item_functions(vec![f]);
+    let x = builder.item_value(
+        Some("x".into()),
+        Rhs::Apply {
+            callee: Atom::Function(f),
+            arguments: vec![],
+        },
+    );
+    let (one, two) = (nat(&mut builder, 1), nat(&mut builder, 2));
+    let table = builder.item_value(
+        Some("table".into()),
+        Rhs::Product {
+            schema,
+            fields: vec![one, two],
+        },
+    );
+    let held = builder.item_value(
+        Some("held".into()),
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Value(x), one],
+        },
+    );
+    builder.open_block();
+    let [left, right] = [(held, 0), (table, 1)].map(|(product, field)| {
+        builder.let_value(
+            None,
+            Rhs::Project {
+                schema,
+                product: Atom::Value(product),
+                field,
+            },
+        )
+    });
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(left), Atom::Value(right)],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.set_entry(entry);
+    let cps = lowered(&builder.finalize().expect("verifies"));
+
+    assert!(named(&cps, "table/init").is_none(), "{cps}");
+    assert!(named(&cps, "held/init").is_some(), "{cps}");
+}
+
 /// The lowering stamps each continuation with the role it fills, which is what lets a dump name a block instead of numbering it. Nothing below reads these — `curios-emit` takes function names only — so they are display and no more; contification adds the contified function's own name on top of them.
 #[test]
 fn every_lowered_continuation_carries_the_role_it_fills() {
