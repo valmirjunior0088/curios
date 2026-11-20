@@ -4,7 +4,7 @@ This is the surface language a `.crs` file is written in: each form, what it mea
 
 A `.crs` file is a sequence of top-level items. A program closes with one final term, the description it performs; a module is items alone. Everything below is an item, a term, or a part of one.
 
-Every `crs` example is a whole program or module that `curios wonder` reports nothing for, which `curios/src/tests/reference.rs` holds. A `text` example shows a form on its own. The examples name declarations from `/std`, the standard library every program may name, whose source under `curios-prelude/std/` is the largest body of Curios there is.
+Every `crs` example is a whole program or module that `curios wonder` reports nothing for and `curios format` leaves as it is, which `curios/src/tests/reference.rs` holds. A `text` example shows a form on its own. The examples name declarations from `/std`, the standard library every program may name, whose source under `curios-prelude/std/` is the largest body of Curios there is.
 
 - [Lexical structure](#lexical-structure)
 - [Literals](#literals)
@@ -185,7 +185,8 @@ A non-empty literal may infer `T` from its elements. An empty one takes its type
 ```crs
 use /std/{List, Nat};
 
-pub let empty: List(Nat) = [];
+pub let empty: List(Nat) =
+    [];
 ```
 
 Written as a pattern, a list literal is a [run](#list-case-split).
@@ -225,7 +226,8 @@ Only the `x` and the `[` are glued, so `x` is still an ordinary name: in `x [1]`
 ```crs
 use /std/{Eq};
 
-pub let keep(@A: Sort, a: A) -> A = a;
+pub let keep(@A: Sort, a: A) -> A =
+    a;
 
 pub induct Maybe(A: Sort): pub Type
 | some(A)
@@ -405,7 +407,10 @@ A binder may be an irrefutable tuple or structure pattern:
 ```crs
 use /std/{Nat};
 
-pub struct Point: pub Type { x: Nat, y: Nat }
+pub struct Point: pub Type {
+    x: Nat,
+    y: Nat,
+}
 
 pub let sum(pair: {Nat, Nat}, point: Point) -> Nat =
     let (a, b) = pair;
@@ -424,7 +429,10 @@ The binders of a `let`, a lambda and a function's parameters take nested tuple a
 ```crs
 use /std/{Nat};
 
-pub struct Point: pub Type { loc: {Nat, Nat}, color: Nat }
+pub struct Point: pub Type {
+    loc: {Nat, Nat},
+    color: Nat,
+}
 
 pub let total(value: {Nat, {Nat, Nat}}, point: Point) -> Nat =
     let (a, (_, b)) = value;
@@ -499,6 +507,7 @@ Why: [A bound is stated in a decided proposition and discharged by reduction](de
 
 ```crs
 use /std/{Nat, Byte, Bytes, Parse};
+
 pub let parser() -> Parse(Bytes, Nat) =
     let a = Parse/bytes/byte!;
     let b = Parse/bytes/byte!;
@@ -519,6 +528,7 @@ Every operation that touches the host — writing to a handle, reading a clock, 
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
+
 pub let contents() -> Try(Io, Io/Error, Bytes) =
     Try/scope((s) =>
         let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
@@ -536,7 +546,9 @@ For a monad `Job` that wraps a description, with its `Monad` witness, the embedd
 ```crs
 use /std/{Io, Monad, print};
 
-pub struct Job(A: Type): pub Type { Io(A) }
+pub struct Job(A: Type): pub Type {
+    Io(A),
+}
 
 satisfy Monad(Job) {
     pure(a) = Job { Io/pure(a) },
@@ -572,10 +584,7 @@ An inductive pattern names a constructor and gives a pattern for each plain payl
 use /std/{Nat, Option};
 
 pub let or_zero(option: Option(Nat)) -> Nat =
-    match option
-    | some(value) => value
-    | none() => 0
-    end;
+    match option | some(value) => value | none() => 0 end;
 ```
 
 A constructor is named bare, since the scrutinee's type gives its namespace: `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value: each plain payload takes a pattern, in order, and an implicit (`@`) payload is left out, or written under `@` before the plain payload it precedes, where the arm names it. Two arms of one constructor may write different hidden payloads. A pattern takes no witness payload, so `use` is refused in one.
@@ -589,16 +598,10 @@ pub induct Vector(T: Type): (length: Nat) -> pub Type
 end
 
 pub let head_or(@n: Nat, vector: Vector(Nat)(n), fallback: Nat) -> Nat =
-    match vector
-    | nil() => fallback
-    | cons(head, _) => head
-    end;
+    match vector | nil() => fallback | cons(head, _) => head end;
 
 pub let length(@T: Type, @n: Nat, vector: Vector(T)(n)) -> Nat =
-    match vector
-    | nil() => 0
-    | cons(@length, _, _) => length + 1
-    end;
+    match vector | nil() => 0 | cons(@length, _, _) => length + 1 end;
 ```
 
 A pattern nests inside a constructor's, a tuple's or a structure's field and in a run's element ([List case split](#list-case-split)), and parentheses group one. A successor's predecessor and an open run's rest are binders, so `[a, ..[b, ..t]]` is written `[a, b, ..t]`. Why: [Patterns are compiled where their types are known](design/surface/patterns-are-compiled-where-their-types-are-known.md).
@@ -639,10 +642,7 @@ A `Bool` match has a `true` arm and a `false` arm in either order, or one of the
 use /std/{Bool, Str};
 
 pub let answer(condition: Bool) -> Str =
-    match condition
-    | true => "yes"
-    | false => "no"
-    end;
+    match condition | true => "yes" | false => "no" end;
 ```
 
 ### Number patterns
@@ -665,11 +665,7 @@ Literals and successor arms meet as every pattern does ([Binders beside patterns
 use /std/{Nat, Str};
 
 pub let name(tag: Nat) -> Str =
-    match tag
-    | 0 => "first"
-    | 1 => "second"
-    | _ => "otherwise"
-    end;
+    match tag | 0 => "first" | 1 => "second" | _ => "otherwise" end;
 ```
 
 A literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value.
@@ -682,11 +678,7 @@ An `Int` is dispatched on its keys, each written with its sign, beside an arm th
 use /std/{Int, Str};
 
 pub let classify(i: Int) -> Str =
-    match i
-    | -1 => "minus one"
-    | +0 => "zero"
-    | _ => "otherwise"
-    end;
+    match i | -1 => "minus one" | +0 => "zero" | _ => "otherwise" end;
 ```
 
 A `Byte` is dispatched on its values, each a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are, beside an arm that writes a binder. Each arm knows the byte it took and the arm past the keys knows the byte is none of them, as an `Int`'s do. Its `0` is a literal like any other, and a byte takes no successor pattern.
@@ -695,11 +687,7 @@ A `Byte` is dispatched on its values, each a numeral from `0` through `255` or a
 use /std/{Byte, Nat};
 
 pub let class(b: Byte) -> Nat =
-    match b
-    | 0 => 0
-    | '\n' => 1
-    | _ => 2
-    end;
+    match b | 0 => 0 | '\n' => 1 | _ => 2 end;
 ```
 
 ### Character and string dispatch
@@ -710,18 +698,10 @@ A `Char` is dispatched on character literals and a `Str` on string literals, bes
 use /std/{Char, Nat, Str};
 
 pub let spacing(c: Char) -> Nat =
-    match c
-    | ' ' | '\t' => 0
-    | '\n' => 1
-    | _ => 2
-    end;
+    match c | ' ' | '\t' => 0 | '\n' => 1 | _ => 2 end;
 
 pub let command(name: Str) -> Nat =
-    match name
-    | "build" => 0
-    | "test" => 1
-    | _ => 2
-    end;
+    match name | "build" => 0 | "test" => 1 | _ => 2 end;
 ```
 
 A character matches by its code point and a string by its bytes, a one-line and a block string alike, so a string pattern stands wherever a pattern does: `| some("--help") =>`, `| ["run", ..rest] =>`. A `Char` takes no numeral, and a `Str` no packed run.
@@ -736,10 +716,7 @@ A list pattern is a run, written as the [list literal](#list-literals) that buil
 use /std/{List, Nat, Option};
 
 pub let sum(values: List(Nat)) -> Nat =
-    match values
-    | [] => 0
-    | [head, ..tail] => head + sum(tail)
-    end;
+    match values | [] => 0 | [head, ..tail] => head + sum(tail) end;
 
 pub let last(values: List(Nat)) -> Option(Nat) =
     match values
@@ -772,16 +749,10 @@ pub let total(bytes: Bytes) -> Nat =
     end;
 
 pub let first_or_zero(bytes: Bytes) -> Byte =
-    match bytes
-    | x[] => 0
-    | x[head, .._] => head
-    end;
+    match bytes | x[] => 0 | x[head, .._] => head end;
 
 pub let second_or_zero(bytes: Bytes) -> Nat =
-    match bytes
-    | x[_, second, .._] => Byte/to_nat(second)
-    | _ => 0
-    end;
+    match bytes | x[_, second, .._] => Byte/to_nat(second) | _ => 0 end;
 
 pub let escapes(bytes: Bytes) -> Nat =
     match bytes
@@ -873,10 +844,7 @@ A final arm whose pattern takes nothing apart that could fail — most often a b
 use /std/{Nat, Option};
 
 pub let or_zero(option: Option(Nat)) -> Nat =
-    match option
-    | some(value) => value
-    | _ => 0
-    end;
+    match option | some(value) => value | _ => 0 end;
 ```
 
 After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — a final arm may bind a name, which names the value those arms leave: under a head that is an expression, `match n + 1 | 0 => … | m => … end`, it is that value's one name. A name that is a constructor of the family the arms take apart is refused there, since it binds every value they leave where the case was likely meant: `| none =>` after `| some(x) =>` is written `| none() =>`. A literal's dispatch names no constructor, so over one any name binds. Under a head that is itself a name, the final arm's name only renames it, which `renaming-binder` reports ([`curios lint`](usage.md#lint)). A lone `_` with no other arm binds rather than matches.
@@ -912,6 +880,7 @@ Each tail of the final term closes the program: a tail is reached through a loca
 
 ```crs
 use /std/{Io, Try, File, Path, print};
+
 let main() -> Try(Io, Io/Error, {}) =
     let text = File/read_all_text(Path/of_str("notes.txt"))!;
     print(text);
@@ -928,7 +897,8 @@ That is also what tells an item from the final term: in a program, a top-level `
 ```crs
 use /std/{Nat, Option};
 
-pub let zero: Nat = 0;
+pub let zero: Nat =
+    0;
 
 pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
     match value
@@ -1033,16 +1003,8 @@ A local group's first member may be a pattern; every later one is a name that st
 use /std/{Bool, Nat};
 
 pub let parity(input: Nat) -> Bool =
-    let even(n: Nat) -> Bool =
-        match n
-        | 0 => true
-        | p + 1 => odd(p)
-        end
-    and odd(n: Nat) -> Bool =
-        match n
-        | 0 => false
-        | p + 1 => even(p)
-        end;
+    let even(n: Nat) -> Bool = match n | 0 => true | p + 1 => odd(p) end
+    and odd(n: Nat) -> Bool = match n | 0 => false | p + 1 => even(p) end;
     even(input);
 ```
 
@@ -1118,7 +1080,9 @@ A structure of one unlabeled field wraps it, and is projected with `.0`.
 ```crs
 use /std/{Nat};
 
-pub struct Meters: pub Type { Nat }
+pub struct Meters: pub Type {
+    Nat,
+}
 ```
 
 The outer `pub` exports the type's name. The inner one exports building it and projecting it; without it, both are kept to the declaring module's subtree. A structure at `Prop` holds only propositions.
@@ -1131,8 +1095,15 @@ A field is plain or hidden. A hidden field is written under `@`, as `@label: typ
 use /std/{Nat, Vec};
 use /std/Bool/{Holds};
 
-pub struct Positive: pub Type { n: Nat, @Holds(0 < n) }
-pub struct Sized: pub Type { @len: Nat, items: Vec(Nat, len) }
+pub struct Positive: pub Type {
+    n: Nat,
+    @Holds(0 < n),
+}
+
+pub struct Sized: pub Type {
+    @len: Nat,
+    items: Vec(Nat, len),
+}
 ```
 
 A field takes no `use` member, since a structure's premise is a `use` parameter, and a tuple type's field takes no mark.
@@ -1142,8 +1113,14 @@ Structures whose fields name one another are one group, joined by `and`; a lone 
 ```crs
 use /std/{Nat, Option};
 
-pub struct Node: pub Type { value: Nat, next: Option(Edge) }
-pub and Edge: pub Type { weight: Nat, to: Node }
+pub struct Node: pub Type {
+    value: Nat,
+    next: Option(Edge),
+}
+pub and Edge: pub Type {
+    weight: Nat,
+    to: Node,
+}
 ```
 
 ### Structure literals
@@ -1230,7 +1207,9 @@ A field whose result is a sort is a type each witness chooses. `Div`'s `Ok(A) ->
 use /std/{Nat};
 use /std/ops/{Rem};
 
-pub struct Hours: pub Type { Nat }
+pub struct Hours: pub Type {
+    Nat,
+}
 
 satisfy Rem(Hours) {
     Ok(b) = Nat/NonZero(b.0),
@@ -1261,7 +1240,9 @@ A concept at `Prop` has proof-irrelevant witnesses, which leave nothing at run t
 ```crs
 use /std/{Nat, Show};
 
-pub struct Meters: pub Type { Nat }
+pub struct Meters: pub Type {
+    Nat,
+}
 
 satisfy Show(Meters) {
     show(m) = Nat/to_str(m.0),
@@ -1273,7 +1254,9 @@ A witness may take implicit parameters and require other witnesses, in a telesco
 ```crs
 use /std/{List, Show, Str};
 
-pub struct Bag(A: Type): pub Type { List(A) }
+pub struct Bag(A: Type): pub Type {
+    List(A),
+}
 
 satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
     show(bag) = List/fold(bag.0, "", (value, result) => Str/concat(result, Show/show(value))),
@@ -1300,7 +1283,10 @@ satisfy Show(Tree) {
 }
 and Show(Forest) {
     show(f) =
-        match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
+        match f
+        | nil() => ""
+        | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest))
+        end,
 }
 ```
 
@@ -1326,8 +1312,15 @@ A witness whose body is `..` alone is derived: the compiler writes its body from
 use /std/{Nat, Ord, Spell};
 use /std/ops/{Eql};
 
-pub struct Point: pub Type { x: Nat, y: Nat }
-pub induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+pub struct Point: pub Type {
+    x: Nat,
+    y: Nat,
+}
+
+pub induct Tree(A: Type): pub Type
+| leaf(A)
+| node(Tree(A), Tree(A))
+end
 
 satisfy Spell(Point) {
     ..
@@ -1406,11 +1399,17 @@ A `foreign` declaration introduces a function implemented outside the program: b
 
 ```crs
 pub foreign random() -> Nat;
+
 pub foreign frobnicate(Nat, Bytes) -> Nat;
+
 pub foreign log(Bytes) -> Nat;
+
 pub foreign close(Handle) -> {};
+
 pub foreign flip(Byte) -> Byte;
+
 pub foreign read(Handle, Nat) -> {status: Nat, bytes: Bytes};
+
 pub foreign abort(Byte) -> Never;
 ```
 
@@ -1436,9 +1435,7 @@ Propositional equality, `Eq`, is an ordinary indexed inductive proposition of `/
 use /std/{Eq};
 
 pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
-    match proof
-    | refl() => Eq/refl()
-    end;
+    match proof | refl() => Eq/refl() end;
 ```
 
 
@@ -1463,7 +1460,10 @@ use /std/{Nat, proved};
 use /std/Bool/{False, Holds};
 
 pub let clamp(n: Nat, q: Holds(n <= 10)) -> Nat =
-    match n > 20 | true => match proved(@False) end | false => n end;
+    match n > 20
+    | true => match proved(@False) end
+    | false => n
+    end;
 ```
 
 A bound the facts do not imply is refused, the report naming the facts it read and values under which they hold and the bound fails.

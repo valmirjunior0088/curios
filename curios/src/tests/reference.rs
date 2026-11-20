@@ -1,11 +1,11 @@
-//! The language reference's examples check clean: every `crs` block of `documentation/language.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
+//! The language reference's examples check clean: every `crs` block of `documentation/language.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint — and is canonical, as `curios format --check -` asks. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
 
 use {
     super::test_support::*,
-    curios_common::Style,
+    curios_common::{Kind, Source, SourceName, Style},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_surface::WrittenIn,
+    curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{Origin, Subject, diagnostics},
     std::{fs, path::Path},
 };
@@ -19,6 +19,17 @@ fn every_crs_example_reports_nothing() {
 
     let mut wrong = Vec::new();
     for (line, example) in examples {
+        let source = Source::named(SourceName::stdin(), example.as_str());
+        match Formatted::from_source(&source, WrittenIn::Program, Format::default()) {
+            Ok(Formatted::Unchanged(_)) => {}
+            Ok(Formatted::Changed(canonical)) => wrong.push(format!(
+                "the example at language.md:{line} is not canonical; the formatter writes it\n{canonical}"
+            )),
+            Err(report) => wrong.push(format!(
+                "the example at language.md:{line} does not format\n{}",
+                report.rendered(Kind::Error, &Style::plain())
+            )),
+        }
         let subject = Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
