@@ -1,21 +1,20 @@
 use /std/{Nat, Flt, Bool, Char, Str, Option, Parse, Toml};
-use /std/Toml/scan/{hex_val};
 
-let dec_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '9')
-    | true => Option/some(n - '0')
+let dec_digit(c: Char) -> Option(Nat) =
+    match Nat/in_range(c.code, '0', '9')
+    | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
-let oct_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '7')
-    | true => Option/some(n - '0')
+let oct_digit(c: Char) -> Option(Nat) =
+    match Nat/in_range(c.code, '0', '7')
+    | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
-let bin_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '1')
-    | true => Option/some(n - '0')
+let bin_digit(c: Char) -> Option(Nat) =
+    match Nat/in_range(c.code, '0', '1')
+    | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
@@ -30,7 +29,7 @@ let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
 let magnitude_limit: Nat =
     9223372036854775808;
 
-let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Str, Nat) =
+let magnitude(radix: Nat, digit_of: (Char) -> Option(Nat)) -> Parse(Str, Nat) =
     let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
         let next = Parse/str/peek!;
         match next
@@ -45,7 +44,7 @@ let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Str, Nat) =
                     go(acc, seen, true)
                 | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
-            | some(d) = digit_of(n) =>
+            | some(d) = digit_of(c) =>
                 let next = acc * radix + d;
                 match next > magnitude_limit
                 | true => Parse/fail("integer out of range")
@@ -82,7 +81,7 @@ let prefixed() -> Parse(Str, Nat) =
     let _ = Parse/str/expect('0')!;
     let marker = Parse/str/char!;
     match marker
-    | 'x' => magnitude(16, hex_val)
+    | 'x' => magnitude(16, Char/of_hex_digit)
     | 'o' => magnitude(8, oct_digit)
     | 'b' => magnitude(2, bin_digit)
     | _ => Parse/fail("expected digit")

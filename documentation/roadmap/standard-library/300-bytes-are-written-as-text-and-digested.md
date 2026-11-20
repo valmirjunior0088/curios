@@ -4,7 +4,7 @@
 
 ## What is missing
 
-- **`Bytes` has no text encoding.** `/std` writes one hexadecimal digit at a time (`Char/hex_digit`) and reads one three ways: `Char/of_hex_digit` over a `Char`, which `Json/decode`, `Html/parse` and `Flt/grammar`'s `hex_value` over a run of digits call; `Toml/scan/hex_val` over a code point; and `http/Url`'s `hex_value` over a `Byte`, with the bound its percent-decoding needs. Nothing writes or reads a byte string as hexadecimal, base32 or base64.
+- **`Bytes` has no text encoding.** `/std` writes one hexadecimal digit at a time (`Char/hex_digit`) and reads one with `Char/of_hex_digit`, which `Json/decode`, `Html/parse`, `Toml`'s escapes and integers, `Flt/grammar`'s `hex_value` over a run of digits and `http/Url`'s percent-decoding call. Nothing writes or reads a byte string as hexadecimal, base32 or base64.
 - **`/std` has no digest a peer can check.** `Hash/digest` (`curios-prelude/std/Hash.crs`) is eight bytes of three polynomial lanes, for dedup, cache keys and bloom filters, and its own documentation says it is not stable across compiler versions and not adversarially resistant. No SHA-1, SHA-2 or CRC-32 is computed anywhere in `/std`.
 
 ## What is known
@@ -17,7 +17,7 @@
 ## Refinement
 
 - **The word.** A digest's every step is a 32- or 64-bit operation, past the `2^30` a `Nat` is held unboxed in. For digest rounds implemented in Curios, the question is [arithmetic modulo a word](../arithmetic/301-arithmetic-modulo-a-word.md)'s, settled there. Encodings wait on neither that choice nor a digest.
-- **Where they live.** Lowercase namespaces of functions over `Bytes`, reading a digit through `Char/of_hex_digit`, which the standard library's findings make its one reader.
+- **Where they live.** Lowercase namespaces of functions over `Bytes`, reading a digit through `Char/of_hex_digit`.
 - **Which digests.** SHA-256 for integrity, SHA-1 only where a protocol requires it, CRC-32 for the formats that carry one; and whether a digest is computed in Curios or answered by a host row, which every host would then answer.
 - **Whole or streamed.** A digest of one `Bytes`, or one fed piece by piece from an `Io/Reader`, so that a large body is digested as it arrives.
 - **Decoding.** What a decoder refuses — padding, alphabet, the non-canonical encodings RFC 4648 §3.5 names — and whether it answers an `Option` or a refusal with its position.
@@ -25,7 +25,7 @@
 
 ## Independent deliveries
 
-1. **A named encoding consumer.** Choose the needed alphabet, padding and canonical-decoding contract, implement its read and write functions and test RFC 4648's vectors, round trips and malformed inputs, folded and executed. State which existing hexadecimal readers it replaces. No digest, checksum or word representation is a prerequisite; another encoding waits for its own consumer and refinement.
+1. **A named encoding consumer.** Choose the needed alphabet, padding and canonical-decoding contract, implement its read and write functions and test RFC 4648's vectors, round trips and malformed inputs, folded and executed. No digest, checksum or word representation is a prerequisite; another encoding waits for its own consumer and refinement.
 2. **A named digest or checksum consumer.** Choose its algorithm and whole-value or streamed interface, then its Curios or host implementation. Only the Curios rounds wait on the modular-word decision. Check the standard's vectors and piecewise versus whole-input results where streaming is offered, against an independent reference. For a pure Curios implementation compare folded and executed results; for host rows compare native and browser replies against the same vectors. A digest's completion waits on no unrelated encoding.
 
 ## Completion and retirement

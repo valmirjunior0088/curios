@@ -227,16 +227,9 @@ let percent(c: Char) -> Option(Str) =
 pub let encode(component: Str) -> Str =
     Str/escape(component, percent);
 
--- The digit travels with the evidence that it is one, because the caller combines two of them into a byte and reduction cannot see a bound a guard established. Deciding the range once is what produces both: the ladder yields a value `16` for anything that is not a hex digit, and the single comparison below is at once the refusal and the proof. Masking the digit instead would state a width this encoding does not have — a hex digit is four bits because of what it is, not because of where it is stored.
+-- The digit travels with the evidence that it is below sixteen, because the caller combines two of them into a byte and reduction cannot see a bound a guard established: `Char/of_hex_digit` refuses what is no hex digit, and the comparison below proves the bound its answer meets. Masking the digit instead would state a width this encoding does not have — a hex digit is four bits because of what it is, not because of where it is stored.
 let hex_value(byte: Byte) -> Option({v: Nat, ok: Bool/Holds(v < 16)}) =
-    let n = Byte/to_nat(byte);
-    let digit =
-        match
-        | Nat/in_range(n, '0', '9') => n - '0'
-        | Nat/in_range(n, 'a', 'f') => n - 'a' + 10
-        | Nat/in_range(n, 'A', 'F') => n - 'A' + 10
-        | _ => 16
-        end;
+    let digit = Option/bind(Char/of_ascii(byte), Char/of_hex_digit)!;
     match Bool/holds(digit < 16)
     | some(ok) => Option/some((v = digit, ok = ok))
     | none() => Option/none()
