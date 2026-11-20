@@ -148,7 +148,7 @@ pub enum Mode {
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable, or the page's directory, to PATH (default: under the store, beside the governing manifest; required for a program no package declares)"
+            help = "Write the executable, or the page's directory, to PATH (default: under `.curios/`, beside the governing manifest; required for a program no package declares)"
         )]
         output_path: Option<PathBuf>,
 
@@ -156,7 +156,7 @@ pub enum Mode {
         elaboration: Elaboration,
     },
 
-    /// A library is the one thing with an interface, so the subject names one — none for the governing package's, or a file its library declares — and `--std` names the standard library this compiler was built with, which has no package to be compiled from and so no store to file its pages under: the flag takes the directory they go in. Where the pages go is `documentation/usage.md`'s Documenting.
+    /// A library is the one thing with an interface, so the subject names one — none for the governing package's, or a file its library declares — and `--std` names the standard library this compiler was built with, which has no package to be compiled from and so no cabinet to file its pages under: the flag takes the directory they go in. Where the pages go is `documentation/usage.md`'s Documenting.
     #[command(about = "Write a library's interface as pages")]
     Document {
         #[arg(value_name = "SUBJECT", help = DOCUMENT.subject_help())]
@@ -174,7 +174,7 @@ pub enum Mode {
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Write the pages under DIR (default: under the store, beside the governing manifest)"
+            help = "Write the pages under DIR (default: under `.curios/`, beside the governing manifest)"
         )]
         output_path: Option<PathBuf>,
 
@@ -217,7 +217,7 @@ pub enum Mode {
         elaboration: Elaboration,
     },
 
-    /// The store's tool, and with `pin` one of the two commands that reach the network, both through the one fetcher `curios-package`'s `curate` holds. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
+    /// The cabinet's tool, and with `pin` one of the two commands that reach the network, both through the one fetcher `curios-package`'s `curate` holds. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
     #[command(about = "Materialize what the manifests reference")]
     Curate {
         #[command(flatten)]
@@ -346,7 +346,7 @@ pub enum Pinned {
             value_name = "URL",
             group = "delivery",
             conflicts_with = "refresh",
-            help = "A file fetched once and filed in the shared store"
+            help = "A file fetched once and filed in the cabinet"
         )]
         url: Option<String>,
 

@@ -134,7 +134,7 @@ impl Headed {
             .collect()
     }
 
-    /// This head placed in `source`, which holds the text it was read from. A scan restored from a store lies in a source of its own, and its file is read again as another holding the same text.
+    /// This head placed in `source`, which holds the text it was read from. A scan restored from a cabinet lies in a source of its own, and its file is read again as another holding the same text.
     pub(super) fn rebased(&self, source: &Arc<Source>) -> Headed {
         let mut placed = self.clone();
         placed.rebase(source);

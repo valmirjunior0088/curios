@@ -424,7 +424,7 @@ pub struct BaselineHalf {
     pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
 }
 
-/// An entry of a unit's baseline half as a store keeps it, an object of its own bytes: a declaration's record, or a file's scan.
+/// An entry of a unit's baseline half as a cabinet keeps it, an object of its own bytes: a declaration's record, or a file's scan.
 #[curios_archive::archived]
 pub enum HalfEntry {
     Record(LoweredDeclaration),
@@ -456,7 +456,7 @@ impl BaselineHalf {
         self.entries().map(|entry| entry.digest()).collect()
     }
 
-    /// The entries `wanted` asks for, as the objects a store keeps them as, each archived now.
+    /// The entries `wanted` asks for, as the objects a cabinet keeps them as, each archived now.
     pub(crate) fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
         let mut objects = Vec::new();
         for entry in self.entries() {
@@ -476,7 +476,7 @@ enum Entry<'h> {
 }
 
 impl Entry<'_> {
-    /// The entry as a store keeps it.
+    /// The entry as a cabinet keeps it.
     fn stored(&self) -> HalfEntry {
         match self {
             Entry::Record(record) => HalfEntry::Record(LoweredDeclaration::clone(record)),

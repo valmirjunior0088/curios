@@ -52,7 +52,7 @@ pub struct Archived {
     pub reason: String,
 }
 
-/// One term put to the checkers at `False` on every run, at the end of a history: the steps it states walked over a store of their own, then the proof put over the prelude and every unit they compiled. Admitted, it is the flaw; refused as it expects, it is what holds the flaw shut.
+/// One term put to the checkers at `False` on every run, at the end of a history: the steps it states walked over a cabinet of their own, then the proof put over the prelude and every unit they compiled. Admitted, it is the flaw; refused as it expects, it is what holds the flaw shut.
 #[derive(Debug)]
 pub struct Witness {
     /// What is being put, in a few words.

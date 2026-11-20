@@ -479,7 +479,7 @@ impl Loaded {
         if let Some(scan) = scans.and_then(|scans| scans.get(module))
             && scan.source.text() == text.text()
         {
-            // A scan this thread made lies in the very source the file was read as, and is shared. One restored from a store lies in a source of its own, so its heads are placed in the one just read.
+            // A scan this thread made lies in the very source the file was read as, and is shared. One restored from a cabinet lies in a source of its own, so its heads are placed in the one just read.
             let heads = match Arc::ptr_eq(&scan.source, &text) {
                 true => Rc::clone(&scan.heads),
                 false => Rc::new(
@@ -923,7 +923,7 @@ impl PreparedText {
         self.half().digests()
     }
 
-    /// The records and scans of this unit's baseline half that `wanted` asks for, as the objects a store keeps them as.
+    /// The records and scans of this unit's baseline half that `wanted` asks for, as the objects a cabinet keeps them as.
     pub fn baseline_objects(
         &self,
         wanted: &dyn Fn(&Digest) -> bool,
@@ -1718,7 +1718,7 @@ pub struct UnitSource<'a> {
     ///
     /// `None` is not "nothing declared" but "the caller did not decide", which is every caller that has no manifest to read one out of: a fold whose order is the whole of its dependency information cannot narrow, so the default has to be every predecessor. A unit that *does* declare them names them here, and a predecessor it did not name is then in the fold — contributing its identities, its universe seeds and its erased operands — while being unspellable.
     visible: Option<Vec<Qualifier>>,
-    /// What the unit is compiled for: what `source` was marked for ([`RootSource::tested`]), or the other kind, for a store looking up the same source's other compile ([`UnitSource::other`]).
+    /// What the unit is compiled for: what `source` was marked for ([`RootSource::tested`]), or the other kind, for a cabinet looking up the same source's other compile ([`UnitSource::other`]).
     compiled: Compiled,
     /// The prefixes of the archived root a unit of this unit's fold stands in for, where one does ([`UnitSource::over_stand_in`]).
     stand_in: Option<Vec<Qualifier>>,
@@ -1747,7 +1747,7 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The same unit compiled for the other kind: built where this one is tested, and tested where it is built. The two differ by the source's tests alone, so a store holding one offers it as the baseline of the other.
+    /// The same unit compiled for the other kind: built where this one is tested, and tested where it is built. The two differ by the source's tests alone, so a cabinet holding one offers it as the baseline of the other.
     pub fn other(&self) -> Self {
         Self {
             entrypoint: self.entrypoint,
@@ -1771,7 +1771,7 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The same unit, compiled in a fold whose first unit stands in for the archived root claiming `root`, as a package named `std` does: what it reads under `root` is not the compiler's own, so a store keeps it apart from the same unit compiled over the archived root.
+    /// The same unit, compiled in a fold whose first unit stands in for the archived root claiming `root`, as a package named `std` does: what it reads under `root` is not the compiler's own, so a cabinet keeps it apart from the same unit compiled over the archived root.
     pub fn over_stand_in(self, root: Vec<Qualifier>) -> Self {
         Self {
             stand_in: Some(root),
@@ -1836,12 +1836,12 @@ impl<'a> UnitSource<'a> {
 
     /// The prefixes this unit declared a dependency on, when it declared any — the other half of which unit this is.
     ///
-    /// Two units of one source and the same predecessors differing only in what they declared are two lowerings, because a name resolves in one and is refused in the other. So a store addresses them apart, which is what this is read for.
+    /// Two units of one source and the same predecessors differing only in what they declared are two lowerings, because a name resolves in one and is refused in the other. So a cabinet addresses them apart, which is what this is read for.
     pub fn declared(&self) -> Option<&[Qualifier]> {
         self.visible.as_deref()
     }
 
-    /// What this unit is compiled for ([`RootSource::tested`]). A built unit and a tested one are two lowerings of one source, so a store addresses them apart, as it does two units that declared differently.
+    /// What this unit is compiled for ([`RootSource::tested`]). A built unit and a tested one are two lowerings of one source, so a cabinet addresses them apart, as it does two units that declared differently.
     pub fn compiled(&self) -> Compiled {
         self.compiled
     }
@@ -2013,7 +2013,7 @@ fn into_core_unit_within(
         .entrypoint()
         .map(|entrypoint| Headed::of(&entrypoint.module))
         .unwrap_or_default();
-    // What the baseline kept of each file. A baseline restored from a store holds its half as bytes until this, the lowering's first read of it.
+    // What the baseline kept of each file. A baseline restored from a cabinet holds its half as bytes until this, the lowering's first read of it.
     let baseline_scans =
         curios_profile::profile!("into_core_unit::baseline" => baseline.map(PreparedText::scans));
 

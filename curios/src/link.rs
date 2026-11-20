@@ -2,7 +2,7 @@
 //!
 //! **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no file opened, so the common case pays one pass over its rows. A row answers a declaration of its own package alone, so none could answer for such a program.
 //!
-//! **The graph walked is the one of the package whose manifest declares the program**, an umbrella's member as a package standing alone: an umbrella's directory, where the store sits, declares no package to walk from. A loose program has no manifest and so no row: what it reaches of the standard library's rows the host answers, and a row of its own is refused, saying it has nowhere to name what would answer it.
+//! **The graph walked is the one of the package whose manifest declares the program**, an umbrella's member as a package standing alone: an umbrella's directory, where `.curios/` sits, declares no package to walk from. A loose program has no manifest and so no row: what it reaches of the standard library's rows the host answers, and a row of its own is refused, saying it has nowhere to name what would answer it.
 
 #[cfg(test)]
 mod tests;

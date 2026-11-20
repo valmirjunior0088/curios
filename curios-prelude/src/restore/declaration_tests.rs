@@ -388,7 +388,7 @@ fn the_restored_prelude_pairs_every_arm_mark_with_its_binder() {
     });
 }
 
-/// The function literals of the restored standard library state which of their binders bind a proof, and none says so of a binder whose type is written as a sort. A mark lives in what a scope remembers of its binder, which is no part of a term, so a pass that rebuilt a scope from its body alone, or a store that kept a term without its labels, would leave every binder unmarked and change no verdict: the closed machine would evaluate each proof it binds, and only a floor would say so. A binder at a sort binds a type, which the machine evaluates, and is the one kind this can name without the classifier.
+/// The function literals of the restored standard library state which of their binders bind a proof, and none says so of a binder whose type is written as a sort. A mark lives in what a scope remembers of its binder, which is no part of a term, so a pass that rebuilt a scope from its body alone, or a cabinet that kept a term without its labels, would leave every binder unmarked and change no verdict: the closed machine would evaluate each proof it binds, and only a floor would say so. A binder at a sort binds a type, which the machine evaluates, and is the one kind this can name without the classifier.
 #[test]
 fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
     with_prelude(|prelude| {

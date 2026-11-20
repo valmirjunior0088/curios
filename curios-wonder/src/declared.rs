@@ -9,7 +9,7 @@ use {
     std::cell::RefCell,
 };
 
-/// Every test `subject` declares, in the order its test program schedules them — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read, and filed into where a question may.
+/// Every test `subject` declares, in the order its test program schedules them — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the cabinet is read, and filed into where a question may.
 pub fn declared_tests(
     budget: u64,
     subject: Subject,

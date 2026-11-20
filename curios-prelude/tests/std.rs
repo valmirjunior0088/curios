@@ -1,6 +1,6 @@
 //! The library's own claims, written in Curios as the `tests` modules of `/std`, run as `curios test` runs a package's: the package at [`std_directory`] tested through `curios::test_subjects`, one Rust test per module of tests narrowed to it, each test run in an instantiation of its own under the mock host. Beside them, the claims too large to write by hand: every Unicode conformance case and every property run's edges, as programs this file writes.
 //!
-//! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one store under the build's scratch directory, which a rerun of an unchanged build takes whole.
+//! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one cabinet under the build's scratch directory, which a rerun of an unchanged build takes whole.
 
 use {
     curios::{TestSubject, Verdict, test_subjects, test_support::*},
@@ -77,7 +77,7 @@ fn tests_of(subject: &[&str]) -> Qualifier {
 }
 
 /// The cabinet every test files what it compiled into, under this build's scratch directory: keyed by the test binary's own digest, as every cabinet is keyed by its compiler's, so a rebuilt compiler finds nothing it did not compile.
-fn store() -> Verdicts {
+fn opened() -> Verdicts {
     Verdicts::at(Cabinet::of(
         &Path::new(env!("CARGO_TARGET_TMPDIR")).join("claims"),
         None,
@@ -108,7 +108,7 @@ fn library() -> TestSubject {
     subjects.remove(0)
 }
 
-/// **The standard library's test modules lint clean**, decided as `curios lint` decides the package: the library's declarations kept from the archive with the records they were elaborated to, and each test module elaborated over it — or the unit restored from the store the claims file into, whose lints are the ones a compile decides. `curios-prelude`'s `every_authored_source_is_lint_clean` holds the library by its archive alone, which elaborates no test, so what a test module's site binds is held here.
+/// **The standard library's test modules lint clean**, decided as `curios lint` decides the package: the library's declarations kept from the archive with the records they were elaborated to, and each test module elaborated over it — or the unit restored from the cabinet the claims file into, whose lints are the ones a compile decides. `curios-prelude`'s `every_authored_source_is_lint_clean` holds the library by its archive alone, which elaborates no test, so what a test module's site binds is held here.
 #[test]
 fn every_test_module_lints_clean() {
     let found = diagnostics(
@@ -117,7 +117,7 @@ fn every_test_module_lints_clean() {
             units: vec![std_source().tested()],
         },
         &Overlay::default(),
-        Some(&store()),
+        Some(&opened()),
         &mut |_| {},
     )
     .diagnostics
@@ -137,12 +137,12 @@ fn every_test_module_lints_clean() {
 /// Every test `/std` declares, by its path.
 fn declared() -> Vec<Qualifier> {
     let subject = library();
-    let store = subject.filed(|_| Some(store()));
+    let verdicts = subject.filed(|_| Some(opened()));
 
     subject
         .compile(
             DEFAULT_BUDGET,
-            store.as_ref(),
+            verdicts.as_ref(),
             &[],
             Target::Native,
             |_| {},
@@ -159,11 +159,11 @@ fn declared() -> Vec<Qualifier> {
 /// Failures are collected rather than raised at the first. Each test runs in an instantiation of its own, so one failing says nothing about the rest, and a run that stopped early would hide every test after it.
 fn run_module(module: &Qualifier) {
     let subject = library();
-    let store = subject.filed(|_| Some(store()));
+    let verdicts = subject.filed(|_| Some(opened()));
     let tested = subject
         .compile(
             DEFAULT_BUDGET,
-            store.as_ref(),
+            verdicts.as_ref(),
             std::slice::from_ref(module),
             Target::Native,
             |_| {},

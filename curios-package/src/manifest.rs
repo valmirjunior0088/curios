@@ -471,7 +471,7 @@ impl fmt::Display for Resolver {
 pub enum Module {
     /// A file the package carries, at a plain relative path from the manifest. What a small package that would rather commit its module than publish one writes, and what a project building its own into a gitignored directory names.
     Filed(PathBuf),
-    /// A file fetched once and filed in the shared store. What a package whose module is too large to live in a source tree writes.
+    /// A file fetched once and filed in the cabinet. What a package whose module is too large to live in a source tree writes.
     Fetched(String),
 }
 
@@ -592,7 +592,7 @@ struct DeliveryRow {
 impl Delivery {
     /// The file's bytes, accepted against this delivery's `hash`, for the row `name`'s table of `target`.
     ///
-    /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a store entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
+    /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a cabinet entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
     ///
     /// `directory` is the package's own, which a carried module's path is relative to; `cabinet` answers for a fetched one, where the entry's name is already the digest.
     pub fn bytes(
@@ -753,7 +753,7 @@ impl GatewayRow {
             plain_static(&page, &subject, "page path").map_err(entry)?;
             held_by_the_page(&page, &subject).map_err(entry)?;
             let read = plain_static(&package, &subject, "package path").map_err(valued)?;
-            // The store is the toolchain's, and a page that served it would serve every build product the project holds.
+            // `.curios/` is the toolchain's, and a page that served it would serve every build product the project holds.
             if read.starts_with(PRODUCTS) {
                 return Err(Refused::of("invalid path")
                     .stating(format_args!(

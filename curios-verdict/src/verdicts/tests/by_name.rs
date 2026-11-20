@@ -1,4 +1,4 @@
-//! A unit a store filed is reused only where every name it read means what it meant: read of a package of one name in another project, or of a package named `std` standing in for the archived root.
+//! A unit a cabinet filed is reused only where every name it read means what it meant: read of a package of one name in another project, or of a package named `std` standing in for the archived root.
 
 use super::*;
 
@@ -38,7 +38,7 @@ fn built_library_in(root: &Path, package: &str, cabinet: &Cabinet) -> Result<(),
         .map_err(String::from)
 }
 
-/// A package named `std`, first in a fold, takes the archived `/std`'s place, so a unit compiled after it read a `/std` that is not the compiler's own. `p` proves `NonZero(0)` while `q` depends on such a package, under which `NonZero` holds of every number; once `q` depends on nothing, `/std` is the archived root, where `NonZero(0)` is `Bool/Holds(0 != 0)`, and `p`'s slot is the one it was filed in. A build over the store answers what a build with nothing stored answers: `d` is refused.
+/// A package named `std`, first in a fold, takes the archived `/std`'s place, so a unit compiled after it read a `/std` that is not the compiler's own. `p` proves `NonZero(0)` while `q` depends on such a package, under which `NonZero` holds of every number; once `q` depends on nothing, `/std` is the archived root, where `NonZero(0)` is `Bool/Holds(0 != 0)`, and `p`'s slot is the one it was filed in. A build over the cabinet answers what a build with nothing stored answers: `d` is refused.
 #[test]
 fn a_unit_compiled_after_the_package_std_is_judged_again_over_the_archived_std() {
     let project = |name: &str, under: Option<&str>| {
@@ -76,11 +76,11 @@ fn a_unit_compiled_after_the_package_std_is_judged_again_over_the_archived_std()
     assert_eq!(
         refused(&root),
         refused(&fresh),
-        "a build over the store answers what a build with nothing stored answers"
+        "a build over the cabinet answers what a build with nothing stored answers"
     );
 }
 
-/// Two projects each hold a package `base` and a package `top` of one text, `top` proving `Holds(t)` of `base`'s `t`. The slot `top` filed in the project whose `t` is `true` is the other project's baseline, a record naming each file by its package: its read of `t` is asked again of this project's `base`, whose `t` is `false`, and a build over the shared store answers what a build with nothing stored answers.
+/// Two projects each hold a package `base` and a package `top` of one text, `top` proving `Holds(t)` of `base`'s `t`. The slot `top` filed in the project whose `t` is `true` is the other project's baseline, a record naming each file by its package: its read of `t` is asked again of this project's `base`, whose `t` is `false`, and a build over the shared cabinet answers what a build with nothing stored answers.
 #[test]
 fn a_proof_another_project_filed_over_a_package_of_one_name_is_judged_again_over_this_ones() {
     let twin = |name: &str, t: &str| {
@@ -121,7 +121,7 @@ fn a_proof_another_project_filed_over_a_package_of_one_name_is_judged_again_over
     );
 }
 
-/// A verdict a store filed is found by the item it judged, its reads digested again where it is taken. `d` proves `NonZero(0)` while `/std` is the package `std`, where `NonZero` holds of every number, and its first filing completes its record with what it read of that package; `p` is then filed without `d`, so its slot holds no `d` to adopt; once `/std` is the archived root, where `NonZero(0)` is `Bool/Holds(0 != 0)`, `d` written again is judged and not taken from that record, and is refused as a build with nothing stored refuses it.
+/// A verdict a cabinet filed is found by the item it judged, its reads digested again where it is taken. `d` proves `NonZero(0)` while `/std` is the package `std`, where `NonZero` holds of every number, and its first filing completes its record with what it read of that package; `p` is then filed without `d`, so its slot holds no `d` to adopt; once `/std` is the archived root, where `NonZero(0)` is `Bool/Holds(0 != 0)`, `d` written again is judged and not taken from that record, and is refused as a build with nothing stored refuses it.
 #[test]
 fn a_verdict_filed_over_the_package_std_is_not_taken_over_the_archived_std() {
     const PROVED: &str = "use /std/Nat/{NonZero};\nuse /std/Bool/{True};\n\npub let d: NonZero(0) =\n    True/qed();\n";
@@ -160,6 +160,6 @@ fn a_verdict_filed_over_the_package_std_is_not_taken_over_the_archived_std() {
     assert_eq!(
         refused(&root),
         refused(&fresh),
-        "a build over the store answers what a build with nothing stored answers"
+        "a build over the cabinet answers what a build with nothing stored answers"
     );
 }

@@ -97,7 +97,7 @@ impl RootSource {
 
     /// [`entry`](Self::entry) for an entry whose text is in hand: `source` is what was parsed from `header`, and is logged as read.
     ///
-    /// The header is never read through this source, so nothing else would log it, and a store that verifies a unit against what it was compiled from finds the entry's own text among them only if it is put there: the text that was parsed, never a re-read of the path, which races an edit landing between the parse and the digest and records newer text against an older artifact.
+    /// The header is never read through this source, so nothing else would log it, and a cabinet that verifies a unit against what it was compiled from finds the entry's own text among them only if it is put there: the text that was parsed, never a re-read of the path, which races an edit landing between the parse and the digest and records newer text against an older artifact.
     pub(crate) fn opened(header: &Path, source: &Arc<Source>) -> Self {
         let opened = header
             .canonicalize()
@@ -314,7 +314,7 @@ impl RootSource {
     ///
     /// **This is a unit's input set, and it is closed.** A file can only join it by being declared `mod x` in a header, and that header is itself a read — so nothing can enter the set without changing something already in it. Cross-unit references read nothing at all: `Self::owning` claims only qualifiers inside this source's own mounts, so `use /json/Value` resolves against a compiled predecessor rather than a file. Together those are why a cache can verify a stored unit by re-reading exactly this list and needs no record of what was *looked for and not found*.
     ///
-    /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a store.
+    /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a cabinet.
     ///
     /// Keyed by canonical path within the process, so the same file reached through a relative invocation and an absolute one is one entry; what outlives the process holds each by its name (`curios_unit::recorded`), so a project moved keeps its records.
     pub fn reads(&self) -> Vec<(PathBuf, Arc<Source>)> {
@@ -424,7 +424,7 @@ impl RootSource {
 
     /// Whether a chain of `mod` declarations from the owning mount's header reaches `qualifier`, read as the lowering reads it — through the overlay first, then the disk.
     ///
-    /// **This is the question "is this file part of the unit", asked before any compile and independent of the store.** A unit's input set is closed (see [`Self::reads`]): a file joins it only by being declared, so a file the walk does not reach is one no compilation of this unit ever reads. Asking the walk rather than the record of a compilation is what keeps the answer the same on a cache hit, where nothing is read at all. An inline `mod x { … }` is walked as the body it carries, and a file module is loaded, so what this reads is exactly what discovery would.
+    /// **This is the question "is this file part of the unit", asked before any compile and independent of the cabinet.** A unit's input set is closed (see [`Self::reads`]): a file joins it only by being declared, so a file the walk does not reach is one no compilation of this unit ever reads. Asking the walk rather than the record of a compilation is what keeps the answer the same on a cache hit, where nothing is read at all. An inline `mod x { … }` is walked as the body it carries, and a file module is loaded, so what this reads is exactly what discovery would.
     ///
     /// The module asked about is never loaded: the `mod` that declares it is the whole answer, and what the file holds is not part of the question. Loading it would make a declared file that does not parse — a program a row also compiles, say — answer `Err` where the truthful answer is `true`, and the caller asking whether the file is claimed would be told nothing.
     ///

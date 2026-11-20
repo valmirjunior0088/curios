@@ -382,9 +382,9 @@ fn std_recompile_reproduction() {
     });
 }
 
-/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a store filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the store's candidates, compared as stored with the first, and every verdict it holds one a filing completed, none judged again. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first, or a verdict judged again, is the fault it is here to name.
+/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a cabinet filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the cabinet's candidates, compared as stored with the first, and every verdict it holds one a filing completed, none judged again. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first, or a verdict judged again, is the fault it is here to name.
 #[test]
-#[ignore = "measurement, counted: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the store's candidates, and compares the result with the first unit byte for byte"]
+#[ignore = "measurement, counted: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the cabinet's candidates, and compares the result with the first unit byte for byte"]
 fn std_undo_reproduction() {
     let directory = std_directory();
 
@@ -399,10 +399,10 @@ fn std_undo_reproduction() {
         let original = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &first, &|_| {}, None)
             .expect("the library compiles");
 
-        println!("\n=== /std with an edit undone over the store ===");
+        println!("\n=== /std with an edit undone over the cabinet ===");
         for Edit { label, file, edit } in edits() {
-            let mut store = Store::default();
-            store.file(&original);
+            let mut cabinet = Cabinet::default();
+            cabinet.file(&original);
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
             let edited = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
@@ -421,7 +421,7 @@ fn std_undo_reproduction() {
                 None,
             )
             .expect("the edited library recompiles");
-            store.file(&edited);
+            cabinet.file(&edited);
 
             let undone = compile_unit_over(
                 DEFAULT_BUDGET,
@@ -431,7 +431,7 @@ fn std_undo_reproduction() {
                 Over {
                     baseline: &edited,
                     moved: &[false],
-                    candidates: Some(&store),
+                    candidates: Some(&cabinet),
                 },
                 &|_| {},
                 None,
@@ -445,7 +445,7 @@ fn std_undo_reproduction() {
                 .map(|(name, _)| *name)
                 .collect::<Vec<_>>();
             println!("{label}");
-            println!("  objects read {:>9}", store.read().len());
+            println!("  objects read {:>9}", cabinet.read().len());
             println!("  judged       {:>9}", judged.len());
             assert_eq!(judged, Vec::new(), "{label}: judged again");
             assert_stored_alike(&original, &undone);
@@ -453,7 +453,7 @@ fn std_undo_reproduction() {
     });
 }
 
-/// Whether every part of the standard library digests alike held in hand and restored from a store: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]); and so does what the certifier completes each judgment's record with, its own digest of each part read ([`complete_records`]). A measurement, since it compiles the library whole; counted, and it asserts.
+/// Whether every part of the standard library digests alike held in hand and restored from a cabinet: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]); and so does what the certifier completes each judgment's record with, its own digest of each part read ([`complete_records`]). A measurement, since it compiles the library whole; counted, and it asserts.
 #[test]
 #[ignore = "measurement, counted: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold, and how each completes its certifier's records"]
 fn std_part_digest_census() {

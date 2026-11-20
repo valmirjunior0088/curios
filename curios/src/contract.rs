@@ -1,8 +1,8 @@
 //! What each command accepts, stated once, and the one place a command's argument is admitted as its subject.
 //!
-//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A SUBJECT's help is read off the same contract, so the help cannot describe an argument its command admits another way.
+//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the cabinet and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A SUBJECT's help is read off the same contract, so the help cannot describe an argument its command admits another way.
 //!
-//! **A question's access is a build's, and what it files is decided below.** A command that asks the `wonder` engine reads the store and files what it compiled as a build would have: the engine opens the store beside what it is asked about and files a unit where the disk holds every text its fold has read. What dispatch chooses from a contract is a build's store: whether one is opened for it to file into.
+//! **A question's access is a build's, and what it files is decided below.** A command that asks the `wonder` engine reads the cabinet and files what it compiled as a build would have: the engine opens the cabinet beside what it is asked about and files a unit where the disk holds every text its fold has read. What dispatch chooses from a contract is a build's cabinet: whether one is opened for it to file into.
 
 #[cfg(test)]
 mod tests;
@@ -68,13 +68,13 @@ impl Access {
 /// What a command leaves on disk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Product {
-    /// Nothing beyond what the store keeps.
+    /// Nothing beyond what the cabinet keeps.
     Nothing,
-    /// A native executable, or for a browser a directory holding its page, under the store beside the package that declares it, under the target it is built for, or wherever `--output` says — the one place a program no package declares can go.
+    /// A native executable, or for a browser a directory holding its page, under `.curios/` beside the package that declares it, under the target it is built for, or wherever `--output` says — the one place a program no package declares can go.
     Executable,
-    /// A library's pages, under the store beside its package unless `--output` says elsewhere.
+    /// A library's pages, under `.curios/` beside its package unless `--output` says elsewhere.
     Pages,
-    /// Dependency sources, materialized into the store.
+    /// Dependency sources, materialized into the cabinet.
     Sources,
     /// A new package's files, in the directory named.
     Package,
@@ -91,7 +91,7 @@ impl Product {
     }
 }
 
-/// What a command accepts, how it reaches the store, and what it leaves behind.
+/// What a command accepts, how it reaches the cabinet, and what it leaves behind.
 pub struct Contract {
     /// The command as it is typed, for a refusal to name.
     pub command: &'static str,
@@ -158,7 +158,7 @@ pub const CURATE: Contract = Contract {
     product: Product::Sources,
 };
 
-/// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no argument names it, and the store it reaches is the one a delivery is filed in rather than one it compiles into.
+/// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no argument names it, and the cabinet it reaches is the one a delivery is filed in rather than one it compiles into.
 pub const PIN: Contract = Contract {
     command: "pin",
     accepts: Accepts::Nothing,
@@ -195,7 +195,7 @@ pub const FORMAT: Contract = Contract {
     product: Product::Rewritten,
 };
 
-/// Its argument is a filed stream rather than anything a package declares, so nothing is resolved against a manifest and no store is opened: the file named is the whole of what it reads.
+/// Its argument is a filed stream rather than anything a package declares, so nothing is resolved against a manifest and no cabinet is opened: the file named is the whole of what it reads.
 #[cfg(feature = "profile")]
 pub const PROFILE: Contract = Contract {
     command: "profile",

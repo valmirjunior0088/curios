@@ -60,7 +60,7 @@ fn a_short_digest_is_refused() {
     assert!(refusal.contains("64 lowercase hex digits"), "{refusal}");
 }
 
-/// Uppercase is refused rather than folded, because the hash is a store key and two spellings of one digest would be two directories.
+/// Uppercase is refused rather than folded, because the hash is a cabinet key and two spellings of one digest would be two directories.
 #[test]
 fn an_uppercase_digest_is_refused() {
     let refusal = TreeHash::parse(&format!("c1:{}", "A".repeat(64)))
@@ -102,7 +102,7 @@ fn a_tampered_byte_is_a_different_hash() {
 
 /// Both halves are length-framed, so moving a boundary between a path and its contents is a different tree.
 ///
-/// Unframed, `ab` holding `c` and `a` holding `bc` feed the digest the identical byte sequence — two trees, one store key.
+/// Unframed, `ab` holding `c` and `a` holding `bc` feed the digest the identical byte sequence — two trees, one cabinet key.
 #[test]
 fn a_moved_boundary_is_a_different_hash() {
     let left = tree("hash-frame-left", &[("ab", "c")]);

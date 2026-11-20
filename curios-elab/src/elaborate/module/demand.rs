@@ -8,7 +8,7 @@
 //!
 //! **Over a baseline, the walk visits what the edit reached and nothing else.** A unit compiled over an earlier text of itself marks the declarations its edit could reach, through who asked what of the baseline's traces ([`Readers`]), and holds those alone: the baseline answers for every other declaration from the start ([`Established::answer_but`]), and its trace is the baseline's. A marked declaration is decided once every marked declaration it read is, kept where none of what it read moved and made otherwise; one asked for ahead of that asks again the questions its elaboration put, in the order it asked them ([`Traces`]), each after the declaration it is about has been asked for, and is kept where every one is answered as it was. A question about a declaration that was kept is answered as it was; one about a declaration elaborated again is answered as it was where the part asked came out equal, so an edit redoes what read the part it changed and nothing behind that.
 //!
-//! **A declaration to be made is first looked for in a store.** Where the walk is handed what a store holds of declarations elaborated before ([`Over::candidates`]), a declaration it would elaborate is taken from a record filed for what its items were lowered to, where every answer the record's elaboration was given is the walk's now and every part it read digests as it did ([`found`]); it is elaborated otherwise.
+//! **A declaration to be made is first looked for in a cabinet.** Where the walk is handed what a cabinet holds of declarations elaborated before ([`Over::candidates`]), a declaration it would elaborate is taken from a record filed for what its items were lowered to, where every answer the record's elaboration was given is the walk's now and every part it read digests as it did ([`found`]); it is elaborated otherwise.
 //!
 //! **A cycle is refused by its members.** A declaration asked for while it is being asked for closes a cycle, through a name it wrote or a witness a goal of its resolves to alike. Every member is refused, the report is raised once, at the first member in source order, naming them all, and what reaches a member is withheld as a dependent of any refusal is.
 
@@ -69,7 +69,7 @@ pub struct Over<'a> {
     pub readers: &'a Readers,
     /// The scope, whose baseline layer answers for every declaration the walk does not hold, and for each it holds from where the walk keeps it.
     pub established: &'a Established<'a>,
-    /// What a store holds of declarations elaborated before, where the walk may take a declaration from it ([`found`]).
+    /// What a cabinet holds of declarations elaborated before, where the walk may take a declaration from it ([`found`]).
     pub candidates: Option<&'a dyn Candidates>,
 }
 
@@ -984,7 +984,7 @@ impl<'a> Demand<'a> {
         self.held_mut(declaration).kept = true;
     }
 
-    /// File `record` as the declaration declaring `names`'s, under the first: in place of the baseline's record of it, and of any record the baseline held under another of its names, which was a declaration this one now holds the name of. A record made now, or one a store held, which the declaration was taken from.
+    /// File `record` as the declaration declaring `names`'s, under the first: in place of the baseline's record of it, and of any record the baseline held under another of its names, which was a declaration this one now holds the name of. A record made now, or one a cabinet held, which the declaration was taken from.
     fn file(&mut self, names: &[Global], record: HeldTrace) {
         let (first, others) = names.split_first().expect("a declaration declares a name");
         if let Some(over) = self.over {
@@ -1045,11 +1045,11 @@ impl<'a> Demand<'a> {
         }
     }
 
-    /// Take `declaration`'s items from a record a store holds for what its items were lowered to, where one stands ([`found`]): every answer its elaboration was given is the one the walk gives now, and every part it read digests as it did. Whether one was taken.
+    /// Take `declaration`'s items from a record a cabinet holds for what its items were lowered to, where one stands ([`found`]): every answer its elaboration was given is the one the walk gives now, and every part it read digests as it did. Whether one was taken.
     ///
     /// **Nothing is asked for to decide it.** A record's questions are answered of declarations finished and of other units alone, so a record that read a declaration not yet decided is passed over, and the declaration elaborated as it would have been: taking one closes no cycle and decides nothing ahead of the order its readers are counted in.
     ///
-    /// **Taken as elaborated.** Each item is published as its elaboration published it ([`Context::publish_adopted`]) and compared with the baseline's, the binders its proofs read are credited, and the record is filed as the declaration's, complete as the store held it, so the declarations that read it, the unit's record and a later filing find what they would have of an elaboration.
+    /// **Taken as elaborated.** Each item is published as its elaboration published it ([`Context::publish_adopted`]) and compared with the baseline's, the binders its proofs read are credited, and the record is filed as the declaration's, complete as the cabinet held it, so the declarations that read it, the unit's record and a later filing find what they would have of an elaboration.
     fn adopted(&mut self, context: &mut Context, declaration: usize) -> bool {
         let Some(candidates) = self.over.and_then(|over| over.candidates) else {
             return false;

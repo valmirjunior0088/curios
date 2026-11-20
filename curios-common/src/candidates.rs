@@ -1,6 +1,6 @@
-//! What a compile made of a declaration, kept for a later compile of the same input: a candidate, a record of the store named by the facet it is, the input it was made from and what it holds ([`candidate_name`]), so a store finds every candidate filed for one input together ([`Candidates`]).
+//! What a compile made of a declaration, kept for a later compile of the same input: a candidate, a record of the cabinet named by the facet it is, the input it was made from and what it holds ([`candidate_name`]), so a cabinet finds every candidate filed for one input together ([`Candidates`]).
 //!
-//! **Many for one input.** A declaration made again from an input it was once made from is made from whatever it read then, which may stand or not: so a candidate holds what its making read, each part by the digest it had, and a store keeps every candidate filed for an input until no slot has named its unit for the time a collection keeps an object, so an edit undone, a branch checked out again and a bisection find what was made of the text they bring back.
+//! **Many for one input.** A declaration made again from an input it was once made from is made from whatever it read then, which may stand or not: so a candidate holds what its making read, each part by the digest it had, and a cabinet keeps every candidate filed for an input until no slot has named its unit for the time a collection keeps an object, so an edit undone, a branch checked out again and a bisection find what was made of the text they bring back.
 
 use {
     crate::{Digest, Object},
@@ -49,7 +49,7 @@ pub fn candidate_prefix(facet: Facet, input: &Digest) -> [u8; CANDIDATE_PREFIX] 
         .expect("a digest is longer than a candidate's prefix")
 }
 
-/// What a store names a candidate of `facet` made from `input` by, `bytes` being what it is stored as alone: the facet and the input, which it shares with every candidate made of them, and then the digest of what it holds, which tells it from them.
+/// What a cabinet names a candidate of `facet` made from `input` by, `bytes` being what it is stored as alone: the facet and the input, which it shares with every candidate made of them, and then the digest of what it holds, which tells it from them.
 pub fn candidate_name(facet: Facet, input: &Digest, bytes: &[u8]) -> Digest {
     let mut name = [0; 32];
     name[..CANDIDATE_PREFIX].copy_from_slice(&candidate_prefix(facet, input));
@@ -59,11 +59,11 @@ pub fn candidate_name(facet: Facet, input: &Digest, bytes: &[u8]) -> Digest {
     Digest::from_bytes(name)
 }
 
-/// What a store holds for a compile to look among: the candidates filed for an input, and any object by its name.
+/// What a cabinet holds for a compile to look among: the candidates filed for an input, and any object by its name.
 pub trait Candidates {
-    /// Every candidate of `facet` made from `input` that the store holds, in no stated order.
+    /// Every candidate of `facet` made from `input` that the cabinet holds, in no stated order.
     fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object>;
 
-    /// The object named `digest`, where the store holds it.
+    /// The object named `digest`, where the cabinet holds it.
     fn object(&self, digest: &Digest) -> Option<Object>;
 }

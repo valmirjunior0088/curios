@@ -29,7 +29,7 @@ fn main() {
         env::var_os("OUT_DIR").expect("Cargo runs a build script with `OUT_DIR` set"),
     );
 
-    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its store's memo there.
+    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its cabinet's memo there.
     for path in compile(&out) {
         println!("cargo:rerun-if-changed={}", path.display());
     }

@@ -1,4 +1,4 @@
--- `/app/X` was taken from the store's record of it, filed while `F` was positive, because `F` digests alike with no vector on record whatever the walk mounting `/lib` computes for it (`recheck::stored`, `baseline::read_digest`); `X` holds a function out of `X`, and `self_app` applies one to itself.
+-- `/app/X` was taken from the cabinet's record of it, filed while `F` was positive, because `F` digests alike with no vector on record whatever the walk mounting `/lib` computes for it (`recheck::stored`, `baseline::read_digest`); `X` holds a function out of `X`, and `self_app` applies one to itself.
 let /self_app: (x: #{node = InductType} /app/X()) -> #{node = InductType} /sys/Bool/False() =
     (x: #{node = InductType} /app/X()) =>
         #{goal = #{node = InductType} /sys/Bool/False()}

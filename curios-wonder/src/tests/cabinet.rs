@@ -1,4 +1,4 @@
-//! What a question takes from the store and its session, and what it gives back: a hit verified against the text the compilation would read, a unit filed where the disk holds every text the fold has read, whole or over a baseline, and kept and placed otherwise, and a baseline — filed or kept — that a unit is recompiled over only while the units before it still hold what they held when it was made.
+//! What a question takes from the cabinet and its session, and what it gives back: a hit verified against the text the compilation would read, a unit filed where the disk holds every text the fold has read, whole or over a baseline, and kept and placed otherwise, and a baseline — filed or kept — that a unit is recompiled over only while the units before it still hold what they held when it was made.
 
 use {
     super::test_support::*,
@@ -18,7 +18,7 @@ use {
     },
 };
 
-/// A question files each unit it compiled whole from the text on disk, so the next command starts from the store, whichever command it is.
+/// A question files each unit it compiled whole from the text on disk, so the next command starts from the cabinet, whichever command it is.
 #[test]
 fn a_question_files_what_it_compiled_whole_from_the_disk() {
     let root = mounted_project("question-files");
@@ -32,7 +32,7 @@ fn a_question_files_what_it_compiled_whole_from_the_disk() {
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
-        "the next question starts from the store"
+        "the next question starts from the cabinet"
     );
     assert_eq!(
         built(&root),
@@ -72,11 +72,11 @@ fn a_unit_read_through_an_open_document_is_filed_while_the_disk_holds_its_text()
     assert_eq!(slots(&root).len(), 2, "both units stand on the disk's text");
 }
 
-/// A unit whose record still agrees comes from the store, however many units before it missed.
+/// A unit whose record still agrees comes from the cabinet, however many units before it missed.
 ///
 /// A missing unit is compiled whole from the same text into the same bytes and filed where it was, so the unit after it, whose record vouches for those bytes, is reused. Which slot is the first unit's is not spelled here, so each is taken out in turn and the two outcomes are read together.
 ///
-/// Read off the fold's own progress events, as the store's own tests are: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with the chain broken.
+/// Read off the fold's own progress events, as the cabinet's own tests are: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with the chain broken.
 #[test]
 fn a_miss_does_not_refuse_the_units_after_it() {
     let root = mounted_project("chain");
@@ -85,7 +85,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
-        "both units are the store's when nothing is missing"
+        "both units are the cabinet's when nothing is missing"
     );
 
     let slots = Cabinet::of(&root, None).verdict_files();
@@ -109,7 +109,7 @@ fn a_miss_does_not_refuse_the_units_after_it() {
             ["compiling /alpha", "reused /beta"],
             ["reused /alpha", "compiling /beta"],
         ],
-        "the unit after a missing one is still the store's, since the one compiled again holds the bytes it held"
+        "the unit after a missing one is still the cabinet's, since the one compiled again holds the bytes it held"
     );
 }
 
@@ -134,11 +134,11 @@ fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
-        "so the disk's text is the store's still"
+        "so the disk's text is the cabinet's still"
     );
 }
 
-/// One unit, however it was compiled: over a text saved since the store was filed, a question compiles the unit over its slot and files it, and the unit after it, and each slot holds the bytes a build files there.
+/// One unit, however it was compiled: over a text saved since the cabinet was filed, a question compiles the unit over its slot and files it, and the unit after it, and each slot holds the bytes a build files there.
 ///
 /// This is what lets a build believe a unit a question compiled over a baseline, and the next question start from it.
 #[test]
@@ -182,12 +182,12 @@ fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
     assert_eq!(
         folded(&root, &edited(&root, "b/lib.crs")),
         ["reused /alpha", "recompiling /beta"],
-        "an edited last unit is compiled over its own slot, after a predecessor that is the store's"
+        "an edited last unit is compiled over its own slot, after a predecessor that is the cabinet's"
     );
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
-        "and nothing was filed, so the disk's text is the store's still"
+        "and nothing was filed, so the disk's text is the cabinet's still"
     );
 }
 
@@ -214,11 +214,11 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
     );
 }
 
-/// A file rewritten while its unit compiles leaves the store as it was: the disk is asked as the unit is handed over, and no longer holds the text the unit was compiled from.
+/// A file rewritten while its unit compiles leaves the cabinet as it was: the disk is asked as the unit is handed over, and no longer holds the text the unit was compiled from.
 ///
 /// The rewrite lands between the compile and the hand-over, which is where a save during a long check lands. `/beta` is then a unit after one that was not filed.
 #[test]
-fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
+fn a_file_rewritten_while_its_unit_compiles_leaves_the_cabinet_as_it_was() {
     /// The question's cache, with one file rewritten as the first unit is handed over.
     struct Rewriting<'a> {
         reached: Overlaid<'a>,
@@ -249,9 +249,9 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
 
     let root = mounted_project("rewritten");
     let overlay = Overlay::default();
-    let store = Verdicts::at(Cabinet::of(&root, None));
+    let verdicts = Verdicts::at(Cabinet::of(&root, None));
     let rewriting = Rewriting {
-        reached: Overlaid::over(&store, &overlay),
+        reached: Overlaid::over(&verdicts, &overlay),
         file: root.join("a/lib.crs"),
         rewritten: Cell::new(false),
     };
@@ -266,11 +266,11 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_store_as_it_was() {
     );
 }
 
-/// A package the store cannot take recompiles over what the session compiled last, rather than compiling whole every time: no slot can be written, so the unit a check produced is the only baseline there is.
+/// A package the cabinet cannot take recompiles over what the session compiled last, rather than compiling whole every time: no slot can be written, so the unit a check produced is the only baseline there is.
 ///
-/// **The baseline advances without the store.** A unit is kept whether or not it is filed, so a session over a store nobody can write still recompiles what each edit moved, and a question with no session is where it was.
+/// **The baseline advances without the cabinet.** A unit is kept whether or not it is filed, so a session over a cabinet nobody can write still recompiles what each edit moved, and a question with no session is where it was.
 #[test]
-fn a_session_recompiles_what_the_store_could_not_take() {
+fn a_session_recompiles_what_the_cabinet_could_not_take() {
     let root = mounted_project("session-unfiled");
     unwritable(&root);
     let session = Session::default();
@@ -292,7 +292,7 @@ fn a_session_recompiles_what_the_store_could_not_take() {
     );
 }
 
-/// A unit after an edited one is compiled over a baseline at every check: over the store's slot at the first, though that was filed after the first unit's disk text, each stage asking again what it read of the unit that moved, and over what the session kept from then on, which was compiled after the text the edit still holds.
+/// A unit after an edited one is compiled over a baseline at every check: over the cabinet's slot at the first, though that was filed after the first unit's disk text, each stage asking again what it read of the unit that moved, and over what the session kept from then on, which was compiled after the text the edit still holds.
 #[test]
 fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check() {
     let root = mounted_project("session-downstream");
@@ -303,7 +303,7 @@ fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
         ["recompiling /alpha", "recompiling /beta"],
-        "the first check has only the store, whose slot for /beta is a baseline though it vouches for the /alpha on disk"
+        "the first check has only the cabinet, whose slot for /beta is a baseline though it vouches for the /alpha on disk"
     );
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
@@ -314,7 +314,7 @@ fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check
 
 /// A unit compiled in a second scope replaces what the session kept for it in the first, rather than sitting beside it: the session holds one unit per unit, so what it holds is bounded by the units the editor reached and never by how often their scope moved.
 ///
-/// Observed from the far side of the bound, over a `/beta` held edited throughout, so that the store never holds it and the session is all there is. `/beta` is compiled after `/alpha`, then with its dependency dropped from the manifest, then after `/alpha` again — and the third check compiles it whole, since the second replaced what the first kept. A session keyed by slot would still hold the first scope's unit, and would have recompiled over it, beside a stranded unit per scope the session had ever seen.
+/// Observed from the far side of the bound, over a `/beta` held edited throughout, so that the cabinet never holds it and the session is all there is. `/beta` is compiled after `/alpha`, then with its dependency dropped from the manifest, then after `/alpha` again — and the third check compiles it whole, since the second replaced what the first kept. A session keyed by slot would still hold the first scope's unit, and would have recompiled over it, beside a stranded unit per scope the session had ever seen.
 #[test]
 fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     let root = mounted_project("session-rescoped");
@@ -347,15 +347,15 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
         ["reused /alpha", "compiling /beta"],
-        "after /alpha again: /alpha's unit is the store's, and /beta's was replaced"
+        "after /alpha again: /alpha's unit is the cabinet's, and /beta's was replaced"
     );
 }
 
-/// A session keeps a unit the store restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session has only what that check filed.
+/// A session keeps a unit the cabinet restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session has only what that check filed.
 ///
-/// What this spares an editor is the second read of a slot: the first edit after a check the store answered misses, asks for a baseline, and is handed the unit already decoded.
+/// What this spares an editor is the second read of a slot: the first edit after a check the cabinet answered misses, asks for a baseline, and is handed the unit already decoded.
 #[test]
-fn a_session_keeps_a_unit_the_store_restored() {
+fn a_session_keeps_a_unit_the_cabinet_restored() {
     let root = mounted_project("session-restored");
     built(&root);
     let session = Session::default();
@@ -374,11 +374,11 @@ fn a_session_keeps_a_unit_the_store_restored() {
     assert_eq!(
         folded(&root, &edited(&root, "b/lib.crs")),
         ["reused /alpha", "compiling /beta"],
-        "and a question with no session has only the store, where the /alpha the disk holds was filed again and the /beta held edited was not"
+        "and a question with no session has only the cabinet, where the /alpha the disk holds was filed again and the /beta held edited was not"
     );
 }
 
-/// A session answers a hit on a slot it filed with the unit it compiled, and reads nothing of the slot past its record: with every filed artifact damaged, the session's next check still takes each unit from the store, where a question with no session reads the damage and compiles each again.
+/// A session answers a hit on a slot it filed with the unit it compiled, and reads nothing of the slot past its record: with every filed artifact damaged, the session's next check still takes each unit from the cabinet, where a question with no session reads the damage and compiles each again.
 ///
 /// What this spares an editor is the decode after a save: the save's check files the unit, the question after it hits that slot, and the session goes on holding the unit it compiled in place of a copy read back out of the bytes it just wrote.
 #[test]
@@ -404,7 +404,7 @@ fn a_session_answers_a_hit_on_what_it_filed_with_the_unit_it_compiled() {
     );
 }
 
-/// A session files a dependency when it compiles it, and not the unit its editor holds edited: every keystroke after that leaves the store as it was.
+/// A session files a dependency when it compiles it, and not the unit its editor holds edited: every keystroke after that leaves the cabinet as it was.
 #[test]
 fn a_session_files_a_dependency_and_no_keystroke() {
     let root = mounted_project("session-files");
@@ -429,7 +429,7 @@ fn a_session_files_a_dependency_and_no_keystroke() {
         folded_reusing(&root, &keystroke, &session),
         ["reused /alpha", "recompiling /beta"]
     );
-    assert!(slots(&root) == filed, "a keystroke moved the store");
+    assert!(slots(&root) == filed, "a keystroke moved the cabinet");
 }
 
 /// A unit a session compiles whole after a saved manifest edit moved its scope is filed where its new scope addresses it, beside the slots its old scope filed.
@@ -485,11 +485,11 @@ fn a_kept_unit_after_a_changed_predecessor_is_refused() {
     assert_mismatch(&checked(&root, &retyped, &session));
 }
 
-/// The guard holds over a predecessor the store could not take: a unit is kept, and what it read is logged, whether or not it is filed.
+/// The guard holds over a predecessor the cabinet could not take: a unit is kept, and what it read is logged, whether or not it is filed.
 ///
-/// `/beta` is held edited, so it is kept and never filed, and `/alpha` is compiled whole from the disk twice, the store taking neither. A cache that logged only what it did not file would keep `/beta` after an empty log, offer it again after `/alpha` had changed its declared type, and report nothing.
+/// `/beta` is held edited, so it is kept and never filed, and `/alpha` is compiled whole from the disk twice, the cabinet taking neither. A cache that logged only what it did not file would keep `/beta` after an empty log, offer it again after `/alpha` had changed its declared type, and report nothing.
 #[test]
-fn a_kept_unit_is_refused_once_a_predecessor_the_store_could_not_take_has_changed() {
+fn a_kept_unit_is_refused_once_a_predecessor_the_cabinet_could_not_take_has_changed() {
     let root = mounted_project("session-guard-unfiled");
     unwritable(&root);
     let session = Session::default();
@@ -507,7 +507,7 @@ fn a_kept_unit_is_refused_once_a_predecessor_the_store_could_not_take_has_change
 
 /// A declaration the parser cannot read answers with its own record, over a baseline as with none.
 ///
-/// **Recovery and the item-level recompile meet here.** A question compiles over a baseline, the session's or the store's. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that expected an item of every declaration would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
+/// **Recovery and the item-level recompile meet here.** A question compiles over a baseline, the session's or the cabinet's. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so a recompile that expected an item of every declaration would look for items its own elaboration deliberately did not produce, and a keystroke leaving a half-written declaration with a dependent would kill the analyst instead of answering.
 ///
 /// Two declarations are the smallest shape that shows it: one broken, and one naming it, which is the one that goes missing.
 #[test]
@@ -521,14 +521,14 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
         root.join("b/lib.crs"),
         module.replace("\"beta\"", ""),
     )]));
-    let store = Verdicts::at(Cabinet::of(&root, None));
+    let verdicts = Verdicts::at(Cabinet::of(&root, None));
     let diagnostics = diagnostics(
         DEFAULT_BUDGET,
         Subject::Unit {
             units: crate::overlaid(mounted(&root), &overlay),
         },
         &overlay,
-        Some(&store),
+        Some(&verdicts),
         &mut |_| {},
     )
     .diagnostics;
@@ -544,26 +544,26 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
     );
 }
 
-/// A store that cannot be written costs nothing of the answer, which is the one it would have been, and holds why it took nothing for whoever narrates the compile.
+/// A cabinet that cannot be written costs nothing of the answer, which is the one it would have been, and holds why it took nothing for whoever narrates the compile.
 #[test]
-fn a_store_that_cannot_be_written_answers_as_one_that_can() {
+fn a_cabinet_that_cannot_be_written_answers_as_one_that_can() {
     let refused = mounted_project("unfiled-named");
     unwritable(&refused);
     let taken = mounted_project("unfiled-none");
     let overlay = Overlay::default();
     let asked = |root: &Path| {
-        let store = Verdicts::at(Cabinet::of(root, None));
+        let verdicts = Verdicts::at(Cabinet::of(root, None));
         let answer = diagnostics(
             DEFAULT_BUDGET,
             Subject::Unit {
                 units: crate::overlaid(mounted(root), &overlay),
             },
             &overlay,
-            Some(&store),
+            Some(&verdicts),
             &mut |_| {},
         );
 
-        (answer, store.refused())
+        (answer, verdicts.refused())
     };
 
     let (answer, refusal) = asked(&refused);
@@ -577,7 +577,7 @@ fn a_store_that_cannot_be_written_answers_as_one_that_can() {
 
     let (answer, refusal) = asked(&taken);
     assert!(answer.diagnostics.is_empty(), "{:?}", answer.diagnostics);
-    assert_eq!(refusal, None, "a store that took the units says nothing");
+    assert_eq!(refusal, None, "a cabinet that took the units says nothing");
 }
 
 /// `/beta`'s library reading a name of `/alpha`'s, at the type `/alpha` first declares it.
@@ -601,24 +601,24 @@ fn assert_mismatch(diagnostics: &[crate::Diagnosis]) {
     );
 }
 
-/// What a build did to each of `root`'s units, filing them through the store itself.
+/// What a build did to each of `root`'s units, filing them through the cabinet itself.
 fn built(root: &Path) -> Vec<String> {
-    let store = Verdicts::at(Cabinet::of(root, None));
+    let verdicts = Verdicts::at(Cabinet::of(root, None));
 
-    folded_through(root, &Overlay::default(), &store)
+    folded_through(root, &Overlay::default(), &verdicts)
 }
 
-/// What the fold did to each of `root`'s units, checked through [`Overlaid`] over `overlay` — the store as `wonder` hands a query.
+/// What the fold did to each of `root`'s units, checked through [`Overlaid`] over `overlay` — the cabinet as `wonder` hands a query.
 fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
     folded_reusing(root, overlay, &Session::default())
 }
 
-/// [`folded`], compiling over what `session` kept — the store the language server hands a query.
+/// [`folded`], compiling over what `session` kept — the cabinet the language server hands a query.
 fn folded_reusing(root: &Path, overlay: &Overlay, session: &Session) -> Vec<String> {
-    let mut store = Verdicts::at(Cabinet::of(root, None));
-    store.reuse(session.clone());
+    let mut verdicts = Verdicts::at(Cabinet::of(root, None));
+    verdicts.reuse(session.clone());
 
-    folded_through(root, overlay, &Overlaid::over(&store, overlay))
+    folded_through(root, overlay, &Overlaid::over(&verdicts, overlay))
 }
 
 /// What the fold did to each of `root`'s units, read through `overlay` and `cache`.
@@ -642,8 +642,8 @@ fn folded_through(root: &Path, overlay: &Overlay, cache: &dyn Cache) -> Vec<Stri
 
 /// Every record the second package reports over `overlay`, compiled over what `session` kept — the question the language server asks about a library.
 fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diagnosis> {
-    let mut store = Verdicts::at(Cabinet::of(root, None));
-    store.reuse(session.clone());
+    let mut verdicts = Verdicts::at(Cabinet::of(root, None));
+    verdicts.reuse(session.clone());
 
     diagnostics(
         DEFAULT_BUDGET,
@@ -651,13 +651,13 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
             units: crate::overlaid(mounted(root), overlay),
         },
         overlay,
-        Some(&store),
+        Some(&verdicts),
         &mut |_| {},
     )
     .diagnostics
 }
 
-/// Every unit slot the store at `root` holds, by name, with its bytes.
+/// Every unit slot the cabinet at `root` holds, by name, with its bytes.
 fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
     let Ok(entries) = fs::read_dir(Cabinet::of(root, None).verdicts()) else {
         return BTreeMap::new();
@@ -676,7 +676,7 @@ fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
         .collect()
 }
 
-/// Damage the last byte of every unit slot the store at `root` holds: the artifact's, behind a record that still reads.
+/// Damage the last byte of every unit slot the cabinet at `root` holds: the artifact's, behind a record that still reads.
 fn damaged(root: &Path) {
     for (name, mut bytes) in slots(root) {
         let last = bytes.last_mut().expect("a slot holds an artifact");
@@ -685,7 +685,7 @@ fn damaged(root: &Path) {
     }
 }
 
-/// Leave the store at `root` unable to take a unit: a file where its slots would go.
+/// Leave the cabinet at `root` unable to take a unit: a file where its slots would go.
 fn unwritable(root: &Path) {
     let verdicts = Cabinet::of(root, None).verdicts();
     fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
@@ -736,9 +736,9 @@ impl Cache for Noting<'_> {
     }
 }
 
-/// A file no package declares has no store, and the session that asks about it keeps what it compiled of it all the same. A module is compiled whole at the first check and over what the session kept at the next, with the text an editor holds; and nothing is filed, there being nowhere to file it.
+/// A file no package declares has no cabinet, and the session that asks about it keeps what it compiled of it all the same. A module is compiled whole at the first check and over what the session kept at the next, with the text an editor holds; and nothing is filed, there being nowhere to file it.
 ///
-/// Mutation-checked: with a handle that has no store given no slot to keep a unit at, the second check compiles the module whole.
+/// Mutation-checked: with a handle that has no cabinet given no slot to keep a unit at, the second check compiles the module whole.
 #[test]
 fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
     let root = Temporary::new("wonder", "loose-module");
@@ -747,7 +747,7 @@ fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
     write(&root, "Loose.crs", text);
     let session = Session::default();
     let folded = |overlay: &Overlay| {
-        let store = Verdicts::kept_by(session.clone());
+        let verdicts = Verdicts::kept_by(session.clone());
         let unit = RootSource::loose_module(&file, overlay).expect("written as a module");
         let units = crate::overlaid(vec![unit], overlay);
 
@@ -755,7 +755,7 @@ fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
         Fold::new(
             DEFAULT_BUDGET,
             &units,
-            Some(&Overlaid::over(&store, overlay)),
+            Some(&Overlaid::over(&verdicts, overlay)),
         )
         .check_units(|progress| match progress {
             Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
@@ -786,8 +786,8 @@ fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
     write(&root, "loose.crs", text);
     let session = Session::default();
     let asked = |overlay: &Overlay| {
-        let store = Verdicts::kept_by(session.clone());
-        let reached = Overlaid::over(&store, overlay);
+        let verdicts = Verdicts::kept_by(session.clone());
+        let reached = Overlaid::over(&verdicts, overlay);
         let noting = Noting {
             cache: &reached,
             entry: RefCell::new(Vec::new()),
@@ -834,8 +834,8 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
     let session = Session::default();
     let overlay = Overlay::default();
     let asked = |file: &str| {
-        let store = Verdicts::kept_by(session.clone());
-        let reached = Overlaid::over(&store, &overlay);
+        let verdicts = Verdicts::kept_by(session.clone());
+        let reached = Overlaid::over(&verdicts, &overlay);
         let noting = Noting {
             cache: &reached,
             entry: RefCell::new(Vec::new()),

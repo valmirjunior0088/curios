@@ -28,7 +28,7 @@ A test lowers to a definition of kind `Test` and type `() -> /std/Test({})`, and
 - **Empty parentheses**, `test foo() = …`, which spell a telescope the form does not admit.
 - **Checking the written entry and the synthesized tail together**: the tail pairs each declaration with its path and raises nothing of its own, and would have to be carried to finalization, where a witness premise is decided.
 - **A verdict in the exit code**, `0` for a pass and `1` for a failure, or a code set apart for a pass, as [Rust's harness](https://doc.rust-lang.org/src/test/test_result.rs.html) sets `50` apart for a test run in a process of its own: `/std/Proc/exit` is every test's to call, so whatever code a runner reads as a verdict is one a test can exit with.
-- **Verdict caching**: a test payload is filed in the store like any program's, under a reserved executable name, but a verdict is a fact about an execution, and the store holds only what sources determine.
+- **Verdict caching**: a test payload is filed in the cabinet like any program's, under a reserved executable name, but a verdict is a fact about an execution, and the cabinet holds only what sources determine.
 - **A host row the verdict is handed through**: the host's contract grows for what one kind of program says once, where the entry's answer already crosses.
 - **The answer read by its shape at run time**, a byte string told from a program's unit by a test of the reference: a second rule beside the wire's, reading what the emitter keeps to itself, which forced a rope to a payload holding room past its run.
 - **JSON as the verdict's text**, which links float printing the verdict never writes and a mapping into `Json` written by hand; and **a framing of its own**, a format stated twice by hand where the language has one.
@@ -40,4 +40,4 @@ A test lowers to a definition of kind `Test` and type `() -> /std/Test({})`, and
 - **A test-only module**, `test mod`: a module is a namespace, and what it holds is no property of it.
 - **Leaving out what only tests reach**, by liveness: whether a build checks a declaration would follow from who reads it.
 - **A test named within its subtree**, as a private definition is: a reference from anything a build holds would resolve in a test compilation and not in a build.
-- **A filter in the unit**, its tests outside the selection left out as a build leaves every test out: a command-line argument would be part of what a unit is, the store would hold one tested unit per filter, and a filtered run would share none with `wonder` and `lint`.
+- **A filter in the unit**, its tests outside the selection left out as a build leaves every test out: a command-line argument would be part of what a unit is, the cabinet would hold one tested unit per filter, and a filtered run would share none with `wonder` and `lint`.

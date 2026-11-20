@@ -305,7 +305,7 @@ impl<'a> Established<'a> {
 
     /// This scope with `fixed` saying of each unit, in the order they stand, whether it is the compiler's own: a constant of the executable, which is one thing under one compiler. Asked before a baseline is laid over the scope.
     ///
-    /// **Nothing is recorded of a read of a fixed unit.** A baseline is offered by the compiler that made it, a store's slot and a session's entry naming it alike, so a fixed unit is the one every baseline was compiled after and no read of it is asked again.
+    /// **Nothing is recorded of a read of a fixed unit.** A baseline is offered by the compiler that made it, a cabinet's slot and a session's entry naming it alike, so a fixed unit is the one every baseline was compiled after and no read of it is asked again.
     pub fn fixed(mut self, fixed: &[bool]) -> Self {
         assert_eq!(
             fixed.len(),
@@ -423,7 +423,7 @@ impl<'a> Established<'a> {
 
     /// Refuse a scope two of whose units declare a witness at one concept and one key.
     ///
-    /// Each unit was held to the orphan rule where it was compiled, which is what keeps two units from declaring one witness; a scope is still asked, since its units arrive from a store and a program resolved through either of two would mean two things. The names say it, so nothing is reduced.
+    /// Each unit was held to the orphan rule where it was compiled, which is what keeps two units from declaring one witness; a scope is still asked, since its units arrive from a cabinet and a program resolved through either of two would mean two things. The names say it, so nothing is reduced.
     pub fn coherent(&self) -> Result<(), Error> {
         let mut declared = HashMap::<(Global, WitnessKey), (Global, Qualifier)>::new();
         for unit in &self.units {

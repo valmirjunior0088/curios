@@ -220,7 +220,7 @@ pub struct Anchors {
     fields: Sorted<Global, Vec<(String, Extent)>>,
 }
 
-/// The texts of one source as a store keeps them, an object of its own: the source, once, and each text's key with where it lies in it.
+/// The texts of one source as a cabinet keeps them, an object of its own: the source, once, and each text's key with where it lies in it.
 #[curios_archive::archived]
 pub struct SourceTexts {
     source: Source,
@@ -287,7 +287,7 @@ impl Anchors {
 }
 
 impl Anchors {
-    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same name and text being one, since a source is stored by its name and its file is no part of it.
+    /// Each source's texts, as a cabinet keeps them: the sources in the order of the first text each holds, two holding the same name and text being one, since a source is stored by its name and its file is no part of it.
     fn sources(&self) -> Vec<SourceTexts> {
         let mut sources = Vec::<SourceTexts>::new();
         // Where each source a text was sited in went, by where it lies in memory, and by its name.
@@ -336,7 +336,7 @@ impl Anchors {
             .collect()
     }
 
-    /// The source texts `wanted` asks for, as the objects a store keeps them as, made now.
+    /// The source texts `wanted` asks for, as the objects a cabinet keeps them as, made now.
     pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
         let mut objects = Vec::new();
         for texts in self.sources() {

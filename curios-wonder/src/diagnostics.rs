@@ -244,8 +244,10 @@ fn diagnosed_reading(
     file: Option<&Path>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Diagnosed {
-    let store = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = store.as_ref().map(|store| store as &dyn Cache);
+    let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = overlaid_verdicts
+        .as_ref()
+        .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
 
     if let Some(refusal) = subject.unnameable(overlay) {
         return Diagnosed {
@@ -452,7 +454,7 @@ pub fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
     units
 }
 
-/// The store as a question reaches it: read through the editor's documents, and filed into where the disk holds what was compiled.
+/// The cabinet as a question reaches it: read through the editor's documents, and filed into where the disk holds what was compiled.
 ///
 /// **A stored unit is verified through the overlay.** A unit is believed on a re-read of every file it was compiled from, and here that re-read takes an open document's text over the disk's (`Verdicts::get_overlaid`), so a unit whose source an editor holds edited is a miss and one whose source is merely open is not. The rule is exact because the record lists what the unit read: a document the unit never read — an executable beside a package's library, in the very directory the library reads from — leaves the hit standing. Refusing on containment instead would cost the language server that library on every keystroke in a program file.
 ///
@@ -474,18 +476,18 @@ impl Cache for Overlaid<'_> {
         self.cache.get_overlaid(source, self.overlay)
     }
 
-    /// The store's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the slot this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile redoes more than it had to and answers the same.
+    /// The cabinet's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the slot this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the cabinet nearer than the session, and then the recompile redoes more than it had to and answers the same.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
         Cache::baseline(self.cache, source, offered)
     }
 
-    /// Kept, then filed where the disk holds every text the fold has read. This is why the store itself is held rather than a `dyn Cache`, which cannot keep a unit without filing it.
+    /// Kept, then filed where the disk holds every text the fold has read. This is why the cabinet itself is held rather than a `dyn Cache`, which cannot keep a unit without filing it.
     ///
     /// **Every unit is kept, filed or not.** Keeping hands the session its next baseline, with the units it was compiled after, and takes the unit into the fold, so a unit after it is checked against it whether or not it was filed.
     ///
     /// **The disk is asked as the unit is handed over**, of everything the fold has read so far, which is what catches a file rewritten while its unit compiled.
     ///
-    /// **A unit that is not filed has no place in the store.** No slot is addressed after another, so a unit that cannot read it is restored as though it were not there, and one that can is compiled over its baseline, each stage asking again what it read of the unit that moved. Saying what an unfiled unit's slot would hold costs a serialization of the whole unit, which on the standard library is most of what a cache would cost a keystroke, and nothing reads it.
+    /// **A unit that is not filed has no place in the cabinet.** No slot is addressed after another, so a unit that cannot read it is restored as though it were not there, and one that can is compiled over its baseline, each stage asking again what it read of the unit that moved. Saying what an unfiled unit's slot would hold costs a serialization of the whole unit, which on the standard library is most of what a cache would cost a keystroke, and nothing reads it.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
         self.cache.keep(source, unit);
 

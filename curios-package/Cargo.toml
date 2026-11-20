@@ -3,7 +3,7 @@ name = "curios-package"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios packages: the manifest, the governance walk, the dependency resolver, and the store"
+description = "Curios packages: the manifest, the governance walk, the dependency resolver, and the cabinet"
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 //! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's, or, with `--target browser`, serves the page it is built into on loopback, the arguments in the page's address; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable, or, with `--target browser`, writes the module Binaryen produced beside the page that runs it. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
-//! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
+//! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's cabinet, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
 //! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what a test run shows in `test_runner`, executable emission in `bundle`, a page's in `browser` and its serving in `serve` — this file only dispatches, mapping any error to stderr and a failure exit. What answers a program's `foreign` rows and what a test run compiles and runs are the library's (`curios::bindings_of`, `curios::test_subjects`).
 
@@ -240,12 +240,12 @@ fn dispatch() -> Result<(), Failure> {
 
             // The program's arguments reach it through the page's address, and its name is its first.
             if target == Target::Browser {
-                let store = program.home().and_then(|home| {
-                    let store = contract.access.filed(&home.cabinet)?;
+                let verdicts = program.home().and_then(|home| {
+                    let verdicts = contract.access.filed(&home.cabinet)?;
 
-                    Some(store.executing(&home.package, &home.executable))
+                    Some(verdicts.executing(&home.package, &home.executable))
                 });
-                let (files, mut tree) = built(elaboration.budget, program, store, cabinet)?;
+                let (files, mut tree) = built(elaboration.budget, program, verdicts, cabinet)?;
                 let listener = bound(port.unwrap_or(PORT))?;
                 let port = port_of(&listener)?;
 
@@ -262,10 +262,10 @@ fn dispatch() -> Result<(), Failure> {
                 Entry::Stdin(_) => Spelling::STDIN.as_bytes().to_vec(),
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
-            let store = program.home().and_then(|home| {
-                let store = contract.access.filed(&home.cabinet)?;
+            let verdicts = program.home().and_then(|home| {
+                let verdicts = contract.access.filed(&home.cabinet)?;
 
-                Some(store.executing(&home.package, &home.executable))
+                Some(verdicts.executing(&home.package, &home.executable))
             });
             // Kept before the program is consumed: binding needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
@@ -276,7 +276,7 @@ fn dispatch() -> Result<(), Failure> {
             } = payload_of(
                 elaboration.budget,
                 program,
-                store,
+                verdicts,
                 Target::Native,
                 Then::Nothing,
             )?;
@@ -289,7 +289,7 @@ fn dispatch() -> Result<(), Failure> {
             // Nothing announces the run: what follows is the program's own output.
             tree.close();
 
-            // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
+            // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own cabinet, where a compilation of this compiler filed it.
             let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }.map_err(|error| {
                 fault("the program's machine code could not be read back", error)
             })?;
@@ -394,10 +394,10 @@ fn dispatch() -> Result<(), Failure> {
                     "`compile` admits a program no package declares only with `--output`"
                 ),
             };
-            let store = program.home().and_then(|home| {
-                let store = contract.access.filed(&home.cabinet)?;
+            let verdicts = program.home().and_then(|home| {
+                let verdicts = contract.access.filed(&home.cabinet)?;
 
-                Some(store.executing(&home.package, &home.executable))
+                Some(verdicts.executing(&home.package, &home.executable))
             });
             // Kept before the program is consumed: resolving the declared modules needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
@@ -445,7 +445,7 @@ fn dispatch() -> Result<(), Failure> {
                         payload,
                         foreigns,
                         mut tree,
-                    } = payload_of(elaboration.budget, program, store, target, Then::More)?;
+                    } = payload_of(elaboration.budget, program, verdicts, target, Then::More)?;
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
@@ -472,7 +472,7 @@ fn dispatch() -> Result<(), Failure> {
                     (written, tree)
                 }
                 Target::Browser => {
-                    let (files, mut tree) = built(elaboration.budget, program, store, cabinet)?;
+                    let (files, mut tree) = built(elaboration.budget, program, verdicts, cabinet)?;
 
                     tree.open("write", true);
 
@@ -504,11 +504,11 @@ fn dispatch() -> Result<(), Failure> {
                 }
                 None => {
                     let library = contract.admit_library(subject, manifest, &here()?, cabinet)?;
-                    let store = contract.access.filed(&library.cabinet);
+                    let verdicts = contract.access.filed(&library.cabinet);
                     let (record, tree) = documentation_of(
                         elaboration.budget,
                         &library.units,
-                        store.as_ref(),
+                        verdicts.as_ref(),
                         &Subject::package(&library.package),
                     )?;
                     let directory = output_path.unwrap_or_else(|| {
@@ -520,7 +520,7 @@ fn dispatch() -> Result<(), Failure> {
 
             tree.open("write", true);
 
-            // Where the pages landed, as `compile` ends on where its executable did: by default that is under the store, where nobody would look, and the landing page is the one file a reader opens.
+            // Where the pages landed, as `compile` ends on where its executable did: by default that is under `.curios/`, where nobody would look, and the landing page is the one file a reader opens.
             tree.stands(
                 write_documentation(&record, &directory).map_err(|error| {
                     Refused::of("unwritable directory")

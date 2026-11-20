@@ -2,7 +2,7 @@
 //!
 //! A compilation is a set of units folded over a dependency order. Each stage takes its *predecessors* — what earlier units established — and one unit, and a [`Unit`] is defined by what it hands the next one rather than by what it is. The standard library is a unit; a package is a unit; the program you asked for is the unit with no successors, which is what lets it carry the entrypoint.
 //!
-//! A unit's serialized form is a *stored unit*: a [`Record`] of what it was compiled from, framed ahead of the archived unit in one file. The store files a [`Unit`] under a slot, and the fixed prelude's build images each of its roots the same way, and the framing lives here because the prelude's build sits below every store — see `stored`.
+//! A unit's serialized form is a *stored unit*: a [`Record`] of what it was compiled from, framed ahead of the archived unit in one file. The cabinet files a [`Unit`] under a slot, and the fixed prelude's build images each of its roots the same way, and the framing lives here because the prelude's build sits below every cabinet — see `stored`.
 //!
 //! The unit and the stages that do not judge live here, and judgment is interleaved by the driver above it: a unit is made with the certifier's record, never by this crate's walking anything.
 //!

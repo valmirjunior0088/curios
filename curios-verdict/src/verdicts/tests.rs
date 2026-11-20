@@ -1,6 +1,6 @@
-//! What the store does across two compilations of the same project.
+//! What the cabinet does across two compilations of the same project.
 //!
-//! Every test here compiles for real, twice, and reads the answer off the fold's own progress events rather than off the store's internals: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with verification broken.
+//! Every test here compiles for real, twice, and reads the answer off the fold's own progress events rather than off the cabinet's internals: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with verification broken.
 
 use {
     super::*,
@@ -27,7 +27,7 @@ fn shared(shared: &Path) -> Cabinet {
     Cabinet::of(shared, Some(shared))
 }
 
-/// Whether the one mounted unit of a compilation came from the store.
+/// Whether the one mounted unit of a compilation came from the cabinet.
 fn reused(root: &Path) -> bool {
     reused_in(root, &own(root))
 }
@@ -51,7 +51,7 @@ fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
-/// A question's reading of the store, as far as the store's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and keeping what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
+/// A question's reading of the cabinet, as far as the cabinet's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and keeping what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
 struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
 
 impl Cache for Overlaid<'_> {
@@ -112,7 +112,7 @@ fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache, compiled: Compil
     events
 }
 
-/// What a build's fold did to the one unit, through the store itself.
+/// What a build's fold did to the one unit, through the cabinet itself.
 fn folded(root: &Path) -> Vec<String> {
     folded_as(root, Compiled::Built)
 }
@@ -124,7 +124,7 @@ fn folded_as(root: &Path, compiled: Compiled) -> Vec<String> {
     folded_through(root, &root.join("shape"), &verdicts, compiled)
 }
 
-/// What a query's fold did to the one unit, through the store read as the `wonder` engine reads it.
+/// What a query's fold did to the one unit, through the cabinet read as the `wonder` engine reads it.
 fn folded_overlaid(root: &Path, overlay: &Overlay) -> Vec<String> {
     folded_overlaid_in(root, overlay, &own(root))
 }
@@ -179,16 +179,16 @@ fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// The store read and written through, noting the certifier's record of each mounted unit filed into it and of each one handed back. The unit of the entry's own declarations passes through unnoted: the store is told of no executable here, so it files none.
+/// The cabinet read and written through, noting the certifier's record of each mounted unit filed into it and of each one handed back. The unit of the entry's own declarations passes through unnoted: the cabinet is told of no executable here, so it files none.
 struct Recorded<'a> {
-    store: &'a Verdicts,
+    verdicts: &'a Verdicts,
     filed: RefCell<Vec<Certification>>,
     taken: RefCell<Vec<Certification>>,
 }
 
 impl Cache for Recorded<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        let unit = Cache::get(self.store, source)?;
+        let unit = Cache::get(self.verdicts, source)?;
         if !source.is_entry() {
             self.taken.borrow_mut().push(unit.certification().clone());
         }
@@ -199,18 +199,18 @@ impl Cache for Recorded<'_> {
         if !source.is_entry() {
             self.filed.borrow_mut().push(unit.certification().clone());
         }
-        Cache::put(self.store, source, unit);
+        Cache::put(self.verdicts, source, unit);
     }
 }
 
-/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the store rather than from what elaboration concluded, and the reads a recompile over it invalidates along.
+/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the cabinet rather than from what elaboration concluded, and the reads a recompile over it invalidates along.
 #[test]
 fn a_reused_unit_brings_its_certification_back() {
     let root = project("certified");
     let shape = root.join("shape");
-    // A store per compilation, as every caller opens one: the chain it places is the fold's that used it.
-    let recorded = |store| Recorded {
-        store,
+    // A handle per compilation, as every caller opens one: the chain it places is the fold's that used it.
+    let recorded = |verdicts| Recorded {
+        verdicts,
         filed: Default::default(),
         taken: Default::default(),
     };
@@ -237,14 +237,14 @@ fn a_reused_unit_brings_its_certification_back() {
     );
 }
 
-/// A unit taken back from a slot lies in its package's files: what was stored of each source is its name, and the store restores the unit for the source asking, whose package stands on this machine, so a place in it reads as a place in a unit compiled here does.
+/// A unit taken back from a slot lies in its package's files: what was stored of each source is its name, and the cabinet restores the unit for the source asking, whose package stands on this machine, so a place in it reads as a place in a unit compiled here does.
 #[test]
 fn a_reused_unit_lies_in_its_packages_files() {
     let root = project("filed");
     let shape = root.join("shape");
-    let store = Verdicts::at(own(&root));
+    let verdicts = Verdicts::at(own(&root));
     let taking = Taking {
-        store: &store,
+        verdicts: &verdicts,
         taken: RefCell::new(None),
     };
 
@@ -266,15 +266,15 @@ fn a_reused_unit_lies_in_its_packages_files() {
     );
 }
 
-/// The store, keeping the last unit it handed back.
+/// The cabinet, keeping the last unit it handed back.
 struct Taking<'a> {
-    store: &'a Verdicts,
+    verdicts: &'a Verdicts,
     taken: RefCell<Option<Unit>>,
 }
 
 impl Cache for Taking<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        let hit = Cache::get(self.store, source);
+        let hit = Cache::get(self.verdicts, source);
         if let Some(unit) = &hit {
             *self.taken.borrow_mut() = Some(unit.clone());
         }
@@ -283,7 +283,7 @@ impl Cache for Taking<'_> {
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
-        Cache::put(self.store, source, unit);
+        Cache::put(self.verdicts, source, unit);
     }
 }
 
@@ -296,13 +296,13 @@ fn an_unchanged_unit_is_reused() {
     assert!(reused(&root), "and the second finds what the first filed");
 }
 
-/// Filing a unit writes into `.curios/`, which sits inside the directory a package's library reads from, so an address hashed over that tree would miss forever and grow the store a directory per compile. What a unit was compiled from is recorded and verified rather than addressed, and a generated file is not something it was compiled from.
+/// Filing a unit writes into `.curios/`, which sits inside the directory a package's library reads from, so an address hashed over that tree would miss forever and grow the cabinet a directory per compile. What a unit was compiled from is recorded and verified rather than addressed, and a generated file is not something it was compiled from.
 #[test]
-fn writing_into_the_store_does_not_invalidate_it() {
-    let root = project("store-writes");
+fn writing_into_the_cabinet_does_not_invalidate_it() {
+    let root = project("cabinet-writes");
 
     reused(&root);
-    assert!(reused(&root), "the store's own writes are not source");
+    assert!(reused(&root), "the cabinet's own writes are not source");
 
     write(&root, ".curios/unrelated", "not a source file");
     assert!(reused(&root), "and neither is anything else under it");
@@ -453,7 +453,7 @@ fn a_damaged_unit_is_not_reused() {
     assert!(reused(&root), "and the recompile repairs the slot");
 }
 
-/// The store holds one slot per unit rather than one per compile — the property the address exists to have.
+/// The cabinet holds one slot per unit rather than one per compile — the property the address exists to have.
 #[test]
 fn compiling_repeatedly_files_one_slot() {
     let root = project("bounded");
@@ -463,22 +463,22 @@ fn compiling_repeatedly_files_one_slot() {
     }
 
     let slots = fs::read_dir(own(&root).verdicts())
-        .expect("a store with units in it")
+        .expect("a cabinet with units in it")
         .count();
 
     assert_eq!(slots, 1, "four compiles of one unit, one slot");
 }
 
-/// Opening a store is not a decision to file anything in it: the compiler's memo is written by the first slot that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
+/// Opening a cabinet is not a decision to file anything in it: the compiler's memo is written by the first slot that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
 #[test]
-fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
+fn opening_a_cabinet_writes_nothing_until_a_slot_is_addressed() {
     let root = temporary("untouched");
     fs::create_dir_all(&root).unwrap();
 
     let verdicts = Verdicts::at(own(&root));
     assert!(
         !root.join(".curios").exists(),
-        "opening the store created its directory"
+        "opening the cabinet created its directory"
     );
 
     verdicts.compiler();
@@ -520,7 +520,7 @@ fn a_lint_stores_no_copy_of_its_source() {
     );
 }
 
-/// The bytes of every slot the store at `root` holds.
+/// The bytes of every slot the cabinet at `root` holds.
 fn slots(root: &Path) -> Vec<Vec<u8>> {
     let mut slots = own(root)
         .verdict_files()
@@ -657,15 +657,15 @@ fn copied(from: &Path, into: &Path) {
 /// An entry with a declaration of its own, so the unit of its declarations holds something.
 const DECLARING_ENTRY: &str = "use /std/{Fmt, Str};\nuse /shape/{message};\n\nlet twice: Str = Str/concat(message, message);\n\nFmt/print(\"%\\n\")(twice)\n";
 
-/// The store, saying what a fold did with the unit of its entry's own declarations: `reused` where the store handed it back, `recompiled` where it was compiled over a baseline, `compiled` otherwise.
+/// The cabinet, saying what a fold did with the unit of its entry's own declarations: `reused` where the cabinet handed it back, `recompiled` where it was compiled over a baseline, `compiled` otherwise.
 struct Watching<'a> {
-    store: &'a Verdicts,
+    verdicts: &'a Verdicts,
     entry: RefCell<Option<&'static str>>,
 }
 
 impl Cache for Watching<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        let hit = Cache::get(self.store, source);
+        let hit = Cache::get(self.verdicts, source);
         if source.is_entry() {
             *self.entry.borrow_mut() = Some(match hit {
                 Some(_) => "reused",
@@ -677,7 +677,7 @@ impl Cache for Watching<'_> {
     }
 
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
-        let earlier = Cache::baseline(self.store, source, offered);
+        let earlier = Cache::baseline(self.verdicts, source, offered);
         if source.is_entry() && earlier.is_some() {
             *self.entry.borrow_mut() = Some("recompiled");
         }
@@ -686,19 +686,19 @@ impl Cache for Watching<'_> {
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
-        Cache::put(self.store, source, unit);
+        Cache::put(self.verdicts, source, unit);
     }
 }
 
-/// What a build's fold did with the unit of the entry `root` holds in `entry`, through a store told the entry is the executable `executable`, or told nothing.
+/// What a build's fold did with the unit of the entry `root` holds in `entry`, through a cabinet told the entry is the executable `executable`, or told nothing.
 fn entered(root: &Path, entry: &str, executable: Option<&str>) -> &'static str {
-    let store = Verdicts::at(own(root));
-    let store = match executable {
-        Some(executable) => store.executing("app", executable),
-        None => store,
+    let verdicts = Verdicts::at(own(root));
+    let verdicts = match executable {
+        Some(executable) => verdicts.executing("app", executable),
+        None => verdicts,
     };
     let watching = Watching {
-        store: &store,
+        verdicts: &verdicts,
         entry: RefCell::new(None),
     };
     let governing = Governing::of(&root.join("shape"), None).expect("a governed package");
@@ -796,10 +796,10 @@ fn library_of_three(word: &str) -> String {
     )
 }
 
-/// The packs of the store at `root`, each by where it is kept.
+/// The packs of the cabinet at `root`, each by where it is kept.
 fn packs(root: &Path) -> Vec<PathBuf> {
     fs::read_dir(own(root).verdicts())
-        .expect("a store with slots in it")
+        .expect("a cabinet with slots in it")
         .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
         .map(|pack| pack.unwrap().path())
         .filter(|path| {
@@ -809,7 +809,7 @@ fn packs(root: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// How many objects each pack of the store at `root` holds, fewest first.
+/// How many objects each pack of the cabinet at `root` holds, fewest first.
 fn packed_counts(root: &Path) -> Vec<usize> {
     let mut counts = packs(root)
         .into_iter()
@@ -928,7 +928,7 @@ fn chained(name: &str, body: &str) -> Temporary {
     root
 }
 
-/// What a build of `root`'s `top` through the store did to each unit, or what it was refused with.
+/// What a build of `root`'s `top` through the cabinet did to each unit, or what it was refused with.
 fn folded_chain(root: &Path) -> Result<Vec<String>, String> {
     let verdicts = Verdicts::at(own(root));
     let governing = Governing::of(&root.join("top"), None).expect("a governed package");
@@ -980,6 +980,6 @@ fn a_unit_reaching_an_edited_one_through_a_unit_stored_as_it_was_is_not_reused()
     assert_eq!(
         refused(&root),
         refused(&fresh),
-        "a build over the store answers what a build with nothing stored answers"
+        "a build over the cabinet answers what a build with nothing stored answers"
     );
 }

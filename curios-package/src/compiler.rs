@@ -8,7 +8,7 @@
 //!
 //! **Why not a fingerprint over chosen sources.** That is a list somebody maintains, and the failure of forgetting an entry is silent admission. There is nothing to forget here.
 //!
-//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves — about 0.4 s for a 700 MiB debug build (`time sha256sum target/debug/curios` retakes it), which a language server would pay on every keystroke — so the digest is recorded beside the store against a stamp of the binary, and recomputed only when the stamp moves. The common path is one `stat`.
+//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves — about 0.4 s for a 700 MiB debug build (`time sha256sum target/debug/curios` retakes it), which a language server would pay on every keystroke — so the digest is recorded in the cabinet against a stamp of the binary, and recomputed only when the stamp moves. The common path is one `stat`.
 //!
 //! **What the stamp identifies, and why size and modification time are not enough.** Those two alone are what `sccache` uses, and they are forgeable by the ordinary means of moving a binary about: `cp -p`, `rsync -a`, `tar -x` and a restored artifact cache all preserve a modification time, so two builds that happen to agree on length would share a stamp and the second would be handed the first's digest — a verdict believed on behalf of a compiler that never reached it, which is the one direction that admits. The stamp therefore also carries the inode and the *status change* time, which the kernel writes on every modification and no copying tool can set. What is identified is the file this compiler is running from, not merely how large it is and when someone says it was written.
 
@@ -61,9 +61,9 @@ pub fn compiler(cabinet: &Cabinet) -> Option<String> {
 
     let digest = digest(&executable)?;
 
-    // Best-effort: a store that cannot be written costs the next compile another digest, and nothing else. It must not cost the verdict.
+    // Best-effort: a cabinet that cannot be written costs the next compile another digest, and nothing else. It must not cost the verdict.
     //
-    // Renamed into place rather than written in place, as every slot in the store is. Two compilers sharing a cache would otherwise interleave their writes, and a torn memo pairs a stamp with a digest no binary ever had together — which fails safe, since a stamp nobody matches costs one digest, but the store's one rule is cheaper than the reasoning that it does.
+    // Renamed into place rather than written in place, as every slot in the cabinet is. Two compilers sharing a cache would otherwise interleave their writes, and a torn memo pairs a stamp with a digest no binary ever had together — which fails safe, since a stamp nobody matches costs one digest, but the cabinet's one rule is cheaper than the reasoning that it does.
     if let Some(parent) = record.parent() {
         let _ = fs::create_dir_all(parent);
     }

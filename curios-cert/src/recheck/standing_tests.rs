@@ -156,11 +156,11 @@ fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
     }
 }
 
-/// What a store holds of the walks filed into it, in memory: each record a member of its walk's run, under the name its filing completed it with.
+/// What a cabinet holds of the walks filed into it, in memory: each record a member of its walk's run, under the name its filing completed it with.
 struct Shelf(Vec<Object>);
 
 impl Shelf {
-    /// A store holding `certification`, a walk of `module`, its records completed as a filing completes them.
+    /// A cabinet holding `certification`, a walk of `module`, its records completed as a filing completes them.
     fn filed(definitions: &Definitions, certification: &Certification) -> Self {
         complete(Filed {
             definitions,
@@ -217,7 +217,7 @@ fn edited_five() -> Definitions {
     replaced(&versioned(written()), "five", five)
 }
 
-/// A declaration the walk would judge takes a verdict a store holds of its item where every part that verdict read digests as it did: `five` was written, edited and written back, so the baseline's `five` is another item, and the store's record of the first is taken, the mark with it.
+/// A declaration the walk would judge takes a verdict a cabinet holds of its item where every part that verdict read digests as it did: `five` was written, edited and written back, so the baseline's `five` is another item, and the cabinet's record of the first is taken, the mark with it.
 #[test]
 fn a_declaration_to_judge_takes_a_stores_verdict_where_every_part_it_read_stands() {
     let first = marked();
@@ -231,7 +231,7 @@ fn a_declaration_to_judge_takes_a_stores_verdict_where_every_part_it_read_stands
     assert_eq!(rechecked.certification(), &first);
 }
 
-/// A store's verdict whose reads moved is passed over: the record of `five` says it unfolded `alias`, which is respelled as an application that reduces to `Nat`, so `five`, written back, is judged and files its own reads, as a walk over every declaration does.
+/// A cabinet's verdict whose reads moved is passed over: the record of `five` says it unfolded `alias`, which is respelled as an application that reduces to `Nat`, so `five`, written back, is judged and files its own reads, as a walk over every declaration does.
 #[test]
 fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     let unfolding = doctored(walked(&written()).certification(), "five", |certified| {
@@ -258,7 +258,7 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     assert_eq!(
         store.candidates(Facet::Judgment, &identity).len(),
         1,
-        "the store holds a verdict of the item",
+        "the cabinet holds a verdict of the item",
     );
     assert_eq!(rechecked.verdicts(), Vec::new());
     assert_eq!(

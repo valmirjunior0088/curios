@@ -165,7 +165,7 @@ fn a_pin_of_a_live_member_is_not_acquired() {
     assert!(curate(&governing, |_| {}).unwrap().is_empty());
 }
 
-/// **A fetchable catalog row is acquired.** A marker resolved *after* the dispatch that decides what to fetch would land in the store at a hash nothing had put there: `curate` would acquire nothing, `order` would refuse the dependency naming `curate`, and running it would change nothing — a dead end whose error message names the command that cannot escape it.
+/// **A fetchable catalog row is acquired.** A marker resolved *after* the dispatch that decides what to fetch would land in the cabinet at a hash nothing had put there: `curate` would acquire nothing, `order` would refuse the dependency naming `curate`, and running it would change nothing — a dead end whose error message names the command that cannot escape it.
 ///
 /// Asserted against the walk rather than against a fetch, so it needs no `git` and no network: what is under test is which acquisitions the walk collects.
 #[test]
@@ -573,7 +573,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
     );
 }
 
-/// A fetched module that is not what it was pinned to is refused stating both digests, and nothing is filed — the store never holds bytes under a key they do not have.
+/// A fetched module that is not what it was pinned to is refused stating both digests, and nothing is filed — the cabinet never holds bytes under a key they do not have.
 #[test]
 fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     let root = tree(

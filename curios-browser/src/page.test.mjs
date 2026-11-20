@@ -267,7 +267,7 @@ main()
   assert.ok(!existsSync(join(page, "assets/.DS_Store")));
 });
 
-test("a page is written under the store when no --output is given, holding nothing an earlier build left", async (t) => {
+test("a page is written under `.curios/` when no --output is given, holding nothing an earlier build left", async (t) => {
   const root = tree(t, {
     "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
     "app/exe.crs": '/std/print("hello")\n',

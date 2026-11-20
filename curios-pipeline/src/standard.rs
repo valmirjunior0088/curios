@@ -160,7 +160,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// [`Fold::compile`] stopped where the verdicts stop: `entrypoint` lowered, elaborated and judged on top of the fold — see `check_entrypoint`. The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
+    /// [`Fold::compile`] stopped where the verdicts stop: `entrypoint` lowered, elaborated and judged on top of the fold — see `check_entrypoint`. The same fold, so a unit the cabinet already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
     pub fn check<P>(
         self,
         entrypoint: &curios_surface::Entrypoint,
@@ -373,7 +373,7 @@ impl<'a> Fold<'a> {
         )
     }
 
-    /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the certifier included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
+    /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the certifier included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the cabinet: no unit carries one.
     ///
     /// **The prelude's records are the ones handed over.** A unit adopts a root no consumer can name, and the prelude holds the only one: `/sys`, which a package named `std` adopts as the archived `/std` does.
     pub fn documentation<P>(self, progress: P) -> Result<Documentation, CompileError>
@@ -506,7 +506,7 @@ impl<'a> Fold<'a> {
         } = self;
 
         with_prelude(|prelude| {
-            // The prelude's roots are in scope unconditionally, with one exception: a package named `std` is the standard library, by the meaning of the name. It takes the archived root's place — the root is withheld, the package is compiled over the archived unit as its baseline and sees what the root could see — and every unit after it is compiled against it, addressed in the store after it. Any other unit claiming a prefix a root mounts collides with it and is refused, exactly as two source units claiming one prefix are. What this is not is a way to swap standard libraries under a dependency: a dependency means what it means against the `/std` it was compiled after, which is why the name is reserved rather than the scope made a parameter.
+            // The prelude's roots are in scope unconditionally, with one exception: a package named `std` is the standard library, by the meaning of the name. It takes the archived root's place — the root is withheld, the package is compiled over the archived unit as its baseline and sees what the root could see — and every unit after it is compiled against it, addressed in the cabinet after it. Any other unit claiming a prefix a root mounts collides with it and is refused, exactly as two source units claiming one prefix are. What this is not is a way to swap standard libraries under a dependency: a dependency means what it means against the `/std` it was compiled after, which is why the name is reserved rather than the scope made a parameter.
             let withheld = stood_in_for(prelude, units);
             let roots = prelude
                 .iter()
@@ -517,7 +517,7 @@ impl<'a> Fold<'a> {
 
             // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines — read for that unit's packages, so the texts a lowering over it keeps lie in the package's own files.
             let offered = withheld.map(|(_, root)| root.clone().read_for(units[0].packages()));
-            // Every unit of a fold whose first unit stands in for a root is compiled over the stand-in, which a store keeps apart from the archived root.
+            // Every unit of a fold whose first unit stands in for a root is compiled over the stand-in, which a cabinet keeps apart from the archived root.
             let mounted = |unit| match withheld {
                 Some((_, root)) => UnitSource::mounted(unit).over_stand_in(prefixes_of(root)),
                 None => UnitSource::mounted(unit),
@@ -598,7 +598,7 @@ pub fn granted_in_place(prelude: &[&Unit], withheld: usize, unit: &RootSource) -
     prefixes
 }
 
-/// The documentation record of each of the prelude's roots, in the fold's order — off the image this compiler was built with: no sources, no store, nothing compiled and no unit restored.
+/// The documentation record of each of the prelude's roots, in the fold's order — off the image this compiler was built with: no sources, no cabinet, nothing compiled and no unit restored.
 pub fn prelude_documentation() -> Vec<Documentation> {
     curios_prelude::documentation()
 }

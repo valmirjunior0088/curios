@@ -6,7 +6,7 @@
 //!
 //! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells ([`Outlines`]).
 //!
-//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, each an object of the store with its digest, and a version that shares one of its items hands back the object it was read from ([`Items::part`]), so a unit filed again names what it did not change by the digest it had, digesting nothing.
+//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, each an object of the cabinet with its digest, and a version that shares one of its items hands back the object it was read from ([`Items::part`]), so a unit filed again names what it did not change by the digest it had, digesting nothing.
 //!
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 //!

@@ -4,7 +4,7 @@
 //!
 //! **A part is digested by whoever reads it.** A signature and a body by the certifier's own digest ([`curios_cert::part_digest`]), so what a recompile compares of a declaration is what the certifier compares of it; a kind, a binding and forms whole by erasure's ([`declared_digest`], [`erased_digest`]).
 //!
-//! **Completed where it is filed, and found by the item it erased.** A store's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_common::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the store where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the store beside it.
+//! **Completed where it is filed, and found by the item it erased.** A cabinet's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_common::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the cabinet where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the cabinet beside it.
 
 mod table;
 pub use table::{ArchivedAskedTable, AskedEntry, AskedTable};
@@ -78,7 +78,7 @@ impl Asked {
     }
 }
 
-/// What a completed record holds of a read: `None` where nothing is recorded of it, a part of a fixed unit's, which a store's address names; and otherwise the digest of the part, `None` within where the name holds no such part.
+/// What a completed record holds of a read: `None` where nothing is recorded of it, a part of a fixed unit's, which a cabinet's address names; and otherwise the digest of the part, `None` within where the name holds no such part.
 pub type Read = Option<Option<[u8; 32]>>;
 
 /// What a filing completes an item's record with: what the item was, what each of its reads read and what it erased to. See the module documentation.
@@ -112,7 +112,7 @@ impl AskedRecord {
         }
     }
 
-    /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
+    /// The record a cabinet held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
     pub fn restored(asked: Asked, made: Option<Made>, digest: Digest) -> Self {
         let record = Self::new(asked);
         if let Some(made) = made {
@@ -138,7 +138,7 @@ impl AskedRecord {
         let _ = self.made.set(made);
     }
 
-    /// The digest a store names this record of the item declaring `name` first by: where it is complete, the candidate's name, which a store finds it among the records filed for the item by ([`candidate_name`]), and otherwise the digest of its run alone.
+    /// The digest a cabinet names this record of the item declaring `name` first by: where it is complete, the candidate's name, which a cabinet finds it among the records filed for the item by ([`candidate_name`]), and otherwise the digest of its run alone.
     pub fn digest(&self, name: &curios_core::Global) -> Result<Digest, String> {
         if let Some(digest) = self.digest.get() {
             return Ok(*digest);
@@ -185,7 +185,7 @@ pub struct AskedItems {
 }
 
 impl AskedItems {
-    /// File `record` as the item declaring `name` first's: another unit's record of it, held where that unit holds it, or one a store held.
+    /// File `record` as the item declaring `name` first's: another unit's record of it, held where that unit holds it, or one a cabinet held.
     pub(super) fn share(&mut self, name: curios_core::Global, record: HeldAsked) {
         self.items.insert(name, record);
     }

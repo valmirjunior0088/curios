@@ -3,7 +3,7 @@ name = "curios-verdict"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios store as a compilation sees it: the fold's units and an invocation's precompiled payload, believed on a verified record"
+description = "The Curios cabinet as a compilation sees it: the fold's units and an invocation's precompiled payload, believed on a verified record"
 
 [lints]
 workspace = true
@@ -22,7 +22,7 @@ test-support = [
 ]
 
 # Beside `curios-pipeline` and over `curios-package`, never under either: `Cache` is the pipeline's
-# trait and the store's layout is the package's, and the crate implementing one through the other
+# trait and the cabinet's layout is the package's, and the crate implementing one through the other
 # can belong to neither — see the crate rustdoc. Nothing below here reaches Binaryen or Wasmtime;
 # the engine a payload address carries is handed in by the crate that owns the runtime.
 [dependencies]
@@ -41,7 +41,7 @@ curios-prelude = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
 curios-surface = { workspace = true, optional = true }
 
-# The payload suite files the bytes of a compiled module as a payload: the store digests a payload and never reads it, so any bytes stand in for machine code.
+# The payload suite files the bytes of a compiled module as a payload: the cabinet digests a payload and never reads it, so any bytes stand in for machine code.
 [dev-dependencies]
 curios-wasm = { workspace = true }
 # What the history's held attacks expect: the certifier's refusal, by its error.

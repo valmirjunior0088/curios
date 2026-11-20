@@ -1,8 +1,8 @@
-//! What `curios test` compiles and runs, with nothing it shows: the subjects a selection declares tests in ([`test_subjects`]), each one's test program under the prefixes its tests are selected at or under, for the target it runs on — taken from a store where nothing it was made from moved, and compiled and filed there otherwise ([`TestSubject::compile`]) — and each of its tests run under a host its caller hands in ([`TestRun::run`]), or the page a browser runs them in ([`Tested::page`]). The command line narrates around these pieces; a caller running a package's tests in process asserts on what they answer.
+//! What `curios test` compiles and runs, with nothing it shows: the subjects a selection declares tests in ([`test_subjects`]), each one's test program under the prefixes its tests are selected at or under, for the target it runs on — taken from a cabinet where nothing it was made from moved, and compiled and filed there otherwise ([`TestSubject::compile`]) — and each of its tests run under a host its caller hands in ([`TestRun::run`]), or the page a browser runs them in ([`Tested::page`]). The command line narrates around these pieces; a caller running a package's tests in process asserts on what they answer.
 //!
 //! **A subject is one test program.** For the governing package entire it is its library and then each executable, and for a library, a program or a loose file its own. The one unit compiled tested among a subject's is its own ([`RootSource::tested`]), so its program schedules its own tests and nothing it stands on.
 //!
-//! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
+//! **The cabinet is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no cabinet, so its tests are compiled every time.
 
 mod verdict;
 pub use verdict::{FailedCheck, Verdict};
@@ -244,24 +244,24 @@ impl TestSubject {
             .map(|filing| filing.cabinet.directory())
     }
 
-    /// The store the subject is filed in, opened by `open` at the governing root, and told the executable its own declarations are filed as where it is one. `None` for a loose subject, which has no project to keep anything for.
+    /// The cabinet the subject is filed in, opened by `open` at the governing root, and told the executable its own declarations are filed as where it is one. `None` for a loose subject, which has no project to keep anything for.
     ///
-    /// One handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
+    /// One handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the cabinet withholds without a word.
     pub fn filed(&self, open: impl FnOnce(&Cabinet) -> Option<Verdicts>) -> Option<Verdicts> {
         let filing = self.filing.as_ref()?;
-        let store = open(&filing.cabinet)?;
+        let verdicts = open(&filing.cabinet)?;
 
         Some(match &filing.executable {
-            Some(executable) => store.executing(&filing.package, executable),
-            None => store,
+            Some(executable) => verdicts.executing(&filing.package, executable),
+            None => verdicts,
         })
     }
 
-    /// The subject's test program for `target`, scheduling its tests at or under any of `under` — from `store` when nothing it was made from has changed and the prefixes are the ones it was filed under, and compiled and filed there otherwise, `progress` told each step of the compile. Without a store, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no payload, so a second run under it reuses every subject.
+    /// The subject's test program for `target`, scheduling its tests at or under any of `under` — from `verdicts` when nothing it was made from has changed and the prefixes are the ones it was filed under, and compiled and filed there otherwise, `progress` told each step of the compile. Without a cabinet, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no payload, so a second run under it reuses every subject.
     pub fn compile(
         &self,
         budget: u64,
-        store: Option<&Verdicts>,
+        verdicts: Option<&Verdicts>,
         under: &[Qualifier],
         target: Target,
         observe: impl FnMut(Stage<'_>),
@@ -285,21 +285,25 @@ impl TestSubject {
             Target::Browser => Runs::Browser,
         };
 
-        if let Some((store, program)) = store.zip(program.as_ref())
-            && let Some((bytes, foreigns)) = store.payload_get(program, &sources, runs)
+        if let Some((verdicts, program)) = verdicts.zip(program.as_ref())
+            && let Some((bytes, foreigns)) = verdicts.payload_get(program, &sources, runs)
             && let Some(tested) = decode(&bytes, foreigns, target)
         {
             return Ok(tested);
         }
 
-        let compiled = Fold::new(budget, &self.units, store.map(|store| store as &dyn Cache))
-            .tests(
-                &self.entrypoint,
-                &self.loader,
-                under.to_vec(),
-                observe,
-                progress,
-            )?;
+        let compiled = Fold::new(
+            budget,
+            &self.units,
+            verdicts.map(|verdicts| verdicts as &dyn Cache),
+        )
+        .tests(
+            &self.entrypoint,
+            &self.loader,
+            under.to_vec(),
+            observe,
+            progress,
+        )?;
         // What the target consumes, as `payload_of` makes it: machine code for the native runtime, and for a browser the module Binaryen wrote.
         let built = compiled
             .compiled
@@ -315,7 +319,7 @@ impl TestSubject {
             reused: false,
         };
 
-        if let Some((store, program)) = store.zip(program.as_ref())
+        if let Some((verdicts, program)) = verdicts.zip(program.as_ref())
             && let Some(bytes) = encode(&tested)
         {
             let foreigns = tested
@@ -323,7 +327,7 @@ impl TestSubject {
                 .as_ref()
                 .map(|(_, foreigns)| foreigns.clone())
                 .unwrap_or_default();
-            store.payload_put(program, &sources, bytes.as_ref(), &foreigns, runs);
+            verdicts.payload_put(program, &sources, bytes.as_ref(), &foreigns, runs);
         }
 
         Ok(tested)
@@ -355,7 +359,7 @@ impl Payload {
     }
 }
 
-/// One subject compiled as a test program for one target: every test it declares, module by module, scheduled or skipped, and its payload with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own store, which is what lets [`Tested::loaded`] load its machine code.
+/// One subject compiled as a test program for one target: every test it declares, module by module, scheduled or skipped, and its payload with the rows it imports — `None` where it schedules none — made by [`TestSubject::compile`] alone, in this process or read back from the project's own cabinet, which is what lets [`Tested::loaded`] load its machine code.
 pub struct Tested {
     modules: Vec<TestModule>,
     unmatched: Vec<Qualifier>,
@@ -386,7 +390,7 @@ impl Tested {
             .flat_map(|module| module.scheduled.iter().chain(&module.skipped))
     }
 
-    /// Whether the program was taken from the store rather than compiled.
+    /// Whether the program was taken from the cabinet rather than compiled.
     pub fn reused(&self) -> bool {
         self.reused
     }
@@ -399,7 +403,7 @@ impl Tested {
         let Payload::Cwasm(cwasm) = payload else {
             unreachable!("a test program is loaded for the target it was compiled for");
         };
-        // SAFETY: a `Tested` is made by `TestSubject::compile` alone, from machine code this process precompiled or read back from the project's own store, where a compilation of this compiler filed it.
+        // SAFETY: a `Tested` is made by `TestSubject::compile` alone, from machine code this process precompiled or read back from the project's own cabinet, where a compilation of this compiler filed it.
         let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
             .map_err(|error| fault("the program's machine code could not be read back", error))?;
         // Resolved once for the subject: its manifests are walked and its modules compiled here, and each test is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's. A loose subject has no package, so nothing declares what would answer a `foreign` of its own, and `bindings_of` refuses one it reaches, saying so.
@@ -486,7 +490,7 @@ pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), Com
     })
 }
 
-/// What the store files for one test program: its modules and each prefix it was selected under that selects nothing, by their segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the store is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.
+/// What the cabinet files for one test program: its modules and each prefix it was selected under that selects nothing, by their segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the cabinet is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.
 #[curios_archive::archived]
 struct TestPayload {
     modules: Vec<ModulePayload>,
@@ -494,7 +498,7 @@ struct TestPayload {
     payload: Option<Vec<u8>>,
 }
 
-/// One module's tests as the store files them: the segments of its path, of each scheduled test's path and of each skipped test's.
+/// One module's tests as the cabinet files them: the segments of its path, of each scheduled test's path and of each skipped test's.
 #[curios_archive::archived]
 struct ModulePayload {
     path: Vec<String>,
@@ -502,7 +506,7 @@ struct ModulePayload {
     skipped: Vec<Vec<String>>,
 }
 
-/// `tested` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
+/// `tested` as the bytes the cabinet files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
 fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
     let payload = TestPayload {
         modules: tested
@@ -536,7 +540,7 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
     curios_archive::to_bytes(&payload).ok()
 }
 
-/// The inverse of [`encode`], with the rows the store filed beside the bytes and the target whose directory they were filed in, `None` on any malformation.
+/// The inverse of [`encode`], with the rows the cabinet filed beside the bytes and the target whose directory they were filed in, `None` on any malformation.
 fn decode(bytes: &[u8], foreigns: ForeignStore, target: Target) -> Option<Tested> {
     let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
     let modules = payload

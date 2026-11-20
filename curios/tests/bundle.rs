@@ -206,7 +206,7 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     );
 }
 
-/// A member of an umbrella links the rows of its own manifest, as a package standing alone does: the graph walked for them is the one of the package that declares the program, and the umbrella's directory, where the store sits, declares no package to walk from.
+/// A member of an umbrella links the rows of its own manifest, as a package standing alone does: the graph walked for them is the one of the package that declares the program, and the umbrella's directory, where `.curios/` sits, declares no package to walk from.
 #[test]
 fn an_umbrella_members_program_links_its_own_foreign_rows() {
     let root = Temporary::new("cli-bundle", "member");
@@ -338,7 +338,7 @@ fn compile_refuses_the_modules_a_run_would() {
     );
 }
 
-/// A claim is held to a declaration however the program is reached: a run that reuses the payload an earlier run filed compiles no unit, so the claims a manifest has gained since are held by what the stored units record. Without that, a claim on no declaration is admitted for as long as the store answers and refused the moment it is emptied.
+/// A claim is held to a declaration however the program is reached: a run that reuses the payload an earlier run filed compiles no unit, so the claims a manifest has gained since are held by what the stored units record. Without that, a claim on no declaration is admitted for as long as the cabinet answers and refused the moment it is emptied.
 #[test]
 fn a_claim_written_after_a_run_is_refused_by_the_next() {
     let root = Temporary::new("cli-bundle", "claimed");
@@ -356,7 +356,7 @@ fn a_claim_written_after_a_run_is_refused_by_the_next() {
     assert_eq!(
         run().status.code(),
         Some(6),
-        "and answers again from the store"
+        "and answers again from the cabinet"
     );
 
     let manifest = package.join("curios.toml");
@@ -602,7 +602,7 @@ fn a_compiled_executable_carries_the_modules_answering_its_foreign_declarations(
     let root = Temporary::new("cli-bundle", "ffi");
     let package = calling_double(&root, "ffi", &[("probe", "double")]);
 
-    // Somewhere else entirely, holding nothing but the executable: no manifest to read a row from, no `.wasm` to hash, no store to look in.
+    // Somewhere else entirely, holding nothing but the executable: no manifest to read a row from, no `.wasm` to hash, no cabinet to look in.
     let elsewhere = root.join("elsewhere");
     fs::create_dir_all(&elsewhere).expect("create the run directory");
     let output = elsewhere.join("ffi.out");

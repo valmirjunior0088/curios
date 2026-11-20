@@ -1,4 +1,4 @@
-//! What the `document` subcommand writes, end to end: the bundle under the store, its layout, and the override.
+//! What the `document` subcommand writes, end to end: the bundle under `.curios/`, its layout, and the override.
 //!
 //! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that `--std` documents the standard library the compiler embeds, and that a package without a library is refused by name.
 
@@ -66,7 +66,7 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
 }
 
 #[test]
-fn document_writes_the_bundle_under_the_store() {
+fn document_writes_the_bundle_among_the_products() {
     let root = project("store");
 
     let output = curios(&root, &["document"]);
@@ -143,7 +143,7 @@ fn output_names_another_directory() {
     assert!(site.join("geometry.crs.html").is_file());
     assert!(
         !root.join(".curios/documentation").exists(),
-        "the store holds nothing when the pages went elsewhere"
+        "`.curios/` holds nothing when the pages went elsewhere"
     );
 }
 
@@ -184,7 +184,7 @@ fn the_standard_library_documents_into_the_directory_std_names() {
     );
     assert!(
         !root.join(".curios").exists(),
-        "the standard library has no package, so nothing is filed under a store"
+        "the standard library has no package, so nothing is written under `.curios/`"
     );
 }
 

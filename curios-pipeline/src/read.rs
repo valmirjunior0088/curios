@@ -244,7 +244,7 @@ impl Unmade {
     }
 }
 
-/// Compile a unit read from Core text, `read` being what the reader made of its text: what stands where a program's unit holds its lowering and its elaboration, judged and erased as any unit is from there, over `predecessors`, and claiming `mounts`. Over `baseline`, the unit the store offers for the text's earlier spelling, the certifier is handed its module and record whole and adopts each verdict that still stands, the units in scope it was not compiled after being moved, as a recompile over a baseline is judged (`recheck_over`).
+/// Compile a unit read from Core text, `read` being what the reader made of its text: what stands where a program's unit holds its lowering and its elaboration, judged and erased as any unit is from there, over `predecessors`, and claiming `mounts`. Over `baseline`, the unit the cabinet offers for the text's earlier spelling, the certifier is handed its module and record whole and adopts each verdict that still stands, the units in scope it was not compiled after being moved, as a recompile over a baseline is judged (`recheck_over`).
 pub fn compile_read(
     budget: u64,
     predecessors: Predecessors<'_>,

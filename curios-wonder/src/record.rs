@@ -28,7 +28,7 @@ impl Severity {
 #[derive(Debug, Clone)]
 pub struct Diagnosis {
     pub severity: Severity,
-    /// The message and its span — `None` for a refusal about the program as a whole or something outside it, such as a manifest or a store.
+    /// The message and its span — `None` for a refusal about the program as a whole or something outside it, such as a manifest or a cabinet.
     pub report: Report,
 }
 

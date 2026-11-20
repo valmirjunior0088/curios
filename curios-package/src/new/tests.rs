@@ -93,9 +93,9 @@ fn a_scaffolded_manifest_declares_a_package() {
     );
 }
 
-/// The store is the one directory the toolchain generates, and a fresh package starts out ignoring it.
+/// `.curios/` is the one directory the toolchain generates, and a fresh package starts out ignoring it.
 #[test]
-fn a_scaffolded_package_ignores_its_store() {
+fn a_scaffolded_package_ignores_what_the_toolchain_generates() {
     let (_temporary, root) = fresh("scaffold_ignore");
     let written = scaffold(&root).expect("a fresh directory");
 
@@ -104,7 +104,7 @@ fn a_scaffolded_package_ignores_its_store() {
     assert_eq!(
         fs::read_to_string(&ignore).unwrap(),
         format!("/{PRODUCTS}/\n"),
-        "the store and nothing else"
+        "`.curios/` and nothing else"
     );
 }
 

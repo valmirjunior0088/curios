@@ -1,4 +1,4 @@
-//! `curios wonder` spoken to in the language server protocol: what it publishes from the buffer and the disk, what a save asks again, what it answers while a check runs, and what it files in the store.
+//! `curios wonder` spoken to in the language server protocol: what it publishes from the buffer and the disk, what a save asks again, what it answers while a check runs, and what it files in the cabinet.
 
 use {
     super::test_support::*,
@@ -495,14 +495,14 @@ fn a_lint_is_published_as_a_warning() {
     );
 }
 
-/// A store a build already filled answers about the disk, so it does not answer here: the library's unit is in the store, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
+/// A cabinet a build already filled answers about the disk, so it does not answer here: the library's unit is in the cabinet, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
 ///
-/// The second half is that the record goes when the buffer stops disagreeing, with the store warm throughout. It does not witness a surviving hit: the document is still open, so the overlay still reaches its unit either way, and no progress event reaches this transport to say which happened.
+/// The second half is that the record goes when the buffer stops disagreeing, with the cabinet warm throughout. It does not witness a surviving hit: the document is still open, so the overlay still reaches its unit either way, and no progress event reaches this transport to say which happened.
 #[test]
-fn a_warm_store_does_not_answer_for_the_buffer() {
+fn a_warm_cabinet_does_not_answer_for_the_buffer() {
     let root = project("warm");
 
-    // Filled by a build, so the store is warm before any document is open.
+    // Filled by a build, so the cabinet is warm before any document is open.
     let built = curios(&root, &["run", "app"], "");
     assert!(
         built.status.success(),
@@ -891,9 +891,9 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
     assert!(!text.contains("_b"), "{text}");
 }
 
-/// A server over a store it cannot write publishes what it would have, and says nothing of the store: the first message after a document opens is its check, and so is the one after an edit.
+/// A server over a cabinet it cannot write publishes what it would have, and says nothing of the cabinet: the first message after a document opens is its check, and so is the one after an edit.
 #[test]
-fn the_server_says_nothing_of_a_store_that_takes_nothing() {
+fn the_server_says_nothing_of_a_cabinet_that_takes_nothing() {
     let root = project("unstored");
     // A file where the slots would go.
     let verdicts = Cabinet::of(&root, None).verdicts();
@@ -922,7 +922,7 @@ fn the_server_says_nothing_of_a_store_that_takes_nothing() {
     );
 }
 
-/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the store, an edit leaves the store as it was, and a test run afterwards, which compiles the library tested as the server does, starts from what the server filed.
+/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the cabinet, an edit leaves the cabinet as it was, and a test run afterwards, which compiles the library tested as the server does, starts from what the server filed.
 #[test]
 fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     let root = project("server-files");
@@ -955,7 +955,7 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"typed\";\n"}]}}"#, uri));
     let republished = editor.receive();
     assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
-    assert!(slots(&root) == filed, "a keystroke moved the store");
+    assert!(slots(&root) == filed, "a keystroke moved the cabinet");
 
     let output = editor.finish();
     assert!(
@@ -973,9 +973,9 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     );
 }
 
-/// A question about a file no package governs, or about standard input, opens no store: nothing is written beside it.
+/// A question about a file no package governs, or about standard input, opens no cabinet: nothing is written beside it.
 #[test]
-fn a_loose_file_and_standard_input_leave_no_store() {
+fn a_loose_file_and_standard_input_leave_nothing_generated() {
     let root = temporary("loose-question");
     let program = "/std/print(\"loose\")\n";
     write(&root, "scratch.crs", program);

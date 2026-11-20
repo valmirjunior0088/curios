@@ -20,7 +20,7 @@ use {
     },
 };
 
-/// What an elaboration that ran holds, whatever it concluded: the binder lints of every declaration its walk's traces hold — elaborated now, adopted from a store or kept from a baseline — and those of an entry's final term, which no record holds, decided once it has run, which a unit is made with and a refused one is reported with; and where the walk refused, the declarations that elaborated, which a question about the refused unit answers them from.
+/// What an elaboration that ran holds, whatever it concluded: the binder lints of every declaration its walk's traces hold — elaborated now, adopted from a cabinet or kept from a baseline — and those of an entry's final term, which no record holds, decided once it has run, which a unit is made with and a refused one is reported with; and where the walk refused, the declarations that elaborated, which a question about the refused unit answers them from.
 #[derive(Debug, Clone, Default)]
 pub struct Observed {
     pub lints: Vec<Lint>,

@@ -1,4 +1,4 @@
-//! A pack: objects of the store, each named by a digest ([`Object`]), kept together in one file named by the digest of its own ([`Pack`]).
+//! A pack: objects of the cabinet, each named by a digest ([`Object`]), kept together in one file named by the digest of its own ([`Pack`]).
 //!
 //! **Read from its end.** A pack closes on a table of the objects it holds, sorted by name, each with where its bytes lie, then how many there are and a magic: an object is found by a binary search of the table, and which objects a pack holds is read off its end alone ([`pack_names`]).
 //!

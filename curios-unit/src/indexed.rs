@@ -61,9 +61,9 @@ impl Indexed {
     }
 }
 
-/// The entries of one kind a unit names, each by its digest, as a filing writes the ones the store lacks.
+/// The entries of one kind a unit names, each by its digest, as a filing writes the ones the cabinet lacks.
 pub enum Kind {
-    /// Entries a unit restored and holds as the objects it found them as: written again, where the store lacks them, as a run of their kind ([`rerun`]).
+    /// Entries a unit restored and holds as the objects it found them as: written again, where the cabinet lacks them, as a run of their kind ([`rerun`]).
     Stored(Vec<Object>),
     /// The elaborated items of `core`, at each place with its digest.
     Items {

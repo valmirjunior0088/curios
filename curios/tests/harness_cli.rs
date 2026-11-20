@@ -1,4 +1,4 @@
-//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, each test a node of its subject's tree closed by how it ended, what the test wrote of its own joined by what only the runner knows — the failing body, each subject's tally, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
+//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, each test a node of its subject's tree closed by how it ended, what the test wrote of its own joined by what only the runner knows — the failing body, each subject's tally, the exit code — plus the filter, the cabinet round trip, and `run`'s indifference to it all.
 
 use {
     curios::CABINET,
@@ -659,7 +659,7 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     let cold = curios(&root, &["test"]);
     assert_eq!(cold.status.code(), Some(0), "stderr: {}", stderr(&cold));
 
-    // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step is its program's. A store handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
+    // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step is its program's. A cabinet handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
     let warm = curios(&root, &["test"]);
     in_order(
         &stderr(&warm),

@@ -22,7 +22,7 @@ pub struct Linted {
     pub goals: usize,
 }
 
-/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
+/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a cabinet took nothing of what the lint compiled, which changes neither the report nor what is returned.
 pub fn lint(
     budget: u64,
     selection: Selection,

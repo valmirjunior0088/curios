@@ -1,6 +1,6 @@
 //! The order a compilation folds its units in.
 //!
-//! **Membership organizes; dependency compiles** (law 3). The umbrella's tree decides where the store goes and what a marker may resolve to; only declared dependencies order compilation, and enumerating a member creates no edge. What comes out of here is a topological sort over the edges packages declared for themselves, with the governing package last.
+//! **Membership organizes; dependency compiles** (law 3). The umbrella's tree decides where `.curios/` goes and what a marker may resolve to; only declared dependencies order compilation, and enumerating a member creates no edge. What comes out of here is a topological sort over the edges packages declared for themselves, with the governing package last.
 //!
 //! Exact pins mean there is nothing to solve, only to realize: a name resolves to one place or the resolution is refused. Every refusal names both parties — both dependents and both pins for a conflict, the whole chain for a cycle — and all of them fire before any package involved elaborates (law 4).
 
@@ -124,7 +124,7 @@ impl Walk<'_> {
                     };
                 }
 
-                // A pin and a live row disagree about what the name *is*, and that is the fact to state. Comparing their locations instead would find two directories, one of them the store's — the right directory and the wrong fact, sending the reader after a path nobody wrote. The live side is named by where its row points, not by locating it: the disagreement stands whether or not that place exists.
+                // A pin and a live row disagree about what the name *is*, and that is the fact to state. Comparing their locations instead would find two directories, one of them the cabinet's — the right directory and the wrong fact, sending the reader after a path nobody wrote. The live side is named by where its row points, not by locating it: the disagreement stands whether or not that place exists.
                 (Some(pinned), None) => {
                     let live = self.point(dependent, from, name, row, &written)?;
 
@@ -247,7 +247,7 @@ impl Walk<'_> {
         Row::of(self.governing.manifest_of(from), ["dependencies", name])
     }
 
-    /// The snapshot `row` pins — read through a `catalog` marker to the umbrella's row it names, so a catalogued pin and a direct one disagreeing about a name are refused as the two pins they are, before either is located, rather than as two store paths once both are. A marker nothing answers pins nothing here; [`Walk::point`] is where it is refused, naming what is missing.
+    /// The snapshot `row` pins — read through a `catalog` marker to the umbrella's row it names, so a catalogued pin and a direct one disagreeing about a name are refused as the two pins they are, before either is located, rather than as two cabinet paths once both are. A marker nothing answers pins nothing here; [`Walk::point`] is where it is refused, naming what is missing.
     fn pinned(&self, name: &str, row: &Dependency) -> Option<Snapshot> {
         match row {
             Dependency::Catalog => self
@@ -364,7 +364,7 @@ impl Walk<'_> {
 
             Dependency::Path { path } => Ok(from.join(path)),
 
-            // The store is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
+            // The cabinet is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
             Dependency::Git { url, rev, hash } => {
                 let tree = self.governing.cabinet.source(hash);
 

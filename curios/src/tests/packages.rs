@@ -346,7 +346,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
 
 /// **A cached unit and a freshly elaborated one produce the same program**, and changing the terms invalidates.
 ///
-/// The dependency is what gets stored here: the handle is told of no executable, so the unit of the entry's own declarations has no slot. So the third run below is the one that matters: it reuses a verdict reached in the first, and has to agree with it. The middle run is the control that says the store is keyed on content rather than merely written to, since an edited dependency must not be answered from it.
+/// The dependency is what gets stored here: the handle is told of no executable, so the unit of the entry's own declarations has no slot. So the third run below is the one that matters: it reuses a verdict reached in the first, and has to agree with it. The middle run is the control that says the cabinet is keyed on content rather than merely written to, since an edited dependency must not be answered from it.
 #[test]
 fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     let root = tree(
@@ -370,16 +370,16 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(Cabinet::of(&root, None));
+    let verdicts = Verdicts::at(Cabinet::of(&root, None));
 
-    let cold = cached(&app, None, Some(&store));
+    let cold = cached(&app, None, Some(&verdicts));
     assert_eq!(cold, b"42");
     assert!(
         Cabinet::of(&root, None).verdicts().is_dir(),
         "the dependency's verdict is recorded"
     );
 
-    // Keyed on content: an edited dependency is a different unit, whatever is in the store.
+    // Keyed on content: an edited dependency is a different unit, whatever is in the cabinet.
     fs::write(
         root.join("base/lib.crs"),
         "pub let answer : /std/Nat = 7;\n",
@@ -402,9 +402,9 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     );
 }
 
-/// Registration through a library unit and the store: a dependency's `test` declaration is an item of its unit, so the unit that carries it is filed on the cold compile and restored on the warm one — a schema the field broke would fail loudly here.
+/// Registration through a library unit and the cabinet: a dependency's `test` declaration is an item of its unit, so the unit that carries it is filed on the cold compile and restored on the warm one — a schema the field broke would fail loudly here.
 #[test]
-fn a_library_test_declaration_rides_through_the_store() {
+fn a_library_test_declaration_rides_through_the_cabinet() {
     let root = tree(
         "e2e-test-decl",
         &[
@@ -429,9 +429,9 @@ fn a_library_test_declaration_rides_through_the_store() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(Cabinet::of(&root, None));
+    let verdicts = Verdicts::at(Cabinet::of(&root, None));
 
-    assert_eq!(cached(&app, None, Some(&store)), b"42");
+    assert_eq!(cached(&app, None, Some(&verdicts)), b"42");
     assert!(
         Cabinet::of(&root, None).verdicts().is_dir(),
         "the dependency's verdict is recorded"
@@ -479,24 +479,24 @@ fn siblings(name: &str) -> Temporary {
 fn an_edit_to_one_package_leaves_a_sibling_it_cannot_read_reused() {
     let root = siblings("e2e-siblings");
     let app = root.join("app");
-    let store = || Verdicts::at(Cabinet::of(&root, None));
+    let filed = || Verdicts::at(Cabinet::of(&root, None));
 
     assert_eq!(
-        folded(&app, None, &store()),
+        folded(&app, None, &filed()),
         ["compiling /alpha", "compiling /beta", "compiling /app"]
     );
     assert_eq!(
-        folded(&app, None, &store()),
+        folded(&app, None, &filed()),
         ["reused /alpha", "reused /beta", "reused /app"]
     );
 
     fs::write(root.join("alpha/lib.crs"), "pub let one : /std/Nat = 3;\n").unwrap();
     assert_eq!(
-        folded(&app, None, &store()),
+        folded(&app, None, &filed()),
         ["recompiling /alpha", "reused /beta", "recompiling /app"],
         "a sibling was compiled again, or a dependent compiled whole after a dependency it had a baseline for"
     );
-    assert_eq!(cached(&app, None, Some(&store())), b"5");
+    assert_eq!(cached(&app, None, Some(&filed())), b"5");
 }
 
 /// A unit two folds reach after different others is filed once: `left` depends on `alpha` and `beta`, `right` on `beta` alone, and the `/beta` the first fold filed is the one the second is handed, though the first took `/alpha` ahead of it.
@@ -537,19 +537,19 @@ fn a_unit_reached_after_different_others_is_filed_once() {
             ),
         ],
     );
-    let store = || Verdicts::at(Cabinet::of(&root, None));
+    let filed = || Verdicts::at(Cabinet::of(&root, None));
 
     assert_eq!(
-        folded(&root.join("left"), None, &store()),
+        folded(&root.join("left"), None, &filed()),
         ["compiling /alpha", "compiling /beta"]
     );
     assert_eq!(
-        folded(&root.join("right"), None, &store()),
+        folded(&root.join("right"), None, &filed()),
         ["reused /beta"],
         "a unit filed after another it cannot read was not the one a fold without that other is handed"
     );
     assert_eq!(
-        folded(&root.join("left"), None, &store()),
+        folded(&root.join("left"), None, &filed()),
         ["reused /alpha", "reused /beta"]
     );
 }

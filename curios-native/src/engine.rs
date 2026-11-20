@@ -784,7 +784,7 @@ impl MachineCode {
     ///
     /// # Safety
     ///
-    /// `payload` must be unmodified output of this engine's compiler: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it filed in the project's store.
+    /// `payload` must be unmodified output of this engine's compiler: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it filed in the project's cabinet.
     pub unsafe fn deserialize(payload: &[u8]) -> Result<Self, String> {
         // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
         unsafe { Module::deserialize(shared_engine(), payload) }

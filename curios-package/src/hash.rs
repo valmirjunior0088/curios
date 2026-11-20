@@ -1,4 +1,4 @@
-//! The criteria a delivery is accepted against, and the keys the store files them under: [`TreeHash`] for a source tree, [`FileHash`] for one file beside it.
+//! The criteria a delivery is accepted against, and the keys the cabinet files them under: [`TreeHash`] for a source tree, [`FileHash`] for one file beside it.
 
 #[cfg(test)]
 mod tests;
@@ -31,7 +31,7 @@ fn parse_under(spelling: &str, scheme: &str) -> Result<String, Said> {
         });
     };
 
-    // Lowercase is part of the spelling rather than a normalization, because the hash is a store key: two spellings of one digest would be two directories.
+    // Lowercase is part of the spelling rather than a normalization, because the hash is a cabinet key: two spellings of one digest would be two directories.
     match digest.len() == DIGITS
         && digest
             .chars()
@@ -49,7 +49,7 @@ fn parse_under(spelling: &str, scheme: &str) -> Result<String, Said> {
     }
 }
 
-/// A hash over one delivered file — a foreign module a `[[foreign]]` row names by `url` — doing the two jobs [`TreeHash`] does for a tree: the criterion the delivery is accepted against, and the key the shared store files it under.
+/// A hash over one delivered file — a foreign module a `[[foreign]]` row names by `url` — doing the two jobs [`TreeHash`] does for a tree: the criterion the delivery is accepted against, and the key the cabinet files it under.
 ///
 /// **`f1:` is plain SHA-256 over the file's bytes, and deliberately nothing more.** A tree hash has to frame its parts because a tree is many files and two of them could otherwise share a spelling; one file has no parts to separate. Leaving it unframed is what lets a publisher compute the digest with `sha256sum` and a consumer read the same string back — which matters, because unlike a `rev` this is a number somebody writes into a manifest by hand or reads out of a release's checksum file.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -66,7 +66,7 @@ impl FileHash {
         Self(format!("{FILE_SCHEME}{}", digest(bytes)))
     }
 
-    /// The scheme and the digest, apart — the store files a file under its scheme as a directory of its own, as it does a tree.
+    /// The scheme and the digest, apart — the cabinet files a file under its scheme as a directory of its own, as it does a tree.
     pub fn split(&self) -> (&str, &str) {
         self.0
             .split_once(':')
@@ -80,7 +80,7 @@ impl fmt::Display for FileHash {
     }
 }
 
-/// A hash over a delivered source tree, doing two jobs at once: the criterion a delivery is accepted against, and the key the shared content-addressed store files it under, uniformly across source kinds.
+/// A hash over a delivered source tree, doing two jobs at once: the criterion a delivery is accepted against, and the key the content-addressed cabinet files it under, uniformly across source kinds.
 ///
 /// `c1:` is SHA-256 over the tree's regular files sorted by relative path, each contributing its path and its contents. Permissions and timestamps do not exist for it, and a symlink in a delivered tree is refused. The scheme prefix is carried rather than assumed, because a hash outlives any implementation: a successor is `c2:`, and the prefix is what lets both verify during a transition.
 ///
@@ -96,7 +96,7 @@ impl TreeHash {
 
     /// The scheme and the digest, apart.
     ///
-    /// The store files a tree under its scheme as a directory of its own, which is what lets a successor scheme sit beside `c1` during a transition rather than replacing it. Splitting here rather than at the store keeps the spelling's shape this type's business.
+    /// The cabinet files a tree under its scheme as a directory of its own, which is what lets a successor scheme sit beside `c1` during a transition rather than replacing it. Splitting here rather than at the cabinet keeps the spelling's shape this type's business.
     pub fn split(&self) -> (&str, &str) {
         self.0
             .split_once(':')
@@ -107,7 +107,7 @@ impl TreeHash {
     ///
     /// **What goes into it, exactly.** Every regular file the tree holds, sorted by relative path, each contributing its path and then its contents. Paths are spelled with `/` whatever the platform, so a tree delivered to Windows hashes as it did on the machine that published it. Nothing else exists for the scheme: not permissions, not timestamps, not directories — an empty one leaves no trace, because a tree is its files.
     ///
-    /// **Both halves are length-framed**, which the scheme has to do and [`Fingerprint::feed`] is how: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half, the one frame every key in the workspace uses.
+    /// **Both halves are length-framed**, which the scheme has to do and [`Fingerprint::feed`] is how: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a cabinet key. The frame is the byte length as a little-endian `u64` before each half, the one frame every key in the workspace uses.
     ///
     /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against. A name that is not UTF-8 is refused for the same reason: the scheme spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it could only hash by replacing bytes, and two names that differ only in the bytes replaced would share a key.
     pub fn of(directory: &Path) -> Result<Self, Box<Report>> {

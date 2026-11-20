@@ -1,6 +1,6 @@
-//! An item's erasure as a store keeps it to be found by the item: its record, completed where it is filed with the item's identity, the digest of every part it read and the erased forms it made ([`ErasedUnit::complete`]).
+//! An item's erasure as a cabinet keeps it to be found by the item: its record, completed where it is filed with the item's identity, the digest of every part it read and the erased forms it made ([`ErasedUnit::complete`]).
 //!
-//! **Found by the item it erased.** A completed record is named by the item's identity ([`curios_core::ItemRun::identity`]), which says what the item means and nothing of where it was written, so an item elaborated again to what it was, or taken from a store, finds the records of every erasure of it.
+//! **Found by the item it erased.** A completed record is named by the item's identity ([`curios_core::ItemRun::identity`]), which says what the item means and nothing of where it was written, so an item elaborated again to what it was, or taken from a cabinet, finds the records of every erasure of it.
 //!
 //! **Taken where every part it read digests as it did.** An item's erased form is a function of its item and of what its erasure read ([`ErasedOver`]): the parts of the declarations around it, how each name it uses is bound in the erased form that declares it, and the forms its evaluation ran, whole. A completed record holds a digest of each, as the certifier's holds one of each part its judgment read (`curios_core::Concluded`), so it is told standing by what is erased now and never by what its erasure read then.
 

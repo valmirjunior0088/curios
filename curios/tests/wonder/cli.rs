@@ -169,7 +169,7 @@ fn a_file_is_placed_in_its_unit() {
     assert!(text.contains("util.crs:1:27"), "{text}");
 }
 
-/// A file under a package that no `mod` reaches is in no unit, so it is checked on its own, as a unit of its own where it is written as a module, with nothing said of that, on a cold store and on a warm one alike, since placement walks the headers and not the record of a compile. Declaring it puts it in the library.
+/// A file under a package that no `mod` reaches is in no unit, so it is checked on its own, as a unit of its own where it is written as a module, with nothing said of that, on a cold cabinet and on a warm one alike, since placement walks the headers and not the record of a compile. Declaring it puts it in the library.
 #[test]
 fn a_file_no_mod_declares_is_checked_on_its_own() {
     let root = project("undeclared");
@@ -184,7 +184,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own() {
     );
     assert!(text.contains("stray.crs:1:24"), "{text}");
 
-    // Warm: the library is served from the store, and placement still walks the headers.
+    // Warm: the library is served from the cabinet, and placement still walks the headers.
     let built = curios(&root, &["run", "app"], "");
     assert!(
         built.status.success(),
@@ -281,7 +281,7 @@ fn a_place_answers_the_name_written_there() {
         )
     );
 
-    // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
+    // Asked again, of the library the first question filed: a unit restored from the cabinet states its declarations as one compiled now does.
     let again = curios(&root, &["wonder", "--at", "app.crs:1:22"], "");
     assert_eq!(stdout(&again), answer);
 
@@ -298,7 +298,7 @@ fn a_place_answers_the_name_written_there() {
     );
 }
 
-/// A place in a library's file answers what is written there whatever the store holds of the library: here the check of the package entire files the library, beside an executable, before the place is asked.
+/// A place in a library's file answers what is written there whatever the cabinet holds of the library: here the check of the package entire files the library, beside an executable, before the place is asked.
 #[test]
 fn a_place_answers_over_a_library_a_check_filed() {
     let root = project("at-filed");
@@ -320,7 +320,7 @@ fn a_place_answers_over_a_library_a_check_filed() {
     assert!(answer.starts_with("/app/util/word\n"), "{answer:?}");
 }
 
-/// A place in a file of the standard library's package answers what is written there: the package is lowered over the library the compiler carries, and what it keeps of that library's files lies in the files the package holds. Asked of a copy, so the tree's own package keeps no store.
+/// A place in a file of the standard library's package answers what is written there: the package is lowered over the library the compiler carries, and what it keeps of that library's files lies in the files the package holds. Asked of a copy, so the tree's own package keeps no cabinet.
 #[test]
 fn a_place_in_the_standard_librarys_package_answers() {
     fn copied(from: &Path, to: &Path) {

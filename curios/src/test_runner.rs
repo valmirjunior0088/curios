@@ -131,7 +131,7 @@ fn drawn(verdict: &Verdict) -> Vec<String> {
         .collect()
 }
 
-/// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
+/// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a cabinet `access` opens. `Ok(true)` when every selected test passed.
 pub fn run_tests(
     budget: u64,
     selection: Selection,
@@ -142,12 +142,12 @@ pub fn run_tests(
 
     for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
-        let store = subject.filed(|cabinet| access.filed(cabinet));
+        let verdicts = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(
             budget,
             &subject,
             &shown,
-            store.as_ref(),
+            verdicts.as_ref(),
             printer.under(),
             Target::Native,
             Then::More,
@@ -176,12 +176,12 @@ pub fn run_tests(
     printer.finish()
 }
 
-/// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: a tree for each unit it had to compile, and the subject's own, whose `emit` node lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes. One the store held narrates nothing. The subject's tree comes back with the program, for the tests `then` says follow on it.
+/// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: a tree for each unit it had to compile, and the subject's own, whose `emit` node lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes. One the cabinet held narrates nothing. The subject's tree comes back with the program, for the tests `then` says follow on it.
 pub fn compiled(
     budget: u64,
     subject: &TestSubject,
     shown: &Subject,
-    store: Option<&Verdicts>,
+    verdicts: Option<&Verdicts>,
     under: &[Qualifier],
     target: Target,
     then: Then,
@@ -190,11 +190,11 @@ pub fn compiled(
     let steps = RefCell::new(Steps::program(shown, subject.manifest(), then));
     let tested = subject.compile(
         budget,
-        store,
+        verdicts,
         under,
         target,
         |stage| steps.borrow_mut().reached(&stage),
-        |progress| steps.borrow_mut().told(progress, store),
+        |progress| steps.borrow_mut().told(progress, verdicts),
     );
     let mut steps = steps.into_inner();
 
@@ -273,7 +273,7 @@ struct Hand {
 /// The printer is told of a test only while the subject that schedules it is in hand.
 const IN_HAND: &str = "a test is told of while its subject is in hand";
 
-/// What a run of tests comes to, written as it goes on each subject's tree: a node for each scheduled test, the subject's tally as the node that closes its tree, and the run's as the last line — with every test the subjects declare, and the one reason a store refused filing.
+/// What a run of tests comes to, written as it goes on each subject's tree: a node for each scheduled test, the subject's tally as the node that closes its tree, and the run's as the last line — with every test the subjects declare, and the one reason a cabinet refused filing.
 pub struct Printer<'a> {
     /// The `--filter` arguments as written, for a refusal to name.
     filters: &'a [String],
@@ -436,7 +436,7 @@ impl<'a> Printer<'a> {
     }
 }
 
-/// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens: every subject built as a page before anything is served, then the runner at the root, the socket it drives the run over, and the pages beside them one subject at a time, each outcome taken as the step in hand's and written as native writes a test's end, on its subject's tree, named again past the address served. `Ok(true)` when every selected test passed.
+/// Serve the tests `selection` declares to a browser on `port`, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a cabinet `access` opens: every subject built as a page before anything is served, then the runner at the root, the socket it drives the run over, and the pages beside them one subject at a time, each outcome taken as the step in hand's and written as native writes a test's end, on its subject's tree, named again past the address served. `Ok(true)` when every selected test passed.
 pub fn serve_tests(
     budget: u64,
     selection: Selection,
@@ -453,12 +453,12 @@ pub fn serve_tests(
 
     for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
-        let store = subject.filed(|cabinet| access.filed(cabinet));
+        let verdicts = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(
             budget,
             &subject,
             &shown,
-            store.as_ref(),
+            verdicts.as_ref(),
             printer.under(),
             Target::Browser,
             Then::Nothing,

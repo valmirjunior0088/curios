@@ -1,4 +1,4 @@
-//! What judging definitions read, as a run of the store holds it: every name once, and each definition's reads holding the places of the names it read, a member of the run.
+//! What judging definitions read, as a run of the cabinet holds it: every name once, and each definition's reads holding the places of the names it read, a member of the run.
 //!
 //! **Each definition's reads an object.** What judging a definition read is stored as an object of its own, named by its run alone or, completed, by what it judged ([`crate::ReadRecord::digest`]), and the reads a filing writes are the members of one run, so a name two judgments read is written and restored once.
 
@@ -17,7 +17,7 @@ pub type ReadEntry = (Global, Reads, Option<Concluded>);
 /// What judging a definition read, as a run is written from: the definition's name, what it read, and what a filing completed it with, each borrowed.
 pub type ReadsEntry<'r> = (&'r Global, &'r Reads, Option<&'r Concluded>);
 
-/// What judging definitions read, as a run of the store holds it: every name once, and each definition's reads holding places among them.
+/// What judging definitions read, as a run of the cabinet holds it: every name once, and each definition's reads holding places among them.
 #[curios_archive::archived]
 pub struct ReadTable {
     names: Vec<Global>,
@@ -123,7 +123,7 @@ impl ReadTable {
             .collect()
     }
 
-    /// The entry the run `bytes` holds as its member `member`, the run checked once and nothing of it restored but the member and the names it holds: what a walk reads of a record a store found among those of a run.
+    /// The entry the run `bytes` holds as its member `member`, the run checked once and nothing of it restored but the member and the names it holds: what a walk reads of a record a cabinet found among those of a run.
     pub fn member(bytes: &[u8], member: u32) -> Result<ReadEntry, String> {
         let table = curios_archive::access::<ArchivedReadTable>(bytes)?;
         let tabled = usize::try_from(member)

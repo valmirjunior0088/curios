@@ -50,3 +50,4 @@ A word the project renamed is not written again for what it named, in a document
 | soundness perimeter, the perimeter | the soundness board | nothing |
 | cell, for what one stage makes of one declaration | facet | the language's write-once cell, `Intrinsic::Cell` |
 | full gate, hand-off gate, `cargo xtask gate` | the handoff, `cargo xtask handoff` | nothing |
+| the store, for `.curios/` or what it keeps for reuse | the cabinet, or `.curios/` | the verb, and a unit's `store` node; the elaborator's, the universe solver's and the certifier's own stores; Wasmtime's `Store`, the ABI's `ForeignStore` and a store into memory |

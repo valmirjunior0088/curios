@@ -4,7 +4,7 @@
 //!
 //! **The lowering's answer always, and the check's where it established more.** The fold tells its reader the subject's lowering as soon as it is made or restored (`Fold::reading`), so a subject that is refused answers as one that compiles; a declaration of a unit in scope, compiled and certified before the subject, answers its type and its totality whatever the subject is; and once elaboration has established the subject's own declarations, the fold tells that too (`Fold::elaborating`), each answering its type, and its totality where the certifier judged it ([`Placed::establish`]). A declaration elaboration refused, or withheld for reaching one it refused, answers the lowering's facts and no type. Only a subject that does not lower has nothing to read.
 //!
-//! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a store's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. A unit the compiler was built with was read in a checkout no question names, or on another machine, so its sources hold their names and no file, and a declaration of one is left unplaced: it is answered by its path, its head and its prose read off its text all the same.
+//! **A name is answered with where it is declared, as a place in a file that holds it.** A declaration of the subject's own stands in text this question read, and one of a unit in scope in the text that unit was compiled from, which is what the disk or an editor holds: a cabinet's hit is believed on a re-read of every file, and a session's unit was compiled from the overlay. A unit the compiler was built with was read in a checkout no question names, or on another machine, so its sources hold their names and no file, and a declaration of one is left unplaced: it is answered by its path, its head and its prose read off its text all the same.
 //!
 //! **A name answers the path its declaration is exposed at and the path it is declared at.** Exposed is how a reader outside every module writes it ([`absolute`]), the path `--name` resolves: `List/map` answers `/std/List/map`, declared at `/sys/List/map`.
 //!
@@ -910,8 +910,10 @@ pub fn described(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Described>, Vec<Diagnosis>> {
-    let store = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = store.as_ref().map(|store| store as &dyn Cache);
+    let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = overlaid_verdicts
+        .as_ref()
+        .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
 
     match subject.formed(overlay) {
         Subject::Unit { units } => described_unit(
@@ -1147,8 +1149,10 @@ pub fn exported(
         // A text of Core text is compiled against the prelude alone.
         Subject::CoreText { .. } => Vec::new(),
     };
-    let store = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = store.as_ref().map(|store| store as &dyn Cache);
+    let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = overlaid_verdicts
+        .as_ref()
+        .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
     let Some(holding) = units
         .iter()
         .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))

@@ -115,7 +115,7 @@ fn a_file_whose_text_changed_is_parsed() {
     );
 }
 
-/// A unit restored from a store holds each scan in a source of its own, and one built elsewhere under another path: what the scan kept is the heads a parse of the file as read gives, every position in the file that was read.
+/// A unit restored from a cabinet holds each scan in a source of its own, and one built elsewhere under another path: what the scan kept is the heads a parse of the file as read gives, every position in the file that was read.
 #[test]
 fn what_a_scan_kept_is_placed_in_the_file_as_it_is_read() {
     let root = written(

@@ -6,7 +6,7 @@
 //!
 //! **Asked in the order the items are stored in, which is the order they are read in.** A module's items stand each after the items it reaches, and erasing one reads the erased form of another only where the other is already erased, so what a question is about is decided by the time it is asked: no item waits for another, and none is asked for.
 //!
-//! **An item to be erased is first looked for in a store.** Where the baseline is handed what a store holds of items erased before ([`ErasedBaseline::candidates`]), an item the walk does not keep is taken from a record filed of an erasure of the item it is, where every part the record read digests as it does now ([`ErasedUnit::complete`]); it is erased otherwise.
+//! **An item to be erased is first looked for in a cabinet.** Where the baseline is handed what a cabinet holds of items erased before ([`ErasedBaseline::candidates`]), an item the walk does not keep is taken from a record filed of an erasure of the item it is, where every part the record read digests as it does now ([`ErasedUnit::complete`]); it is erased otherwise.
 //!
 //! **A part is the certified declaration's, a binding the erased item's.** A signature, a body or a kind read of a declaration of the unit stands where the elaborator kept the declaration, and for one elaborated again where the part digests as it did: a signature and a body by the certifier's own digest, of the module against the record its walk filed and of the baseline against its own ([`curios_cert::part_digest`]), and a kind by erasure's. A binding read stands where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). An erased form read whole, which an item evaluated where it is erased reads of each item it ran (`evaluate`), stands where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded.
 
@@ -36,7 +36,7 @@ pub struct ErasedBaseline<'a> {
     pub now: &'a curios_core::Places,
     /// The record the certifier filed of the module being erased: what a part read of it is digested under.
     pub recorded: &'a curios_core::Certification,
-    /// What a store holds of items erased before, where an item to be erased may be taken from one of its records ([`ErasedUnit::complete`]).
+    /// What a cabinet holds of items erased before, where an item to be erased may be taken from one of its records ([`ErasedUnit::complete`]).
     pub candidates: Option<&'a dyn Candidates>,
 }
 
@@ -255,7 +255,7 @@ impl<'a> ErasedOver<'a> {
         Some((erased, Rc::clone(record)))
     }
 
-    /// The erased form of `item`, at `place`, taken from a record a store holds of an erasure of the item, where one stands ([`ErasedUnit::complete`]), with the record: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
+    /// The erased form of `item`, at `place`, taken from a record a cabinet holds of an erasure of the item, where one stands ([`ErasedUnit::complete`]), with the record: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
     pub fn taken(
         &self,
         place: usize,

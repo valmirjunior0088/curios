@@ -1,10 +1,10 @@
-//! The store's tool, and the toolchain's one fetcher: `curate` and `pin` reach the network through it alone.
+//! The cabinet's tool, and the toolchain's one fetcher: `curate` and `pin` reach the network through it alone.
 //!
 //! **Why fetching lives here and nowhere else.** Opacity is a compiler property — it compares a `rev` and never interprets one — and interpretation is exactly what turning a revision into bytes requires. Putting it here is a decision rather than a concession, because acceptance is by hash: *any* transport may deliver the bytes, an untrusted one included, and a delivery that fails its hash is refused regardless of who fetched it. A separate fetcher layered above this would double the tooling for zero integrity gain. The compiler itself never fetches.
 //!
 //! That same argument picks the transports: programs already on the developer's machine, shelled out to — `git` for a package tree, `curl` or `wget` for a `[[foreign]]` module. A second implementation of the git protocol vendored into this workspace would buy nothing the hash does not already guarantee, while owning an authentication story — ssh keys, credential helpers, private remotes — that the one already installed handles; an HTTP client would buy no more, against proxy and certificate configuration the installed one already reads. Two fetchers rather than one because neither is universally present and choosing between them would be arbitrary.
 //!
-//! **A delivered tree is source, and `.git` is not source.** It is removed before the tree is hashed or placed: a fresh clone's object store differs run to run, so leaving it in would make the criterion unreproducible and the store key meaningless. This is not something the scheme could state, because the scheme hashes whatever it is handed; it is a fact about what `curate` hands it.
+//! **A delivered tree is source, and `.git` is not source.** It is removed before the tree is hashed or placed: a fresh clone's object store differs run to run, so leaving it in would make the criterion unreproducible and the cabinet key meaningless. This is not something the scheme could state, because the scheme hashes whatever it is handed; it is a fact about what `curate` hands it.
 
 #[cfg(test)]
 mod tests;
@@ -23,7 +23,7 @@ use {
     },
 };
 
-/// One package to bring into the store: which one, where from, and the snapshot that decides what to accept.
+/// One package to bring into the cabinet: which one, where from, and the snapshot that decides what to accept.
 ///
 /// The transport sits here rather than in [`Snapshot`] because only a fetch needs it. What two dependents must agree on is the snapshot alone, so a mirror and its origin are one acquisition's worth of difference and no conflict at all.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -52,7 +52,7 @@ impl fmt::Display for Acquisition {
     }
 }
 
-/// One foreign module to bring into the store: the row that named it, the package that declared that row, the target whose table names it, and what the delivery must hash to.
+/// One foreign module to bring into the cabinet: the row that named it, the package that declared that row, the target whose table names it, and what the delivery must hash to.
 ///
 /// A module reveals nothing further — it is a file, not a tree with a manifest — so these are gathered and fetched after the package fixed point rather than inside it.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -87,7 +87,7 @@ pub struct Curated {
 }
 
 impl Curated {
-    /// Whether the store already held everything the manifests reference, which is what a second `curate` over an unchanged project finds.
+    /// Whether the cabinet already held everything the manifests reference, which is what a second `curate` over an unchanged project finds.
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty() && self.modules.is_empty()
     }
@@ -101,11 +101,11 @@ pub enum Fetch<'a> {
     Module(&'a ModuleAcquisition),
     /// The transport delivered what was just announced, which nothing has judged yet.
     Arrived,
-    /// What arrived is what was pinned, and is in the store.
+    /// What arrived is what was pinned, and is in the cabinet.
     Placed,
 }
 
-/// Bring every snapshot the governing package reaches into the store, and then every foreign module the manifests now readable name, `told` of each fetch as it goes.
+/// Bring every snapshot the governing package reaches into the cabinet, and then every foreign module the manifests now readable name, `told` of each fetch as it goes.
 ///
 /// Iterated to a fixed point rather than walked once, because a dependency's own dependencies cannot be read until it is there: each round materializes what the manifests currently reachable declare, and the next round sees further. A round that fetches nothing new is the end of it — and a round that fetches without revealing anything is impossible, since a fetched tree either has a manifest or is refused for having none.
 ///
@@ -163,7 +163,7 @@ pub fn curate(
 ///
 /// Unreadable ones are not an error here: a dependency that has not been materialized is precisely what this walk exists to discover, and refusing on it would make the first round the only round.
 ///
-/// Both are collected in the one walk because both are read off the same manifests. A second traversal would have to resolve each dependency row a second time to find them, and resolution is where a store path comes from — so the two walks could disagree about which tree a row meant.
+/// Both are collected in the one walk because both are read off the same manifests. A second traversal would have to resolve each dependency row a second time to find them, and resolution is where a cabinet path comes from — so the two walks could disagree about which tree a row meant.
 #[derive(Default)]
 struct Reachable {
     /// The trees to bring in.
@@ -224,7 +224,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
         }
 
         for (name, row) in &package.dependencies {
-            // A `catalog` marker names a row the umbrella holds, and *that* row is what this walk must realize — so it is resolved before the dispatch below, leaving the fetchable arm the only place a fetch is decided. Resolved after instead, a fetchable catalog row would be acquired by nobody: the marker would land in the store at a hash nothing had put there, and `order` would refuse it naming `curate`, which had just declined to fetch it. A member marker names a directory rather than a row, so only this one indirects.
+            // A `catalog` marker names a row the umbrella holds, and *that* row is what this walk must realize — so it is resolved before the dispatch below, leaving the fetchable arm the only place a fetch is decided. Resolved after instead, a fetchable catalog row would be acquired by nobody: the marker would land in the cabinet at a hash nothing had put there, and `order` would refuse it naming `curate`, which had just declined to fetch it. A member marker names a directory rather than a row, so only this one indirects.
             //
             // The base travels with the row because a relative `path` is relative to whoever wrote it: the umbrella's root for a catalog row, the depending package's own directory otherwise. `order` reads it the same way, at `Walk::point`'s catalog arm.
             let (row, base, written) = match row {
@@ -281,7 +281,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
     Ok(reachable)
 }
 
-/// Fetch one foreign module, accept it against its pin, and file it in the shared store.
+/// Fetch one foreign module, accept it against its pin, and file it in the cabinet.
 ///
 /// **Shelled out, as `git` is, and for the reason the module doc gives.** Acceptance is by hash, so any transport may deliver the bytes — which makes the one already installed the right one to use rather than an HTTP client vendored into this crate. What `curate` owns is the criterion, not the download.
 ///
@@ -436,7 +436,7 @@ fn catalogued<'a>(governing: &'a Governing, name: &str) -> Option<&'a Dependency
 
 /// Fetch `acquisition`, verify it, and place it — in that order, and only in that order.
 ///
-/// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
+/// The tree is hashed where it lands temporarily and moved into the cabinet only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the cabinet would later read as a verified delivery.
 fn fetch(
     cabinet: &Cabinet,
     acquisition: &Acquisition,
@@ -484,7 +484,7 @@ pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), Refused> {
         }
     }
 
-    // Source is what was delivered; the object store is how it arrived. A fresh clone's differs run to run, so leaving it in would make the hash unreproducible and the store key meaningless.
+    // Source is what was delivered; the object store is how it arrived. A fresh clone's differs run to run, so leaving it in would make the hash unreproducible and the cabinet key meaningless.
     fs::remove_dir_all(scratch.join(".git")).map_err(|error| {
         Refused::of("unwritable directory")
             .stating("the fetched repository's metadata could not be dropped")
@@ -492,7 +492,7 @@ pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), Refused> {
     })
 }
 
-/// Verify the delivery and move it into the store.
+/// Verify the delivery and move it into the cabinet.
 fn accept(scratch: &Path, cabinet: &Cabinet, acquisition: &Acquisition) -> Result<(), Box<Report>> {
     let delivered = TreeHash::of(scratch)?;
 
@@ -560,9 +560,9 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<(), Refused> {
     }
 }
 
-/// The refusal of a place in the store the system would not let be written, in the system's words.
+/// The refusal of a place in the cabinet the system would not let be written, in the system's words.
 pub fn unwritable(path: &Path, error: &io::Error) -> Box<Report> {
-    Refused::of("unwritable store")
+    Refused::of("unwritable cabinet")
         .stating(OsError(error))
         .about_path(path)
 }

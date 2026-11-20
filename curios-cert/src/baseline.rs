@@ -23,7 +23,7 @@ use {
 
 /// A unit as its walk filed it: the module the walk accepted, where that module holds each name, and the record the walk filed of it. How the certifier reads a unit it does not judge again: a unit in scope (`Globals::mount`), a baseline a walk over another text of the unit adopts verdicts from, and a unit a stage outside the certifier digests a part of ([`part_digest`]).
 ///
-/// **The record answers for every name the module holds**: a totality for each definition and both vectors for each family and record, as every walk's record does, and a unit is made of its walk's accepted answer whole (`curios_unit::Unit`). So each is read here per name, and a miss is a construction bug of the compiler's own, read as one; bytes no walk wrote, a store's damaged or a forger's, are outside the claim ([the soundness board](../../documentation/design/soundness/the-soundness-board.md)).
+/// **The record answers for every name the module holds**: a totality for each definition and both vectors for each family and record, as every walk's record does, and a unit is made of its walk's accepted answer whole (`curios_unit::Unit`). So each is read here per name, and a miss is a construction bug of the compiler's own, read as one; bytes no walk wrote, a cabinet's damaged or a forger's, are outside the claim ([the soundness board](../../documentation/design/soundness/the-soundness-board.md)).
 #[derive(Clone, Copy)]
 pub struct Filed<'a> {
     pub definitions: &'a Definitions,
@@ -313,7 +313,7 @@ impl Readable<'_> {
     }
 }
 
-/// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a store's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
+/// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a cabinet's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
 pub fn complete(unit: Filed<'_>) {
     curios_profile::profile!("judgments::complete");
     let mut globals = Globals::default();

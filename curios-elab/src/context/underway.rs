@@ -24,7 +24,7 @@ pub struct Underway {
     pub credits: Credits,
     // The written sites opened and not yet classified, each with the type it was opened at; see [`Sites`].
     pub sites: Sites,
-    /// The binder lints of every declaration the walk's traces hold — elaborated now, adopted from a store or kept from a baseline — taken where the walk ends (`Context::hold_lints`), whatever it concluded: what `Context::observed` hands out beside the final term's.
+    /// The binder lints of every declaration the walk's traces hold — elaborated now, adopted from a cabinet or kept from a baseline — taken where the walk ends (`Context::hold_lints`), whatever it concluded: what `Context::observed` hands out beside the final term's.
     pub held: Vec<Lint>,
     /// The type each written place settled at, of the items published since the declaration they belong to was last filed ([`SettledPlace`]): taken into its record where it is filed (`Context::take_settled`).
     pub settled: Vec<SettledPlace>,

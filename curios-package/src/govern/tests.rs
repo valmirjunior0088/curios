@@ -123,7 +123,7 @@ fn a_directory_no_manifest_is_above_is_governed_by_nothing() {
     );
 }
 
-/// An umbrella governs what it enumerates, and its directory is where the store goes.
+/// An umbrella governs what it enumerates, and its directory is where `.curios/` goes.
 #[test]
 fn an_umbrella_governs_a_member_it_enumerates() {
     let root = tree(

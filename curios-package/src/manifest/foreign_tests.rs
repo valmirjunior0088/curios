@@ -216,9 +216,9 @@ fn the_page_s_own_names_are_refused() {
     }
 }
 
-/// Both sides of a `static` entry are plain relative paths naming something, and the store is no file a page serves.
+/// Both sides of a `static` entry are plain relative paths naming something, and `.curios/` is no file a page serves.
 #[test]
-fn a_static_entry_names_plain_paths_outside_the_store() {
+fn a_static_entry_names_plain_paths_outside_what_the_toolchain_generates() {
     const PIN: &str =
         "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
 

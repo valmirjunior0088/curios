@@ -213,7 +213,7 @@ impl ReadRecord {
         }
     }
 
-    /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
+    /// The record a cabinet held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
     pub fn restored(reads: Reads, made: Option<Concluded>, digest: Digest) -> Self {
         let record = Self::new(reads);
         if let Some(made) = made {
@@ -239,7 +239,7 @@ impl ReadRecord {
         let _ = self.made.set(made);
     }
 
-    /// The digest a store names this record of the definition `name` by: where it is complete, the candidate's name, which a store finds it among the records filed for the item it judged by ([`candidate_name`]), and otherwise the digest of its run alone.
+    /// The digest a cabinet names this record of the definition `name` by: where it is complete, the candidate's name, which a cabinet finds it among the records filed for the item it judged by ([`candidate_name`]), and otherwise the digest of its run alone.
     pub fn digest(&self, name: &Global) -> Result<Digest, String> {
         if let Some(digest) = self.digest.get() {
             return Ok(*digest);
@@ -531,7 +531,7 @@ impl Revision {
             .insert(name, Rc::new(ReadRecord::new(certified.reads)));
     }
 
-    /// Record `record`, a record a store held, as what judging `name` read, and its verdict as the walk's: a definition whose verdict the walk took from it.
+    /// Record `record`, a record a cabinet held, as what judging `name` read, and its verdict as the walk's: a definition whose verdict the walk took from it.
     pub fn adopted(&mut self, name: Global, record: HeldReads) {
         if let Some(made) = record.made() {
             self.totalities.insert(name, made.totality);
@@ -2156,7 +2156,7 @@ fn item_positions(
     }
 }
 
-/// Every position that can hold a bound value in the items of `module` it holds as other than an object a store holds, item by item — see [`item_positions`]: an item read out of the object it was stored as was walked where it was filed, by the compiler that files this one, since a store's address names its compiler.
+/// Every position that can hold a bound value in the items of `module` it holds as other than an object a cabinet holds, item by item — see [`item_positions`]: an item read out of the object it was stored as was walked where it was filed, by the compiler that files this one, since a cabinet's address names its compiler.
 fn made_positions(definitions: &Definitions, mut visit: impl FnMut(Option<&Global>, &dyn Carried)) {
     let items = &definitions.items;
     for place in items.places().filter(|place| items.part(*place).is_none()) {
@@ -2175,7 +2175,7 @@ pub enum Positional {
     LooseIndex { owner: Option<Global>, reach: usize },
     /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.
     UnscopedWitness { witness: Global },
-    /// A witness this module declares under its place among its module's witnesses ([`WitnessId::Unspelled`]): its signature spelled no key, which registration refuses, so one reaching a store is a name the same text written in another order gives to another declaration.
+    /// A witness this module declares under its place among its module's witnesses ([`WitnessId::Unspelled`]): its signature spelled no key, which registration refuses, so one reaching a cabinet is a name the same text written in another order gives to another declaration.
     PlacedWitness { witness: Global },
 }
 
@@ -2219,7 +2219,7 @@ impl fmt::Display for Positional {
 ///
 /// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Definitions::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
-/// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
+/// The terms are those of the items the module holds as other than an object a cabinet holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
 /// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the certifier refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Driver`.
 pub fn validate_stored_identities(

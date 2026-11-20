@@ -4,7 +4,7 @@
 //!
 //! That is also why `-` is spelled at all, rather than a bare invocation reading standard input when one is piped in. No argument already means the governing package, and deciding between the two would mean asking whether a terminal is attached — which makes one command line mean different things in a shell and in a pipeline.
 //!
-//! **What is selected is one of three things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; or a program. A program is *declared*, with a home in its package's store and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more.
+//! **What is selected is one of three things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; or a program. A program is *declared*, with a home in its package's `.curios/` and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more.
 //!
 //! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise, as a file of Core text always is, no `mod` line reaching one — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
 
@@ -251,7 +251,7 @@ pub struct Home {
     pub cabinet: Cabinet,
     /// The manifest that declares it, for a report to name when the invocation stands somewhere else.
     pub manifest: PathBuf,
-    /// The package that declares it. Carried beside `executable` because the two together are the one identity in a compilation that cannot collide, which is what the store addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
+    /// The package that declares it. Carried beside `executable` because the two together are the one identity in a compilation that cannot collide, which is what `.curios/` addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
     pub package: String,
     /// The directory the package's manifest sits in, which the program's files are named below.
     pub directory: PathBuf,
@@ -314,7 +314,7 @@ impl Program {
         }
     }
 
-    /// Where it belongs — `None` for a loose program, which has no project and so no store.
+    /// Where it belongs — `None` for a loose program, which has no project and so no `.curios/`.
     pub fn home(&self) -> Option<&Home> {
         match &self.scope {
             Scope::Loose => None,

@@ -549,13 +549,13 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
 
         text.to_string()
     };
-    let store = || Verdicts::at(Cabinet::of(&directory.join("project"), None));
+    let opened = || Verdicts::at(Cabinet::of(&directory.join("project"), None));
 
     let tested = written(&kinds("/sys/Bool/True()", true));
     let tested_root = RootSource::one_file("lib", &file, &tested).tested();
     with_prelude(|prelude| {
         super::read(
-            &store(),
+            &opened(),
             Predecessors::over(prelude),
             &UnitSource::mounted(&tested_root),
             &tested,
@@ -566,7 +566,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
 
     let built = written(&kinds("/sys/Bool/False()", false));
     let built_root = RootSource::one_file("lib", &file, &built);
-    let verdicts = store();
+    let verdicts = opened();
     assert!(
         verdicts
             .baseline(&UnitSource::mounted(&built_root), None)
@@ -993,7 +993,7 @@ fn refused_for_its_equation_alone(verdicts: &[Verdict]) -> bool {
         && !refused_as_partial(verdicts)
 }
 
-/// `loop` is graded through what `/lib`'s record files of how `apply` applies `k`: below `x`, so `loop` is total and `loop(0)` is `N/z()`. Edited at the same type to apply `k` at `0` itself, `apply` moves its summary and nothing else `loop` reads of it, so `/app`, compiled over its baseline, keeps `loop` total only where a read of `apply`'s signature digests no summary. Stepped back and forth, `/app` finds `loop`'s verdict among the records the store filed of its item, one under each summary, and takes the one filed under the summary `/lib` files now. Mutation-check: leave `self.applications` out of the signature part `Readable::digest` archives (`curios-cert/src/baseline.rs`), and the proof over a library last stepped to apply `k` at `0` is admitted at `False`.
+/// `loop` is graded through what `/lib`'s record files of how `apply` applies `k`: below `x`, so `loop` is total and `loop(0)` is `N/z()`. Edited at the same type to apply `k` at `0` itself, `apply` moves its summary and nothing else `loop` reads of it, so `/app`, compiled over its baseline, keeps `loop` total only where a read of `apply`'s signature digests no summary. Stepped back and forth, `/app` finds `loop`'s verdict among the records the cabinet filed of its item, one under each summary, and takes the one filed under the summary `/lib` files now. Mutation-check: leave `self.applications` out of the signature part `Readable::digest` archives (`curios-cert/src/baseline.rs`), and the proof over a library last stepped to apply `k` at `0` is admitted at `False`.
 #[test]
 fn a_recursion_through_a_callees_summary_is_judged_again_where_the_callee_moves_in_another_unit() {
     for steps in [

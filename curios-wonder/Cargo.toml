@@ -14,7 +14,7 @@ test-support = []
 profile = ["curios-profile/enabled", "curios-pipeline/profile", "curios-verdict/profile"]
 
 # Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
-# runs the compiler as far as it needs and reads the answer off the store through `curios-verdict`.
+# runs the compiler as far as it needs and reads the answer off the cabinet through `curios-verdict`.
 # The language server's protocol crates have this crate as their one owner.
 [dependencies]
 curios-common = { workspace = true }
@@ -42,5 +42,5 @@ serde_json = { workspace = true }
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
-# The directory a cabinet files its slots in, which the store's suite lists, removes and blocks.
+# The directory a cabinet files its slots in, which the cabinet's suite lists, removes and blocks.
 curios-package = { workspace = true, features = ["test-support"] }

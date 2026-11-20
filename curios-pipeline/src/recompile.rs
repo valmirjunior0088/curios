@@ -27,7 +27,7 @@ use {
 ///
 /// **`over.moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
 ///
-/// **`over.candidates` is what a store holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_definitions_over`).
+/// **`over.candidates` is what a cabinet holds of what was made before**: a declaration's elaboration by what it was lowered to, and an item's erasure and verdict by the item. Each is taken from a record there where every part it read stands (`curios_elab::Candidating`, `curios_erase::ErasedUnit::complete`, `curios_cert::certify_definitions_over`).
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -56,7 +56,7 @@ pub fn compile_unit_over(
         .map(|(unit, _)| unit)
 }
 
-/// What a unit is compiled over: its baseline, which predecessors the baseline was not compiled after, and what a store holds of declarations elaborated before ([`compile_unit_over`]).
+/// What a unit is compiled over: its baseline, which predecessors the baseline was not compiled after, and what a cabinet holds of declarations elaborated before ([`compile_unit_over`]).
 #[derive(Clone, Copy)]
 pub struct Over<'a> {
     pub baseline: &'a Unit,
@@ -276,7 +276,7 @@ pub fn recheck_over<'s>(
     )
 }
 
-/// Complete what the certifier recorded of `unit`'s judgments where no filing has (`curios_cert::complete`): what a store asks before it files the unit, so a later walk at its address finds each verdict by the item it judged, by what the certifier alone computed.
+/// Complete what the certifier recorded of `unit`'s judgments where no filing has (`curios_cert::complete`): what a cabinet asks before it files the unit, so a later walk at its address finds each verdict by the item it judged, by what the certifier alone computed.
 pub fn complete_records(unit: &Unit) {
     curios_cert::complete(unit.filed());
 }

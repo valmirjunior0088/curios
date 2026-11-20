@@ -1,4 +1,4 @@
-//! Driving the compile pipeline for the CLI, from an admitted program to the payload a target consumes — natively the `.cwasm` both subcommands run or bundle, and for a browser the module Binaryen wrote — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
+//! Driving the compile pipeline for the CLI, from an admitted program to the payload a target consumes — natively the `.cwasm` both subcommands run or bundle, and for a browser the module Binaryen wrote — including the cabinet consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
 //!
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
@@ -26,11 +26,11 @@ use {
     },
 };
 
-/// The payload `program` is built into for `target`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise: natively the precompiled `.cwasm`, filed under the engine that will run it, and for a browser the module Binaryen wrote, which any browser runs. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
+/// The payload `program` is built into for `target`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise: natively the precompiled `.cwasm`, filed under the engine that will run it, and for a browser the module Binaryen wrote, which any browser runs. `cache` is the cabinet its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
 /// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
 ///
-/// `then` is what the command goes on to write in the subject's tree, which comes back with the payload for it to do so: a payload the store held narrates nothing, and its tree is the subject's with no node yet.
+/// `then` is what the command goes on to write in the subject's tree, which comes back with the payload for it to do so: a payload the cabinet held narrates nothing, and its tree is the subject's with no node yet.
 pub fn payload_of(
     budget: u64,
     program: Program,
@@ -44,7 +44,7 @@ pub fn payload_of(
         Target::Browser => Runs::Browser,
     };
 
-    // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
+    // A loose program has no project, so it has no cabinet to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
     let entry = match program.entry() {
         Entry::Stdin(_) => None,
         Entry::File(path) => Some(path.clone()),
@@ -57,7 +57,7 @@ pub fn payload_of(
     let package = program.home().map(Home::package_root);
     let units = program.into_units();
 
-    // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
+    // Opened before the cabinet is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
     let (entrypoint, loader, source) = open(entry.as_deref(), package.as_ref())?;
     // What the manifest declared, onto the resolver the entry's own names go through. A loose program has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
     let loader = match declares {
@@ -65,7 +65,7 @@ pub fn payload_of(
         None => loader,
     };
 
-    // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry its package names to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
+    // A payload is filed only where all three exist: a cabinet to put it in, a declared name to file it under, and an entry its package names to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
     let filed = cache
         .as_ref()
         .zip(declared.as_ref())
@@ -84,7 +84,7 @@ pub fn payload_of(
             )
         });
 
-    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about which units the compilation holds: the probe refuses a unit the store may not file, and the write must refuse the same one.
+    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about which units the compilation holds: the probe refuses a unit the cabinet may not file, and the write must refuse the same one.
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
@@ -131,7 +131,7 @@ pub struct Built {
     pub tree: Tree,
 }
 
-/// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `store` when there is one.
+/// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `verdicts` when there is one.
 ///
 /// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` files the units a build would have and writes no pages, which is as far as a question goes. The compilation runs to completion first, the certifier included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
 ///
@@ -139,12 +139,16 @@ pub struct Built {
 pub fn documentation_of(
     budget: u64,
     units: &[RootSource],
-    store: Option<&Verdicts>,
+    verdicts: Option<&Verdicts>,
     subject: &Subject,
 ) -> Result<(Documentation, Tree), CompileError> {
     let mut steps = Steps::library(subject);
-    let documented = Fold::new(budget, units, store.map(|store| store as &dyn Cache))
-        .documentation(|progress| steps.told(progress, store));
+    let documented = Fold::new(
+        budget,
+        units,
+        verdicts.map(|verdicts| verdicts as &dyn Cache),
+    )
+    .documentation(|progress| steps.told(progress, verdicts));
 
     steps.ended(&documented);
 
@@ -174,7 +178,7 @@ pub fn drained() -> Result<String, Box<Report>> {
     })
 }
 
-/// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrated by `steps` beside `store`, the one the fold files into, whose subject's tree comes back with the payload.
+/// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrated by `steps` beside `verdicts`, the one the fold files into, whose subject's tree comes back with the payload.
 ///
 /// The program's last build node stays open until `finish` returns, so what it reports is what the payload took: the optimized program emitted and compiled to what a run executes.
 pub fn compile_entry<P>(
@@ -182,7 +186,7 @@ pub fn compile_entry<P>(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     steps: Steps,
-    store: Option<&Verdicts>,
+    verdicts: Option<&Verdicts>,
     finish: impl FnOnce(&Module) -> Result<P, CompileError>,
 ) -> Result<(P, ForeignStore, Tree), CompileError> {
     // Two callbacks write one narration, the stages a program reaches and the units the fold goes through, so it is lent to each in turn.
@@ -192,7 +196,7 @@ pub fn compile_entry<P>(
             entrypoint,
             loader,
             |stage| steps.borrow_mut().reached(&stage),
-            |progress| steps.borrow_mut().told(progress, store),
+            |progress| steps.borrow_mut().told(progress, verdicts),
         )
         .and_then(|(module, foreigns)| finish(&module).map(|payload| (payload, foreigns)));
     let mut steps = steps.into_inner();
@@ -246,10 +250,10 @@ impl How {
     }
 }
 
-/// Whether a command has said why its store took nothing: said once, beneath the first `store` node the store refused.
+/// Whether a command has said why its cabinet took nothing: said once, beneath the first `store` node the cabinet refused.
 static WHY_UNSTORED: AtomicBool = AtomicBool::new(false);
 
-/// A compile narrated: a tree for each unit the fold compiles, with a `check` node and, where there is a store, a `store` node; and the subject's own tree, whose `check`, `build` and `emit` nodes open and close as the program reaches each stage. A unit the store held narrates nothing.
+/// A compile narrated: a tree for each unit the fold compiles, with a `check` node and, where there is a cabinet, a `store` node; and the subject's own tree, whose `check`, `build` and `emit` nodes open and close as the program reaches each stage. A unit the cabinet held narrates nothing.
 ///
 /// The nodes outlive each event, which is why they are kept here rather than written whole: `check` and the `; 1.4s` that closes it are two writes to one line, with the work between them.
 pub struct Steps {
@@ -290,18 +294,18 @@ impl Steps {
         self.closing == Closing::Library && *unit == self.subject
     }
 
-    /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end. `store` is the one the fold files into, which says whether a unit has a `store` node to come and, once its filing ends, whether the store took it.
-    pub fn told(&mut self, progress: Progress<'_>, store: Option<&Verdicts>) {
+    /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end. `verdicts` is the one the fold files into, which says whether a unit has a `store` node to come and, once its filing ends, whether the cabinet took it.
+    pub fn told(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>) {
         match progress {
             // A recompile over a baseline reads as a compile: what the node reports is that the unit is being checked and how long it took.
             Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
                 let subject = Subject::Mounted(*prefix);
                 let mut tree = Tree::of(&subject, None);
 
-                tree.open("check", store.is_none() && !self.goes_on(&subject));
+                tree.open("check", verdicts.is_none() && !self.goes_on(&subject));
                 self.unit = Some((subject, tree));
             }
-            // The entry program is the subject, and its compile a tree of its own after every unit's. A build checks it whether or not the store held its declarations, since it is erased and linked either way; a question that only checks it has nothing to narrate of one the store held.
+            // The entry program is the subject, and its compile a tree of its own after every unit's. A build checks it whether or not the cabinet held its declarations, since it is erased and linked either way; a question that only checks it has nothing to narrate of one the cabinet held.
             Progress::Entry { held } => {
                 let last = match (self.closing, held) {
                     (Closing::Program(_), _) => false,
@@ -313,7 +317,7 @@ impl Steps {
                 tree.open("check", last);
                 self.program = Some(tree);
             }
-            // What the store held is not narrated.
+            // What the cabinet held is not narrated.
             Progress::Reused(_) => {}
             // A unit's check ends with the fold's step; the entry's has ended already, where its lowering began.
             Progress::Compiled => {
@@ -333,9 +337,9 @@ impl Steps {
                     tree.open("store", last);
                 }
             }
-            // A store that took nothing says so at its node, and why beneath the first node it refused: a store nobody can write refuses every unit for one reason, so the reason is one line however many units went past it.
+            // A cabinet that took nothing says so at its node, and why beneath the first node it refused: a cabinet nobody can write refuses every unit for one reason, so the reason is one line however many units went past it.
             Progress::Filed => {
-                let refusal = store.and_then(Verdicts::refused);
+                let refusal = verdicts.and_then(Verdicts::refused);
 
                 if let Some((_, tree)) = &mut self.unit {
                     match refusal {
@@ -419,7 +423,7 @@ impl Steps {
     }
 }
 
-/// A question narrated, as [`Telling`] tells it: each subject's compile as a build's is, the units it had to compile and, where the question checks a program, the program's own `check`; a blank line ahead of the answer where anything was narrated; and, after the answer, why the store took nothing where it could not.
+/// A question narrated, as [`Telling`] tells it: each subject's compile as a build's is, the units it had to compile and, where the question checks a program, the program's own `check`; a blank line ahead of the answer where anything was narrated; and, after the answer, why the cabinet took nothing where it could not.
 pub struct Asking {
     /// Whether the question checks a program, and so narrates its check. A rung or a cost reprints the program, and a question about its names reads it: those narrate what it stands on and never the program.
     checks: bool,
@@ -469,7 +473,7 @@ impl Telling for Asking {
         self.steps = Some(Steps::new(&Subject::of(named), manifest, closing));
     }
 
-    fn step(&mut self, progress: Progress<'_>, store: Option<&Verdicts>) {
+    fn step(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>) {
         let Some(steps) = &mut self.steps else {
             return;
         };
@@ -485,7 +489,7 @@ impl Telling for Asking {
             Progress::Entry { held: false } => self.narrated = true,
             _ => {}
         }
-        steps.told(progress, store);
+        steps.told(progress, verdicts);
     }
 
     fn ended(&mut self, ended: Ended) {

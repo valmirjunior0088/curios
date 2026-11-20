@@ -4,11 +4,11 @@
 //!
 //! **A version of the baseline's.** A unit compiled over a baseline holds its baseline's traces with the trace of each declaration it made filed in place of the one it replaces and each declaration it dropped taken out: the table is persistent and read back in the order of its names ([`Sorted`]), so a trace kept is shared, never copied, and nothing is visited to keep it.
 //!
-//! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a store holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it. So is what a question about a place reads of the declaration: the type each of its written places settled at and each of its written binders was opened at ([`SettledPlace`]).
+//! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a cabinet holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it. So is what a question about a place reads of the declaration: the type each of its written places settled at and each of its written binders was opened at ([`SettledPlace`]).
 //!
 //! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 //!
-//! **Completed where it is filed, and found by what its declaration was made from.** A store's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a store holds for the same input ([`curios_common::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the store beside it.
+//! **Completed where it is filed, and found by what its declaration was made from.** A cabinet's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a cabinet holds for the same input ([`curios_common::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the cabinet beside it.
 
 #[cfg(test)]
 mod tests;
@@ -32,7 +32,7 @@ use {
     },
 };
 
-/// What a question read, as a completed record holds it: `None` where it read no part a record holds — whether lemmas are on offer, whether a witness is declared, a key no witness answers, a part of the declaration's own or of a fixed unit's, which a store's address names — and otherwise the digest of the part, `None` within where the name declared no such part.
+/// What a question read, as a completed record holds it: `None` where it read no part a record holds — whether lemmas are on offer, whether a witness is declared, a key no witness answers, a part of the declaration's own or of a fixed unit's, which a cabinet's address names — and otherwise the digest of the part, `None` within where the name declared no such part.
 pub type Read = Option<Option<[u8; 32]>>;
 
 /// What a filing completes a declaration's trace with: what the declaration was made from, what each of its questions read and what it made. See the module documentation.
@@ -46,7 +46,7 @@ pub struct Made {
     pub outputs: Vec<Digest>,
 }
 
-/// What elaboration concluded of a declaration as it made it, beside its items: what a compile that keeps the declaration — over a baseline, or from a record a store held — reads of it with nothing elaborated. Made where the declaration elaborates and held by its record, so a record shared, stored or taken from a store carries it.
+/// What elaboration concluded of a declaration as it made it, beside its items: what a compile that keeps the declaration — over a baseline, or from a record a cabinet held — reads of it with nothing elaborated. Made where the declaration elaborates and held by its record, so a record shared, stored or taken from a cabinet carries it.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Concluded {
     /// What elaboration concluded of each definition the declaration made, by the definition's name ([`Classified`]), its items holding none: what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
@@ -117,7 +117,7 @@ impl TraceRecord {
         }
     }
 
-    /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
+    /// The record a cabinet held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
     pub fn restored(
         asked: Trace<Question, Answered>,
         concluded: Concluded,
@@ -153,7 +153,7 @@ impl TraceRecord {
         let _ = self.made.set(made);
     }
 
-    /// The digest a store names this record by, the record of the declaration written as `name` that `facet` made: where it is complete, the candidate's name, which a store finds it among the records filed for its input by ([`candidate_name`]), and otherwise the digest of its run alone.
+    /// The digest a cabinet names this record by, the record of the declaration written as `name` that `facet` made: where it is complete, the candidate's name, which a cabinet finds it among the records filed for its input by ([`candidate_name`]), and otherwise the digest of its run alone.
     pub fn digest(&self, facet: Facet, name: &Global) -> Result<Digest, String> {
         if let Some(digest) = self.digest.get() {
             return Ok(*digest);
@@ -310,7 +310,7 @@ impl Foreign {
 }
 
 impl Traces {
-    /// File `record` as the declaration written as `name`'s, in place of the one filed under it: another unit's record of it, held where that unit holds it, or one a store held.
+    /// File `record` as the declaration written as `name`'s, in place of the one filed under it: another unit's record of it, held where that unit holds it, or one a cabinet held.
     pub fn share(&mut self, name: Global, record: HeldTrace) {
         self.forget(&name);
         for (definition, _) in &record.concluded.classified {
@@ -701,7 +701,7 @@ impl Readers {
     }
 }
 
-/// Declarations' traces as a run of the store holds them: every name and every witness key a question holds, once, and each declaration's questions holding their places, a member of the run.
+/// Declarations' traces as a run of the cabinet holds them: every name and every witness key a question holds, once, and each declaration's questions holding their places, a member of the run.
 #[curios_archive::archived]
 pub struct TraceTable {
     names: Vec<Global>,
@@ -843,7 +843,7 @@ impl TraceTable {
             .collect()
     }
 
-    /// The entry the run `bytes` holds as its member `member`, the run checked once and nothing of it restored but the member and the names and keys it holds: what a compile reads of a record a store found among those of a run.
+    /// The entry the run `bytes` holds as its member `member`, the run checked once and nothing of it restored but the member and the names and keys it holds: what a compile reads of a record a cabinet found among those of a run.
     pub fn member(bytes: &[u8], member: u32) -> Result<TracedEntry, String> {
         let table = curios_archive::access::<ArchivedTraceTable>(bytes)?;
         let tabled = usize::try_from(member)

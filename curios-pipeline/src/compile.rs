@@ -1628,13 +1628,13 @@ pub trait Cache {
     ///
     /// **Offered rather than imposed, and lent rather than handed over.** The cache decides whether the unit is compiled over the offer, and a cache holding something nearer copies nothing. Whatever tree the package is, the offer is a correct baseline: an item is reused only where its lowered form matches the offered one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
     ///
-    /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The store's own cache answers, for a build and for a question alike; a cache that keeps the default compiles whole.
+    /// **What came of a baseline is handed to `put` like any other unit**, and is one: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so a cache that answers may file it where it would file the other. The cabinet's own cache answers, for a build and for a question alike; a cache that keeps the default compiles whole.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
         let _ = (source, offered);
         None
     }
 
-    /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
+    /// Record what `source` compiled to. Best effort — a cabinet that cannot be written costs the next compilation the work, and nothing else.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit);
 }
 
@@ -1945,7 +1945,7 @@ fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
     Ok(())
 }
 
-/// Told a subject's lowering as soon as it is made — or restored, where the store held the unit — beside the units it was lowered against and, for a program, the term it closes with: what a question about what the subject writes reads, whatever the rest of its compile goes on to conclude.
+/// Told a subject's lowering as soon as it is made — or restored, where the cabinet held the unit — beside the units it was lowered against and, for a program, the term it closes with: what a question about what the subject writes reads, whatever the rest of its compile goes on to conclude.
 ///
 /// **What was produced, told once, for the subject alone.** Beside [`Progress`] and the [`Stage`] observer rather than inside either: the first reports what is happening and the second the rungs `wonder --stage` prints, while this hands a reader the lowering a refused subject still has, so a question about what a file writes is answered from the check that compiled it.
 pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>);
@@ -1982,7 +1982,7 @@ pub enum Progress<'a> {
     Recompiling(&'a Qualifier),
     /// The entry program is about to be compiled. Its declarations are a unit of their own, `held` where the cache handed them back, on which its final term alone is elaborated anew. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
     Entry { held: bool },
-    /// A mounted unit came from the store instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
+    /// A mounted unit came from the cabinet instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
     Reused(&'a Qualifier),
     /// The subject just announced finished.
     Compiled,

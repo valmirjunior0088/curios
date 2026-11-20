@@ -1,8 +1,8 @@
-//! A declaration's elaboration as a store keeps it to be found by what the declaration was lowered to: its trace, completed where it is filed with what the declaration was made from, the digest of every part it read and what it made ([`Candidating`], [`Made`]).
+//! A declaration's elaboration as a cabinet keeps it to be found by what the declaration was lowered to: its trace, completed where it is filed with what the declaration was made from, the digest of every part it read and what it made ([`Candidating`], [`Made`]).
 //!
-//! **Found by what it was made from.** A completed record is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_common::candidate_name`]), so a store holds every record filed for one lowering together, whichever unit filed each ([`found`]).
+//! **Found by what it was made from.** A completed record is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_common::candidate_name`]), so a cabinet holds every record filed for one lowering together, whichever unit filed each ([`found`]).
 //!
-//! **Taken where every part it read digests as it did.** A declaration is [a function of what it reads](../../documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md), so one lowered to the items a record was made from, every answer it was given standing and every part it read digesting as it did, elaborates to the record's items, and a walk over a baseline takes them in place of elaborating. A part of the unit's own is answered in a trace by the unit the trace is kept with, so a completed record holds a digest of each, which no later unit moves; a part of a fixed unit is the compiler's, which a store's address names, and is recorded nowhere.
+//! **Taken where every part it read digests as it did.** A declaration is [a function of what it reads](../../documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md), so one lowered to the items a record was made from, every answer it was given standing and every part it read digesting as it did, elaborates to the record's items, and a walk over a baseline takes them in place of elaborating. A part of the unit's own is answered in a trace by the unit the trace is kept with, so a completed record holds a digest of each, which no later unit moves; a part of a fixed unit is the compiler's, which a cabinet's address names, and is recorded nowhere.
 //!
 //! **What a filing completes again is what it completed.** A part's digest is of the part as it is compared, under no position ([`part_digest`]), so a declaration kept over a baseline, which read each part as it was, holds the record its baseline filed, and a unit compiled whole completes it again alike.
 //!
@@ -27,7 +27,7 @@ pub fn declaration_input(items: impl IntoIterator<Item = Digest>) -> Digest {
     Digest::of(&bytes)
 }
 
-/// The digest of the lowered item at `position` of `lowered`, as a store keeps it: the object it was read from, where it was, and its archive otherwise.
+/// The digest of the lowered item at `position` of `lowered`, as a cabinet keeps it: the object it was read from, where it was, and its archive otherwise.
 pub fn lowered_digest(lowered: &Definitions, position: usize) -> Result<Digest, String> {
     match lowered.items.part(position) {
         Some(stored) => Ok(stored.digest),
@@ -77,7 +77,7 @@ impl<'a> Candidating<'a> {
     pub fn complete(&self) -> Result<(), String> {
         curios_profile::profile!("elaborations::complete");
         for declaration in self.declarations.each() {
-            // Asked of what each place declares, which a stored module knows without its item: a filing over a store completes what its edit made and restores nothing else.
+            // Asked of what each place declares, which a stored module knows without its item: a filing over a cabinet completes what its edit made and restores nothing else.
             let Some(first) = self.lowered.items.names(declaration).first().copied() else {
                 continue;
             };

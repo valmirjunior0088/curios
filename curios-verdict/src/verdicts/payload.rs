@@ -79,7 +79,7 @@ impl Verdicts {
     ) -> Option<(Vec<u8>, ForeignStore)> {
         let units = self.chain(units)?;
 
-        // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
+        // A file that is not a slot, or a stored record that will not read back, is ignored, never a compile to fail.
         let cabinet = self.cabinet.as_ref()?;
         let filed = fs::read(cabinet.payload(runs, &slot(self, program, runs)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
@@ -93,7 +93,7 @@ impl Verdicts {
 
     /// File `bytes` as `program`'s payload, against what the fold just filed each of `units` as.
     ///
-    /// Called after the fold, which is what makes the units it took the right ones to record: each with what it was filed as in *this* compilation, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
+    /// Called after the fold, which is what makes the units it took the right ones to record: each with what it was filed as in *this* compilation, whether it was reused or compiled. Best effort, exactly as a unit's write is — a cabinet that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
     ///
     /// **`units` is taken so this can refuse a compilation one of whose units has no place, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe verifies each unit through `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, so a record naming fewer units than the compilation held is one no probe agrees with: not a stale answer, but a slot rewritten by every build and found by none. Withholding the record is free, since the compilation it came from is correct either way.
     pub fn payload_put(

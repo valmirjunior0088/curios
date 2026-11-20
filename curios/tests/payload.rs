@@ -1,6 +1,6 @@
-//! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a store mechanism.
+//! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a cabinet mechanism.
 //!
-//! The store's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
+//! The cabinet's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
@@ -59,7 +59,7 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
         .expect("run the compiler")
 }
 
-/// Whether an invocation was served from the store, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it: a program the store held narrates no build, so its tree has no `emit` node.
+/// Whether an invocation was served from the cabinet, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it: a program the cabinet held narrates no build, so its tree has no `emit` node.
 fn reused(output: &Output) -> bool {
     !String::from_utf8_lossy(&output.stderr).contains("emit;")
 }
@@ -91,7 +91,7 @@ fn running_twice_reuses_and_behaves_identically() {
     assert_eq!(
         second.status.code(),
         first.status.code(),
-        "and exited the same way — a payload from the store is the payload a compile produced"
+        "and exited the same way — a payload from the cabinet is the payload a compile produced"
     );
     assert_eq!(
         first.status.code(),
@@ -122,7 +122,7 @@ fn one_slot_serves_run_and_compile() {
     );
 }
 
-/// A stage is a question, and a question files the units it compiled whole and no payload: after `wonder --stage`, the plain invocation finds the library in the store and compiles the program over it.
+/// A stage is a question, and a question files the units it compiled whole and no payload: after `wonder --stage`, the plain invocation finds the library in the cabinet and compiles the program over it.
 #[test]
 fn asking_for_a_stage_files_its_units_and_no_payload() {
     let root = project("asking");
@@ -162,7 +162,7 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
     );
 }
 
-/// A bare file has no project, hence no store and no slot — the declared-versus-bare split.
+/// A bare file has no project, hence no cabinet and no slot — the declared-versus-bare split.
 #[test]
 fn a_bare_file_files_nothing() {
     let root = temporary("bare");
@@ -184,7 +184,7 @@ fn a_bare_file_files_nothing() {
     );
 }
 
-/// A program no package declares has no store to be filed under, so it builds only where `--output` says — and files nothing in a store either way.
+/// A program no package declares has no `.curios/` to be built under, so it builds only where `--output` says — and files nothing in a cabinet either way.
 #[test]
 fn a_loose_file_compiles_only_where_output_says() {
     let root = temporary("loose-compile");
@@ -209,7 +209,7 @@ fn a_loose_file_compiles_only_where_output_says() {
     assert!(root.join("scratch").is_file());
     assert!(
         !root.join(".curios").exists(),
-        "a loose program has no store to file into"
+        "a loose program has no cabinet to file into"
     );
 }
 
@@ -263,9 +263,9 @@ const COMMANDS: &[(&[&str], bool)] = &[
     (&["wonder", "--stage", "wasm"], false),
 ];
 
-/// A store holds what every command filed of a package while its dependency let `f` check, and the dependency's edit leaves `f`'s text as it was and refuses it: every command is refused, none answered from what the store holds for the text it was filed for.
+/// A cabinet holds what every command filed of a package while its dependency let `f` check, and the dependency's edit leaves `f`'s text as it was and refuses it: every command is refused, none answered from what the cabinet holds for the text it was filed for.
 #[test]
-fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_store() {
+fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_cabinet() {
     let dep = temporary("refused-dep");
     write(
         &dep,

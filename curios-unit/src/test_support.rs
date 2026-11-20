@@ -6,7 +6,7 @@ use {
     curios_core::Read,
 };
 
-/// The bytes a record of what was read is filed as where it is a constant of the executable, as the prelude's certification files it: its own part, the digest of each definition's reads and the one run holding them all, behind their lengths, so it is restored as a store's is and nothing of it is read until a walk asks.
+/// The bytes a record of what was read is filed as where it is a constant of the executable, as the prelude's certification files it: its own part, the digest of each definition's reads and the one run holding them all, behind their lengths, so it is restored as a cabinet's is and nothing of it is read until a walk asks.
 pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
     let (table, kind) = reads_indexed(recorded)?;
     let digests = digests(kind.digests());

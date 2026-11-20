@@ -21,15 +21,15 @@ use {
     },
 };
 
-/// What a store holds of the units filed into it, by name, and the name of every object a compile read out of it: a store's candidates, held in memory.
+/// What a cabinet holds of the units filed into it, by name, and the name of every object a compile read out of it: a cabinet's candidates, held in memory.
 #[derive(Default)]
-pub struct Store {
+pub struct Cabinet {
     objects: BTreeMap<Digest, Object>,
     read: RefCell<Vec<Digest>>,
 }
 
-impl Store {
-    /// File `unit`: every object it names, each once, its records completed as a store's filing completes them.
+impl Cabinet {
+    /// File `unit`: every object it names, each once, its records completed as a cabinet's filing completes them.
     pub fn file(&mut self, unit: &Unit) {
         complete_records(unit);
         let stored = unit.stored().expect("a unit serializes");
@@ -38,13 +38,13 @@ impl Store {
         }
     }
 
-    /// The name of every object a compile read out of the store, in the order it was read.
+    /// The name of every object a compile read out of the cabinet, in the order it was read.
     pub fn read(&self) -> Vec<Digest> {
         self.read.borrow().clone()
     }
 }
 
-impl Candidates for Store {
+impl Candidates for Cabinet {
     fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
         let prefix = candidate_prefix(facet, input);
         self.objects
@@ -638,7 +638,7 @@ pub fn asked_stored(asked: &AskedItems) -> Vec<u8> {
     bytes
 }
 
-/// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
+/// `unit` stored and restored, the objects its index names found in one pack of their own, as a cabinet keeps them beside a slot.
 pub fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
     let objects = stored

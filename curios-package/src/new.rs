@@ -2,7 +2,7 @@
 //!
 //! What it produces is a package the rest of this crate already accepts — no template escapes the rules, and nothing here knows a rule the manifest parser does not.
 //!
-//! It writes every part a package has: a manifest, a library header, and one executable. A package can still be a program alone or a library alone — the manifest decides, and deleting either file says so — but *starting* one is not the moment to ask which, and a flag asking would only be answerable by somebody who already knows what the two are. Beside them goes a `.gitignore` for the store, since the one directory the toolchain generates is the one thing in a fresh package that should never be committed.
+//! It writes every part a package has: a manifest, a library header, and one executable. A package can still be a program alone or a library alone — the manifest decides, and deleting either file says so — but *starting* one is not the moment to ask which, and a flag asking would only be answerable by somebody who already knows what the two are. Beside them goes a `.gitignore` for `.curios/`, since the one directory the toolchain generates is the one thing in a fresh package that should never be committed.
 
 #[cfg(test)]
 mod tests;
@@ -93,7 +93,7 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, Box<Report>> {
     ])
 }
 
-/// The ignore file a scaffolded package starts with, holding the store and nothing else.
+/// The ignore file a scaffolded package starts with, holding `.curios/` and nothing else.
 const IGNORE: &str = ".gitignore";
 
 /// One scaffolded file.

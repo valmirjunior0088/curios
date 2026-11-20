@@ -615,7 +615,7 @@ pub enum LineNamed {
 /// What an imported module offers: each public label with what it resolves to, by label.
 pub type Offer = Vec<(String, Global)>;
 
-/// An entry of a unit's import scopes as a store keeps it, an object of its own bytes: a module body's imports, or what an imported module offers.
+/// An entry of a unit's import scopes as a cabinet keeps it, an object of its own bytes: a module body's imports, or what an imported module offers.
 #[curios_archive::archived]
 pub enum ImportsEntry {
     Body(Qualifier, Vec<Import>),
@@ -732,7 +732,7 @@ impl Imports {
         bodies.chain(members).chain(lines).collect()
     }
 
-    /// The entries `wanted` asks for, as the objects a store keeps them as, each archived now.
+    /// The entries `wanted` asks for, as the objects a cabinet keeps them as, each archived now.
     pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
         let digests = self.digests()?;
         let entries = self

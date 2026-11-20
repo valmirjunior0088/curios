@@ -77,7 +77,7 @@ impl Pinning {
 
 /// Where a delivery lands before the digest that will name it is known, removed however this ends.
 ///
-/// The removal is what a failed or interrupted delivery needs: the path is not a digest, so nothing would ever read it, but leaving a half-fetched tree in the store is untidy at best. A delivery that succeeds is *renamed away* from here, so the drop finds nothing.
+/// The removal is what a failed or interrupted delivery needs: the path is not a digest, so nothing would ever read it, but leaving a half-fetched tree in the cabinet is untidy at best. A delivery that succeeds is *renamed away* from here, so the drop finds nothing.
 struct Staged(PathBuf);
 
 impl Staged {

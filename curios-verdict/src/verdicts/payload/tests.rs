@@ -1,6 +1,6 @@
 //! What the payload family does across two invocations of one target.
 //!
-//! Every test here compiles for real and asks the question a caller asks — was this invocation served from the store — rather than reading the store's internals. Asserting on a slot name would pass just as happily with verification broken.
+//! Every test here compiles for real and asks the question a caller asks — was this invocation served from the cabinet — rather than reading the cabinet's internals. Asserting on a slot name would pass just as happily with verification broken.
 //!
 //! The address parts and their separation are `curios-package`'s to test, and are: this file is about the *record*, which is what stands between an address and a stale answer.
 
@@ -20,7 +20,7 @@ const ENGINE: &str = "test-engine";
 
 /// What one invocation did.
 struct Invocation {
-    /// Whether the store answered instead of the compiler.
+    /// Whether the cabinet answered instead of the compiler.
     reused: bool,
     /// The payload, however it was obtained.
     payload: Vec<u8>,
@@ -103,7 +103,7 @@ fn invoke_over(
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
 
-    // The module's own bytes stand in for machine code: the store digests a payload and never reads it, and nothing here runs one.
+    // The module's own bytes stand in for machine code: the cabinet digests a payload and never reads it, and nothing here runs one.
     let payload = to_bytes(&module);
     verdicts.payload_put(
         &program,
@@ -192,7 +192,7 @@ fn payloads(root: &Path) -> PathBuf {
     Cabinet::of(root, None).payloads(Runs::Native { engine: ENGINE }.target())
 }
 
-/// The payload slots at `root`, counting a store that was never created as the none it holds — which is what a refusal to file leaves behind.
+/// The payload slots at `root`, counting a cabinet that was never created as the none it holds — which is what a refusal to file leaves behind.
 fn filed(root: &Path) -> usize {
     fs::read_dir(payloads(root)).map_or(0, Iterator::count)
 }
@@ -200,14 +200,14 @@ fn filed(root: &Path) -> usize {
 /// The slots the payload family holds for the project at `root`.
 fn slots(root: &Path) -> usize {
     fs::read_dir(payloads(root))
-        .expect("a store with payloads in it")
+        .expect("a cabinet with payloads in it")
         .count()
 }
 
 /// The one payload slot's file, for a test that has to damage what is in it.
 fn slot_of(root: &Path) -> PathBuf {
     let mut slots = fs::read_dir(payloads(root))
-        .expect("a store with payloads in it")
+        .expect("a cabinet with payloads in it")
         .map(|slot| slot.unwrap().path())
         .collect::<Vec<_>>();
 
@@ -394,9 +394,9 @@ fn a_corrupted_payload_is_not_reused() {
     assert!(run(&root).reused, "and the recompile repairs the slot");
 }
 
-/// A slot is written beside its name and renamed into place, so an interrupted write leaves the slot as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a store can be found in, and each reads as a miss or as the intact slot it is.
+/// A slot is written beside its name and renamed into place, so an interrupted write leaves the slot as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a cabinet can be found in, and each reads as a miss or as the intact slot it is.
 #[test]
-fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
+fn no_state_a_cabinet_is_left_in_reads_as_a_hit_it_is_not() {
     let root = project("interrupted");
 
     run(&root);
@@ -428,7 +428,7 @@ fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
     fs::write(&slot, &filed[..24]).unwrap();
     assert!(
         !run(&root).reused,
-        "a file that will not read back as a slot is a store to ignore"
+        "a file that will not read back as a slot is ignored"
     );
     restore();
 
@@ -484,11 +484,11 @@ fn a_slot_does_not_answer_for_another_projects_program() {
     );
 }
 
-/// A store nobody can write costs the reuse and never the verdict or the run: the compilation proceeds, a payload comes back, and the reason is kept for a caller with somewhere to say it.
+/// A cabinet nobody can write costs the reuse and never the verdict or the run: the compilation proceeds, a payload comes back, and the reason is kept for a caller with somewhere to say it.
 ///
-/// The store is made unwritable by putting a *file* where its directory belongs, which fails for every user rather than only for one who is not root.
+/// The cabinet is made unwritable by putting a *file* where its directory belongs, which fails for every user rather than only for one who is not root.
 #[test]
-fn an_unwritable_store_refuses_once_and_stops_nothing() {
+fn an_unwritable_cabinet_refuses_once_and_stops_nothing() {
     let root = project("unwritable");
     fs::write(root.join(".curios"), "not a directory").unwrap();
 
@@ -496,7 +496,7 @@ fn an_unwritable_store_refuses_once_and_stops_nothing() {
     assert!(!first.reused);
     assert!(
         !first.payload.is_empty(),
-        "the compilation is unaffected by a store it cannot write"
+        "the compilation is unaffected by a cabinet it cannot write"
     );
     assert!(
         first.refused.is_some(),
@@ -518,7 +518,7 @@ fn an_unwritable_store_refuses_once_and_stops_nothing() {
 ///
 /// **A unit with nothing on disk is the gap, and `RootSource::supplied` is what builds one.** It holds no directory, so `Verdicts::slot` declines to address it: the fold compiles it every time and places nothing for it, which leaves `Verdicts::placed` one entry shorter than the scope it folded. [`Verdicts::payload_get`] derives its own chain through `Verdicts::chain`, which refuses that unit outright — so a payload filed against the short chain is addressed under a prefix the probe never computes. Nothing stale comes back; a slot is simply written that nothing will ever read, on every invocation, forever.
 ///
-/// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the store's own shape rather than on a reuse verdict, because the failure it guards against produces no wrong answer to assert against: it produces a write.
+/// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the cabinet's own shape rather than on a reuse verdict, because the failure it guards against produces no wrong answer to assert against: it produces a write.
 #[test]
 fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
     let root = project("gapped");

@@ -420,7 +420,7 @@ impl Wrote {
 /// └─ store; 0.1s
 /// ```
 ///
-/// **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the store already held is not narrated.
+/// **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the cabinet already held is not narrated.
 ///
 /// **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
 ///

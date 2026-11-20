@@ -37,7 +37,7 @@ impl ItemRun {
         curios_archive::to_bytes(&run).map(|bytes| bytes.to_vec())
     }
 
-    /// What `item` is named by among the objects of a store: the digest of its form consed in a table of its own and archived alone.
+    /// What `item` is named by among the objects of a cabinet: the digest of its form consed in a table of its own and archived alone.
     pub fn identity(item: &Item) -> Result<Digest, String> {
         curios_archive::to_bytes(&item.shared(&Sharing::new())).map(|bytes| Digest::of(&bytes))
     }

@@ -8,9 +8,9 @@ use {
     curios_verdict::Verdicts,
 };
 
-/// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for [`diagnostics`](diagnostics()): unsaved text wins over the disk, and the store is read, and filed into where a question may.
+/// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for [`diagnostics`](diagnostics()): unsaved text wins over the disk, and the cabinet is read, and filed into where a question may.
 ///
-/// The compilation runs to completion first, the certifier included, so a library that does not check is not documented and reports what stopped it exactly as `run` would. The record itself is made after it, from the unit's stored tables and its sources, whether the unit was compiled now or reused from the store.
+/// The compilation runs to completion first, the certifier included, so a library that does not check is not documented and reports what stopped it exactly as `run` would. The record itself is made after it, from the unit's stored tables and its sources, whether the unit was compiled now or reused from the cabinet.
 pub fn documentation(
     budget: u64,
     units: Vec<RootSource>,

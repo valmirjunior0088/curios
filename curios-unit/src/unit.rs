@@ -40,14 +40,14 @@ enum Written {
 ///
 /// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-module`'s resolution tables and `curios-erase`'s erased forms are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the artifacts describe *one* unit, and nothing else says so.
 ///
-/// **Each artifact is held by pointer, so a unit is handed over and never copied.** A fold hands a unit to its successors, a session keeps one as the next question's baseline, and a store offers one, and each of those is a clone of the handles and of nothing they hold.
+/// **Each artifact is held by pointer, so a unit is handed over and never copied.** A fold hands a unit to its successors, a session keeps one as the next question's baseline, and a cabinet offers one, and each of those is a clone of the handles and of nothing they hold.
 #[derive(Clone)]
 #[curios_archive::archived]
 struct Produced {
     written: Written,
     /// Elaborated and zonked, as the certifier handed it back: elaboration's items, with every proof mark and value sort the certifier stated of them. This is what a successor's elaboration and the certifier's walk over it read where it stands.
     ///
-    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
+    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the cabinet, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
     #[archived_with(curios_core::WithoutItems)]
     core: Rc<Definitions>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
@@ -174,7 +174,7 @@ impl Produced {
 
     /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item read ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
     ///
-    /// **With `candidates`, what a store files: each stage's records completed** ([`Candidating::complete`], [`ErasedUnit::complete`]), where a filing has not completed them, with what each declaration was made from, read and made, and named by those, so a store finds them by what each was made from.
+    /// **With `candidates`, what a cabinet files: each stage's records completed** ([`Candidating::complete`], [`ErasedUnit::complete`]), where a filing has not completed them, with what each declaration was made from, read and made, and named by those, so a cabinet finds them by what each was made from.
     fn indexed(
         &self,
         unit: &[u8],
@@ -362,9 +362,9 @@ impl Produced {
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
 ///
-/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the certifier's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`] and [`Unit::read`], which take the module the walk accepted with its record as one value, or restored from the bytes a store or the prelude's image holds, and cloned as a handle is: each stage's artifact is held by pointer.
+/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the certifier's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`] and [`Unit::read`], which take the module the walk accepted with its record as one value, or restored from the bytes a cabinet or the prelude's image holds, and cloned as a handle is: each stage's artifact is held by pointer.
 ///
-/// The serialized form of this is what a store files under an address covering its mounts, its predecessors and the compiler that judged them, beside a [`Record`](crate::Record) of the files it was compiled from.
+/// The serialized form of this is what a cabinet files under an address covering its mounts, its predecessors and the compiler that judged them, beside a [`Record`](crate::Record) of the files it was compiled from.
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct Unit {
@@ -383,7 +383,7 @@ impl Unit {
         observed: &Observed,
     ) -> Self {
         let (core, certification) = accepted.into_parts();
-        // Gathered once, here, where every unit written as a program is made, from what each stage decided: the lowering's lints, the binder lints elaboration filed with each declaration's record — elaborated now, kept from a baseline or taken from a store — and decided of the program's final term, and what erasure decided of each item's erased forms, placed through the lowering's anchors.
+        // Gathered once, here, where every unit written as a program is made, from what each stage decided: the lowering's lints, the binder lints elaboration filed with each declaration's record — elaborated now, kept from a baseline or taken from a cabinet — and decided of the program's final term, and what erasure decided of each item's erased forms, placed through the lowering's anchors.
         let lints = Lint::ordered(
             text.lints()
                 .iter()
@@ -469,7 +469,7 @@ impl Unit {
         self.unit.text()
     }
 
-    /// Where this unit's text writes each of its declarations: a program's lowering's anchors, or those a unit read from Core text was read with, which a unit restored from a store holds none of ([`Unit::read`]).
+    /// Where this unit's text writes each of its declarations: a program's lowering's anchors, or those a unit read from Core text was read with, which a unit restored from a cabinet holds none of ([`Unit::read`]).
     pub fn anchors(&self) -> &Anchors {
         self.unit.anchors()
     }
@@ -537,7 +537,7 @@ impl Unit {
             .indexed(&unit, (Some((&table, reads)), &self.certification), true)
     }
 
-    /// This unit as the fixed prelude images it: [`Unit::stored`]'s form, with no stage's records completed, since no store files the compiler's own units and finds their declarations by what each was made from.
+    /// This unit as the fixed prelude images it: [`Unit::stored`]'s form, with no stage's records completed, since no cabinet files the compiler's own units and finds their declarations by what each was made from.
     pub fn imaged(&self) -> Result<Indexed, String> {
         let unit = curios_archive::to_bytes(self)?;
         let (table, reads) = reads_indexed(self.certification.recorded())?;

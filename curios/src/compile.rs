@@ -12,7 +12,7 @@ use {
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdict`'s payload family beside every program it files.
 ///
-/// **The payload is the store's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-cranelift` describes the engine, `curios-common`'s `Fingerprint` turns the description into a digest, and `curios-verdict` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
+/// **The payload is the cabinet's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-cranelift` describes the engine, `curios-common`'s `Fingerprint` turns the description into a digest, and `curios-verdict` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
 pub fn engine() -> &'static str {
     static ENGINE: LazyLock<String> = LazyLock::new(|| {
         let mut fingerprint = Fingerprint::new();
@@ -49,7 +49,7 @@ pub fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
     optimize(module, cfg!(feature = "profile"))
 }
 
-/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
+/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a cabinet files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, Box<Report>> {
     let bytes = optimized(module);
 

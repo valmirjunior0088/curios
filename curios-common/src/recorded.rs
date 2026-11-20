@@ -1,4 +1,4 @@
-//! A table a unit stores by entry: a part of the unit's own, and each entry an object of the store, read where the table is first asked for ([`Recorded`]), each entry keeping the digest it is stored under ([`Filed`]).
+//! A table a unit stores by entry: a part of the unit's own, and each entry an object of the cabinet, read where the table is first asked for ([`Recorded`]), each entry keeping the digest it is stored under ([`Filed`]).
 //!
 //! **An entry kept is digested once.** A unit compiled over a baseline holds the baseline's entries shared, and an entry carries the digest of the object it is stored as, the one it was restored with or the first it was filed as: so a filing names what it kept by the digest it had and digests what it made alone.
 
@@ -8,7 +8,7 @@ use {
     std::{cell::OnceCell, ops::Deref},
 };
 
-/// A value beside the digest of the object a store keeps it as, once that is known: restored, it holds the digest it was found by, and made here, the one it is first filed as. Shared by every version that holds it, so a value kept from a baseline is never digested again.
+/// A value beside the digest of the object a cabinet keeps it as, once that is known: restored, it holds the digest it was found by, and made here, the one it is first filed as. Shared by every version that holds it, so a value kept from a baseline is never digested again.
 #[derive(Debug, Clone)]
 pub struct Filed<T> {
     value: T,

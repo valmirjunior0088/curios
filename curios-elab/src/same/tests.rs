@@ -89,7 +89,7 @@ fn constrained(upper: usize) -> Item {
     }))
 }
 
-/// A signature digests as it is compared: the definition elaborated now and the one restored from a store digest alike, and one with another inequality digests otherwise and compares otherwise.
+/// A signature digests as it is compared: the definition elaborated now and the one restored from a cabinet digest alike, and one with another inequality digests otherwise and compares otherwise.
 #[test]
 fn a_signature_digests_as_it_is_compared() {
     let made = constrained(1);

@@ -18,7 +18,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 The governing package is the one whose `curios.toml` is nearest to the subject — a file's own directory, the working directory for a name or no argument — found there or in the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a command names the manifest beside its subject whenever it is not in the working directory: `serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
 
-Above the package, only the umbrella is looked for, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where the store goes, and it is shared with your sibling members.
+Above the package, only the umbrella is looked for, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where `.curios/` goes, and it is shared with your sibling members.
 
 `--manifest <PATH>` overrides exactly which manifest is the package's. Which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
 
@@ -75,7 +75,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 Ten commands, and `wonder`'s five queries with the views `--name` takes — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
-| Command | Subject | Its own arguments | Writes | Store |
+| Command | Subject | Its own arguments | Writes | Cabinet |
 | --- | --- | --- | --- | --- |
 | [`run`](#run) | a program | `--target <TARGET>`, `--port <PORT>`, trailing `ARGS…` for the program | nothing | reads, files what it built |
 | [`compile`](#compile) | a program | `--target <TARGET>`, `-o`/`--output <PATH>` | a native executable, or a page's directory | reads, files what it built |
@@ -115,7 +115,7 @@ hello
 └─ emit; 0.4s
 ```
 
-A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, and filed where a store keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the store already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest, whose line says which package the invocation reached.
+A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, and filed where a cabinet keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the cabinet already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest, whose line says which package the invocation reached.
 
 A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `└─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
 
@@ -212,19 +212,19 @@ Only `GET` is answered, and a request naming a host other than `127.0.0.1` or `l
 ## `compile`
 
 ```sh
-curios compile                   # under the store, beside the governing manifest
+curios compile                   # under `.curios/`, beside the governing manifest
 curios compile -o hello          # somewhere else
 curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
-curios compile --target browser  # a page, under the store
+curios compile --target browser  # a page, under `.curios/`
 ```
 
-`--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. The command closes the program's tree with `write` and where the result stands, a page's directory with a trailing separator, whether or not anything had to be compiled. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
+`--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. The command closes the program's tree with `write` and where the result stands, a page's directory with a trailing separator, whether or not anything had to be compiled. A declared executable's build is written under `.curios/` beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
-**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
+**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the cabinet or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
 
 ### The page
 
-`--target browser` writes the module Binaryen produced, with no Cranelift step after it, beside the page that runs it, all in one directory: under the store at `browser/<package>/<name>/`, emptied first so it holds nothing an earlier build left, or the directory `--output` names, which is created where it is missing and keeps whatever else it holds, a file of the page replacing the one of its name. The directory is the page whole, and copying it anywhere a static server serves deploys it.
+`--target browser` writes the module Binaryen produced, with no Cranelift step after it, beside the page that runs it, all in one directory: under `.curios/` at `browser/<package>/<name>/`, emptied first so it holds nothing an earlier build left, or the directory `--output` names, which is created where it is missing and keeps whatever else it holds, a file of the page replacing the one of its name. The directory is the page whole, and copying it anywhere a static server serves deploys it.
 
 | File | Is |
 | --- | --- |
@@ -274,7 +274,7 @@ curios document --std site   # the standard library
 
 `curios document` writes a library's interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written, every word and name in it painted by what it is and every name linked to where it was declared, and the `---` documentation comments attached to each. The subject names the library — none for the governing package's, or `lib.crs` or a module its `mod` lines reach — since a library is the one thing with an interface; a program, a loose file or standard input is refused.
 
-`--std <DIR>` documents the standard library the compiler was built with instead, writing its pages under `DIR`: the record is read off an image the compiler was built with, so nothing is compiled and no sources are read. It takes no subject, and since the standard library has no store to file pages under, the flag itself names where they go and `--output` does not apply.
+`--std <DIR>` documents the standard library the compiler was built with instead, writing its pages under `DIR`: the record is read off an image the compiler was built with, so nothing is compiled and no sources are read. It takes no subject, and since the standard library has no `.curios/` to file pages under, the flag itself names where they go and `--output` does not apply.
 
 The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a concept whose representation is private is marked sealed, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer.
 
@@ -358,7 +358,7 @@ curios curate
 
 It reaches the network through programs already on the machine ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)). A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
-Each fetch is a subject of its own — a package by the prefix it mounts, a module by its row's name — whose one node stands open while it arrives, and the last line counts what was brought in, `0 fetched` where the store already held everything:
+Each fetch is a subject of its own — a package by the prefix it mounts, a module by its row's name — whose one node stands open while it arrives, and the last line counts what was brought in, `0 fetched` where the cabinet already held everything:
 
 ```text
 /json
@@ -374,7 +374,7 @@ A fetch whose transport fails closes as `fetch; failed in 2.0s`, and one whose d
 
 ```sh
 curios pin foreign sha2 --target native --path foreign/libsha2.wasm   # a module this package carries
-curios pin foreign sha2 --target native --url https://…/libsha2.wasm  # one fetched and filed in the store
+curios pin foreign sha2 --target native --url https://…/libsha2.wasm  # one fetched and filed in the cabinet
 curios pin foreign dom --target browser --path web/dom.js             # a gateway a browser links
 curios pin foreign sha2 --target native --refresh                     # deliver again, pin what arrives
 curios pin dependency json --url https://…/json --rev abc123
@@ -401,12 +401,12 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 | Flag | Is |
 | --- | --- |
 | `--path <PATH>` | a module the package carries, spelled plainly and relative as an executable's path is; or a dependency in a separate project on disk, such as `../json`. A package of the same project is a `member` of its umbrella, which this command does not write |
-| `--url <URL>` | a module fetched once and filed in the shared store, or — with `--rev` — a repository |
+| `--url <URL>` | a module fetched once and filed in the cabinet, or — with `--rev` — a repository |
 | `--rev <REV>` | a dependency's revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
 | `--refresh` | deliver again whatever the row already names and pin what arrives. The only spelling permitted to overwrite a hash that was not asked to move |
 | `--check` | write nothing and exit nonzero if the manifest would change. The delivery still happens — what a row *should* say cannot be known without it — and only the write is withheld |
 
-What was fetched is filed in the store under the digest it turns out to have, so the `curate` that follows finds it there.
+What was fetched is filed in the cabinet under the digest it turns out to have, so the `curate` that follows finds it there.
 
 The row is the subject, by its name. A module is described before its pin is written: what arrived is a node of its own, `deliver`, open while a fetch arrives and closed by its size and whether it is a WebAssembly module, with **what it exports** beneath, which is what a `[foreign.answers]` entry may name as the export that answers a declaration. The `pin` node closes the tree with what became of the row — `recorded` where the manifest was written, `unchanged` where the row already said so, `would change` under `--check` — and each key it set beneath, beside what the key said before where it said anything:
 
@@ -516,7 +516,7 @@ A file that cannot be formatted closes as `format; refused`, why following, and 
 
 ## `wonder`
 
-`curios wonder [QUERY] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing: with no query, the check. The subject is the one argument, read as every command reads its own, and a query is an option, one at most — `--witnesses`, `--footprint`, `--exports` and `--stage` views beside `--name`, one at most, of what its path names, refused beside any other query, and `--stage` alone the query it is — so no word is ever both: `curios wonder tests` checks the executable named `tests`. The answer goes to stdout and nothing else does, so it can be redirected; standard error narrates the units the question had to compile, each checked and stored as a build's are ([What a command reports](#what-a-command-reports)), and, where the question is the check or `--tests`, the check of a program the store did not hold, with a blank line then parting the trees from the answer. A question that reprints or reads a program — a rung, `--footprint`, `--at` — narrates what the program stands on and never the program, and one the store answers whole narrates nothing. Exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
+`curios wonder [QUERY] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing: with no query, the check. The subject is the one argument, read as every command reads its own, and a query is an option, one at most — `--witnesses`, `--footprint`, `--exports` and `--stage` views beside `--name`, one at most, of what its path names, refused beside any other query, and `--stage` alone the query it is — so no word is ever both: `curios wonder tests` checks the executable named `tests`. The answer goes to stdout and nothing else does, so it can be redirected; standard error narrates the units the question had to compile, each checked and stored as a build's are ([What a command reports](#what-a-command-reports)), and, where the question is the check or `--tests`, the check of a program the cabinet did not hold, with a blank line then parting the trees from the answer. A question that reprints or reads a program — a rung, `--footprint`, `--at` — narrates what the program stands on and never the program, and one the cabinet answers whole narrates nothing. Exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
 
 | Query | Answers |
 | --- | --- |
@@ -658,7 +658,7 @@ A row states either table or both, and either may be written inline, `native = {
 
 Both sides of a `static` entry are plain relative paths, as an executable's `path` is, and none reads from `.curios/`. No file of any package may stand at `index.html`, `index.js` or `index.wasm`, the names a page holds for itself: a `static` key, a carried gateway's `path` and a fetched gateway in a row named `index` that would stand on one are refused where the manifest is read, the rule holding for a library as for a program.
 
-`path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)).
+`path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the cabinet. `hash` is stated for both ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)).
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
@@ -786,14 +786,14 @@ Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a co
 
 ## Reusing what was already built
 
-Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it and narrates nothing, where a compile shows a tree for each unit it compiled and the program's own ([What a command reports](#what-a-command-reports)). One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
+Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the cabinet beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it and narrates nothing, where a compile shows a tree for each unit it compiled and the program's own ([What a command reports](#what-a-command-reports)). One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
 
-An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
+An edit anywhere the program was built from is a miss, and so is a damaged or half-written cabinet entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
-A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
+A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the cabinet and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
-A store that cannot be written costs the reuse and never the answer. The command goes on: each unit's `store` node closes `refused`, and why hangs beneath the first of them, once however many units went past it. [`wonder --server`](#wonder) says nothing of it.
+A cabinet that cannot be written costs the reuse and never the answer. The command goes on: each unit's `store` node closes `refused`, and why hangs beneath the first of them, once however many units went past it. [`wonder --server`](#wonder) says nothing of it.
 
-A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
+A loose `.crs` file consults and writes nothing: it has no project, hence no cabinet — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot, overwritten in place.

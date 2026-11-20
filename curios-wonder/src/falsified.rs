@@ -1,6 +1,6 @@
 //! The `--false` query: whether the checkers admit a subject's closing term at `False`, asked through the pipeline's put ([`put_program`], [`put_core_text`]), the one the soundness board asks of every witness, over the units the subject is compiled against.
 //!
-//! **What an answer rests on**: the checkers, and the units in scope, believed as every build believes them — compiled against the store a build reads, or restored from it. A program is put whole, its declarations and its closing term elaborated as one module, as the board puts a witness; Core text over the prelude alone, as a `.crsc` is compiled.
+//! **What an answer rests on**: the checkers, and the units in scope, believed as every build believes them — compiled against the cabinet a build reads, or restored from it. A program is put whole, its declarations and its closing term elaborated as one module, as the board puts a witness; Core text over the prelude alone, as a `.crsc` is compiled.
 
 use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},

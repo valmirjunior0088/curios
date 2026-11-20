@@ -22,7 +22,7 @@ fn mounted(history: &History, name: &Global) -> Option<Totality> {
 }
 
 #[test]
-fn a_step_files_its_unit_and_a_later_build_mounts_it_from_the_store() {
+fn a_step_files_its_unit_and_a_later_build_mounts_it_from_the_cabinet() {
     let mut history = History::new();
     history
         .step("lib", WrittenIn::Program, "pub let one: /std/Nat = 1;\n")

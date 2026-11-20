@@ -44,7 +44,7 @@ pub struct ErasedItem {
     interfaces: BTreeMap<curios_anf::FunctionId, curios_anf::Interface>,
     /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_anf::Module::unforced`]). Nothing here forces one; an item that reads one would, and is refused where it reads it.
     ///
-    /// **No position.** Where such a value is written is its declaration's, which a report finds by the name; a form holding it would be one thing erased from an item in hand and another from the same item restored from a store, which holds no position.
+    /// **No position.** Where such a value is written is its declaration's, which a report finds by the name; a form holding it would be one thing erased from an item in hand and another from the same item restored from a cabinet, which holds no position.
     unforced: BTreeSet<curios_anf::ValueId>,
 }
 
@@ -675,7 +675,7 @@ pub struct Held {
 }
 
 impl Held {
-    /// The erased form `object` holds, as a store keeps it, with whether its item initializes observably: what a unit takes from a candidate, stored again as the bytes it was read from.
+    /// The erased form `object` holds, as a cabinet keeps it, with whether its item initializes observably: what a unit takes from a candidate, stored again as the bytes it was read from.
     pub fn stored(object: Object) -> Result<Held, String> {
         let erased = Rc::new(Form {
             erased: Deferred::stored(object.bytes),

@@ -301,7 +301,7 @@ pub fn certify_definitions<'s>(
 
 /// [`certify_definitions`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Filed`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
 ///
-/// **`candidates` is what a store at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
+/// **`candidates` is what a cabinet at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
 pub fn certify_definitions_over<'s>(
     definitions: &Definitions,
     budget: u64,
@@ -581,7 +581,7 @@ pub fn verdicts_from<'s>(
     grown(|| verdicts_within(certifier, definitions, entry, globals, over))
 }
 
-/// A walk over a baseline: the earlier walk, handed over whole, where the module being judged holds each name, and what a store holds of verdicts filed before.
+/// A walk over a baseline: the earlier walk, handed over whole, where the module being judged holds each name, and what a cabinet holds of verdicts filed before.
 #[derive(Clone, Copy)]
 pub struct Over<'s> {
     pub baseline: Filed<'s>,
@@ -827,9 +827,9 @@ fn verdicts_within<'s>(
     let mut applications: BTreeMap<Global, Applications> = BTreeMap::new();
     // The names of the declarations the walk judged, whose reads are its own.
     let mut judged = Vec::new();
-    // The records the walk took a verdict from, of a store, by the name each was filed under.
+    // The records the walk took a verdict from, of a cabinet, by the name each was filed under.
     let mut taken = BTreeMap::<Global, HeldReads>::new();
-    // The names of the declarations the walk has settled, judged or adopted: what a record a store holds may be held to.
+    // The names of the declarations the walk has settled, judged or adopted: what a record a cabinet holds may be held to.
     let mut settled = BTreeSet::<Global>::new();
     // The module as the walk states it, settled item by item: an item it judges or takes as it states it, and every other as the baseline's walk stated it. An item of the baseline's the elaborator made again arrives saying what the elaborator stated, so it takes what that walk stated of the item the baseline holds in its place, keeping its own names and places (`certifier::stating`). It is what the walk digests a declaration of its own unit by, so a read is told by what this certifier stated and never by what a module arriving says.
     let mut stated = definitions.clone();
@@ -883,7 +883,7 @@ fn verdicts_within<'s>(
             continue;
         }
 
-        // A declaration the walk would judge takes the verdict of a record a store holds of the item, where every part the record read digests as it did.
+        // A declaration the walk would judge takes the verdict of a record a cabinet holds of the item, where every part the record read digests as it did.
         if let Some(over) = over
             && let Some(candidates) = over.candidates
             && let Some(records) = {
@@ -1253,7 +1253,7 @@ fn verdicts_within<'s>(
 /// What a walk over a baseline concluded of the declarations it judged: their names, what each read, how each is classified, and the vectors of the entries it accepted.
 struct Judged<'w> {
     names: &'w [Global],
-    /// The records of a store the walk took the verdicts of some of `names` from, which are filed as they were taken.
+    /// The records of a cabinet the walk took the verdicts of some of `names` from, which are filed as they were taken.
     taken: &'w BTreeMap<Global, HeldReads>,
     reads: &'w BTreeMap<Global, Reads>,
     totality: &'w dyn Fn(&Global) -> Totality,
@@ -1560,9 +1560,9 @@ fn read_stands(
     stands
 }
 
-/// What a walk has settled where it asks whether a record a store holds stands: its module, where the module holds each name, the baseline beneath it, the names settled so far, and the verdicts and vectors it holds of them.
+/// What a walk has settled where it asks whether a record a cabinet holds stands: its module, where the module holds each name, the baseline beneath it, the names settled so far, and the verdicts and vectors it holds of them.
 struct Settled<'w> {
-    /// The module as it arrived, whose items a store files its records by.
+    /// The module as it arrived, whose items a cabinet files its records by.
     definitions: &'w Definitions,
     /// The module as the walk has stated it so far, which a part of it is digested in.
     stated: &'w Definitions,
@@ -1575,7 +1575,7 @@ struct Settled<'w> {
     applications: &'w BTreeMap<Global, Applications>,
 }
 
-/// The records a store holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
+/// The records a cabinet holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
 ///
 /// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, and a fixed unit's is recorded nowhere. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
 fn stored(
@@ -1702,7 +1702,7 @@ fn stands(
             .all(|(read, recorded)| digest(read, true).is_some_and(|now| now == *recorded))
 }
 
-/// Take the verdict a store's records hold of `item`: what the walk states of it, as it states what it judges, and each name standing at its type with its real body, as the walk leaves an item it does not judge; what the walk refuses of it is handed back with it.
+/// Take the verdict a cabinet's records hold of `item`: what the walk states of it, as it states what it judges, and each name standing at its type with its real body, as the walk leaves an item it does not judge; what the walk refuses of it is handed back with it.
 fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
     let mut refusals = Vec::new();
     certifier.restore_budget();

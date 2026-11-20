@@ -1,4 +1,4 @@
-//! How a recompile takes a declaration's elaboration from a candidate a store holds: found by what the declaration was lowered to, and taken where every answer it was given stands and every part it read digests as it did.
+//! How a recompile takes a declaration's elaboration from a candidate a cabinet holds: found by what the declaration was lowered to, and taken where every answer it was given stands and every part it read digests as it did.
 
 use {
     super::test_support::*,
@@ -11,8 +11,8 @@ use {
     curios_unit::{Predecessors, Unit},
 };
 
-/// `source` compiled as the unit `/lib` over `baseline`, against the prelude, taking what it can from `store`.
-fn recompile_from(source: &str, baseline: &Unit, store: &Store) -> Unit {
+/// `source` compiled as the unit `/lib` over `baseline`, against the prelude, taking what it can from `cabinet`.
+fn recompile_from(source: &str, baseline: &Unit, cabinet: &Cabinet) -> Unit {
     let modules = mounted("lib", source);
 
     with_prelude(|prelude| {
@@ -24,7 +24,7 @@ fn recompile_from(source: &str, baseline: &Unit, store: &Store) -> Unit {
             Over {
                 baseline,
                 moved: &vec![false; prelude.len()],
-                candidates: Some(store),
+                candidates: Some(cabinet),
             },
             &|_| {},
             None,
@@ -95,16 +95,16 @@ const FIRST: &str = "use /std/{Nat};\n\npub let base: Nat = 1;\n\npub let next: 
 
 const EDITED: &str = "use /std/{Nat};\n\npub let base: Nat = 2;\n\npub let next: Nat = base;\n";
 
-/// An edit undone elaborates, erases and judges nothing: the declaration it made again is lowered as it was first and every part and binding read stands, so its item is read out of the store, then its erased form and the one of the declaration that read its value, and its verdict is a record the store holds, complete before the unit is filed; the unit comes out as a whole compile of the first text.
+/// An edit undone elaborates, erases and judges nothing: the declaration it made again is lowered as it was first and every part and binding read stands, so its item is read out of the cabinet, then its erased form and the one of the declaration that read its value, and its verdict is a record the cabinet holds, complete before the unit is filed; the unit comes out as a whole compile of the first text.
 #[test]
-fn an_edit_undone_takes_what_it_made_from_the_store() {
+fn an_edit_undone_takes_what_it_made_from_the_cabinet() {
     let first = unit_of(FIRST);
-    let mut store = Store::default();
-    store.file(&first);
+    let mut cabinet = Cabinet::default();
+    cabinet.file(&first);
     let edited = recompile_over(EDITED, &first).expect("the edit compiles");
-    store.file(&edited);
+    cabinet.file(&edited);
 
-    let undone = recompile_from(FIRST, &edited, &store);
+    let undone = recompile_from(FIRST, &edited, &cabinet);
 
     assert!(
         undone
@@ -115,7 +115,7 @@ fn an_edit_undone_takes_what_it_made_from_the_store() {
     );
     assert_stored_alike(&first, &undone);
     assert_eq!(
-        store.read(),
+        cabinet.read(),
         vec![
             identity(&first, "base"),
             form(&first, "base"),
@@ -131,28 +131,28 @@ use /std/Bool/{Holds};
 pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
 ";
 
-/// A declaration a recompile takes from a store keeps what its proofs read: the record the store held carries the binders its proof read, so `p` is credited as a whole compile credits it, with nothing elaborated.
+/// A declaration a recompile takes from a cabinet keeps what its proofs read: the record the cabinet held carries the binders its proof read, so `p` is credited as a whole compile credits it, with nothing elaborated.
 #[test]
-fn a_declaration_taken_from_the_store_keeps_what_its_proofs_read() {
+fn a_declaration_taken_from_the_cabinet_keeps_what_its_proofs_read() {
     let first = unit_of(PROVED);
     assert!(
         unused_binders(&first).is_empty(),
         "`p` is read by the proof `proved` stands for"
     );
-    let mut store = Store::default();
-    store.file(&first);
+    let mut cabinet = Cabinet::default();
+    cabinet.file(&first);
     let respelled = PROVED.replace(
         "n: Nat, p: Holds(i < n)) -> Holds(i <= n)",
         "m: Nat, p: Holds(i < m)) -> Holds(i <= m)",
     );
     let edited = recompile_over(&respelled, &first).expect("the edit compiles");
-    store.file(&edited);
+    cabinet.file(&edited);
 
-    let undone = recompile_from(PROVED, &edited, &store);
+    let undone = recompile_from(PROVED, &edited, &cabinet);
 
     assert!(
-        store.read().contains(&identity(&first, "below")),
-        "`below` is taken from the store"
+        cabinet.read().contains(&identity(&first, "below")),
+        "`below` is taken from the cabinet"
     );
     assert!(unused_binders(&undone).is_empty());
 }
@@ -166,24 +166,24 @@ const RESPELLED: &str =
 const RETYPED: &str =
     "use /std/{Int, Nat};\n\npub let Number: Type = Int;\n\npub let one: Number = 1;\n";
 
-/// A candidate whose reads moved is passed over: the declaration is lowered as it was first, so the store holds a candidate of it, but what it read of the alias is another body now, so it is elaborated, as a whole compile elaborates it.
+/// A candidate whose reads moved is passed over: the declaration is lowered as it was first, so the cabinet holds a candidate of it, but what it read of the alias is another body now, so it is elaborated, as a whole compile elaborates it.
 #[test]
 fn a_candidate_that_read_a_part_since_moved_is_passed_over() {
     let first = unit_of(ALIASED);
-    let mut store = Store::default();
-    store.file(&first);
+    let mut cabinet = Cabinet::default();
+    cabinet.file(&first);
     let respelled = recompile_over(RESPELLED, &first).expect("the respelling compiles");
-    store.file(&respelled);
+    cabinet.file(&respelled);
 
-    let retyped = recompile_from(RETYPED, &respelled, &store);
+    let retyped = recompile_from(RETYPED, &respelled, &cabinet);
 
     assert_eq!(
-        store
+        cabinet
             .candidates(Facet::Elaboration, &input(&retyped, "one"))
             .len(),
         1,
-        "the store holds what the first text's declaration was made into"
+        "the cabinet holds what the first text's declaration was made into"
     );
     assert_stored_alike(&unit_of(RETYPED), &retyped);
-    assert!(store.read().is_empty());
+    assert!(cabinet.read().is_empty());
 }

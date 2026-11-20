@@ -21,7 +21,7 @@ pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), Box<Report>> {
     append_bundle(&mut bytes, bundle)
         .map_err(|error| fault("the executable's bundle could not be archived", error))?;
 
-    // A declared executable lands inside the store, nested under its package, so the directories below it are this write's to create — nothing else has had reason to.
+    // A declared executable lands inside `.curios/`, nested under its package, so the directories below it are this write's to create — nothing else has had reason to.
     if let Some(directory) = output.parent()
         && !directory.as_os_str().is_empty()
     {

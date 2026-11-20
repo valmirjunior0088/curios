@@ -1,4 +1,4 @@
-//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a store slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the objects the index names, as a store keeps them beside a slot.
+//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a cabinet slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the objects the index names, as a cabinet keeps them beside a slot.
 
 use {
     curios_archive::{Bytes, parted},
@@ -11,11 +11,11 @@ use {
 
 // From `OUT_DIR`, where the build script files them.
 //
-// Two images rather than one paired file, because each is framed as a store slot is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
+// Two images rather than one paired file, because each is framed as a cabinet slot is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
 const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
 const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
 
-// The objects each image's index names, one pack beside each, as a store keeps the packs of a slot's address beside it.
+// The objects each image's index names, one pack beside each, as a cabinet keeps the packs of a slot's address beside it.
 const SYS_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.pack"));
 const STD_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.pack"));
 

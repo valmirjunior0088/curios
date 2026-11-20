@@ -109,7 +109,7 @@ fn located(error: &ReadError) -> String {
     }
 }
 
-/// Walk `steps` over a store of their own, then put `proof` to the checkers at `False` over the prelude and every unit they compiled: the history a witness is. With no step, the proof is put over the prelude alone, and nothing is written anywhere.
+/// Walk `steps` over a cabinet of their own, then put `proof` to the checkers at `False` over the prelude and every unit they compiled: the history a witness is. With no step, the proof is put over the prelude alone, and nothing is written anywhere.
 pub fn put(steps: &[Step], proof: &Proof) -> Answer {
     let mut history = History::new();
     for step in steps {

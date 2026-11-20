@@ -7,7 +7,7 @@ use {
     curios_pipeline::{CompileError, prelude_documentation},
 };
 
-/// The standard library's record, read off the image this compiler was built with — no sources, no store, nothing compiled and no unit restored.
+/// The standard library's record, read off the image this compiler was built with — no sources, no cabinet, nothing compiled and no unit restored.
 ///
 /// **The record of `/std`, named by its prefix rather than taken as the first one found.** Both prelude roots have one — `/sys` documents itself so that `/std` has something to adopt its intrinsic declarations out of — and the fold puts `/sys` first, so a search for "the" record finds the wrong half.
 pub fn std_documentation() -> Result<Documentation, CompileError> {

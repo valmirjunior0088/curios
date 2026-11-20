@@ -11,7 +11,7 @@
 ## What it waits on
 
 - **Whether a unit's occurrences are stored with it**, a facet read without the unit, so a query across the units that import a declaration reads no unit whole. Lean writes `.ilean` files, "All references of this module" and "All declarations of this module", and "The current references in a file worker take precedence over those in .ilean files" ([`References.lean`](https://github.com/leanprover/lean4/blob/master/src/Lean/Server/References.lean)); hiedb indexes HIE files and answers `point-refs` of a place ([HieDb](https://github.com/wz1000/HieDb)).
-- **What `curios-wonder`'s README states the engine is** once it writes a file as well as a store.
+- **What `curios-wonder`'s README states the engine is** once it writes a file as well as a cabinet.
 
 ## Prior art
 

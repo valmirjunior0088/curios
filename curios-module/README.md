@@ -36,6 +36,6 @@ The Curios module system, over the tree [`curios-surface`](../curios-surface/REA
 
 **Decision.** `RootSource::core_text`, behind `test-support`, is the source of a unit written as Core text, mounted at its prefix: it reads its one `.crsc` file through the loader, so the file is logged as read, and lowers nothing, since the module is read from the text and not lowered from a program.
 
-**Rationale.** A unit a history steps is filed, verified and offered as a baseline by the store as any unit is, and the store keys a unit by what its source read, so a Core-text unit's source is one that reads its file.
+**Rationale.** A unit a history steps is filed, verified and offered as a baseline by the cabinet as any unit is, and the cabinet keys a unit by what its source read, so a Core-text unit's source is one that reads its file.
 
-**Rejected.** A Core-text unit kept out of the store, handed to the next step directly: it would never be mounted as a build mounts one.
+**Rejected.** A Core-text unit kept out of the cabinet, handed to the next step directly: it would never be mounted as a build mounts one.

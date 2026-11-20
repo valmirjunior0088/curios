@@ -24,7 +24,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         },
         named: Some(curios_package::Named::Stdin),
         manifest: None,
-        store: None,
+        verdicts: None,
     };
 
     let same = rendered(

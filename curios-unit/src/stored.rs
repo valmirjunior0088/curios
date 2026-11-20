@@ -1,6 +1,6 @@
 //! The stored unit: a record of what a unit was compiled from, framed ahead of the unit in one file.
 //!
-//! Two producers write this format, and one sits below the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdict` above the pipeline, and the fixed prelude's build images each of its roots this way ([`Unit::imaged`](crate::Unit::imaged)), from `curios-prelude`, below the pipeline and so below every store. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the units it names still contain what they did — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
+//! Two producers write this format, and one sits below the other. The cabinet files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdict` above the pipeline, and the fixed prelude's build images each of its roots this way ([`Unit::imaged`](crate::Unit::imaged)), from `curios-prelude`, below the pipeline and so below every cabinet. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the units it names still contain what they did — is the cabinet's business and stays there. This crate says what a record is, never whether one may be believed.
 
 #[cfg(test)]
 mod tests;
@@ -44,9 +44,9 @@ impl Record {
     }
 }
 
-/// A read log as a record spells it: each file by the name its package gives it, with the digest of the text that was parsed from it, in the order of the names. `None` where a file was read for no package, which no record can name: a unit that read one has no place in a store.
+/// A read log as a record spells it: each file by the name its package gives it, with the digest of the text that was parsed from it, in the order of the names. `None` where a file was read for no package, which no record can name: a unit that read one has no place in a cabinet.
 ///
-/// **A name resolves only to a file of the asking source's own packages**, which is what keeps a store shared across projects from handing one project a unit compiled from another's files: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, and so is the unit this project would compile.
+/// **A name resolves only to a file of the asking source's own packages**, which is what keeps a cabinet shared across projects from handing one project a unit compiled from another's files: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, and so is the unit this project would compile.
 pub fn recorded(reads: &[(PathBuf, Arc<Source>)]) -> Option<Vec<(SourceName, String)>> {
     let mut recorded = reads
         .iter()
@@ -100,7 +100,7 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
 ///
 /// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
 ///
-/// What a unit stores apart is a part for each reader, every one behind its length ([`Unit::stored`](crate::Unit::stored), [`apart_parts`]): the digests of its lowered items, its erased forms and its elaborated items, each an object of the store, found where the unit is restored and read by whoever names its declaration or links it; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+/// What a unit stores apart is a part for each reader, every one behind its length ([`Unit::stored`](crate::Unit::stored), [`apart_parts`]): the digests of its lowered items, its erased forms and its elaborated items, each an object of the cabinet, found where the unit is restored and read by whoever names its declaration or links it; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
 pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
     bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());

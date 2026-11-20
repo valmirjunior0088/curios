@@ -210,9 +210,9 @@ fn a_file_argument_needs_no_project() {
     assert!(program.home().is_none());
 }
 
-/// A declared executable's binary lands in the governing root's store, nested under the package that declares it.
+/// A declared executable's binary lands in the governing root's `.curios/`, nested under the package that declares it.
 #[test]
-fn a_declared_executable_builds_into_the_store() {
+fn a_declared_executable_builds_beside_its_governing_root() {
     let root = tree(
         "run-output",
         &[
@@ -235,7 +235,7 @@ fn a_declared_executable_builds_into_the_store() {
 
     let program = selected(None, &root.join("json")).expect("an enumerated member");
 
-    // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
+    // The umbrella governs, so `.curios/` is its own — but the path *within* it names the package, so it would not move if the member left.
     let home = program
         .home()
         .expect("an enumerated member is a declared executable");

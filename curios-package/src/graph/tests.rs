@@ -256,7 +256,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
         ],
     );
 
-    // One delivery, in the store, under the hash it actually hashes to.
+    // One delivery, in the cabinet, under the hash it actually hashes to.
     let delivered = root.join("delivered");
     fs::create_dir_all(&delivered).unwrap();
     fs::write(
@@ -327,7 +327,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     assert!(refusal.contains("pinned two ways"), "{refusal}");
 }
 
-/// A pin reached through the catalog is a pin: a member drawing `http` from the umbrella's `[catalog]` and a member pinning it directly at another revision are refused naming both pins, before the direct one's tree exists — where reading the snapshot off the marker itself found none, sent the reader to `curate`, and after it reported two store paths.
+/// A pin reached through the catalog is a pin: a member drawing `http` from the umbrella's `[catalog]` and a member pinning it directly at another revision are refused naming both pins, before the direct one's tree exists — where reading the snapshot off the marker itself found none, sent the reader to `curate`, and after it reported two cabinet paths.
 #[test]
 fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     let root = tree(
@@ -347,7 +347,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
         ],
     );
 
-    // The catalogued delivery, in the store under the hash it hashes to; the direct pin's never arrives.
+    // The catalogued delivery, in the cabinet under the hash it hashes to; the direct pin's never arrives.
     let delivered = root.join("delivered");
     fs::create_dir_all(&delivered).unwrap();
     fs::write(
@@ -514,7 +514,7 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
     assert!(refusal.contains("declares itself `base`"), "{refusal}");
 }
 
-/// A pin and a live row for one name are refused as a pin against a live row, in either order: the store's directory for the pinned side is the right directory and the wrong fact, and a reader sent there would be looking for a path nobody wrote.
+/// A pin and a live row for one name are refused as a pin against a live row, in either order: the cabinet's directory for the pinned side is the right directory and the wrong fact, and a reader sent there would be looking for a path nobody wrote.
 #[test]
 fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
     // The pinned dependent and the live one, in both fold orders — dependencies fold by name, so which is placed first is the names' doing.
@@ -548,7 +548,7 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
             ],
         );
 
-        // One delivery in the store, under the hash it hashes to, so the pin can be placed.
+        // One delivery in the cabinet, under the hash it hashes to, so the pin can be placed.
         let delivered = root.join("delivered");
         fs::create_dir_all(&delivered).unwrap();
         fs::write(

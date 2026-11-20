@@ -237,9 +237,9 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
     assert!(!text.contains("`shape`"), "{text}");
 }
 
-/// A store that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's `store` node says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
+/// A cabinet that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's `store` node says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
 #[test]
-fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
+fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let package = |name: &str| {
         let root = temporary(name);
         write(
@@ -262,7 +262,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
         filed.contains("└─ store; ") && !filed.contains("refused"),
-        "a store that took the units says nothing of itself: {filed}"
+        "a cabinet that took the units says nothing of itself: {filed}"
     );
 
     let refused = package("unstored");
@@ -275,7 +275,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
 
     assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");
     assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
-    // Each unit's own node says the store took nothing, and the reason hangs beneath the first alone.
+    // Each unit's own node says the cabinet took nothing, and the reason hangs beneath the first alone.
     let lines = narrated.lines().collect::<Vec<_>>();
     let refused = lines
         .iter()
@@ -293,6 +293,6 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(
         narrated.matches(reason).count(),
         1,
-        "once, for a library and a program asked of one store: {narrated}"
+        "once, for a library and a program asked of one cabinet: {narrated}"
     );
 }

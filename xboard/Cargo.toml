@@ -20,7 +20,7 @@ curios-elab = { workspace = true }
 curios-cert = { workspace = true }
 # The product's put at `False`, `wonder --false`'s: a program to both checkers as a compilation puts it, a module built by hand read through the product's door and put to the certifier, over the units in scope, and what each checker said.
 curios-pipeline = { workspace = true }
-# A witness's history: its steps walked over a store of their own, and the units in scope its proof is put over.
+# A witness's history: its steps walked over a cabinet of their own, and the units in scope its proof is put over.
 curios-verdict = { workspace = true, features = ["test-support"] }
 # The units in scope, as the history hands them to the proof's put.
 curios-unit = { workspace = true }

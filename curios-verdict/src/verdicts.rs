@@ -2,13 +2,13 @@
 //!
 //! **A slot is addressed, and a hit is verified.** The address (`unit_slot`) names a place — these mounts, declaring these dependencies, by this compiler — and holds no file contents and no unit before it, so a project has as many slots as it has units rather than one per compile or one per scope. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
-//! That split is deliberate. Hashing the unit's source directory into the address would hash a directory that, for a package's own library, *contains this store*: filing a unit would change the address it is next looked for under, so a package's own code would never hit and `verdicts/` would grow a directory per compile. Excluding the store from the walk is no answer: a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
+//! That split is deliberate. Hashing the unit's source directory into the address would hash a directory that, for a package's own library, *contains this cabinet*: filing a unit would change the address it is next looked for under, so a package's own code would never hit and `verdicts/` would grow a directory per compile. Excluding the cabinet from the walk is no answer: a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 //!
 //! **A hit is believed whole, so it rests on every unit its unit could have read.** That is the units it may name and, in turn, the ones those may name: a term names what its unit may name, or what a term handed to it names, which that term's unit may name; a witness is declared with its concept or with the type it is at, both of which whoever states the goal can name. A record names what each of those contained and no unit beside them, so an edit to a unit outside them leaves the hit standing, and two folds that reach one unit after different others file it once.
 //!
 //! **A slot whose record no longer agrees is still a baseline.** The unit it holds is compiled over, each stage asking again what its own record says it read: of the unit's own text, of the units its record names where they contain what they did, nothing, and of any other unit in scope each part by its digest (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). So a unit after an edited dependency redoes the declarations that read what the edit changed.
 //!
-//! What a record holds and how it is framed ahead of the unit are `curios-unit`'s, since the prelude image is written the same way by a build script below every store; what a record is *verified against* is here.
+//! What a record holds and how it is framed ahead of the unit are `curios-unit`'s, since the prelude image is written the same way by a build script below every cabinet; what a record is *verified against* is here.
 
 #[cfg(test)]
 mod tests;
@@ -34,11 +34,11 @@ use {
     },
 };
 
-/// The last unit one session had in hand for each unit it reached, compiled or restored — the baseline a question takes when the store holds nothing nearer, and the unit a hit hands back in place of reading and decoding its slot.
+/// The last unit one session had in hand for each unit it reached, compiled or restored — the baseline a question takes when the cabinet holds nothing nearer, and the unit a hit hands back in place of reading and decoding its slot.
 ///
-/// **Shared rather than owned by a store handle, because it outlives every one of them.** A handle lives for one question; this lives for as long as whoever made it. That difference is the whole point: a language server compiles a unit, the next keystroke compiles over what it just produced, and the keystroke after that over *that*, so what an edit elaborates again is what read what *that* edit changed, rather than everything changed since the last build. Without it the baseline is the last unit the store was written with, which nothing in an editing session ever advances — so one edit to a widely-read declaration leaves every later keystroke elaborating its readers again, for the rest of the session.
+/// **Shared rather than owned by a cabinet handle, because it outlives every one of them.** A handle lives for one question; this lives for as long as whoever made it. That difference is the whole point: a language server compiles a unit, the next keystroke compiles over what it just produced, and the keystroke after that over *that*, so what an edit elaborates again is what read what *that* edit changed, rather than everything changed since the last build. Without it the baseline is the last unit the cabinet was written with, which nothing in an editing session ever advances — so one edit to a widely-read declaration leaves every later keystroke elaborating its readers again, for the rest of the session.
 ///
-/// **What this asks of the trusted base is argued in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)**, which owns it: an item reused from a unit that was itself a recompile, by induction on the per-item argument, and what a kept unit says of the units it was compiled after. A session files nothing: a kept unit dies with the process, and whether the question that kept it also files it is that question's rule, asked of the store ([`Verdicts::taken_on_disk`]).
+/// **What this asks of the trusted base is argued in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)**, which owns it: an item reused from a unit that was itself a recompile, by induction on the per-item argument, and what a kept unit says of the units it was compiled after. A session files nothing: a kept unit dies with the process, and whether the question that kept it also files it is that question's rule, asked of the cabinet ([`Verdicts::taken_on_disk`]).
 ///
 /// **A kept unit is offered with the units it was compiled after.** A recompile cannot see by itself that a unit before it changed: a reference into an edited predecessor lowers to the same name either way. So each kept unit carries every unit the fold had taken before it, and is offered beside the ones the fold in hand has taken again — the same unit in hand, or one whose slot holds the bytes it held. What the kept unit read of any other is asked again, part by part, by the stage that read it.
 ///
@@ -46,9 +46,9 @@ use {
 ///
 /// **One entry per unit, whatever scope it was compiled in.** Keyed by which unit it is — the prefixes it claims and the directories it reads — and not by its slot, which also names what it declared: a manifest edit that adds or narrows a dependency gives the unit a new slot, and a map keyed by slot would strand the old entry beside the new one for as long as the session lives, each holding a whole unit. Keyed this way, an edit and a rescoping both *replace*, so the map is bounded by the units the editor has reached, as the parse memo is by the files. The slot rides inside the entry instead, and a kept unit is offered only where it still matches. The directories are what keep two projects apart: a package of one name in each claims the same prefix and addresses the same slot, which is sound to share — a baseline is only compiled over — but a poor baseline for either, and each would keep overwriting the other.
 ///
-/// **A unit the store restored, or one this session filed, is kept beside the digest of the bytes the slot holds for it.** Kept, a restored unit is the baseline of the first edit to its unit, which would otherwise miss and be handed the same slot read back a second time. And a later hit on that slot, its record verified against the texts and the units it names as any hit's is, is answered with the unit in hand where the record names the bytes it was decoded from or filed as: the artifact is neither read nor decoded. A slot another process has rewritten carries a record naming other bytes, and is read and decoded afresh. The unit in hand is believed on the evidence the slot is, since its bytes are the ones the record vouches for, so nothing rests on the session that a hit does not rest on already.
+/// **A unit the cabinet restored, or one this session filed, is kept beside the digest of the bytes the slot holds for it.** Kept, a restored unit is the baseline of the first edit to its unit, which would otherwise miss and be handed the same slot read back a second time. And a later hit on that slot, its record verified against the texts and the units it names as any hit's is, is answered with the unit in hand where the record names the bytes it was decoded from or filed as: the artifact is neither read nor decoded. A slot another process has rewritten carries a record naming other bytes, and is read and decoded afresh. The unit in hand is believed on the evidence the slot is, since its bytes are the ones the record vouches for, so nothing rests on the session that a hit does not rest on already.
 ///
-/// A one-shot invocation makes none of these, and the store is its only baseline.
+/// A one-shot invocation makes none of these, and the cabinet is its only baseline.
 #[derive(Clone, Default)]
 pub struct Session {
     units: Rc<RefCell<BTreeMap<Identity, Kept>>>,
@@ -107,7 +107,7 @@ struct Kept {
     digest: Option<String>,
 }
 
-/// One unit a fold has taken, restored or compiled: which unit it is to the units after it, and what it contains where it has a place in the store.
+/// One unit a fold has taken, restored or compiled: which unit it is to the units after it, and what it contains where it has a place in the cabinet.
 pub struct Taken {
     /// The prefixes the unit claims, as one key: which unit it is to a record that names it.
     key: String,
@@ -119,7 +119,7 @@ pub struct Taken {
     reads: ReadLog,
     /// The unit as the fold holds it. `None` where a chain is verified and nothing decoded ([`Verdicts::chain`]).
     unit: Option<Unit>,
-    /// The digest of the bytes the unit's slot holds, where it has a place: what a record of a unit that could have read it vouches for. `None` for a unit the store may not place, and for one a question compiled and did not file.
+    /// The digest of the bytes the unit's slot holds, where it has a place: what a record of a unit that could have read it vouches for. `None` for a unit the cabinet may not place, and for one a question compiled and did not file.
     contained: Option<String>,
     /// Whether it is the unit of an entry's own declarations: the last a fold takes, which no unit reads and no payload counts among the units it was made after.
     entry: bool,
@@ -151,7 +151,7 @@ fn reach(source: &UnitSource<'_>, taken: &[Taken]) -> BTreeSet<String> {
     reach
 }
 
-/// What each unit of `reach` contains, in the order of their keys: what a record vouches for. `None` where one of them has no place in the store, since nothing can vouch for what it held.
+/// What each unit of `reach` contains, in the order of their keys: what a record vouches for. `None` where one of them has no place in the cabinet, since nothing can vouch for what it held.
 fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, String)>> {
     reach
         .iter()
@@ -163,21 +163,21 @@ fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, St
         .collect()
 }
 
-/// The store, as a compilation sees it — the fold's units through [`Cache`], and the invocation's own payload through [`Verdicts::payload_get`] and [`Verdicts::payload_put`].
+/// The cabinet, as a compilation sees it — the fold's units through [`Cache`], and the invocation's own payload through [`Verdicts::payload_get`] and [`Verdicts::payload_put`].
 ///
-/// One handle for both because they are one store: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
+/// One handle for both because they are one cabinet: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
-    /// `None` for a handle with no store behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
+    /// `None` for a handle with no cabinet behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
     cabinet: Option<Cabinet>,
     /// The identity of the compiler running now, asked for on the first slot that needs it and not before. `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
     ///
-    /// Lazy because identifying the compiler writes its memo beside the store, and opening a store is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
+    /// Lazy because identifying the compiler writes its memo beside the cabinet, and opening a cabinet is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
     compiler: OnceCell<Option<String>>,
     /// Every unit this fold has taken so far, in fold order: restored by [`Verdicts::hit`], kept by [`Verdicts::keep`] or filed by [`Cache::put`]. Read afterwards by [`Verdicts::payload_put`], which files what the whole fold compiled to.
     taken: RefCell<Vec<Taken>>,
-    /// Why the store could not be written, if it could not.
+    /// Why the cabinet could not be written, if it could not.
     ///
-    /// The first refusal and not a count: a store nobody can write refuses every unit for one reason, so the reason is the whole of what a reader needs and repeating it per unit would say nothing new. Recorded rather than reported here because this crate has no terminal — see [`Verdicts::refused`].
+    /// The first refusal and not a count: a cabinet nobody can write refuses every unit for one reason, so the reason is the whole of what a reader needs and repeating it per unit would say nothing new. Recorded rather than reported here because this crate has no terminal — see [`Verdicts::refused`].
     refused: RefCell<Option<String>>,
     /// What the session this handle belongs to has in hand — `None` for a handle nobody attached one to, a one-shot question's or a build's, which keeps nothing and so copies nothing.
     session: Option<Session>,
@@ -201,7 +201,7 @@ impl Verdicts {
         }
     }
 
-    /// A handle with no store behind it, keeping in `session` what its fold compiles: what a question about a file no package declares is compiled through. Such a file has no project and so nowhere to file a unit, and the session that asks about it again at the next keystroke still has the last unit it compiled of it to compile over.
+    /// A handle with no cabinet behind it, keeping in `session` what its fold compiles: what a question about a file no package declares is compiled through. Such a file has no project and so nowhere to file a unit, and the session that asks about it again at the next keystroke still has the last unit it compiled of it to compile over.
     ///
     /// Nothing is addressed, since nothing is filed: a kept unit is told from another by which unit it is, the prefixes it claims and where it reads from ([`Session`]).
     pub fn kept_by(session: Session) -> Self {
@@ -222,14 +222,14 @@ impl Verdicts {
         self
     }
 
-    /// Consult `session` for a baseline ahead of the store, and keep in it what is compiled and what is restored — see [`Session`].
+    /// Consult `session` for a baseline ahead of the cabinet, and keep in it what is compiled and what is restored — see [`Session`].
     pub fn reuse(&mut self, session: Session) {
         self.session = Some(session);
     }
 
     /// The unit this session last had in hand for `source` — compiled, or restored from its slot — if it had one, with the units of this fold it was compiled after.
     ///
-    /// Offered only at the slot it stood at, the one the store files under, so a kept unit answers where a filed one would: the same mounts, declaring the same dependencies, by the same compiler. See [`Session`].
+    /// Offered only at the slot it stood at, the one the cabinet files under, so a kept unit answers where a filed one would: the same mounts, declaring the same dependencies, by the same compiler. See [`Session`].
     pub fn kept(&self, source: &UnitSource<'_>) -> Option<Earlier> {
         let session = self.session.as_ref()?;
         let slot = self.slot(source)?;
@@ -384,7 +384,7 @@ impl Verdicts {
 
     /// Why nothing was filed, for a caller with somewhere to say it.
     ///
-    /// **A store that cannot be written is invisible without this.** Every compilation silently recompiles everything, forever, and the only symptom is that builds are slower than they should be — which reads as the compiler being slow rather than as a directory being unwritable. It is not a failure: the verdict is unaffected, so this is reported and the build is not stopped.
+    /// **A cabinet that cannot be written is invisible without this.** Every compilation silently recompiles everything, forever, and the only symptom is that builds are slower than they should be — which reads as the compiler being slow rather than as a directory being unwritable. It is not a failure: the verdict is unaffected, so this is reported and the build is not stopped.
     pub fn refused(&self) -> Option<String> {
         self.refused.borrow().clone()
     }
@@ -396,7 +396,7 @@ impl Verdicts {
         if source.directories().is_empty() {
             return None;
         }
-        // A handle with no store files nothing, so it addresses nothing: every unit its session keeps stands at the one slot, and is told from another by which unit it is.
+        // A handle with no cabinet files nothing, so it addresses nothing: every unit its session keeps stands at the one slot, and is told from another by which unit it is.
         if self.cabinet.is_none() {
             return Some(String::new());
         }
@@ -423,7 +423,7 @@ impl Verdicts {
         ))
     }
 
-    /// The packs of `slot`'s address, opened the first time this handle asks for them. `None` for a handle with no store.
+    /// The packs of `slot`'s address, opened the first time this handle asks for them. `None` for a handle with no cabinet.
     fn packs(&self, slot: &str) -> Option<Rc<Packs>> {
         let cabinet = self.cabinet.as_ref()?;
         let packs = self
@@ -457,7 +457,7 @@ impl Verdicts {
         curios_profile::profile!("verdicts::file_objects");
         let packs = self
             .packs(slot)
-            .ok_or_else(|| io::Error::other("a store files objects"))?;
+            .ok_or_else(|| io::Error::other("a cabinet files objects"))?;
         let missing = packs
             .missing(stored.digests())
             .into_iter()
@@ -473,16 +473,16 @@ impl Verdicts {
     fn collect(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
         let packs = self
             .packs(slot)
-            .ok_or_else(|| io::Error::other("a store collects objects"))?;
+            .ok_or_else(|| io::Error::other("a cabinet collects objects"))?;
 
         packs.collect(&stored.digests().copied().collect())
     }
 
-    /// What each unit of `sources` is filed as, in order, verified against the store without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.
+    /// What each unit of `sources` is filed as, in order, verified against the cabinet without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.
     ///
     /// **This is the verification half of [`Cache::get`], and it is shared rather than restated.** Each source's slot and record are decided by exactly the calls the fold makes, so the two cannot come to different answers about whether a unit is still good; all that is left out is the `Unit` decode, which a payload hit has no use for. A stale unit is `None` and so a payload miss by construction — it is about to recompile into bytes no record of the payload could match.
     ///
-    /// A source the store may not file at all is also `None`, which is stricter than the fold, where such a unit is simply compiled every time. The strictness is the point: a payload vouches for the *whole* compilation, and a unit nothing can verify is a part of it nothing can vouch for.
+    /// A source the cabinet may not file at all is also `None`, which is stricter than the fold, where such a unit is simply compiled every time. The strictness is the point: a payload vouches for the *whole* compilation, and a unit nothing can verify is a part of it nothing can vouch for.
     pub(crate) fn chain(&self, sources: &[UnitSource<'_>]) -> Option<Vec<String>> {
         let mut taken: Vec<Taken> = Vec::new();
 
@@ -534,10 +534,10 @@ impl Verdicts {
         curios_profile::profile!("verdicts::hit");
         let slot = self.slot(source)?;
 
-        // The record is judged before the artifact is read: a slot whose record disagrees is not worth reading past it, and a file that is not a slot is a store to ignore.
+        // The record is judged before the artifact is read: a slot whose record disagrees is not worth reading past it, and a file that is not a slot is ignored.
         let opened = opened(&self.cabinet.as_ref()?.verdict(&slot))?;
 
-        // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
+        // A stored unit that will not read back is ignored, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
 
         let reads = {
@@ -715,7 +715,7 @@ impl Cache for Verdicts {
             .and_then(|record| replace(&placement.path, &record, placement.stored.index()))
             .and_then(|()| self.collect(&placement.slot, &placement.stored));
 
-        // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
+        // Best effort: a cabinet that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         match filed {
             // The session holds this very unit, now the bytes the slot holds: a later hit on them is answered with it.
             Ok(()) => self.filed_as(source, &placement.slot, unit, &placement.contained),
@@ -734,7 +734,7 @@ impl Cache for Verdicts {
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list. And so is a unit the source could have read that the record does not name, or names with other contents: one that joined its scope, left it, or changed.
 ///
-/// **A recorded name resolves only through `source`'s own packages**, and that is what keeps a *shared* store from admitting across projects: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, after units holding what it was compiled after — the unit this project would compile (`curios_unit::recorded`).
+/// **A recorded name resolves only through `source`'s own packages**, and that is what keeps a *shared* cabinet from admitting across projects: a slot two projects address alike is believed only where this project's files hold the texts it was compiled from, after units holding what it was compiled after — the unit this project would compile (`curios_unit::recorded`).
 ///
 /// **And every file `source` has read already must be one the record names, holding the text it holds now.** An entry's unit is filed by its executable and not by its root file, and the source logs that root as read the moment it is opened ([`RootSource::opened`](curios_module::RootSource)): a record that names other files, every one of which still stands, is the record of another file, as after a manifest points its executable elsewhere.
 fn agreeing(

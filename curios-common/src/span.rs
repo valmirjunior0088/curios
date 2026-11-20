@@ -407,7 +407,7 @@ impl Report {
         Self::of(Some(span), Said::line(headline))
     }
 
-    /// A report about nothing in particular that says `headline`: a manifest, a store, a certifier refusal that names an item rather than a position.
+    /// A report about nothing in particular that says `headline`: a manifest, a cabinet, a certifier refusal that names an item rather than a position.
     pub fn unlocated(headline: impl Into<String>) -> Self {
         Self::of(None, Said::line(headline))
     }

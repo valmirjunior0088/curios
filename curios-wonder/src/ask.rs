@@ -1,6 +1,6 @@
 //! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
-//! **The answer goes to stdout, and nothing else does** ([`answer`]). A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
+//! **The answer goes to stdout, and nothing else does** ([`answer`]). A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the cabinet took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
 //! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `footprint` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
@@ -58,13 +58,13 @@ pub fn answer(text: impl Display) {
     }
 }
 
-/// Whoever a question tells of its work as it goes, beside the answer it writes on standard output: each subject as it is taken on, each step of the subject's compile, how that compile ended, that an answer is about to be written, and why the store took nothing where it could not. The command line narrates with it; the language server asks in silence (`Silent`).
+/// Whoever a question tells of its work as it goes, beside the answer it writes on standard output: each subject as it is taken on, each step of the subject's compile, how that compile ended, that an answer is about to be written, and why the cabinet took nothing where it could not. The command line narrates with it; the language server asks in silence (`Silent`).
 pub trait Telling {
     /// A subject is about to be compiled: what a report names it, and the manifest that declares it where one does.
     fn asked(&mut self, named: &curios_package::Named, manifest: Option<&Path>);
 
-    /// A step of the compile in hand, beside the store it files into, which says for itself whether it took what it was handed.
-    fn step(&mut self, progress: Progress<'_>, store: Option<&Verdicts>);
+    /// A step of the compile in hand, beside the cabinet it files into, which says for itself whether it took what it was handed.
+    fn step(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>);
 
     /// The compile in hand is over.
     fn ended(&mut self, ended: Ended);
@@ -138,13 +138,13 @@ impl Ended {
     }
 }
 
-/// One thing a question can be about, resolved: the subject, what a report names it with the manifest that declares it, and the store it reads and files into.
+/// One thing a question can be about, resolved: the subject, what a report names it with the manifest that declares it, and the cabinet it reads and files into.
 pub struct Asked {
     pub subject: Subject,
     /// What a report names the subject — none for the prelude's scope alone, which has nothing of its own to compile or narrate.
     pub named: Option<curios_package::Named>,
     pub manifest: Option<PathBuf>,
-    pub store: Option<Verdicts>,
+    pub verdicts: Option<Verdicts>,
 }
 
 impl Asked {
@@ -175,7 +175,7 @@ impl Asked {
             },
             Entry::File(path) => Origin::File(path.clone()),
         };
-        let store = program.home().map(|home| {
+        let verdicts = program.home().map(|home| {
             Verdicts::at(home.cabinet.clone()).executing(&home.package, &home.executable)
         });
         let declares = program.declares();
@@ -192,7 +192,7 @@ impl Asked {
             },
             named: Some(named),
             manifest,
-            store,
+            verdicts,
         })
     }
 
@@ -204,45 +204,45 @@ impl Asked {
             subject: Subject::Unit {
                 units: library.units,
             },
-            store: Some(Verdicts::at(library.cabinet)),
+            verdicts: Some(Verdicts::at(library.cabinet)),
         }
     }
 
-    /// The prelude's scope alone ([`Subject::prelude`]), with no manifest and no store.
+    /// The prelude's scope alone ([`Subject::prelude`]), with no manifest and no cabinet.
     fn about_the_prelude() -> Self {
         Self {
             subject: Subject::prelude(),
             named: None,
             manifest: None,
-            store: None,
+            verdicts: None,
         }
     }
 
-    /// Compile over what `session` already compiled — see [`Session`]. A question with no store, about a file no package declares, files nothing and keeps what it compiles in the session all the same (`Verdicts::kept_by`): the next keystroke compiles over it.
+    /// Compile over what `session` already compiled — see [`Session`]. A question with no cabinet, about a file no package declares, files nothing and keeps what it compiles in the session all the same (`Verdicts::kept_by`): the next keystroke compiles over it.
     pub fn reusing(mut self, session: &Session) -> Self {
-        match &mut self.store {
-            Some(store) => store.reuse(session.clone()),
-            None => self.store = Some(Verdicts::kept_by(session.clone())),
+        match &mut self.verdicts {
+            Some(verdicts) => verdicts.reuse(session.clone()),
+            None => self.verdicts = Some(Verdicts::kept_by(session.clone())),
         }
 
         self
     }
 
-    /// The subject and its store, `telling` told that the subject is taken on.
+    /// The subject and its cabinet, `telling` told that the subject is taken on.
     fn taken(self, telling: &mut dyn Telling) -> (Subject, Option<Verdicts>) {
         if let Some(named) = &self.named {
             telling.asked(named, self.manifest.as_deref());
         }
 
-        (self.subject, self.store)
+        (self.subject, self.verdicts)
     }
 
     /// Every diagnostic, goal and lint the subject reports, with what it reached, `telling` told of the compile as it goes.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay, telling: &mut dyn Telling) -> Diagnosed {
-        let (subject, store) = self.taken(telling);
-        let store = store.as_ref();
-        let diagnosed = diagnostics(budget, subject, overlay, store, &mut |progress| {
-            telling.step(progress, store);
+        let (subject, verdicts) = self.taken(telling);
+        let verdicts = verdicts.as_ref();
+        let diagnosed = diagnostics(budget, subject, overlay, verdicts, &mut |progress| {
+            telling.step(progress, verdicts);
         });
         telling.ended(Ended::of(&diagnosed.diagnostics));
 
@@ -257,10 +257,10 @@ impl Asked {
         file: &Path,
         telling: &mut dyn Telling,
     ) -> Diagnosed {
-        let (subject, store) = self.taken(telling);
-        let store = store.as_ref();
-        let diagnosed = checked(budget, subject, overlay, store, file, &mut |progress| {
-            telling.step(progress, store);
+        let (subject, verdicts) = self.taken(telling);
+        let verdicts = verdicts.as_ref();
+        let diagnosed = checked(budget, subject, overlay, verdicts, file, &mut |progress| {
+            telling.step(progress, verdicts);
         });
         telling.ended(Ended::of(&diagnosed.diagnostics));
 
@@ -274,10 +274,10 @@ impl Asked {
         overlay: &Overlay,
         telling: &mut dyn Telling,
     ) -> Result<Vec<DeclaredTest>, CompileError> {
-        let (subject, store) = self.taken(telling);
-        let store = store.as_ref();
-        let declared = declared_tests(budget, subject, overlay, store, &mut |progress| {
-            telling.step(progress, store);
+        let (subject, verdicts) = self.taken(telling);
+        let verdicts = verdicts.as_ref();
+        let declared = declared_tests(budget, subject, overlay, verdicts, &mut |progress| {
+            telling.step(progress, verdicts);
         });
         telling.ended(Ended::of_compile(&declared));
 
@@ -293,8 +293,8 @@ impl Asked {
         shown: impl FnMut(&str),
         telling: &mut dyn Telling,
     ) -> Result<Rendering, Refusal> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let reached = stage(
             budget,
             subject,
@@ -322,8 +322,8 @@ impl Asked {
         name: &str,
         telling: &mut dyn Telling,
     ) -> Result<Option<(Described, String)>, Refusal> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let staged = named_stage(
             budget,
             subject,
@@ -351,8 +351,8 @@ impl Asked {
         path: &Qualifier,
         telling: &mut dyn Telling,
     ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let footprint = footprint(budget, subject, path, overlay, cache, &mut |progress| {
             telling.step(progress, cache);
         });
@@ -371,8 +371,8 @@ impl Asked {
         overlay: &Overlay,
         telling: &mut dyn Telling,
     ) -> Result<Put, Unput> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let put = falsified(budget, subject, overlay, cache, &mut |progress| {
             telling.step(progress, cache);
         });
@@ -393,8 +393,8 @@ impl Asked {
         place: &Place,
         telling: &mut dyn Telling,
     ) -> Result<Option<Answer>, Vec<Diagnosis>> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let placed = placed(
             budget,
             subject,
@@ -420,8 +420,8 @@ impl Asked {
         path: &Qualifier,
         telling: &mut dyn Telling,
     ) -> Result<Option<Described>, Vec<Diagnosis>> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let described = described(budget, subject, path, overlay, cache, &mut |progress| {
             telling.step(progress, cache);
         });
@@ -441,8 +441,8 @@ impl Asked {
         path: &Qualifier,
         telling: &mut dyn Telling,
     ) -> Result<Option<Exported>, CompileError> {
-        let (subject, store) = self.taken(telling);
-        let cache = store.as_ref();
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
         let exported = exported(budget, subject, path, overlay, cache, &mut |progress| {
             telling.step(progress, cache);
         });
@@ -564,7 +564,7 @@ fn uncanonical(
 ///
 /// **The subjects of a whole package overlap, and one fact is still one fact.** Every executable is compiled against the library, so a diagnostic in the library is reached by the library's own subject and again by each executable's — one unbound variable printed three times in a package declaring two programs, which is what an agent's one-error-at-a-time loop then walks through. Collapsing is safe because a rendering carries the source, the line and the column beneath the message: two that compare equal say the same thing about the same place, and two about different places never compare equal.
 ///
-/// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the store when there is one and recompiled when there is not — is the price of the same independence.
+/// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the cabinet when there is one and recompiled when there is not — is the price of the same independence.
 pub fn rendered(
     answers: Vec<Asked>,
     budget: u64,
@@ -741,7 +741,7 @@ fn library_stage(
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let file = asked_through(&library)?;
-    let store = Verdicts::at(library.cabinet.clone());
+    let verdicts = Verdicts::at(library.cabinet.clone());
 
     telling.asked(&library.named(), Some(&library.manifest));
     let reached = unit_stage(
@@ -749,9 +749,9 @@ fn library_stage(
         library.units,
         &file,
         overlay,
-        Some(&store),
+        Some(&verdicts),
         name,
-        &mut |progress| telling.step(progress, Some(&store)),
+        &mut |progress| telling.step(progress, Some(&verdicts)),
     );
     telling.ended(match &reached {
         Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
