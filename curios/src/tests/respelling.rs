@@ -120,6 +120,16 @@ const BINDERS: &[Binder] = &[
         type_: "(Bool) -> Nat",
         needs: &[],
     },
+    Binder {
+        name: "e",
+        type_: "(Nat) -> Bool",
+        needs: &[],
+    },
+    Binder {
+        name: "k",
+        type_: "(Nat) -> Bool",
+        needs: &[],
+    },
 ];
 
 /// How many orders of [`BINDERS`] the held cells are stated at. A refused cell is stated at the first two, the declared order and its reverse.
@@ -553,7 +563,7 @@ impl Atoms {
     }
 }
 
-/// A guard and a second match, inside the guard's `true` arm, on a variable the guard names.
+/// A guard and a second match, inside the guard's `true` arm, on a variable the guard names or on an expression it reads.
 struct Substitution {
     guard: &'static str,
     variable: &'static str,
@@ -606,6 +616,16 @@ const SUBSTITUTIONS: &[Substitution] = &[
         case: "true",
         other: "false",
         at_case: "g(true) < 5",
+        refused: &[],
+        certifier: &[],
+    },
+    // A second match on an expression the guard reads: the guard's spelling, settled outside it, is the stuck match on `e(c)`, so the arm on `e(c)` restates the guard, and its fact at the case is `k(0)`.
+    Substitution {
+        guard: "(match e(c) | true => k(0) | false => k(1) end)",
+        variable: "e(c)",
+        case: "true",
+        other: "false",
+        at_case: "k(0)",
         refused: &[],
         certifier: &[],
     },
@@ -751,6 +771,32 @@ fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
     assert!(
         refusal.contains("type mismatch") && !refusal.contains("the certifier refused"),
         "the elaborator refuses the Flt dual as a type mismatch, not the certifier: {refusal}",
+    );
+}
+
+/// A guard that reads an expression only through the types of the binders it names is restated under an arm on that expression: under `match e(c)` the binders `p` and `q` of `F(e(c))` are units, so the guard `h(p) == h(q)` is `true` and the guard's scrutinee `k(0)`, which the guard's spelling, settled outside the arm with `p` and `q` apart, is not. The control is an arm on an expression the guard does not read, `e(d)`, under which `k(0)` is no case the guard's equation reaches and the fact is refused where it is written.
+#[test]
+fn a_guard_reading_an_expression_through_its_binders_types_is_restated_under_an_arm_on_it() {
+    let program = |inner: &str| {
+        fill!(
+            "use /std/{Nat, Bool, Io};
+use /std/Bool/{Holds, True};
+let F(b: Bool) -> Type = match b | true => {} | false => Nat end;
+let cell(c: Nat, d: Nat, e: (Nat) -> Bool, k: (Nat) -> Bool, h: (F(e(c))) -> Nat, p: F(e(c)), q: F(e(c))) -> {} =
+    match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+    | true => match ${inner} | true => let _: Holds(k(0)) = True/qed(); () | false => () end
+    | false => ()
+    end;
+Io/pure(())",
+            inner,
+        )
+    };
+
+    assert_eq!(typecheck(&program("e(c)")), Ok(()));
+    let refusal = typecheck(&program("e(d)")).expect_err("`k(0)` is no case of the guard there");
+    assert!(
+        refusal.contains("type mismatch") && !refusal.contains("the certifier refused"),
+        "the elaborator refuses the fact where it is written: {refusal}",
     );
 }
 

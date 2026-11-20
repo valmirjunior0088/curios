@@ -701,9 +701,13 @@ fn check_cases(
                 {
                     certifier.assume_nonzero(*binder)?;
                 }
-                for test in catch_all_tests(scrutinee, keys) {
-                    certifier.refine(test, Term::intrinsic(Intrinsic::Bool(false)))?;
+                let below = certifier.refinements_recorded();
+                let tests = catch_all_tests(scrutinee, keys).collect::<Vec<_>>();
+                for test in &tests {
+                    certifier.refine(test.clone(), Term::intrinsic(Intrinsic::Bool(false)))?;
                 }
+                // An equation settled outside the catch-all read none of its tests, so each whose settlement meets one whole is assumed again after them, as an arm on an expression restates it.
+                certifier.restate_refinements(&[], &tests, below);
 
                 check(certifier, default, &expected)
             })

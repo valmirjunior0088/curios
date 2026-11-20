@@ -8,7 +8,7 @@ use {
         BinderSite, Context, Error, check_as, check_is_sort, dead_guard, decided_sort_of, expect,
         hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
         resolved_for_display, same_uncommitted, solve_case_indices, stuck_on_metavar,
-        zonk_solved_term_metas,
+        under_restated, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, catch_all_tests, retyped, scrutinee_solution, wholly_pinned},
     curios_common::Plicity,
@@ -18,7 +18,10 @@ use {
         Term, Two, Universes, goal_at,
     },
     curios_num::{Binary, Natural},
-    std::collections::{HashMap, HashSet},
+    std::{
+        collections::{HashMap, HashSet},
+        slice,
+    },
 };
 
 /// A match's scrutinee, elaborated once before any arm is: rebuilt, beside its type reduced — what every eliminator reads its carrier off.
@@ -205,7 +208,9 @@ fn split_arm(
     open_arm(context, head, value)
         .and_then(|()| {
             retype_locals(context, head, value, Vec::new());
-            body(context, goal_at(goal, head, &[], &[], value))
+            under_restated(context, slice::from_ref(head), |context| {
+                body(context, goal_at(goal, head, &[], &[], value))
+            })
         })
         .map_err(|error| from_arm(context, head, value, error))
 }
@@ -610,7 +615,9 @@ impl SwitchSplit {
             .with_frame(|context| {
                 open_arm(context, &self.head, &literal)?;
                 retype_locals(context, &self.head, &literal, Vec::new());
-                body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
+                under_restated(context, slice::from_ref(&self.head), |context| {
+                    body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
+                })
             })
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
@@ -624,11 +631,12 @@ impl SwitchSplit {
     ) -> Result<Term, Error> {
         context.with_frame(|context| {
             let failed = Term::intrinsic(Intrinsic::Bool(false));
-            for test in catch_all_tests(&self.head, keys) {
-                refine_head(context, &test, &failed)?;
+            let tests = catch_all_tests(&self.head, keys).collect::<Vec<_>>();
+            for test in &tests {
+                refine_head(context, test, &failed)?;
             }
 
-            body(context, self.goal.clone())
+            under_restated(context, &tests, |context| body(context, self.goal.clone()))
         })
     }
 
@@ -808,7 +816,9 @@ impl BoolSplit {
             .with_frame(|context| {
                 open_arm(context, &self.head, &literal)?;
                 retype_locals(context, &self.head, &literal, Vec::new());
-                body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
+                under_restated(context, slice::from_ref(&self.head), |context| {
+                    body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
+                })
             })
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
@@ -1220,7 +1230,10 @@ impl NominalSplit {
                     .collect::<Vec<_>>();
                 retype_locals(context, &self.head, &ctor_val, solutions);
 
-                body(context, expected).map(|body| (body, held))
+                under_restated(context, slice::from_ref(&self.head), |context| {
+                    body(context, expected)
+                })
+                .map(|body| (body, held))
             })
             .map_err(|error| match &ruled_out {
                 Some(dead) => error.in_dead_arm(dead),

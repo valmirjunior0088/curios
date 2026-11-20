@@ -5,7 +5,7 @@
 //! `mark` and `retract` are `pub(super)` and the certifier's bracket is their only caller anywhere, opened by `Certifier::scoped` and by a reading's `ByValue::scoped` — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    curios_analysis::{reads_solved, records_case_equation},
+    curios_analysis::{meets_one_of, reads_one_of, records_case_equation},
     curios_core::{Free, Term},
     std::collections::HashMap,
 };
@@ -38,8 +38,20 @@ struct Refinement {
     ///
     /// One for each because a probe is compared with the spelling reduced the way the probe was: plain reduction asks its checker's conversion nothing, so where a key holds a fold only a question decides, its two reducts are two terms.
     reducts: [Reduct; 2],
-    /// The depth the locals stood at when an arm restated this equation under its solution, or `None` while it answers as recorded. See [`Scope::restate`].
-    restated_at: Option<usize>,
+    /// Where an arm restated this equation, or `None` while it answers as recorded. See [`Scope::restate`].
+    restated_at: Option<Restated>,
+}
+
+/// Where an arm restated an equation: the depths the locals and the equations stood at, before the arm bound its solution or recorded the restated instances.
+///
+/// **A bracket closing at or outside both was opened outside the arm**, and revives the equation; one the arm opens marks deeper in one of the two. An arm that solves a variable binds its solution among the locals next, so its brackets mark deeper locals, though a restatement naming no local is not recorded and leaves the equations where they stood. An arm on an expression binds nothing, but records its own equation before it restates and the restated instances after, each recorded, so its brackets mark deeper equations. Filed against either alone, the first bracket closing inside such an arm would revive the equation beside its instance, and an equation would stand once more at every arm inside.
+///
+/// **Where the arm's restatement stands, for an arm on an expression.** Such an arm restates an equation as it was, after its own, and binds nothing, so the equation steps aside only where its instance is in view or being settled ([`Scope::stepped_aside`]): an equation recorded between the two — the arm's own — is settled with this one in view, as it was recorded under it, where withholding its own inner side would leave it reading neither. An arm's solution re-types what a settlement reads, so an equation restated under one steps aside wherever the arm stands, and `instance` is `None`.
+#[derive(Clone, Copy, Debug)]
+struct Restated {
+    locals: usize,
+    equations: usize,
+    instance: Option<usize>,
 }
 
 /// Whether an equation's reduced spelling has been asked for yet.
@@ -295,12 +307,16 @@ impl Scope {
     ///
     /// **The recorded equation steps aside rather than standing beside its instance.** Nothing a reader in the arm is handed names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
     ///
-    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it or `member_value` knows it as a member of a group being checked, names one, read through to the end ([`reads_solved`]). Binding a solved variable re-types the first kind of local and binds the second again (`Certifier::bind`), and a settlement reads all three, a `let` by its value, a member known to terminate by its selection and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
+    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it or `member_value` knows it as a member of a group being checked, names one, read through to the end ([`reads_one_of`]). Binding a solved variable re-types the first kind of local and binds the second again (`Certifier::bind`), and a settlement reads all three, a `let` by its value, a member known to terminate by its selection and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
+    ///
+    /// **So is each equation recorded before `below` whose settlement would meet one of `keys` whole** ([`meets_one_of`]), the keys an arm on an expression assumes an equation over: its spelling, settled outside the arm, read none of what the arm assumes, and an occurrence the arm's equation takes apart inside it would meet the stale spelling. The instance is the equation as it was, pushed after the arm's, so a settlement, which withholds only what lies at or inside its entry, settles it with the arm's equation in view, in the arm and gone with it.
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
     pub fn restate(
         &mut self,
         solutions: &[(Free, Term)],
+        keys: &[Term],
+        below: usize,
         member_value: impl Fn(&Free) -> Option<Term>,
     ) -> Vec<(Term, Term)> {
         assert!(
@@ -318,44 +334,50 @@ impl Scope {
                 .chain(member_value(name))
                 .collect::<Vec<_>>()
         };
-        let solved = |term: &Term| reads_solved(term, solutions, &reads);
+        let solved_names = solutions.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+        let solved = |term: &Term| reads_one_of(term, &solved_names, &reads);
+        let meets_assumed = |term: &Term| meets_one_of(term, keys, &reads);
+        // Each restated equation beside whether the arm's solution restates it, rather than its expression alone.
         let restating = self
             .refinements
             .iter()
             .enumerate()
-            .filter(|(_, entry)| {
-                entry.restated_at.is_none()
-                    && (solved(&entry.key)
-                        || solved(&entry.value)
-                        || entry.resolved.as_ref().is_some_and(solved))
+            .filter(|(_, entry)| entry.restated_at.is_none())
+            .filter_map(|(index, entry)| {
+                let under_solution = solved(&entry.key)
+                    || solved(&entry.value)
+                    || entry.resolved.as_ref().is_some_and(solved);
+                let read_by_arm = index < below
+                    && (meets_assumed(&entry.key)
+                        || entry.resolved.as_ref().is_some_and(meets_assumed));
+                (under_solution || read_by_arm).then_some((index, under_solution))
             })
-            .map(|(index, _)| index)
             .collect::<Vec<_>>();
 
-        // Filed against the locals, which the arm binds its solution among next, so every bracket the arm opens from then on marks deeper and only the arm's own closing, or an outer one's, revives the equation. The equation stack would not do: a restatement naming no local is not recorded, so a bracket the arm opens marks the depth it was restated at.
-        let depth = self.locals.len();
+        // Filed against the locals and the equations both ([`Restated`]), so every bracket the arm opens from then on marks deeper in one of them and only the arm's own closing, or an outer one's, revives the equation.
+        let locals = self.locals.len();
+        let equations = self.refinements.len();
         let mut restated = Vec::new();
-        for index in restating {
-            let entry = &mut self.refinements[index];
-            entry.restated_at = Some(depth);
-            restated.push((
-                entry.key.substitute(solutions),
-                entry
-                    .resolved
-                    .as_ref()
-                    .map(|resolved| resolved.substitute(solutions)),
-                entry.value.substitute(solutions),
-            ));
+        for (index, under_solution) in restating {
+            let entry = &self.refinements[index];
+            let key = entry.key.substitute(solutions);
+            let resolved = entry
+                .resolved
+                .as_ref()
+                .map(|resolved| resolved.substitute(solutions));
+            let value = entry.value.substitute(solutions);
+            // The position the instance takes, which an arm on an expression steps the equation aside behind.
+            let instance = (!under_solution).then_some(self.refinements.len());
+            self.refinements[index].restated_at = Some(Restated {
+                locals,
+                equations,
+                instance,
+            });
+            self.refine(key.clone(), resolved, value.clone());
+            restated.push((key, value));
         }
 
         restated
-            .into_iter()
-            .map(|(key, resolved, value)| {
-                self.refine(key.clone(), resolved, value.clone());
-
-                (key, value)
-            })
-            .collect()
     }
 
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.
@@ -385,7 +407,7 @@ impl Scope {
         self.refinements[..self.in_force()]
             .iter()
             .enumerate()
-            .filter(|(_, entry)| entry.restated_at.is_none())
+            .filter(|(_, entry)| !self.stepped_aside(entry))
             .map(|(index, entry)| (index, entry.key.clone()))
             .collect()
     }
@@ -421,6 +443,11 @@ impl Scope {
                 admitted.contains(index) && matches!(entry.reducts[plain], Reduct::Unasked)
             })
             .map(|(index, entry)| (index, entry.key.clone()))
+    }
+
+    /// How many equations have been recorded, in force or withheld: the position the next one takes.
+    pub fn recorded(&self) -> usize {
+        self.refinements.len()
     }
 
     /// Record what the equation at `index` reduces to, or that reducing it refused.
@@ -508,10 +535,13 @@ impl Scope {
         let dropped = self.refinements.len() > mark.refinements;
         self.refinements.truncate(mark.refinements);
 
-        // An equation restated at or past the mark was restated by an arm this bracket held, which is gone with its restatement.
+        // An equation restated at or past the mark, in its locals and its equations both, was restated by an arm this bracket held, which is gone with its restatement.
         let mut revived = false;
         for entry in &mut self.refinements {
-            if entry.restated_at.is_some_and(|depth| depth >= mark.locals) {
+            if entry
+                .restated_at
+                .is_some_and(|at| at.locals >= mark.locals && at.equations >= mark.refinements)
+            {
                 entry.restated_at = None;
                 revived = true;
             }
@@ -537,11 +567,19 @@ impl Scope {
             .collect()
     }
 
-    /// The equations in force that answer, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement.
+    /// The equations in force that answer, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement ([`Scope::stepped_aside`]).
     fn in_force_innermost_first(&self) -> impl Iterator<Item = &Refinement> {
         self.refinements[..self.in_force()]
             .iter()
             .rev()
-            .filter(|entry| entry.restated_at.is_none())
+            .filter(|entry| !self.stepped_aside(entry))
+    }
+
+    /// Whether `entry` steps aside for its restatement: wherever the arm that restated it under a solution stands, and, restated by an arm on an expression, where its instance is in force or being settled ([`Restated`]).
+    fn stepped_aside(&self, entry: &Refinement) -> bool {
+        entry.restated_at.is_some_and(|at| {
+            at.instance
+                .is_none_or(|instance| instance <= self.in_force())
+        })
     }
 }

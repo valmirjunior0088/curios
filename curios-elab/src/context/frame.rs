@@ -119,8 +119,10 @@ pub struct ScrutineeEntry {
     pub alias: bool,
     /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the certifier spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
     pub withheld: bool,
-    /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`). Its spelling is settled in this frame and goes with it.
+    /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`), or an arm on an expression restated it as it was (`Context::restate_read`). Its spelling is settled in this frame and goes with it.
     pub restates: bool,
+    /// Whether an arm on an expression restated the equation, as it was, in a frame of its own inside the arm's. The recorded entry then steps aside only for what this frame's settlements and lookups read, and a settlement made outside this frame — the arm's own equation's — reads the recorded entry, as it was recorded under it. An arm's solution re-types what a settlement reads, so an entry restated under one hides the recorded entry wherever its frame stands.
+    pub restated_by_expression: bool,
 }
 
 /// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.

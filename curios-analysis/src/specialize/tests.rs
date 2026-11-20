@@ -4,6 +4,7 @@ use {
     super::*,
     crate::test_support::*,
     curios_core::{Intrinsic, Nat},
+    std::slice,
 };
 
 fn nat(value: usize) -> Term {
@@ -68,16 +69,16 @@ fn a_local_typed_through_a_let_is_retyped_with_the_let_inlined() {
     );
 }
 
-/// A term reads a solved variable where it names one, where a local it names is typed over one, and where a local definition it names is defined over one, through any chain of either. Controls: a local typed and defined over nothing solved, and a top-level name, whose type no case moves.
+/// A term reads one of a set of locals where it names one, where a local it names is typed over one, and where a local definition it names is defined over one, through any chain of either. Controls: a local typed and defined over none of them, a top-level name, whose type no arm moves, and an empty set.
 #[test]
-fn a_term_reads_a_solved_variable_through_the_types_and_definitions_of_its_locals() {
+fn a_term_reads_a_local_through_the_types_and_definitions_of_its_locals() {
     let c = Free::local(1, Some("c"));
     let typed = Free::local(2, Some("p"));
     let defined = Free::local(3, Some("y"));
     let chained = Free::local(4, Some("q"));
     let apart = Free::local(5, Some("n"));
     let top = Free::local(6, Some("top"));
-    let solutions = [(c, nat(0))];
+    let locals = [c];
 
     let reads = |name: &Free| match name {
         name if *name == typed => vec![over(&c)],
@@ -95,7 +96,42 @@ fn a_term_reads_a_solved_variable_through_the_types_and_definitions_of_its_local
         (over(&apart), false),
         (over(&top), false),
     ] {
-        assert_eq!(reads_solved(&term, &solutions, reads), expected, "{term:?}");
+        assert_eq!(reads_one_of(&term, &locals, reads), expected, "{term:?}");
     }
-    assert!(!reads_solved(&over(&c), &[], reads));
+    assert!(!reads_one_of(&over(&c), &[], reads));
+}
+
+/// A term meets a key whole where it holds the key as a subterm, and where the type or definition of a local it names holds it, through any chain of either. Controls: a term naming every local of the key but not the key itself, a local typed over another term, and no key at all.
+#[test]
+fn a_term_meets_a_key_through_the_types_and_definitions_of_its_locals() {
+    let c = Free::local(1, Some("c"));
+    let typed = Free::local(2, Some("p"));
+    let chained = Free::local(3, Some("q"));
+    let apart = Free::local(4, Some("n"));
+    let key = over(&c);
+
+    let reads = |name: &Free| match name {
+        name if *name == typed => vec![Term::intrinsic(Intrinsic::nat_add(key.clone(), nat(2)))],
+        name if *name == chained => vec![Term::free_var(&typed)],
+        name if *name == apart => vec![Term::free_var(&c)],
+        _ => Vec::new(),
+    };
+
+    for (term, expected) in [
+        (
+            Term::intrinsic(Intrinsic::nat_add(key.clone(), nat(5))),
+            true,
+        ),
+        (Term::free_var(&typed), true),
+        (Term::free_var(&chained), true),
+        (Term::free_var(&c), false),
+        (Term::free_var(&apart), false),
+    ] {
+        assert_eq!(
+            meets_one_of(&term, slice::from_ref(&key), reads),
+            expected,
+            "{term:?}"
+        );
+    }
+    assert!(!meets_one_of(&key, &[], reads));
 }

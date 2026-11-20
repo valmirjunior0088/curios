@@ -373,6 +373,11 @@ impl<'s> Frames<'s> {
         rebound(self.top.as_ref()) == rebound(held.innermost())
     }
 
+    /// The depth of the innermost frame, the one being elaborated.
+    pub fn innermost_depth(&self) -> usize {
+        self.innermost_frame().depth
+    }
+
     /// The innermost frame as it stands: the frame a block's end leaves.
     pub fn innermost_frame(&self) -> &Frame {
         self.read_scope();
@@ -860,17 +865,21 @@ impl<'s> Frames<'s> {
         forget_settled_windows(frame);
     }
 
-    /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it.
+    /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it — one an arm on an expression restated only for a settlement made at or inside that frame ([`ScrutineeEntry::restated_by_expression`]).
     ///
     /// **Past a settlement's ceiling too.** A settlement withholds the refinements of the frames from its own inwards, and an arm's step-aside is no refinement: the recorded equation steps aside in the arm that restated or withheld it from every lookup and every settlement made while the arm stands, as the certifier's `Scope::restate` has it, so a restatement settled with its own frame withheld settles under the arm's re-typing and goes with it, and the recorded equation settles only where the arm does not stand.
     fn withheld_inside(&self, frame: usize, key: &Term) -> bool {
         self.refined_standing()
             .filter(|inner| frame < inner.depth)
             .any(|inner| {
-                inner
-                    .refinement_scrutinees
-                    .get(key)
-                    .is_some_and(|entry| entry.withheld || entry.restates)
+                inner.refinement_scrutinees.get(key).is_some_and(|entry| {
+                    entry.withheld
+                        || (entry.restates
+                            && (!entry.restated_by_expression
+                                || self
+                                    .withhold_refinements_from
+                                    .is_none_or(|ceiling| inner.depth <= ceiling)))
+                })
             })
     }
 

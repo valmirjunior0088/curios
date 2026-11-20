@@ -10,7 +10,8 @@ use {
     crate::{
         Binders, Context, Entailed, InductCase, Occurrence, Opened, Outcome, Resolution,
         convert_outcome, entail, enter_induct_case, is_prop, method_type, reduce_with, reference,
-        refine_head, resolve_witness, synth_neutral, trivially_inhabited, zonk_solved_term_metas,
+        refine_head, resolve_witness, synth_neutral, trivially_inhabited, under_restated,
+        zonk_solved_term_metas,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -25,6 +26,7 @@ use {
         collections::{HashMap, VecDeque},
         hash::{Hash, Hasher},
         rc::Rc,
+        slice,
     },
 };
 
@@ -673,12 +675,12 @@ impl Writing {
     /// An arm that binds nothing, walked in a frame where `head` is `value`.
     fn case(&mut self, context: &mut Context, head: &Term, value: &Term, body: &Term) -> Term {
         context.with_frame(|context| match enter_case(context, head, value) {
-            true => {
+            true => under_restated(context, slice::from_ref(head), |context| {
                 self.layers.push(HashMap::new());
                 let written = self.term(context, body);
                 self.layers.pop();
                 written
-            }
+            }),
             false => self.unrefined_term(context, body),
         })
     }
@@ -720,12 +722,12 @@ impl Writing {
             let refined = enter_case_of(context, head, tag, &labels, &vars);
             self.entered.extend(vars.iter().rev().cloned());
             let body = match refined {
-                true => {
+                true => under_restated(context, slice::from_ref(head), |context| {
                     self.layers.push(HashMap::new());
                     let body = arm.body().map_body(|body| self.term(context, body));
                     self.layers.pop();
                     body
-                }
+                }),
                 false => arm
                     .body()
                     .map_body(|body| self.unrefined_term(context, body)),
@@ -867,12 +869,12 @@ impl Writing {
         self.entered.extend(binders.iter().rev().cloned());
         let refined = enter_case(context, head, value);
         let arm = match refined {
-            true => {
+            true => under_restated(context, slice::from_ref(head), |context| {
                 self.layers.push(HashMap::new());
                 let arm = arm.map_body(|body| self.term(context, body));
                 self.layers.pop();
                 arm
-            }
+            }),
             false => arm.map_body(|body| self.unrefined_term(context, body)),
         };
         self.entered.truncate(before);

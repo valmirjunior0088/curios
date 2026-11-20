@@ -313,7 +313,7 @@ pub fn never_taken(
 ///
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Certifier::scoped`] bracket — that bracket is what scopes the refinement to the arm.
 ///
-/// **The solution reaches the equations already in force.** Every reader in the arm reads it by value, the solution substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term no reader in the arm is handed; [`Certifier::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
+/// **The solution reaches the equations already in force.** Every reader in the arm reads it by value, the solution substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term no reader in the arm is handed; [`Certifier::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer. **So does the arm's own equation**, where the scrutinee is no variable: an equation settled outside the arm read none of it, so each whose settlement meets the scrutinee whole is assumed again after it.
 ///
 /// **Answers every equation the arm assumes**, each as its scrutinee and the case it states: its own, where the scrutinee is no variable, and those restated under its solution, recorded or not. They are what [`unless_never_taken`] puts to reduction where the arm is refused.
 pub fn assume_case_value(
@@ -324,16 +324,19 @@ pub fn assume_case_value(
 ) -> Result<Vec<(Term, Term)>, ReduceError> {
     let value = value.substitute(solutions);
     let mut assumed = Vec::new();
+    let below = certifier.refinements_recorded();
+    let mut keys = Vec::new();
 
     match scrutinee_solution(&*certifier, scrutinee, &value) {
         Some(solution) => solutions.push(solution),
         None => {
             assumed.push((scrutinee.clone(), value.clone()));
             certifier.refine(scrutinee.clone(), value)?;
+            keys.push(scrutinee.clone());
         }
     }
-    // Every reader in the arm reads it with `solutions` substituted, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them.
-    assumed.extend(certifier.restate_refinements(solutions));
+    // Every reader in the arm reads it with `solutions` substituted, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them; and an equation recorded before the arm's own whose settlement meets the arm's scrutinee whole is restated after it, so it is settled with the arm's equation in view.
+    assumed.extend(certifier.restate_refinements(solutions, &keys, below));
 
     Ok(assumed)
 }

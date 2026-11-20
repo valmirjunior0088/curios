@@ -7,7 +7,7 @@ use {
         Context, DeadArm, HeldFrames, Question, RegionOwner, ScrutineeEntry, hold_at_one_instance,
         key_spelling, shallow_scrutinee, zonk_solved_term_metas,
     },
-    curios_analysis::{reads_solved, records_case_equation},
+    curios_analysis::{meets_one_of, reads_one_of, records_case_equation},
     curios_common::Plicity,
     curios_core::{
         Advance, DefinitionKind, Free, Global, HeadTag, Mention, RecGroup, Subterm, Term,
@@ -343,7 +343,7 @@ impl<'s> Context<'s> {
     ///
     /// **The recorded equation steps aside, as the certifier's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
     ///
-    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, or a member of a group being checked whose body names it once reduction reads through its slot, read through to the end (`curios_analysis::reads_solved`, the rule the certifier restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
+    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, or a member of a group being checked whose body names it once reduction reads through its slot, read through to the end (`curios_analysis::reads_one_of`, the rule the certifier restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
     ///
     /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
     fn restate_equations(&mut self, name: &Free, value: &Term) {
@@ -351,24 +351,6 @@ impl<'s> Context<'s> {
             return;
         }
         let solution = [(*name, value.clone())];
-        // Each read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable. A member of a group being checked is defined as its slot, which zonk spells as the member, so a slot reduction reads through — its member known to terminate — is read through here too, its body naming the locals the group captured.
-        let reads = |local: &Free| -> Vec<Term> {
-            if !curios_analysis::Driver::is_local(self, local) {
-                return Vec::new();
-            }
-            let member = self.definition_body(local).and_then(|body| match &**body {
-                Subterm::Metavar(slot) if !self.is_withheld_rec_slot(slot.id) => {
-                    self.resolve_metavar(slot)
-                }
-                _ => None,
-            });
-            self.assumption(local)
-                .into_iter()
-                .chain(self.definition_body(local))
-                .map(|read| zonk_solved_term_metas(self, read))
-                .chain(member)
-                .collect()
-        };
         let named = self
             .typing
             .frames
@@ -376,7 +358,8 @@ impl<'s> Context<'s> {
             .into_iter()
             .filter_map(|(key, entry)| {
                 let original = zonk_solved_term_metas(self, &entry.original);
-                reads_solved(&original, &solution, reads).then_some((key, entry, original))
+                reads_one_of(&original, &[*name], |local| self.readings(local))
+                    .then_some((key, entry, original))
             })
             .collect::<Vec<_>>();
 
@@ -390,11 +373,69 @@ impl<'s> Context<'s> {
                 alias: entry.alias,
                 withheld: false,
                 restates,
+                restated_by_expression: false,
             };
             if !restates {
                 self.typing.frames.withhold_scrutinee(key, entry);
             }
             self.typing.frames.refine_scrutinee(restated_key, restated);
+        }
+    }
+
+    /// What a settlement reads of the local `local`, as `curios_analysis::reads_one_of` follows it: its type, and its definition where it has one, each with its solved metavariables materialized, since a metavariable stands over a spine of every local in scope where it was born and would read as naming them. A member of a group being checked is defined as its slot, which zonk spells as the member, so a slot reduction reads through — its member known to terminate — is read through too, its body naming the locals the group captured.
+    fn readings(&self, local: &Free) -> Vec<Term> {
+        if !curios_analysis::Driver::is_local(self, local) {
+            return Vec::new();
+        }
+        let member = self.definition_body(local).and_then(|body| match &**body {
+            Subterm::Metavar(slot) if !self.is_withheld_rec_slot(slot.id) => {
+                self.resolve_metavar(slot)
+            }
+            _ => None,
+        });
+        self.assumption(local)
+            .into_iter()
+            .chain(self.definition_body(local))
+            .map(|read| zonk_solved_term_metas(self, read))
+            .chain(member)
+            .collect()
+    }
+
+    /// The equations in force, recorded outside the frame being elaborated, whose settlement would meet one of `keys` whole as the certifier spells it: one whose scrutinee holds such a key, or a local whose type or definition holds one, read through to the end (`curios_analysis::meets_one_of`, the rule the certifier restates by). An arm on an expression assumes an equation over each of its keys, which such an equation's spelling, settled outside the arm, cannot have read ([`Context::restate_read`]).
+    pub(crate) fn equations_read_by(&self, keys: &[Term]) -> Vec<(Term, ScrutineeEntry)> {
+        if !self.typing.frames.has_scrutinee_refinements() {
+            return Vec::new();
+        }
+        let keys = keys
+            .iter()
+            .map(|key| self.certifier_spelling(key))
+            .collect::<Vec<_>>();
+        let arm = self.typing.frames.innermost_depth();
+
+        self.typing
+            .frames
+            .visible_scrutinee_entries()
+            .filter(|(frame, _, _)| *frame < arm)
+            .filter(|(_, _, entry)| {
+                let original = zonk_solved_term_metas(self, &entry.original);
+                meets_one_of(&original, &keys, |local| self.readings(local))
+            })
+            .map(|(_, key, entry)| (key.clone(), entry.clone()))
+            .collect()
+    }
+
+    /// Register each of `equations` again in the frame being elaborated, standing in for its recorded entry while the frame stands ([`ScrutineeEntry::restates`]): an arm on an expression restating the equations its own reads ([`Context::equations_read_by`]). The frame is one of its own inside the arm's, so a settlement, which withholds its entry's frame and every frame inside it, settles each with the arm's equation in view, as the certifier settles an equation it restates after the arm's own.
+    pub(crate) fn restate_read(&mut self, equations: Vec<(Term, ScrutineeEntry)>) {
+        for (key, entry) in equations {
+            self.typing.frames.refine_scrutinee(
+                key,
+                ScrutineeEntry {
+                    withheld: false,
+                    restates: true,
+                    restated_by_expression: true,
+                    ..entry
+                },
+            );
         }
     }
 
@@ -528,6 +569,7 @@ impl<'s> Context<'s> {
                     alias,
                     withheld: false,
                     restates: false,
+                    restated_by_expression: false,
                 },
             );
         }
