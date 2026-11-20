@@ -127,10 +127,12 @@ pub enum RegionFrame {
         value: curios_core::Term,
     },
     Rec(Vec<(curios_core::Free, curios_core::Term, curios_core::Term)>),
+    /// `binder` held to the shape `pattern` writes by an arm of one row, which binds `bound`, the leaves the pattern writes, in their order.
     Held {
         binder: curios_core::Free,
         pattern: curios_core::Pattern,
         span: Option<Span>,
+        bound: Vec<curios_core::Free>,
     },
 }
 
@@ -1214,7 +1216,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut lowered = Vec::with_capacity(params.len());
         // The binders already minted for the leaves, consumed in the same pre-order `pattern_names` produced them, plus the field-`let` chains that put the compound patterns in scope — both advance with the walk.
         let mut seen = 0;
-        let mut chains: Vec<(&[PatternField], curios_core::Free, &[Binder])> = Vec::new();
+        let mut chains: Vec<(&Pattern, curios_core::Free, &[Binder])> = Vec::new();
         let mut shapes: Vec<(&Pattern, curios_core::Free)> = Vec::new();
 
         let mut prefixes = self.prefixes(binders);
@@ -1238,10 +1240,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
                 Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
-                Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => {
+                Pattern::Tuple(_) | Pattern::Struct { .. } => {
                     let synthetic = self.context.fresh_binder(None);
-                    shapes.push((pattern, synthetic));
-                    chains.push((fields, synthetic, leaves));
+                    // A structure's held arm holds its shape as it binds its leaves; a tuple's chain reads fields a held shape outside it stands for.
+                    if let Pattern::Tuple(_) = pattern {
+                        shapes.push((pattern, synthetic));
+                    }
+                    chains.push((pattern, synthetic, leaves));
                     lowered.push((*plicity, synthetic, domain));
                 }
             }
@@ -1253,10 +1258,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let body = chains
             .iter()
             .rev()
-            .try_fold(body, |tail, (fields, synthetic, leaves)| {
-                self.lower_pattern_fields(fields, synthetic, leaves, tail)
+            .try_fold(body, |tail, (pattern, synthetic, leaves)| {
+                self.destructured(pattern, synthetic, leaves, tail)
             })?;
-        // Each compound pattern's shape is held once, around the body its parameter stands over: an annotation that reads its fields is under the same parameter.
+        // Each tuple pattern's shape is held once, around the body its parameter stands over: an annotation that reads its fields is under the same parameter.
         let body = shapes
             .iter()
             .rev()
@@ -1267,19 +1272,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok((lowered, body))
     }
 
-    /// Wraps a parameter annotation in the field-`let` chain of every preceding compound pattern, outermost chain first. Only a chain whose leaf names the annotation actually mentions is emitted — every other domain keeps its written shape, so projections off an unrelated tuple parameter never show up in its error messages. (The *body* is wrapped unconditionally: it is the chain's original consumer and its shape is settled.)
+    /// Wraps a parameter annotation in what puts every preceding compound pattern's leaves in scope ([`Self::destructured`]), outermost first. Only a pattern whose leaf the annotation actually mentions is wrapped — every other domain keeps its written shape, so projections off an unrelated tuple parameter never show up in its error messages. (The *body* is wrapped unconditionally: it is the chain's original consumer and its shape is settled.)
     fn wrap_pattern_chains(
         &self,
-        chains: &[(&[PatternField], curios_core::Free, &[Binder])],
+        chains: &[(&Pattern, curios_core::Free, &[Binder])],
         annotation: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
         chains
             .iter()
             .rev()
-            .try_fold(annotation, |tail, (fields, synthetic, leaves)| {
+            .try_fold(annotation, |tail, (pattern, synthetic, leaves)| {
                 // A leaf is mentioned iff one of the identities this chain binds occurs free — an exact test, where matching by spelling could only ever approximate one.
                 match leaves.iter().any(|(_, id)| tail.mentions_free(id)) {
-                    true => self.lower_pattern_fields(fields, synthetic, leaves, tail),
+                    true => self.destructured(pattern, synthetic, leaves, tail),
                     false => Ok(tail),
                 }
             })
@@ -1436,41 +1441,44 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         value,
                     });
                 }
-                Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => {
+                Pattern::Tuple(TuplePattern { fields, .. }) => {
                     let binder = self.context.fresh_binder(None);
                     frames.push(RegionFrame::Let {
                         binder,
                         type_,
                         value,
                     });
-                    frames.push(self.held_frame(pattern, binder)?);
+                    frames.push(self.held_frame(pattern, binder, binders)?);
                     self.pattern_field_frames(fields, binder, binders, frames)?;
+                }
+                Pattern::Struct { .. } => {
+                    let binder = self.context.fresh_binder(None);
+                    frames.push(RegionFrame::Let {
+                        binder,
+                        type_,
+                        value,
+                    });
+                    frames.push(self.held_frame(pattern, binder, binders)?);
                 }
             }
             Ok(())
         })
     }
 
-    /// What holds `binder` to the shape the compound `pattern` writes, ahead of the fields it projects: a struct pattern to the structure its head names, and a tuple pattern to a tuple of as many fields, each field a `_` the projections after it read.
-    fn held_frame(
+    /// What holds `binder` to the shape the compound `pattern` writes. A struct pattern is held to the structure its head names by an arm that takes it apart, binding each of its leaves as an arm's — the next of `leaves`, in the pre-order [`pattern_names`] lists them — so its fields meet the structure's by their marks where the structure is known, as a literal's entries do. A tuple pattern is held to a tuple of as many fields, each field a `_` the projections after it read, and takes none of `leaves`.
+    fn held_frame<'i>(
         &self,
         pattern: &Pattern,
         binder: curios_core::Free,
+        leaves: &mut impl Iterator<Item = &'i Binder>,
     ) -> Result<RegionFrame, Error> {
+        let mut bound = Vec::new();
         let (pattern, span) = match pattern {
             Pattern::Binder(_) => unreachable!("a binder holds its value to no shape"),
-            Pattern::Struct { head, .. } => {
-                let structure = match self.resolve_nominal(head)? {
-                    Ok(structure) => curios_core::Mention::Declaration(structure),
-                    Err(unbound) => curios_core::Mention::Local(unbound),
-                };
-                let held = curios_core::Pattern::Struct {
-                    head: head.join(),
-                    structure,
-                    fields: Vec::new(),
-                };
-                (held, head.span().cloned())
-            }
+            Pattern::Struct { head, .. } => (
+                self.held_pattern(pattern, leaves, &mut bound)?,
+                head.span().cloned(),
+            ),
             Pattern::Tuple(TuplePattern { fields, span }) => {
                 let held = curios_core::Pattern::Tuple(
                     fields
@@ -1490,17 +1498,87 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             binder,
             pattern,
             span,
+            bound,
         })
     }
 
-    /// Holds the scrutinee to the shape its compound pattern writes, using the same resolved check as the region's lexical frames.
+    /// The pattern a held arm's row writes for `pattern`: each binder the next of `leaves`, pushed onto `bound` in the order the arm binds it, a tuple's fields under their labels, and a structure's under their marks and labels, its head resolved while the source scope stands.
+    fn held_pattern<'i>(
+        &self,
+        pattern: &Pattern,
+        leaves: &mut impl Iterator<Item = &'i Binder>,
+        bound: &mut Vec<curios_core::Free>,
+    ) -> Result<curios_core::Pattern, Error> {
+        recurse(|| {
+            Ok(match pattern {
+                Pattern::Binder(_) => {
+                    let (_, leaf) = leaves.next().expect("one mint per written leaf");
+                    bound.push(*leaf);
+                    curios_core::Pattern::Binder
+                }
+                Pattern::Tuple(TuplePattern { fields, .. }) => curios_core::Pattern::Tuple(
+                    fields
+                        .iter()
+                        .map(|field| {
+                            Ok((
+                                field.label.as_ref().map(|label| self.field_label(label)),
+                                self.held_pattern(&field.value, leaves, bound)?,
+                            ))
+                        })
+                        .collect::<Result<_, Error>>()?,
+                ),
+                Pattern::Struct { head, fields } => curios_core::Pattern::Struct {
+                    head: head.join(),
+                    structure: match self.resolve_nominal(head)? {
+                        Ok(structure) => curios_core::Mention::Declaration(structure),
+                        Err(unbound) => curios_core::Mention::Local(unbound),
+                    },
+                    fields: fields
+                        .iter()
+                        .map(|(plicity, field)| {
+                            Ok((
+                                *plicity,
+                                field.label.as_ref().map(|label| self.field_label(label)),
+                                self.held_pattern(&field.value, leaves, bound)?,
+                            ))
+                        })
+                        .collect::<Result<_, Error>>()?,
+                },
+            })
+        })
+    }
+
+    /// `tail` under the leaves of the compound parameter `pattern` over `synthetic`, each under its already-minted identity: a tuple's projected by the chain of `let`s that reads its fields, and a structure's bound by the held arm that takes it apart.
+    fn destructured(
+        &self,
+        pattern: &Pattern,
+        synthetic: &curios_core::Free,
+        leaves: &[Binder],
+        tail: curios_core::Term,
+    ) -> Result<curios_core::Term, Error> {
+        match pattern {
+            Pattern::Binder(_) => unreachable!("a binder is no compound parameter"),
+            Pattern::Tuple(TuplePattern { fields, .. }) => {
+                self.lower_pattern_fields(fields, synthetic, leaves, tail)
+            }
+            Pattern::Struct { .. } => self.wrap(
+                vec![self.held_frame(pattern, *synthetic, &mut leaves.iter())?],
+                tail,
+            ),
+        }
+    }
+
+    /// Holds the scrutinee to the tuple its compound pattern writes, using the same resolved check as the region's lexical frames.
     pub fn held_to_shape(
         &self,
         pattern: &Pattern,
         binder: &curios_core::Free,
         tail: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        self.wrap(vec![self.held_frame(pattern, *binder)?], tail)
+        self.wrap(
+            vec![self.held_frame(pattern, *binder, &mut std::iter::empty())?],
+            tail,
+        )
     }
 
     /// Projects the leaves of a compound parameter pattern under its already-minted identities.
@@ -1581,6 +1659,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     binder,
                     pattern,
                     span,
+                    bound,
                 } => {
                     let held = curios_core::Term::matrix(curios_core::Matrix {
                         head: curios_core::Term::var(curios_core::Var::free(binder)),
@@ -1589,7 +1668,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                                 pattern,
                                 guards: Vec::new(),
                                 body: curios_core::Term::func(
-                                    Vec::<(curios_core::Free, curios_core::Term)>::new(),
+                                    bound
+                                        .into_iter()
+                                        .map(|leaf| {
+                                            (
+                                                leaf,
+                                                curios_core::Term::hole(
+                                                    self.context.fresh_metavar(),
+                                                ),
+                                            )
+                                        })
+                                        .collect::<Vec<_>>(),
                                     body,
                                 ),
                             }],
@@ -1835,9 +1924,13 @@ fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
 fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
     match pattern {
         Pattern::Binder(name) => vec![(name.to_string(), name.span().cloned())],
-        Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => fields
+        Pattern::Tuple(TuplePattern { fields, .. }) => fields
             .iter()
             .flat_map(|field| pattern_labels(&field.value))
+            .collect(),
+        Pattern::Struct { fields, .. } => fields
+            .iter()
+            .flat_map(|(_, field)| pattern_labels(&field.value))
             .collect(),
     }
 }
@@ -1856,9 +1949,13 @@ fn pattern_span(pattern: &Pattern) -> Option<Span> {
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
     match pattern {
         Pattern::Binder(name) => vec![name.to_string()],
-        Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => fields
+        Pattern::Tuple(TuplePattern { fields, .. }) => fields
             .iter()
             .flat_map(|field| pattern_names(&field.value))
+            .collect(),
+        Pattern::Struct { fields, .. } => fields
+            .iter()
+            .flat_map(|(_, field)| pattern_names(&field.value))
             .collect(),
     }
 }

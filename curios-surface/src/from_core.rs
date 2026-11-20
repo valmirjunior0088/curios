@@ -627,7 +627,15 @@ pub fn written_pattern<D: Dialect>(
         }
         curios_core::Pattern::Struct { head, fields, .. } => MatchPattern::Struct {
             head: name_of(head),
-            fields: written_fields(fields, names, own),
+            fields: fields
+                .iter()
+                .map(|(plicity, label, field)| {
+                    (
+                        *plicity,
+                        written_pattern_field(label.as_ref(), field, names, own),
+                    )
+                })
+                .collect(),
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Succ { predecessor, step } => MatchPattern::Successor {
@@ -703,11 +711,21 @@ fn written_fields<D: Dialect>(
 ) -> Vec<MatchPatternField<D>> {
     fields
         .iter()
-        .map(|(label, field)| MatchPatternField {
-            label: label.as_ref().map(|label| Label::from(label.as_str())),
-            value: written_pattern(field, names, own),
-        })
+        .map(|(label, field)| written_pattern_field(label.as_ref(), field, names, own))
         .collect()
+}
+
+/// One field of a tuple's or a structure's pattern as a program writes it, under the label it is written with.
+fn written_pattern_field<D: Dialect>(
+    label: Option<&curios_core::FieldLabel>,
+    field: &curios_core::Pattern,
+    names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
+) -> MatchPatternField<D> {
+    MatchPatternField {
+        label: label.map(|label| Label::from(label.as_str())),
+        value: written_pattern(field, names, own),
+    }
 }
 
 fn infix<D: Dialect>(op: InfixOp, left: Term<D>, right: Term<D>) -> Term<D> {

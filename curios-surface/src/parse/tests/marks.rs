@@ -133,6 +133,41 @@ fn a_structures_field_and_its_entry_are_written_under_their_mark() {
     );
 }
 
+/// A structure's pattern writes a hidden field under its mark, as its literal does, named or alone, in a `let` and in an arm, and prints back as written.
+#[test]
+fn a_structures_pattern_writes_a_hidden_field_under_its_mark() {
+    let Subterm::Let(let_) = "let At { n, @ok = p } = a; u"
+        .parse::<Term>()
+        .unwrap()
+        .as_subterm()
+        .clone()
+    else {
+        panic!("expected a let");
+    };
+    let Pattern::Struct { fields, .. } = &let_.groups[0].members[0].binder else {
+        panic!("expected a struct pattern");
+    };
+    assert_eq!(
+        fields.iter().map(|(mark, _)| *mark).collect::<Vec<_>>(),
+        [Plicity::Explicit, Plicity::Implicit]
+    );
+    assert_eq!(fields[1].1.label.as_deref(), Some("ok"));
+
+    for source in [
+        "let At { n, @ok = p } = a; u",
+        "let At { @p, n } = a; u",
+        "match a | At { n, @ok = p } => n end",
+        "match a | At { @p, n } => n end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(
+            term.to_string().parse::<Term>().unwrap(),
+            term,
+            "round-trip failed for {source:?}"
+        );
+    }
+}
+
 /// Each form a site refuses is reported by the rule it breaks, never by the token a later alternative expected.
 #[test]
 fn a_refused_form_names_its_rule() {
@@ -233,12 +268,11 @@ fn a_refused_form_names_its_rule() {
         ),
         (
             "let Over { use _, over } = d; u",
-            "a struct pattern takes no mark",
+            "a pattern takes no `use` member",
         ),
-        ("let At { n, @ok } = a; u", "a struct pattern takes no mark"),
         (
-            "match a | At { n, @ok } => n end",
-            "a struct pattern takes no mark",
+            "match d | Over { use _, over } => over end",
+            "a pattern takes no `use` member",
         ),
         (
             "match t | two(use n, m) => m end",

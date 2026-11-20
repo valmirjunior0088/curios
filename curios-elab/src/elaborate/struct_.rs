@@ -8,7 +8,7 @@ use {
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
-        ArgumentSite, CalleeId, Global, Mention, Probe, Struct, StructDecl, StructEntry,
+        ArgumentSite, CalleeId, Extent, Global, Mention, Probe, Struct, StructDecl, StructEntry,
         StructType, Subterm, Telescope, Term, UniverseContext, Universes, WitnessOrigin,
         WitnessRole, instantiate_universes,
     },
@@ -340,139 +340,17 @@ fn elaborate_struct_entries(
             })
             .collect(),
     };
-    let plain: Vec<(Option<&str>, &Term)> = written
-        .iter()
-        .filter(|(mark, ..)| *mark == Plicity::Explicit)
-        .map(|(_, label, field)| (*label, *field))
-        .collect();
-
     if written.iter().any(|(mark, ..)| *mark == Plicity::Witness) && context.concept(name).is_none()
     {
         return Err(Error::use_entry_outside_concept(*name));
     }
 
-    // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a superclass is just an unknown field, caught by the positional validation below.
     let labels = field_telescope.labels();
-    let plain_labels: Vec<&str> = labels
+    let members = written
         .iter()
-        .enumerate()
-        .filter(|(position, _)| slots[*position] == Plicity::Explicit)
-        .map(|(_, label)| *label)
-        .collect();
-
-    for (mark, label, field) in &written {
-        if let (Plicity::Explicit, Some(label)) = (mark, label)
-            && let Some(unmarked) = unmarked(name, &labels, &slots, label)
-        {
-            return Err(unmarked.at_opt(field.extent()));
-        }
-    }
-
-    if plain.len() != plain_labels.len() {
-        // Where every written entry carries its label, the labels say which fields are absent and which are no field of the struct; a positional literal says only how many it wrote, so what it lacks is the declared tail.
-        let written = plain
-            .iter()
-            .map(|(label, _)| *label)
-            .collect::<Option<Vec<_>>>();
-        let named = |labels: Vec<&str>| {
-            labels
-                .into_iter()
-                .filter(|label| !label.is_empty())
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        };
-        let (missing, surplus) = match &written {
-            Some(written) => (
-                named(
-                    plain_labels
-                        .iter()
-                        .copied()
-                        .filter(|label| !written.contains(label))
-                        .collect(),
-                ),
-                named(
-                    written
-                        .iter()
-                        .copied()
-                        .filter(|label| !plain_labels.contains(label))
-                        .collect(),
-                ),
-            ),
-            None => (
-                named(plain_labels.iter().copied().skip(plain.len()).collect()),
-                Vec::new(),
-            ),
-        };
-
-        // A plain entry past the plain fields may be meant for a hidden one, so a structure's `@` fields are named with the count; a concept's hidden fields are superclass edges, written `use`, and none is named.
-        let hidden = match plain.len() > plain_labels.len() {
-            true => labels
-                .iter()
-                .zip(&slots)
-                .filter(|(_, mark)| **mark == Plicity::Implicit)
-                .map(|(label, _)| label.to_string())
-                .collect(),
-            false => Vec::new(),
-        };
-
-        return Err(Error::wrong_number_of_fields(
-            *name,
-            plain_labels.len(),
-            plain.len(),
-            missing,
-            surplus,
-            hidden,
-        ));
-    }
-
-    // Written field names are checked positionally against the declared labels and then dropped — the rebuilt literal is name-free. Reordering is not supported: in a dependent telescope the written order is the check order.
-    for (position, (written, _)) in plain.iter().enumerate() {
-        let Some(written) = written else { continue };
-        let declared = plain_labels.get(position).copied().unwrap_or_default();
-        if declared != *written {
-            return Err(Error::unknown_struct_field(
-                *name,
-                (*written).to_string(),
-                plain_labels
-                    .iter()
-                    .filter(|l| !l.is_empty())
-                    .map(|l| l.to_string())
-                    .collect(),
-            ));
-        }
-    }
-
-    // One source per declared position, by the alignment walk. The plain fields were counted against the telescope above, with the labels that report can name, so the refusals left are a hidden entry's: one of the other mark than the field it meets, or one with no hidden field left in its run — written after the plain field the run precedes, or past the last of it.
-    let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
-    let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
-        Misaligned::Surplus { member } => {
-            Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2.extent())
-        }
-        Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
-            marks[member],
-            slots[slot],
-            field_telescope.hints()[slot],
-        )
-        .at_opt(written[member].2.extent()),
-        Misaligned::Missing | Misaligned::Extra { .. } => {
-            unreachable!("a literal's plain fields are counted before its entries are aligned")
-        }
-    })?;
-
-    // A hidden entry's written name is held to the field it fills, as a plain one's is: it says which field the author meant and selects nothing.
-    for (position, fill) in fills.iter().enumerate() {
-        let Some((mark, Some(label), field)) = fill.map(|member| written[member]) else {
-            continue;
-        };
-        if mark != Plicity::Explicit && labels[position] != label {
-            return Err(Error::unknown_struct_field(
-                *name,
-                format!("@{label}"),
-                written_fields(&labels, &slots),
-            )
-            .at_opt(field.extent()));
-        }
-    }
+        .map(|(mark, label, field)| (*mark, *label, field.extent()))
+        .collect::<Vec<_>>();
+    let fills = aligned_fields(name, &field_telescope, &members)?;
     let sources = fills
         .iter()
         .zip(&slots)
@@ -514,6 +392,238 @@ fn elaborate_struct_entries(
         Term::struct_at(*name, universes.clone(), resolved.clone(), elaborated),
         Term::struct_type_at(*name, universes, resolved),
     ))
+}
+
+/// One member written where a structure's or a concept's fields are met: its mark, the label it is written with, and where it was written.
+pub type WrittenMember<'w> = (Plicity, Option<&'w str>, Option<Extent>);
+
+/// Which of the `written` members fills each of the fields `fields` holds, the fields of `name`, `None` for a hidden field left out: what a literal's entries and a structure pattern's fields are both read by. The plain members are the plain fields in order, counted against them and held to their labels by position, and a plain member labelled as a hidden field is that field unmarked. The hidden ones meet the hidden fields of their run as a call's hidden arguments meet its parameters ([`align()`]), each held to the label it is written with: it says which field the author meant and selects nothing. In a dependent telescope the written order is the check order, so no member is reordered.
+pub fn aligned_fields(
+    name: &Global,
+    fields: &Telescope<()>,
+    written: &[WrittenMember],
+) -> Result<Vec<Option<usize>>, Error> {
+    let slots = fields.marks();
+    let labels = fields.labels();
+    let plain = written
+        .iter()
+        .filter(|(mark, ..)| *mark == Plicity::Explicit)
+        .map(|(_, label, _)| *label)
+        .collect::<Vec<_>>();
+    // Superclass fields are anonymous, so no written label can target one: a labeled entry naming a superclass is just an unknown field, caught by the positional validation below.
+    let plain_labels: Vec<&str> = labels
+        .iter()
+        .enumerate()
+        .filter(|(position, _)| slots[*position] == Plicity::Explicit)
+        .map(|(_, label)| *label)
+        .collect();
+
+    for (mark, label, at) in written {
+        if let (Plicity::Explicit, Some(label)) = (mark, label)
+            && let Some(unmarked) = unmarked(name, &labels, &slots, label)
+        {
+            return Err(unmarked.at_opt(*at));
+        }
+    }
+
+    if plain.len() != plain_labels.len() {
+        // Where every written member carries its label, the labels say which fields are absent and which are no field of the struct; a positional one says only how many it wrote, so what it lacks is the declared tail.
+        let named = |labels: Vec<&str>| {
+            labels
+                .into_iter()
+                .filter(|label| !label.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+        let (missing, surplus) = match plain.iter().copied().collect::<Option<Vec<_>>>() {
+            Some(written) => (
+                named(
+                    plain_labels
+                        .iter()
+                        .copied()
+                        .filter(|label| !written.contains(label))
+                        .collect(),
+                ),
+                named(
+                    written
+                        .iter()
+                        .copied()
+                        .filter(|label| !plain_labels.contains(label))
+                        .collect(),
+                ),
+            ),
+            None => (
+                named(plain_labels.iter().copied().skip(plain.len()).collect()),
+                Vec::new(),
+            ),
+        };
+
+        // A plain member past the plain fields may be meant for a hidden one, so a structure's `@` fields are named with the count; a concept's hidden fields are superclass edges, written `use`, and none is named.
+        let hidden = match plain.len() > plain_labels.len() {
+            true => labels
+                .iter()
+                .zip(&slots)
+                .filter(|(_, mark)| **mark == Plicity::Implicit)
+                .map(|(label, _)| label.to_string())
+                .collect(),
+            false => Vec::new(),
+        };
+
+        return Err(Error::wrong_number_of_fields(
+            *name,
+            plain_labels.len(),
+            plain.len(),
+            missing,
+            surplus,
+            hidden,
+        ));
+    }
+
+    for (position, written) in plain.iter().enumerate() {
+        let Some(written) = written else { continue };
+        let declared = plain_labels.get(position).copied().unwrap_or_default();
+        if declared != *written {
+            return Err(Error::unknown_struct_field(
+                *name,
+                (*written).to_string(),
+                plain_labels
+                    .iter()
+                    .filter(|l| !l.is_empty())
+                    .map(|l| l.to_string())
+                    .collect(),
+            ));
+        }
+    }
+
+    // One member per declared position, by the alignment walk. The plain members were counted against the telescope above, with the labels that report can name, so the refusals left are a hidden member's: one of the other mark than the field it meets, or one with no hidden field left in its run — written after the plain field the run precedes, or past the last of it.
+    let marks = written.iter().map(|(mark, ..)| *mark).collect::<Vec<_>>();
+    let fills = align(&slots, &marks).map_err(|misaligned| match misaligned {
+        Misaligned::Surplus { member } => {
+            Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2)
+        }
+        Misaligned::Mark { member, slot } => {
+            Error::hidden_member_out_of_order(marks[member], slots[slot], fields.hints()[slot])
+                .at_opt(written[member].2)
+        }
+        Misaligned::Missing | Misaligned::Extra { .. } => {
+            unreachable!("the plain members are counted before the members are aligned")
+        }
+    })?;
+
+    for (position, fill) in fills.iter().enumerate() {
+        let Some((mark, Some(label), at)) = fill.map(|member| written[member]) else {
+            continue;
+        };
+        if mark != Plicity::Explicit && labels[position] != label {
+            return Err(Error::unknown_struct_field(
+                *name,
+                format!("@{label}"),
+                written_fields(&labels, &slots),
+            )
+            .at_opt(at));
+        }
+    }
+
+    Ok(fills)
+}
+
+/// The slot of the fields `fields` holds, the fields of `name`, each of a struct pattern's `written` members reads, in the order they are written: the literal's rule ([`aligned_fields`]), where a field may be left out, since a pattern reads a value a literal builds whole. A positional plain member reads the next plain field, a labelled one the field its label names, held to that field's mark, and a hidden one written alone the next hidden field of its run, ahead of the plain field the run precedes. Each reads past the one before it, so the written order is the declared order.
+pub fn read_fields(
+    name: &Global,
+    fields: &Telescope<()>,
+    written: &[WrittenMember],
+) -> Result<Vec<usize>, Error> {
+    let slots = fields.marks();
+    let labels = fields.labels();
+    let plain_labels = || {
+        labels
+            .iter()
+            .zip(&slots)
+            .filter(|(label, mark)| **mark == Plicity::Explicit && !label.is_empty())
+            .map(|(label, _)| label.to_string())
+            .collect::<Vec<_>>()
+    };
+    let mut next = 0;
+    let mut read = Vec::with_capacity(written.len());
+    for (mark, label, at) in written {
+        let slot = match label {
+            Some(label) => {
+                if *mark == Plicity::Explicit
+                    && let Some(unmarked) = unmarked(name, &labels, &slots, label)
+                {
+                    return Err(unmarked.at_opt(*at));
+                }
+                let named = |slot: &usize| slots[*slot] == *mark && labels[*slot] == *label;
+                let spelled = match mark {
+                    Plicity::Explicit => label.to_string(),
+                    _ => format!("@{label}"),
+                };
+                match (next..slots.len()).find(named) {
+                    Some(slot) => slot,
+                    None if (0..next).any(|slot| named(&slot)) => {
+                        return Err(Error::field_out_of_order(
+                            *name,
+                            spelled,
+                            written_fields(&labels, &slots),
+                        )
+                        .at_opt(*at));
+                    }
+                    None => {
+                        let available = match mark {
+                            Plicity::Explicit => plain_labels(),
+                            _ => written_fields(&labels, &slots),
+                        };
+                        return Err(
+                            Error::unknown_struct_field(*name, spelled, available).at_opt(*at)
+                        );
+                    }
+                }
+            }
+            None if *mark == Plicity::Explicit => {
+                match (next..slots.len()).find(|slot| slots[*slot] == Plicity::Explicit) {
+                    Some(slot) => slot,
+                    None => {
+                        let count = |marks: &mut dyn Iterator<Item = Plicity>| {
+                            marks.filter(|mark| *mark == Plicity::Explicit).count()
+                        };
+                        let hidden = labels
+                            .iter()
+                            .zip(&slots)
+                            .filter(|(_, mark)| **mark == Plicity::Implicit)
+                            .map(|(label, _)| label.to_string())
+                            .collect();
+                        return Err(Error::wrong_number_of_fields(
+                            *name,
+                            count(&mut slots.iter().copied()),
+                            count(&mut written.iter().map(|(mark, ..)| *mark)),
+                            Vec::new(),
+                            Vec::new(),
+                            hidden,
+                        )
+                        .at_opt(*at));
+                    }
+                }
+            }
+            None => match slots.get(next) {
+                Some(slot) if slot == mark => next,
+                Some(Plicity::Explicit) | None => {
+                    return Err(Error::hidden_member_without_slot(*mark).at_opt(*at));
+                }
+                Some(slot) => {
+                    return Err(Error::hidden_member_out_of_order(
+                        *mark,
+                        *slot,
+                        fields.hints()[next],
+                    )
+                    .at_opt(*at));
+                }
+            },
+        };
+        read.push(slot);
+        next = slot + 1;
+    }
+
+    Ok(read)
 }
 
 /// The refusal of a plain entry `written` labels, where the label is a hidden field's of `name`: a hidden field is written under its mark wherever it is written, so one written as a plain field is that, and no unknown field.

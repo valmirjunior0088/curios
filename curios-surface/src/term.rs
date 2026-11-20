@@ -254,10 +254,10 @@ pub enum Pattern<D: Dialect = Program> {
     /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
     Binder(Binder<D>),
     Tuple(TuplePattern<D>),
-    /// A structure's fields under the name the structure is written by, kept as written for the lowering to resolve: the pattern is held to the structure its binder is.
+    /// A structure's fields under the name the structure is written by, kept as written for the lowering to resolve: the pattern is held to the structure its binder is. Each field stands under the mark it is written under, a hidden one under `@`, as a literal's entry does.
     Struct {
         head: Name,
-        fields: Vec<PatternField<D>>,
+        fields: Vec<(Plicity, PatternField<D>)>,
     },
 }
 
@@ -465,10 +465,10 @@ pub enum MatchPattern<D: Dialect = Program> {
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
     Tuple(Vec<MatchPatternField<D>>),
-    /// A struct pattern — the same labeled/punned/positional grammar as struct literals and the irrefutable [`Pattern::Struct`], not the positional constructor-call shape (structs have field labels; inductive constructors don't).
+    /// A struct pattern — the same labeled/positional grammar as struct literals and the irrefutable [`Pattern::Struct`], each field under the mark it is written under, not the positional constructor-call shape (structs have field labels; inductive constructors don't).
     Struct {
         head: Name,
-        fields: Vec<MatchPatternField<D>>,
+        fields: Vec<(Plicity, MatchPatternField<D>)>,
     },
     /// A `Bool` literal leaf: `true` or `false`.
     Bool(bool),

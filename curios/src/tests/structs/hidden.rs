@@ -1,6 +1,6 @@
 //! A structure's hidden field: declared under `@`, left out where the value is built and where it is read, and a fact wherever the value is in scope.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 // An invariant written once, on the data it constrains. The literal writes the plain field and the bound is discharged as a call's would be; a function over the value has the bound as a fact, with nothing passed or matched to get it.
 #[test]
@@ -38,7 +38,7 @@ fn a_hidden_field_is_inferred_or_written_under_its_mark() {
     assert_eq!(run(source), b"8");
 }
 
-// A hidden field takes no position where the value is read: `.0` and a pattern's positional field are the first plain field, and the hidden one is read by its label.
+// A hidden field takes no position where the value is read: `.0` and a pattern's positional field are the first plain field, and a pattern writes the hidden one under its mark, by its label or alone, as the literal does.
 #[test]
 fn a_hidden_field_takes_no_position_where_the_value_is_read() {
     let source = r#"
@@ -51,12 +51,67 @@ fn a_hidden_field_takes_no_position_where_the_value_is_read() {
         let count(@n: Nat, v: Vec(Nat)(n)) -> Nat = n;
         let read(s: Sized) -> Nat =
             let Sized { items } = s;
-            let Sized { items = again, len = n } = s;
-            count(items) + count(s.0) + count(again) + n;
+            let Sized { @len = n, items = again } = s;
+            let Sized { @m, _ } = s;
+            count(items) + count(s.0) + count(again) + n + m;
         print(Nat/to_str(read(Sized { items = Vec/cons(7, Vec/cons(8, Vec/nil())) })))
         "#;
 
-    assert_eq!(run(source), b"8");
+    assert_eq!(run(source), b"10");
+}
+
+// A pattern writes a hidden field under its mark wherever it stands — a `let`, a lambda's parameter, an arm — and one declared as its type alone is bound by its place in its run, a fact under the name the pattern gives it.
+#[test]
+fn a_pattern_writes_a_hidden_field_under_its_mark() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        use /std/Bool/{Holds};
+        struct Positive: pub Type { n: Nat, @Holds(0 < n) }
+        struct Sized: pub Type { @len: Nat, items: Nat }
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
+        let proved(p: Positive) -> Nat = let Positive { n, @ok } = p; halve(n, @ok);
+        let lambda: (Sized) -> Nat = (Sized { @len = l, items }) => l + items;
+        let arm(s: Sized) -> Nat = match s | Sized { @l, items } => l * items end;
+        print(Nat/to_str(proved(Positive { n = 8 }) * 100 + lambda(Sized { @len = 2, items = 3 }) * 10 + arm(Sized { @len = 2, items = 3 })))
+        "#;
+
+    assert_eq!(run(source), b"456");
+}
+
+// What `pattern`, written over a `Sized`, is refused with.
+fn refused_pattern(pattern: &str) -> String {
+    error(&fill!(
+        "use /std/{Nat, Str, print};
+        struct Sized: pub Type { @len: Nat, items: Nat }
+        let read(s: Sized) -> Nat = let ${pattern} = s; 0;
+        print(Nat/to_str(read(Sized { items = 1 })))",
+        pattern,
+    ))
+}
+
+// A pattern holds a hidden field to its mark as the literal does: its label written with no mark is that field unmarked.
+#[test]
+fn a_patterns_hidden_field_written_bare_is_refused_as_unmarked() {
+    let unmarked = refused_pattern("Sized { len = n, items }");
+
+    assert!(unmarked.contains("unmarked field"), "{unmarked}");
+    assert!(unmarked.contains("write it `@len = ...`"), "{unmarked}");
+}
+
+// A pattern reads its fields in their declared order, each past the one before it.
+#[test]
+fn a_patterns_field_written_out_of_order_is_refused() {
+    let reordered = refused_pattern("Sized { items, @len = n }");
+
+    assert!(reordered.contains("field out of order"), "{reordered}");
+}
+
+// A hidden field written alone is placed by its run, ahead of the plain field the run precedes, as a literal's is.
+#[test]
+fn a_patterns_hidden_field_past_its_run_has_no_slot() {
+    let late = refused_pattern("Sized { items, @n }");
+
+    assert!(late.contains("this `@` member has no slot"), "{late}");
 }
 
 // A bound nothing fills is refused where the value is built, as a field of its structure and by the proposition it states.

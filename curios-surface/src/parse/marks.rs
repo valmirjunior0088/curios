@@ -91,13 +91,6 @@ pub const TUPLE_FIELD_TAKES_NO_MARK: &[&str] = &[
     "a hidden field is a structure's, `struct S: Type { n: Nat, @Holds(0 < n) }`",
 ];
 
-/// What refuses a mark on a field of a struct pattern.
-pub const STRUCT_PATTERN_TAKES_NO_MARK: &[&str] = &[
-    "a struct pattern takes no mark",
-    "a hidden field takes no position",
-    "one that has a label is read by it, `label = binder`",
-];
-
 /// What refuses a `use` member in a constructor pattern.
 pub const PATTERN_TAKES_NO_USE: &[&str] = &[
     "a pattern takes no `use` member",

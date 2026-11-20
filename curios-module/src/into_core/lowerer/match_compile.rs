@@ -279,7 +279,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     Ok(structure) => curios_core::Mention::Declaration(structure),
                     Err(unbound) => curios_core::Mention::Local(unbound),
                 },
-                fields: self.fields(fields, binders)?,
+                fields: fields
+                    .iter()
+                    .map(|(plicity, field)| {
+                        let (label, pattern) = self.field(field, binders)?;
+                        Ok((*plicity, label, pattern))
+                    })
+                    .collect::<Result<_, Error>>()?,
             },
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
             MatchPattern::Char(character) => {
@@ -349,13 +355,20 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ) -> Result<Vec<(Option<curios_core::FieldLabel>, curios_core::Pattern)>, Error> {
         fields
             .iter()
-            .map(|field| {
-                Ok((
-                    field.label.as_ref().map(|label| self.field_label(label)),
-                    self.pattern(&field.value, binders)?,
-                ))
-            })
+            .map(|field| self.field(field, binders))
             .collect()
+    }
+
+    /// One field of a tuple's or a structure's pattern: the label it is written with, and its pattern.
+    fn field(
+        &self,
+        field: &MatchPatternField,
+        binders: &mut Vec<Binder>,
+    ) -> Result<(Option<curios_core::FieldLabel>, curios_core::Pattern), Error> {
+        Ok((
+            field.label.as_ref().map(|label| self.field_label(label)),
+            self.pattern(&field.value, binders)?,
+        ))
     }
 }
 
@@ -393,8 +406,9 @@ fn placed(error: Error, span: Option<&Span>) -> Error {
 fn takes_apart(pattern: &MatchPattern) -> bool {
     match pattern {
         MatchPattern::Binder(_) => false,
-        MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => {
-            fields.iter().any(|field| takes_apart(&field.value))
+        MatchPattern::Tuple(fields) => fields.iter().any(|field| takes_apart(&field.value)),
+        MatchPattern::Struct { fields, .. } => {
+            fields.iter().any(|(_, field)| takes_apart(&field.value))
         }
         MatchPattern::Variant { .. }
         | MatchPattern::Bool(_)

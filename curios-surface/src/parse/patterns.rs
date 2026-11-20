@@ -1,11 +1,11 @@
 use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
-        PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
-        member_ends, members, parse_binder_label, parse_block_str, parse_keyword, parse_label,
-        parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
-        parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw,
-        parse_written_char, parse_written_word, refused, require_space, trimmed, unbindable,
+        PATTERN_TAKES_NO_USE, Read, begins_a_name, digit_led, member_ends, members,
+        parse_binder_label, parse_block_str, parse_keyword, parse_label, parse_line_str,
+        parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_number,
+        parse_place, parse_qualified_name, parse_word_raw, parse_written_char, parse_written_word,
+        refused, require_space, trimmed, unbindable,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
@@ -173,19 +173,19 @@ const UNCLOSED_STRUCT_PATTERN: &[&str] = &[
     "a `let` reads `Name { … }` as its binder",
 ];
 
-// A struct pattern's field: [`parse_pattern_field`], under no mark. A hidden field takes no position in a pattern, so a mark there has nothing to claim, and is refused by that rule where `committed` says the text is a struct pattern's alone.
-fn parse_struct_pattern_field<'a, D: Grammar>(committed: bool) -> impl Parser<'a, PatternField<D>> {
+// A struct pattern's field: [`parse_pattern_field`] under the mark it is written under, a hidden field under `@`, as a literal's entry is. `use` is refused by its rule, where `committed` says the text is a struct pattern's alone: a field is plain or `@`.
+fn parse_struct_pattern_field<'a, D: Grammar>(
+    committed: bool,
+) -> impl Parser<'a, (Plicity, PatternField<D>)> {
     move |state: ParserState<'a>| {
         mark()
             .and(parse_mark)
             .flat_map(move |(start, plicity)| match (plicity, committed) {
-                (Plicity::Explicit, _) => parse_pattern_field::<D>.boxed(),
-                (Plicity::Implicit | Plicity::Witness, true) => {
-                    commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK)).boxed()
-                }
-                (Plicity::Implicit | Plicity::Witness, false) => {
-                    fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK).boxed()
-                }
+                (Plicity::Explicit | Plicity::Implicit, _) => parse_pattern_field::<D>
+                    .map(move |field| (plicity, field))
+                    .boxed(),
+                (Plicity::Witness, true) => commit(fail_from(&start, PATTERN_TAKES_NO_USE)).boxed(),
+                (Plicity::Witness, false) => fail_from(&start, PATTERN_TAKES_NO_USE).boxed(),
             })
             .parse(state)
     }
@@ -303,19 +303,19 @@ pub fn parse_tuple_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// A struct match pattern `Name { p1, p2, … }` / `Name { label = p, … }` — the `MatchPattern` counterpart of `parse_struct_pattern`, mirroring struct literals rather than the positional constructor-call shape (structs have field labels; inductive constructors don't — see `MatchPattern`).
+// A struct match pattern `Name { p1, p2, … }` / `Name { label = p, @hidden = p, … }` — the `MatchPattern` counterpart of `parse_struct_pattern`, mirroring struct literals rather than the positional constructor-call shape (structs have field labels; inductive constructors don't — see `MatchPattern`).
 pub fn parse_struct_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    // Nothing but a pattern is read in an arm, so a marked field is refused by its rule where it stands, as a constructor pattern's `use` is.
+    // Each field under the mark it is written under, a hidden one under `@`. Nothing but a pattern is read in an arm, so `use` is refused by its rule where it stands, as a constructor pattern's is.
     let field = || {
         mark()
             .and(parse_mark)
             .flat_map(|(start, plicity)| match plicity {
-                Plicity::Explicit => parse_match_pattern_field::<D>.boxed(),
-                Plicity::Implicit | Plicity::Witness => {
-                    commit(fail_from(&start, STRUCT_PATTERN_TAKES_NO_MARK)).boxed()
-                }
+                Plicity::Explicit | Plicity::Implicit => parse_match_pattern_field::<D>
+                    .map(move |field| (plicity, field))
+                    .boxed(),
+                Plicity::Witness => commit(fail_from(&start, PATTERN_TAKES_NO_USE)).boxed(),
             })
     };
 

@@ -377,7 +377,9 @@ impl<D: Layout> TreePrinter<D> {
                     "{",
                     fields
                         .into_iter()
-                        .map(|field| self.pattern_field(field))
+                        .map(|(plicity, field)| {
+                            flat([print_plicity(plicity), self.pattern_field(field)])
+                        })
                         .collect(),
                     "}",
                 ),
@@ -486,7 +488,9 @@ impl<D: Layout> TreePrinter<D> {
                     "{",
                     fields
                         .into_iter()
-                        .map(|field| self.match_pattern_field(field))
+                        .map(|(plicity, field)| {
+                            flat([print_plicity(plicity), self.match_pattern_field(field)])
+                        })
                         .collect(),
                     "}",
                 ),

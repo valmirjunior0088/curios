@@ -899,6 +899,12 @@ pub enum Error {
         name: Global,
         label: String,
     },
+    /// A struct pattern reads a field it names before a field it already read: the fields as the structure orders them, a hidden one under its mark.
+    FieldOutOfOrder {
+        name: Global,
+        label: String,
+        order: Vec<String>,
+    },
     /// A nominal type whose declaration is absent from the registry.
     UnknownDeclaration {
         name: Global,
@@ -1244,6 +1250,7 @@ variants!(Error {
     StructArityMismatch,
     WrongNumberOfFields,
     HiddenFieldUnmarked,
+    FieldOutOfOrder,
     UnknownDeclaration,
     UnknownStructField,
     UseEntryOutsideConcept,
@@ -1726,6 +1733,10 @@ impl Error {
 
     pub fn hidden_field_unmarked(name: Global, label: String) -> Self {
         Self::HiddenFieldUnmarked { name, label }
+    }
+
+    pub fn field_out_of_order(name: Global, label: String, order: Vec<String>) -> Self {
+        Self::FieldOutOfOrder { name, label, order }
     }
 
     /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.

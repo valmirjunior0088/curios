@@ -1194,6 +1194,15 @@ impl Displayed<'_> {
                 f.stating("a hidden field is written under `@`, or left out");
                 f.stating(format_args!("write it `@{label} = ...`"));
             }
+            Error::FieldOutOfOrder { name, label, order } => {
+                f.text("field out of order");
+                f.stating(format_args!("`{label}` is repeated or out of place"));
+                f.stating(format_args!(
+                    "a pattern reads the fields of `{}` in their order",
+                    spelling.symbol(name)
+                ));
+                f.stating(format_args!("order: {}", codes(order)));
+            }
             Error::UnknownDeclaration { name } => {
                 f.text("unknown declaration");
                 f.stating(format_args!("`{}` is not declared", spelling.symbol(name)));

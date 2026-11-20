@@ -442,10 +442,13 @@ pub let total(value: {Nat, {Nat, Nat}}, point: Point) -> Nat =
 
 Such a pattern projects, and matches nothing at run time. A structure pattern names the structure its binder is; a head naming another structure, or nothing, is refused. A tuple pattern writes every field of its tuple, `_` for one it does not read: `(a, b)` takes apart a pair, and a triple is refused. `()`, which writes none, is the pattern of `{}`, as `()` is its value: `let () = print("hi")!;`.
 
-- An unlabeled field is matched by position among the plain fields, whose order is part of the type.
-- A field written `label = pattern` projects that label, holding the position it is written at, as a labeled entry of a literal does.
-- A hidden field — a structure's `@` field, a concept's superclass field — takes no position, and a pattern's field takes no mark, so it is read by its label, after the fields read by position: over `struct Sized: Type { @len: Nat, items: Vec(Nat, len) }`, `Sized { items, len = n }` binds both.
-- A pattern over a concept value writes its methods alone.
+A structure pattern writes its fields where its literal would write them, and may leave any of them out: it reads a value its literal builds whole.
+
+- An unlabeled field reads the next plain field, whose order is part of the type.
+- A field written `label = pattern` reads the field its label names, as a labeled entry of a literal does.
+- A hidden field is written under its mark, as a literal's entry is: `@label = pattern`, or `@pattern` alone for the next hidden field of its run, ahead of the plain field the run precedes. A hidden field's label written with no mark is refused. Over `struct Sized: Type { @len: Nat, items: Vec(Nat, len) }`, `Sized { @len = n, items }` and `Sized { @n, items }` bind both.
+- Each field reads past the one before it, so the fields are written in their declared order, and one written out of it is refused.
+- A pattern over a concept value writes its methods alone; a superclass field has no binder.
 
 `Point { x, y }` is the positional form, its fields binders named after the fields. Parentheses group a pattern without changing it: `((x, y))` is `(x, y)`.
 
@@ -1091,7 +1094,7 @@ The outer `pub` exports the type's name. The inner one exports building it and p
 
 Parameters are written as an inductive's are: plain, `@`, or a premise `use Concept(args)` ([A type declared under a premise](#a-type-declared-under-a-premise)).
 
-A field is plain or hidden. A hidden field is written under `@`, as `@label: type` or its type alone, and takes no position among the fields an author writes: a literal leaves it out, a projection `.N` and a pattern's positional fields count only the plain ones, and it is read by its label. Why: [A hidden member takes no position](design/theory/a-hidden-member-takes-no-position.md).
+A field is plain or hidden. A hidden field is written under `@`, as `@label: type` or its type alone, and takes no position among the plain fields an author writes: a literal and a pattern leave it out or write it under its mark, `@label = …` or alone from the first of its run, a projection `.N` and a pattern's positional fields count only the plain ones, and a projection reads it by its label. Why: [A hidden member takes no position](design/theory/a-hidden-member-takes-no-position.md).
 
 ```crs
 use /std/{Nat, Vec};

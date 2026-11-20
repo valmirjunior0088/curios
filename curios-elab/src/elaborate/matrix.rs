@@ -17,7 +17,7 @@
 use {
     super::{
         BoolSplit, Expectation, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit,
-        SwitchSplit, elaborate, payload_fills, realize,
+        SwitchSplit, elaborate, payload_fills, read_fields, realize,
     },
     crate::{
         Context, Error, HeldFrames, Resolved, WrittenLiteral, check, expect_as, pending,
@@ -25,7 +25,7 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Elements, Ending, FieldLabel, Free, Guard, InductArm, Intrinsic, IntrinsicHead,
+        Arm, Atom, Elements, Ending, Free, Global, Guard, InductArm, Intrinsic, IntrinsicHead,
         Keyed, Keys, Label, Matrix, Mention, Nat, NumLit, Numeral, Pattern, Row, Slot, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
     },
@@ -415,8 +415,8 @@ enum Seen {
     Successor(usize),
     /// A constructor over its plain payloads.
     Variant(String, Vec<usize>),
-    /// A tuple, or a struct under its head, over its fields.
-    Fields(Option<String>, Vec<(Option<String>, usize)>),
+    /// A tuple, or a struct under its head, over its fields, each behind what it is written behind: its mark and its label, or nothing.
+    Fields(Option<String>, Vec<(String, usize)>),
     /// An empty sequence.
     Empty(Sequence),
     /// A nonempty sequence over its first element and what follows it.
@@ -802,13 +802,10 @@ impl<'m> Compiler<'m> {
 
     /// The value at `place` as a pattern.
     fn value(&self, place: usize) -> String {
-        let fields = |fields: &[(Option<String>, usize)]| {
+        let fields = |fields: &[(String, usize)]| {
             fields
                 .iter()
-                .map(|(label, field)| match label {
-                    Some(label) => format!("{label} = {}", self.value(*field)),
-                    None => self.value(*field),
-                })
+                .map(|(written, field)| format!("{written}{}", self.value(*field)))
                 .collect::<Vec<_>>()
                 .join(", ")
         };
@@ -902,7 +899,10 @@ impl<'m> Compiler<'m> {
             let (first, later) = (&self.row(line.row).pattern, &self.row(other.row).pattern);
             // Each alternative of an arm is typed under its own cases, so the one a value both match takes would be decided by the order they are written in.
             if self.arm_of[line.row] == self.arm_of[other.row] {
-                let (case, general) = match (instance(first, later), instance(later, first)) {
+                let (case, general) = match (
+                    instance(context, first, later),
+                    instance(context, later, first),
+                ) {
                     (true, _) => (Some(line.row), other.row),
                     (_, true) => (Some(other.row), line.row),
                     _ => (None, other.row),
@@ -917,7 +917,7 @@ impl<'m> Compiler<'m> {
                 .at_opt(self.row(case.unwrap_or(other.row)).body.extent()));
             }
             // An arm written after one it is a case of is no second claim on the value: the first takes it, and the later one is reached by nothing here. Guards order no pattern, so two that meet are refused whether or not the first is guarded.
-            if !instance(first, later) && !instance(later, first) {
+            if !instance(context, first, later) && !instance(context, later, first) {
                 return Err(Error::MatrixArmsMeet {
                     value: self.value(0),
                     first: self.written(line.row),
@@ -926,7 +926,7 @@ impl<'m> Compiler<'m> {
                 .at_opt(self.row(other.row).body.extent()));
             }
             // A guard orders no pattern: a guarded arm before one that is a case of it would hand the case on where its guards fail, where with no guard the case would be reached by nothing — so it is held to the order an arm with no guard is.
-            if line.guarded && !instance(first, later) {
+            if line.guarded && !instance(context, first, later) {
                 return Err(Error::MatrixGuardedBeforeCase {
                     general: self.written(line.row),
                     case: self.written(other.row),
@@ -952,7 +952,7 @@ impl<'m> Compiler<'m> {
             }
             // Reached at one case alone, it is that case's arm, read here under the case's facts.
             let row = line.row;
-            let body = self.unfailing(context, row);
+            let body = self.unfailing(context, row)?;
 
             return elaborate(context, &body, mode)
                 .map_err(|error| self.in_alternative(row, error));
@@ -1117,7 +1117,7 @@ impl<'m> Compiler<'m> {
             return Ok((rebuilt, type_));
         }
 
-        let body = self.unfailing(context, fallthrough.row);
+        let body = self.unfailing(context, fallthrough.row)?;
         let body = check(context, &body, type_.clone())?;
         if fallthrough.reached == 1 {
             return Ok((rebuilt.substitute(&[(fallthrough.stand_in, body)]), type_));
@@ -1136,14 +1136,14 @@ impl<'m> Compiler<'m> {
     }
 
     /// The row that cannot fail as a term over the scrutinee: its body under each name its pattern writes, bound to the part of the scrutinee it stands at.
-    fn unfailing(&mut self, context: &mut Context, row: usize) -> Term {
+    fn unfailing(&mut self, context: &mut Context, row: usize) -> Result<Term, Error> {
         let head = &self.matrix.head;
         let pattern = &self.row(row).pattern;
         let mut line = self.line(row);
         line.cells.clear();
-        self.unfailing_parts(context, &mut line, pattern, 0, head.clone());
+        self.unfailing_parts(context, &mut line, pattern, 0, head.clone())?;
 
-        self.body_of(context, line)
+        Ok(self.body_of(context, line))
     }
 
     /// Bind each name `pattern`, which takes nothing apart, writes to the part of `value` it stands at.
@@ -1154,19 +1154,21 @@ impl<'m> Compiler<'m> {
         pattern: &Pattern,
         mut place: usize,
         value: Term,
-    ) {
+    ) -> Result<(), Error> {
         match pattern {
             Pattern::Binder => self.bind(context, line, place, value),
             Pattern::Wildcard(_) => {}
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                for (index, (label, field)) in fields.iter().enumerate() {
-                    let projected = projection(&value, label.as_deref(), index);
-                    self.unfailing_parts(context, line, field, place, projected);
+            Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                for (index, (read, _, field)) in parts(context, pattern)?.into_iter().enumerate() {
+                    let projected = read.of(&value, index);
+                    self.unfailing_parts(context, line, field, place, projected)?;
                     place += field.binders();
                 }
             }
             _ => unreachable!("the row that cannot fail takes nothing apart"),
         }
+
+        Ok(())
     }
 
     /// The refusal of the arms' default where its name is a constructor of the family the outermost dispatch takes apart, the scrutinee itself ([`Error::MatrixDefaultNamesAConstructor`]): `| none =>` after `| some(x) =>` binds what the arms leave as `none`, where the case was meant. A literal's dispatch names no constructor, so over one any name stands; and a default over a tuple or a struct binds the whole, so a constructor of a field's family is no case it could mean.
@@ -1916,15 +1918,14 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         let rest = columns;
 
-        let written = |shape: Shape<'m>| match shape {
-            Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => fields,
+        let written = |context: &Context, shape: Shape<'m>| match shape {
+            Shape::Pattern(pattern @ (Pattern::Tuple(_) | Pattern::Struct { .. })) => {
+                parts(context, pattern)
+            }
             _ => unreachable!("every row that takes the column apart writes a tuple or a struct"),
         };
-        let labelled = |fields: &'m [(Option<FieldLabel>, Pattern)]| {
-            fields
-                .iter()
-                .map(|(label, _)| label.as_deref())
-                .collect::<Vec<_>>()
+        let reads = |parts: &[(Read<'m>, String, &'m Pattern)]| {
+            parts.iter().map(|(read, ..)| *read).collect::<Vec<_>>()
         };
         let shape = lines
             .iter()
@@ -1938,7 +1939,6 @@ impl<'m> Compiler<'m> {
             })
             .map(|(shape, _)| shape)
             .expect("a column is flattened for a row that writes its shape");
-        let canonical = labelled(written(shape));
         let head = match shape {
             Shape::Pattern(Pattern::Struct {
                 head, structure, ..
@@ -1954,6 +1954,9 @@ impl<'m> Compiler<'m> {
             }
             _ => None,
         };
+        // Every row that takes the column apart reads its fields as this one does, each where the literal would write it.
+        let first = written(context, shape)?;
+        let canonical = reads(&first);
 
         let mut flattened = Vec::with_capacity(lines.len());
         for mut line in lines {
@@ -1965,26 +1968,27 @@ impl<'m> Compiler<'m> {
                 }
                 Some((Shape::Pattern(Pattern::Wildcard(_)), _)) => vec![None; canonical.len()],
                 Some((shape, mut place)) => {
-                    let fields = written(shape);
-                    if labelled(fields) != canonical {
+                    let parts = written(context, shape)?;
+                    if reads(&parts) != canonical {
                         return Err(Error::MatrixInconsistentShape);
                     }
                     // What each label names, at the row's own place for it.
                     if let Some(Pattern::Struct {
                         structure: Mention::Declaration(structure),
+                        fields,
                         ..
                     }) = shape.pattern()
                     {
-                        for (label, _) in fields {
+                        for (_, label, _) in fields {
                             if let Some(label) = label {
                                 context.resolved_label(label, *structure);
                             }
                         }
                     }
 
-                    fields
+                    parts
                         .iter()
-                        .map(|(_, field)| {
+                        .map(|(_, _, field)| {
                             let cell = Some((Shape::Pattern(field), place));
                             place += field.binders();
 
@@ -2004,17 +2008,17 @@ impl<'m> Compiler<'m> {
         let mut projections = canonical
             .iter()
             .enumerate()
-            .map(|(index, label)| Column {
-                term: projection(&column.term, *label, index),
+            .map(|(index, read)| Column {
+                term: read.of(&column.term, index),
                 seen: places[index],
             })
             .collect::<Vec<_>>();
         projections.extend(rest);
         self.seen[column.seen] = Seen::Fields(
             head,
-            canonical
-                .iter()
-                .map(|label| label.map(str::to_string))
+            first
+                .into_iter()
+                .map(|(_, spelled, _)| spelled)
                 .zip(places)
                 .collect(),
         );
@@ -2230,14 +2234,15 @@ impl<'m> Compiler<'m> {
 
                 return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
-            Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => {
-                let mut cells = Vec::with_capacity(fields.len() + line.cells.len());
-                let mut projections = Vec::with_capacity(fields.len() + columns.len());
+            Shape::Pattern(pattern @ (Pattern::Tuple(_) | Pattern::Struct { .. })) => {
+                let parts = parts(context, pattern)?;
+                let mut cells = Vec::with_capacity(parts.len() + line.cells.len());
+                let mut projections = Vec::with_capacity(parts.len() + columns.len());
                 let mut place = place;
-                for (index, (label, field)) in fields.iter().enumerate() {
+                for (index, (read, _, field)) in parts.into_iter().enumerate() {
                     cells.push(Some((Shape::Pattern(field), place)));
                     place += field.binders();
-                    projections.push(projection(&column, label.as_deref(), index));
+                    projections.push(read.of(&column, index));
                 }
                 cells.append(&mut line.cells);
                 line.cells = cells;
@@ -2746,6 +2751,77 @@ fn held_to_arity(context: &mut Context, column: &Term, written: usize) -> Result
 /// The field of `value` a pattern reads: by its label where it is written with one, and by its position.
 ///
 /// A tuple literal's field is the term written there, so a match over `(a, b)` reads `a` and `b` themselves: an arm that states a case of one refines it as an arm of a match on it alone does, where a projection of the literal is a term no variable stands for.
+/// How a field a row's tuple or struct pattern writes is read out of a value of its shape: a tuple's by the label it is written with, or its place among the fields written, and a structure's by the slot of its fields it reads.
+#[derive(Clone, Copy, PartialEq)]
+enum Read<'m> {
+    Tuple(Option<&'m str>),
+    Slot(Global, usize),
+}
+
+impl Read<'_> {
+    /// The field this reads out of `value`, at `index` among the fields written.
+    fn of(self, value: &Term, index: usize) -> Term {
+        match self {
+            Read::Tuple(label) => projection(value, label, index),
+            Read::Slot(structure, slot) => Term::proj_struct(value.clone(), structure, slot),
+        }
+    }
+}
+
+/// Each field the tuple or struct `pattern` writes, beside how it is read out of a value of its shape and how a report spells it: a tuple's by its label or its place, and a structure's by the slot of its fields it reads ([`read_fields`]), or as written where its head names no structure, which [`held_to_structure`] refuses where its column is read.
+fn parts<'m>(
+    context: &Context,
+    pattern: &'m Pattern,
+) -> Result<Vec<(Read<'m>, String, &'m Pattern)>, Error> {
+    let spelled = |mark: Plicity, label: Option<&str>| match (mark, label) {
+        (Plicity::Explicit, None) => String::new(),
+        (Plicity::Explicit, Some(label)) => format!("{label} = "),
+        (_, None) => "@".to_string(),
+        (_, Some(label)) => format!("@{label} = "),
+    };
+    match pattern {
+        Pattern::Tuple(fields) => Ok(fields
+            .iter()
+            .map(|(label, field)| {
+                let label = label.as_deref();
+                (Read::Tuple(label), spelled(Plicity::Explicit, label), field)
+            })
+            .collect()),
+        Pattern::Struct {
+            structure, fields, ..
+        } => {
+            let declared = match structure {
+                Mention::Declaration(name) => context
+                    .struct_decl(name)
+                    .map(|declaration| (*name, declaration)),
+                Mention::Local(_) => None,
+            };
+            let reads = match declared {
+                Some((name, declaration)) => {
+                    let written = fields
+                        .iter()
+                        .map(|(mark, label, _)| (*mark, label.as_deref(), None))
+                        .collect::<Vec<_>>();
+                    read_fields(&name, declaration.fields(), &written)?
+                        .into_iter()
+                        .map(|slot| Read::Slot(name, slot))
+                        .collect()
+                }
+                None => fields
+                    .iter()
+                    .map(|(_, label, _)| Read::Tuple(label.as_deref()))
+                    .collect::<Vec<_>>(),
+            };
+            Ok(reads
+                .into_iter()
+                .zip(fields)
+                .map(|(read, (mark, label, field))| (read, spelled(*mark, label.as_deref()), field))
+                .collect())
+        }
+        _ => unreachable!("only a tuple or a struct is read by its fields"),
+    }
+}
+
 fn projection(value: &Term, label: Option<&str>, index: usize) -> Term {
     if let Subterm::Tuple(Tuple { fields, names }) = &**value {
         let at = match label {
@@ -2793,8 +2869,9 @@ fn refutations(pattern: &Pattern) -> usize {
         Pattern::Variant { args, .. } => {
             1 + args.iter().map(|(_, arg)| refutations(arg)).sum::<usize>()
         }
-        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-            fields.iter().map(|(_, field)| refutations(field)).sum()
+        Pattern::Tuple(fields) => fields.iter().map(|(_, field)| refutations(field)).sum(),
+        Pattern::Struct { fields, .. } => {
+            fields.iter().map(|(_, _, field)| refutations(field)).sum()
         }
         Pattern::Bool(_) | Pattern::Succ { .. } | Pattern::Literal(_) => 1,
         // A split for each byte, and one for the end.
@@ -2841,7 +2918,7 @@ fn payload_places(
 }
 
 /// Whether every value `this` matches is one `that` matches: `this` is a case of `that`. Two rows that reach one leaf agree wherever both write a case, so what is asked is whether `that` writes a case anywhere `this` writes a binder.
-fn instance(this: &Pattern, that: &Pattern) -> bool {
+fn instance(context: &Context, this: &Pattern, that: &Pattern) -> bool {
     match (this, that) {
         (_, Pattern::Binder | Pattern::Wildcard(_)) => true,
         (Pattern::Binder | Pattern::Wildcard(_), that) => refutations(that) == 0,
@@ -2858,15 +2935,27 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
 
             tag == other_tag
                 && payload_places(others).all(|(place, other)| match written.get(&place) {
-                    Some(pattern) => instance(pattern, other),
-                    None => instance(&Pattern::WILDCARD, other),
+                    Some(pattern) => instance(context, pattern, other),
+                    None => instance(context, &Pattern::WILDCARD, other),
                 })
         }
-        (Pattern::Tuple(fields), Pattern::Tuple(others))
-        | (Pattern::Struct { fields, .. }, Pattern::Struct { fields: others, .. }) => fields
+        (Pattern::Tuple(fields), Pattern::Tuple(others)) => fields
             .iter()
             .zip(others)
-            .all(|((_, field), (_, other))| instance(field, other)),
+            .all(|((_, field), (_, other))| instance(context, field, other)),
+        // A field one row reads and another leaves out is a binder where it is left out: the two read the value's fields by slot.
+        (Pattern::Struct { .. }, Pattern::Struct { .. }) => {
+            let (Ok(these), Ok(those)) = (parts(context, this), parts(context, that)) else {
+                return false;
+            };
+            those.iter().all(|(read, _, other)| {
+                let field = these
+                    .iter()
+                    .find(|(this, ..)| this == read)
+                    .map_or(&Pattern::WILDCARD, |(_, _, field)| *field);
+                instance(context, field, other)
+            })
+        }
         (Pattern::Tuple(_) | Pattern::Struct { .. }, _) => false,
         (
             Pattern::List(elements) | Pattern::Bytes(elements),
@@ -2877,7 +2966,7 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
             loop {
                 match (these.next(), those.next()) {
                     (Some(element), Some(other)) => {
-                        if !instance(element, other) {
+                        if !instance(context, element, other) {
                             return false;
                         }
                     }

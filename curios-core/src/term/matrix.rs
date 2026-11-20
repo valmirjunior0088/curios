@@ -140,12 +140,12 @@ pub enum Pattern {
     },
     /// A tuple pattern, each field under the label it is written with.
     Tuple(#[archived_omit_bounds] Vec<(Option<FieldLabel>, Pattern)>),
-    /// A struct pattern: the head it is written with, which a report prints, and the structure that head resolved to, or the binder it lowered to where it names none.
+    /// A struct pattern: the head it is written with, which a report prints, the structure that head resolved to, or the binder it lowered to where it names none, and each field under the mark and the label it is written with.
     Struct {
         head: String,
         structure: Mention,
         #[archived_omit_bounds]
-        fields: Vec<(Option<FieldLabel>, Pattern)>,
+        fields: Vec<(Plicity, Option<FieldLabel>, Pattern)>,
     },
     Bool(bool),
     /// `predecessor + step`, `step` successors over the predecessor: one at least, since `p + 0` is the binder `p`, which the parser and Core text's reader refuse to spell this way.
@@ -266,8 +266,9 @@ impl Pattern {
             Pattern::Binder => 1,
             Pattern::Wildcard(_) => 0,
             Pattern::Variant { args, .. } => args.iter().map(|(_, arg)| arg.binders()).sum(),
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                fields.iter().map(|(_, field)| field.binders()).sum()
+            Pattern::Tuple(fields) => fields.iter().map(|(_, field)| field.binders()).sum(),
+            Pattern::Struct { fields, .. } => {
+                fields.iter().map(|(_, _, field)| field.binders()).sum()
             }
             Pattern::Bool(_) | Pattern::Literal(_) | Pattern::Str(_) => 0,
             Pattern::Succ { predecessor, .. } => predecessor.binders(),
