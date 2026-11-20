@@ -3,10 +3,13 @@
 //! The files are fetched once and kept in `.artifacts/<version>/` beside this crate — outside Cargo's target tree, so `cargo clean` leaves them — and each is checked against its pinned SHA-256 in memory, whether it was downloaded or placed there by hand for an offline build.
 //!
 //! **The library's enums are the classes.** A run of one class is written as the variant it is, named from the database's own spelling (`Regional_Indicator` is `RegionalIndicator`, `CR` is `Cr`), so a class the database names and an enum lacks is refused where the library compiles, and this script holds no list of classes. The class a scalar no line names is the one the file's `@missing` line gives the whole range, and its runs are left out.
+//!
+//! **A mapping is written as records.** Each scalar a mapping changes is read off the database's rows, and the scalars are gathered in order into records, each covering scalars a step of one or two apart that become the same scalars moved as far, as `README.md` decides.
 
 use {
     sha2::{Digest, Sha256},
     std::{
+        collections::BTreeMap,
         env,
         fmt::Write,
         fs,
@@ -19,7 +22,7 @@ use {
 const VERSION: &str = "18.0.0";
 
 /// Every file read, by its path under the version's `ucd/` directory, with its SHA-256.
-const FILES: [(&str, &str); 7] = [
+const FILES: [(&str, &str); 8] = [
     (
         "EastAsianWidth.txt",
         "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
@@ -47,6 +50,10 @@ const FILES: [(&str, &str); 7] = [
     (
         "PropList.txt",
         "f438f532e8737bb8a2702126cdf9c4af5e357c58c7acf9d9eb2fc7c1a1d955d6",
+    ),
+    (
+        "SpecialCasing.txt",
+        "8538dea57c184f1ef3783885ea79677b10f6efa06423717157e63712f14d1ad2",
     ),
 ];
 
@@ -318,6 +325,116 @@ fn general_category(text: &str, categories: &[&str]) -> Vec<usize> {
     each
 }
 
+/// Each scalar a mapping changes, with the one to three scalars it becomes.
+type Mapping = BTreeMap<usize, Vec<usize>>;
+
+/// The simple mapping `UnicodeData.txt` states in its field `field`: each scalar the field names another for, to that one.
+fn simple(text: &str, field: usize) -> Mapping {
+    text.lines()
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split(';').collect();
+            (!fields[field].is_empty())
+                .then(|| (scalars(fields[0]).0, vec![scalars(fields[field]).0]))
+        })
+        .collect()
+}
+
+/// The full mapping: `simple` with the unconditional rows of `SpecialCasing.txt`'s column `column` over it. A row conditioned on a context or a language is left out, and a row mapping a scalar to itself takes it out of the mapping.
+fn full(mut simple: Mapping, special: &str, column: usize) -> Mapping {
+    for line in special.lines() {
+        let content = line.split('#').next().unwrap_or("").trim();
+        let fields: Vec<&str> = content.split(';').map(str::trim).collect();
+        if content.is_empty() || fields.get(4).is_some_and(|condition| !condition.is_empty()) {
+            continue;
+        }
+        let scalar = scalars(fields[0]).0;
+        let targets: Vec<usize> = fields[column]
+            .split_whitespace()
+            .map(|target| scalars(target).0)
+            .collect();
+        match targets == [scalar] {
+            true => simple.remove(&scalar),
+            false => simple.insert(scalar, targets),
+        };
+    }
+
+    simple
+}
+
+/// One record of a mapping: the scalars `first`, `first + step`, … up to `last` each become `targets`, the first of them moved as far as the scalar is from `first`.
+struct Record {
+    first: usize,
+    last: usize,
+    step: usize,
+    targets: Vec<usize>,
+}
+
+/// A mapping as the records a scan in order gathers it into: a scalar joins the record before it where it lies one or two past its last, at the record's step, and becomes what the record's scalars become moved as far.
+fn records(mapping: &Mapping) -> Vec<Record> {
+    let mut records: Vec<Record> = Vec::new();
+
+    for (&scalar, targets) in mapping {
+        if let Some(record) = records.last_mut() {
+            let gap = scalar - record.last;
+            let step = match record.first == record.last {
+                true => gap,
+                false => record.step,
+            };
+            let moved = targets[0] + record.first == record.targets[0] + scalar;
+            if gap == step && gap <= 2 && moved && targets[1..] == record.targets[1..] {
+                record.last = scalar;
+                record.step = step;
+                continue;
+            }
+        }
+        records.push(Record {
+            first: scalar,
+            last: scalar,
+            step: 1,
+            targets: targets.clone(),
+        });
+    }
+
+    records
+}
+
+/// A mapping as the Rust it is written to: its records, and, for a crate testing a reading of them, each scalar it changes with what the database's rows map it to.
+fn mapping_table(out: &mut String, constant: &str, property: &str, mapping: &Mapping) {
+    let spelled = |targets: &[usize]| {
+        targets
+            .iter()
+            .map(|target| format!("0x{target:X}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
+    let _ = writeln!(
+        out,
+        "/// Each record of the `{property}` mapping: the scalars `first`, `first + step`, … up to `last`, and what each becomes, the first target moved as far as the scalar is from `first`.\npub(crate) static {constant}: &[(u32, u32, u8, &[u32])] = &["
+    );
+    for record in records(mapping) {
+        let _ = writeln!(
+            out,
+            "    (0x{:X}, 0x{:X}, {}, &[{}]),",
+            record.first,
+            record.last,
+            record.step,
+            spelled(&record.targets)
+        );
+    }
+    out.push_str("];\n\n");
+
+    let _ = writeln!(
+        out,
+        "/// Each scalar the `{property}` mapping changes, with what the database's rows map it to.\n#[cfg(any(test, feature = \"test-support\"))]\npub(crate) static {constant}_ROWS: &[(u32, &[u32])] = &["
+    );
+    for (scalar, targets) in mapping {
+        let _ = writeln!(out, "    (0x{scalar:X}, &[{}]),", spelled(targets));
+    }
+    out.push_str("];\n\n");
+}
+
 /// Every case of the conformance file: the clusters a run of scalars segments into.
 fn cases(text: &str) -> Vec<Vec<Vec<u32>>> {
     text.lines()
@@ -352,6 +469,7 @@ fn main() {
         conformance,
         unicode_data,
         properties,
+        special,
     ] = FILES.map(|(path, sha256)| text(path, sha256));
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
@@ -424,6 +542,12 @@ fn main() {
         "WHITE_SPACE",
         "White_Space",
         &binary(&properties, "White_Space"),
+    );
+    mapping_table(
+        &mut out,
+        "UPPER",
+        "Uppercase_Mapping",
+        &full(simple(&unicode_data, 12), &special, 3),
     );
 
     out.push_str(

@@ -1,14 +1,19 @@
-use /std/{Nat, Byte, Bytes, Bool, Char, proved};
+use /std/{Nat, Byte, Bytes, Bool, Char, Option, Str, proved};
+use /std/Char/{Valid};
 
 -- A run is read as the seven bytes `curios-unicode` packs it in: its first scalar in three, its last in three, least significant first, then its class's code.
 let _a_run_is_seven_bytes: Bool/Holds(/sys/unicode/run == 7) =
     Bool/True/qed();
 
--- The runs of a table a search has not ruled out.
-struct Span(runs: Nat): Type {
+-- A record is read as the seventeen bytes `curios-unicode` packs it in: its first scalar in three, its last in three, the step between the scalars it maps, how many characters each becomes, then three targets in three bytes each.
+let _a_record_is_seventeen_bytes: Bool/Holds(/sys/unicode/record == 17) =
+    Bool/True/qed();
+
+-- The records of a table a search has not ruled out.
+struct Span(records: Nat): Type {
     lo: Nat,
     hi: Nat,
-    @within: Bool/Holds(hi <= runs),
+    @within: Bool/Holds(hi <= records),
 }
 
 -- The number the three bytes of `t` from `at` spell, least significant first.
@@ -16,31 +21,251 @@ let number(t: Bytes, at: Nat, @fits: Bool/Holds(at + 3 <= Bytes/len(t))) -> Nat 
     Byte/to_nat(Bytes/get(t, at)) + 256 * Byte/to_nat(Bytes/get(t, at + 1))
         + 65536 * Byte/to_nat(Bytes/get(t, at + 2));
 
---- The code `table`'s run holding `c` gives it, or `missing` where no run does: a search by halves over the runs of a table `/sys/unicode` holds, which ascend and never meet.
-pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
+-- Which record of `records` a search found.
+struct Found(records: Nat): Type {
+    index: Nat,
+    @inside: Bool/Holds(index < records),
+}
+
+-- The record holding `c`, or `none` where none does: a search by halves over `records` records that ascend and never meet, reading each one's first and last scalar by `first` and `last`.
+let find(
+    records: Nat,
+    first: (i: Nat, Bool/Holds(i < records)) -> Nat,
+    last: (i: Nat, Bool/Holds(i < records)) -> Nat,
+    c: Char,
+) -> Option(Found(records)) =
     let scalar = Char/to_nat(c);
-    let runs = Bytes/len(table) / 7;
     Nat/descend(
-        (span: Span(runs)) => span.hi - span.lo,
-        (_) => Nat,
+        (span: Span(records)) => span.hi - span.lo,
+        (_) => Option(Found(records)),
         (span, again) =>
             match span.lo < span.hi
-            | false => missing
+            | false => Option/none()
             | true =>
                 let mid = (span.lo + span.hi) / 2;
-                let at = 7 * mid;
-                let inside: Bool/Holds(mid < span.hi) = proved();
-                let room: Bool/Holds(at + 7 <= Bytes/len(table)) = proved();
+                let inside: Bool/Holds(mid < records) = proved();
                 match
-                | scalar < number(table, at) =>
-                    again(Span(runs) { lo = span.lo, hi = mid }, proved())
-                | number(table, at + 3) < scalar =>
-                    again(Span(runs) { lo = mid + 1, hi = span.hi }, proved())
-                | _ => Byte/to_nat(Bytes/get(table, at + 6))
+                | scalar < first(mid, inside) =>
+                    again(Span(records) { lo = span.lo, hi = mid }, proved())
+                | last(mid, inside) < scalar =>
+                    again(Span(records) { lo = mid + 1, hi = span.hi }, proved())
+                | _ => Option/some(Found(records) { index = mid })
                 end
             end,
-        Span(runs) { lo = 0, hi = runs });
+        Span(records) { lo = 0, hi = records });
+
+--- The code `table`'s run holding `c` gives it, or `missing` where no run does: a search by halves over the runs of a table `/sys/unicode` holds, which ascend and never meet.
+pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
+    let runs = Bytes/len(table) / 7;
+    match find(runs, (i, _) => number(table, 7 * i), (i, _) => number(table, 7 * i + 3), c)
+    | some(found) =>
+        let room: Bool/Holds(7 * found.index + 7 <= Bytes/len(table)) = proved();
+        Byte/to_nat(Bytes/get(table, 7 * found.index + 6))
+    | none() => missing
+    end;
 
 --- Whether a run of `table`, a binary property's, holds `c`: each of its runs has code `1`, and a character no run holds has none.
 pub let held(table: Bytes, c: Char) -> Bool =
     class(table, 0, c) != 0;
+
+-- A record of a mapping as its seventeen bytes spell it: it covers `first` through `last` stepping by `step`, each scalar becoming `count` characters — the first `target` moved as far as the scalar is from `first`, then `second` and `third`.
+struct Record: Type {
+    first: Nat,
+    last: Nat,
+    step: Nat,
+    count: Nat,
+    target: Nat,
+    second: Nat,
+    third: Nat,
+}
+
+-- The record of `table` at `i`, or `none` past its last. A fact about a record is stated as a match on this one call, so that where a lookup matches on the same call the fact is about the record its arm binds, and nothing is unfolded to read it.
+let record_at(table: Bytes, i: Nat) -> Option(Record) =
+    match 17 * i + 17 <= Bytes/len(table)
+    | true =>
+        Option/some(
+            Record {
+                first = number(table, 17 * i),
+                last = number(table, 17 * i + 3),
+                step = Byte/to_nat(Bytes/get(table, 17 * i + 6)),
+                count = Byte/to_nat(Bytes/get(table, 17 * i + 7)),
+                target = number(table, 17 * i + 8),
+                second = number(table, 17 * i + 11),
+                third = number(table, 17 * i + 14) })
+    | false => Option/none()
+    end;
+
+-- A record is there at every index whose seventeen bytes the table holds.
+let present(
+    table: Bytes,
+    i: Nat,
+    fits: Bool/Holds(17 * i + 17 <= Bytes/len(table)),
+) -> Bool/Holds(Option/is_some(record_at(table, i))) =
+    match 17 * i + 17 <= Bytes/len(table)
+    | true => Bool/True/qed()
+    | false => match fits end
+    end;
+
+-- Whether a record's shape is one: it covers at least one scalar, steps forward, and makes each one to three characters.
+let shaped(r: Record) -> Bool =
+    r.first <= r.last && 1 <= r.step && 1 <= r.count && r.count <= 3;
+
+-- Whether every character a record makes is a scalar value: the first target's range, moved as far as the record reaches, and the other two.
+let onto_scalars(r: Record) -> Bool =
+    Valid/scalars(r.target, r.target + (r.last - r.first)) && Valid/scalars(r.second, r.second)
+        && Valid/scalars(r.third, r.third);
+
+-- Whether a record lands among the scalars.
+let lands(r: Record) -> Bool =
+    shaped(r) && onto_scalars(r);
+
+-- Whether the record of `table` at `i` lands among the scalars.
+let record_lands(table: Bytes, i: Nat) -> Bool =
+    match record_at(table, i) | some(r) => lands(r) | none() => false end;
+
+--- Whether every record of `table`, a mapping's, lands among the scalars: decided by reading each, so `Bool/Holds(every_record_lands(table))` at a table `/sys/unicode` holds is discharged by reduction when `/std` is built.
+pub let every_record_lands(table: Bytes) -> Bool =
+    Nat/all_below(Bytes/len(table) / 17, (i) => record_lands(table, i));
+
+-- Whether `code` is one of the scalars a record covering it from `first`, stepping by `step`, steps through.
+let stepped(code: Nat, first: Nat, step: Nat, _: Bool/Holds(1 <= step)) -> Bool =
+    (code - first) % step == 0;
+
+-- What a record's first target becomes for `code`, moved as far as `code` is from the record's first: a scalar value, since the target's range is one and `code` lies no further than the record's last.
+let moved(
+    target: Nat,
+    first: Nat,
+    last: Nat,
+    code: Nat,
+    range: Bool/Holds(Valid/scalars(target, target + (last - first))),
+    _: Bool/Holds(code <= last),
+) -> Char =
+    let to = target + (code - first);
+    Char {
+        code = to,
+        @valid =
+            Valid/scalars/within(
+                target,
+                target + (last - first),
+                to,
+                to,
+                range,
+                proved(),
+                proved()) };
+
+-- What a record that lands among the scalars states of its shape: the conjuncts `shaped` decides, before the last.
+let counted(
+    r: Record,
+    fact: Bool/Holds(lands(r)),
+) -> Bool/Holds(r.first <= r.last && 1 <= r.step && 1 <= r.count) =
+    Bool/and/first(
+        r.first <= r.last && 1 <= r.step && 1 <= r.count,
+        r.count <= 3,
+        Bool/and/first(shaped(r), onto_scalars(r), fact));
+
+-- That a record that lands among the scalars steps forward.
+let steps_of(r: Record, fact: Bool/Holds(lands(r))) -> Bool/Holds(1 <= r.step) =
+    Bool/and/second(
+        r.first <= r.last,
+        1 <= r.step,
+        Bool/and/first(r.first <= r.last && 1 <= r.step, 1 <= r.count, counted(r, fact)));
+
+-- That a record that lands among the scalars makes at least one character.
+let counts_of(r: Record, fact: Bool/Holds(lands(r))) -> Bool/Holds(1 <= r.count) =
+    Bool/and/second(r.first <= r.last && 1 <= r.step, 1 <= r.count, counted(r, fact));
+
+-- What a record that lands among the scalars states of its first two targets.
+let leading(
+    r: Record,
+    fact: Bool/Holds(lands(r)),
+) -> Bool/Holds(
+    Valid/scalars(r.target, r.target + (r.last - r.first)) && Valid/scalars(r.second, r.second)) =
+    Bool/and/first(
+        Valid/scalars(r.target, r.target + (r.last - r.first)) && Valid/scalars(r.second, r.second),
+        Valid/scalars(r.third, r.third),
+        Bool/and/second(shaped(r), onto_scalars(r), fact));
+
+-- That a record's first target, moved as far as the record reaches, stays among the scalars.
+let range_of(
+    r: Record,
+    fact: Bool/Holds(lands(r)),
+) -> Bool/Holds(Valid/scalars(r.target, r.target + (r.last - r.first))) =
+    Bool/and/first(
+        Valid/scalars(r.target, r.target + (r.last - r.first)),
+        Valid/scalars(r.second, r.second),
+        leading(r, fact));
+
+-- That a record's second target is a scalar value.
+let second_of(r: Record, fact: Bool/Holds(lands(r))) -> Valid(r.second) =
+    Bool/and/second(
+        Valid/scalars(r.target, r.target + (r.last - r.first)),
+        Valid/scalars(r.second, r.second),
+        leading(r, fact));
+
+-- That a record's third target is a scalar value.
+let third_of(r: Record, fact: Bool/Holds(lands(r))) -> Valid(r.third) =
+    Bool/and/second(
+        Valid/scalars(r.target, r.target + (r.last - r.first)) && Valid/scalars(r.second, r.second),
+        Valid/scalars(r.third, r.third),
+        Bool/and/second(shaped(r), onto_scalars(r), fact));
+
+-- The characters a record that lands among the scalars makes of `code`, one it covers: its first target moved as far as `code` is from the record's first, then the others it makes. Each fact is read off `fact` by a lemma of its own rather than proved again here, so that no one declaration's check decides them all.
+let made_by(
+    code: Nat,
+    r: Record,
+    fact: Bool/Holds(lands(r)),
+    before: Bool/Holds(code <= r.last),
+) -> Str =
+    let one = Str/of_char(moved(r.target, r.first, r.last, code, range_of(r, fact), before));
+    let two = Str/of_char(Char { code = r.second, @valid = second_of(r, fact) });
+    let three = Str/of_char(Char { code = r.third, @valid = third_of(r, fact) });
+    match r.count
+    | 0 => match counts_of(r, fact) end
+    | 1 => one
+    | 2 => Str/concat(one, two)
+    | _ => Str/concat(Str/concat(one, two), three)
+    end;
+
+-- What `make` makes of `c` where `c` is one of the scalars a record steps through, handed that it lies no further than the record's last; any other character stays itself. Each condition is a match of its own, so that the arm calling `make` holds `code <= r.last` as its own equation, and no fact about the record stands in scope for a match to read through.
+let chosen(
+    c: Char,
+    r: Record,
+    steps: Bool/Holds(1 <= r.step),
+    make: (Bool/Holds(Char/to_nat(c) <= r.last)) -> Str,
+) -> Str =
+    let code = Char/to_nat(c);
+    match r.first <= code
+    | false => Str/of_char(c)
+    | true =>
+        match code <= r.last
+        | false => Str/of_char(c)
+        | true =>
+            match stepped(code, r.first, r.step, steps)
+            | false => Str/of_char(c)
+            | true => make(Bool/True/qed())
+            end
+        end
+    end;
+
+-- What a record that lands among the scalars maps `c` to: where `c` is one of the scalars it steps through, the characters it makes of it; any other character stays itself.
+let onto(c: Char, r: Record, fact: Bool/Holds(lands(r))) -> Str =
+    chosen(c, r, steps_of(r, fact), (before) => made_by(Char/to_nat(c), r, fact, before));
+
+--- What `c` becomes under the mapping `table` packs, every record of which lands among the scalars: the characters of the record that covers it, or `c` itself where none does.
+pub let mapping(table: Bytes, landing: Bool/Holds(every_record_lands(table)), c: Char) -> Str =
+    let records = Bytes/len(table) / 17;
+    match find(records, (i, _) => number(table, 17 * i), (i, _) => number(table, 17 * i + 3), c)
+    | none() => Str/of_char(c)
+    | some(found) =>
+        let fact =
+            Nat/all_below/at(
+                records,
+                (j) => record_lands(table, j),
+                found.index,
+                landing,
+                found.inside);
+        match record_at(table, found.index)
+        | some(r) => onto(c, r, fact)
+        | none() => match present(table, found.index, proved()) end
+        end
+    end;

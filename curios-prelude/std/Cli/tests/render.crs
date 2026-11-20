@@ -49,3 +49,18 @@ test the_usage_line_says_only_what_the_declaration_declares =
                     rest = Option/some(Cli/positional("files", Cli/str, "The files")) }),
             Option/none());
     Test/equal(Cli/usage(cat, ["cat"]), "Usage: cat [FIRST] [FILES]...");
+
+-- A positional's name is shouted as Unicode writes it in upper case, in any script: a letter past ASCII is raised, and `ß` becomes `SS`.
+test a_positional_is_shouted_in_any_script =
+    let cat: Cli =
+        Cli/declare(
+            Cli/leaf(
+                "cat",
+                "Concatenate",
+                [],
+                Cli/Positionals {
+                    required = [Cli/positional("année", Cli/str, "The year")],
+                    optional = [Cli/positional("straße", Cli/str, "The street")],
+                    rest = Option/none() }),
+            Option/none());
+    Test/equal(Cli/usage(cat, ["cat"]), "Usage: cat <ANNÉE> [STRASSE]");

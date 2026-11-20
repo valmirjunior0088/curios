@@ -1,0 +1,44 @@
+use /std/{Nat, Bool, proved};
+
+--- Whether every code from `min` to `max` is a scalar value: the range lies below the surrogates, or past them and at most `U+10FFFF`. One contiguous range, so these two cases are the whole of it, and of one code it is `Char/Valid`.
+pub let scalars(min: Nat, max: Nat) -> Bool =
+    max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
+
+--- A range of scalar values narrowed stays one.
+pub let within(
+    min: Nat,
+    max: Nat,
+    min2: Nat,
+    max2: Nat,
+    s: Bool/Holds(scalars(min, max)),
+    low: Bool/Holds(min <= min2),
+    high: Bool/Holds(max2 <= max),
+) -> Bool/Holds(scalars(min2, max2)) =
+    match max < 0xD800
+    | true =>
+        match max2 < 0xD800
+        | true => Bool/True/qed()
+        | false => match proved(@Bool/False) end
+        end
+    | false =>
+        match min >= 0xE000
+        | false => match s end
+        | true =>
+            match max <= 0x10FFFF
+            | false => match s end
+            | true =>
+                match max2 < 0xD800
+                | true => Bool/True/qed()
+                | false =>
+                    match min2 >= 0xE000
+                    | false => match proved(@Bool/False) end
+                    | true =>
+                        match max2 <= 0x10FFFF
+                        | true => Bool/True/qed()
+                        | false => match proved(@Bool/False) end
+                        end
+                    end
+                end
+            end
+        end
+    end;

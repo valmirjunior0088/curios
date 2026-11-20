@@ -123,6 +123,14 @@ pub let to_ascii_upper(c: Char) -> Char =
     | false => c
     end;
 
+-- Every record of `/sys/unicode/upper` maps onto scalar values, decided by reading each when `/std` is built.
+let upper_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/upper)) =
+    Bool/True/qed();
+
+--- `c` in upper case: its full mapping, the database's `Uppercase_Mapping`, as text — one to three characters, `ß` becoming `SS` — and `c` itself where the database maps it to no other. What `Str/to_upper` writes for each character of a text.
+pub let to_upper(c: Char) -> Str =
+    unicode/mapping(/sys/unicode/upper, upper_lands, c);
+
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen. Both codes are scalar values by reduction, since a remainder sits below its divisor.
 pub let hex_digit(nibble: Nat) -> Char =
     match nibble % 0x10 < 10

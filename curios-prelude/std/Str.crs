@@ -155,6 +155,10 @@ let lower_ascii_bytes(b: Bytes) -> Bytes =
 pub let eql_ignoring_ascii_case(a: Str, b: Str) -> Bool =
     lower_ascii_bytes(to_bytes(a)) == lower_ascii_bytes(to_bytes(b));
 
+--- `s` in upper case, Unicode's `toUppercase`: each character by its full mapping, `Char/to_upper`, so `straße` becomes `STRASSE`.
+pub let to_upper(s: Str) -> Str =
+    fold(s, "", (c, written) => concat(written, Char/to_upper(c)));
+
 --- `s` written `n` times.
 ---
 --- Half the copies are built once and joined to themselves, with `s` once more where `n` is odd, so `n` copies take a number of joins logarithmic in `n` and hold each half once.

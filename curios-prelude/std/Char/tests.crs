@@ -10,6 +10,18 @@ test ascii_case_flips_letters_and_nothing_beside_them =
         Test/equal(spelled(Char/to_ascii_lower), "@az[`az{é"),
         Test/equal(spelled(Char/to_ascii_upper), "@AZ[`AZ{é")]);
 
+-- Upper case is the database's full mapping: a letter past ASCII is raised, `ß` becomes two letters and `ΐ` three, a run where the two cases alternate raises its lower letters and leaves the upper ones between them, and a character with no mapping stays itself.
+test to_upper_is_the_full_mapping =
+    Test/all([
+        Test/equal(Char/to_upper('a'), "A"),
+        Test/equal(Char/to_upper('é'), "É"),
+        Test/equal(Char/to_upper('ß'), "SS"),
+        Test/equal(Char/to_upper('ΐ'), "\u{399}\u{308}\u{301}"),
+        Test/equal(Char/to_upper('ǆ'), "Ǆ"),
+        Test/equal(Char/to_upper('ă'), "Ă"),
+        Test/equal(Char/to_upper('Ă'), "Ă"),
+        Test/equal(Char/to_upper('1'), "1")]);
+
 -- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
 test hex_digit_spells_a_nibble_modulo_sixteen =
     Test/equal(

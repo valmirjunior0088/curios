@@ -92,6 +92,10 @@ test logical_operations_use_certified_chars =
             Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 4))]),
         "a€😀|€|1|4|😀|true|false|3|€");
 
+-- A text in upper case is each character's full mapping in order: a letter past ASCII is raised, `ß` and `ﬃ` lengthen the text, and what has no case stays.
+test to_upper_writes_each_character_s_full_mapping =
+    Test/equal(Str/to_upper("straße ﬃ, année 1"), "STRASSE FFI, ANNÉE 1");
+
 -- `repeat` writes its text `n` times, at no copy, at one, at an odd count, and at a count a tree of single copies would not fit a test in: a million copies of one letter have a million bytes, and each half was built once.
 test repeat_writes_its_text_n_times =
     Test/equal(

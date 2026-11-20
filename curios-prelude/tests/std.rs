@@ -1,4 +1,4 @@
-//! The library's own claims, written in Curios as the `tests` modules of `/std`, run as `curios test` runs a package's: the package at [`std_directory`] tested through `curios::test_subjects`, one Rust test per module of tests narrowed to it, each test run in an instantiation of its own under the mock host. Beside them, the claims too large to write by hand: every Unicode conformance case and every property run's edges, as programs this file writes.
+//! The library's own claims, written in Curios as the `tests` modules of `/std`, run as `curios test` runs a package's: the package at [`std_directory`] tested through `curios::test_subjects`, one Rust test per module of tests narrowed to it, each test run in an instantiation of its own under the mock host. Beside them, the claims too large to write by hand: every Unicode conformance case, and the edges of every property's runs and every mapping's records, as programs this file writes.
 //!
 //! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one cabinet under the build's scratch directory, which a rerun of an unchanged build takes whole.
 
@@ -347,60 +347,47 @@ fn every_conformance_case_segments_through_the_library_as_the_database_states() 
     assert!(otherwise.is_empty(), "segmented otherwise:\n{otherwise}");
 }
 
-/// What `/std/Char` answers of each scalar read on standard input, one line a scalar.
-const PROPERTIES_PROGRAM: &str = r#"
-use /std/{Nat, Str, Char, Option, Io, Try, Proc, Spell, print};
-use /std/Io/{Reader};
-use /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};
+/// A program printing what `answer`, its declaration `answer(c: Char) -> Str` written over the imports `head` adds, answers of each scalar read on standard input, one line a scalar.
+fn answering(head: &str, answer: &str) -> String {
+    fill!(
+        r#"
+        use /std/{Nat, Str, Char, Option, Io, Try, Proc, print};
+        use /std/Io/{Reader};
+        ${head}
 
-let answer(c: Char) -> Str =
-    Str/join(" ", [
-        Spell/spell(GraphemeBreak/of_char(c)),
-        Spell/spell(IndicConjunctBreak/of_char(c)),
-        Spell/spell(EastAsianWidth/of_char(c)),
-        Spell/spell(Char/is_extended_pictographic(c)),
-        Spell/spell(Char/is_emoji_presentation(c))]);
+        ${answer}
 
-let each(r: Reader(Proc/Input)) -> Try(Io, Io/Error, {}) =
-    let line = Reader/line_text(r)!;
-    match line
-    | none() => Try/pure(())
-    | some(text) =>
-        let shown =
-            match Option/bind(Nat/of_str(text), Char/of_nat)
-            | some(c) => answer(c)
-            | none() => "unread"
+        let each(r: Reader(Proc/Input)) -> Try(Io, Io/Error, {}) =
+            let line = Reader/line_text(r)!;
+            match line
+            | none() => Try/pure(())
+            | some(text) =>
+                let shown =
+                    match Option/bind(Nat/of_str(text), Char/of_nat)
+                    | some(c) => answer(c)
+                    | none() => "unread"
+                    end;
+                let _ = print(Str/concat(shown, "\n"))!;
+                each(r)
             end;
-        let _ = print(Str/concat(shown, "\n"))!;
-        each(r)
-    end;
 
-let main() -> Try(Io, Io/Error, {}) =
-    let r = Reader/new(Proc/stdin)!;
-    each(r);
+        let main() -> Try(Io, Io/Error, {}) =
+            let r = Reader/new(Proc/stdin)!;
+            each(r);
 
-main()
-"#;
-
-/// `curios-unicode`'s answer for `scalar`, spelled as [`PROPERTIES_PROGRAM`] prints `/std/Char`'s.
-fn database(scalar: char) -> String {
-    format!(
-        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {}",
-        grapheme_break(scalar).sys_name(),
-        indic_conjunct_break(scalar).sys_name(),
-        east_asian_width(scalar).sys_name(),
-        is_extended_pictographic(scalar),
-        is_emoji_presentation(scalar),
+        main()
+        "#,
+        head,
+        answer
     )
 }
 
-/// `/std/Char` answers every property as `curios-unicode` does wherever a table's answer changes and just before: every run's first and last scalar and those outside it, which is where a misread of the packed runs — their order, their width, a search by halves stopping short — would show.
-#[test]
-fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() {
+/// The scalars where `key` changes, each with the scalar before it, and the last scalar: every run's first and last scalar and those just outside it, which is where a misread of the packed runs — their order, their width, a search by halves stopping short — would show.
+fn edges(key: impl Fn(char) -> String) -> Vec<char> {
     let mut scalars: Vec<char> = Vec::new();
     let mut previous: Option<(char, String)> = None;
     for scalar in (0..=0x10_FFFF).filter_map(char::from_u32) {
-        let answer = database(scalar);
+        let answer = key(scalar);
         if previous
             .as_ref()
             .is_none_or(|(_, before)| *before != answer)
@@ -416,12 +403,23 @@ fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() 
     }
     scalars.push('\u{10FFFF}');
 
+    scalars
+}
+
+/// Each of `scalars` that `program`, as [`answering`] writes one, answers otherwise than `database` does, with both answers.
+fn answered_otherwise(
+    program: &str,
+    scalars: &[char],
+    database: impl Fn(char) -> String,
+) -> Vec<String> {
     let printed = printed(
-        PROPERTIES_PROGRAM,
+        program,
         scalars.iter().map(|&scalar| u32::from(scalar).to_string()),
     );
     let lines: Vec<&str> = printed.lines().collect();
-    let wrong: Vec<String> = scalars
+    assert_eq!(lines.len(), scalars.len());
+
+    scalars
         .iter()
         .zip(&lines)
         .filter(|&(&scalar, line)| database(scalar) != **line)
@@ -432,12 +430,93 @@ fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() 
                 database(scalar)
             )
         })
-        .collect();
+        .collect()
+}
 
-    assert_eq!(lines.len(), scalars.len());
+/// What `/std/Char` answers of a scalar's properties, as [`answering`] takes it.
+const PROPERTIES: [&str; 2] = [
+    "use /std/{Spell};\nuse /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};",
+    r#"
+    let answer(c: Char) -> Str =
+        Str/join(" ", [
+            Spell/spell(GraphemeBreak/of_char(c)),
+            Spell/spell(IndicConjunctBreak/of_char(c)),
+            Spell/spell(EastAsianWidth/of_char(c)),
+            Spell/spell(Char/is_extended_pictographic(c)),
+            Spell/spell(Char/is_emoji_presentation(c))]);
+    "#,
+];
+
+/// `curios-unicode`'s answer for `scalar`, spelled as [`PROPERTIES`] prints `/std/Char`'s.
+fn database(scalar: char) -> String {
+    format!(
+        "GraphemeBreak/{}() IndicConjunctBreak/{}() EastAsianWidth/{}() {} {}",
+        grapheme_break(scalar).sys_name(),
+        indic_conjunct_break(scalar).sys_name(),
+        east_asian_width(scalar).sys_name(),
+        is_extended_pictographic(scalar),
+        is_emoji_presentation(scalar),
+    )
+}
+
+/// `/std/Char` answers every property as `curios-unicode` does at every run's edges.
+#[test]
+fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() {
+    let [head, answer] = PROPERTIES;
+    let wrong = answered_otherwise(&answering(head, answer), &edges(database), database);
+
     assert!(
         wrong.is_empty(),
         "{} scalars read otherwise:\n{}",
+        wrong.len(),
+        wrong.join("\n")
+    );
+}
+
+/// What `/std/Char` maps a scalar to, each mapping's scalars in decimal, as [`answering`] takes it.
+const MAPPINGS: [&str; 2] = [
+    "use /std/{List};",
+    r#"
+    let spelled(s: Str) -> Str =
+        Str/join(",", List/map(Str/to_list(s), (m) => Nat/to_str(Char/to_nat(m))));
+
+    let answer(c: Char) -> Str =
+        spelled(Char/to_upper(c));
+    "#,
+];
+
+/// What the database's rows map `scalar` to, spelled as [`MAPPINGS`] prints `/std/Char`'s.
+fn mapped(scalar: char) -> String {
+    let spelled = |mapped: Vec<u32>| {
+        mapped
+            .iter()
+            .map(u32::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+
+    spelled(uppercase(u32::from(scalar)))
+}
+
+/// How what the database maps `scalar` to stands to it: each mapping's first scalar as a distance from `scalar`, the others as they are, so every scalar a record steps through answers alike and its edges are where the answer changes.
+fn shape(scalar: char) -> String {
+    let relative = |mapped: Vec<u32>| {
+        let distance = i64::from(mapped[0]) - i64::from(u32::from(scalar));
+        format!("{distance}{:?}", &mapped[1..])
+    };
+
+    relative(uppercase(u32::from(scalar)))
+}
+
+/// `/std/Char` maps case as the database's rows do at every record's edges, and at every scalar of a record that steps by two, whose answer alternates.
+#[test]
+fn the_library_maps_case_as_the_database_does_at_every_record_s_edges() {
+    let [head, answer] = MAPPINGS;
+    let wrong = answered_otherwise(&answering(head, answer), &edges(shape), mapped);
+
+    assert!(
+        wrong.is_empty(),
+        "{} scalars mapped otherwise:\n{}",
         wrong.len(),
         wrong.join("\n")
     );

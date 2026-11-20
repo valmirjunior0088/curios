@@ -1,19 +1,22 @@
-//! The tables as `/sys` carries them: each a run of seven bytes a range, and each class set the codes its classes are read by.
+//! The tables as `/sys` carries them: a property's a run of seven bytes a range, a mapping's a record of seventeen, and each class set the codes its classes are read by.
 
 use crate::{
     EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION, EXTENDED_PICTOGRAPHIC,
     EastAsianWidth, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING, GraphemeBreak, INDIC_CONJUNCT_BREAK,
-    INDIC_CONJUNCT_BREAK_MISSING, IndicConjunctBreak,
+    INDIC_CONJUNCT_BREAK_MISSING, IndicConjunctBreak, UPPER,
 };
 
 /// How many bytes a run takes packed: its first scalar and its last, three bytes each, least significant first, then its class's code.
 pub const PACKED_RUN: usize = 7;
 
-/// One property's table packed for `/sys/unicode`.
+/// How many bytes a mapping's record takes packed: its first scalar and its last, three bytes each, least significant first, the step between the scalars it covers, how many scalars each becomes, then three targets of three bytes each, a target the record does not have written as U+0000 so that every target is a scalar value.
+pub const PACKED_RECORD: usize = 17;
+
+/// One table packed for `/sys/unicode`.
 pub struct PackedTable {
     /// The name `/sys/unicode` gives the table.
     pub name: &'static str,
-    /// Each run of scalars of one class but the class a scalar no run names, in the order of their scalars, as [`PACKED_RUN`] bytes. A binary property's runs are those of the scalars that have it, each of code `1`.
+    /// A property's runs of scalars of one class but the class a scalar no run names, in the order of their scalars, as [`PACKED_RUN`] bytes, a binary property's runs those of the scalars that have it, each of code `1`; or a mapping's records, in the order of their scalars, as [`PACKED_RECORD`] bytes.
     pub bytes: Vec<u8>,
 }
 
@@ -48,7 +51,27 @@ fn binary(table: &[(u32, u32)]) -> Vec<u8> {
     pack(table.iter().map(|&(first, last)| (first, last, 1)))
 }
 
-/// Every table, packed for `/sys/unicode`.
+fn records(table: &[(u32, u32, u8, &[u32])]) -> Vec<u8> {
+    let three = |scalar: u32| {
+        let [low, middle, high, _] = scalar.to_le_bytes();
+        [low, middle, high]
+    };
+
+    table
+        .iter()
+        .flat_map(|&(first, last, step, targets)| {
+            let count = u8::try_from(targets.len()).expect("a scalar becomes at most three");
+            let slots = (0..3).flat_map(|slot| three(targets.get(slot).copied().unwrap_or(0)));
+            three(first)
+                .into_iter()
+                .chain(three(last))
+                .chain([step, count])
+                .chain(slots)
+        })
+        .collect()
+}
+
+/// Every property's table, packed for `/sys/unicode`.
 pub fn packed_tables() -> Vec<PackedTable> {
     vec![
         PackedTable {
@@ -72,6 +95,14 @@ pub fn packed_tables() -> Vec<PackedTable> {
             bytes: binary(EMOJI_PRESENTATION),
         },
     ]
+}
+
+/// Every mapping, packed for `/sys/unicode`.
+pub fn packed_mappings() -> Vec<PackedTable> {
+    vec![PackedTable {
+        name: "upper",
+        bytes: records(UPPER),
+    }]
 }
 
 fn codes<C: Copy>(

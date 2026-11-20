@@ -137,3 +137,81 @@ fn a_packed_table_reads_back_as_its_runs() {
             .collect::<Vec<_>>()
     );
 }
+
+/// What a mapping's records map `scalar` to, read as `/std` reads them: the record covering it, where `scalar` is one of the scalars it steps through, makes it the record's targets with the first moved as far as `scalar` is from the record's first; any other scalar stays itself.
+fn by_records(records: &[(u32, u32, u8, &[u32])], scalar: u32) -> Vec<u32> {
+    let covering = records
+        .binary_search_by(
+            |&(first, last, _, _)| match (scalar < first, last < scalar) {
+                (true, _) => std::cmp::Ordering::Greater,
+                (_, true) => std::cmp::Ordering::Less,
+                _ => std::cmp::Ordering::Equal,
+            },
+        )
+        .ok()
+        .map(|record| records[record]);
+
+    match covering {
+        Some((first, _, step, targets)) if (scalar - first).is_multiple_of(u32::from(step)) => {
+            let mut mapped = targets.to_vec();
+            mapped[0] += scalar - first;
+            mapped
+        }
+        _ => vec![scalar],
+    }
+}
+
+/// What a mapping's rows map `scalar` to, as the database states it.
+fn by_rows(rows: &[(u32, &[u32])], scalar: u32) -> Vec<u32> {
+    rows.binary_search_by_key(&scalar, |&(from, _)| from)
+        .map_or_else(|_| vec![scalar], |row| rows[row].1.to_vec())
+}
+
+/// A mapping's records ascend apart, step by one or two, become one to three scalars, and map every scalar as the database's rows do, which is what a reading of them in `/std` is held to.
+#[test]
+fn a_mapping_s_records_map_every_scalar_as_its_rows_do() {
+    assert!(ascend_apart(
+        UPPER.iter().map(|&(first, last, _, _)| (first, last))
+    ));
+    assert!(UPPER.iter().all(|&(_, _, step, targets)| {
+        (1..=2).contains(&step) && (1..=3).contains(&targets.len())
+    }));
+
+    let wrong: Vec<String> = (0..=0x10_FFFF)
+        .filter(|&scalar| by_records(UPPER, scalar) != by_rows(UPPER_ROWS, scalar))
+        .map(|scalar| format!("U+{scalar:04X}"))
+        .collect();
+    assert!(wrong.is_empty(), "the records map otherwise: {wrong:?}");
+}
+
+/// A packed mapping is its records, seventeen bytes each, read back as they were written, a target the record does not have read as U+0000.
+#[test]
+fn a_packed_mapping_reads_back_as_its_records() {
+    let three = |bytes: &[u8]| u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0]);
+    let mappings = packed_mappings();
+    let upper = &mappings[0];
+
+    assert_eq!(upper.name, "upper");
+    assert_eq!(upper.bytes.len(), PACKED_RECORD * UPPER.len());
+    for (packed, &(first, last, step, targets)) in upper.bytes.chunks(PACKED_RECORD).zip(UPPER) {
+        let mut padded = targets.to_vec();
+        padded.resize(3, 0);
+        assert_eq!(
+            (
+                three(&packed[0..]),
+                three(&packed[3..]),
+                packed[6],
+                usize::from(packed[7])
+            ),
+            (first, last, step, targets.len())
+        );
+        assert_eq!(
+            [
+                three(&packed[8..]),
+                three(&packed[11..]),
+                three(&packed[14..])
+            ],
+            [padded[0], padded[1], padded[2]]
+        );
+    }
+}

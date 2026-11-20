@@ -1,6 +1,6 @@
 use /std/{Str, Nat, Bool, List, Option, Result, Map};
 use /std/Cli/{Value, nat, Field, Presence, Positional, Positionals, Command, Failure, Reading,
-    Carrier, Values, Parsed, Chosen, option_slots, slots, shouted, scan};
+    Carrier, Values, Parsed, Chosen, option_slots, slots, scan};
 use /std/Cli/Parsed/{presented, required_slots, optional_slots, rest_slots, appended};
 use /std/Cli/scan/{Seen, Raw};
 
@@ -150,9 +150,9 @@ let read_required(
     | [] => Result/success((Values/nil(), tokens))
     | [p, ..more] =>
         match tokens
-        | [] => Result/failure(Failure/missing_required(shouted(p.name)))
+        | [] => Result/failure(Failure/missing_required(Str/to_upper(p.name)))
         | [t, ..rest] =>
-            let a = reading(p.v, shouted(p.name), t)!;
+            let a = reading(p.v, Str/to_upper(p.name), t)!;
             let (tail, left) = read_required(more, rest)!;
             Result/success((Values/cons(a, tail), left))
         end
@@ -170,7 +170,7 @@ let read_optional(
             let (tail, left) = read_optional(more, [])!;
             Result/success((Values/cons(Option/none(), tail), left))
         | [t, ..rest] =>
-            let a = reading(p.v, shouted(p.name), t)!;
+            let a = reading(p.v, Str/to_upper(p.name), t)!;
             let (tail, left) = read_optional(more, rest)!;
             Result/success((Values/cons(Option/some(a), tail), left))
         end
@@ -184,7 +184,7 @@ let read_rest(p: Option(Positional), tokens: List(Str)) -> Result(Failure, Value
         | [t, .._] => Result/failure(Failure/unexpected(t))
         end
     | some(r) =>
-        let all = readings(r.v, shouted(r.name), tokens)!;
+        let all = readings(r.v, Str/to_upper(r.name), tokens)!;
         Result/success(Values/cons(all, Values/nil()))
     end;
 

@@ -344,10 +344,6 @@ pub induct Reading(A: Type): pub Type
 | refused(path: List(Str), failure: Failure)
 end
 
--- `name` as help writes a positional's.
-let shouted(name: Str) -> Str =
-    Str/flatten(List/map(Str/to_list(name), (c) => Str/of_char(Char/to_ascii_upper(c))));
-
 --- `argv` read against `cli`, `env` the environment variables the declaration names: what it parsed into, a request for help or the version, or the refusal. Help is answered before anything else on the line is, and the version next.
 pub let parse(cli: Cli, argv: List(Str), env: Map(Str, Str)) -> Reading(Parsed(cli.command)) =
     parse/command(cli.command, argv, [], cli.version, env);

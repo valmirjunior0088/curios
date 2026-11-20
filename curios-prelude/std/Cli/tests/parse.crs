@@ -75,6 +75,23 @@ test each_refusal_names_what_the_line_got_wrong =
         Test/equal(read([]), "missing ROOT"),
         Test/equal(read(["a", "b"]), "unexpected b")]);
 
+-- A missing positional is named as help shouts it, in any script: `année` as `ANNÉE`.
+test a_missing_positional_is_named_as_help_shouts_it =
+    let cal: Cli =
+        Cli/declare(
+            Cli/leaf(
+                "cal",
+                "Show a year",
+                [],
+                Cli/positionals([Cli/positional("année", Cli/str, "The year")])),
+            Option/none());
+    let refused =
+        match Cli/parse(cal, [], Map/empty())
+        | refused(_, f) => why(f)
+        | _ => "read"
+        end;
+    Test/equal(refused, "missing ANNÉE");
+
 -- A reader refusing a value reports its own reason, named against the option that asked for it.
 test a_reader_that_refuses_a_value_reports_its_own_reason =
     Test/equal(

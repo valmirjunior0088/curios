@@ -15,7 +15,9 @@ mod graphemes;
 pub use graphemes::{Graphemes, graphemes};
 
 mod packed;
-pub use packed::{ClassCodes, PACKED_RUN, PackedTable, class_codes, packed_tables};
+pub use packed::{
+    ClassCodes, PACKED_RECORD, PACKED_RUN, PackedTable, class_codes, packed_mappings, packed_tables,
+};
 
 #[cfg(feature = "test-support")]
 pub mod test_support;

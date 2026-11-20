@@ -40,7 +40,7 @@ use {
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Subterm, TopCase, TopInduct,
         TopItem,
     },
-    curios_unicode::{PACKED_RUN, class_codes, packed_tables},
+    curios_unicode::{PACKED_RECORD, PACKED_RUN, class_codes, packed_mappings, packed_tables},
 };
 
 // Ordinary declarations use the parser's source identities: every repeated lowering of a written `Type` must share its universe seed, including the family and constructor signatures synthesized from it.
@@ -1038,13 +1038,18 @@ fn code_modules() -> Vec<SysModule> {
         .collect()
 }
 
-/// The Unicode Character Database `curios-unicode` pins, as `/std/Char` reads it: `/sys/unicode` holds each property's table as `Bytes`, in runs of `run` bytes as [`PACKED_RUN`] states them, and each class set's codes are a module of their own, named as the property's table is, holding each class's code at its name, the code of the class a scalar no run names as `missing`, and every code as `codes` — what the standard library's cases are held to, as `/sys/status/failures` holds `/std/Io/Error`'s. Nothing here spells a class or a run.
+/// The Unicode Character Database `curios-unicode` pins, as `/std/Char` reads it: `/sys/unicode` holds each property's table as `Bytes`, in runs of `run` bytes as [`PACKED_RUN`] states them, and each mapping's in records of `record` bytes as [`PACKED_RECORD`] states them; each class set's codes are a module of their own, named as the property's table is, holding each class's code at its name, the code of the class a scalar no run names as `missing`, and every code as `codes` — what the standard library's cases are held to, as `/sys/status/failures` holds `/std/Io/Error`'s. Nothing here spells a class, a run or a record.
 fn unicode_modules() -> Vec<SysModule> {
     let run = u64::try_from(PACKED_RUN).expect("a run's size fits a natural");
+    let record = u64::try_from(PACKED_RECORD).expect("a record's size fits a natural");
     let tables = packed_tables()
         .into_iter()
+        .chain(packed_mappings())
         .map(|table| pub_let(table.name, bytes(), bytes_lit(table.bytes)))
-        .chain([pub_let("run", nat(), nat_lit(run))])
+        .chain([
+            pub_let("run", nat(), nat_lit(run)),
+            pub_let("record", nat(), nat_lit(record)),
+        ])
         .collect();
     let codes = class_codes().into_iter().map(|set| {
         let named = set
