@@ -17,7 +17,7 @@
 ## Refinement
 
 - **The word.** A digest's every step is a 32- or 64-bit operation, past the `2^30` a `Nat` is held unboxed in. For digest rounds implemented in Curios, the question is [arithmetic modulo a word](../arithmetic/301-arithmetic-modulo-a-word.md)'s, settled there. Encodings wait on neither that choice nor a digest.
-- **Where they live.** Lowercase namespaces of functions over `Bytes`, and whether the three hexadecimal readers above become callers of one.
+- **Where they live.** Lowercase namespaces of functions over `Bytes`, reading a digit through `Char/of_hex_digit`, which the standard library's findings make its one reader.
 - **Which digests.** SHA-256 for integrity, SHA-1 only where a protocol requires it, CRC-32 for the formats that carry one; and whether a digest is computed in Curios or answered by a host row, which every host would then answer.
 - **Whole or streamed.** A digest of one `Bytes`, or one fed piece by piece from an `Io/Reader`, so that a large body is digested as it arrives.
 - **Decoding.** What a decoder refuses — padding, alphabet, the non-canonical encodings RFC 4648 §3.5 names — and whether it answers an `Option` or a refusal with its position.
@@ -30,4 +30,4 @@
 
 ## Completion and retirement
 
-Each delivered encoding, digest or checksum records its public contracts and tests with its implementation and leaves only the remaining work here. The specification retires when `Bytes` reads and writes the reserved RFC 4648 encodings, `/std` computes the digests and checksum the refinement chooses, the hexadecimal readers are what it settles, and no reference to this filename remains. Completing one delivery releases it independently while the other consumer gates remain.
+Each delivered encoding, digest or checksum records its public contracts and tests with its implementation and leaves only the remaining work here. The specification retires when `Bytes` reads and writes the reserved RFC 4648 encodings, `/std` computes the digests and checksum the refinement chooses, and no reference to this filename remains. Completing one delivery releases it independently while the other consumer gates remain.

@@ -28,6 +28,14 @@ The program is `curios-prelude`'s `profile-prelude`, and its stream holds each r
 
 ## Design
 
+### Three questions, three tools
+
+**Decision.** How much a run spends in the compiler's own terms — a stage, a pass, a declaration, a magnitude, a reason — is this crate's to answer. What a running compiler is doing now, how it got there and how often it calls a function is a debugger's: gdb stops or attaches to any build that keeps its symbols, and a breakpoint's hit count is an exact count of calls. Where time goes beneath and between spans is a sampling profiler's, `samply` over the kernel's performance events, which reads the guest's emitted functions through the map the engine writes under the `profile` feature (`curios-native`) and which a kernel at `perf_event_paranoid` above 1 refuses. A permanent span names a unit of the compiler's own work; a question about code no span covers is a debugger's or a sampler's, not a new span's.
+
+**Rationale.** A span sees only what was instrumented, in the build that compiles it in, and says what a frame means; a stack sees every frame of the build at hand and nothing of what one means; a breakpoint counts any function exactly and costs a trap a call. A check that does not finish inside a certifier comparison tens of thousands of frames deep is a debugger's question at once, where no span stands, and what each frame was working on is the recorder's or a print's.
+
+**Rejected.** Retiring the recorder for a debugger, which counts nothing a measurement reads and names no declaration; spans in every hot function, which makes the recorder a sampler paying a row a call.
+
 ### Profiling is configured in code, never from the environment
 
 **Decision.** There is no environment-variable switch and no metrics API. What is instrumented is decided by the `profile` feature and the call sites it compiles in; whether anything records, and where, is one argument at the call site — `curios`'s `--profile <PATH>`, or a destination a caller hands `trace`. Nothing records unasked, a build script included: one takes no argument, so the work of the prelude's two is profiled by a program beside each that takes a destination. `trace` runs one operation under a thread-local subscriber, and `install` makes the recorder the process's global default, which a binary needs because its work is whatever subcommand the arguments selected and it has no closure to wrap; a thread-local `trace` still overrides the default for its closure. Stage entry points and optimizer passes carry permanent spans; a span added for one investigation is removed once it is answered.
