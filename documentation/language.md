@@ -505,7 +505,7 @@ pub let parser() -> Parse(Bytes, Nat) =
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
 ```
 
-A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one. A function of no parameters is written `parser()` and called `parser()`.
+A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one.
 
 A `match` arm and a guard each keep a region of their own, and a local `let`'s value shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
@@ -957,7 +957,7 @@ A test takes no parameters. A claim about every instance is a proposition, not a
 
 A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
 
-A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. `test` is a word only where an item may start, and an ordinary name elsewhere. A test is never `pub`, since its name is no export, and no documentation comment precedes one.
+A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. A test is never `pub`, since its name is no export, and no documentation comment precedes one.
 
 `Test(A)` is a monad: a test's body sequences assertions, `Io` actions and fallible actions with `!`, at its fixed type `Test({})` and through the declared embeddings, and ends in a `Test({})`. A failed assertion or a lifted error stops that test, past what `Test/all` gathers of its independent cases.
 
@@ -1176,7 +1176,7 @@ Pair { ..pair, snd = false }
 Pair(Str, Nat) { ..pair, fst = "new" }
 ```
 
-A spread copies the plain fields, and a hidden field is filled anew, as in any literal: the base's own is written where it is meant, `Positive { ..p, @ok = p.ok }`.
+A spread copies the plain fields, and a hidden field is filled anew, as in any literal: the base's own is written where it is meant, `Sized { ..s, @len = s.len }`.
 
 The spread stands first and once. Every override is labeled, and the overrides follow the declared order. The head may choose other parameters, and every copied and replaced field is checked at them, so dependent fields stay consistent.
 
@@ -1185,8 +1185,6 @@ Tuple and string literals have no update form. A spread in a list or a packed li
 ## Concepts and witnesses
 
 A concept is an interface shaped as a record, a witness is a registered value of a concept at some types, and a `use` parameter asks the compiler to supply one. Together they give ad-hoc polymorphism.
-
-`concept` and `satisfy` are words only where a declaration starts, and ordinary identifiers elsewhere.
 
 ### Concept declarations
 
@@ -1443,7 +1441,6 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
     end;
 ```
 
-`Eq` is propositional equality; `Eql` is the concept `==` and `!=` call.
 
 ### Bounds from the facts in scope
 
@@ -1495,5 +1492,5 @@ A bound the facts do not imply is refused, the report naming the facts it read a
 | `satisfy C(args) { ... }` | Registered witness, which has no name |
 | `satisfy C(args) { .. }` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Witness under a telescope |
-| `use /std/{Nat};` / `use /std/*` / `use /{Name};` | Import a group, what a module exports, or a name of the compilation root |
+| `use /std/{Nat};` / `use /std/*;` / `use /{Name};` | Import a group, what a module exports, or a name of the compilation root |
 | `… and …` | [Recursive group](#recursive-groups) — `let`, `induct`, `struct`, `concept` or `satisfy` |
