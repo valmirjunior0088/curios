@@ -4,8 +4,8 @@ use {
     curios_emit::{bytes_sub_type, elems_sub_type, longs_sub_type, words_sub_type},
     curios_wasm::{
         AbsHeapType, AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType,
-        HeapType, Instr, LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType,
-        RefType, ResultType, SubType, TypeName, ValType, to_bytes,
+        HeapType, Instr, LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, Names,
+        NumType, RefType, ResultType, SubType, TypeName, ValType, to_bytes,
     },
 };
 
@@ -408,5 +408,5 @@ pub fn bridge_module() -> Module {
 
 /// The encoded bridge, ready for `WebAssembly.instantiate`.
 pub fn bridge_bytes() -> Vec<u8> {
-    to_bytes(&bridge_module())
+    to_bytes(&bridge_module(), &Names::default())
 }

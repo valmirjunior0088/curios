@@ -5,7 +5,7 @@
 ## What is wrong today
 
 - **The instrumentation is a build axis.** Every macro of `curios-profile` expands under the *invoking* crate's `profile` feature, which twenty crates declare as `profile = ["curios-profile/enabled", …]` (`curios-profile/src/lib.rs`), and `--profile` and `curios profile` exist only in such a build (`curios/src/cli.rs`). `cargo xtask profile debug` and `release` build the compiler with the feature (`xtask/tasks/profile.toml`), and a build with a feature set of its own builds a prelude archive of its own, which evicts the other ([CLAUDE.md](../../../CLAUDE.md)'s feature rule). So a profile of a change costs a second build of the workspace, and an installed `curios` can profile nothing.
-- **The guest's code map rides the same feature.** Under `profile` the engine writes the map a sampling profiler reads emitted code by (`ProfilingStrategy::PerfMap`, `curios-native/src/engine.rs`), so a sampler reads the guest's functions by name only in a profile build. Which names a payload carries is the writer's to say, by the names entry of [the compilation findings](../compilation/000-findings.md).
+- **The guest's code map rides the same feature.** Under `profile` the engine writes the map a sampling profiler reads emitted code by (`ProfilingStrategy::PerfMap`, `curios-native/src/engine.rs`), so a sampler reads the guest's functions by name only in a profile build. Which names a payload carries is its writer's to say (`curios_wasm::Names`), every product writing its functions' names.
 
 ## Context
 

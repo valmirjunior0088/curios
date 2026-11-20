@@ -3,7 +3,7 @@
 use {
     super::structural::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
 };
 
 #[test]
@@ -32,14 +32,14 @@ fn small_suspension_programs_do_not_expand_into_callback_families() {
         ),
     ] {
         let (module, foreigns) = compile_raw_program(source);
-        let raw = to_bytes(&module);
+        let raw = to_bytes(&module, &Names::default());
         // Names are retained, as on the browser path. These coarse ceilings leave room for ordinary emission changes while rejecting replicated suspension callback families.
         assert!(
             raw.len() < ceiling,
             "{source}: {} raw bytes reaches the {ceiling}-byte ceiling",
             raw.len()
         );
-        for bytes in [raw.clone(), curios_binaryen::optimize(raw, false)] {
+        for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
             let code = curios_cranelift::compile(&bytes).expect("module validates and compiles");
             let compiled = Compiled::of(code, foreigns.clone());
             let (host, io) = MockHost::builder().build();

@@ -8,7 +8,7 @@ use {
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    curios_wasm::{Module, to_bytes},
+    curios_wasm::{Module, Names, to_bytes},
     std::collections::BTreeSet,
 };
 
@@ -781,7 +781,7 @@ pub fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 /// Run the raw (Binaryen-free) module: Cranelift-compile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `/std/Proc/args()!`, which drives the taint.
 pub fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let (module, foreigns) = compile_raw_program(source);
-    let code = curios_cranelift::compile(&to_bytes(&module))
+    let code = curios_cranelift::compile(&to_bytes(&module, &Names::default()))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
     let compiled = Compiled::of(code, foreigns);
 

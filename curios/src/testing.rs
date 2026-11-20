@@ -303,7 +303,7 @@ impl TestSubject {
             .compiled
             .map(|(module, foreigns)| match target {
                 Target::Native => to_cwasm(&module).map(|cwasm| (Payload::Cwasm(cwasm), foreigns)),
-                Target::Browser => Ok((Payload::Module(optimize(&module, false)), foreigns)),
+                Target::Browser => Ok((Payload::Module(optimize(&module)), foreigns)),
             })
             .transpose()?;
         let tested = Tested {

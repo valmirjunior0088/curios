@@ -9,7 +9,7 @@ use {
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
     std::collections::BTreeSet,
 };
 
@@ -168,8 +168,8 @@ fn loop_cont(fixture: &Fixture) {
 }
 
 fn run_both(fixture: &Fixture, cases: &[(&[&str], &str)]) {
-    let raw = to_bytes(&fixture.wasm);
-    for bytes in [raw.clone(), curios_binaryen::optimize(raw, false)] {
+    let raw = to_bytes(&fixture.wasm, &Names::default());
+    for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
         let code = curios_cranelift::compile(&bytes).expect("raw and optimized modules validate");
         let compiled = Compiled::of(code, fixture.foreigns.clone());
         for &(args, expected) in cases {

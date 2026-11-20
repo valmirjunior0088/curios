@@ -1618,23 +1618,44 @@ where
         self.write_indirect_name_subsection(10, names)
     }
 
-    fn write_name_section(&mut self, module: &Module) -> Result<()> {
+    /// The custom name section, holding the subsections `names` asks for, each where it names something, and written only where one is.
+    fn write_name_section(&mut self, module: &Module, names: &Names) -> Result<()> {
         let mut bytes = Vec::new();
 
         let mut subsections = Vec::new();
         {
             let mut writer = self.fork(&mut subsections);
 
-            writer.write_module_name_subsection(module.name())?;
-            writer.write_func_name_section(module.imports(), module.funcs())?;
-            writer.write_local_name_section(module.funcs())?;
-            writer.write_type_name_section(module.types())?;
-            writer.write_table_name_section(module.imports(), module.tables())?;
-            writer.write_memory_name_section(module.imports(), module.mems())?;
-            writer.write_global_name_section(module.imports(), module.globals())?;
-            writer.write_elem_name_section(module.elems())?;
-            writer.write_data_name_section(module.datas())?;
-            writer.write_field_name_section(module.types())?;
+            if names.module {
+                writer.write_module_name_subsection(module.name())?;
+            }
+            if names.functions {
+                writer.write_func_name_section(module.imports(), module.funcs())?;
+            }
+            if names.locals {
+                writer.write_local_name_section(module.funcs())?;
+            }
+            if names.types {
+                writer.write_type_name_section(module.types())?;
+            }
+            if names.tables {
+                writer.write_table_name_section(module.imports(), module.tables())?;
+            }
+            if names.memories {
+                writer.write_memory_name_section(module.imports(), module.mems())?;
+            }
+            if names.globals {
+                writer.write_global_name_section(module.imports(), module.globals())?;
+            }
+            if names.elements {
+                writer.write_elem_name_section(module.elems())?;
+            }
+            if names.data {
+                writer.write_data_name_section(module.datas())?;
+            }
+            if names.fields {
+                writer.write_field_name_section(module.types())?;
+            }
         }
         if subsections.is_empty() {
             return Ok(());
@@ -1650,7 +1671,7 @@ where
         Ok(())
     }
 
-    fn write_module(&mut self, module: &Module) -> Result<()> {
+    fn write_module(&mut self, module: &Module, names: &Names) -> Result<()> {
         self.write_magic()?;
         self.write_version()?;
         self.write_type_section(module.types())?;
@@ -1667,7 +1688,7 @@ where
         self.write_data_count_section(module.datas())?;
         self.write_code_section(module.funcs())?;
         self.write_data_section(module.datas())?;
-        self.write_name_section(module)?;
+        self.write_name_section(module, names)?;
 
         Ok(())
     }
@@ -1691,12 +1712,67 @@ pub fn code_sizes(module: &Module) -> HashMap<FuncName, usize> {
         .collect()
 }
 
-/// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: every index space is derived once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records every index space's names, so disassemblers and profilers show the same identifiers the compiler emitted.
-pub fn to_bytes(module: &Module) -> Vec<u8> {
+/// Which names a module's custom name section carries, one flag for each of its subsections: what its consumer asks the artifact to hold. The default is the module's name and its functions', which a sampler, a browser's stack and a debugger read; every other kind is read only by a reader of the binary itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Names {
+    pub module: bool,
+    pub functions: bool,
+    pub locals: bool,
+    pub types: bool,
+    pub fields: bool,
+    pub tables: bool,
+    pub memories: bool,
+    pub globals: bool,
+    pub elements: bool,
+    pub data: bool,
+}
+
+impl Names {
+    /// No name at all, and so no name section.
+    pub const NONE: Self = Self {
+        module: false,
+        functions: false,
+        locals: false,
+        types: false,
+        fields: false,
+        tables: false,
+        memories: false,
+        globals: false,
+        elements: false,
+        data: false,
+    };
+
+    /// Every name the module holds.
+    pub const EVERY: Self = Self {
+        module: true,
+        functions: true,
+        locals: true,
+        types: true,
+        fields: true,
+        tables: true,
+        memories: true,
+        globals: true,
+        elements: true,
+        data: true,
+    };
+}
+
+impl Default for Names {
+    fn default() -> Self {
+        Self {
+            module: true,
+            functions: true,
+            ..Self::NONE
+        }
+    }
+}
+
+/// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: every index space is derived once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records the names `names` asks for, so disassemblers and profilers show the same identifiers the compiler emitted where the artifact carries them.
+pub fn to_bytes(module: &Module, names: &Names) -> Vec<u8> {
     let mut bytes = Vec::new();
 
     Writer::new(&Indices::new(module), &mut bytes)
-        .write_module(module)
+        .write_module(module, names)
         .unwrap();
 
     bytes

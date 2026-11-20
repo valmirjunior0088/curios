@@ -532,7 +532,11 @@ fn emits(source: &str) -> Result<(), String> {
         .map_err(|error| error.format())?;
     let (module, _) =
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})?;
-    curios_native::validate(&curios_wasm::to_bytes(&module)).map_err(|error| error.to_string())
+    curios_native::validate(&curios_wasm::to_bytes(
+        &module,
+        &curios_wasm::Names::default(),
+    ))
+    .map_err(|error| error.to_string())
 }
 
 /// Elaboration takes a deep expression in its size: a left-leaning and a right-nested chain of ten thousand operators, whose recorded terms are each other's subterms and are zonked in one pass, and a thousand nested list literals, whose levels are a chain of solutions zonked once along it.

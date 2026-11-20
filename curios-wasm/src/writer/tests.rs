@@ -18,7 +18,7 @@ fn a_param_list_of_another_length_than_its_type_is_refused() {
     .parse::<Module>()
     .expect("expected a module");
 
-    to_bytes(&module);
+    to_bytes(&module, &Names::default());
 }
 
 /// A body's size is its entry of the code section without the size before it: the locals, run-length encoded, then the expression and its `end`, the very bytes the module holds after that size.
@@ -43,7 +43,7 @@ fn a_functions_code_size_is_its_entry_after_the_size() {
     assert_eq!(sizes[&FuncName::from("seven")], seven.len());
     assert_eq!(sizes[&FuncName::from("local")], local.len());
 
-    let bytes = to_bytes(&module);
+    let bytes = to_bytes(&module, &Names::default());
     for body in [&seven[..], &local[..]] {
         let entry = [&[body.len() as u8][..], body].concat();
         assert!(
@@ -88,7 +88,7 @@ fn sections(bytes: &[u8]) -> Vec<String> {
     found
 }
 
-/// A section or a name subsection that would hold nothing is left out, an empty one decoding to the same module as none: no import, global, export or data section here, and of the names, the module's, its functions' and its type's alone, `$seven` naming no local.
+/// A section or a name subsection that would hold nothing is left out, an empty one decoding to the same module as none: no import, global, export or data section here, and of every name asked for, the module's, its functions' and its type's alone, `$seven` naming no local.
 #[test]
 fn a_section_that_would_hold_nothing_is_left_out() {
     let module = r#"
@@ -101,7 +101,7 @@ fn a_section_that_would_hold_nothing_is_left_out() {
     .expect("expected a module");
 
     assert_eq!(
-        sections(&to_bytes(&module)),
+        sections(&to_bytes(&module, &Names::EVERY)),
         ["1", "3", "10", "0", "0/0", "0/1", "0/4"]
     );
 }
@@ -120,7 +120,7 @@ fn a_function_naming_no_local_is_no_entry_of_the_local_names() {
 "#
     .parse::<Module>()
     .expect("expected a module");
-    let bytes = to_bytes(&module);
+    let bytes = to_bytes(&module, &Names::EVERY);
 
     // The local names: one entry, `$local`'s, at function index 1, naming one local, `l`.
     let entry = [0x02, 0x06, 0x01, 0x01, 0x01, 0x00, 0x01, b'l'];
@@ -130,3 +130,32 @@ fn a_function_naming_no_local_is_no_entry_of_the_local_names() {
     );
 }
 
+/// The name section carries the kinds of name its writer asks for and no other: by default the module's and its functions', and none at all where none is asked for.
+#[test]
+fn the_name_section_carries_what_its_writer_asks_for() {
+    let module = r#"
+        (module $m
+            (type $t (func (result i32)))
+            (func $local (type $t)
+                (local $l i32)
+                local.get $l))
+"#
+    .parse::<Module>()
+    .expect("expected a module");
+
+    assert_eq!(
+        sections(&to_bytes(&module, &Names::default())),
+        ["1", "3", "10", "0", "0/0", "0/1"]
+    );
+    assert_eq!(
+        sections(&to_bytes(
+            &module,
+            &Names {
+                locals: true,
+                ..Names::NONE
+            }
+        )),
+        ["1", "3", "10", "0", "0/2"]
+    );
+    assert_eq!(sections(&to_bytes(&module, &Names::NONE)), ["1", "3", "10"]);
+}

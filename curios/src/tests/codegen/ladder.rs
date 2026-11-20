@@ -18,7 +18,7 @@ use {
     super::structural::test_support::*,
     crate::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
     std::time::Instant,
 };
 
@@ -427,7 +427,8 @@ fn walk_mirror_attribution_measurements() {
         let (module, foreigns) = compile_raw_program(source);
         let counts = mirror_counts(&module.to_string());
         let raw = Compiled::of(
-            curios_cranelift::compile(&to_bytes(&module)).expect("raw module compiles"),
+            curios_cranelift::compile(&to_bytes(&module, &Names::default()))
+                .expect("raw module compiles"),
             foreigns.clone(),
         );
         let optimized = to_compiled(&module, foreigns).expect("binaryen path compiles");

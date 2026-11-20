@@ -7,7 +7,7 @@ use {
     curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
 };
 
 /// A loop parameter whose one reader builds its own next value is dead, and so is that work: `seen`, a hidden argument carrying what the walk has read, is read only by the append that hands it back as the next `seen`, so the loop takes neither the parameter nor the append. With the append gone no byte is read, so the loop carries the bytes' length and its count alone. Mutation-checked: with droppable work asking of its operands whether or not its result is read, the loop keeps `seen` and appends a byte at every step.
@@ -54,8 +54,8 @@ fn a_parameter_read_only_to_build_its_own_next_value_is_dead() {
 
 fn answers(source: &str, expected: [&str; 4]) {
     let (module, foreigns) = compile_raw_program(source);
-    let raw = to_bytes(&module);
-    for bytes in [raw.clone(), curios_binaryen::optimize(raw, false)] {
+    let raw = to_bytes(&module, &Names::default());
+    for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
         let code = curios_cranelift::compile(&bytes).expect("the module validates and compiles");
         let compiled = Compiled::of(code, foreigns.clone());
         for (n, expected) in [0, 1, 4, 8].into_iter().zip(expected) {

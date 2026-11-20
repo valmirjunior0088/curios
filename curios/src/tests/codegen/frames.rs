@@ -9,7 +9,7 @@ use {
     curios_num::Natural,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
 };
 
 /// The module `source` is emitted from, its recursions on the heap, and the one it would be emitted from with every call native: its lowering optimized and rebuilt as the pipeline does, but kept off the heap.
@@ -64,7 +64,8 @@ fn refused(module: &Module) -> Module {
 /// What `module` exits with and prints, given `n` as its first argument.
 fn run(module: &Module, n: &str) -> (u8, Vec<u8>) {
     let (wasm, foreigns) = curios_emit::into_wasm(module, module.entry_suspension(), None);
-    let code = curios_cranelift::compile(&to_bytes(&wasm)).expect("the module validates");
+    let code = curios_cranelift::compile(&to_bytes(&wasm, &Names::default()))
+        .expect("the module validates");
     let (host, io) = MockHost::builder().args(["program", n]).build();
     let status = Compiled::of(code, foreigns)
         .run(host, ForeignBindings::empty())

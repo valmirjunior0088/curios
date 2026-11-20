@@ -1,6 +1,9 @@
 //! Recorded figures for the structural shapes, each with the command that retakes it. None asserts.
 
-use {super::test_support::*, curios_wasm::to_bytes};
+use {
+    super::test_support::*,
+    curios_wasm::{Names, to_bytes},
+};
 
 /// What the closure table index is worth at product level.
 ///
@@ -193,7 +196,7 @@ fn copy_growth_measurements() {
         ("split-return", SPLIT_RETURN),
     ] {
         let module = compile_raw(source);
-        let bytes = to_bytes(&module).len();
+        let bytes = to_bytes(&module, &Names::EVERY).len();
         println!("{label}: {bytes} bytes");
     }
 }

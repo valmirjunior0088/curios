@@ -6,13 +6,13 @@ use test_support::*;
 use {
     super::structural::test_support::*,
     curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
 };
 
 fn answers(source: &str, expected: [&str; 4]) {
     let (module, foreigns) = compile_raw_program(source);
-    let raw = to_bytes(&module);
-    for bytes in [raw.clone(), curios_binaryen::optimize(raw, false)] {
+    let raw = to_bytes(&module, &Names::default());
+    for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
         let code = curios_cranelift::compile(&bytes).expect("the module validates and compiles");
         let compiled = Compiled::of(code, foreigns.clone());
         for (n, expected) in [0, 1, 4, 8].into_iter().zip(expected) {

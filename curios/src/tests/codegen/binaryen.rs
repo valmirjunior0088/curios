@@ -4,7 +4,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    curios_wasm::{Module, to_bytes},
+    curios_wasm::{Module, Names, to_bytes},
 };
 
 #[test]
@@ -28,9 +28,9 @@ fn optimizes_to_a_smaller_valid_module() {
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
             .expect("expected wasm module");
 
-    let bytes = to_bytes(&module);
+    let bytes = to_bytes(&module, &Names::default());
     // `optimize` validates the result internally (asserting on an invalid module).
-    let optimized = optimize(bytes.clone(), false);
+    let optimized = optimize(bytes.clone());
 
     assert!(optimized.starts_with(b"\0asm"));
     assert!(
@@ -40,15 +40,19 @@ fn optimizes_to_a_smaller_valid_module() {
         bytes.len()
     );
 
-    // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which leaves a runtime profile unreadable.
-    let named = optimize(bytes, true);
+    // Binaryen keeps a name section exactly where it is handed one: the names a module carries are its writer's to decide (`Names`), so a module written with none is optimized to one with none, and one written with its functions' names keeps a section a sampler reads them off.
+    let unnamed = optimize(to_bytes(&module, &Names::NONE));
 
-    assert!(named.starts_with(b"\0asm"));
+    assert!(unnamed.starts_with(b"\0asm"));
     assert!(
-        named.len() > optimized.len(),
-        "expected the named module ({} bytes) to retain the name section the unnamed one ({} bytes) drops",
-        named.len(),
-        optimized.len()
+        optimized.len() > unnamed.len(),
+        "expected the named module ({} bytes) to keep the name section the unnamed one ({} bytes) never had",
+        optimized.len(),
+        unnamed.len()
+    );
+    assert!(
+        !unnamed.windows(5).any(|window| window == b"\x04name"),
+        "an unnamed module is optimized to one with no name section"
     );
 }
 
@@ -128,7 +132,7 @@ fn passes_the_full_memory_and_table_surface_through() {
 
     for (construct, source) in sources {
         let module = source.parse::<Module>().expect("expected a module");
-        let optimized = optimize(to_bytes(&module), false);
+        let optimized = optimize(to_bytes(&module, &Names::default()));
 
         assert!(
             optimized.starts_with(b"\0asm"),

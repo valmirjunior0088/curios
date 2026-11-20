@@ -11,7 +11,7 @@ use {
     curios_surface::Entrypoint,
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, MemName,
-        MemType, Module, NumType, ResultType, SubType, TypeName, ValType, to_bytes,
+        MemType, Module, Names, NumType, ResultType, SubType, TypeName, ValType, to_bytes,
     },
     std::collections::BTreeMap,
 };
@@ -171,7 +171,7 @@ fn plugin() -> Vec<u8> {
         vec![local(0), local(1)],
     );
 
-    to_bytes(&module)
+    to_bytes(&module, &Names::default())
 }
 
 /// One module answering the declarations `exports` names, each an export beside the declaration it answers.

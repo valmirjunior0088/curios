@@ -161,7 +161,7 @@ pub struct Module {
 }
 
 impl Module {
-    /// Creates an empty module. The name carries no wasm semantics; it is emitted in the custom name section so tooling can identify the module.
+    /// Creates an empty module. The name carries no wasm semantics; it is emitted in the custom name section, where its writer asks for the module's name, so tooling can identify the module.
     pub fn new<N>(name: N) -> Self
     where
         N: Into<String>,

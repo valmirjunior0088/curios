@@ -28,7 +28,7 @@ pub use module::{
 };
 
 mod writer;
-pub use writer::{code_sizes, to_bytes};
+pub use writer::{Names, code_sizes, to_bytes};
 
 mod parse;
 

@@ -124,7 +124,7 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
         .expect("a growth compiles");
     let mark = mark.expect("the last stage left a mark");
 
-    let bytes = optimize(&module, false);
+    let bytes = optimize(&module);
     let (count, mark) = mark.since(counters, 9);
     counts[9] = count;
 

@@ -1,7 +1,7 @@
 //! A module compiled and run in this process: what this crate's suites and `curios-prelude`'s run a program by, where a shipped build runs one from its `.cwasm` alone.
 
 use {
-    crate::compile::optimized,
+    crate::compile::optimize,
     curios_abi::{ForeignStore, HostOps},
     curios_native::{Compiled, ForeignBindings},
 };
@@ -11,7 +11,7 @@ pub fn to_compiled(
     module: &curios_wasm::Module,
     foreigns: ForeignStore,
 ) -> Result<Compiled, String> {
-    let bytes = optimized(module);
+    let bytes = optimize(module);
 
     let code = curios_profile::profile!("precompile" => curios_cranelift::compile(&bytes))
         .map_err(|error| format!("failed to compile module: {error}"))?;

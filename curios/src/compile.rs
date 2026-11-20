@@ -35,23 +35,17 @@ fn validate(bytes: &[u8]) {
     }
 }
 
-/// Optimize `module` with Binaryen and return its bytes, the name section kept where `names` asks for it.
-pub fn optimize(module: &curios_wasm::Module, names: bool) -> Vec<u8> {
-    let raw = curios_wasm::to_bytes(module);
+/// Optimize `module` with Binaryen and return its bytes, carrying the names every product carries ([`curios_wasm::Names`]'s default, the module's and its functions'): what a sampler, a browser's stacks and a debugger read the emitted code by.
+pub fn optimize(module: &curios_wasm::Module) -> Vec<u8> {
+    let raw = curios_wasm::to_bytes(module, &curios_wasm::Names::default());
     validate(&raw);
 
-    curios_binaryen::optimize(raw, names)
-}
-
-/// `module` optimized with Binaryen, as the bytes Cranelift is handed.
-pub fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
-    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-native` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
-    optimize(module, cfg!(feature = "profile"))
+    curios_binaryen::optimize(raw)
 }
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a cabinet files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, Box<Report>> {
-    let bytes = optimized(module);
+    let bytes = optimize(module);
 
     curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes)).map_err(
         |error| {

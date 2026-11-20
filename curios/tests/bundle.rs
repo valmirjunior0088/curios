@@ -7,7 +7,7 @@ use {
     curios_common::{digest, fill, test_support::*},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, LocalName,
-        MemName, MemType, Module, NumType, ResultType, SubType, TypeName, ValType, to_bytes,
+        MemName, MemType, Module, Names, NumType, ResultType, SubType, TypeName, ValType, to_bytes,
     },
     std::{
         fs,
@@ -111,7 +111,7 @@ fn plugin() -> Vec<u8> {
         vec![Instr::I32Const { value: 1 }],
     );
 
-    to_bytes(&module)
+    to_bytes(&module, &Names::default())
 }
 
 /// A package `name` under `root` whose library declares `pub foreign double(Nat) -> Nat;`, whose program calls it, and whose manifest names the fixture plugin in each of `rows`, a row's name beside the export it says answers `double`.

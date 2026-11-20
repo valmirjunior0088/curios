@@ -9,8 +9,9 @@ use std::{ptr, slice, sync::Mutex};
 
 /// Run Binaryen's whole-module optimizer over serialized module bytes (optimize level 2, shrink level 1, closed world) and return the re-encoded binary. The feature set is pinned to exactly what the emitter produces and Wasmtime's engine enables, so the optimizer can never introduce a post-GC proposal the runtime rejects. Safe to call concurrently — Binaryen's settings are process-global and its optimizer is not thread-safe, so calls serialize behind an internal lock — but `bytes` must be a well-formed module: Binaryen aborts the process on malformed input instead of returning an error, which is acceptable only because the input always comes from `curios_wasm::to_bytes`.
 ///
-/// `names` keeps the name section, which a profile of the optimized module reads its functions' names off.
-pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
+/// A name section in `bytes` is kept, as far as the optimizer keeps what it names, and none is written where `bytes` has none: which names an artifact carries is decided where it is written (`curios_wasm::Names`).
+pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
+    let names = has_name_section(&bytes);
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
@@ -37,7 +38,7 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
         BinaryenSetClosedWorld(true);
         BinaryenSetOptimizeLevel(2);
         BinaryenSetShrinkLevel(1);
-        // Off by default, and deliberately: the name section is 22 KB on a program the size of `trees`, which a shipped binary should not carry. A runtime profile without it shows bare addresses, so the caller that is profiling asks for it.
+        // Binaryen writes names only under its debug flag, and writes an empty section under it where it was handed none, so the flag follows the input.
         BinaryenSetDebugInfo(names);
 
         BinaryenModuleOptimize(module);
@@ -60,4 +61,37 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
 
         optimized
     }
+}
+
+/// Whether `bytes`, a well-formed module, holds a custom section named `name`: read off the section headers, each its id and its length.
+fn has_name_section(bytes: &[u8]) -> bool {
+    fn leb(bytes: &[u8], mut at: usize) -> Option<(usize, usize)> {
+        let (mut value, mut shift) = (0usize, 0);
+        loop {
+            let byte = *bytes.get(at)?;
+            at += 1;
+            value |= usize::from(byte & 0x7f) << shift;
+            shift += 7;
+            if byte < 0x80 {
+                return Some((value, at));
+            }
+        }
+    }
+
+    let mut at = 8;
+    while at < bytes.len() {
+        let id = bytes[at];
+        let Some((size, start)) = leb(bytes, at + 1) else {
+            return false;
+        };
+        if id == 0
+            && let Some((length, name)) = leb(bytes, start)
+            && bytes.get(name..name + length) == Some(b"name".as_slice())
+        {
+            return true;
+        }
+        at = start + size;
+    }
+
+    false
 }

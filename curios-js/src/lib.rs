@@ -6,7 +6,7 @@ use {
     curios_module::RootSource,
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
     js_sys::{Array, JSON, Object, Reflect, Uint8Array},
     wasm_bindgen::prelude::*,
 };
@@ -41,7 +41,7 @@ pub fn compile(source: &str) -> Result<Object, JsValue> {
     set(
         &compiled,
         "program",
-        &Uint8Array::from(to_bytes(&module).as_slice()),
+        &Uint8Array::from(to_bytes(&module, &Names::default()).as_slice()),
     );
     set(
         &compiled,

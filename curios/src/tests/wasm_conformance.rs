@@ -6,13 +6,13 @@
 
 use {
     curios_native::validate,
-    curios_wasm::{Module, to_bytes},
+    curios_wasm::{Module, Names, to_bytes},
 };
 
 fn validates(source: &str) {
     let module = source.parse::<Module>().expect("expected a module");
 
-    if let Err(error) = validate(&to_bytes(&module)) {
+    if let Err(error) = validate(&to_bytes(&module, &Names::default())) {
         panic!("expected a valid module: {error}");
     }
 }

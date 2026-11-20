@@ -11,7 +11,7 @@ use {
     curios_module::{open_entrypoint, read_module},
     curios_package::Cabinet,
     curios_pipeline::{Cache, Fold},
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
     std::path::{Path, PathBuf},
 };
 
@@ -104,7 +104,7 @@ fn invoke_over(
         .expect("the package compiles");
 
     // The module's own bytes stand in for machine code: the cabinet digests a payload and never reads it, and nothing here runs one.
-    let payload = to_bytes(&module);
+    let payload = to_bytes(&module, &Names::default());
     verdicts.payload_put(
         &program,
         &sources,

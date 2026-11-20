@@ -115,7 +115,7 @@ pub struct ArrayType {
     pub field_type: FieldType,
 }
 
-/// A struct composite type with named fields. Field names are this crate's own layer: `struct.get`/`struct.set` instructions refer to fields by name, the encoder resolves them to positional indices, and the names survive into the emitted name section for debug tooling.
+/// A struct composite type with named fields. Field names are this crate's own layer: `struct.get`/`struct.set` instructions refer to fields by name, the encoder resolves them to positional indices, and the names reach the emitted name section where its writer asks for fields' names ([`Names`](crate::Names)).
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructType {
     pub fields: Vec<(FieldName, FieldType)>,

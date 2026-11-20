@@ -7,7 +7,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_erase::Part,
     curios_module::RootSource,
-    curios_wasm::to_bytes,
+    curios_wasm::{Names, to_bytes},
 };
 
 #[test]
@@ -16,7 +16,10 @@ fn repeated_compilation_restores_an_unmutated_anf_prefix() {
 /std/Io/pure(())";
     let first = compile(source).unwrap();
     let second = compile(source).unwrap();
-    assert_eq!(to_bytes(&first), to_bytes(&second));
+    assert_eq!(
+        to_bytes(&first, &Names::EVERY),
+        to_bytes(&second, &Names::EVERY)
+    );
 }
 
 /// `Stage::NAMES`, `Stage::name`, and the driver's emission order are three spellings of one fact, and only `name` is forced by the compiler when a stage is added — a variant missing from `NAMES` would leave `wonder --stage`'s roster silently incomplete. One compile pins all three to each other.
