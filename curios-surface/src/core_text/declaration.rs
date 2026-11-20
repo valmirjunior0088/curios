@@ -12,7 +12,7 @@ use {
     },
     crate::{
         CasePayloadParam, CoreHead, CoreText, DecoratorField, Frame, FuncTypeParam, Rendered,
-        Shown, TopCase, TopConcept, TopInduct, TopStruct, sub,
+        Shown, TopCase, TopConcept, TopInduct, TopStruct, WordAt, sub,
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
@@ -158,6 +158,7 @@ pub fn family_declared<D: Rendered>(
         .collect::<Vec<_>>();
 
     TopInduct {
+        word: WordAt::default(),
         doc: None,
         core: head_of(name),
         vis_pub: false,
@@ -229,6 +230,7 @@ impl<D: Rendered> RecordWritten<D> {
     /// The record as a `struct` declaration of `name`.
     pub fn structure(self, name: &Global) -> TopStruct<D> {
         TopStruct {
+            word: WordAt::default(),
             doc: None,
             core: head_of(name),
             vis_pub: false,
@@ -243,6 +245,7 @@ impl<D: Rendered> RecordWritten<D> {
     /// The record as a `concept` declaration of `name`.
     pub fn concept(self, name: &Global) -> TopConcept<D> {
         TopConcept {
+            word: WordAt::default(),
             doc: None,
             core: head_of(name),
             vis_pub: false,

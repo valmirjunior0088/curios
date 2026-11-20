@@ -7,7 +7,7 @@ use {
     curios_common::{Plicity, SyntaxRegistry},
     curios_surface::{
         Doc, FuncSugarParam, GroupItem, Intrinsic, LetSignature, Module, Name, Pattern, Term,
-        TopItem, TopLet, TopMod, TopUse, UseGroup,
+        TopItem, TopLet, TopMod, TopUse, UseGroup, WordAt,
     },
 };
 
@@ -62,6 +62,7 @@ impl Decl {
         } = self;
 
         TopLet {
+            word: WordAt::default(),
             core: (),
             doc,
             vis_pub,

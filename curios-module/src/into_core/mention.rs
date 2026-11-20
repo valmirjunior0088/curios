@@ -243,6 +243,21 @@ impl Text<'_> {
         mentions
     }
 
+    /// Where every contextual word that opened a member this text writes stands, in the order they are written ([`curios_core::Mints::words`]).
+    pub fn words(&self) -> Vec<Span> {
+        let mut words = self
+            .mints()
+            .into_iter()
+            .flat_map(|mints| mints.words.iter().copied())
+            .filter(|extent| (extent.anchor, extent.stamp) == self.key)
+            .filter_map(|extent| self.placed(extent.start, extent.end))
+            .collect::<Vec<_>>();
+        words.sort_by_key(|span| (span.start, span.end));
+        words.dedup_by(|this, that| (this.start, this.end) == (that.start, that.end));
+
+        words
+    }
+
     /// Every segment of a path this text writes that reaches a module, where it is written and the module, in the order they are written ([`curios_core::Mints::modules`]).
     pub fn modules(&self) -> Vec<(Span, Qualifier)> {
         let lines = self

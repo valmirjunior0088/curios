@@ -646,6 +646,8 @@ pub struct Declaring {
     named: RefCell<Vec<(curios_core::Extent, curios_core::Global)>>,
     // Every segment of a path the declaration being lowered writes that reaches a module, where it is written. The declaration's, as its written binders are.
     modules: RefCell<Vec<(curios_core::Extent, Qualifier)>>,
+    // Where every contextual word that opened a member of the declaration being lowered stands. The declaration's, as its written binders are.
+    words: RefCell<Vec<curios_core::Extent>>,
     // The lints the lowering of the declaration being lowered decided, its last fact being the text as written. The declaration's, as its unread sites are.
     lints: RefCell<Vec<curios_core::Lint>>,
 }
@@ -666,6 +668,7 @@ impl Declaring {
             hides,
             named,
             modules,
+            words,
             lints,
         } = self;
 
@@ -681,6 +684,7 @@ impl Declaring {
         hides.borrow_mut().clear();
         named.borrow_mut().clear();
         modules.borrow_mut().clear();
+        words.borrow_mut().clear();
         lints.borrow_mut().clear();
     }
 }
@@ -702,6 +706,7 @@ impl Shared {
                 hides: RefCell::default(),
                 named: RefCell::default(),
                 modules: RefCell::default(),
+                words: RefCell::default(),
                 lints: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
@@ -848,6 +853,17 @@ impl<'a> Context<'a> {
         >,
     ) {
         self.shared.declaring.written.borrow_mut().extend(binders);
+    }
+
+    /// Record where `word`, a contextual word that opened a member of the declaration being lowered, was read, beside what it minted, once however often its text is lowered — an arm's body is lowered once for each of its alternatives: nothing for one that lies in no text of it.
+    pub fn word(&self, word: &Span) {
+        let Some(extent) = self.extent(word) else {
+            return;
+        };
+        let mut words = self.shared.declaring.words.borrow_mut();
+        if !words.contains(&extent) {
+            words.push(extent);
+        }
     }
 
     /// Record `hiding`, a use of a written binder of the declaration being lowered that hides what the module's scope binds under its name, beside what it minted.
@@ -1058,6 +1074,7 @@ impl<'a> Context<'a> {
             hides: self.shared.declaring.hides.borrow().clone(),
             named: self.shared.declaring.named.borrow().clone(),
             modules: self.shared.declaring.modules.borrow().clone(),
+            words: self.shared.declaring.words.borrow().clone(),
             lints: self.shared.declaring.lints.borrow().clone(),
         }
     }

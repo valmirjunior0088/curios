@@ -2,14 +2,15 @@ use {
     super::{
         DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, Read,
         comment_ending_at, members, parse_caller_sort, parse_func, parse_func_type,
-        parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
-        parse_name, parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
-        parse_qualified_name, parse_struct_lit, parse_terminator, parse_tuple, parse_tuple_type,
-        parse_type, parse_unreadable_binder, parse_usize_raw, parse_written_word_raw, refused,
+        parse_intrinsic, parse_keyword, parse_keyword_at, parse_let_binder, parse_literal,
+        parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens, parse_pattern,
+        parse_premise, parse_prop, parse_qualified_name, parse_struct_lit, parse_terminator,
+        parse_tuple, parse_tuple_type, parse_type, parse_unreadable_binder, parse_usize_raw,
+        parse_written_word_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
-        LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, bound,
+        LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, WordAt, bound,
         parse_identifier_raw, parse_whitespace,
     },
     curios_common::{InfixOp, Keyword, Plicity, Span, Standing, is_identifier_char, recurse},
@@ -71,11 +72,16 @@ fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGrou
     parse_keyword(Keyword::Let)
         .and_keep(parse_let_binder::<D>)
         .and(parse_local_let_signature)
-        .map(|(binder, signature)| LetBinding { binder, signature })
+        .map(|(binder, signature)| LetBinding {
+            word: WordAt::default(),
+            binder,
+            signature,
+        })
         .and(many0(|| {
-            parse_keyword(Keyword::And)
-                .and_keep(commit(D::parse_fields.and(parse_binding)))
-                .map(|(core, (label, signature))| LetBinding {
+            parse_keyword_at(Keyword::And)
+                .and(commit(D::parse_fields.and(parse_binding)))
+                .map(|(word, (core, (label, signature)))| LetBinding {
+                    word: WordAt::at(word),
                     binder: Pattern::Binder(Binder { core, label }),
                     signature,
                 })

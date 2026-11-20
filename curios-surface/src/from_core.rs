@@ -19,6 +19,7 @@ use {
         LetGroup, LetSignature, ListEntry, Literal, Match, MatchPattern, MatchPatternField,
         MatrixArm, Name, NatLiteral, NumLit, Pattern, Program, Proj, ProofLiteral, Radix, StrLit,
         StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
+        WordAt,
     },
     curios_common::{InfixOp, Plicity, Qualifier, recurse},
     curios_core::Bound,
@@ -418,6 +419,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 let value = binding.value().release(&refs[..index]);
                 groups.push(LetGroup {
                     members: vec![LetBinding {
+                        word: WordAt::default(),
                         binder: Pattern::Binder(Label::from(frame.word(&labels[index])).into()),
                         signature: LetSignature::Name {
                             type_: Some(sub(type_, frame)?),
@@ -448,6 +450,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 .enumerate()
                 .map(|(index, member)| {
                     Some(LetBinding {
+                        word: WordAt::default(),
                         binder: Pattern::Binder(Label::from(frame.word(&labels[index])).into()),
                         signature: LetSignature::Name {
                             type_: Some(sub(member.type_.open(&refs), frame)?),

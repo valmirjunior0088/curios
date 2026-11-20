@@ -2,8 +2,9 @@ use {
     super::{
         Argument, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS,
         Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
-        TupleTypeParam, clear_comments, parse_file_head, parse_optional_term, parse_program_end,
-        parse_term, parse_top_item, print_module_items, print_term, signature_type, take_comments,
+        TupleTypeParam, WordAt, clear_comments, parse_file_head, parse_optional_term,
+        parse_program_end, parse_term, parse_top_item, print_module_items, print_term,
+        signature_type, take_comments,
     },
     curios_abi::WireSignature,
     curios_common::{Keyword, Plicity, Report, Source, Span, is_identifier_char},
@@ -113,6 +114,8 @@ impl PartialEq for TopUse {
 /// One member of a top-level `let` item — a lone definition, or one member of a `let … and …;` group (see `TopItem::Let`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet<D: Dialect = Program> {
+    /// Where the `and` before a later member of a group was read.
+    pub word: WordAt,
     pub doc: Option<Doc>,
     pub core: D::Head,
     pub vis_pub: bool,
@@ -158,6 +161,8 @@ pub struct TopCase<D: Dialect = Program> {
 /// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives its type-constructor function, which declares one value-constructor function per case, made of the family's entry where it is read; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct<D: Dialect = Program> {
+    /// Where the `and` before a later member of a group was read.
+    pub word: WordAt,
     pub doc: Option<Doc>,
     pub core: D::Head,
     pub vis_pub: bool,
@@ -185,6 +190,8 @@ pub struct StructField<D: Dialect = Program> {
 /// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the type-former's visibility); `rep_pub` is the declaration-local `pub` before the result sort (representation exported wherever the type name is visible). The two markers are orthogonal; every combination is legal. `params` are written exactly like an inductive's; `fields` reuse the Σ-type field grammar (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct<D: Dialect = Program> {
+    /// Where the `and` before a later member of a group was read.
+    pub word: WordAt,
     pub doc: Option<Doc>,
     pub core: D::Head,
     pub vis_pub: bool,
@@ -229,6 +236,8 @@ impl<D: Dialect> ConceptField<D> {
 /// A `concept` declaration: a record-shaped interface. It lowers to a representation-public nominal structure plus a concept-registry entry and, into its own namespace, one method-wrapper `let` per field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept<D: Dialect = Program> {
+    /// Where the `concept` heading the item, or the `and` before a later member, was read.
+    pub word: WordAt,
     pub doc: Option<Doc>,
     pub core: D::Head,
     pub vis_pub: bool,
@@ -252,6 +261,8 @@ pub struct WitnessField {
 /// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness~N(tele) -> C(args) = C { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application — an application like any other, so its arguments take the marks a call's do — which is the witness's declared type and what its body is checked against. The body is written, or `..` alone as `satisfy C(args) { .. }` — the derived form, whose body the compiler writes.
 #[derive(Debug, Clone)]
 pub struct TopWitness {
+    /// Where the `satisfy` heading the item, or the `and` before a later member, was read.
+    pub word: WordAt,
     pub doc: Option<Doc>,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
@@ -276,6 +287,8 @@ impl PartialEq for TopWitness {
 /// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest<D: Dialect = Program> {
+    /// Where the `test` heading the item was read.
+    pub word: WordAt,
     pub core: D::Head,
     pub label: Label,
     pub body: Term<D>,

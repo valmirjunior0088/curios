@@ -18,7 +18,7 @@ use {
     },
     curios_prelude::{root_prefixes, test_support::*, with_prelude},
     curios_surface::{
-        Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod,
+        Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod, WordAt,
         build_rename, display_names,
     },
     curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, test_support::*},
@@ -1496,6 +1496,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             false => (type_.clone(), parsed(label, name)),
                         };
                         let declared = |label: String, type_, body| TopLet {
+                            word: WordAt::default(),
                             doc: None,
                             core: (),
                             vis_pub: false,

@@ -10,6 +10,7 @@ fn local_let_without_type() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
+                    word: WordAt::default(),
                     binder: Pattern::Binder("x".into()),
                     signature: LetSignature::Name {
                         type_: None,
@@ -30,6 +31,7 @@ fn local_let_with_type_still_works() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
+                    word: WordAt::default(),
                     binder: Pattern::Binder("x".into()),
                     signature: LetSignature::Name {
                         type_: Some(Subterm::Type.into()),
@@ -103,6 +105,7 @@ fn func_without_annotation_still_works() {
 fn local_let_group() {
     // `and` joins members into one statement, each a plain label with a mandatory type.
     let member = |label: &str, body: &str| LetBinding {
+        word: WordAt::default(),
         binder: Pattern::Binder(label.into()),
         signature: LetSignature::Name {
             type_: Some(Subterm::Type.into()),

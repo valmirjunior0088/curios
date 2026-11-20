@@ -16,6 +16,7 @@ fn let_func_and_apply() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
+                    word: WordAt::default(),
                     binder: Pattern::Binder("id".into()),
                     signature: LetSignature::Name {
                         type_: Some(
@@ -361,6 +362,7 @@ fn a_binder_spans_its_word_alone() {
     let LetBinding {
         binder: Pattern::Binder(f),
         signature: LetSignature::Func { params, .. },
+        ..
     } = &outer.groups[1].members[0]
     else {
         panic!("function sugar");

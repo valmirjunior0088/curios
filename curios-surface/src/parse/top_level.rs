@@ -4,19 +4,20 @@ use {
         PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, name_from_segments,
         parse_apply_argument, parse_bound_word, parse_field_equals, parse_field_member,
         parse_func_pattern_param, parse_func_sugar_param, parse_func_type_param, parse_identifier,
-        parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_prop, parse_terminator, parse_type, parse_word_raw,
+        parse_keyword, parse_keyword_at, parse_let_signature, parse_literal, parse_mark,
+        parse_name, parse_named_premise, parse_prop, parse_terminator, parse_type, parse_word_raw,
         parse_written_word, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
         InductIndex, Label, Module, Name, Program, StructField, Term, TopCase, TopConcept,
         TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        UseGroup, WitnessField, one_of, parse_declared_label, parse_doc, parse_identifier_raw,
-        parse_term, parse_whitespace, reserved_keyword, text_after, word_after,
+        UseGroup, WitnessField, WordAt, one_of, parse_declared_label, parse_doc,
+        parse_identifier_raw, parse_term, parse_whitespace, reserved_keyword, text_after,
+        word_after,
     },
     curios_abi::{NEVER, WireLeaf, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Keyword, Plicity, is_reserved},
+    curios_common::{Keyword, Plicity, Span, is_reserved},
     curios_parse::{
         Boxed, Mark, Parsed, Parser, ParserError, ParserState, Stated, commit, fail, fail_from,
         look_ahead, many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing,
@@ -45,20 +46,31 @@ const DOC_BEFORE_TEST: &[&str] = &[
     "a test is not part of the interface",
 ];
 
+/// The head of a later member of an `and` group, as [`parse_and_head`] reads it: its documentation comment, what Core text's decorator states, its `pub`, and where the `and` was read.
+pub struct AndHead<F> {
+    pub doc: Option<Doc>,
+    pub fields: F,
+    pub vis_pub: bool,
+    pub word: Span,
+}
+
 /// The head of a later member of an `and` group: its documentation comment, its `pub`, and the `and` itself.
 ///
 /// Recoverable when there is no documentation, since the absence of `and` is how a group ends. With one, the keyword after the block — past a `pub` — decides: `and` makes it this group's next member, so a failure past it is the diagnosis; another word makes it the next item's, so the group ends recoverably and the item loop reads the block again; anything else is nothing the block may document.
-pub fn parse_and_head<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, (Option<Doc>, D::Fields, bool)> {
+pub fn parse_and_head<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, AndHead<D::Fields>> {
     parse_doc
         .flat_map(|doc| {
             let head = D::parse_fields
                 .and(parse_pub)
-                .and_drop(parse_keyword(Keyword::And));
+                .and(parse_keyword_at(Keyword::And));
             let Some(doc) = doc else {
                 return head
-                    .map(|(fields, vis_pub)| (None, fields, vis_pub))
+                    .map(|((fields, vis_pub), word)| AndHead {
+                        doc: None,
+                        fields,
+                        vis_pub,
+                        word,
+                    })
                     .boxed();
             };
 
@@ -66,7 +78,12 @@ pub fn parse_and_head<'a, D: Grammar>(
             match Keyword::read(word) {
                 Some(Keyword::And) => head
                     .map_err(DOC_BEFORE_NOTHING)
-                    .map(move |(fields, vis_pub)| (Some(doc), fields, vis_pub))
+                    .map(move |((fields, vis_pub), word)| AndHead {
+                        doc: Some(doc.clone()),
+                        fields,
+                        vis_pub,
+                        word,
+                    })
                     .boxed(),
                 Some(Keyword::End) => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
                 None if word.is_empty() => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
@@ -90,7 +107,7 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> 
 // A `test` declaration: `test name = body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
 //
 // Like `satisfy`, `test` stays a contextual word everywhere else, and the label is exactly how far that reaches. The label's own refusal stays recoverable because the head is already eaten when this runs: its failure sits past the item loop's choice point, so uncaught it would abort the loop rather than end it, and `test(1)` could not be a program's tail. Past the label there is nothing to fall through to — `test name` is two names in a row and so no term at all — so the rest commits and reports its own fault.
-pub fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_test<'a>(vis_pub: bool, word: Span) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
             true => fail(&[
@@ -101,7 +118,12 @@ pub fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
             false => pure(()).boxed(),
         }
         .and_keep(parse_test_member(()))
-        .map(TopItem::Test))
+        .map(|test| {
+            TopItem::Test(TopTest {
+                word: WordAt::at(word.clone()),
+                ..test
+            })
+        }))
         .parse(state)
     }
 }
@@ -118,7 +140,12 @@ pub fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, T
                     .and_drop(parse_whitespace),
             ),
         )
-        .map(|((core, label), body)| TopTest { core, label, body })
+        .map(|((core, label), body)| TopTest {
+            word: WordAt::default(),
+            core,
+            label,
+            body,
+        })
         .parse(state)
     }
 }
@@ -130,6 +157,7 @@ pub fn parse_let_member<'a, D: Grammar>(
     vis_pub: bool,
 ) -> impl Parser<'a, TopLet<D>> {
     D::declaring(fields, parse_let_signature::<D>).map(move |((core, label), signature)| TopLet {
+        word: WordAt::default(),
         doc: doc.clone(),
         core,
         vis_pub,
@@ -147,8 +175,13 @@ pub fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, Top
                 tagging(
                     Some(tag),
                     many0(move || {
-                        parse_and_head::<Program>.flat_map(move |(doc, (), vis_pub)| {
-                            commit(parse_let_member::<Program>(doc, (), vis_pub))
+                        parse_and_head::<Program>.flat_map(move |head| {
+                            commit(parse_let_member::<Program>(head.doc, (), head.vis_pub)).map(
+                                move |member| TopLet {
+                                    word: WordAt::at(head.word.clone()),
+                                    ..member
+                                },
+                            )
                         })
                     })
                     // Committed for the body's reason: a first member read to the end of its body is a declaration and nothing else, the local reading being the same text failing the same way, so the `;` it owes is the item's own to report and the loop recovers past it.
@@ -755,6 +788,7 @@ pub fn parse_top_induct_body<'a, D: Grammar>(
                 }
 
                 pure(TopInduct {
+                    word: WordAt::default(),
                     doc: doc.clone(),
                     core,
                     vis_pub,
@@ -781,8 +815,13 @@ pub fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, 
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
-                            parse_top_induct_body::<Program>(doc, (), vis_pub)
+                        parse_and_head::<Program>.flat_map(|head| {
+                            parse_top_induct_body::<Program>(head.doc, (), head.vis_pub).map(
+                                move |member| TopInduct {
+                                    word: WordAt::at(head.word.clone()),
+                                    ..member
+                                },
+                            )
                         })
                     })
                     .and_drop(parse_keyword(Keyword::End)),
@@ -856,6 +895,7 @@ pub fn parse_struct_member<'a, D: Grammar>(
         )
         .map(
             move |((core, label), ((params, (rep_pub, result_sort)), members))| TopStruct {
+                word: WordAt::default(),
                 doc: doc.clone(),
                 core,
                 vis_pub,
@@ -879,8 +919,13 @@ pub fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, 
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
-                            parse_struct_member::<Program>(doc, (), vis_pub)
+                        parse_and_head::<Program>.flat_map(|head| {
+                            parse_struct_member::<Program>(head.doc, (), head.vis_pub).map(
+                                move |member| TopStruct {
+                                    word: WordAt::at(head.word.clone()),
+                                    ..member
+                                },
+                            )
                         })
                     }),
                 )
@@ -977,6 +1022,7 @@ pub fn parse_concept_member<'a, D: Grammar>(
         )
         .map(
             move |((core, label), ((params, (rep_pub, result_sort)), members))| TopConcept {
+                word: WordAt::default(),
                 doc: doc.clone(),
                 core,
                 vis_pub,
@@ -992,16 +1038,29 @@ pub fn parse_concept_member<'a, D: Grammar>(
 }
 
 // A `concept` item: one concept, or a `concept A … and B …` group whose method types name one another's dictionaries. Each member takes its own `pub`, as a `struct` group's do.
-pub fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_concept<'a>(
+    doc: Option<Doc>,
+    vis_pub: bool,
+    word: Span,
+) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_concept_member::<Program>(doc.clone(), (), vis_pub)
+            .map(|first| TopConcept {
+                word: WordAt::at(word.clone()),
+                ..first
+            })
             .flat_map(|first| {
                 let tag = first.label.to_string();
                 tagging(
                     Some(tag),
                     many0(|| {
-                        parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| {
-                            parse_concept_member::<Program>(doc, (), vis_pub)
+                        parse_and_head::<Program>.flat_map(|head| {
+                            parse_concept_member::<Program>(head.doc, (), head.vis_pub).map(
+                                move |member| TopConcept {
+                                    word: WordAt::at(head.word.clone()),
+                                    ..member
+                                },
+                            )
                         })
                     }),
                 )
@@ -1095,6 +1154,7 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> impl Parser<'a, TopWitness> {
                 };
 
                 TopWitness {
+                    word: WordAt::default(),
                     doc,
                     params,
                     concept,
@@ -1114,17 +1174,30 @@ const WITNESS_NEVER_PUB: &[&str] = &[
 ];
 
 // A witness declaration is anonymous: `satisfy Concept(args) { … }`, or a group `satisfy C(A) { … } and D(B) { … }` of witnesses that resolve through one another. The keyword is *not* a commit point: `satisfy` is contextual, so a program's tail may call a function of that name, and the dispatch keeps this arm recoverable for it. A witness has no `pub`, so neither does an `and` member, and one written here is refused by name as a test's is.
-pub fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_witness<'a>(
+    doc: Option<Doc>,
+    vis_pub: bool,
+    word: Span,
+) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
             true => fail(WITNESS_NEVER_PUB).boxed(),
             false => pure(()).boxed(),
         }
-        .and_keep(parse_witness_member(doc))
+        .and_keep(parse_witness_member(doc.clone()))
+        .map(|first| TopWitness {
+            word: WordAt::at(word.clone()),
+            ..first
+        })
         .and(many0(|| {
-            parse_and_head::<Program>.flat_map(|(doc, (), vis_pub)| match vis_pub {
+            parse_and_head::<Program>.flat_map(|head| match head.vis_pub {
                 true => fail(WITNESS_NEVER_PUB).boxed(),
-                false => parse_witness_member(doc).boxed(),
+                false => parse_witness_member(head.doc)
+                    .map(move |member| TopWitness {
+                        word: WordAt::at(head.word.clone()),
+                        ..member
+                    })
+                    .boxed(),
             })
         }))
         .map(|(first, rest)| iter::once(first).chain(rest).collect())
@@ -1168,57 +1241,63 @@ fn not_a_top_level_item() -> Vec<String> {
 pub fn parse_top_item<'a>(state: ParserState<'a>) -> Parsed<'a, TopItem> {
     parse_doc
         .flat_map(|doc| {
-            let head = parse_pub.and(parse_identifier_raw);
+            let head = parse_pub.and(spanned(parse_identifier_raw));
             let head = match &doc {
                 Some(_) => commit(head.map_err(DOC_BEFORE_NOTHING)).boxed(),
                 None => head.boxed(),
             };
 
-            mark().and(head).flat_map(move |(start, (vis_pub, head))| {
-                // Recoverable only where a failed item may still be a program's tail, which a `pub` or a documentation comment rules out.
-                let documented = doc.is_some();
-                let fallible = |parser: Boxed<'a, TopItem>| match vis_pub || documented {
-                    true => commit(parser).boxed(),
-                    false => parser,
-                };
+            mark()
+                .and(head)
+                .flat_map(move |(start, (vis_pub, (word, head)))| {
+                    // Recoverable only where a failed item may still be a program's tail, which a `pub` or a documentation comment rules out.
+                    let documented = doc.is_some();
+                    let fallible = |parser: Boxed<'a, TopItem>| match vis_pub || documented {
+                        true => commit(parser).boxed(),
+                        false => parser,
+                    };
 
-                // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
-                let body = match Keyword::read(head) {
-                    Some(Keyword::Mod) => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
-                    Some(Keyword::Use) => match documented {
-                        true => commit(fail(DOC_BEFORE_USE)).boxed(),
-                        false => commit(parse_top_use(vis_pub, start)).boxed(),
-                    }
-                    .boxed(),
-                    Some(Keyword::Induct) => commit(parse_top_induct(doc, vis_pub)).boxed(),
-                    Some(Keyword::Struct) => commit(parse_top_struct(doc, vis_pub)).boxed(),
-                    Some(Keyword::Foreign) => commit(parse_top_foreign(doc, vis_pub)).boxed(),
-                    Some(Keyword::Concept) => fallible(parse_top_concept(doc, vis_pub).boxed()),
-                    Some(Keyword::Satisfy) => fallible(parse_top_witness(doc, vis_pub).boxed()),
-                    // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose commitment reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
-                    Some(Keyword::Test) => match (documented, vis_pub) {
-                        (true, _) => commit(fail(DOC_BEFORE_TEST)).boxed(),
-                        (false, true) => commit(parse_top_test(vis_pub)).boxed(),
-                        (false, false) => parse_top_test(vis_pub).boxed(),
-                    }
-                    .boxed(),
-                    Some(Keyword::Let) => fallible(parse_top_let(doc, vis_pub).boxed()),
-                    _ => {
-                        return fallible(
-                            fail_from(
-                                &start,
-                                match documented {
-                                    true => Stated::from(DOC_BEFORE_NOTHING),
-                                    false => Stated::from(not_a_top_level_item()),
-                                },
-                            )
-                            .boxed(),
-                        );
-                    }
-                };
+                    // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
+                    let body = match Keyword::read(head) {
+                        Some(Keyword::Mod) => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
+                        Some(Keyword::Use) => match documented {
+                            true => commit(fail(DOC_BEFORE_USE)).boxed(),
+                            false => commit(parse_top_use(vis_pub, start)).boxed(),
+                        }
+                        .boxed(),
+                        Some(Keyword::Induct) => commit(parse_top_induct(doc, vis_pub)).boxed(),
+                        Some(Keyword::Struct) => commit(parse_top_struct(doc, vis_pub)).boxed(),
+                        Some(Keyword::Foreign) => commit(parse_top_foreign(doc, vis_pub)).boxed(),
+                        Some(Keyword::Concept) => {
+                            fallible(parse_top_concept(doc, vis_pub, word).boxed())
+                        }
+                        Some(Keyword::Satisfy) => {
+                            fallible(parse_top_witness(doc, vis_pub, word).boxed())
+                        }
+                        // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose commitment reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
+                        Some(Keyword::Test) => match (documented, vis_pub) {
+                            (true, _) => commit(fail(DOC_BEFORE_TEST)).boxed(),
+                            (false, true) => commit(parse_top_test(vis_pub, word)).boxed(),
+                            (false, false) => parse_top_test(vis_pub, word).boxed(),
+                        }
+                        .boxed(),
+                        Some(Keyword::Let) => fallible(parse_top_let(doc, vis_pub).boxed()),
+                        _ => {
+                            return fallible(
+                                fail_from(
+                                    &start,
+                                    match documented {
+                                        true => Stated::from(DOC_BEFORE_NOTHING),
+                                        false => Stated::from(not_a_top_level_item()),
+                                    },
+                                )
+                                .boxed(),
+                            );
+                        }
+                    };
 
-                parse_whitespace.and_keep(body).boxed()
-            })
+                    parse_whitespace.and_keep(body).boxed()
+                })
         })
         .parse(state)
 }

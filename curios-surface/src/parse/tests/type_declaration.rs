@@ -8,6 +8,7 @@ fn top_inductive_single_variant() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            word: WordAt::default(),
             core: (),
             doc: None,
             vis_pub: false,
@@ -32,6 +33,7 @@ fn top_inductive_empty() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            word: WordAt::default(),
             core: (),
             doc: None,
             vis_pub: false,

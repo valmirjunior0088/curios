@@ -570,14 +570,19 @@ fn parse_qualified_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 //
 // Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report would be its bare `Expected identifier`, which names neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's is.
 fn parse_keyword<'a>(keyword: Keyword) -> impl Parser<'a, ()> {
+    move |state: ParserState<'a>| parse_keyword_at(keyword).map(|_| ()).parse(state)
+}
+
+/// [`parse_keyword`], handing back where the word was read, the whitespace after it left out: where a contextual word stood, which the tree keeps ([`WordAt`](crate::WordAt)).
+fn parse_keyword_at<'a>(keyword: Keyword) -> impl Parser<'a, Span> {
     let expected = keyword.spelling();
     move |state: ParserState<'a>| {
         mark()
-            .and(take_while(is_identifier_char))
+            .and(spanned(take_while(is_identifier_char)))
             .and(ahead())
             .flat_map(
-                move |((start, word), rest)| match (word, expected == word) {
-                    (_, true) => pure(()).boxed(),
+                move |((start, (span, word)), rest)| match (word, expected == word) {
+                    (_, true) => pure(span).boxed(),
                     ("", false) => fail(vec![
                         format!("expected: the keyword `{expected}`"),
                         format!("obtained: {}", obtained(rest)),

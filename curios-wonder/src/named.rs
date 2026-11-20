@@ -134,6 +134,8 @@ pub struct Written {
     pub fields: Vec<WrittenField>,
     /// Each segment of a path the text writes that reaches a module, with the module, in the order they are written (`curios_module::Text::modules`).
     pub modules: Vec<(Span, Qualifier)>,
+    /// Where each contextual word that opened a member the text writes stands, in the order they are written (`curios_module::Text::words`).
+    pub words: Vec<Span>,
 }
 
 /// A structure's field named by the label it is written with ([`Stands::Field`]): where the label is written, the field's label, the path of the structure that declares it, where the structure writes the field, and its type as the structure declares it, spelled for a reader standing in the text.
@@ -665,6 +667,7 @@ impl Reading {
                     settled: BTreeMap::new(),
                     fields: Vec::new(),
                     modules: passage.modules(),
+                    words: passage.words(),
                 }
             })
             .collect::<Vec<_>>();

@@ -679,6 +679,8 @@ impl<D: Dialect> LetSignature<D> {
 /// One binding of a [`Let`] block: a bound pattern and its signature.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetBinding<D: Dialect = Program> {
+    /// Where the `and` before a later member of a group was read.
+    pub word: WordAt,
     /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the `let f(…) -> R = …` function-definition sugar. A compound pattern here is grammatically legal for the function-sugar form too, but pointless: a function's own binding is never itself a tuple/struct value, so destructuring it fails the same "not a tuple/struct" projection type error a hand-written misuse would (no special-casing needed).
     pub binder: Pattern<D>,
     pub signature: LetSignature<D>,
@@ -760,6 +762,30 @@ pub enum Subterm<D: Dialect = Program> {
 pub enum ProofLiteral {
     Char(CharLit),
     Str(StrLit),
+}
+
+/// Where the contextual word that opened a member was read: `and` before a group's later member, and `test`, `concept` or `satisfy` at an item's head. None where a reserved word opened it, which a grammar paints by the word alone, and for a member the compiler built. What the lowering keeps of a declaration's words, which a question about a file classes as the language's.
+///
+/// Presentational, as a span is: no part of what the member is, so any two are equal, as [`Written`]'s are.
+#[derive(Debug, Clone, Default)]
+pub struct WordAt(Option<Span>);
+
+impl WordAt {
+    /// The word read at `span`.
+    pub fn at(span: Span) -> Self {
+        Self(Some(span))
+    }
+
+    /// Where the word was read, where one opened the member.
+    pub fn span(&self) -> Option<&Span> {
+        self.0.as_ref()
+    }
+}
+
+impl PartialEq for WordAt {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 /// The text a literal was written as, so the printer writes it back as it was written: `1.0e9` stays `1.0e9`, and an escape stays the escape its author chose for a character that is hard to see or to type. Empty for a literal the compiler built, which prints in its canonical spelling.

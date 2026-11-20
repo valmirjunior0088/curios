@@ -25,7 +25,7 @@ pub use term::{
     FuncSugarParam, FuncType, FuncTypeParam, Guard, HeadlessArm, HeadlessMatch, Infix, Let,
     LetBinding, LetGroup, LetSignature, Match, MatchPattern, MatchPatternField, MatrixArm, NumLit,
     Pattern, PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm, Term,
-    Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam, Written, func_sugar_params,
+    Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam, WordAt, Written, func_sugar_params,
     func_sugar_type_params,
 };
 

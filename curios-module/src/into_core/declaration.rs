@@ -7,13 +7,28 @@ use {
     },
     crate::Error,
     curios_abi::ForeignFunction,
-    curios_common::Plicity,
+    curios_common::{Plicity, Span},
     curios_surface::{
-        LetSignature, StructLit, StructLitEntry, Subterm, Term, TopItem, TupleField,
+        LetSignature, StructLit, StructLitEntry, Subterm, Term, TopItem, TupleField, WordAt,
         func_sugar_type_params,
     },
     std::{collections::BTreeSet, sync::Arc},
 };
+
+/// Where each contextual word that opened a member of `item` was read ([`WordAt`]).
+fn words(item: &TopItem) -> Vec<&Span> {
+    let members: Vec<&WordAt> = match item {
+        TopItem::Let(group) => group.iter().map(|member| &member.word).collect(),
+        TopItem::Induct(group) => group.iter().map(|member| &member.word).collect(),
+        TopItem::Struct(group) => group.iter().map(|member| &member.word).collect(),
+        TopItem::Concept(group) => group.iter().map(|member| &member.word).collect(),
+        TopItem::Witness(group) => group.iter().map(|member| &member.word).collect(),
+        TopItem::Test(test) => vec![&test.word],
+        TopItem::Mod(_) | TopItem::Use(_) | TopItem::Foreign(_) | TopItem::Broken(_) => Vec::new(),
+    };
+
+    members.into_iter().filter_map(WordAt::span).collect()
+}
 
 /// Lower `item`, a declaration of the module body `context` stands in, into `lowered`: its items, the registry entries it declares and the `foreign` row it registers.
 pub(super) fn lower_declaration(
@@ -21,6 +36,9 @@ pub(super) fn lower_declaration(
     context: &Context,
     lowered: &mut Lowering,
 ) -> Result<(), Error> {
+    for word in words(item) {
+        context.word(word);
+    }
     match item {
         TopItem::Broken(_) | TopItem::Mod(_) | TopItem::Use(_) => {
             unreachable!("a head stands where its item does")

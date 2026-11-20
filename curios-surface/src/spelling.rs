@@ -4,10 +4,10 @@ use {
     crate::{
         CoreEntry, CoreFile, CoreHead, CoreItem, CoreNominals, CoreText, CoreValue, Decoration,
         DecoratorField, FlatMatch, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign,
-        TopLet, TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
-        level_spelled, nested, print_core_entry, print_core_item, print_core_term, print_shown,
-        print_shown_entry, print_shown_item, print_term, record_declared, spellings_reaching,
-        string, tree, universe_context_written, value, word_value,
+        TopLet, TopTest, WordAt, bracketed, core_written, decoration_fields, family_declared,
+        from_core, level_spelled, nested, print_core_entry, print_core_item, print_core_term,
+        print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
+        spellings_reaching, string, tree, universe_context_written, value, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, MAX_LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
@@ -2293,6 +2293,7 @@ fn test_declared<D: Rendered>(
     }
 
     Some(TopTest {
+        word: WordAt::default(),
         core: CoreHead {
             fields: decorated_fields(
                 spelling,
@@ -2364,6 +2365,7 @@ impl Member<'_> {
         let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
 
         TopLet {
+            word: WordAt::default(),
             doc: None,
             core: CoreHead {
                 fields: decorated_fields(spelling, fields),

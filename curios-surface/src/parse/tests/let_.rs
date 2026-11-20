@@ -7,6 +7,7 @@ fn top_let_without_pub() {
     assert_eq!(
         "let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            word: WordAt::default(),
             core: (),
             doc: None,
             vis_pub: false,
@@ -24,6 +25,7 @@ fn top_let_with_pub() {
     assert_eq!(
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            word: WordAt::default(),
             core: (),
             doc: None,
             vis_pub: true,
@@ -84,6 +86,7 @@ fn top_let_group_mixed_pub() {
         .items,
         vec![TopItem::Let(vec![
             TopLet {
+                word: WordAt::default(),
                 core: (),
                 doc: None,
                 vis_pub: true,
@@ -94,6 +97,7 @@ fn top_let_group_mixed_pub() {
                 },
             },
             TopLet {
+                word: WordAt::default(),
                 core: (),
                 doc: None,
                 vis_pub: false,

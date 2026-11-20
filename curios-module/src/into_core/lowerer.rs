@@ -964,6 +964,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         group: &LetGroup,
         lower_value: impl Fn(&Term, &mut Vec<RegionFrame>) -> Result<curios_core::Term, Error>,
     ) -> Result<LoweredGroup, Error> {
+        for word in group.members.iter().filter_map(|member| member.word.span()) {
+            self.context.word(word);
+        }
         let binders = self.mint_written(
             group
                 .members

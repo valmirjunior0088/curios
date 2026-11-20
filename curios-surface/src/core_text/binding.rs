@@ -6,7 +6,7 @@ use {
     super::{LabelRead, ReadError, Reader, Refusal, core_read, stated_proofs, tree, word_value},
     crate::{
         Binder, CoreText, DecoratorField, Frame, Label, LetBinding, LetGroup, LetSignature,
-        Pattern, Rendered, label_terms, sub,
+        Pattern, Rendered, WordAt, label_terms, sub,
     },
     curios_core::{Bound, Free, Let, Many, Rec, RecGroup, Scope, Subterm, Term},
 };
@@ -19,6 +19,7 @@ fn binding<D: Rendered>(
     body: crate::Term<D>,
 ) -> LetBinding<D> {
     LetBinding {
+        word: WordAt::default(),
         binder: Pattern::Binder(Binder {
             core,
             label: Label::from(word),

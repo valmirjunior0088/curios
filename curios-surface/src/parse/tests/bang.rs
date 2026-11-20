@@ -45,6 +45,7 @@ fn bang_in_let_binding() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
+                    word: WordAt::default(),
                     binder: Pattern::Binder("x".into()),
                     signature: LetSignature::Name {
                         type_: None,

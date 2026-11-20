@@ -391,8 +391,7 @@ fn parse_core_item<'a>(state: ParserState<'a>) -> Parsed<'a, CoreItem> {
 fn parse_lets<'a>(fields: Vec<DecoratorField>) -> impl Parser<'a, Vec<TopLet<CoreText>>> {
     parse_let_member(None, fields, false)
         .and(many0(|| {
-            parse_and_head::<CoreText>
-                .flat_map(|(_, fields, _)| parse_let_member(None, fields, false))
+            parse_and_head::<CoreText>.flat_map(|head| parse_let_member(None, head.fields, false))
         }))
         .and_drop(parse_terminator("a `let`"))
         .and_drop(parse_whitespace)
@@ -409,7 +408,7 @@ fn parse_nominals<'a, T: 'a>(
         .and(many0(move || {
             parse_and_head::<CoreText>
                 .and_drop(parse_keyword(keyword))
-                .flat_map(move |(_, fields, _)| form(fields))
+                .flat_map(move |head| form(head.fields))
         }))
         .map(|(first, rest)| std::iter::once(first).chain(rest).collect())
 }

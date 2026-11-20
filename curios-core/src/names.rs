@@ -194,6 +194,8 @@ pub struct Mints {
     pub named: Vec<(Extent, Global)>,
     /// Every segment of a path that reaches a module a `mod` line declares, where it is written, with the module: what a place's answer reads of a module. A segment reaching a declaration's namespace — a family's constructors, a concept's methods — is a name of the declaration (`named`). Held here, as `written` is.
     pub modules: Vec<(Extent, Qualifier)>,
+    /// Every contextual word that opened a member of the declaration, where it is written: `and` before a group's later member, `test`, `concept` or `satisfy` at an item's head, which a question about a file classes as the language's. Held here, as `modules` is, since no lowered term stands where a word is written.
+    pub words: Vec<Extent>,
     /// The lints the lowering decided of the declaration, whose last fact is the text as written: a final arm's binder that renames the name its match's head is (`renaming-binder`). Held here, beside the sites elaboration decides the rest from, as the declaration's record of what its lowering found.
     pub lints: Vec<Lint>,
 }
@@ -257,6 +259,7 @@ impl Minted {
             hides: Vec::new(),
             named: Vec::new(),
             modules: Vec::new(),
+            words: Vec::new(),
             lints: Vec::new(),
         };
 

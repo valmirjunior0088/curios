@@ -1,6 +1,6 @@
 //! What a check leaves of a file, classed: each span the compiler knows the class of ([`Classed`]) — a name by what its declaration is declared as, a binder by what it binds, a field's label, a segment of a path reaching a module — which `wonder --classes` lists and the server encodes as semantic tokens. Why the server lays them over a grammar's guess is `documentation/design/tools/curios-is-coloured-from-one-class-set.md`'s.
 //!
-//! **A span is classed as what stands there.** Each record of a text proposes the span it would be painted over — a name its path's last segment, since each segment before it is answered on its own — and the span is classed by what [`Placed::answer`] answers at it, so a span and the hover over it never disagree, two records proposing one span are one row, and no two rows overlap. What no record answers is left to the grammar.
+//! **A span is classed as what stands there.** Each record of a text proposes the span it would be painted over — a name its path's last segment, since each segment before it is answered on its own — and the span is classed by what [`Placed::answer`] answers at it, so a span and the hover over it never disagree, two records proposing one span are one row, and no two rows overlap. A contextual word where it opened a member is the keyword, which no answer speaks of. What no record answers is left to the grammar.
 
 use {
     crate::{Diagnosed, Diagnosis, Placed, Stands, Subject, checked, unlowered},
@@ -73,6 +73,14 @@ impl Placed {
                     class,
                     declaration,
                     default_library,
+                });
+            }
+            for word in &written.words {
+                classed.entry((word.start, word.end)).or_insert(Classed {
+                    span: word.clone(),
+                    class: Class::Keyword,
+                    declaration: false,
+                    default_library: false,
                 });
             }
         }

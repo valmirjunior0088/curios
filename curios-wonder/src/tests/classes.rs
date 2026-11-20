@@ -63,7 +63,7 @@ let round: Shape(/std/Nat) = Shape/circle(one);
 let flipped: /std/Bool = /std/Bool/not(true);
 /std/print("")"#;
 
-/// Each span is classed as what stands there, in the order the file writes them and none overlapping another: a declaration's name by what it is declared as, each segment of a path on its own, a binder by the form that binds it — a type parameter where its stated type ends in a sort, `F: (Type) -> Type` among them, a destructured parameter's leaf a parameter, a `let`'s binder a local — a field's label and a method's name where they are declared and read; `declaration` where what a span names is declared there, and `default-library` where it lies under `/std` or `/sys`.
+/// Each span is classed as what stands there, in the order the file writes them and none overlapping another: a declaration's name by what it is declared as, each segment of a path on its own, a binder by the form that binds it — a type parameter where its stated type ends in a sort, `F: (Type) -> Type` among them, a destructured parameter's leaf a parameter, a `let`'s binder a local — a field's label and a method's name where they are declared and read, the contextual word that opens a concept the keyword; `declaration` where what a span names is declared there, and `default-library` where it lies under `/std` or `/sys`.
 #[test]
 fn each_span_is_classed_as_what_stands_there() {
     let declared = |written, class| row(written, class, true, false);
@@ -82,6 +82,7 @@ fn each_span_is_classed_as_what_stands_there() {
             declared("A", "type-parameter"),
             declared("first", "field"),
             read("A", "type-parameter"),
+            read("concept", "keyword"),
             declared("Sized", "concept"),
             declared("T", "type-parameter"),
             declared("size", "method"),
@@ -137,6 +138,59 @@ fn each_span_is_classed_as_what_stands_there() {
             library("std", "module"),
             library("print", "function"),
         ]
+    );
+}
+
+const WORDS: &str = r#"use /std/{Nat, Bool, Test};
+
+concept Sized(T: Type): Type {
+    size: (value: T) -> Nat,
+}
+
+satisfy Sized(Nat) {
+    size(value) = value,
+}
+
+let even(n: Nat) -> Bool =
+    match n
+    | 0 => true
+    | p + 1 => odd(p)
+    end
+and odd(n: Nat) -> Bool =
+    match n
+    | 0 => false
+    | p + 1 => even(p)
+    end;
+
+let twice(n: Nat) -> Nat =
+    let test = n;
+    let left(k: Nat) -> Nat = right(k)
+    and right(k: Nat) -> Nat = k;
+    left(test) + test;
+
+test twice_holds = Test/assert("twice", twice(1) == 2);
+
+/std/print("")"#;
+
+/// A contextual word is the keyword where it opened a member — `concept`, `satisfy` and `test` at an item's head, `and` before a later member of a top-level and of a local group — and a name elsewhere: the `test` a `let` binds is a local where it is bound and read.
+#[test]
+fn a_contextual_word_is_the_keyword_where_it_opened_a_member() {
+    let rows = classes(WORDS).expect("the program lowers");
+    let keywords = rows
+        .iter()
+        .filter(|(_, class, ..)| *class == "keyword")
+        .map(|(written, ..)| written.as_str())
+        .collect::<Vec<_>>();
+    let tests = rows
+        .iter()
+        .filter(|(written, ..)| written == "test")
+        .map(|(_, class, declaration, _)| (*class, *declaration))
+        .collect::<Vec<_>>();
+
+    assert_eq!(keywords, ["concept", "satisfy", "and", "and", "test"]);
+    assert_eq!(
+        tests,
+        [("local", true), ("local", false), ("keyword", false)]
     );
 }
 
