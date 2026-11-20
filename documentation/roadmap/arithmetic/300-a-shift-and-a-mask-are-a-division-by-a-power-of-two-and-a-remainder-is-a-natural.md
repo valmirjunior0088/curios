@@ -8,7 +8,7 @@
 
 ## Decided
 
-- **`Int`'s shift and mask are `Nat`'s.** `Int/shr(i, k)` is the quotient `i / pow(2, k)` at every `i`, a floor being Euclid's quotient by a positive divisor, so the view reads `Int`'s shift and mask as `Nat`'s, the procedure reading an `Int` quotient's bounds, `d * (i / d) <= i < d * (i / d) + |d|`, as it reads a natural's; `Nat/to_int` commutes with `/`, `%` and `shr`; and `Int/DivMod` is `/` and `%` themselves.
+- **`Int`'s shift and mask are `Nat`'s.** `Int/shr(i, k)` is the quotient `i / pow(2, k)` at every `i`, a floor being Euclid's quotient by a positive divisor, so the view reads `Int`'s shift and mask as `Nat`'s, the procedure reading an `Int` quotient's bounds, `d * (i / d) <= i < d * (i / d) + |d|`, as it reads a natural's; `Nat/to_int` commutes with `shr`; and `Int/DivMod` is `/` and `%` themselves.
 
 **Rejected.**
 
@@ -16,7 +16,7 @@
 
 ## Stages
 
-1. **`Int`'s shift and mask are read through the view.** `Int/shr(i, k)` as `i / pow(2, k)` and `Int/and(i, 2ᵏ - 1)` as `i % 2ᵏ`, in conversion and the procedure together, the procedure reading an `Int` quotient's bounds whatever its spelling; Check: rows of the shift's fold and recombination below zero, `Int/shr(i, n) <= i` kept a control, and `Nat/to_int` commuting with `/`, `%` and `shr`, which conversion holds apart today (`Nat/to_int(m) % +3` against `Nat/to_int(m % 3)`); `tests::bounds` rows of an `Int` quotient's bounds, `i % 2 <= i` from `+0 <= i` among them. One commit.
+1. **`Int`'s shift and mask are read through the view.** `Int/shr(i, k)` as `i / pow(2, k)` and `Int/and(i, 2ᵏ - 1)` as `i % 2ᵏ`, in conversion and the procedure together, the procedure reading an `Int` quotient's bounds whatever its spelling; Check: rows of the shift's fold and recombination below zero, `Int/shr(i, n) <= i` kept a control, and `Nat/to_int` commuting with `shr`, which conversion holds apart today (`Int/shr(Nat/to_int(m), 2)` against `Nat/to_int(Nat/shr(m, 2))`); `tests::bounds` rows of an `Int` quotient's bounds, `i % 2 <= i` from `+0 <= i` among them. One commit.
 2. **`/std` reads the convention.** `Int/DivMod` deleted and its eight callers dividing with `/` and `%`; `/std/Int/shl/unique` stated on `m % 2`. Check: `/std`'s tests, `/std/time`'s among them. One commit.
 
 ## Verification and retirement
