@@ -193,6 +193,28 @@ fn a_step_the_reader_refuses_stops_the_history_and_says_where() {
     );
 }
 
+/// A step the certifier refuses is the certifier's refusal, reported in the step it stopped at, as any step's refusal is, and said in the certifier's own words.
+#[test]
+fn a_step_the_certifier_refuses_is_reported_in_its_step() {
+    let answer = put(
+        &[Step::Unit {
+            mount: "lib".to_string(),
+            written: WrittenIn::CoreText,
+            text: "let /lib/bad : #NatType = #BoolType;\n".to_string(),
+        }],
+        &Proof::Module("0".to_string()),
+    );
+
+    let [refusal @ Refusal::Certifier { reported, .. }] = answer.refusals() else {
+        panic!("the certifier refuses the step: {answer:?}");
+    };
+    assert!(
+        reported.starts_with("in the step of `/lib`: "),
+        "{reported}"
+    );
+    assert!(reported.ends_with(&refusal.said()), "{reported}");
+}
+
 /// A program a build refuses is reported as text, so the board cannot tell its checker and no expectation meets it: a witness whose fix refuses an earlier unit writes it as Core text.
 #[test]
 fn a_program_step_refused_stops_the_history_by_no_checker() {

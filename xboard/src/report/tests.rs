@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::Global,
-    curios_pipeline::{Checker, Refusal},
+    curios_pipeline::{Checker, Refusal, certifier_said},
     std::slice,
 };
 
@@ -32,7 +32,7 @@ fn judged(refusals: Vec<Refusal>) -> Answer {
 /// The certifier's refusal by `verdict`, reported in its own words.
 fn refusal_of(verdict: curios_cert::Refusal) -> Refusal {
     Refusal::Certifier {
-        reported: words(&verdict),
+        reported: certifier_said(&verdict),
         refusal: verdict,
     }
 }

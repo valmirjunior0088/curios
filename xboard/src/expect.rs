@@ -1,7 +1,7 @@
 //! The refusal a witness expects once its flaw is closed, and whether what the checkers said meets it.
 
 use {
-    crate::{Answer, Witness, words},
+    crate::{Answer, Witness},
     curios_common::{Qualifier, Variants},
     curios_core::Global,
     curios_pipeline::{Checker, Refusal, standing_at},
@@ -83,12 +83,7 @@ fn nearest(answer: &Answer, by: Checker) -> String {
                 .find(|refusal| refusal.by() == by)
                 .or(refusals.first())
             {
-                Some(
-                    refusal @ Refusal::Certifier {
-                        refusal: certified, ..
-                    },
-                ) => (refusal.named(), words(certified)),
-                Some(refusal) => (refusal.named(), refusal.to_string()),
+                Some(refusal) => (refusal.named(), refusal.said()),
                 None => return "admitted".to_string(),
             }
         }

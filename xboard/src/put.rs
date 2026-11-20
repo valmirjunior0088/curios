@@ -8,8 +8,8 @@ use {
     curios_common::{Report, Source},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{Put, Refusal, Unmade, put_core_text, put_program},
-    curios_surface::{Entrypoint, ReadError, Spelling},
+    curios_pipeline::{Put, Refusal, Unmade, certifier_said, put_core_text, put_program},
+    curios_surface::{Entrypoint, ReadError},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
 };
@@ -95,11 +95,6 @@ fn put_proof(predecessors: Predecessors<'_>, proof: &Proof) -> Result<Put, Strin
         .ok_or_else(|| "the text closes with no term to put".to_string())
 }
 
-/// The certifier's own words for `verdict`, on no place: what a report quotes of a certifier's refusal, and what a step's refusal is reported as, its reading being the history's.
-pub fn words(verdict: &curios_cert::Refusal) -> String {
-    verdict.error.rendered(&Spelling::default()).to_string()
-}
-
 /// The reader's refusal, at the place in the text it stands where it names one.
 fn located(error: &ReadError) -> String {
     match &error.span {
@@ -157,7 +152,7 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Read(error) => unread(at(located(&error))),
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Put(curios_pipeline::Answer::Judged(vec![Refusal::Certifier {
-                reported: words(&verdict),
+                reported: at(certifier_said(&verdict)),
                 refusal: *verdict,
             }]))
         }

@@ -16,7 +16,7 @@ use {
     curios_common::{Report, Source, SyntaxRegistry, Variants},
     curios_core::{Global, Program, Term, Universes},
     curios_module::RootSource,
-    curios_surface::{Entrypoint, FormScope},
+    curios_surface::{Entrypoint, FormScope, Spelling},
     curios_unit::Predecessors,
     std::{fmt, sync::Arc},
 };
@@ -71,6 +71,14 @@ pub enum Refusal {
 }
 
 impl Refusal {
+    /// The refusal in its checker's own words: the elaborator's diagnostic, which opens with them, and the certifier's error on no place ([`certifier_said`]).
+    pub fn said(&self) -> String {
+        match self {
+            Refusal::Elaborator { reported, .. } => reported.clone(),
+            Refusal::Certifier { refusal, .. } => certifier_said(refusal),
+        }
+    }
+
     /// The checker that made it.
     pub fn by(&self) -> Checker {
         match self {
@@ -104,6 +112,11 @@ impl Refusal {
             ),
         }
     }
+}
+
+/// The certifier's refusal in its own words: its error, on no place, which a report of it places beneath a heading.
+pub fn certifier_said(refusal: &curios_cert::Refusal) -> String {
+    refusal.error.rendered(&Spelling::default()).to_string()
 }
 
 /// What the refusal says, as a compilation prints it.

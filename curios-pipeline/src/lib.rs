@@ -30,7 +30,9 @@ mod read;
 pub use read::{EnteredText, Read, Unmade, Unread, compile_read, enter_core_text, read_core_text};
 
 mod put;
-pub use put::{Answer, Checker, Put, Refusal, put_core_text, put_program, standing_at};
+pub use put::{
+    Answer, Checker, Put, Refusal, certifier_said, put_core_text, put_program, standing_at,
+};
 
 mod standard;
 pub use standard::{
