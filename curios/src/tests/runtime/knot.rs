@@ -56,6 +56,32 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
     }
 }
 
+/// A member is computed where a path reads it and nowhere else: `h` reads `d` in one arm, so applied to `false` it answers `7` and `d`'s initializer, which refuses a capacity past the runtime's, never runs; applied to `true` it reads `d`, and the refusal stands.
+#[test]
+fn a_member_an_arm_not_taken_reads_is_not_computed() {
+    let program = |flag: &str| {
+        fill!(
+            r#"
+            use /std/{Bool, Nat, Bytes, Io, rand, print};
+            let main() -> Io({}) =
+                let bs = rand/bytes(1)!;
+                let h: (Bool) -> Nat = (b) => match b | true => d | false => 7 end
+                and d: Nat = Nat/shl(1, Bytes/len(bs) * 200000000000);
+                print(Nat/to_str(h(Bytes/len(bs) == ${flag})));
+            main()
+            "#,
+            flag
+        )
+    };
+
+    assert_eq!(run(&program("5")), b"7");
+    let error = error(&program("1"));
+    assert!(
+        error.contains("past what the runtime can hold"),
+        "the arm taken reads `d`, whose initializer refuses: {error}"
+    );
+}
+
 /// The stepper is never called by the initializer: it is handed to `List/fold`, which applies it through the `go` it nests, reaching it as a capture. Forced by need, the read of `size` inside the stepper runs `size`'s initializer, in either order.
 #[test]
 fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {

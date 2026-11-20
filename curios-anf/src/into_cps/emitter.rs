@@ -6,14 +6,13 @@
 
 use {
     super::{
-        Atom, BlockId, Constant, ConstantId, ConstructorId, FamilyEncoding, FamilyId, FunctionId,
-        Layout, Module, ProductId, SequenceGrain, Statement, StatementId, Terminator, ValueId,
-        edge, sequence_get_op, sequence_rest_op,
+        Atom, Constant, ConstantId, ConstructorId, FamilyEncoding, FamilyId, FunctionId, Layout,
+        Module, ProductId, SequenceGrain, ValueId, edge, sequence_get_op, sequence_rest_op,
     },
     curios_abi::Handle,
     curios_common::Lineage,
     curios_num::{Binary, Natural},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// One computed member: a write-once result cell, a capacity-one initializer channel, and its forcing function.
@@ -146,11 +145,6 @@ impl<'a> Emitter<'a> {
                 self.values.remove(&arena);
             }
         }
-    }
-
-    /// Whether any computed member of a recursive knot is recorded.
-    pub fn has_knot_members(&self) -> bool {
-        !self.knot_members.is_empty()
     }
 
     /// Record `knot` as the storage and forcing function of the computed member `value`.
@@ -392,72 +386,19 @@ impl<'a> Emitter<'a> {
             })
     }
 
-    /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks reachable without entering a function body or a nested group's initializer, each of which forces its own members at its own entry.
-    pub fn block_member_refs(&self, block: BlockId) -> Vec<ValueId> {
-        match self.source.block(block) {
-            Some(block) => self.eager_member_refs(&block.statements, &block.terminator),
-            None => Vec::new(),
-        }
-    }
-
-    pub fn eager_member_refs(
-        &self,
-        statements: &[StatementId],
-        terminator: &Terminator,
-    ) -> Vec<ValueId> {
-        let mut refs = BTreeSet::new();
-        for value in self.eager_value_refs(statements, terminator) {
-            if self.knot_members.contains_key(&value) {
-                refs.insert(value);
+    /// The knot members `atoms` read, in their order, that no force on the path being lowered has bound. A force binds its member to the value it answered for everything lowered after it on its path — the statements after it, the arms below them and the functions they bind — so a member a path has forced is read there as it stands, and one it has not is forced where it is read.
+    pub fn unforced_members(&self, atoms: impl IntoIterator<Item = Atom>) -> Vec<ValueId> {
+        let mut members = Vec::new();
+        for atom in atoms {
+            if let Atom::Value(value) = atom
+                && self.knot_members.contains_key(&value)
+                && !self.values.contains_key(&value)
+                && !members.contains(&value)
+            {
+                members.push(value);
             }
         }
-        refs.into_iter().collect()
-    }
-
-    /// Every value referenced across an eager region rooted at `statements` and closed by `terminator`, descending through control sub-blocks but never into a function body or a nested group's initializer — a thunk, like a function, takes its own reads at its entry, and forcing an outer member because a nested initializer names it would force it before the nested member is ever read, which is a cycle by need never meets.
-    pub fn eager_value_refs(
-        &self,
-        statements: &[StatementId],
-        terminator: &Terminator,
-    ) -> BTreeSet<ValueId> {
-        let mut refs = BTreeSet::new();
-        let mut pending: Vec<StatementId> = statements.to_vec();
-        let mut blocks: Vec<BlockId> = Vec::new();
-        let mut seen = BTreeSet::new();
-        for atom in terminator.atoms() {
-            if let Atom::Value(value) = atom {
-                refs.insert(value);
-            }
-        }
-        loop {
-            if let Some(statement) = pending.pop() {
-                match self.source.statement(statement) {
-                    Some(Statement::Let { rhs, .. }) => {
-                        for atom in rhs.operands() {
-                            if let Atom::Value(value) = atom {
-                                refs.insert(value);
-                            }
-                        }
-                        blocks.extend(rhs.sub_blocks());
-                    }
-                    Some(Statement::Rec { .. } | Statement::Functions { .. }) | None => {}
-                }
-                continue;
-            }
-            let Some(block) = blocks.pop() else { break };
-            if !seen.insert(block) {
-                continue;
-            }
-            if let Some(block) = self.source.block(block) {
-                pending.extend(&block.statements);
-                for atom in block.terminator.atoms() {
-                    if let Atom::Value(value) = atom {
-                        refs.insert(value);
-                    }
-                }
-            }
-        }
-        refs
+        members
     }
 
     // === Statements ======================================================

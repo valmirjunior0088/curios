@@ -132,16 +132,24 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: curios_cps::ContinuationId,
     ) -> curios_cps::NodeId {
+        // A statement forces the members it reads that its path has not, right before it runs: a member is computed where it is read, so a path that does not read it does not compute it.
         let Some((&first, rest)) = statements.split_first() else {
-            return self.lower_terminator(terminator, target);
+            let members = self.emitter.unforced_members(terminator.atoms());
+            return self.with_cell_reads(members, |lowerer| {
+                lowerer.lower_terminator(terminator, target)
+            });
         };
         let statement = self
             .source
             .statement(first)
             .expect("live statement")
             .clone();
-        match statement {
-            Statement::Let { result, rhs } => self.lower_let(
+        let members = match &statement {
+            Statement::Let { rhs, .. } => self.emitter.unforced_members(rhs.operands()),
+            Statement::Functions { .. } | Statement::Rec { .. } => Vec::new(),
+        };
+        self.with_cell_reads(members, |lowerer| match statement {
+            Statement::Let { result, rhs } => lowerer.lower_let(
                 &rhs,
                 Site {
                     result,
@@ -151,13 +159,14 @@ impl Lowerer<'_> {
                 },
             ),
             Statement::Functions { functions } => {
-                let functions = self.lower_function_group(&functions);
-                let body = self.lower_statements(rest, terminator, target);
-                self.emitter
+                let functions = lowerer.lower_function_group(&functions);
+                let body = lowerer.lower_statements(rest, terminator, target);
+                lowerer
+                    .emitter
                     .add_node(curios_cps::Node::LetFun { functions, body })
             }
-            Statement::Rec { group } => self.lower_rec_group(group, rest, terminator, target),
-        }
+            Statement::Rec { group } => lowerer.lower_rec_group(group, rest, terminator, target),
+        })
     }
 
     fn lower_terminator(
@@ -214,7 +223,7 @@ impl Lowerer<'_> {
         ids
     }
 
-    /// Define a reserved CPS function from its arena function. A body that references a knot's computed member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
+    /// Define a reserved CPS function from its arena function. A body that reads a knot's computed member forces it where it reads it, at call time, unless the path that binds the function forced it already, whose value the body then captures.
     fn define_function(&mut self, arena: FunctionId, id: curios_cps::FunctionId) {
         let function: Function = self.source.function(arena).expect("live function").clone();
         let return_cont = self.emitter.reserve_continuation();
@@ -223,15 +232,8 @@ impl Lowerer<'_> {
             .iter()
             .map(|&param| self.emitter.bind_value(param))
             .collect();
-        let members = if !self.emitter.has_knot_members() {
-            Vec::new()
-        } else {
-            self.emitter.block_member_refs(function.body)
-        };
         let lowering = self.emitter.lowering(function.lineage);
-        let body = self.with_cell_reads(members, |lowerer| {
-            lowerer.lower_block(function.body, return_cont)
-        });
+        let body = self.lower_block(function.body, return_cont);
         self.emitter.lowering(lowering);
         self.emitter.define_function(
             id,
@@ -274,11 +276,11 @@ impl Lowerer<'_> {
         self.lower_knot(&group, rest, terminator, target)
     }
 
-    /// Tie a recursive knot by need. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. Every reference to a member calls its force at the referencing region's entry (see [`Lowerer::with_cell_reads`]).
+    /// Tie a recursive knot by need. Every computed member gets an empty write-once result cell, a capacity-one initializer channel, and a forcing function. All storage is allocated before closures are bound, and all initializers are queued before any forcing read. The force polls the result, returns it if present, otherwise takes the initializer, runs it and fills the result. Both containers empty means reentrant forcing and reports `Cycle`. A read of a member calls its force right before the statement that reads it, on each path that reads it and no earlier on it (see [`Lowerer::with_cell_reads`]), so an arm that does not read a member does not compute it.
     ///
     /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator does for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program agrees with both on every forward reference, whatever the verifier can or cannot see through. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
     ///
-    /// Function members take the same forcing reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: patching only *escaping* member closures at a ready point would miss a closure born inside an initializer that merely *calls* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — which would capture the computed value before it exists, where nothing below the CPS verifier's lexical scope rules could see it.
+    /// Function members are lowered before any member is forced, so each forces what it reads at its own read, as any function does (see [`Lowerer::define_function`]), and a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: patching only *escaping* member closures at a ready point would miss a closure born inside an initializer that merely *calls* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — which would capture the computed value before it exists, where nothing below the CPS verifier's lexical scope rules could see it.
     fn lower_knot(
         &mut self,
         group: &RecGroup,
@@ -304,7 +306,7 @@ impl Lowerer<'_> {
                 .define_force(*knot, self.emitter.arena_value_name(member.value));
         }
 
-        // The members are in the map before any body below is lowered, so a reference to a computed sibling — from a function member, a thunk, or the rest — is a forcing read at its entry.
+        // The members are in the map before any body below is lowered, so a read of a computed sibling — from a function member, a thunk, or the rest — forces it where it stands.
         let functions = self.lower_function_group(&group.functions);
         let thunks: Vec<curios_cps::FunctionId> = group
             .values
@@ -314,11 +316,7 @@ impl Lowerer<'_> {
             })
             .collect();
 
-        // Downstream forces the members it references.
-        let ready_members = self.emitter.eager_member_refs(rest, terminator);
-        let mut body = self.with_cell_reads(ready_members, |lowerer| {
-            lowerer.lower_statements(rest, terminator, target)
-        });
+        let mut body = self.lower_statements(rest, terminator, target);
 
         // Publish all initializers before the body can force any member. Each channel is fresh, open, and has capacity one, so every push is taken.
         for (knot, thunk) in members.iter().zip(&thunks).rev() {
@@ -409,14 +407,11 @@ impl Lowerer<'_> {
         body
     }
 
-    /// A member's initializer as a nullary function: what its channel holds until something forces it. It takes its own forcing reads at entry, so the members it depends on are computed before it runs — which is the by-need order, found by running rather than computed ahead.
+    /// A member's initializer as a nullary function: what its channel holds until something forces it. It forces each member it reads where it reads it, so a member it depends on is computed when it is needed — the by-need order, found by running rather than computed ahead.
     fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cps::FunctionId {
         let thunk = self.emitter.reserve_function();
         let return_cont = self.emitter.reserve_continuation();
-        let init_members = self.emitter.block_member_refs(init);
-        let body = self.with_cell_reads(init_members, |lowerer| {
-            lowerer.lower_block(init, return_cont)
-        });
+        let body = self.lower_block(init, return_cont);
         self.emitter.define_function(
             thunk,
             curios_cps::Function {
@@ -433,7 +428,7 @@ impl Lowerer<'_> {
         thunk
     }
 
-    /// Run `build` with each member bound to a fresh local holding its forced value, wrapping the result so the forcing happens at entry. A closure forces at its own entry — when it runs — rather than at its construction, which may be inside the initializer of the very member it names.
+    /// Run `build` with each member bound to a fresh local holding its forced value, the forcing ahead of what `build` lowers, which reads the local: the statement that reads a member, what follows it on its path, the arms below them and the functions they bind. A function lowered where a member is not bound forces it at its own read, when it runs, rather than at its construction, which may be inside the initializer of the very member it names.
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,
