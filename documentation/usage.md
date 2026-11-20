@@ -73,34 +73,33 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Ten commands, and `wonder`'s five queries with the views `--name` takes — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
+Ten commands, and `wonder`'s seven queries with the views `--name` takes — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
-| Command | Subject | Its own arguments | Writes | Cabinet |
+| Command | Subject | Its own flags | Writes | Cabinet |
 | --- | --- | --- | --- | --- |
-| [`run`](#run) | a program | `--target <TARGET>`, `--port <PORT>`, trailing `ARGS…` for the program | nothing | reads, files what it built |
-| [`compile`](#compile) | a program | `--target <TARGET>`, `-o`/`--output <PATH>` | a native executable, or a page's directory | reads, files what it built |
-| [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
-| [`test`](#test) | anything | `--target <TARGET>`, `--port <PORT>`, `--filter <PREFIX>` | nothing | reads, files what it built |
+| [`run [SUBJECT] [ARGS…]`](#run) | a program | `--target <TARGET>`, `--port <PORT>` | nothing | reads, files what it built |
+| [`compile [SUBJECT]`](#compile) | a program | `--target <TARGET>`, `-o`/`--output <PATH>` | a native executable, or a page's directory | reads, files what it built |
+| [`document [SUBJECT]`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
+| [`test [SUBJECT]`](#test) | anything | `--target <TARGET>`, `--port <PORT>`, `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
-| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--target <TARGET>` for `foreign`, `--path`, `--url` for `foreign`, `--git` and `--rev` for `dependency`, `--refresh`, `--check` | one manifest row | files what it delivered |
-| [`new`](#new) | — | `<DIR>` | a package | none |
-| [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`format`](#format) | files, any number | `--check`, `--line-width <COLUMNS>`, `--flat-match-width <COLUMNS>`, `--flat-match-arms <ARMS>` | the files, rewritten | none |
-| [`wonder`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`wonder --tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`wonder --stage`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | `<STAGE>`, the option's value | nothing | reads, files the units it compiled from disk |
-| [`wonder --at`](#wonder) | the file its place names | `<FILE>:<LINE>:<COLUMN>`, the option's value | nothing | reads, files the units it compiled from disk |
-| [`wonder --classes`](#wonder) | a program or a library's file | — | nothing | reads, files the units it compiled from disk |
-| [`wonder --name`](#wonder) | anything | `<PATH>`, the option's value | nothing | reads, files the units it compiled from disk |
-| [`wonder --name --witnesses`](#wonder) | anything | `<PATH>`, `--name`'s value | nothing | reads, files the units it compiled from disk |
-| [`wonder --name --footprint`](#wonder) | a program | `<PATH>`, `--name`'s value | nothing | reads, files the units it compiled from disk |
-| [`wonder --name --stage`](#wonder) | anything at `text`, `core` and `core-elab`, and a program past them | `<PATH>`, `--name`'s value, and `<STAGE>` | nothing | reads, files the units it compiled from disk |
-| [`wonder --name --exports`](#wonder) | anything | `<PATH>`, `--name`'s value | nothing | reads, files the units it compiled from disk |
-| [`wonder --false`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
+| [`pin foreign <NAME>`](#pin) | the governing package's manifest | `--target <TARGET>`, `--path <PATH>` or `--url <URL>`, `--refresh`, `--check` | one manifest row | files what it delivered |
+| [`pin dependency <NAME>`](#pin) | the governing package's manifest | `--path <PATH>`, `--git <URL>`, `--rev <REV>`, `--refresh`, `--check` | one manifest row | files what it delivered |
+| [`new <DIR>`](#new) | — | — | a package | none |
+| [`lint [SUBJECT]`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`format [SUBJECT…]`](#format) | files, any number | `--check`, `--line-width <COLUMNS>`, `--flat-match-width <COLUMNS>`, `--flat-match-arms <ARMS>` | the files, rewritten | none |
+| [`wonder [SUBJECT]`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --tests [SUBJECT]`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --stage <STAGE> [SUBJECT]`](#wonder) | a program, or at `text`, `core` and `core-elab` a library's file | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --at <FILE>:<LINE>:<COLUMN>`](#wonder) | the file its place names | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --classes [SUBJECT]`](#wonder) | a program or a library's file | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --name <PATH> [SUBJECT]`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --name <PATH> --witnesses [SUBJECT]`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --name <PATH> --footprint [SUBJECT]`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --name <PATH> --stage <STAGE> [SUBJECT]`](#wonder) | anything at `text`, `core` and `core-elab`, and a program past them | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --name <PATH> --exports [SUBJECT]`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
+| [`wonder --false [SUBJECT]`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
 | [`wonder --server`](#wonder) | — | — | nothing | reads, files the units it compiled from disk |
-| [`profile`](#profile) | — | `<PATH>` | nothing | none |
-
-`--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
+| [`profile <PATH>`](#profile) | — | — | nothing | none |
 
 ## What a command reports
 
@@ -534,7 +533,7 @@ A file that cannot be formatted closes as `format; refused`, why following, and 
 | `--false` | whether the checkers admit the program's closing term at `False`, the question the [soundness board](../xboard/README.md) asks of every witness: a line with the verdict first, `REFUSED` and by whom — each checker that refused, with each error it raised by the name its variant is declared under and where it stood, in the declaration it names or at the closing term — or `ADMITTED` and the type; beneath it a row for each checker the subject meets and what it made of the term, `refused`, `admitted`, or `not asked` where the elaborator built the certifier no module to judge; then each refusal as its checker reports it, a blank line before each. A program is put whole, its declarations and its closing term one module: to the elaborator, its erasure obligations reported rather than raised so a program the elaborator alone refuses still reaches the certifier, then to the certifier over what it built; Core text to the certifier alone. The answer exits 0 whichever way it went, and a subject that does not lower or read was put to no checker and stops as a build does. A term both checkers admit is a proof of `False`: a flaw in the checkers, for the board to file |
 | `--server` | every question the others answer, asked by an editor over the language server protocol on standard input and output: what an editor integration launches. It publishes a document's diagnostics as the document is edited, telling each check's progress as it goes where the editor takes progress, a report for each unit the check compiles, and every open document's when one is saved or, where the editor watches files at the server's request, when a module or a manifest changes on disk, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what stands under the cursor as `--at` answers it — a declaration's head, or its path where it states none, the facts `--at`'s block states and its prose, a local or a field with its type, a module, or the term written there with its type, over the range it covers, as a hover — where a local or a field under the cursor is bound, what the document declares, the selections a cursor grows through, each term around it out to its declaration, a fold for each declaration over several lines, a link from each segment of a path that reaches a module to the line of its `mod` line, where each witness of the concept or the type under the cursor is written, and the document's semantic tokens, the rows `--classes` lists, asking the editor to request them again once a check is in where it takes the request: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It takes no subject, since an editor hands it its documents, and one written beside it is refused where the line is parsed |
 
-No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--classes`, and for `--stage`, `--footprint` and `--false`, which each need a program and so refuse a file written as a module. For `--name` and its other views it is the widest scope where the command stands: that executable's, else the package's library's where it declares no executable or several and no `default`, and outside every package the prelude's alone, the scope a loose program has, so `curios wonder --name /std/List/map` answers wherever it is asked.
+No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--classes`, `--stage`, `--footprint` and `--false`; `--footprint` and `--false` need a program, and `--stage` one past its three rungs a library has, so each refuses a file written as a module where it needs one. For `--name` and its other views it is the widest scope where the command stands: that executable's, else the package's library's where it declares no executable or several and no `default`, and outside every package the prelude's alone, the scope a loose program has, so `curios wonder --name /std/List/map` answers wherever it is asked.
 
 The check also asks the formatter about every text its subject is written in — the files [`format`](#format) would rewrite for the same subject, each at its package's width, or standard input — and says of each that would change that it is `not canonical`, once a text however much of it would move, with the command that rewrites it:
 
@@ -548,8 +547,6 @@ not canonical
 It is no lint, since no compilation finds it, so [`lint`](#lint) says nothing of it and no exit code turns on it: `format --check` is the question whose answer is a code. A text the formatter refuses is not reported here, since the check's own report says why.
 
 `--at` is asked about the file its place names, read as every command reads a file it is named. It is answered off the check of the subject, as the editor's hover is: the lowering answers every place whatever the check concludes, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build; a declaration elaboration established answers its type, and its totality where the certifier judged it, a declaration of a unit the subject stands on always and one of the subject's own where it elaborated.
-
-A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder.
 
 `--name` takes a path as a program outside every module writes it: a declaration's own path, or one a module exports it at, so `/std/Bool/and` answers the `/sys` declaration `/std` exports there. It is answered off the unit that declares the name, and elaborates the subject only where the subject declares it, so a name of a unit in scope is answered whatever state the subject is in, and one of the subject's own is answered once the subject checks.
 
@@ -668,7 +665,7 @@ A `foreign` no entry names is the host's to answer. A program asks only for what
 | `compiler` | required: the Curios version all enumerated members are written for, which each inherits |
 | `[format]` | how [`format`](#format) writes every enumerated member's files, which they inherit |
 | `members` | the packages this umbrella governs, as paths; an umbrella governs a package **only if it enumerates it**, so a directory nothing enumerates is governed by nothing above it, however deep it sits |
-| `catalog` | pins the members may draw on, keyed as a dependency table is |
+| `[catalog]` | pins the members may draw on, keyed as a dependency table is |
 
 A dependency is pinned exactly, and its name is how every consumer refers to it. A package named `json` mounts at `/json` and no consumer may rename it, which is what lets two dependents on one package share it instead of compiling it twice. Two dependents that pin one name two different ways is a refusal naming both, and it fires before anything is compiled.
 
@@ -753,7 +750,7 @@ It is read as a program. `--core` says it is Core text, as a `.crsc` file's name
 
 One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 
-Text written as a module — items with no final term — is checked as one, as a file written as a module is: `wonder`, `wonder --tests`, `lint` and `test` answer it as a unit of its own mounted at `/stdin`, since standard input has no stem to mount it at, and `run`, `compile`, `wonder --stage`, `wonder --name --footprint` and `wonder --false`, which need a program, refuse it as written as a module.
+Text written as a module — items with no final term — is checked as one, as a file written as a module is: `wonder`, `wonder --tests`, `lint` and `test` answer it as a unit of its own mounted at `/stdin`, since standard input has no stem to mount it at, and `run`, `compile`, `wonder --stage`, `wonder --name <PATH> --footprint` and `wonder --false`, which need a program, refuse it as written as a module.
 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 
