@@ -940,7 +940,7 @@ pub fn wonder_at(
     Ok(())
 }
 
-/// `wonder --classes [SUBJECT]`: every span of the file the subject is asked through that the compiler classes, `staged` being what its file is admitted as, to stdout, a row a line in the order they are written ([`classed`]): its place as a report closes on one, its length in scalar values as a column counts them, its class by its name, and `declaration` where the span is where what it names is declared. What no row covers is left to a grammar. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --classes [SUBJECT]`: every span of the file the subject is asked through that the compiler classes, `staged` being what its file is admitted as, to stdout, a row a line in the order they are written ([`classed`]): its place as a report closes on one, its length in scalar values as a column counts them, its class by its name, `declaration` where the span is where what it names is declared, and `default-library` where what it names lies in the library the compiler was built with. What no row covers is left to a grammar. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_classes(
     budget: u64,
     staged: Staged,
@@ -961,13 +961,17 @@ pub fn wonder_classes(
         span,
         class,
         declaration,
+        default_library,
     } in classed
     {
         let length = span.source.text()[span.start..span.end].chars().count();
-        let modifiers = match declaration {
-            true => " declaration",
-            false => "",
-        };
+        let modifiers = [
+            (declaration, " declaration"),
+            (default_library, " default-library"),
+        ]
+        .into_iter()
+        .filter_map(|(holds, modifier)| holds.then_some(modifier))
+        .collect::<String>();
         answer(format_args!(
             "{} {length} {}{modifiers}\n",
             span.place(&reader),

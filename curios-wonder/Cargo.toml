@@ -32,6 +32,8 @@ curios-wasm = { workspace = true }
 # For what elaboration concluded of each declaration a place stands in: the type each place settled at and each binder's (`Traces`, `Concluded`).
 curios-elab = { workspace = true }
 curios-pipeline = { workspace = true }
+# For the prefixes the prelude's roots claim, read off their names with none restored: a name resolved under one is painted as the library the compiler was built with (`defaultLibrary`).
+curios-prelude = { workspace = true }
 curios-package = { workspace = true }
 curios-profile = { workspace = true }
 curios-verdict = { workspace = true }

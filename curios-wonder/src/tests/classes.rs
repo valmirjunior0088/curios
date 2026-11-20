@@ -5,8 +5,11 @@ use {
     std::path::Path,
 };
 
-/// Every span the check of `program`, read from standard input, classes, each as the text it covers, its class's name and whether what it names is declared there — or the diagnostics of a program that has nothing to read.
-fn classes(program: &str) -> Result<Vec<(String, &'static str, bool)>, Vec<Diagnosis>> {
+/// One row of [`classes`]: the text a span covers, its class's name, whether what it names is declared there, and whether what it names is the library's the compiler was built with.
+type Row = (String, &'static str, bool, bool);
+
+/// Every span the check of `program`, read from standard input, classes ([`Row`]) — or the diagnostics of a program that has nothing to read.
+fn classes(program: &str) -> Result<Vec<Row>, Vec<Diagnosis>> {
     let classed = classed(
         DEFAULT_BUDGET,
         Subject::Entry {
@@ -32,14 +35,15 @@ fn classes(program: &str) -> Result<Vec<(String, &'static str, bool)>, Vec<Diagn
                 span.source.text()[span.start..span.end].to_string(),
                 classed.class.name(),
                 classed.declaration,
+                classed.default_library,
             )
         })
         .collect())
 }
 
 /// One row of [`classes`], from what a test writes of it.
-fn row(written: &str, class: &'static str, declaration: bool) -> (String, &'static str, bool) {
-    (written.to_string(), class, declaration)
+fn row(written: &str, class: &'static str, declaration: bool, library: bool) -> Row {
+    (written.to_string(), class, declaration, library)
 }
 
 const CLASSED: &str = r#"induct Shape(A: Type): Type
@@ -59,11 +63,12 @@ let round: Shape(/std/Nat) = Shape/circle(one);
 let flipped: /std/Bool = /std/Bool/not(true);
 /std/print("")"#;
 
-/// Each span is classed as what stands there, in the order the file writes them and none overlapping another: a declaration's name by what it is declared as, each segment of a path on its own, a binder by the form that binds it — a type parameter where its stated type ends in a sort, `F: (Type) -> Type` among them, a destructured parameter's leaf a parameter, a `let`'s binder a local — a field's label and a method's name where they are declared and read, and `declaration` where what a span names is declared there.
+/// Each span is classed as what stands there, in the order the file writes them and none overlapping another: a declaration's name by what it is declared as, each segment of a path on its own, a binder by the form that binds it — a type parameter where its stated type ends in a sort, `F: (Type) -> Type` among them, a destructured parameter's leaf a parameter, a `let`'s binder a local — a field's label and a method's name where they are declared and read; `declaration` where what a span names is declared there, and `default-library` where it lies under `/std` or `/sys`.
 #[test]
 fn each_span_is_classed_as_what_stands_there() {
-    let declared = |written, class| row(written, class, true);
-    let read = |written, class| row(written, class, false);
+    let declared = |written, class| row(written, class, true, false);
+    let read = |written, class| row(written, class, false, false);
+    let library = |written, class| row(written, class, false, true);
 
     assert_eq!(
         classes(CLASSED).expect("the program lowers"),
@@ -82,55 +87,55 @@ fn each_span_is_classed_as_what_stands_there() {
             declared("size", "method"),
             declared("value", "parameter"),
             read("T", "type-parameter"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             declared("lift", "function"),
             declared("F", "type-parameter"),
             declared("apply", "parameter"),
             declared("x", "parameter"),
-            read("std", "module"),
-            read("Nat", "type"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             read("Pair", "type"),
             read("first", "field"),
             declared("inner", "parameter"),
             read("Pair", "type"),
-            read("std", "module"),
-            read("Nat", "type"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             declared("held", "local"),
             read("apply", "parameter"),
             read("inner", "parameter"),
             read("held", "local"),
             declared("one", "value"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             read("lift", "function"),
-            read("std", "module"),
-            read("List", "type"),
+            library("std", "module"),
+            library("List", "type"),
             declared("n", "parameter"),
             read("n", "parameter"),
             read("Pair", "type"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             read("first", "field"),
             declared("round", "value"),
             read("Shape", "type"),
-            read("std", "module"),
-            read("Nat", "type"),
+            library("std", "module"),
+            library("Nat", "type"),
             read("Shape", "type"),
             read("circle", "constructor"),
             read("one", "value"),
             declared("flipped", "value"),
-            read("std", "module"),
-            read("Bool", "type"),
-            read("std", "module"),
-            read("Bool", "module"),
-            read("not", "function"),
-            read("std", "module"),
-            read("print", "function"),
+            library("std", "module"),
+            library("Bool", "type"),
+            library("std", "module"),
+            library("Bool", "module"),
+            library("not", "function"),
+            library("std", "module"),
+            library("print", "function"),
         ]
     );
 }
