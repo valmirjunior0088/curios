@@ -173,6 +173,7 @@ fn sweep<D: Driver>(
     vectors: &Vectors,
     parts: &[Term],
 ) -> (Marked, Option<D::Error>) {
+    let mut climbs = Climbs::default();
     let mut walk = Walk {
         driver,
         vectors,
@@ -180,7 +181,8 @@ fn sweep<D: Driver>(
         entered: HashSet::new(),
         marked: Marked::default(),
         refused: None,
-        estimate: None,
+        climbs: &mut climbs,
+        fed: None,
         groups: HashMap::new(),
     };
     for part in parts {
@@ -307,6 +309,8 @@ pub fn held_by<D: Driver>(driver: &mut D, declarations: Declarations<'_>) -> Hel
 /// One declaration's traversal: which of its universe parameters something it holds mentions.
 struct Walk<'a, D: Driver> {
     driver: &'a mut D,
+    /// The climbs this walk is a step of, and the groups its reading has read ([`Climbs`]).
+    climbs: &'a mut Climbs,
     vectors: &'a Vectors,
     /// The `rec` members this walk is already inside, innermost last: positivity's guard, for positivity's reason.
     forcing: Vec<(RecGroup, usize)>,
@@ -314,24 +318,61 @@ struct Walk<'a, D: Driver> {
     entered: HashSet<Entered>,
     marked: Marked,
     refused: Option<D::Error>,
-    /// The group whose held levels this walk is a step of computing, with the estimate so far, which a member of it met again reads ([`group_held`]).
-    estimate: Option<(RecGroup, Marked)>,
-    /// The held levels of each other group this walk met a member of again, computed once a walk; `None` for a group not read by its unfolding ([`read_by_unfolding`]).
+    /// The outermost climb whose estimate what this walk marked rests on, by its depth in [`Climbs::climbing`], the walk's own climb's included.
+    fed: Option<usize>,
+    /// The held levels of each group this walk met whose climb read the estimate of a climb around it, which hold while those estimates do, through this walk; `None` for a group not read by its unfolding ([`read_by_unfolding`]).
     groups: HashMap<RecGroup, Option<Marked>>,
+}
+
+/// What one reading of held levels shares across every climb it makes: the climbs in progress and the groups read once and for all.
+///
+/// The groups a reading meets are connected through reduction where no name connects them: a group's body forces to a call of another, minted anew by the substitution that opened it, whose body forces to a call of the first. A climb of a group already being climbed further out would climb it again, and that one the other again, without end, so a group met while it is climbed reads that climb's estimate, as a walk reads its own group's. That is the least fixpoint of the groups together taken one inside the other (Bekić): the inner climb settles under the outer's estimate, and the outer's next round climbs the inner again under its next.
+#[derive(Default)]
+struct Climbs {
+    /// The groups being climbed, outermost first, each with its estimate so far.
+    climbing: Vec<(RecGroup, Marked)>,
+    /// The held levels of each group whose climb read no estimate but its own and those of climbs inside it, for the rest of the reading; `None` for a group not read by its unfolding.
+    settled: HashMap<RecGroup, Option<Marked>>,
+}
+
+/// What a climb of one group found: what its unfolding holds, the first reduction a walk of it refused, and the outermost climb around it whose estimate it read.
+struct Climbed<E> {
+    held: Option<Marked>,
+    exhausted: Option<E>,
+    fed: Option<usize>,
 }
 
 /// The levels two instances of `group` are told apart by: what its members' unfoldings hold where conversion compares them, the least fixpoint over its members from none, a member met again contributing what the fixpoint holds so far. Each member's body is read under its leading lambdas, opened at fresh binders ([`peel`]), and its type is not read, as no parameter's type is. A reduction the driver refuses is kept, and the caller reads it as every level held. `None` for a group not read by its unfolding ([`read_by_unfolding`]), which the caller reads as written.
 pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLevels<D::Error>> {
+    let climbed = climb(driver, &mut Climbs::default(), group);
+    climbed.held.map(|held| HeldLevels {
+        heads: held.heads,
+        every: held.every,
+        exhausted: climbed.exhausted,
+    })
+}
+
+/// [`group_held`] inside a reading: the least fixpoint over `group`'s members from none, climbed with `climbs` holding the climbs around it.
+fn climb<D: Driver>(driver: &mut D, climbs: &mut Climbs, group: &RecGroup) -> Climbed<D::Error> {
     curios_profile::profile!("group_held");
     match read_by_unfolding(driver, group) {
         Ok(true) => {}
-        Ok(false) => return None,
+        Ok(false) => {
+            return Climbed {
+                held: None,
+                exhausted: None,
+                fed: None,
+            };
+        }
         Err(error) => {
-            return Some(HeldLevels {
-                heads: BTreeSet::new(),
-                every: true,
+            return Climbed {
+                held: Some(Marked {
+                    heads: BTreeSet::new(),
+                    every: true,
+                }),
                 exhausted: Some(error),
-            });
+                fed: None,
+            };
         }
     }
     let bodies = (0..group.length())
@@ -341,10 +382,15 @@ pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLev
         computed: BTreeMap::new(),
     };
 
+    let depth = climbs.climbing.len();
+    climbs.climbing.push((group.clone(), Marked::default()));
     let mut exhausted = None;
+    let mut fed: Option<usize> = None;
     let held = least_fixpoint(Marked::default(), |estimate| {
+        climbs.climbing[depth].1 = estimate.clone();
         let mut walk = Walk {
             driver: &mut *driver,
+            climbs: &mut *climbs,
             vectors: &vectors,
             forcing: (0..group.length())
                 .map(|member| (group.clone(), member))
@@ -352,7 +398,7 @@ pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLev
             entered: HashSet::new(),
             marked: estimate.clone(),
             refused: None,
-            estimate: Some((group.clone(), estimate.clone())),
+            fed: None,
             groups: HashMap::new(),
         };
         for body in &bodies {
@@ -361,14 +407,19 @@ pub fn group_held<D: Driver>(driver: &mut D, group: &RecGroup) -> Option<HeldLev
         if exhausted.is_none() {
             exhausted = walk.refused;
         }
+        // An estimate read from a climb around this one makes what it holds that climb's to settle; this climb's own is what it settles.
+        if let Some(read) = walk.fed.filter(|read| *read < depth) {
+            fed = Some(fed.map_or(read, |fed| fed.min(read)));
+        }
         walk.marked
     });
+    climbs.climbing.pop();
 
-    Some(HeldLevels {
-        heads: held.heads,
-        every: held.every,
+    Climbed {
+        held: Some(held),
         exhausted,
-    })
+        fed,
+    }
 }
 
 /// A node as a walk entered it, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
@@ -424,28 +475,48 @@ impl<D: Driver> Walk<'_, D> {
         }
     }
 
-    /// The levels `group`'s unfolding holds: the estimate where this walk is a step of computing them, and otherwise the fixpoint, computed once a walk, a reduction it refused holding every level. `None` for a group not read by its unfolding.
+    /// The levels `group`'s unfolding holds: the estimate of the climb of it this walk is inside, and otherwise its climb, made once a reading where it reads no estimate around it and once a walk where it does, a reduction it refused holding every level. `None` for a group not read by its unfolding.
     fn group_marks(&mut self, group: &RecGroup) -> Option<Marked> {
-        if let Some((estimating, estimate)) = &self.estimate
-            && estimating == group
+        if let Some(depth) = self
+            .climbs
+            .climbing
+            .iter()
+            .position(|(climbing, _)| climbing == group)
         {
-            return Some(estimate.clone());
+            self.feed(Some(depth));
+            return Some(self.climbs.climbing[depth].1.clone());
+        }
+        if let Some(held) = self.climbs.settled.get(group) {
+            return held.clone();
         }
         if let Some(held) = self.groups.get(group) {
             return held.clone();
         }
-        let held = group_held(self.driver, group).map(|found| {
-            let every = found.every || found.exhausted.is_some();
-            if self.refused.is_none() {
-                self.refused = found.exhausted;
-            }
-            Marked {
-                heads: found.heads,
-                every,
-            }
+        let climbed = climb(self.driver, self.climbs, group);
+        let held = climbed.held.map(|held| Marked {
+            every: held.every || climbed.exhausted.is_some(),
+            ..held
         });
-        self.groups.insert(group.clone(), held.clone());
+        if self.refused.is_none() {
+            self.refused = climbed.exhausted;
+        }
+        match climbed.fed {
+            Some(_) => {
+                self.feed(climbed.fed);
+                self.groups.insert(group.clone(), held.clone());
+            }
+            None => {
+                self.climbs.settled.insert(group.clone(), held.clone());
+            }
+        }
         held
+    }
+
+    /// What this walk marked rests on the estimate of the climb at `depth` too.
+    fn feed(&mut self, depth: Option<usize>) {
+        if let Some(depth) = depth {
+            self.fed = Some(self.fed.map_or(depth, |fed| fed.min(depth)));
+        }
     }
 
     /// A nominal occurrence's instance: its levels at the family's invariant positions, and nothing at an irrelevant one.

@@ -2,7 +2,8 @@
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_common::fill,
-    curios_elab::DEFAULT_BUDGET,
+    curios_elab::DEFAULT_BUDGET, curios_module::RootSource, curios_pipeline::test_support::*,
+    curios_surface::Entrypoint,
 };
 
 /// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart.
@@ -350,4 +351,22 @@ fn a_statement_is_one_with_itself_written_again_under_an_operator() {
         "{EVEN}\n let same(@P: Prop, proof: P) -> P = proof;\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Holds(even(l) && even(r))) -> Holds(even(l) && even(r)) = same(held);\n Io/pure(())"
     );
     typecheck(&handed).expect("the proof handed back by a function");
+}
+
+/// **Two instances of a recursive witness's method are one by the levels its unfolding holds, and the groups that reading meets are read once each.** `shown` spells a tree as `Spell/spell` does, so `same` compares the derived witness's method at two instances apart in a level its unfolding does not hold. Reading what the unfolding holds meets `/std/Fmt`'s local loop and a group a reduction mints anew between the loop and itself, each reaching the other through reduction alone: a group met while it is read further out reads the estimate it has there, where reading it anew would climb the two in turn without end, so the elaborator answers within a small budget.
+#[test]
+fn a_derived_witness_compared_through_a_definition_elaborates_within_a_small_budget() {
+    let source = r#"
+        use /std/{Eq, Spell, Str};
+        induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+        satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) { .. }
+        let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str = Spell/spell(t);
+        let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =
+            Eq/refl();
+        /std/print("ok")
+        "#;
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+
+    typecheck_with_prelude(200_000, &entrypoint, &RootSource::none())
+        .expect("the two instances are one within the budget");
 }
