@@ -607,16 +607,19 @@ pub fn reduce_intrinsic(
             Intrinsic::nat_lte,
         ),
         // Bitwise ops fold on unbounded ℕ, which the running program computes too: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The backend's i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
-        Intrinsic::NatAnd(left, right) => Ok(then_laws(
-            reduce_nat_binary(
-                reducer,
-                left,
-                right,
-                |l, r| l.checked_bitand(r).map(Intrinsic::Nat),
-                Intrinsic::NatAnd,
-            )?,
-            |l, r| bitwise_laws(l, r, intrinsic),
-        )),
+        Intrinsic::NatAnd(left, right) => {
+            let masked = then_laws(
+                reduce_nat_binary(
+                    reducer,
+                    left,
+                    right,
+                    |l, r| l.checked_bitand(r).map(Intrinsic::Nat),
+                    Intrinsic::NatAnd,
+                )?,
+                |l, r| bitwise_laws(l, r, intrinsic),
+            );
+            then_power_division(reducer, masked)
+        }
         Intrinsic::NatOr(left, right) => Ok(then_laws(
             reduce_nat_binary(
                 reducer,

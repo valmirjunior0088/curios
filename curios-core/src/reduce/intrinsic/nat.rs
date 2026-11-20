@@ -312,7 +312,7 @@ pub fn reduce_nat_division(
 
 /// A half of the division of a symbolic `dividend` by the literal `divisor`, by the laws a literal divisor admits: the Euclidean split ([`nat_euclid_split`]), then the floor law alone for a dividend the split could not close, which peels the whole divisors the floor certainly carries and leaves the rest divided by `divided`, in the spelling the division was read in. `None` where neither law applies.
 ///
-/// Every spelling of a division by a literal takes its laws here — `/` and `%` beside their proof, and a right shift by a literal count as the quotient by its power of two ([`then_power_division`]) — so when a quotient folds is decided once.
+/// Every spelling of a division by a literal takes its laws here — `/` and `%` beside their proof, a right shift by a literal count as the quotient by its power of two, and a mask as the remainder ([`then_power_division`]) — so when a division folds is decided once.
 fn literal_division(
     reducer: &mut impl Reducer,
     dividend: &Term,
@@ -339,9 +339,9 @@ fn literal_division(
     }))
 }
 
-/// A division its fold left neutral, in a spelling whose divisor is two to a literal count — a right shift, as [`Intrinsic::nat_division`] reads one — folded by the laws of a literal divisor ([`literal_division`]), what is left divided again in that spelling: the shift's laws are the quotient's, read through no rule of the shift's own.
+/// A division its fold left neutral, in a spelling whose divisor is two to a literal count — a right shift or a mask, as [`Intrinsic::nat_division`] reads one — folded by the laws of a literal divisor ([`literal_division`]), what is left divided again in that spelling: the shift's laws are the quotient's and the mask's the remainder's, read through no rule of their own.
 ///
-/// **The power is what this rule builds, and it is charged before it exists**, under the [`shift_bound`] [`then_coefficient`] pays for a left shift's coefficient, so `shr(x, 400000000)` is refused rather than allocated. A count past a `u64` declines, as there.
+/// **The power is what this rule builds, and it is charged before it exists**, under the [`shift_bound`] [`then_coefficient`] pays for a left shift's coefficient, so `shr(x, 400000000)` is refused rather than allocated; a mask's is no wider than the mask. A count past a `u64` declines, as there.
 pub fn then_power_division(
     reducer: &mut impl Reducer,
     result: Subterm,

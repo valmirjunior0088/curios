@@ -27,7 +27,7 @@ use {
         Context, Error, answered_guard, classing_among, distributed, open_layer, reduce_with,
         same_uncommitted, zonk_solved_term_metas,
     },
-    curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
+    curios_algebra::{Carrier, Half, Lattice, LinearForm, Monomial, Operation},
     curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
     curios_common::{OrderSyntax, Plicity, SyntaxName, recurse},
     curios_core::{
@@ -2000,48 +2000,52 @@ fn product(
     reader.admit(context, statement, proof, origin)
 }
 
-/// A quotient or a remainder, in any spelling Core reads one in ([`Intrinsic::nat_division`]): its dividend, its divisor, the program's proof that the divisor is not zero, and its quotient as the program wrote it — so the quotient and the remainder rebuilt from it are the atoms the program wrote.
+/// A quotient or a remainder, in any spelling Core reads one in ([`Intrinsic::nat_division`]): its dividend, its divisor, and its quotient and remainder as the program wrote them, beside the program's proof that the divisor is not zero where the spelling carries one — so they are the atoms the program wrote.
 #[derive(Clone, PartialEq)]
 struct Division {
     dividend: Term,
     divisor: Term,
-    non_zero: Term,
     quotient: Term,
+    remainder: Term,
 }
 
 impl Division {
-    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold. A right shift by `k` is the quotient by `pow(2, k)`, which is positive at every `k`, so `qed` proves it nonzero.
+    /// The division `term` is, where it is one by anything but the literal zero, whose proof of being nonzero only a contradiction in scope could hold. A right shift by `k` and a mask of `k` bits divide by a power of two, which is positive at every `k`, so `qed` proves it nonzero.
     fn of(term: &Term, qed: &Term) -> Option<Self> {
         let Subterm::Intrinsic(intrinsic) = &**term else {
             return None;
         };
-        match intrinsic.nat_division()? {
-            curios_core::Division::Proved {
-                dividend,
-                divisor,
-                non_zero,
-                ..
-            } => {
+        let division = intrinsic.nat_division()?;
+        let divisor = division.divisor();
+        let non_zero = match &division {
+            curios_core::Division::Proved { non_zero, .. } => {
                 let zero = matches!(&*divisor, Subterm::Intrinsic(Intrinsic::Nat(literal))
                     if literal.to_natural().is_some_and(|value| value.is_zero()));
-                (!zero).then(|| Division {
-                    quotient: Term::intrinsic(Intrinsic::NatDiv {
-                        dividend: dividend.clone(),
-                        divisor: divisor.clone(),
-                        non_zero: non_zero.clone(),
-                    }),
-                    dividend,
-                    divisor,
-                    non_zero,
-                })
+                if zero {
+                    return None;
+                }
+                non_zero.clone()
             }
-            curios_core::Division::Shifted { value, count } => Some(Division {
-                dividend: value,
-                divisor: Term::intrinsic(Intrinsic::NatPow(literal(Carrier::Natural, 2u32), count)),
-                non_zero: qed.clone(),
-                quotient: term.clone(),
-            }),
-        }
+            _ => qed.clone(),
+        };
+        let dividend = division.dividend().clone();
+        let (quotient, remainder) = match division.half() {
+            Half::Quotient => (
+                term.clone(),
+                Term::intrinsic(Intrinsic::NatRem {
+                    dividend: dividend.clone(),
+                    divisor: divisor.clone(),
+                    non_zero,
+                }),
+            ),
+            Half::Remainder => (division.quotient(), term.clone()),
+        };
+        Some(Division {
+            dividend,
+            divisor,
+            quotient,
+            remainder,
+        })
     }
 
     fn quotient(&self) -> Term {
@@ -2049,11 +2053,7 @@ impl Division {
     }
 
     fn remainder(&self) -> Term {
-        Term::intrinsic(Intrinsic::NatRem {
-            dividend: self.dividend.clone(),
-            divisor: self.divisor.clone(),
-            non_zero: self.non_zero.clone(),
-        })
+        self.remainder.clone()
     }
 
     /// `d * (x / d)`, which conversion reads beside `x % d` as `x`.

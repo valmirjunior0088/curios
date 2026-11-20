@@ -516,6 +516,8 @@ impl Nat {
 
     /// The first remainder in `combination` held beside at least one copy of its multiple: the recombination the algebra computes for it, and its dividend, read over the combination's atoms.
     ///
+    /// A remainder is read in any of its spellings ([`Intrinsic::nat_division`]), `x % d` or a mask of `k` bits, the remainder by `2ᵏ`, whose quotient is the shift by `k`.
+    ///
     /// **The multiple is matched in the form the fold leaves it in.** A quotient is one symbolic summand, so `d · (x / d)` is always distributed by the product fold — `(x / (y + 1)) · (y + 1)` is `y · (x / (y + 1)) + x / (y + 1)` — and the wanted monomials are computed the same way, through [`Nat::multiply`], so the two spellings meet. A quotient and a remainder pair on their dividend and divisor and never on their proofs, which each division carries as written and which proof irrelevance makes unobservable; a monomial is compared as a multiset of factors, because the factor order is a structural hash that sees the proof.
     fn euclid_pair(
         atoms: &mut Atoms,
@@ -526,20 +528,14 @@ impl Nat {
             .iter()
             .enumerate()
             .find_map(|(index, summand)| {
-                let Subterm::Intrinsic(Intrinsic::NatRem {
-                    dividend,
-                    divisor,
-                    non_zero,
-                }) = &*summand.origin.factor
-                else {
+                let Subterm::Intrinsic(intrinsic) = &*summand.origin.factor else {
                     return None;
                 };
-                let quotient = Term::intrinsic(Intrinsic::NatDiv {
-                    dividend: dividend.clone(),
-                    divisor: divisor.clone(),
-                    non_zero: non_zero.clone(),
-                });
-                let (_, multiple) = Self::decompose(&Self::multiply(divisor, &quotient));
+                let remainder = intrinsic
+                    .nat_division()
+                    .filter(|division| division.half() == Half::Remainder)?;
+                let (_, multiple) =
+                    Self::decompose(&Self::multiply(&remainder.divisor(), &remainder.quotient()));
 
                 let wanted = Self::linear(Self::summands(&multiple))
                     .into_iter()
@@ -558,7 +554,10 @@ impl Nat {
                     })
                     .collect::<Vec<Wanted<Natural>>>();
                 let recombination = Recombination::natural(index, &summand.coefficient, &wanted)?;
-                Some((recombination, Self::combination(atoms, dividend)))
+                Some((
+                    recombination,
+                    Self::combination(atoms, remainder.dividend()),
+                ))
             })
     }
 

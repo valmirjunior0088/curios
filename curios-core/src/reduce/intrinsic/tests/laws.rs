@@ -998,6 +998,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let widen = |nat: Term| Term::intrinsic(Intrinsic::NatToInt(nat));
     let nat_pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
     let nat_shr = |value: Term, count: Term| Term::intrinsic(Intrinsic::NatShr(value, count));
+    let nat_and = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatAnd(left, right));
     let nat_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMin(left, right));
     let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
     let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
@@ -1750,6 +1751,46 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             vec![
                 vec![(&nat_x, lit(1)), (&nat_y, lit(0))],
                 vec![(&nat_x, lit(37)), (&nat_y, lit(2))],
+            ],
+        ),
+        // A mask of `k` low bits is the remainder by `2ᵏ`, read through the same view, the mask on either side: its split and floor law, and Euclid's recombination with a shift and with a quotient.
+        (
+            "and(4 * x + 3, 3) = 3",
+            nat_and(plus(mul(lit(4), x.clone()), lit(3)), lit(3)),
+            lit(3),
+            nats(),
+        ),
+        (
+            "and(15, x + 17) = and(15, x + 1)",
+            nat_and(lit(15), plus(x.clone(), lit(17))),
+            nat_and(lit(15), plus(x.clone(), lit(1))),
+            nats(),
+        ),
+        (
+            "16 * shr(x, 4) + and(x, 15) = x",
+            plus(
+                mul(lit(16), nat_shr(x.clone(), lit(4))),
+                nat_and(x.clone(), lit(15)),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(0))],
+                vec![(&nat_x, lit(15))],
+                vec![(&nat_x, lit(16))],
+                vec![(&nat_x, lit(37))],
+            ],
+        ),
+        (
+            "and(7, x) + 8 * (x / 8) = x",
+            plus(
+                nat_and(lit(7), x.clone()),
+                mul(lit(8), nat_div(x.clone(), lit(8), qed())),
+            ),
+            x.clone(),
+            vec![
+                vec![(&nat_x, lit(7))],
+                vec![(&nat_x, lit(8))],
+                vec![(&nat_x, lit(45))],
             ],
         ),
         (

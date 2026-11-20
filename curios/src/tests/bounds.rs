@@ -429,6 +429,11 @@ const ROWS: &[Row] = &[
     claim("x: Nat, p: Holds(x < 256)", "Holds(Nat/shr(x, 4) < 16)"),
     claim("x: Nat", "Holds(Nat/shr(2 * x + 1, 1) == x)"),
     claim("x: Nat, k: Nat", "Holds(Nat/shr(Nat/shl(x, k), k) == x)"),
+    // A mask, through the remainder by a power of two it is, lifted out of a fact as a remainder is: a value below what its low bits allow.
+    claim(
+        "x: Nat, p: Holds(Nat/and(x, 15) < 10)",
+        "Holds(x < 16 * Nat/shr(x, 4) + 10)",
+    ),
     // A strict bound over a remainder from its loose one and a disequality: the disequality's split is on the goal's comparison, whose arms decide the goal, so the goal's own split is that one.
     claim(
         "k: Nat, at: Nat, d: Nat, p: Holds(d <= (k + at) % 16), q: Holds((k + at) % 16 != d)",
@@ -747,6 +752,11 @@ const CONTROLS: &[Row] = &[
     // A shift's bounds one past what they are: a byte's high nibble is at most fifteen, and a shift's multiple reaches its value less the low bits, `x = 3`.
     claim("x: Nat, p: Holds(x < 256)", "Holds(Nat/shr(x, 4) < 15)"),
     claim("x: Nat", "Holds(x < 4 * Nat/shr(x, 2) + 3)"),
+    // A value one below what its low bits allow: `x = 9`.
+    claim(
+        "x: Nat, p: Holds(Nat/and(x, 15) < 10)",
+        "Holds(x < 16 * Nat/shr(x, 4) + 9)",
+    ),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.
     body(
         "x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)",

@@ -539,6 +539,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/pow(2, 2 * x) * Nat/shr(y, 2 * x) + y % Nat/pow(2, 2 * x), y)",
             "Eq()(Nat/pow(2, x) * Nat/shr(y, x) + y % Nat/pow(2, x) + y / 3, y + y / 3)",
             "Eq()(2 * Nat/pow(2, x) * Nat/shr(y, x) + 2 * (y % Nat/pow(2, x)), 2 * y)",
+            // A mask of `k` low bits is the remainder by `2ᵏ`, the mask on either side: its split and floor law, and Euclid's recombination with a shift and with a quotient, and at multiplicity two beside a summand of its own.
+            "Eq()(Nat/and(4 * y + 3, 3), 3)",
+            "Eq()(Nat/and(3, 4 * y + 3), 3)",
+            "Eq()(Nat/and(y + 17, 15), Nat/and(y + 1, 15))",
+            "Eq()(16 * Nat/shr(y, 4) + Nat/and(y, 15), y)",
+            "Eq()(Nat/and(15, y) + 16 * Nat/shr(y, 4), y)",
+            "Eq()(16 * (y / 16) + Nat/and(y, 15), y)",
+            "Eq()(2 * (16 * Nat/shr(y, 4) + Nat/and(y, 15)) + x, 2 * y + x)",
         ],
         refused: &[
             // A candidate no stage moves: a value is at most itself shifted, a product by a factor that is at least one.
@@ -551,6 +559,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(16 * Nat/shr(y, 4) + x % 16, x)",
             "Eq()(Nat/pow(2, x) * Nat/shr(y, x + 1) + y % Nat/pow(2, x), y)",
             "Eq()(Nat/shl(Nat/shr(x, 1), 1), x)",
+            // The controls beside the mask, and none is a law: a mask that is no power less one (`y = 1`), one of another width (`y = 8`), and a mask of another value (`x = 1, y = 0`).
+            "Eq()(16 * Nat/shr(y, 4) + Nat/and(y, 14), y)",
+            "Eq()(16 * Nat/shr(y, 4) + Nat/and(y, 7), y)",
+            "Eq()(16 * Nat/shr(y, 4) + Nat/and(x, 15), y)",
         ],
     },
     Carrier {
