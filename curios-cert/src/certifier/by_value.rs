@@ -12,8 +12,10 @@
 mod test_support;
 
 use {
-    super::{Certifier, Converted, Error, Sort, canonical_operands, resolved_spelling},
-    curios_analysis::{Classification, Driver, Erased},
+    super::{
+        Certifier, Converted, Error, Sort, canonical_operands, proof_parts, resolved_spelling,
+    },
+    curios_analysis::{Classification, Driver, Erased, ReadsProofs},
     curios_core::{
         Advance, Applications, ClosedMemo, Cost, Free, Global, InductDecl, Intrinsic, Polarity,
         Probe, ReduceError, Reducer, StructDecl, Subterm, Term, Variance,
@@ -489,6 +491,15 @@ impl Driver for ByValue<'_, '_> {
 
     fn refined(&self) -> Vec<(Term, Term)> {
         Driver::refined(&**self)
+    }
+}
+
+/// Which parts of a stuck form the certifier's conversion reads nowhere (`proof_parts`), for the filter in front of an arm's equation. A refusal that is no exhaustion of the budget is that no part is known to be a proof.
+impl ReadsProofs for ByValue<'_, '_> {
+    fn proof_parts(&mut self, term: &Term) -> Result<Vec<usize>, ReduceError> {
+        Ok(proof_parts(self, term)
+            .probed_refusal()?
+            .unwrap_or_default())
     }
 }
 

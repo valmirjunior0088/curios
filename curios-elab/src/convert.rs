@@ -11,8 +11,8 @@ use linear::*;
 mod neutral;
 use neutral::*;
 pub use neutral::{
-    Binders, Opened, hold_at_one_instance, levels_clash_to_conversion, probe_open_sort,
-    synth_neutral,
+    Binders, Opened, apply_param_types, hold_at_one_instance, levels_clash_to_conversion,
+    probe_open_sort, synth_neutral,
 };
 
 mod occurrence;

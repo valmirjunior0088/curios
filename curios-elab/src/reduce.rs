@@ -23,22 +23,26 @@ use {
     super::{
         Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
     },
-    crate::{Error, classing, is_prop, reduce_with, same_uncommitted, sort_of},
+    crate::{
+        Binders, Error, apply_param_types, classing, is_prop, reduce_with, same_uncommitted,
+        sort_of,
+    },
     curios_analysis::{
-        Answered, Classes, Driver, IntrinsicDriver, Judge, ScrutineeRead, Within, answers,
-        answers_classed, apart_in_instance, atoms_within, case_target_indices, could_answer,
-        holds_no_type, one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
-        read_scrutinee_classed, refold,
+        Answered, Classes, Driver, IntrinsicDriver, Judge, ReadsProofs, ScrutineeRead, Within,
+        answers, answers_classed, apart_in_instance, atoms_within, case_target_indices,
+        could_answer, holds_no_type, one_up_to_instances, pinned_instance, read_operands,
+        read_scrutinee, read_scrutinee_classed, refold,
     },
     curios_common::{SyntaxRegistry, recurse},
     curios_core::{
         Advance, Applications, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost,
         ClosedMemo, Cost, Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
-        Instance, Intrinsic, Layer, Let, Match, Metavar, Polarity, Probe, Proj, Quality, Rec,
-        RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseConstraintOrigin, Universes, Var, Variant, Visit,
-        accelerable, eta_head, instantiate_universes, probe_spellings, project_erased_universes,
-        project_literal, reduce_closed, reduce_intrinsic, switch_arm, weak_head_value,
+        Instance, Intrinsic, Layer, Let, Match, Metavar, Operand, Polarity, Probe, Proj, Quality,
+        Rec, RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, UniverseConstraintOrigin, Universes, Var, Variant,
+        Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
+        project_erased_universes, project_literal, reduce_closed, reduce_intrinsic, switch_arm,
+        weak_head_value,
     },
     std::collections::{BTreeSet, HashMap},
 };
@@ -239,6 +243,89 @@ impl Judge for Context<'_> {
     fn force_asking(&mut self, term: &Term) -> Result<Term, Self::Error> {
         reduce_with(self, term)
     }
+}
+
+/// Which parts of a stuck form the elaborator's conversion reads nowhere, for the filter in front of an arm's equation: each part at the type that conversion compares it at — an application's arguments at its head's function type (`apply_param_types`), a constructor's payload and a struct literal's fields at the declaration's telescope, each opened at the parts before it, and an operation's operands at its signature — where `is_prop`, asked plainly, holds it a proposition. The certifier's `proof_parts`, by the elaborator's own lookups; a refusal that is no exhaustion of the budget is that no part is known to be a proof.
+impl ReadsProofs for Context<'_> {
+    fn proof_parts(&mut self, term: &Term) -> Result<Vec<usize>, ReduceError> {
+        let typed = match &**term {
+            Subterm::Apply(apply) => {
+                let types =
+                    apply_param_types(self, &Binders::default(), &apply.head, &apply.arguments)?;
+                apply
+                    .params()
+                    .map(Term::identity)
+                    .zip(types.unwrap_or_default())
+                    .collect()
+            }
+            Subterm::Variant(variant) => {
+                let telescope = self
+                    .induct_facet(&variant.name, &variant.universes, |at| {
+                        at.payload(&variant.tag, &variant.params).transpose()
+                    })
+                    .transpose()
+                    .map_err(ReduceError::Universe)?
+                    .flatten();
+                typed_parts(telescope, &variant.payload)
+            }
+            Subterm::Struct(record) => {
+                let telescope = match self.struct_decl(&record.name).cloned() {
+                    Some(declaration) => Some(
+                        declaration
+                            .universe_context
+                            .read_at(&declaration.arity, &record.universes)
+                            .map_err(ReduceError::Universe)?
+                            .open(&record.params.iter().collect::<Vec<_>>()),
+                    ),
+                    None => None,
+                };
+                typed_parts(telescope, &record.fields)
+            }
+            Subterm::Intrinsic(operation) => {
+                let signature = operation.signature(&self.syntax());
+                operation
+                    .operands()
+                    .into_iter()
+                    .zip(signature.operands)
+                    .filter_map(|(operand, typed)| match typed {
+                        Operand::At(type_) => Some((operand.identity(), type_)),
+                        _ => None,
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
+        };
+        let mut proofs = Vec::new();
+        for (part, type_) in typed {
+            let proof = self
+                .plainly(|context| is_prop(context, &type_))
+                .probed_refusal()?
+                .unwrap_or(false);
+            if proof {
+                proofs.push(part);
+            }
+        }
+
+        Ok(proofs)
+    }
+}
+
+/// The type `telescope` gives each of `parts`, each entry opened at the parts before it, beside the part's identity.
+fn typed_parts<B: Bound>(telescope: Option<Telescope<B>>, parts: &[Term]) -> Vec<(usize, Term)> {
+    let Some(telescope) = telescope else {
+        return Vec::new();
+    };
+    let mut cursor = telescope.cursor();
+    let mut typed = Vec::new();
+    for part in parts {
+        let Some((_, type_)) = cursor.entry() else {
+            break;
+        };
+        cursor.advance(part.clone());
+        typed.push((part.identity(), type_));
+    }
+
+    typed
 }
 
 enum Reduce {

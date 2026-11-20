@@ -13,7 +13,7 @@ use {
 const IMPORTS: &str =
     "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
-/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through.
+/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through.
 const DEFINITIONS: &str =
     "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
 let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
@@ -22,7 +22,11 @@ let small(n: Nat) -> Bool = n < 10;
 let tiny(n: Nat) -> Bool = small(n);
 let Naturals: Type = Nat;
 induct Tag: (Bool) -> Type | yes(): (true) end
-struct Pair: Type { left: Nat, right: Nat }";
+struct Pair: Type { left: Nat, right: Nat }
+let lemma(a: Nat, c: Nat, p: Holds(a < 10)) -> Holds(a < 10) = match c | 0 => p | _ => p end;
+let nonzero(b: Nat, c: Nat, p: Nat/NonZero(b)) -> Nat/NonZero(b) = match c | 0 => p | _ => p end;
+struct Bounded: Type { n: Nat, at: Holds(n < 10) }
+induct Checked: Type | checked(n: Nat, at: Holds(n < 10)) end";
 
 /// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical.
 const BINDERS: &[Binder] = &[
@@ -65,6 +69,21 @@ const BINDERS: &[Binder] = &[
         name: "h",
         type_: "(Nat) -> Holds(a < 10)",
         needs: &["a"],
+    },
+    Binder {
+        name: "q",
+        type_: "Nat/NonZero(b)",
+        needs: &["b"],
+    },
+    Binder {
+        name: "s",
+        type_: "(Bounded) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "t",
+        type_: "(Checked) -> Nat",
+        needs: &[],
     },
     Binder {
         name: "u",
@@ -286,6 +305,31 @@ const GUARDS: &[Guard] = &[
         guard: "w(a, p1) < 5",
         respelled: "w(a, h(c)) < 5",
         dual: Some("5 <= w(a, h(c))"),
+        refused: &[],
+    },
+    // A binder the guard does not name inside a proof stuck on it, standing where conversion compares a proposition and reads nowhere: a function's bounded argument, a struct literal's bounded field, a constructor's bounded payload and a division's bound.
+    Guard {
+        guard: "w(a, p1) < 5",
+        respelled: "w(a, lemma(a, c, p1)) < 5",
+        dual: Some("5 <= w(a, lemma(a, c, p1))"),
+        refused: &[],
+    },
+    Guard {
+        guard: "s(Bounded { n = a, at = p1 }) < 5",
+        respelled: "s(Bounded { n = a, at = lemma(a, c, p1) }) < 5",
+        dual: Some("5 <= s(Bounded { n = a, at = lemma(a, c, p1) })"),
+        refused: &[],
+    },
+    Guard {
+        guard: "t(Checked/checked(a, p1)) < 5",
+        respelled: "t(Checked/checked(a, lemma(a, c, p1))) < 5",
+        dual: Some("5 <= t(Checked/checked(a, lemma(a, c, p1)))"),
+        refused: &[],
+    },
+    Guard {
+        guard: "Nat/div(a, b, @q) < 5",
+        respelled: "Nat/div(a, b, @nonzero(b, c, q)) < 5",
+        dual: Some("5 <= Nat/div(a, b, @nonzero(b, c, q))"),
         refused: &[],
     },
 ];

@@ -157,9 +157,9 @@ pub fn read_scrutinee_classed(
 ///
 /// Reduction substitutes only closed definition bodies and subterms of the term it is reducing, so it can introduce a *global* name and can drop a local, but can never introduce a local the term did not already mention. A reduct of the key names no binder the key does not.
 ///
-/// **A binder counts where conversion reads it.** Conversion compares two stuck forms part by part, reducing an argument of a stuck application and a field of a constructed value before it compares them, so a binder one names that its reduction erases is one it never reads — `f(b + 0 * c)` is `f(b)` to it, and so is `f(Pair { left = b, right = c }.left)` — and it reads no proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So a binder the key does not name ends the test where it stands as a variable in a part reduction has left — the candidate as reduction leaves a stuck form, and its head, a fold's operands, a projection's head and a match's scrutinee, each as reduction left it — and an argument or a field that names one is reduced ([`Reducer::reduce_forced`]) and read in turn. A binder that is a proof is passed over, and so is an application of one, which is a proof too; each checker says which binders are proofs.
+/// **A binder counts where conversion reads it.** Conversion compares two stuck forms part by part, reducing an argument of a stuck application and a field of a constructed value before it compares them, so a binder one names that its reduction erases is one it never reads — `f(b + 0 * c)` is `f(b)` to it, and so is `f(Pair { left = b, right = c }.left)` — and it reads no proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So a binder the key does not name ends the test where it stands as a variable in a part reduction has left — the candidate as reduction leaves a stuck form, and its head, a fold's operands, a projection's head and a match's scrutinee, each as reduction left it — and an argument or a field that names one is reduced ([`Reducer::reduce_forced`]) and read in turn. A binder that is a proof is passed over, and so is an application of one, which is a proof too; and so is any part the checker's conversion compares at a proposition ([`ReadsProofs::proof_parts`]), asked only of a part that would otherwise end the test. Each checker says which are proofs.
 ///
-/// **What it still gives up.** A part beneath a binder of the candidate's — a lambda's body, a match's arm — and a type are read as they stand, reducing nothing below them, where conversion compares bodies reduced: `u((x) => x + 0 * c)` counts `c`. One-sided, a reading that reduced there would reduce without the other side to stop it, where conversion stops at the first difference: a recursive group unfolds to a body that holds the group again. And a proof that is no application of a proof binder is read like any term. The filter fails toward refusal there, and both checkers read it on one spelling with one account of what a proof is, so they fail together.
+/// **What it still gives up.** A part beneath a binder of the candidate's — a lambda's body, a match's arm — and a type are read as they stand, reducing nothing below them, where conversion compares bodies reduced: `u((x) => x + 0 * c)` counts `c`. One-sided, a reading that reduced there would reduce without the other side to stop it, where conversion stops at the first difference: a recursive group unfolds to a body that holds the group again. And a part beneath a binder is read with no lookup of its type, so a proof there is read like any term. The filter fails toward refusal there, and both checkers read it on one spelling with one account of what a proof is, so they fail together.
 ///
 /// That makes this a filter and not a rule: every candidate an eager key would match still passes it, because such a candidate *is* a reduct of the key. What it excludes is the traffic — every stuck form produced under a binder some other judgment opened, which is most of what a probe at a stuck reduct sees — most of it at the first such binder, standing as an operand reduction has already left, before anything is reduced.
 ///
@@ -167,7 +167,7 @@ pub fn read_scrutinee_classed(
 ///
 /// Admitting every form refuses nothing that holds, and costs what it puts to the equations: under a guard over a web of definitions, an arm whose stuck forms name other binders settles and classes each of them against the web, which `curios`' `tests::unfolding::a_guard_over_a_web_puts_forms_over_other_binders_to_no_equation` holds within the default budget. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equation_scope_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
 pub fn could_answer(
-    reducer: &mut impl Reducer,
+    reducer: &mut impl ReadsProofs,
     key: &Term,
     candidate: &Term,
     proofs: &[Free],
@@ -181,6 +181,12 @@ pub fn could_answer(
     };
 
     walk.reads(reducer, candidate, Stands::Left)
+}
+
+/// What [`could_answer`] asks its checker beyond reduction: which parts of a stuck form its conversion compares at a proposition, and so reads nowhere.
+pub trait ReadsProofs: Reducer {
+    /// The parts of `term` this checker's conversion compares at a proposition, by their identities, typed as it types each: an application's arguments by its head's telescope, a constructor's payload and a struct literal's fields by the declaration's, each opened at the parts before it, and an operation's operands by its signature. Empty where no lookup types them, which reads every part.
+    fn proof_parts(&mut self, term: &Term) -> Result<Vec<usize>, ReduceError>;
 }
 
 /// How a part of a stuck form stands to reduction, which is how [`could_answer`] reads it.
@@ -207,7 +213,7 @@ impl<F: Fn(&Free) -> bool> Walk<'_, F> {
     /// Whether `term` reads no binder the walk counts, as [`could_answer`] reads it where it `stands`.
     fn reads(
         &mut self,
-        reducer: &mut impl Reducer,
+        reducer: &mut impl ReadsProofs,
         term: &Term,
         stands: Stands,
     ) -> Result<bool, ReduceError> {
@@ -226,7 +232,7 @@ impl<F: Fn(&Free) -> bool> Walk<'_, F> {
 
     fn reads_part(
         &mut self,
-        reducer: &mut impl Reducer,
+        reducer: &mut impl ReadsProofs,
         term: &Term,
         stands: Stands,
     ) -> Result<bool, ReduceError> {
@@ -287,8 +293,20 @@ impl<F: Fn(&Free) -> bool> Walk<'_, F> {
             parts.push((child.clone(), stands));
             false
         });
+        // A part the checker's conversion compares at a proposition is one it reads nowhere, asked only of a part that would otherwise end the test, and only outside every binder of the candidate's, where a lookup may read the part's type.
+        let mut proofs = None;
         for (part, stands) in parts {
-            if !self.reads(reducer, &part, stands)? {
+            if self.reads(reducer, &part, stands)? {
+                continue;
+            }
+            if term.reach() > 0 {
+                return Ok(false);
+            }
+            let proofs = match &mut proofs {
+                Some(proofs) => proofs,
+                None => proofs.insert(reducer.proof_parts(term)?),
+            };
+            if !proofs.contains(&part.identity()) {
                 return Ok(false);
             }
         }

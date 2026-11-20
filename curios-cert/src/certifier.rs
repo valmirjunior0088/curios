@@ -20,7 +20,7 @@ pub use by_value::{
 };
 
 mod convert;
-pub use convert::{asked_classes, asked_within, stated_payload, unread_payload};
+pub use convert::{asked_classes, asked_within, proof_parts, stated_payload, unread_payload};
 
 mod globals;
 use globals::*;

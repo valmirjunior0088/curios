@@ -37,8 +37,8 @@ use {
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
-        Instance, Lockstep, Match, Paired, Probe, Proj, Quality, ReduceError, Reducer, Step,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Variant,
+        Instance, Lockstep, Match, Operand, Paired, Probe, Proj, Quality, ReduceError, Reducer,
+        Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Variant,
         instantiate_universes, keys_paired, paired,
     },
 };
@@ -1650,6 +1650,68 @@ fn ground(
     that: &Term,
 ) -> Result<bool, Error> {
     compare(certifier, pairs, &Term::type_ground(), this, that)
+}
+
+/// The parts of `term` this checker's conversion compares at a proposition, by their identities (`curios_analysis::ReadsProofs`): an application's arguments at its head's telescope ([`spine_telescope`]), a constructor's payload at its signature and a struct literal's fields at the declaration's field telescope, each opened at the parts before it, and an operation's operands at its signature — the types [`compare_arguments`], the literals' arms of [`compare`] and the shared congruence compare each at, where irrelevance discharges a part unread. Empty where no lookup types the parts.
+pub fn proof_parts(certifier: &mut ByValue, term: &Term) -> Result<Vec<usize>, Error> {
+    match &**term {
+        Subterm::Apply(apply) => {
+            let telescope = spine_telescope(certifier, &apply.head, apply.arguments.len())?;
+            let arguments = apply.params().cloned().collect::<Vec<_>>();
+            at_a_proposition(certifier, telescope, &arguments)
+        }
+        Subterm::Variant(variant) => {
+            let telescope = certifier
+                .induct_at_params(&variant.name, &variant.universes, &variant.params)
+                .ok()
+                .and_then(|at| at.signature(certifier, &variant.tag).ok().flatten());
+            at_a_proposition(certifier, telescope, &variant.payload)
+        }
+        Subterm::Struct(record) => {
+            let telescope = certifier
+                .struct_at(&record.name, &record.universes, &record.params)
+                .ok()
+                .and_then(|at| at.fields(certifier).ok());
+            at_a_proposition(certifier, telescope, &record.fields)
+        }
+        Subterm::Intrinsic(operation) => {
+            let signature = operation.signature(&certifier.syntax());
+            let mut proofs = Vec::new();
+            for (operand, typed) in operation.operands().into_iter().zip(&signature.operands) {
+                if let Operand::At(type_) = typed
+                    && certifier.sort_of(type_)?.is_prop()
+                {
+                    proofs.push(operand.identity());
+                }
+            }
+            Ok(proofs)
+        }
+        _ => Ok(Vec::new()),
+    }
+}
+
+/// Which of `parts` `telescope` types at a proposition, each entry opened at the parts before it, by their identities.
+fn at_a_proposition<B: Bound>(
+    certifier: &mut ByValue,
+    telescope: Option<Telescope<B>>,
+    parts: &[Term],
+) -> Result<Vec<usize>, Error> {
+    let Some(telescope) = telescope else {
+        return Ok(Vec::new());
+    };
+    let mut cursor = telescope.cursor();
+    let mut proofs = Vec::new();
+    for part in parts {
+        let Some((_, type_)) = cursor.entry() else {
+            break;
+        };
+        cursor.advance(part.clone());
+        if certifier.sort_of(&type_)?.is_prop() {
+            proofs.push(part.identity());
+        }
+    }
+
+    Ok(proofs)
 }
 
 /// Whether `this` and `that` convert at `Type`, as reduction asks of two terms it holds stuck: a comparison of its own, inside no unfolding of the goal reduction was serving. A refusal that is no exhaustion of the budget — a term the certifier cannot compare — is that they are not known to: a question only widens what reduction sees.
