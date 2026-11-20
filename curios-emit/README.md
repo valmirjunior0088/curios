@@ -76,6 +76,14 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-anf` bu
 
 **Rejected.** Inlining the slow path, a multiplied division and float conversion at every site.
 
+### A division by a power of two is a shift and a mask
+
+**Decision.** A `Nat` division and remainder of two i31s whose divisor is a literal `2ᵏ`, `k ≥ 1`, are the right shift by `k` and the mask of the `k` low bits, `i32.shr_u` and `i32.and` against a constant (`code_emitter.rs`'s `emit_divided`), and past the i31 they call `big/div` and `big/rem` as any division does. The table knows every value a `Nat` literal binds, which is how an operation reads its operand's value.
+
+**Rationale.** A shift and a mask are a word's own instructions where `i32.div_u` and `i32.rem_u` are long ones, so a program never writes a shift for its speed where the division is what it means. Cranelift turns a `udiv` by a power of two into a shift where its own propagation proves the divisor constant, and no guarantee here rests on an engine's optimizer. The boxed half is rare and long, and keeps the helper the division already called.
+
+**Rejected.** Rewriting the operation into `Nat/shr` and `Nat/and` before emission, which takes `big/shr` and `big/bitwise` into every module that divides by a power of two and clamps the shift's count at every site, where neither the count nor the boxed half needs it. `Int`'s division and remainder lowered the same way while `Int` divides truncating and `Int/shr` floors, which disagree below zero.
+
 ### Floats past ties to even are a helper library the emitter writes
 
 **Decision.** A `Flt` operation Wasm has an instruction for — ties-to-even arithmetic, `sqrt`, `min`, `max`, the roundings to an integral value it spells — stays that instruction, followed by `r != r` and, only for a NaN, a call to `flt/nan`, which recomputes the model's NaN rule from the operands. What Wasm has no instruction for — the four other directions, `fma` in every direction, ties to away to an integral value, and the exact remainder `rem` — is `flt_emitter.rs`: integer soft-float helpers over the operands' bits, emitted on demand in `FltHelper::ALL`'s order as `big_emitter` emits its own, sharing `wasm!` splicing through `shorthand.rs`. A direction is static on each operation, so the choice is made once, at emission.

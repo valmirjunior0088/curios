@@ -315,6 +315,17 @@ impl EmissionBody {
         }
     }
 
+    fn collect_nat_literals<'a>(&'a self, out: &mut HashMap<&'a EmissionValueName, &'a Natural>) {
+        for (name, value) in &self.values {
+            if let EmissionValue::Pure(EmissionData::Nat(literal)) = value {
+                out.insert(name, literal);
+            }
+        }
+        for (_, block) in &self.blocks {
+            block.region.collect_nat_literals(out);
+        }
+    }
+
     /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_indirect` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
     ///
     /// A heap call of a closure of `n` arguments reads its closure at arity `n`, dispatches at `n + 1` through the heap table, and, where the closure has no twin, hands the answer on at one.
@@ -459,6 +470,23 @@ impl EmissionModule {
     /// The closure definitions, in insertion order.
     pub fn clsrs(&self) -> &[(EmissionClosureName, EmissionClosure)] {
         &self.clsrs
+    }
+
+    /// Every value a `Nat` literal binds, in a body or hoisted to a const, with the literal: what an operation reads a literal operand's value through where a literal answers it with other instructions.
+    pub fn nat_literals(&self) -> HashMap<&EmissionValueName, &Natural> {
+        let mut literals = HashMap::new();
+        for (_, func) in &self.funcs {
+            func.region.collect_nat_literals(&mut literals);
+        }
+        for (_, clsr) in &self.clsrs {
+            clsr.region.collect_nat_literals(&mut literals);
+        }
+        for (name, data) in &self.consts {
+            if let EmissionData::Nat(literal) = data {
+                literals.insert(name, literal);
+            }
+        }
+        literals
     }
 
     /// Every value a closure construction binds, in a body or hoisted to a const, with the closure it builds.

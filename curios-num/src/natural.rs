@@ -57,6 +57,14 @@ impl Natural {
         self.value.bits()
     }
 
+    /// The `k` this natural is `2ᵏ` of, or `None` where it is no power of two, zero among them: what reads a division by a literal power of two as the shift it is.
+    pub fn power_of_two_exponent(&self) -> Option<u64> {
+        match self.value.count_ones() {
+            1 => self.value.trailing_zeros(),
+            _ => None,
+        }
+    }
+
     /// The canonical little-endian byte encoding. Zero mints one zero byte, `[0]`, never the empty string. The host/guest handle token is encoded through exactly this, by `curios-abi`'s `Handle::encode`, and is never decoded back into a number: the host lifts a token by comparing its bytes, so there is no inverse here.
     pub fn to_bytes_le(&self) -> Vec<u8> {
         self.value.to_bytes_le()

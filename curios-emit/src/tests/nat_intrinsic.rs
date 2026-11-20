@@ -50,17 +50,44 @@ fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
 fn nat_div_and_rem_are_unsigned_on_the_fast_path() {
     let div = wat(&intrinsic_main(
         curios_cps::Intrinsic::NatDiv,
-        vec![nat(9), nat(2)],
+        vec![nat(9), nat(3)],
     ));
     assert_contains(&div, "i32.div_u");
     assert_contains(&div, "call $big/div");
 
     let rem = wat(&intrinsic_main(
         curios_cps::Intrinsic::NatRem,
-        vec![nat(9), nat(2)],
+        vec![nat(9), nat(3)],
     ));
     assert_contains(&rem, "i32.rem_u");
     assert_contains(&rem, "call $big/rem");
+}
+
+// The quotient and the remainder of two i31s by a literal `2ᵏ` are the shift by `k` and the mask of the `k` low bits, and past the i31 the division's own helpers; a divisor of one is no shift, and is divided.
+#[test]
+fn a_division_and_a_remainder_by_a_power_of_two_are_a_shift_and_a_mask() {
+    let div = wat(&intrinsic_main(
+        curios_cps::Intrinsic::NatDiv,
+        vec![nat(9), nat(16)],
+    ));
+    assert_contains(&div, "i32.const 4\n");
+    assert_contains(&div, "i32.shr_u");
+    assert_absent(&div, "i32.div_u");
+    assert_contains(&div, "call $big/div");
+
+    let rem = wat(&intrinsic_main(
+        curios_cps::Intrinsic::NatRem,
+        vec![nat(9), nat(16)],
+    ));
+    assert_contains(&rem, "i32.const 15\n");
+    assert_absent(&rem, "i32.rem_u");
+    assert_contains(&rem, "call $big/rem");
+
+    let one = wat(&intrinsic_main(
+        curios_cps::Intrinsic::NatDiv,
+        vec![nat(9), nat(1)],
+    ));
+    assert_contains(&one, "i32.div_u");
 }
 
 #[test]

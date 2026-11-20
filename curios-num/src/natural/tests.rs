@@ -1,4 +1,4 @@
-//! The greatest common divisor, against the cases a comparison reads it at.
+//! What ℕ answers beside its operators: the greatest common divisor against the cases a comparison reads it at, a power within its allowance, and the exponent a power of two is.
 
 use crate::*;
 
@@ -37,4 +37,19 @@ fn a_power_is_declined_past_its_allowance_and_answered_at_zero_and_one() {
         Some(Natural::one())
     );
     assert_eq!(huge.pow_within(&Natural::zero(), 0), Some(Natural::one()));
+}
+
+#[test]
+fn a_power_of_two_answers_its_exponent_and_any_other_natural_none() {
+    let past_every_word = Natural::one().shl_within(&nat(100), u64::MAX);
+
+    assert_eq!(nat(1).power_of_two_exponent(), Some(0));
+    assert_eq!(nat(16).power_of_two_exponent(), Some(4));
+    assert_eq!(
+        past_every_word.and_then(|power| power.power_of_two_exponent()),
+        Some(100)
+    );
+    assert_eq!(nat(0).power_of_two_exponent(), None);
+    assert_eq!(nat(12).power_of_two_exponent(), None);
+    assert_eq!(nat(15).power_of_two_exponent(), None);
 }

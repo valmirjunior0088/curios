@@ -80,6 +80,13 @@ enum Fast {
     Wide64,
 }
 
+/// Which half of a `Nat` division an operation answers.
+#[derive(Clone, Copy)]
+enum Half {
+    Quotient,
+    Remainder,
+}
+
 /// The runs of instructions `parts` names, one after another.
 fn sequence<const N: usize>(parts: [Vec<curios_wasm::Instr>; N]) -> Vec<curios_wasm::Instr> {
     parts.into_iter().flatten().collect()
@@ -843,6 +850,53 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .collect();
 
         self.emit_settled(dest, &[&value, &count], fast, Fast::Small, slow);
+    }
+
+    /// Lower one half of a `Nat` division: `i32.div_u` or `i32.rem_u` on two i31s, and where the divisor is a literal `2ᵏ` the right shift by `k` or the mask of the `k` low bits it is, a word's own instructions where a division is a long one; `big/div` or `big/rem` past the i31, whatever the divisor.
+    fn emit_divided(
+        &mut self,
+        dest: &Dest<'_>,
+        (dividend, divisor): (&EmissionValueName, &EmissionValueName),
+        half: Half,
+    ) {
+        let slow = vec![self.big(match half {
+            Half::Quotient => BigHelper::Div,
+            Half::Remainder => BigHelper::Rem,
+        })];
+        let power = self.power_of_two(divisor);
+        self.emit_arith(
+            dest,
+            (dividend, divisor),
+            move |dividend, divisor| {
+                let (operand, instr) = match (power, half) {
+                    (Some(count), Half::Quotient) => (
+                        vec![curios_wasm::Instr::I32Const { value: count }],
+                        curios_wasm::Instr::I32ShrU,
+                    ),
+                    (Some(count), Half::Remainder) => (
+                        vec![curios_wasm::Instr::I32Const {
+                            value: (1 << count) - 1,
+                        }],
+                        curios_wasm::Instr::I32And,
+                    ),
+                    (None, Half::Quotient) => (divisor, curios_wasm::Instr::I32DivU),
+                    (None, Half::Remainder) => (divisor, curios_wasm::Instr::I32RemU),
+                };
+                sequence([dividend, operand, vec![instr]])
+            },
+            Fast::Small,
+            slow,
+        );
+    }
+
+    /// The `k` of the `Nat` literal `2ᵏ`, `k ≥ 1`, `divisor` is bound to. A literal the i31 holds is below `2³⁰`, so `k` is a count `i32.shr_u` takes as it stands.
+    fn power_of_two(&self, divisor: &EmissionValueName) -> Option<i32> {
+        let literal = self.context.table().nat_literal(divisor)?;
+        let count = literal.power_of_two_exponent()?;
+        match curios_cps::nat_is_small(literal) && count >= 1 {
+            true => i32::try_from(count).ok(),
+            false => None,
+        }
     }
 
     /// Lower a bitwise combination: two i31s combine as machine words, since they agree on every bit above bit 30 and so does any combination of them, and anything else goes to `big/bitwise`.
@@ -2162,14 +2216,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             // A zero divisor is ruled out by the evidence every division carries; were one to arrive, `i32.div_u` would trap on it.
             curios_cps::Intrinsic::NatDiv => {
-                let slow = vec![self.big(BigHelper::Div)];
-                self.emit_arith(
-                    dest,
-                    (&args[0], &args[1]),
-                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32DivU]]),
-                    Fast::Small,
-                    slow,
-                );
+                self.emit_divided(dest, (&args[0], &args[1]), Half::Quotient)
             }
             curios_cps::Intrinsic::IntDiv => {
                 let slow = vec![self.big(BigHelper::Div)];
@@ -2182,14 +2229,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             curios_cps::Intrinsic::NatRem => {
-                let slow = vec![self.big(BigHelper::Rem)];
-                self.emit_arith(
-                    dest,
-                    (&args[0], &args[1]),
-                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32RemU]]),
-                    Fast::Small,
-                    slow,
-                );
+                self.emit_divided(dest, (&args[0], &args[1]), Half::Remainder)
             }
             curios_cps::Intrinsic::IntRem => {
                 let slow = vec![self.big(BigHelper::Rem)];
