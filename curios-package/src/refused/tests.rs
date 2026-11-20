@@ -41,6 +41,16 @@ fn a_refusal_stands_where_its_keys_lead() {
     let named = reported("name = \"app\"\n\n[executables]\nrun-me = {}\n");
     assert_eq!(named.headline, "invalid name");
     assert_eq!(placed(&named), ("run-me".to_string(), (4, 1)));
+
+    let hash = reported(
+        "name = \"app\"\n\n[foreign.digest.native]\npath = \"digest.wasm\"\nhash = \"sha1:0\"\n",
+    );
+    assert_eq!(hash.headline, "unknown hash scheme");
+    assert_eq!(placed(&hash), ("\"sha1:0\"".to_string(), (5, 8)));
+
+    let moduleless = reported("name = \"app\"\n\n[foreign.digest]\n");
+    assert_eq!(moduleless.headline, "missing module");
+    assert_eq!(placed(&moduleless), ("digest".to_string(), (3, 10)));
 }
 
 /// A key written twice is TOML's refusal, standing at the second; a table written as an array of rows is the reader's, standing at its header.
@@ -54,16 +64,6 @@ fn a_key_written_twice_and_an_array_where_a_table_is_read_stand_where_they_are_w
     let rows = reported("name = \"app\"\n\n[[executables]]\nname = \"serve\"\n");
     assert_eq!(rows.headline, "invalid value");
     assert_eq!(placed(&rows), ("[[executables]]".to_string(), (3, 1)));
-}
-
-/// A row of an array is found by its position, and what it states by the keys beneath it.
-#[test]
-fn a_row_is_found_by_its_position() {
-    let hash = reported(
-        "name = \"app\"\n\n[[foreign]]\nname = \"digest\"\n\n[foreign.native]\npath = \"digest.wasm\"\nhash = \"sha1:0\"\n",
-    );
-    assert_eq!(hash.headline, "unknown hash scheme");
-    assert_eq!(placed(&hash), ("\"sha1:0\"".to_string(), (8, 8)));
 }
 
 /// A field no table takes is refused at its key, as text that is no TOML is where its reader stopped, and a manifest refused as a whole is reported about its file.
@@ -84,9 +84,7 @@ fn the_readers_own_refusal_keeps_its_place_and_a_whole_manifest_its_file() {
 /// A way out that is a command is carried to the report.
 #[test]
 fn a_command_that_is_a_way_out_reaches_the_report() {
-    let unpinned = reported(
-        "name = \"app\"\n\n[[foreign]]\nname = \"digest\"\n\n[foreign.native]\npath = \"digest.wasm\"\n",
-    );
+    let unpinned = reported("name = \"app\"\n\n[foreign.digest.native]\npath = \"digest.wasm\"\n");
 
     assert_eq!(unpinned.headline, "missing hash");
     assert_eq!(
@@ -97,14 +95,14 @@ fn a_command_that_is_a_way_out_reaches_the_report() {
         unpinned.rendered(curios_common::Kind::Error, &curios_common::Style::plain()),
         concat!(
             "missing hash\n",
-            "│  `digest` states no `hash` in `[foreign.native]`\n",
+            "│  `digest` states no `hash` in `[foreign.digest.native]`\n",
             "│  a file is accepted against one however it arrives\n",
             "│\n",
-            "│  6 │ [foreign.native]\n",
-            "│    │          ^^^^^^\n",
+            "│  3 │ [foreign.digest.native]\n",
+            "│    │                 ^^^^^^\n",
             "│\n",
             "├─ try; curios pin foreign digest --target native --refresh\n",
-            "└─ [error] app/curios.toml:6:10",
+            "└─ [error] app/curios.toml:3:17",
         )
     );
 }

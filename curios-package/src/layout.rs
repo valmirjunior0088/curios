@@ -13,8 +13,7 @@ mod tests;
 
 use {
     crate::{
-        EXTENSION, LIBRARY, MANIFEST, Manifest, Package, Refused, Step, require_compiler,
-        umbrella_over,
+        EXTENSION, LIBRARY, MANIFEST, Manifest, Package, Refused, require_compiler, umbrella_over,
     },
     curios_common::{Qualifier, Report, RootKind, is_identifier},
     curios_module::{PackageRoot, RootSource, open_entrypoint},
@@ -138,11 +137,11 @@ pub fn package_source(
         .reading_for(root.clone())
         .declaring(declared(package))
         .documented(&package.name, package.description.as_deref())
-        .answering(package.foreign.iter().flat_map(|foreign| {
+        .answering(package.foreign.iter().flat_map(|(name, foreign)| {
             foreign
                 .answers
                 .keys()
-                .map(|declaration| (declaration.clone(), foreign.name.clone()))
+                .map(|declaration| (declaration.clone(), name.clone()))
         }))
     });
 
@@ -151,22 +150,20 @@ pub fn package_source(
 
     // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
     if source.is_none()
-        && let Some((row, foreign)) = package
+        && let Some((name, _)) = package
             .foreign
             .iter()
-            .enumerate()
             .find(|(_, foreign)| !foreign.answers.is_empty())
     {
         return Err(Refused::of("no library")
             .stating(format_args!(
-                "the foreign row `{}` names declarations its exports answer",
-                foreign.name
+                "the foreign row `{name}` names declarations its exports answer"
             ))
             .stating(format_args!(
                 "the package has no `{LIBRARY}` to declare them in"
             ))
             .stating("a module answers its own package's declarations")
-            .entry([Step::key("foreign"), Step::Row(row), Step::key("answers")])
+            .entry(["foreign", name.as_str(), "answers"])
             .located_at(&directory.join(MANIFEST)));
     }
 

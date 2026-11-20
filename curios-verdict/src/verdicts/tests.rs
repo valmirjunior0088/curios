@@ -346,13 +346,13 @@ fn an_edited_unit_is_not_reused() {
     assert!(!reused(&root), "and refused once its source differs");
 }
 
-/// A unit is reused only under the claims its package made when it was compiled. A manifest whose `[foreign.answers]` has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where a slot that still answered would vouch for claims nobody checked.
+/// A unit is reused only under the claims its package made when it was compiled. A manifest whose provider's `answers` table has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where a slot that still answered would vouch for claims nobody checked.
 #[test]
 fn a_unit_is_not_reused_under_other_claims() {
     const ROW: &str = concat!(
         "compiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\nname = \"shape\"\n\n[[foreign]]\nname = \"probe\"\n\n[foreign.native]\npath = \"probe.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n"
+        "\"\nname = \"shape\"\n\n[foreign.probe.native]\npath = \"probe.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n"
     );
     let root = project("claims");
     let library = format!(
@@ -364,7 +364,7 @@ fn a_unit_is_not_reused_under_other_claims() {
     write(
         &root,
         "shape/curios.toml",
-        &format!("{ROW}\n[foreign.answers]\none = \"one\"\n"),
+        &format!("{ROW}\n[foreign.probe.answers]\none = \"one\"\n"),
     );
     reused(&root);
     assert!(reused(&root), "stored by the first compile");
@@ -372,7 +372,7 @@ fn a_unit_is_not_reused_under_other_claims() {
     write(
         &root,
         "shape/curios.toml",
-        &format!("{ROW}\n[foreign.answers]\none = \"one\"\ntwo = \"two\"\n"),
+        &format!("{ROW}\n[foreign.probe.answers]\none = \"one\"\ntwo = \"two\"\n"),
     );
     assert!(
         !reused(&root),

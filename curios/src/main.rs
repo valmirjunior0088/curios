@@ -627,7 +627,7 @@ fn dispatch() -> Result<(), Failure> {
                 }
                 tree.outcome(format!("{} bytes, {}", grouped(probe.bytes), probe.kind));
 
-                // What the row's `[foreign.answers]` may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
+                // What the provider's `answers` table may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
                 let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
                 match probe.magic.then(|| read(&probe.at)) {
                     None => {}

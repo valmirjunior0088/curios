@@ -49,7 +49,7 @@ fn parse_under(spelling: &str, scheme: &str) -> Result<String, Said> {
     }
 }
 
-/// A hash over one delivered file — a foreign module a `[[foreign]]` row names by `url` — doing the two jobs [`TreeHash`] does for a tree: the criterion the delivery is accepted against, and the key the cabinet files it under.
+/// A hash over one delivered file — a foreign module a provider names by `url` — doing the two jobs [`TreeHash`] does for a tree: the criterion the delivery is accepted against, and the key the cabinet files it under.
 ///
 /// **`f1:` is plain SHA-256 over the file's bytes, and deliberately nothing more.** A tree hash has to frame its parts because a tree is many files and two of them could otherwise share a spelling; one file has no parts to separate. Leaving it unframed is what lets a publisher compute the digest with `sha256sum` and a consumer read the same string back — which matters, because unlike a `rev` this is a number somebody writes into a manifest by hand or reads out of a release's checksum file.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

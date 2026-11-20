@@ -1,4 +1,4 @@
-//! What a `[foreign.browser.static]` table serves, read against the disk: every file of each entry, by the page path it is served at.
+//! What a `[foreign.<handle>.browser.static]` table serves, read against the disk: every file of each entry, by the page path it is served at.
 //!
 //! **An entry is a file or a directory of the package's own.** A file is served at its key, and a directory as every file under it, at its key joined with the file's path inside, so a page lays out a directory as the package holds it. Inside a directory a file or directory whose name starts with `.` is skipped — a `.git`, a `.DS_Store`, an editor's swap file — which a person serving a directory does not mean to publish.
 //!
@@ -39,7 +39,7 @@ impl Gateway {
                 directory.join(MANIFEST),
                 [
                     Step::key("foreign"),
-                    Step::Named(row.to_string()),
+                    Step::key(row),
                     Step::key("browser"),
                     Step::key("static"),
                     Step::key(entry.as_str()),

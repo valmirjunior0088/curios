@@ -69,7 +69,7 @@ The dispatch is lexical and never probes the disk: an executable's name is a sin
 
 `run` and `compile` are the only commands that need a program's **own** file: a module of one is refused, naming the executable to run instead, and a library is refused as the non-program it is. Everywhere else a module reaches its unit as readily as the entry does, which is what lets a question or a lint be asked about the file in front of you.
 
-A loose file brings no project with it — no dependencies, not even the library of the package it sits in ([An argument names one subject](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)). When a scratch program does want the library, one `[executables]` key gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[[foreign]]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is taken the same way: a `mod` line declares one written as a module, and an `[executables]` key one written as a program.
+A loose file brings no project with it — no dependencies, not even the library of the package it sits in ([An argument names one subject](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)). When a scratch program does want the library, one `[executables]` key gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[foreign]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is taken the same way: a `mod` line declares one written as a module, and an `[executables]` key one written as a program.
 
 ## The surface
 
@@ -220,7 +220,7 @@ curios compile --target browser  # a page, under `.curios/`
 
 `--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. The command closes the program's tree with `write` and where the result stands, a page's directory with a trailing separator, whether or not anything had to be compiled. A declared executable's build is written under `.curios/` beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
-**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the cabinet or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
+**The result is self-contained, including its `foreign` implementations.** Every [`[foreign]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the cabinet or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
 
 ### The page
 
@@ -231,9 +231,9 @@ curios compile --target browser  # a page, under `.curios/`
 | `index.html` | the page: the import map, the loader, and one `<pre id="output">` the program's output is written into while it stands in the document — a gateway may remove it |
 | `index.js` | the loader: the browser's host, what it is configured with, the program's rows, and an import of every gateway |
 | `index.wasm` | the program |
-| everything else | what the [`[[foreign]]`](#the-manifest) rows the program reaches put in the page |
+| everything else | what the [`[foreign]`](#the-manifest) rows the program reaches put in the page |
 
-The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name. Only a row the program reaches puts anything in the page.
+The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.<row>.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name. Only a row the program reaches puts anything in the page.
 
 **A gateway names its package's files relative to its own address**, since its package's files keep their places beside each other in every page that holds them, and the page's root is its package's root only where its package is the program.
 
@@ -247,7 +247,7 @@ The program runs on the page's main thread, its output written to the `<pre>` an
 
 A framed page — one whose window has a parent other than itself — posts to that parent, at its own origin alone: `{ type: "started" }` before the program runs, and `{ type: "outcome", outcome }` after, `outcome` being `{ stdout, stderr, exitCode, trap, answer }` with each stream whole and `answer` what a test program's entry answered, the bytes of what its test found as a `Uint8Array`, or `null` for a program, which answers nothing a host reads, an exit or a trap. It is how the runner of [`test --target browser`](#serving-the-tests) reads each test, and any embedder's to use.
 
-Each export `[foreign.answers]` names is a function answering the declaration it is named for, held to the row where the page loads it: an export that is no function is refused before the program runs, naming the row. It is handed each operand as the JavaScript value its wire type names, a copy it owns, then an `AbortSignal` that fires where the call is cancelled, and it answers the row's results in the same values — nothing for a row with none, the value for a row with one, and an object keyed by exactly the results' labels for a row with several — at once, or as a promise of them, which the call waits on while the rest of the program runs. A row declared `-> Never` is answered by an export that ends the program by throwing. An answer outside the row, or a promise that rejects, stops the program naming the row; a value of another JavaScript type is refused rather than converted, so a `Number` where a `Nat` is declared stops the program instead of crossing wrong past 2⁵³.
+Each export a row's `answers` table names is a function answering the declaration it is named for, held to the row where the page loads it: an export that is no function is refused before the program runs, naming the row. It is handed each operand as the JavaScript value its wire type names, a copy it owns, then an `AbortSignal` that fires where the call is cancelled, and it answers the row's results in the same values — nothing for a row with none, the value for a row with one, and an object keyed by exactly the results' labels for a row with several — at once, or as a promise of them, which the call waits on while the rest of the program runs. A row declared `-> Never` is answered by an export that ends the program by throwing. An answer outside the row, or a promise that rejects, stops the program naming the row; a value of another JavaScript type is refused rather than converted, so a `Number` where a `Nat` is declared stops the program instead of crossing wrong past 2⁵³.
 
 | Wire type | Handed and answered as |
 | --- | --- |
@@ -260,7 +260,7 @@ Each export `[foreign.answers]` names is a function answering the declaration it
 | `List(T)` | an array of what `T` is handed as |
 | `Option(T)` | what `T` is handed as, or `null` |
 
-**Each side is tested with its own tools, and the seam by [`test --target browser`](#serving-the-tests).** A row that states both tables links its `[foreign.native]` module wherever the program runs natively, so a `.wasm` standing in for a gateway is what `curios test` and `curios run` link for code that reaches the row, and the Curios side is tested with the JavaScript mocked. A gateway's exports are plain functions held to the values above, so a JavaScript test calls them with what a page would hand them and checks what they answer, and the JavaScript side is tested with the program mocked. The gateway answering the program's rows is tested by `test --target browser`, which serves the same tests to a browser. A row with only `[foreign.browser]` is refused natively, naming the table a stand-in goes in and the command that runs its tests against the gateway.
+**Each side is tested with its own tools, and the seam by [`test --target browser`](#serving-the-tests).** A row that states both tables links its `native` module wherever the program runs natively, so a `.wasm` standing in for a gateway is what `curios test` and `curios run` link for code that reaches the row, and the Curios side is tested with the JavaScript mocked. A gateway's exports are plain functions held to the values above, so a JavaScript test calls them with what a page would hand them and checks what they answer, and the JavaScript side is tested with the program mocked. The gateway answering the program's rows is tested by `test --target browser`, which serves the same tests to a browser. A row with only a `browser` table is refused natively, naming the table a stand-in goes in and the command that runs its tests against the gateway.
 
 The page runs in Chrome 119, Firefox 121 and Safari 18.2 and every later version, the first to ship WebAssembly's garbage collection and tail calls together. A server must give `.js` and `.mjs` a JavaScript type, which a module script requires; `index.wasm` is compiled from its bytes, so its type does not matter. Curios runs no build of what a gateway imports: TypeScript, a bundler or a minifier runs before `compile`, into a directory a `static` entry serves.
 
@@ -338,7 +338,7 @@ The test *verdicts* are never cached — every invocation runs every selected te
 
 A script runs them with no window by holding a headless browser open until the command exits — `timeout 120 google-chrome --headless=new --user-data-dir=<a fresh directory> http://127.0.0.1:<port>/` — rather than by a mode that dumps the page at its load event, which ends the run before its first outcome.
 
-Everything is built before anything is served, so a `--filter` matching nothing and a test reaching a row with no `[foreign.browser]` table are refused as [`compile`](#compile) refuses them, before the address is printed.
+Everything is built before anything is served, so a `--filter` matching nothing and a test reaching a row with no `browser` table are refused as [`compile`](#compile) refuses them, before the address is printed.
 
 The root is the run: a runner that opens each test in an iframe of its own, one at a time in the order native runs them, each a fresh realm with fresh instances of every gateway module — the browser's form of native's one instantiation per test. `index.html` beside it is the subject in hand's page, the test's index as the program's argument, and the page switches to the next subject with the last outcome of the one before, which is why no subject's page has a name of its own.
 
@@ -356,7 +356,7 @@ curios curate
 
 `curate` materializes what the manifests reference. It and [`pin`](#pin), whose `--url` and `--refresh` fetch through the same delivery, are the only commands that fetch — the compiler itself never does, and [`run --target browser`](#serving-a-page) only listens, on loopback. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
-It reaches the network through programs already on the machine ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)). A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
+It reaches the network through programs already on the machine ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)). A package tree comes through `git`, and a `[foreign]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[foreign]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
 Each fetch is a subject of its own — a package by the prefix it mounts, a module by its row's name — whose one node stands open while it arrives, and the last line counts what was brought in, `0 fetched` where the cabinet already held everything:
 
@@ -408,7 +408,7 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 
 What was fetched is filed in the cabinet under the digest it turns out to have, so the `curate` that follows finds it there.
 
-The row is the subject, by its name. A module is described before its pin is written: what arrived is a node of its own, `deliver`, open while a fetch arrives and closed by its size and whether it is a WebAssembly module, with **what it exports** beneath, which is what a `[foreign.answers]` entry may name as the export that answers a declaration. The `pin` node closes the tree with what became of the row — `recorded` where the manifest was written, `unchanged` where the row already said so, `would change` under `--check` — and each key it set beneath, beside what the key said before where it said anything:
+The row is the subject, by its name. A module is described before its pin is written: what arrived is a node of its own, `deliver`, open while a fetch arrives and closed by its size and whether it is a WebAssembly module, with **what it exports** beneath, which is what an entry of the row's `answers` table may name as the export that answers a declaration. The `pin` node closes the tree with what became of the row — `recorded` where the manifest was written, `unchanged` where the row already said so, `would change` under `--check` — and each key it set beneath, beside what the key said before where it said anything:
 
 ```text
 sha2
@@ -422,7 +422,7 @@ sha2
 
 The export list is read by compiling the module, so a module this toolchain cannot link reports why instead. The line about verification appears only for a fetch, since a carried module arrived inside the tree its consumer pinned. A dependency has no `deliver` node, since nothing describes a tree, and its `pin` node stands open while a repository arrives. A node open when the pin stops closes with how — `failed` where the transport brought nothing, `refused` where a rule refused what it brought — and a pin refused before any delivery began reports why and nothing else.
 
-`--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. The manifest is edited in place, keeping its comments and order, then read back and compared key by key with what went in, so no row the command was not asked about changes. Pinning a row to what it already says writes nothing and reports that it did.
+`--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.<NAME>.native]` or `[foreign.<NAME>.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. The manifest is edited in place, keeping its comments and order, then read back and compared key by key with what went in, so no row the command was not asked about changes. Pinning a row to what it already says writes nothing and reports that it did.
 
 A pin reads only the row it writes, so it repairs a row the manifest refuses: `--refresh` gives a row the `hash` it lacks, and `--path` or `--url` gives a row written by hand the table it names no file in. A value on the way to the row of another kind than the manifest states there — `dependencies = 3`, a row written as a string — is refused at it, as the manifest's reader refuses it, before anything is delivered; a table written inline is written into inline. What is held to the manifest's rules is the manifest as the pin would leave it, read before it is written: one that would still be refused, for this row or another, is refused naming why, and nothing is written.
 
@@ -600,7 +600,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `[format]` | how [`format`](#format) writes the package's files: `line-width`, the columns a line is written within, 50 through 100; `flat-match-width` and `flat-match-arms`, the most columns and arms a match keeps on one line; an umbrella member inherits this from its umbrella instead |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[executables]` | one entry per program beyond `exe.crs`, keyed by the name `run` takes: `path` when the file is not `<name>.crs` |
-| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](language.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
+| `[foreign]` | one row per provider of this package's [`foreign` declarations](language.md#foreign-declarations), keyed by the handle `pin foreign` takes: what each target links, in `[foreign.<handle>.native]` and `[foreign.<handle>.browser]`, and what its exports answer |
 
 ```toml
 name = "hello"
@@ -625,33 +625,30 @@ An umbrella must declare `compiler`, and every package its `members` enumerates 
 line-width = 72
 ```
 
-A `[[foreign]]` row names a module in the table of the target that links it, and says which of its exports answers each of the package's `foreign` declarations it is named for:
+A `[foreign]` row, keyed by a handle for `curios pin` that no program refers to, names a module in the table of the target that links it, and says which of its exports answers each of the package's `foreign` declarations it is named for:
 
 ```toml
-[[foreign]]
-name = "sha2"                    # a handle for `curios pin`; no program refers to it
-
-[foreign.native]                 # the WebAssembly module the native target links
+[foreign.sha2.native]            # the WebAssembly module the native target links
 path = "foreign/libsha2.wasm"    # or `url`, never both
 hash = "f1:9c3a…"                # either way
 
-[foreign.answers]
+[foreign.sha2.answers]
 "digest/sha256" = "SHA256_Digest"  # in the package `crypto`: `/crypto/digest/sha256`
 ```
 
-`[foreign.browser]` names the JavaScript gateway a browser links instead, its exports answering the same declarations, and `[foreign.browser.static]` what the page serves beside it:
+A row's `browser` table names the JavaScript gateway a browser links instead, its exports answering the same declarations, and its `static` table what the page serves beside it:
 
 ```toml
-[foreign.browser]                # the JavaScript gateway a browser links
+[foreign.dom.browser]            # the JavaScript gateway a browser links
 path = "web/dom.js"
 hash = "f1:…"
 
-[foreign.browser.static]         # page path = package path
+[foreign.dom.browser.static]     # page path = package path
 "app" = "build/app"
 "logo.png" = "art/logo.png"
 ```
 
-A row states either table or both, and either may be written inline, `native = { path = "…", hash = "…" }`; a row with neither is refused where the manifest is read, saying where a module goes. A target that reaches a declaration whose row lacks its table is refused where the program is linked, naming the row and the table, so a row with only `[foreign.browser]` is its author's word that the native target links nothing for it.
+A row states either table or both, and either may be written inline under the row's own header, `native = { path = "…", hash = "…" }` beneath `[foreign.sha2]`; a row with neither is refused where the manifest is read, saying where a module goes. A target that reaches a declaration whose row lacks its table is refused where the program is linked, naming the row and the table, so a row with only a `browser` table is its author's word that the native target links nothing for it. A handle is one identifier, and a handle written twice is refused where it is written again, as TOML refuses any key written twice.
 
 Both sides of a `static` entry are plain relative paths, as an executable's `path` is, and none reads from `.curios/`. No file of any package may stand at `index.html`, `index.js` or `index.wasm`, the names a page holds for itself: a `static` key, a carried gateway's `path` and a fetched gateway in a row named `index` that would stand on one are refused where the manifest is read, the rule holding for a library as for a program.
 
@@ -659,7 +656,7 @@ Both sides of a `static` entry are plain relative paths, as an executable's `pat
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
-`[foreign.answers]` maps each declaration to the export of that module that answers it. A module answers its own package's declarations: each is a `foreign` of the package's library, named from the package's root and spelled plainly, as an executable's `path` is, so a row of another package or of the standard library has no spelling here. A path written in full, `/crypto/digest/sha256`, is refused with the spelling it has; an entry that names no `foreign` the library declares is refused where the library is compiled, listing the ones it does; and a package with no `lib.crs` has no declaration for a module to answer. A declaration is answered once: the table is keyed by what is answered, so a row names one export for it, and a second row naming one for a declaration an earlier row answers is refused where the manifest is read, naming both rows. Export names are local to their module, so two rows may name the same export.
+A row's `answers` table maps each declaration to the export of that module that answers it. A module answers its own package's declarations: each is a `foreign` of the package's library, named from the package's root and spelled plainly, as an executable's `path` is, so a row of another package or of the standard library has no spelling here. A path written in full, `/crypto/digest/sha256`, is refused with the spelling it has; an entry that names no `foreign` the library declares is refused where the library is compiled, listing the ones it does; and a package with no `lib.crs` has no declaration for a module to answer. A declaration is answered once: the table is keyed by what is answered, so a row names one export for it, and a second row naming one for a declaration another row answers is refused where the manifest is read, naming both rows. Export names are local to their module, so two rows may name the same export.
 
 A `foreign` no entry names is the host's to answer. A program asks only for what it reaches: a declaration nothing calls needs no implementation, and one a program reaches that neither a module nor the host answers is refused before the program starts, naming it. An export is held to its declaration when the two are linked, so a module that answers another type is refused there as well.
 

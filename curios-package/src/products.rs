@@ -25,7 +25,7 @@
 //!
 //! That tree is what a project gets when nothing points elsewhere. A cabinet named for every project a run sees (`CURIOS_CABINET`, which the command line reads) stands in for `cabinet/` whole — never for `native/`, `browser/` or `documentation/`, which belong to the package that declared them — so two projects pinning one revision materialize and compile it once, and a project shares, moves or clears what it keeps for reuse as one directory.
 //!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every family of the cabinet is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
 
 #[cfg(test)]
 mod tests;

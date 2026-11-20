@@ -554,14 +554,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
         target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: hash.clone(),
-        written: Row::of(
-            PathBuf::from("curios.toml"),
-            [
-                Step::key("foreign"),
-                Step::Named("sha2".to_string()),
-                Step::key("native"),
-            ],
-        ),
+        written: Row::of(PathBuf::from("curios.toml"), ["foreign", "sha2", "native"]),
     };
 
     let cabinet = Cabinet::of(&root, None);
@@ -597,14 +590,7 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
         target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: pinned.clone(),
-        written: Row::of(
-            PathBuf::from("curios.toml"),
-            [
-                Step::key("foreign"),
-                Step::Named("sha2".to_string()),
-                Step::key("native"),
-            ],
-        ),
+        written: Row::of(PathBuf::from("curios.toml"), ["foreign", "sha2", "native"]),
     };
 
     let cabinet = Cabinet::of(&root, None);

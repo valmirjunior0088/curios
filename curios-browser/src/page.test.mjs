@@ -44,7 +44,7 @@ const tree = (t, files) => {
   return root;
 };
 
-/** A package `name`'s manifest, its one `[[foreign]]` row `row` carrying `gateway` at `path`, answering `answers` and serving `statics`, beside `rest`. */
+/** A package `name`'s manifest, its one `[foreign]` row `row` carrying `gateway` at `path`, answering `answers` and serving `statics`, beside `rest`. */
 const manifest = ({
   name,
   row,
@@ -61,7 +61,7 @@ const manifest = ({
     .map(([page, path]) => `"${page}" = "${path}"\n`)
     .join("");
 
-  return `compiler = "${version}"\nname = "${name}"\n${rest}\n[[foreign]]\nname = "${row}"\n\n[foreign.browser]\npath = "${path}"\nhash = "${pinned(gateway)}"\n\n[foreign.browser.static]\n${served}\n[foreign.answers]\n${answered}`;
+  return `compiler = "${version}"\nname = "${name}"\n${rest}\n[foreign.${row}.browser]\npath = "${path}"\nhash = "${pinned(gateway)}"\n\n[foreign.${row}.browser.static]\n${served}\n[foreign.${row}.answers]\n${answered}`;
 };
 
 /** `curios compile --target browser`, run in `directory` with `rest` after it. */
@@ -286,7 +286,7 @@ test("a page is written under `.curios/` when no --output is given, holding noth
 
 test("a row that states no browser table is refused for a browser, naming the row and the table", async (t) => {
   const root = tree(t, {
-    "app/curios.toml": `compiler = "${version}"\nname = "app"\n\n[[foreign]]\nname = "native"\n\n[foreign.native]\npath = "plugin.wasm"\nhash = "${pinned("")}"\n\n[foreign.answers]\ndouble = "double"\n`,
+    "app/curios.toml": `compiler = "${version}"\nname = "app"\n\n[foreign.native.native]\npath = "plugin.wasm"\nhash = "${pinned("")}"\n\n[foreign.native.answers]\ndouble = "double"\n`,
     "app/lib.crs": DOUBLE,
     "app/exe.crs": DOUBLED,
   });
@@ -299,7 +299,7 @@ test("a row that states no browser table is refused for a browser, naming the ro
   assert.equal(status, 1);
   assert.match(
     stderr,
-    /`\/app\/double` is answered by the foreign row `native` of `\/app`\n│ {2}that row states no `\[foreign\.browser\]`\n│ {2}the browser target has nothing to link for it/,
+    /`\/app\/double` is answered by the foreign row `native` of `\/app`\n│ {2}that row states no `\[foreign\.native\.browser\]`\n│ {2}the browser target has nothing to link for it/,
   );
   assert.ok(!existsSync(join(root, "page")));
 });

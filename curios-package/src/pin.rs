@@ -18,7 +18,7 @@ use {
         fs,
         path::{Component, Path, PathBuf},
     },
-    toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, TableLike, Value},
+    toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value},
 };
 
 /// Where `curios pin` writes: the manifest it was named or stands nearest, the directory a carried path is read from, and the cabinet a delivery is filed in.
@@ -123,9 +123,9 @@ impl Drop for Staged {
 
 /// Which of a manifest's two pinned tables a row belongs to.
 ///
-/// The two differ in what their name *is*, which is why they are one command's two subjects rather than one operation over a table name. A `[[foreign]]` row's `name` is a local handle nothing in Curios source refers to, so it is the user's to choose; a `[dependencies]` key is the package's mount prefix and the only way anything refers to it, so it is the dependency's to declare and the user's only to state. [`Subject::Dependency`] therefore checks the name it was given against the delivery, where [`Subject::Foreign`] has nothing to check it against.
+/// The two differ in what their name *is*, which is why they are one command's two subjects rather than one operation over a table name. A foreign provider's key is a local handle nothing in Curios source refers to, so it is the user's to choose; a `[dependencies]` key is the package's mount prefix and the only way anything refers to it, so it is the dependency's to declare and the user's only to state. [`Subject::Dependency`] therefore checks the name it was given against the delivery, where [`Subject::Foreign`] has nothing to check it against.
 ///
-/// A `[[foreign]]` row is pinned for one target at a time: what it says lands in that target's table, `[foreign.native]` or `[foreign.browser]`, and the other's is left as it was.
+/// A foreign provider is pinned for one target at a time: what it says lands in that target's table, `[foreign.<handle>.native]` or `[foreign.<handle>.browser]`, and the other's is left as it was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subject {
     Foreign(Target),
@@ -141,19 +141,25 @@ impl Subject {
         }
     }
 
-    /// Where its row `name` is written in `manifest`: a dependency's in `[dependencies]`, and a foreign module's in its target's table of the row. A refusal of a pin stands there, and at the manifest where the row is not written yet.
-    fn written(self, manifest: &Path, name: &str) -> Row {
+    /// The table a row of this subject is written in.
+    fn table(self) -> &'static str {
         match self {
-            Self::Foreign(target) => Row::of(
-                manifest.to_path_buf(),
-                [
-                    Step::key("foreign"),
-                    Step::Named(name.to_string()),
-                    Step::key(target.spelled()),
-                ],
-            ),
-            Self::Dependency => Row::of(manifest.to_path_buf(), ["dependencies", name]),
+            Self::Foreign(_) => "foreign",
+            Self::Dependency => "dependencies",
         }
+    }
+
+    /// The keys that lead to its row `name` in a manifest: a dependency's in `[dependencies]`, and a foreign provider's table of its target.
+    fn path(self, name: &str) -> Vec<&str> {
+        match self {
+            Self::Foreign(target) => vec![self.table(), name, target.spelled()],
+            Self::Dependency => vec![self.table(), name],
+        }
+    }
+
+    /// Where its row `name` is written in `manifest`. A refusal of a pin stands there, and at the manifest where the row is not written yet.
+    fn written(self, manifest: &Path, name: &str) -> Row {
+        Row::of(manifest.to_path_buf(), self.path(name))
     }
 
     /// The `curios pin` invocation that reaches its row `name`, for a refusal to spell the command that would work: the subcommand and the row, and for a foreign row the target whose table it is.
@@ -220,7 +226,7 @@ impl Probe {
                 false,
             ),
             (Target::Browser, true) => (
-                "a WebAssembly module, which a browser does not link: `[foreign.browser]` names a JavaScript gateway".to_string(),
+                "a WebAssembly module, which a browser does not link: a provider's `browser` table names a JavaScript gateway".to_string(),
                 false,
             ),
             (Target::Browser, false) => (
@@ -394,10 +400,7 @@ fn undisturbed(
     subject: Subject,
     name: &str,
 ) -> Result<(), Refused> {
-    let touched = match subject {
-        Subject::Foreign(_) => "foreign",
-        Subject::Dependency => "dependencies",
-    };
+    let touched = subject.table();
 
     let rendered = |document: &DocumentMut, key: &str| document.get(key).map(ToString::to_string);
 
@@ -420,33 +423,17 @@ fn undisturbed(
 
     // Inside the touched table, every row but this one is the same text it was.
     let others = |document: &DocumentMut| -> Vec<(String, String)> {
-        match subject {
-            Subject::Foreign(_) => document
-                .get("foreign")
-                .and_then(Item::as_array_of_tables)
-                .map(|tables| {
-                    tables
-                        .iter()
-                        .filter_map(|table| {
-                            let keyed = table.get("name")?.as_str()?.to_string();
-
-                            (keyed != name).then(|| (keyed, table.to_string()))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            Subject::Dependency => document
-                .get("dependencies")
-                .and_then(Item::as_table_like)
-                .map(|table| {
-                    table
-                        .iter()
-                        .filter(|(keyed, _)| *keyed != name)
-                        .map(|(keyed, item)| (keyed.to_string(), item.to_string()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-        }
+        document
+            .get(touched)
+            .and_then(Item::as_table_like)
+            .map(|table| {
+                table
+                    .iter()
+                    .filter(|(keyed, _)| *keyed != name)
+                    .map(|(keyed, item)| (keyed.to_string(), item.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     };
 
     match others(before) == others(after) {
@@ -460,7 +447,7 @@ fn undisturbed(
     }
 }
 
-/// One row, in whichever of TOML's two spellings it was written.
+/// One table — a row, or a table on the way to one — in whichever of TOML's two spellings it was written.
 ///
 /// Both, because a manifest is somebody's file: `json = { source = "git", … }` is what the reference shows and what this writes, and `[dependencies.json]` is the same row written the other way. A writer that understood only its own spelling would silently add a second row beside the one already there.
 enum RowMut<'a> {
@@ -585,44 +572,22 @@ fn declares(directory: &Path, written: &Row) -> Result<String, Box<Report>> {
     }
 }
 
-/// Read one field of the row `name` keys, without borrowing it mutably: of a `[[foreign]]` row, a field of its target's delivery table.
+/// Read one field of the row `name` keys — of a foreign provider, a field of its target's table — without borrowing it mutably.
 fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Option<String> {
-    let item = match subject {
-        Subject::Foreign(target) => document
-            .get("foreign")?
-            .as_array_of_tables()?
-            .iter()
-            .find(|table| table.get("name").and_then(Item::as_str) == Some(name))?
-            .get(target.spelled())?
-            .as_table_like()?
-            .get(key)?
-            .as_str()?,
-        Subject::Dependency => match document.get("dependencies")?.as_table_like()?.get(name)? {
-            Item::Table(table) => table.get(key)?.as_str()?,
-            Item::Value(Value::InlineTable(inline)) => inline.get(key)?.as_str()?,
-            _ => return None,
-        },
-    };
+    let mut table: &dyn TableLike = document.as_table();
+    for step in subject.path(name) {
+        table = table.get(step)?.as_table_like()?;
+    }
 
-    Some(item.to_string())
+    Some(table.get(key)?.as_str()?.to_string())
 }
 
-/// Whether the row `name` keys is in `document` at all.
+/// Whether the row `name` keys is in `document` at all: a dependency's row, or a foreign provider whichever of its targets' tables it states.
 fn present(document: &DocumentMut, subject: Subject, name: &str) -> bool {
-    match subject {
-        Subject::Foreign(_) => document
-            .get("foreign")
-            .and_then(Item::as_array_of_tables)
-            .is_some_and(|tables| {
-                tables
-                    .iter()
-                    .any(|table| table.get("name").and_then(Item::as_str) == Some(name))
-            }),
-        Subject::Dependency => document
-            .get("dependencies")
-            .and_then(Item::as_table_like)
-            .is_some_and(|table| table.contains_key(name)),
-    }
+    document
+        .get(subject.table())
+        .and_then(Item::as_table_like)
+        .is_some_and(|table| table.contains_key(name))
 }
 
 /// What a row is to say after this, and what the delivery was.
@@ -634,7 +599,7 @@ struct Settled {
     probe: Option<Probe>,
 }
 
-/// What a `[[foreign]]` row is to say.
+/// What a foreign provider's table of its target is to say.
 fn settled_foreign(
     pinning: &Pinning,
     target: Target,
@@ -830,9 +795,9 @@ fn settled_dependency(
     }
 }
 
-/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its target's delivery table, created too — or the refusal of a value on the way to it that is not the table or the array a manifest states there.
+/// The row `name` keys — of a foreign provider, its target's table — created empty with every table on the way to it where it is not there yet, or the refusal of a value on the way that is not the table a manifest states there.
 ///
-/// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A table already written inline, `dependencies = { … }` or `native = { … }`, is written inline, as a dependency row is.
+/// A table missing under one written inline is created inline. Under one written with a header, a dependency row is created inline, which is how the reference spells one and so how one written here reads beside one written by hand, and every other table implicit, so only a table holding keys is written with a header: a new provider reads `[foreign.sha2.native]`, and `[dependencies]` gains its header with its first row.
 ///
 /// **A value of another kind is refused, never overwritten.** A pin reads only its row, so nothing has held the manifest's shape before this, and overwriting `dependencies = 3` or `json = "1.0"` would discard whatever somebody meant by it: it is refused at the value, in the words the manifest's reader refuses it with.
 fn row_mut<'a>(
@@ -840,76 +805,39 @@ fn row_mut<'a>(
     subject: Subject,
     name: &str,
 ) -> Result<RowMut<'a>, Refused> {
-    match subject {
-        Subject::Foreign(target) => {
-            let foreign = document
-                .entry("foreign")
-                .or_insert(Item::ArrayOfTables(ArrayOfTables::new()));
-            let Item::ArrayOfTables(tables) = foreign else {
-                return Err(misshapen(
-                    &described(foreign),
-                    "an array",
-                    vec![Step::key("foreign")],
-                ));
-            };
+    let path = subject.path(name);
+    let steps = |depth: usize| path[..=depth].iter().copied().map(Step::key).collect();
 
-            let found = tables
-                .iter()
-                .position(|table| table.get("name").and_then(Item::as_str) == Some(name));
-
-            let index = found.unwrap_or_else(|| {
-                let mut fresh = Table::new();
-                fresh.insert("name", toml_edit::value(name));
-                tables.push(fresh);
-
-                tables.len() - 1
-            });
-
-            let row = tables.get_mut(index).expect("the row just located");
-
-            tabled(
-                row.entry(target.spelled())
-                    .or_insert(Item::Table(Table::new())),
-                vec![
-                    Step::key("foreign"),
-                    Step::Named(name.to_string()),
-                    Step::key(target.spelled()),
-                ],
-            )
-        }
-        Subject::Dependency => {
-            let dependencies = document
-                .entry("dependencies")
-                .or_insert(Item::Table(Table::new()));
-            let table: &mut dyn TableLike = match dependencies {
-                Item::Table(table) => table,
-                Item::Value(Value::InlineTable(inline)) => inline,
-                other => {
-                    return Err(misshapen(
-                        &described(other),
-                        "a table",
-                        vec![Step::key("dependencies")],
-                    ));
-                }
-            };
-
-            // An inline table, which is how the reference spells a dependency and so how one written here reads beside one written by hand.
-            tabled(
-                table
-                    .entry(name)
-                    .or_insert(Item::Value(Value::InlineTable(InlineTable::new()))),
-                vec![Step::key("dependencies"), Step::key(name)],
-            )
-        }
+    let mut table = RowMut::Table(document.as_table_mut());
+    for (depth, key) in path.iter().enumerate() {
+        let inline = subject == Subject::Dependency && depth + 1 == path.len();
+        table = table.child(key, steps(depth), inline)?;
     }
+
+    Ok(table)
 }
 
-/// `item`, which `at` leads to, as the row it is in either of TOML's spellings, or refused as a value of another kind.
-fn tabled(item: &mut Item, at: Vec<Step>) -> Result<RowMut<'_>, Refused> {
-    match item {
-        Item::Table(table) => Ok(RowMut::Table(table)),
-        Item::Value(Value::InlineTable(inline)) => Ok(RowMut::Inline(inline)),
-        other => Err(misshapen(&described(other), "a table", at)),
+impl<'a> RowMut<'a> {
+    /// The table `key` holds in this one, which `at` leads to, created empty where it is missing — inline where `inline` asks for it or this table is inline itself, and an implicit table otherwise — or refused as a value of another kind.
+    fn child(self, key: &str, at: Vec<Step>, inline: bool) -> Result<RowMut<'a>, Refused> {
+        let item = match self {
+            Self::Table(table) => table.entry(key).or_insert_with(|| match inline {
+                true => Item::Value(Value::InlineTable(InlineTable::new())),
+                false => {
+                    let mut fresh = Table::new();
+                    fresh.set_implicit(true);
+                    Item::Table(fresh)
+                }
+            }),
+            Self::Inline(table) => TableLike::entry(table, key)
+                .or_insert(Item::Value(Value::InlineTable(InlineTable::new()))),
+        };
+
+        match item {
+            Item::Table(table) => Ok(RowMut::Table(table)),
+            Item::Value(Value::InlineTable(inline)) => Ok(RowMut::Inline(inline)),
+            other => Err(misshapen(&described(other), "a table", at)),
+        }
     }
 }
 

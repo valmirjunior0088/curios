@@ -25,7 +25,7 @@ fn package(root: &Path) {
     fs::write(
         root.join("curios.toml"),
         format!(
-            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[foreign.page.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.page.answers]\ndouble = \"double\"\n",
             digest(GATEWAY), compiler = env!("CARGO_PKG_VERSION")),
     )
     .unwrap();

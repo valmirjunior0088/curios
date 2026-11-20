@@ -18,7 +18,9 @@ pub use compiler::compiler;
 
 mod curate;
 use curate::*;
-pub use curate::{Acquisition, Curated, Fetch, ModuleAcquisition, curate, declared_modules};
+pub use curate::{
+    Acquisition, Curated, Fetch, ModuleAcquisition, Provider, curate, declared_modules,
+};
 
 mod decode;
 use decode::*;

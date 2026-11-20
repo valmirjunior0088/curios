@@ -21,8 +21,6 @@ use {
 pub enum Step {
     Key(String),
     Row(usize),
-    /// The row of an array of tables whose `name` is this one: how a refusal written from a record reaches the row the record was read from.
-    Named(String),
 }
 
 impl Step {
@@ -238,10 +236,6 @@ impl<'a> Node<'a> {
             (Node::Item(Item::ArrayOfTables(rows)), Step::Row(index)) => {
                 Some((None, Node::Table(rows.get(*index)?)))
             }
-            (Node::Item(Item::ArrayOfTables(rows)), Step::Named(name)) => rows
-                .iter()
-                .find(|row| row.get("name").and_then(Item::as_str) == Some(name))
-                .map(|row| (None, Node::Table(row))),
             (
                 Node::Item(Item::Value(Value::Array(array))) | Node::Value(Value::Array(array)),
                 Step::Row(index),

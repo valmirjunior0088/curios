@@ -571,7 +571,7 @@ fn library(root: &Path) -> TestSubject {
 fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
     let gateway = "export const twice = (n) => n * 2n;\n";
     let manifest = format!(
-        "compiler = \"{compiler}\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"twice\"\n",
+        "compiler = \"{compiler}\"\nname = \"app\"\n\n[foreign.dom.browser]\npath = \"web/dom.js\"\nhash = \"f1:{}\"\n\n[foreign.dom.answers]\ndouble = \"twice\"\n",
         digest(gateway.as_bytes()),
         compiler = env!("CARGO_PKG_VERSION")
     );
@@ -620,7 +620,7 @@ fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
 #[test]
 fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_table() {
     let manifest = format!(
-        "compiler = \"{compiler}\"\nname = \"app\"\n\n[[foreign]]\nname = \"native\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+        "compiler = \"{compiler}\"\nname = \"app\"\n\n[foreign.native.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.native.answers]\ndouble = \"double\"\n",
         digest(b""),
         compiler = env!("CARGO_PKG_VERSION")
     );
@@ -651,7 +651,7 @@ fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_tab
 
     assert!(
         refusal.contains(
-            "`/app/double` is answered by the foreign row `native` of `/app`\n│  that row states no `[foreign.browser]`\n│  the browser target has nothing to link for it"
+            "`/app/double` is answered by the foreign row `native` of `/app`\n│  that row states no `[foreign.native.browser]`\n│  the browser target has nothing to link for it"
         ),
         "{refusal}"
     );

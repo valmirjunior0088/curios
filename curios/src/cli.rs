@@ -23,7 +23,7 @@ use {
     std::{env, error::Error as _, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
 };
 
-/// A target as `--target` takes it: the manifest's own spelling of each, read off [`Target::ALL`] and [`Target::spelled`], so the flag and the `[foreign.<target>]` tables cannot spell one target two ways.
+/// A target as `--target` takes it: the manifest's own spelling of each, read off [`Target::ALL`] and [`Target::spelled`], so the flag and the `[foreign.<handle>.<target>]` tables cannot spell one target two ways.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TargetValue(pub Target);
 
@@ -309,7 +309,7 @@ pub enum Mode {
 
 /// Which table a row is written into, which decides what its name means and so what may be checked about it.
 ///
-/// The name is a positional on both, and mandatory on both, so `--rev` and `--refresh` have a row to name without a flag to carry it. What differs is what the name *is*: a `[[foreign]]` row's is a handle no program refers to, and a `[dependencies]` key is the package's own declared name — which is why only the second is checked against the delivery, and why neither is ever discovered rather than stated.
+/// The name is a positional on both, and mandatory on both, so `--rev` and `--refresh` have a row to name without a flag to carry it. What differs is what the name *is*: a `[foreign]` key is a handle no program refers to, and a `[dependencies]` key is the package's own declared name — which is why only the second is checked against the delivery, and why neither is ever discovered rather than stated.
 #[derive(Debug, Subcommand)]
 pub enum Pinned {
     // Required, so a row is never written pointing nowhere; multiple, because `--url` and `--rev` are one delivery spelled in two words.

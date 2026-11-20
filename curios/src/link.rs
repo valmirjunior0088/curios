@@ -1,4 +1,4 @@
-//! What answers the `foreign` rows a program reaches, for each target: the `[[foreign]]` rows of its package graph that answer one of them, compiled natively into the modules a run links and an executable carries, or read for a browser into the gateways and files its page holds — and the refusal of a reached row nothing answers, by what would answer it.
+//! What answers the `foreign` rows a program reaches, for each target: the foreign providers of its package graph that answer one of them, compiled natively into the modules a run links and an executable carries, or read for a browser into the gateways and files its page holds — and the refusal of a reached row nothing answers, by what would answer it.
 //!
 //! **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no file opened, so the common case pays one pass over its rows. A row answers a declaration of its own package alone, so none could answer for such a program.
 //!
@@ -13,21 +13,18 @@ use {
     curios_common::{OsError, Report, Said},
     curios_native::{DeclaredModule, ForeignBindings, Unlinked, plugin_bindings},
     curios_package::{
-        Cabinet, Foreign, Governing, MANIFEST, Refused, Row, Step, Target, declared_modules,
+        Cabinet, Governing, MANIFEST, Provider, Refused, Row, Target, declared_modules,
     },
-    std::{
-        fs,
-        path::{Path, PathBuf},
-    },
+    std::{fs, path::Path},
 };
 
-/// The `[[foreign]]` rows of a program's package graph that answer a declaration it reaches, split by whether they state one target's table.
+/// The foreign providers of a program's package graph that answer a declaration it reaches, split by whether they state one target's table.
 #[derive(Default)]
 struct Reached {
-    /// Each row stating the target's table, with the package that declares it and the directory its paths are read from.
-    stating: Vec<(String, PathBuf, Foreign)>,
-    /// Each row stating none: the package that declares it, the directory its manifest sits in, its name, and what it answers.
-    elsewhere: Vec<(String, PathBuf, String, Vec<String>)>,
+    /// Each provider stating the target's table.
+    stating: Vec<Provider>,
+    /// Each provider stating none.
+    elsewhere: Vec<Provider>,
     /// The cabinet a fetched delivery is read from, where a graph was walked.
     cabinet: Option<Cabinet>,
 }
@@ -57,8 +54,9 @@ fn reached(
     };
 
     // Only a row that answers a declaration the program reaches is read: the rest of the graph's are neither linked nor carried.
-    for (package, directory, foreign) in declared_modules(&governing)? {
-        if !foreign
+    for provider in declared_modules(&governing)? {
+        if !provider
+            .foreign
             .answers
             .keys()
             .any(|declaration| foreigns.get(declaration).is_some())
@@ -66,25 +64,20 @@ fn reached(
             continue;
         }
 
-        match foreign.delivery(target) {
-            Some(_) => reached.stating.push((package, directory, foreign)),
-            None => reached.elsewhere.push((
-                package,
-                directory,
-                foreign.name,
-                foreign.answers.into_keys().collect(),
-            )),
+        match provider.foreign.delivery(target).is_some() {
+            true => reached.stating.push(provider),
+            false => reached.elsewhere.push(provider),
         }
     }
 
     Ok(reached)
 }
 
-/// Refuse the first declaration among `foreigns` that nothing `answered` names and the host does not answer, by what would answer it: a row that answers it and states no table for `target`, which is the author's word that the target links nothing for it, or a `[[foreign]]` row of a manifest, which a loose program has none to write in.
+/// Refuse the first declaration among `foreigns` that nothing `answered` names and the host does not answer, by what would answer it: a provider that answers it and states no table for `target`, which is the author's word that the target links nothing for it, or a provider in a manifest's `[foreign]`, which a loose program has none to write in.
 fn unanswered(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
-    elsewhere: &[(String, PathBuf, String, Vec<String>)],
+    elsewhere: &[Provider],
     target: Target,
     answered: impl Fn(&str) -> bool,
 ) -> Result<(), Box<Report>> {
@@ -102,21 +95,28 @@ fn unanswered(
     Err(
         match elsewhere
             .iter()
-            .find(|(_, _, _, answers)| answers.iter().any(|answer| answer == name))
+            .find(|provider| provider.foreign.answers.contains_key(name))
         {
-            Some((package, directory, row, _)) => {
+            Some(Provider {
+                package,
+                directory,
+                name: row,
+                ..
+            }) => {
                 let refused = refused
                     .stating(format_args!(
                         "`{name}` is answered by the foreign row `{row}` of `/{package}`"
                     ))
-                    .stating(format_args!("that row states no `[foreign.{spelled}]`"))
+                    .stating(format_args!(
+                        "that row states no `[foreign.{row}.{spelled}]`"
+                    ))
                     .stating(format_args!(
                         "the {spelled} target has nothing to link for it"
                     ));
                 // A gateway is tested natively through a module standing in for it, and against the gateway itself by a test serve, so the native refusal names both doors.
                 let refused = match target {
                     Target::Native => refused
-                        .stating("a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link")
+                        .stating(format_args!("a `.wasm` standing in for its gateway, stated as `[foreign.{row}.native]`, is what `run` and `test` link"))
                         .stating("`test --target browser` runs its tests against the gateway"),
                     Target::Browser => refused,
                 };
@@ -128,10 +128,10 @@ fn unanswered(
 
                 match manifest {
                     Some(manifest) => refused
-                        .stating("no `[[foreign]]` row of the package's manifests names an export that answers it")
+                        .stating("no `[foreign]` row of the package's manifests names an export that answers it")
                         .about_path(manifest),
                     None => refused
-                        .stating("a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names")
+                        .stating("a `foreign` is answered by a module that a `[foreign]` row of a manifest names")
                         .stating("a loose program has no manifest to write one in")
                         .about_named(name),
                 }
@@ -140,12 +140,9 @@ fn unanswered(
     )
 }
 
-/// The `[[foreign]]` row `row` of the package whose manifest sits in `directory`: where a refusal of what the row declares stands.
+/// The foreign row `row` of the package whose manifest sits in `directory`: where a refusal of what the row declares stands.
 fn written(directory: &Path, row: &str) -> Row {
-    Row::of(
-        directory.join(MANIFEST),
-        [Step::key("foreign"), Step::Named(row.to_string())],
-    )
+    Row::of(directory.join(MANIFEST), ["foreign", row])
 }
 
 /// The report of what linking refused of the program the package at `manifest` declares, for whoever links it past [`bindings_of`]: at the row that declares the module it is said of, read off the package's graph again, since a refusal is the path that can afford the walk.
@@ -154,23 +151,16 @@ pub fn unlinked(
     manifest: Option<&Path>,
     cabinet: Option<&Path>,
 ) -> Box<Report> {
-    let rows = manifest
+    let providers = manifest
         .and_then(|manifest| Governing::at(manifest, cabinet).ok())
         .and_then(|governing| declared_modules(&governing).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(package, directory, foreign)| (package, directory, foreign.name))
-        .collect::<Vec<_>>();
+        .unwrap_or_default();
 
-    refused(unlinked, &rows, manifest)
+    refused(unlinked, &providers, manifest)
 }
 
-/// The report of what linking refused: at the row that declares the module it is said of, found among `rows` by its package and its name, and about the manifest, or the program where it has none, otherwise.
-fn refused(
-    unlinked: Unlinked,
-    rows: &[(String, PathBuf, String)],
-    manifest: Option<&Path>,
-) -> Box<Report> {
+/// The report of what linking refused: at the row that declares the module it is said of, found among `providers` by its package and its name, and about the manifest, or the program where it has none, otherwise.
+fn refused(unlinked: Unlinked, providers: &[Provider], manifest: Option<&Path>) -> Box<Report> {
     let Unlinked { tag, facts, module } = unlinked;
     let mut said = Said::line(tag);
     for fact in facts {
@@ -178,9 +168,10 @@ fn refused(
     }
     let refused = Refused::saying(said);
     let declared = module.and_then(|(package, name)| {
-        rows.iter()
-            .find(|(of, _, row)| *of == package && *row == name)
-            .map(|(_, directory, row)| written(directory, row))
+        providers
+            .iter()
+            .find(|provider| provider.package == package && provider.name == name)
+            .map(|provider| written(&provider.directory, &provider.name))
     });
 
     match (declared, manifest) {
@@ -197,16 +188,15 @@ pub fn bindings_of(
     cabinet: Option<&Path>,
 ) -> Result<ForeignBindings, Box<Report>> {
     let reached = reached(manifest, foreigns, Target::Native, cabinet)?;
-    let rows = reached
-        .stating
-        .iter()
-        .map(|(package, directory, foreign)| {
-            (package.clone(), directory.clone(), foreign.name.clone())
-        })
-        .collect::<Vec<_>>();
 
     let mut modules = Vec::new();
-    for (package, directory, foreign) in reached.stating {
+    for Provider {
+        package,
+        directory,
+        name,
+        foreign,
+    } in &reached.stating
+    {
         let native = foreign
             .native
             .as_ref()
@@ -217,32 +207,31 @@ pub fn bindings_of(
             .expect("a walked graph has a cabinet");
 
         let code = curios_cranelift::compile(&native.bytes(
-            &foreign.name,
+            name,
             Target::Native,
-            &directory,
+            directory,
             cabinet,
         )?)
         .map_err(|error| {
-            written(&directory, &foreign.name).refuse(
+            written(directory, name).refuse(
                 Refused::of("invalid module")
                     .stating(format_args!(
-                        "the module `{}` of `/{package}` is no WebAssembly module this engine accepts",
-                        foreign.name
+                        "the module `{name}` of `/{package}` is no WebAssembly module this engine accepts"
                     ))
                     .stating(error),
             )
         })?;
 
         modules.push(DeclaredModule {
-            package,
+            package: package.clone(),
             code,
-            name: foreign.name,
-            answers: foreign.answers,
+            name: name.clone(),
+            answers: foreign.answers.clone(),
         });
     }
 
     let bindings = plugin_bindings(foreigns, modules)
-        .map_err(|unlinked| refused(unlinked, &rows, manifest))?;
+        .map_err(|unlinked| refused(unlinked, &reached.stating, manifest))?;
     unanswered(
         manifest,
         foreigns,
@@ -263,7 +252,13 @@ pub fn linked_of(
     let reached = reached(manifest, foreigns, Target::Browser, cabinet)?;
 
     let mut linked = Vec::new();
-    for (package, directory, foreign) in reached.stating {
+    for Provider {
+        package,
+        directory,
+        name,
+        foreign,
+    } in reached.stating
+    {
         let gateway = foreign
             .browser
             .as_ref()
@@ -274,14 +269,13 @@ pub fn linked_of(
             .expect("a walked graph has a cabinet");
 
         let mut statics = Vec::new();
-        for served in gateway.served(&foreign.name, &directory)? {
+        for served in gateway.served(&name, &directory)? {
             let bytes = fs::read(&served.file).map_err(|error| {
-                written(&directory, &foreign.name).refuse(
+                written(&directory, &name).refuse(
                     Refused::of("unreadable file")
                         .stating(format_args!(
-                            "the static entry `{}` of the foreign row `{}` reads {}",
+                            "the static entry `{}` of the foreign row `{name}` reads {}",
                             served.entry,
-                            foreign.name,
                             served.file.display()
                         ))
                         .stating(OsError(&error)),
@@ -299,13 +293,10 @@ pub fn linked_of(
 
         linked.push(Linked {
             gateway: Placed {
-                path: gateway.stands(&foreign.name),
-                bytes: gateway.delivery.bytes(
-                    &foreign.name,
-                    Target::Browser,
-                    &directory,
-                    cabinet,
-                )?,
+                path: gateway.stands(&name),
+                bytes: gateway
+                    .delivery
+                    .bytes(&name, Target::Browser, &directory, cabinet)?,
             },
             // A declaration the program never reaches is no hook a page could hold to a row.
             answers: foreign
@@ -315,7 +306,7 @@ pub fn linked_of(
                 .collect(),
             statics,
             package,
-            row: foreign.name,
+            row: name,
         });
     }
 

@@ -2,7 +2,7 @@
 //!
 //! **Why fetching lives here and nowhere else.** Opacity is a compiler property — it compares a `rev` and never interprets one — and interpretation is exactly what turning a revision into bytes requires. Putting it here is a decision rather than a concession, because acceptance is by hash: *any* transport may deliver the bytes, an untrusted one included, and a delivery that fails its hash is refused regardless of who fetched it. A separate fetcher layered above this would double the tooling for zero integrity gain. The compiler itself never fetches.
 //!
-//! That same argument picks the transports: programs already on the developer's machine, shelled out to — `git` for a package tree, `curl` or `wget` for a `[[foreign]]` module. A second implementation of the git protocol vendored into this workspace would buy nothing the hash does not already guarantee, while owning an authentication story — ssh keys, credential helpers, private remotes — that the one already installed handles; an HTTP client would buy no more, against proxy and certificate configuration the installed one already reads. Two fetchers rather than one because neither is universally present and choosing between them would be arbitrary.
+//! That same argument picks the transports: programs already on the developer's machine, shelled out to — `git` for a package tree, `curl` or `wget` for a foreign module. A second implementation of the git protocol vendored into this workspace would buy nothing the hash does not already guarantee, while owning an authentication story — ssh keys, credential helpers, private remotes — that the one already installed handles; an HTTP client would buy no more, against proxy and certificate configuration the installed one already reads. Two fetchers rather than one because neither is universally present and choosing between them would be arbitrary.
 //!
 //! **A delivered tree is source, and `.git` is not source.** It is removed before the tree is hashed or placed: a fresh clone's object store differs run to run, so leaving it in would make the criterion unreproducible and the cabinet key meaningless. This is not something the scheme could state, because the scheme hashes whatever it is handed; it is a fact about what `curate` hands it.
 
@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{
         Cabinet, Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused,
-        Row, Snapshot, Step, Subject, Target, TreeHash,
+        Row, Snapshot, Subject, Target, TreeHash,
     },
     curios_common::{Code, OsError, Report},
     std::{
@@ -170,17 +170,24 @@ struct Reachable {
     packages: BTreeSet<Acquisition>,
     /// The modules to fetch, which is the `url` rows alone.
     fetches: BTreeSet<ModuleAcquisition>,
-    /// Every `[[foreign]]` row, however delivered, with the package and directory it belongs to — what a link needs, where the two above are what a fetch needs.
-    rows: Vec<(String, PathBuf, Foreign)>,
+    /// Every foreign provider, however delivered, with the package and directory it belongs to — what a link needs, where the two above are what a fetch needs.
+    providers: Vec<Provider>,
 }
 
-/// Every `[[foreign]]` row the governing package's graph declares, with the package that declared it and the directory a carried module's path is relative to.
+/// One foreign provider a package of a graph declares: the package, the directory its manifest sits in and a carried module's path is read from, the provider's handle, and what it states.
+#[derive(Debug, Clone)]
+pub struct Provider {
+    pub package: String,
+    pub directory: PathBuf,
+    pub name: String,
+    pub foreign: Foreign,
+}
+
+/// Every foreign provider the governing package's graph declares.
 ///
 /// One walk with the fetch's, for the reason `acquisitions` gives: resolution is where a directory comes from, and a second traversal could resolve a row differently.
-pub fn declared_modules(
-    governing: &Governing,
-) -> Result<Vec<(String, PathBuf, Foreign)>, Box<Report>> {
-    Ok(acquisitions(governing)?.rows)
+pub fn declared_modules(governing: &Governing) -> Result<Vec<Provider>, Box<Report>> {
+    Ok(acquisitions(governing)?.providers)
 }
 
 fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
@@ -193,7 +200,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
             continue;
         }
 
-        for foreign in &package.foreign {
+        for (name, foreign) in &package.foreign {
             // A carried file needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here. Every target's is fetched, since nothing here knows which target a build will ask for.
             for (target, delivery) in Target::ALL
                 .into_iter()
@@ -202,25 +209,24 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
                 if let Module::Fetched(url) = &delivery.module {
                     reachable.fetches.insert(ModuleAcquisition {
                         package: package.name.clone(),
-                        name: foreign.name.clone(),
+                        name: name.clone(),
                         target,
                         url: url.clone(),
                         hash: delivery.hash.clone(),
                         written: Row::of(
                             governing.manifest_of(&directory),
-                            [
-                                Step::key("foreign"),
-                                Step::Named(foreign.name.clone()),
-                                Step::key(target.spelled()),
-                            ],
+                            ["foreign", name.as_str(), target.spelled()],
                         ),
                     });
                 }
             }
 
-            reachable
-                .rows
-                .push((package.name.clone(), directory.clone(), foreign.clone()));
+            reachable.providers.push(Provider {
+                package: package.name.clone(),
+                directory: directory.clone(),
+                name: name.clone(),
+                foreign: foreign.clone(),
+            });
         }
 
         for (name, row) in &package.dependencies {

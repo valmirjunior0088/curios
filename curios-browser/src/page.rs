@@ -42,7 +42,7 @@ pub const ARGUMENT: &str = "arg";
 /// The harness, which the loader carries whole.
 const HARNESS: &str = include_str!("harness.mjs");
 
-/// One `[[foreign]]` row a page links, the program reaching one of its declarations: who declares it, its gateway, what the gateway answers, and what the row's page serves beside it.
+/// One foreign provider a page links, the program reaching one of its declarations: who declares it, its gateway, what the gateway answers, and what the row's page serves beside it.
 pub struct Linked {
     /// The package that declares the row.
     pub package: String,

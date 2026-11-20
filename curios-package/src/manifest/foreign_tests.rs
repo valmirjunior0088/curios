@@ -2,25 +2,21 @@
 
 use {super::test_support::*, super::*};
 
-/// The two deliveries a `[[foreign]]` row states, and the table naming which declaration each export answers.
+/// The two deliveries a provider states, each under its handle, and the table naming which declaration each export answers.
 #[test]
 fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
     let Manifest::Package(package) = parse(
         r#"
             name = "crypto"
 
-            [[foreign]]
-            name = "sha2"
-
-            [foreign.native]
+            [foreign.sha2.native]
             path = "foreign/libsha2.wasm"
             hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-            [foreign.answers]
+            [foreign.sha2.answers]
             "digest/sha256" = "SHA256_Digest"
 
-            [[foreign]]
-            name = "blake3"
+            [foreign.blake3]
             native = { url = "https://example.com/libblake3.wasm", hash = "f1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" }
         "#,
     ) else {
@@ -28,21 +24,21 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
     };
 
     assert_eq!(
-        package.foreign[0]
+        package.foreign["sha2"]
             .native
             .as_ref()
             .map(|native| native.module.clone()),
         Some(Module::Filed(PathBuf::from("foreign/libsha2.wasm")))
     );
     assert_eq!(
-        package.foreign[0]
+        package.foreign["sha2"]
             .answers
             .get("/crypto/digest/sha256")
             .map(String::as_str),
         Some("SHA256_Digest")
     );
     assert_eq!(
-        package.foreign[1]
+        package.foreign["blake3"]
             .native
             .as_ref()
             .map(|native| native.module.clone()),
@@ -55,7 +51,7 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
 /// A row answers its own package's declarations: each is named from the package's root, so a claim on another package's row, or on the standard library's, has no spelling. A path a manifest once wrote in full is refused with the spelling it has now, and one that leads elsewhere with why it names nothing here.
 #[test]
 fn an_export_answers_a_declaration_named_from_its_own_package() {
-    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n\n[foreign.native]\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.answers]\n";
+    const ROW: &str = "name = \"crypto\"\n\n[foreign.sha2.native]\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.sha2.answers]\n";
 
     for (claim, expected) in [
         ("/crypto/digest/sha256", "write `digest/sha256`"),
@@ -72,14 +68,14 @@ fn an_export_answers_a_declaration_named_from_its_own_package() {
     }
 }
 
-/// A declaration is answered once across a package's rows: a second row that names an export for it is refused where the manifest is read, naming both rows, since nothing chooses between two answers. Within a row the table is keyed by declaration, so one row cannot state two.
+/// A declaration is answered once across a package's providers: a second that names an export for it is refused where the manifest is read, naming both, in the order their handles are read, since nothing chooses between two answers. Within a provider the table is keyed by declaration, so one cannot state two.
 #[test]
 fn a_declaration_two_rows_answer_is_refused() {
     const PIN: &str =
         "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
     let row = |name: &str, export: &str| {
         format!(
-            "[[foreign]]\nname = \"{name}\"\n\n[foreign.native]\npath = \"{name}.wasm\"\n{PIN}\n\n[foreign.answers]\n\"digest/sha256\" = \"{export}\"\n\n"
+            "[foreign.{name}.native]\npath = \"{name}.wasm\"\n{PIN}\n\n[foreign.{name}.answers]\n\"digest/sha256\" = \"{export}\"\n\n"
         )
     };
 
@@ -91,7 +87,7 @@ fn a_declaration_two_rows_answer_is_refused() {
 
     assert!(
         refusal.contains(
-            "`sha2` and `other` both name an export that answers `/crypto/digest/sha256`"
+            "`other` and `sha2` both name an export that answers `/crypto/digest/sha256`"
         ),
         "{refusal}"
     );
@@ -128,7 +124,7 @@ fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
     ] {
         let row = row.as_str();
         let refusal = refuse(&format!(
-            "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n\n[foreign.native]\n{row}\n"
+            "name = \"crypto\"\n\n[foreign.sha2.native]\n{row}\n"
         ));
 
         assert!(refusal.contains(expected), "{row:?} reported {refusal}");
@@ -138,10 +134,10 @@ fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
 /// A row states its module in the native target's table, and one with no such table links nothing: refused where the manifest is read, saying where a module goes.
 #[test]
 fn a_foreign_row_with_no_delivery_says_where_one_goes() {
-    let refusal = refuse("name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n");
+    let refusal = refuse("name = \"crypto\"\n\n[foreign.sha2]\n");
 
     assert!(
-        refusal.contains("names no module\n  state `[foreign.native]`"),
+        refusal.contains("names no module\n  state `[foreign.sha2.native]`"),
         "{refusal}"
     );
 }
@@ -153,14 +149,11 @@ fn a_browser_table_names_a_gateway_and_what_its_page_serves() {
         r#"
             name = "clock"
 
-            [[foreign]]
-            name = "dom"
-
-            [foreign.browser]
+            [foreign.dom.browser]
             path = "web/dom.js"
             hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-            [foreign.browser.static]
+            [foreign.dom.browser.static]
             "app" = "build/app"
             "logo.png" = "art/logo.png"
         "#,
@@ -168,7 +161,7 @@ fn a_browser_table_names_a_gateway_and_what_its_page_serves() {
         panic!("a package");
     };
 
-    let row = &package.foreign[0];
+    let row = &package.foreign["dom"];
     assert!(row.native.is_none());
     let gateway = row.browser.as_ref().expect("a browser table");
     assert_eq!(
@@ -196,7 +189,7 @@ fn the_page_s_own_names_are_refused() {
         (
             "dom",
             format!(
-                "path = \"web/dom.js\"\n{PIN}\n\n[foreign.browser.static]\n\"index.js\" = \"own.js\""
+                "path = \"web/dom.js\"\n{PIN}\n\n[foreign.dom.browser.static]\n\"index.js\" = \"own.js\""
             ),
         ),
         ("dom", format!("path = \"index.html\"\n{PIN}")),
@@ -206,7 +199,7 @@ fn the_page_s_own_names_are_refused() {
         ),
     ] {
         let refusal = refuse(&format!(
-            "name = \"clock\"\n\n[[foreign]]\nname = \"{name}\"\n\n[foreign.browser]\n{table}\n"
+            "name = \"clock\"\n\n[foreign.{name}.browser]\n{table}\n"
         ));
 
         assert!(
@@ -230,7 +223,7 @@ fn a_static_entry_names_plain_paths_outside_what_the_toolchain_generates() {
         ("\"art\" = \".curios/native\"", "under `.curios`"),
     ] {
         let refusal = refuse(&format!(
-            "name = \"clock\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n{PIN}\n\n[foreign.browser.static]\n{entry}\n"
+            "name = \"clock\"\n\n[foreign.dom.browser]\npath = \"web/dom.js\"\n{PIN}\n\n[foreign.dom.browser.static]\n{entry}\n"
         ));
 
         assert!(refusal.contains(expected), "{entry:?} reported {refusal}");
@@ -241,8 +234,19 @@ fn a_static_entry_names_plain_paths_outside_what_the_toolchain_generates() {
 #[test]
 fn the_native_table_serves_nothing() {
     let refusal = refuse(
-        "name = \"clock\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.native]\npath = \"dom.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.native.static]\n\"a\" = \"b\"\n",
+        "name = \"clock\"\n\n[foreign.dom.native]\npath = \"dom.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.dom.native.static]\n\"a\" = \"b\"\n",
     );
 
     assert!(refusal.contains("static"), "{refusal}");
+}
+
+/// A manifest still written as rows of `[[foreign]]` meets the reader's own refusal: an array is written where a table is read.
+#[test]
+fn providers_written_as_rows_are_refused_as_an_array() {
+    let refusal = refuse("name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n");
+
+    assert_eq!(
+        refusal,
+        "invalid value\n  written: an array\n  `foreign` is a table"
+    );
 }

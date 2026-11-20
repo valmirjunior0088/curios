@@ -157,7 +157,7 @@ fn table(at: &[Step]) -> String {
         .iter()
         .filter_map(|step| match step {
             Step::Key(key) => Some(key.as_str()),
-            Step::Row(_) | Step::Named(_) => None,
+            Step::Row(_) => None,
         })
         .collect::<Vec<_>>()
         .join(".");
@@ -165,7 +165,7 @@ fn table(at: &[Step]) -> String {
     match at.last() {
         None => "the manifest".to_string(),
         Some(Step::Key(_)) => format!("`[{header}]`"),
-        Some(Step::Row(_) | Step::Named(_)) => format!("an `[[{header}]]` row"),
+        Some(Step::Row(_)) => format!("an `[[{header}]]` row"),
     }
 }
 
@@ -173,7 +173,7 @@ fn table(at: &[Step]) -> String {
 fn taker(at: &[Step]) -> String {
     let key = at.iter().rev().find_map(|step| match step {
         Step::Key(key) => Some(key.as_str()),
-        Step::Row(_) | Step::Named(_) => None,
+        Step::Row(_) => None,
     });
 
     match (at.last(), key) {

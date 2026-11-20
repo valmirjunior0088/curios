@@ -57,15 +57,19 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
 
     let written = fs::read_to_string(&governing.manifest).expect("read it back");
     assert!(written.contains(&hash.to_string()), "{written}");
-    assert!(written.contains("name = \"probe\""), "{written}");
-    assert!(written.contains("[foreign.native]"), "{written}");
+    // The provider and the table above it are implicit, so only the table holding keys gets a header, as one written by hand reads.
+    assert!(written.contains("[foreign.probe.native]\n"), "{written}");
+    assert!(
+        !written.contains("[foreign]") && !written.contains("[foreign.probe]"),
+        "{written}"
+    );
 
     let crate::Manifest::Package(package) = written.parse().expect("what was written reads back")
     else {
         panic!("a package");
     };
     assert_eq!(
-        package.foreign[0]
+        package.foreign["probe"]
             .native
             .as_ref()
             .map(|native| &native.module),
@@ -73,7 +77,7 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
     );
 }
 
-/// A gateway is pinned into the row's `[foreign.browser]` table, beside whatever its native table says, and described as the JavaScript it is rather than as a module to compile.
+/// A gateway is pinned into the provider's `browser` table, beside whatever its native table says, and described as the JavaScript it is rather than as a module to compile.
 #[test]
 fn a_gateway_is_pinned_into_the_browser_table() {
     let (root, governing) = governed(
@@ -81,7 +85,7 @@ fn a_gateway_is_pinned_into_the_browser_table() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\nnative = { path = \"dom.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
+            "\"\nname = \"app\"\n\n[foreign.dom]\nnative = { path = \"dom.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
         ),
     );
     let hash = carried(&root, "web/dom.js", b"export const setText = () => {};\n");
@@ -104,7 +108,7 @@ fn a_gateway_is_pinned_into_the_browser_table() {
     );
 
     let written = fs::read_to_string(&governing.manifest).expect("read it back");
-    assert!(written.contains("[foreign.browser]"), "{written}");
+    assert!(written.contains("[foreign.dom.browser]"), "{written}");
     assert!(
         written.contains("native = { path = \"dom.wasm\""),
         "{written}"
@@ -114,7 +118,7 @@ fn a_gateway_is_pinned_into_the_browser_table() {
     else {
         panic!("a package");
     };
-    let gateway = package.foreign[0]
+    let gateway = package.foreign["dom"]
         .browser
         .as_ref()
         .expect("a browser delivery");
@@ -124,7 +128,7 @@ fn a_gateway_is_pinned_into_the_browser_table() {
     );
     assert_eq!(gateway.delivery.hash, hash);
     assert!(
-        package.foreign[0].native.is_some(),
+        package.foreign["dom"].native.is_some(),
         "the native table is left as it was"
     );
 }
@@ -137,7 +141,7 @@ fn an_inline_delivery_is_re_pinned_inline() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"probe\"\nnative = { path = \"old.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
+            "\"\nname = \"app\"\n\n[foreign.probe]\nnative = { path = \"old.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
         ),
     );
     let hash = carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
@@ -159,7 +163,7 @@ fn an_inline_delivery_is_re_pinned_inline() {
         )),
         "{written}"
     );
-    assert!(!written.contains("[foreign.native]"), "{written}");
+    assert!(!written.contains("[foreign.probe.native]"), "{written}");
 }
 
 #[test]
@@ -408,7 +412,7 @@ fn a_row_with_no_hash_is_given_one_by_a_refresh() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n\n[foreign.answers]\nclick = \"click\"\n"
+            "\"\nname = \"app\"\n\n[foreign.dom.browser]\npath = \"web/dom.js\"\n\n[foreign.dom.answers]\nclick = \"click\"\n"
         ),
     );
     let hash = carried(&root, "web/dom.js", b"export const click = () => {};\n");
@@ -438,7 +442,7 @@ fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.answers]\nclick = \"click\"\n"
+            "\"\nname = \"app\"\n\n[foreign.dom.answers]\nclick = \"click\"\n"
         ),
     );
     carried(&root, "web/dom.js", b"export const click = () => {};\n");
@@ -454,7 +458,7 @@ fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
     .expect("the pin writes the table the row lacks");
 
     let written = fs::read_to_string(&pinning.manifest).expect("read it back");
-    assert!(written.contains("[foreign.browser]"), "{written}");
+    assert!(written.contains("[foreign.dom.browser]"), "{written}");
     crate::Manifest::from_path(&pinning.manifest).expect("the manifest reads once pinned");
 }
 
@@ -495,14 +499,14 @@ fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
 fn a_value_of_another_kind_on_the_way_to_the_row_is_refused_as_the_reader_refuses_it() {
     for (case, rows, subject, repoint) in [
         (
-            "foreign-table",
-            "[foreign.probe.native]\npath = \"probe.wasm\"\n",
+            "foreign-rows",
+            "[[foreign]]\nname = \"probe\"\n",
             Subject::Foreign(Target::Native),
             "probe.wasm",
         ),
         (
             "delivery-string",
-            "[[foreign]]\nname = \"probe\"\nnative = \"probe.wasm\"\n",
+            "[foreign.probe]\nnative = \"probe.wasm\"\n",
             Subject::Foreign(Target::Native),
             "probe.wasm",
         ),

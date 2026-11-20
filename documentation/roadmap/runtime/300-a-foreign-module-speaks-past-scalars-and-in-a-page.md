@@ -1,6 +1,6 @@
 # A foreign module speaks past scalars, and in a page
 
-**Not refined yet.** This specification reserves two independent deliveries for a WebAssembly module a package names to answer `foreign` declarations: marshalling the shapes past scalars and byte strings, and linking such a module where a `[foreign.browser]` table names it. It is not an implementation plan: each waits for its own consumer, a plugin that needs a shape past those and a program that needs a module in a page, and is refined for that consumer alone; neither waits on the other.
+**Not refined yet.** This specification reserves two independent deliveries for a WebAssembly module a package names to answer `foreign` declarations: marshalling the shapes past scalars and byte strings, and linking such a module where a row's `browser` table names it. It is not an implementation plan: each waits for its own consumer, a plugin that needs a shape past those and a program that needs a module in a page, and is refined for that consumer alone; neither waits on the other.
 
 ## What is known
 
@@ -16,7 +16,7 @@
 
 ## A module in a page
 
-**What is missing.** A browser delivery is a JavaScript gateway, so a module a package answers natively through `[foreign.native]` reaches a page only through a gateway the author writes, which instantiates the module and copies every byte string into and out of its memory by hand, against nothing that holds the copy to the row.
+**What is missing.** A browser delivery is a JavaScript gateway, so a module a package answers natively through a row's `native` table reaches a page only through a gateway the author writes, which instantiates the module and copies every byte string into and out of its memory by hand, against nothing that holds the copy to the row.
 
 **What is not known.** No browser ships WebAssembly type reflection without a flag, so what `Plugin::of` checks of each export natively is checked where the page is assembled; how the compiler reads a module's export types there without compiling it with Cranelift is the first question its refinement answers.
 

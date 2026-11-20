@@ -16,7 +16,7 @@ mod package_tests;
 
 use {
     crate::{
-        Cabinet, CompilerVersion, FileHash, FormatSettings, PRODUCTS, Refused, Row, Step, Subject,
+        Cabinet, CompilerVersion, FileHash, FormatSettings, PRODUCTS, Refused, Row, Subject,
         TreeHash, decode,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
@@ -111,8 +111,8 @@ pub struct Package {
     pub dependencies: BTreeMap<String, Dependency>,
     /// The entry programs this package declares, by the name each is run by: a single legal identifier, which is what keeps `curios run <name>` and `curios run <file>.crs` two spaces that cannot overlap.
     pub executables: BTreeMap<String, Executable>,
-    /// What implements this package's `foreign` declarations, in the order written. Empty for the overwhelming majority of packages, which declare none.
-    pub foreign: Vec<Foreign>,
+    /// What implements this package's `foreign` declarations, by each provider's handle: a single legal identifier, which exists for the same reason an executable's name does — so a command can name the provider. Nothing in Curios source refers to it: a `foreign` declaration is reached by its own qualified name, never through the module that implements it. Empty for the overwhelming majority of packages, which declare none.
+    pub foreign: BTreeMap<String, Foreign>,
 }
 
 impl Package {
@@ -218,7 +218,7 @@ struct Document {
     default: Option<String>,
     dependencies: Option<BTreeMap<String, DependencyRow>>,
     executables: Option<BTreeMap<String, ExecutableRow>>,
-    foreign: Option<Vec<ForeignRow>>,
+    foreign: Option<BTreeMap<String, ForeignRow>>,
     members: Option<Vec<String>>,
     catalog: Option<BTreeMap<String, DependencyRow>>,
 }
@@ -288,10 +288,12 @@ impl Document {
                 .value(["default"]));
         }
 
-        let mut foreign = Vec::new();
-        for (index, row) in self.foreign.unwrap_or_default().into_iter().enumerate() {
-            let placed = |refused: Refused| refused.under([Step::key("foreign"), Step::Row(index)]);
-            foreign.push(row.foreign(&name, &foreign).map_err(placed)?);
+        let mut foreign = BTreeMap::new();
+        for (written, row) in self.foreign.unwrap_or_default() {
+            let provider = row
+                .foreign(&name, &written, &foreign)
+                .map_err(|refused| refused.under(["foreign", written.as_str()]))?;
+            foreign.insert(written, provider);
         }
 
         Ok(Package {
@@ -421,7 +423,7 @@ impl DependencyRow {
 
 /// `value`, refused when it would reach a fetch as an option rather than as itself.
 ///
-/// **`curate` hands a `url` and a `rev` to a fetcher as positional arguments, and both `git` and the file fetcher a `[[foreign]]` row's `url` reaches read a leading `-` as an option wherever it sits.** The hash is what a *delivery* is accepted against, and it is checked after the fetch has already run — so it answers for the bytes and not for the invocation that obtained them. This is the check that answers for the invocation, and it belongs here beside the hash's, because a row is refused where a row is read.
+/// **`curate` hands a `url` and a `rev` to a fetcher as positional arguments, and both `git` and the file fetcher a foreign provider's `url` reaches read a leading `-` as an option wherever it sits.** The hash is what a *delivery* is accepted against, and it is checked after the fetch has already run — so it answers for the bytes and not for the invocation that obtained them. This is the check that answers for the invocation, and it belongs here beside the hash's, because a row is refused where a row is read.
 ///
 /// It matters past the manifest somebody wrote: `curate` walks each fetched dependency's own manifest for further rows, so a pinned tree supplies these fields for fetches on its consumer's machine. Vouching for a tree's bytes is not authorizing it to pass options to that consumer's `git`.
 ///
@@ -479,7 +481,7 @@ impl Target {
     /// Every target, in the order a reader meets them.
     pub const ALL: [Target; 2] = [Target::Native, Target::Browser];
 
-    /// The target's one spelling: what `--target` takes, the `[foreign.<target>]` table a row states its delivery in, and the `.curios/<target>/` entry its products are written under.
+    /// The target's one spelling: what `--target` takes, the `[foreign.<handle>.<target>]` table a provider states its delivery in, and the `.curios/<target>/` entry its products are written under.
     pub fn spelled(self) -> &'static str {
         match self {
             Target::Native => "native",
@@ -491,20 +493,18 @@ impl Target {
 /// The names a browser page holds for itself — its page, its loader and its module — which no file of any package may stand at: a `static` key, a carried gateway's path, or a fetched gateway's `<row>.js`.
 pub const PAGE_FILES: [&str; 3] = ["index.html", "index.js", "index.wasm"];
 
-/// One declared provider of `foreign` implementations: what each target links, and the export of it that answers each of the package's declarations it is named for.
+/// One declared provider of `foreign` implementations, which [`Package::foreign`] keys by its handle: what each target links, and the export of it that answers each of the package's declarations it is named for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Foreign {
-    /// A single legal identifier, which exists for the same reason an [`Executable`]'s does — so a command can name this row. Nothing in Curios source refers to it: a `foreign` declaration is reached by its own qualified name, never through the module that implements it.
-    pub name: String,
-    /// The WebAssembly module the native target links, where the row states `[foreign.native]`.
+    /// The WebAssembly module the native target links, where the provider states `[foreign.<handle>.native]`.
     pub native: Option<Delivery>,
-    /// The JavaScript gateway a browser links, and the files its page serves beside it, where the row states `[foreign.browser]`.
+    /// The JavaScript gateway a browser links, and the files its page serves beside it, where the provider states `[foreign.<handle>.browser]`.
     pub browser: Option<Gateway>,
-    /// The export that answers each declaration, as `fully qualified path -> export name`: keyed by what is answered, so a row states one export a declaration, and a declaration two rows claim is refused where the manifest is read. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
+    /// The export that answers each declaration, as `fully qualified path -> export name`: keyed by what is answered, so a provider states one export a declaration, and a declaration two providers claim is refused where the manifest is read. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the provider is read (`own_declaration`), so every path here lies under the package's prefix. A `foreign` declaration no entry names is the host's to answer, or is refused by name where a program reaches it.
     pub answers: BTreeMap<String, String>,
 }
 
-/// One file a target links for a `[[foreign]]` row: where it comes from, and what it must be.
+/// One file a target links for a foreign provider: where it comes from, and what it must be.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Delivery {
     pub module: Module,
@@ -514,12 +514,12 @@ pub struct Delivery {
     pub hash: FileHash,
 }
 
-/// What a browser links for a `[[foreign]]` row: its gateway, and the files the page serves beside it.
+/// What a browser links for a foreign provider: its gateway, and the files the page serves beside it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gateway {
-    /// The `.js` module whose exports answer the row's declarations.
+    /// The `.js` module whose exports answer the provider's declarations.
     pub delivery: Delivery,
-    /// Each file or directory the page serves, by the page path it is served at, beside the package path it is read from, both plain relative: `[foreign.browser.static]`.
+    /// Each file or directory the page serves, by the page path it is served at, beside the package path it is read from, both plain relative: `[foreign.<handle>.browser.static]`.
     pub statics: BTreeMap<String, PathBuf>,
 }
 
@@ -543,7 +543,7 @@ fn stands(module: &Module, name: &str) -> String {
 }
 
 impl Foreign {
-    /// What `target` links for this row, where the row states its table.
+    /// What `target` links for this provider, where it states its table.
     pub fn delivery(&self, target: Target) -> Option<&Delivery> {
         match target {
             Target::Native => self.native.as_ref(),
@@ -552,17 +552,16 @@ impl Foreign {
     }
 }
 
-/// One `[[foreign]]` row as TOML spells it: its name, each target's delivery in a table of its own, and what its exports answer.
+/// One `[foreign]` provider as TOML spells it under its handle: each target's delivery in a table of its own, and what its exports answer.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ForeignRow {
-    name: String,
     native: Option<DeliveryRow>,
     browser: Option<GatewayRow>,
     answers: Option<BTreeMap<String, String>>,
 }
 
-/// A `[[foreign]]` row's `[foreign.browser]` table as TOML spells it: a delivery, and the files its page serves.
+/// A provider's `browser` table as TOML spells it: a delivery, and the files its page serves.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GatewayRow {
@@ -573,7 +572,7 @@ struct GatewayRow {
     statics: Option<BTreeMap<String, String>>,
 }
 
-/// One target's table of a `[[foreign]]` row as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
+/// One target's table of a provider as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DeliveryRow {
@@ -583,7 +582,7 @@ struct DeliveryRow {
 }
 
 impl Delivery {
-    /// The file's bytes, accepted against this delivery's `hash`, for the row `name`'s table of `target`.
+    /// The file's bytes, accepted against this delivery's `hash`, for the provider `name`'s table of `target`.
     ///
     /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a cabinet entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
     ///
@@ -595,14 +594,10 @@ impl Delivery {
         directory: &Path,
         cabinet: &Cabinet,
     ) -> Result<Vec<u8>, Box<Report>> {
-        // The row's table of this target, in its package's manifest, which is where its `hash` is written.
+        // The provider's table of this target, in its package's manifest, which is where its `hash` is written.
         let written = Row::of(
             directory.join(MANIFEST),
-            [
-                Step::key("foreign"),
-                Step::Named(name.to_string()),
-                Step::key(target.spelled()),
-            ],
+            ["foreign", name, target.spelled()],
         );
         let path = match &self.module {
             Module::Filed(path) => directory.join(path),
@@ -646,53 +641,55 @@ impl Delivery {
 }
 
 impl ForeignRow {
-    /// This row as a declared provider of the package `package`, against the ones already declared before it.
-    fn foreign(self, package: &str, declared: &[Foreign]) -> Result<Foreign, Refused> {
+    /// This table as the provider `name` of the package `package`, against the ones read before it, its refusals written of the provider, which whoever reads the table places under its key.
+    fn foreign(
+        self,
+        package: &str,
+        name: &str,
+        declared: &BTreeMap<String, Foreign>,
+    ) -> Result<Foreign, Refused> {
         let Self {
-            name,
             native,
             browser,
             answers,
         } = self;
 
-        let name = canonical(&name).map_err(|refused| refused.value(["name"]))?;
-
-        if declared.iter().any(|foreign| foreign.name == name) {
-            return Err(Refused::of("duplicate foreign row")
-                .stating(format_args!("`{name}` is declared twice")));
-        }
+        canonical(name)?;
 
         if native.is_none() && browser.is_none() {
             return Err(Refused::of("missing module")
                 .stating(format_args!("`{name}` names no module"))
-                .stating("state `[foreign.native]` for what the native target links")
-                .stating("or `[foreign.browser]` for what a browser does")
+                .stating(format_args!(
+                    "state `[foreign.{name}.native]` for what the native target links"
+                ))
+                .stating(format_args!(
+                    "or `[foreign.{name}.browser]` for what a browser does"
+                ))
                 .stating("each with a `path` for a file the package carries or a `url` for one it fetches, beside its `hash`"));
         }
         let native = native
-            .map(|row| row.delivery(&name, Target::Native))
+            .map(|row| row.delivery(name, Target::Native))
             .transpose()
             .map_err(|refused| refused.under(["native"]))?;
         let browser = browser
-            .map(|row| row.gateway(&name))
+            .map(|row| row.gateway(name))
             .transpose()
             .map_err(|refused| refused.under(["browser"]))?;
 
-        // Each declaration is claimed once across the package's rows: nothing chooses between two answers, and the rows of one manifest are where two claims on one declaration can be written.
+        // Each declaration is claimed once across the package's providers: nothing chooses between two answers, and the providers of one manifest are where two claims on one declaration can be written.
         let mut claimed = BTreeMap::new();
         for (spelled, export) in answers.unwrap_or_default() {
             let answer = |refused: Refused| refused.entry(["answers", spelled.as_str()]);
-            let declaration = own_declaration(package, &spelled, &name).map_err(answer)?;
+            let declaration = own_declaration(package, &spelled, name).map_err(answer)?;
 
-            if let Some(earlier) = declared
+            if let Some((other, _)) = declared
                 .iter()
-                .find(|foreign| foreign.answers.contains_key(&declaration))
+                .find(|(_, foreign)| foreign.answers.contains_key(&declaration))
             {
                 return Err(answer(
                     Refused::of("duplicate answer")
                         .stating(format_args!(
-                            "`{}` and `{name}` both name an export that answers `{declaration}`",
-                            earlier.name
+                            "`{other}` and `{name}` both name an export that answers `{declaration}`"
                         ))
                         .stating("a declaration is answered by one export of one module"),
                 ));
@@ -702,7 +699,6 @@ impl ForeignRow {
         }
 
         Ok(Foreign {
-            name,
             native,
             browser,
             answers: claimed,
@@ -720,7 +716,7 @@ impl DeliveryRow {
 }
 
 impl GatewayRow {
-    /// This `[foreign.browser]` table of the foreign row `name`, as what a browser links for it.
+    /// This `browser` table of the foreign row `name`, as what a browser links for it.
     ///
     /// **The page's own names are refused here, for every package.** A gateway the package carries stands at its path in the page, a fetched one at `<row>.js`, and a `static` key at itself, so each of [`PAGE_FILES`] is refused where the manifest is read rather than where a page is put together, and in a library as in a program, so no package can come to depend on standing there.
     fn gateway(self, name: &str) -> Result<Gateway, Refused> {
@@ -819,7 +815,7 @@ fn delivered(
         (Some(_), Some(_)) => {
             return Err(Refused::of("conflicting fields")
                 .stating(format_args!(
-                    "`{name}` states `path` beside `url` in `[foreign.{target}]`"
+                    "`{name}` states `path` beside `url` in `[foreign.{name}.{target}]`"
                 ))
                 .stating("a file is carried by the package or fetched, never both")
                 .entry(["url"]));
@@ -827,7 +823,7 @@ fn delivered(
         (None, None) => {
             return Err(Refused::of("missing field")
                 .stating(format_args!(
-                    "`{name}` names no file in `[foreign.{target}]`"
+                    "`{name}` names no file in `[foreign.{name}.{target}]`"
                 ))
                 .stating("state `path` for one the package carries, or `url` for one it fetches"));
         }
@@ -837,7 +833,7 @@ fn delivered(
     let Some(hash) = hash else {
         return Err(Refused::of("missing hash")
             .stating(format_args!(
-                "`{name}` states no `hash` in `[foreign.{target}]`"
+                "`{name}` states no `hash` in `[foreign.{name}.{target}]`"
             ))
             .stating("a file is accepted against one however it arrives")
             .trying(format!("{invocation} --refresh")));

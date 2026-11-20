@@ -127,7 +127,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .iter()
         .map(|(row, export)| {
             format!(
-                "\n[[foreign]]\nname = \"{row}\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"{export}\"\n",
+                "\n[foreign.{row}.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.{row}.answers]\ndouble = \"{export}\"\n",
                 digest(&wasm)
             )
         })
@@ -176,10 +176,10 @@ fn refused(directory: &Path, output: &Path, arguments: &[&str]) -> String {
     String::from_utf8_lossy(&compiled.stderr).into_owned()
 }
 
-/// A program that calls a `foreign` of its own, which no `[[foreign]]` row answers.
+/// A program that calls a `foreign` of its own, which no `[foreign]` row answers.
 const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) = let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\nmain()\n";
 
-/// `compile` links what it bundles before it writes, as `run` links before it runs: a reached row nothing answers is refused by its name and by what would answer it, a `[[foreign]]` row, and no executable is written that its launcher would refuse at every start.
+/// `compile` links what it bundles before it writes, as `run` links before it runs: a reached row nothing answers is refused by its name and by what would answer it, a `[foreign]` row, and no executable is written that its launcher would refuse at every start.
 #[test]
 fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     let root = Temporary::new("cli-bundle", "unanswered");
@@ -200,7 +200,7 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
 
     assert!(
         refusal.contains(
-            "no implementation\n│  `/frobnicate` is declared `foreign`\n│  no `[[foreign]]` row of the package's manifests names an export that answers it"
+            "no implementation\n│  `/frobnicate` is declared `foreign`\n│  no `[foreign]` row of the package's manifests names an export that answers it"
         ),
         "{refusal}"
     );
@@ -248,7 +248,7 @@ fn an_umbrella_members_program_links_its_own_foreign_rows() {
     );
 }
 
-/// A row that states only `[foreign.browser]` is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row, the table it lacks, and the stand-in for its gateway that table would hold, before anything is written.
+/// A row that states only a `browser` table is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row, the table it lacks, and the stand-in for its gateway that table would hold, before anything is written.
 #[test]
 fn a_row_with_no_native_table_is_refused_natively_by_name() {
     let root = Temporary::new("cli-bundle", "browser-only");
@@ -260,7 +260,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
     fs::write(
         package.join("curios.toml"),
         format!(
-            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[foreign.page.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.page.answers]\ndouble = \"double\"\n",
             digest(gateway), compiler = env!("CARGO_PKG_VERSION")),
     )
     .expect("write the manifest");
@@ -276,20 +276,20 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
 
     assert!(
         refusal.contains(
-            "`/clock/double` is answered by the foreign row `page` of `/clock`\n│  that row states no `[foreign.native]`\n│  the native target has nothing to link for it\n│  a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link\n│  `test --target browser` runs its tests against the gateway"
+            "`/clock/double` is answered by the foreign row `page` of `/clock`\n│  that row states no `[foreign.page.native]`\n│  the native target has nothing to link for it\n│  a `.wasm` standing in for its gateway, stated as `[foreign.page.native]`, is what `run` and `test` link\n│  `test --target browser` runs its tests against the gateway"
         ),
         "{refusal}"
     );
 }
 
-/// A loose program has no manifest to write a `[[foreign]]` row in, and `compile` and `run` both say so of a row of its own, where the link would say only that nothing answered.
+/// A loose program has no manifest to write a `[foreign]` row in, and `compile` and `run` both say so of a row of its own, where the link would say only that nothing answered.
 #[test]
 fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
     let root = Temporary::new("cli-bundle", "loose");
     fs::create_dir_all(&*root).expect("create the temp directory");
     fs::write(root.join("loose.crs"), UNANSWERED).expect("write the temp source");
 
-    let expected = "no implementation\n│  `/frobnicate` is declared `foreign`\n│  a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names\n│  a loose program has no manifest to write one in";
+    let expected = "no implementation\n│  `/frobnicate` is declared `foreign`\n│  a `foreign` is answered by a module that a `[foreign]` row of a manifest names\n│  a loose program has no manifest to write one in";
 
     let refusal = refused(&root, &root.join("loose.out"), &["loose.crs"]);
     assert!(refusal.contains(expected), "{refusal}");
