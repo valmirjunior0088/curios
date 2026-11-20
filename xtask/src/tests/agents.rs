@@ -1,10 +1,16 @@
-//! What the agent files hold of the tree: `CLAUDE.md` and every Markdown file under `.claude/`.
+//! What the agent files hold of the tree: `CLAUDE.md` and every Markdown file under `.claude/`, with the hunter's guards beside them.
 //!
-//! A rule's globs decide where it loads, and a citation is where a session is sent. Each is text no compiler reads, so a moved file fails nothing until it is put to the tree here.
+//! A rule's globs decide where it loads, a citation is where a session is sent, and a guard is what stands between a hunter and the tree. Each is text no compiler reads, so a moved file or a pattern that reads a command line otherwise than the shell does fails nothing until it is put to the tree here.
 
 use {
     crate::*,
-    std::{collections::BTreeSet, fs, path::Path, process::Command},
+    std::{
+        collections::BTreeSet,
+        fs,
+        io::Write,
+        path::Path,
+        process::{Command, Stdio},
+    },
 };
 
 /// Every file the repository tracks, by its path from the root.
@@ -233,4 +239,420 @@ fn every_citation_of_an_agent_file_is_in_the_tree() {
     }
 
     assert!(stale.is_empty(), "{stale:#?}");
+}
+
+/// `text` as a JSON string, as a hook's input spells a command line or a path.
+fn json(text: &str) -> String {
+    let mut spelled = String::from("\"");
+    for character in text.chars() {
+        match character {
+            '"' => spelled.push_str("\\\""),
+            '\\' => spelled.push_str("\\\\"),
+            '\n' => spelled.push_str("\\n"),
+            '\t' => spelled.push_str("\\t"),
+            other => spelled.push(other),
+        }
+    }
+    spelled.push('"');
+
+    spelled
+}
+
+/// Whether the hunter's hook `script` admits a tool call whose input holds `value` at `field`, by the code a hook ends with: 0 admits and 2 refuses.
+fn admits(script: &str, field: &str, value: &str) -> bool {
+    let input = ["{\"tool_input\":{\"", field, "\":", &json(value), "}}"].concat();
+    let mut hook = Command::new("bash")
+        .arg(root().join(".claude/agents/hunter").join(script))
+        .env("CLAUDE_PROJECT_DIR", root())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("bash runs the hook");
+    hook.stdin
+        .take()
+        .expect("the hook reads its input")
+        .write_all(input.as_bytes())
+        .expect("the hook takes its input");
+
+    match hook.wait().expect("the hook ends").code() {
+        Some(0) => true,
+        Some(2) => false,
+        code => panic!("`{script}` ended with {code:?}"),
+    }
+}
+
+/// What a row of a guard's table expects.
+const ADMITTED: bool = true;
+const REFUSED: bool = false;
+
+/// The rows of `table` the hook `script` judges otherwise than the row says, `ROOT` in a row standing for the repository's root.
+fn misjudged(script: &str, field: &str, table: &[(bool, &str, &str)]) -> Vec<String> {
+    let root = root().to_str().expect("the root is written in UTF-8");
+
+    table
+        .iter()
+        .filter(|(expected, _, value)| {
+            admits(script, field, &value.replace("ROOT", root)) != *expected
+        })
+        .map(|(expected, row, _)| {
+            let verdict = if *expected { "admitted" } else { "refused" };
+
+            format!("{row}: not {verdict}")
+        })
+        .collect()
+}
+
+/// A hunter's shell runs the readers and the probes a hunt needs and nothing else: the guard admits each command line of the first rows, and refuses each of the rest, where the shell would run a program the guard never judged, hand one a flag it refuses, or write a file. The guard reads a command line as the shell does or refuses it: a heredoc is `<<'NAME'` alone, whose body is data, a backslash before a newline joins two lines, and a redirection is admitted only where its word ends.
+#[test]
+fn a_hunter_s_shell_runs_what_its_guard_judged_and_nothing_else() {
+    let table = [
+        (ADMITTED, "a reader", "cat CLAUDE.md"),
+        (ADMITTED, "a line range", "sed -n 1,5p CLAUDE.md"),
+        (
+            ADMITTED,
+            "a pipe of readers",
+            "git log --oneline -3 | head -2",
+        ),
+        (
+            ADMITTED,
+            "a list of readers",
+            "wc -l CLAUDE.md && ls xtask; pwd",
+        ),
+        (ADMITTED, "an input redirection", "wc -l < CLAUDE.md"),
+        (ADMITTED, "a bounded reader", "timeout 5 rg guard CLAUDE.md"),
+        (
+            ADMITTED,
+            "a quoted word holding operators",
+            "grep 'a; b > c' CLAUDE.md",
+        ),
+        (
+            ADMITTED,
+            "a backslash kept inside double quotes",
+            "grep \"a\\.b\" CLAUDE.md",
+        ),
+        (
+            ADMITTED,
+            "an escaped quote inside double quotes",
+            "grep \"say \\\"hi\\\"\" CLAUDE.md",
+        ),
+        (
+            ADMITTED,
+            "a line joined between two words",
+            "cat \\\nCLAUDE.md",
+        ),
+        (
+            ADMITTED,
+            "a line joined inside double quotes",
+            "echo \"a\\\nb\"",
+        ),
+        (ADMITTED, "a merge of two descriptors", "cat CLAUDE.md 2>&1"),
+        (
+            ADMITTED,
+            "a merge, then a pipe",
+            "cat CLAUDE.md 2>&1|head -1",
+        ),
+        (ADMITTED, "the null device", "cat CLAUDE.md > /dev/null"),
+        (
+            ADMITTED,
+            "the null device for one descriptor",
+            "cat CLAUDE.md 2>/dev/null; pwd",
+        ),
+        (
+            ADMITTED,
+            "a probe of a snapshot's compiler",
+            "ROOT/.claude/snapshots/0abc123/binaries/curios run - <<'CRS'\n/std/print(\"ok\")\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a probe of a snapshot's board",
+            "ROOT/.claude/snapshots/0abc123/binaries/xboard probe - <<'CRS'\ntext\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a heredoc, then a reader",
+            "cat <<'CRS'\ntext\nCRS\ncat CLAUDE.md",
+        ),
+        (
+            ADMITTED,
+            "a heredoc whose body holds a substitution",
+            "cat <<'CRS'\n$(touch x) costs $5 => `y`\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a heredoc whose body ends a line in a backslash",
+            "cat <<'CRS'\nCR\\\nS\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a heredoc under a name in double quotes",
+            "cat <<\"CRS\"\ntext\nCRS",
+        ),
+        (
+            ADMITTED,
+            "two heredocs on one line",
+            "cat <<'A' <<'B'\none\nA\ntwo\nB",
+        ),
+        (
+            ADMITTED,
+            "a heredoc and a pipe",
+            "cat <<'CRS' | head -1\ntext\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a heredoc whose body holds its name indented",
+            "cat <<'CRS'\n  CRS\nbody\nCRS",
+        ),
+        (
+            ADMITTED,
+            "a heredoc after a space",
+            "cat << 'CRS'\ntext\nCRS",
+        ),
+        (REFUSED, "a writer", "touch x"),
+        (REFUSED, "a build", "cargo build"),
+        (REFUSED, "a directory entered", "cd xtask"),
+        (
+            REFUSED,
+            "a compiler outside every snapshot",
+            "ROOT/target/debug/curios run -",
+        ),
+        (
+            REFUSED,
+            "a snapshot's compiler asked to build",
+            "ROOT/.claude/snapshots/0abc123/binaries/curios compile -",
+        ),
+        (REFUSED, "a redirection", "cat CLAUDE.md > x"),
+        (
+            REFUSED,
+            "an appending redirection",
+            "cat CLAUDE.md >>/dev/null",
+        ),
+        (REFUSED, "a substitution", "cat $(touch x)"),
+        (REFUSED, "a parameter", "cat $HOME/x"),
+        (REFUSED, "a detached command", "cat CLAUDE.md &"),
+        (REFUSED, "sed writing in place", "sed -i s/a/b/ CLAUDE.md"),
+        (REFUSED, "sort writing a file", "sort -o x CLAUDE.md"),
+        (
+            REFUSED,
+            "git asked for an output file",
+            "git log --output=x -1",
+        ),
+        (
+            REFUSED,
+            "git grep's pager, by its short flag",
+            "git grep -Otouch -l guard",
+        ),
+        (
+            REFUSED,
+            "git grep's pager, by its long flag",
+            "git grep --open-files-in-pager=touch -l guard",
+        ),
+        (
+            REFUSED,
+            "git grep's pager, with no value",
+            "git grep --open-files-in-pager -l guard",
+        ),
+        (REFUSED, "rg's preprocessor", "rg --pre cat guard CLAUDE.md"),
+        (
+            REFUSED,
+            "rg's hostname program",
+            "rg --hyperlink-format=default --hostname-bin=/usr/bin/true guard CLAUDE.md",
+        ),
+        (
+            REFUSED,
+            "a writer after a heredoc",
+            "cat <<'CRS'\ntext\nCRS\ntouch x",
+        ),
+        (REFUSED, "a here-string", "cat <<< CRS\ntouch x"),
+        (
+            REFUSED,
+            "a heredoc under a bare name",
+            "cat <<CRS\ntext\nCRS",
+        ),
+        (
+            REFUSED,
+            "a heredoc that strips tabs",
+            "cat <<-'CRS'\n\ttext\n\tCRS",
+        ),
+        (
+            REFUSED,
+            "a heredoc under a name with a dash",
+            "cat <<CRS-1\ntext\nCRS-1\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a heredoc under two quoted words",
+            "cat <<'C R S'\ntext\nC R S\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a heredoc under a name glued to a quote",
+            "cat <<\"A\"B\ntext\nAB\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a heredoc under a quoted name glued to a backslash",
+            "cat <<'CRS'\\x\nCRSx\ntouch x\nCRS",
+        ),
+        (
+            REFUSED,
+            "a heredoc under an escaped name",
+            "cat <<\\CRS\ntext\nCRS",
+        ),
+        (
+            REFUSED,
+            "a heredoc's opening inside double quotes",
+            "echo \"<<CRS\"\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a heredoc's opening inside single quotes",
+            "echo '<<CRS'\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a heredoc's opening in a comment",
+            "cat CLAUDE.md # <<'CRS'\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a substitution in a body the shell expands",
+            "cat <<CRS\n$(touch x)\nCRS",
+        ),
+        (
+            REFUSED,
+            "a name joined by a backslash in a body the shell expands",
+            "cat <<CRS\na\nCR\\\nS\ntouch x\nCRS",
+        ),
+        (REFUSED, "a heredoc never closed", "cat <<'CRS'\ntext"),
+        (REFUSED, "a heredoc opened on the last line", "cat <<'CRS'"),
+        (
+            REFUSED,
+            "a flag behind a joined line",
+            "sort \\\n-o x CLAUDE.md",
+        ),
+        (
+            REFUSED,
+            "a flag split by a joined line",
+            "git log --out\\\nput=x -1",
+        ),
+        (
+            REFUSED,
+            "a flag split by a joined line inside double quotes",
+            "git log \"--out\\\nput=x\" -1",
+        ),
+        (
+            REFUSED,
+            "a writer behind a joined line",
+            "cat CLAUDE.md;\\\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a writer after a comment ending in a backslash",
+            "cat CLAUDE.md # note \\\ntouch x",
+        ),
+        (
+            REFUSED,
+            "a backslash that escapes nothing",
+            "cat CLAUDE.md\\",
+        ),
+        (
+            REFUSED,
+            "words past a closing brace, which the shell hands the program before it",
+            "sort CLAUDE.md } cat -o x",
+        ),
+        (
+            REFUSED,
+            "words past an opening brace",
+            "sort CLAUDE.md { cat -o x",
+        ),
+        (
+            REFUSED,
+            "a flag spelled by a brace expansion",
+            "git log --out{put,}=x -1",
+        ),
+        (REFUSED, "a brace group", "{ cat CLAUDE.md; }"),
+        (
+            REFUSED,
+            "a merge that is a file's name",
+            "cat CLAUDE.md >&1x",
+        ),
+        (
+            REFUSED,
+            "a merge joined to a name",
+            "cat CLAUDE.md >&1\\\nx",
+        ),
+        (
+            REFUSED,
+            "a merge that moves a descriptor",
+            "cat CLAUDE.md >&1-",
+        ),
+        (
+            REFUSED,
+            "a file named after the null device",
+            "cat CLAUDE.md >/dev/nullx",
+        ),
+        (
+            REFUSED,
+            "the null device joined to a name",
+            "cat CLAUDE.md >/dev/null\\\nx",
+        ),
+    ];
+
+    let misjudged = misjudged("guard.sh", "command", &table);
+
+    assert!(misjudged.is_empty(), "{misjudged:#?}");
+}
+
+/// A hunter writes only inside its own directory of a snapshot, by the path as it resolves: the tree, a snapshot's files and binaries, another's directory and a path that climbs out are each refused.
+#[test]
+fn a_hunter_writes_only_inside_its_directory_of_a_snapshot() {
+    let table = [
+        (
+            ADMITTED,
+            "a file of its directory",
+            "ROOT/.claude/snapshots/0abc123/hunters/hunter-1/notes.md",
+        ),
+        (
+            ADMITTED,
+            "a file deeper in it",
+            "ROOT/.claude/snapshots/0abc123/hunters/hunter-1/probes/a.crs",
+        ),
+        (REFUSED, "a file of the tree", "ROOT/CLAUDE.md"),
+        (
+            REFUSED,
+            "a file of the snapshot's tree",
+            "ROOT/.claude/snapshots/0abc123/tree/CLAUDE.md",
+        ),
+        (
+            REFUSED,
+            "a snapshot's compiler",
+            "ROOT/.claude/snapshots/0abc123/binaries/curios",
+        ),
+        (
+            REFUSED,
+            "a path that climbs out of the directory",
+            "ROOT/.claude/snapshots/0abc123/hunters/hunter-1/../../binaries/curios",
+        ),
+        (
+            REFUSED,
+            "a directory that is no hunter's",
+            "ROOT/.claude/snapshots/0abc123/hunters/other/x",
+        ),
+        (
+            REFUSED,
+            "a snapshot that is no commit",
+            "ROOT/.claude/snapshots/not-hex/hunters/hunter-1/x",
+        ),
+        (
+            REFUSED,
+            "the directory itself",
+            "ROOT/.claude/snapshots/0abc123/hunters/hunter-1",
+        ),
+        (REFUSED, "no path", ""),
+    ];
+
+    let misjudged = misjudged("write-guard.sh", "file_path", &table);
+
+    assert!(misjudged.is_empty(), "{misjudged:#?}");
 }
