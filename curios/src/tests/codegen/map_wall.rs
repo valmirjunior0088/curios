@@ -175,7 +175,7 @@ entry()
 ///
 /// Over the seven: encoded 40, 40, 40, 42, 42, 44, 44, median 42; control 2, 3, 3, 3, 4, 4, 5, median 3; key construction 36, 36, 36, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 265 nanoseconds, under 15%.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the emitted `spines` module's 25 `br_table`s, as `wonder --stage wasm` prints it at `06ea35a7d`, fourteen sit in the program's entry, the `io/bind` its description runs, three in `/std/Map/internal/Node/insert` itself and one in its heap version, two in the heap version's resumption, one in each of `/std/Map/internal/Node/fold`'s two copies and one in its heap version, one in `/std/answered` and one in a handle's retry, none in a digit read, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {

@@ -154,14 +154,21 @@ fn emitted_wat(source: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// Taken at `447fbb0a1`, release, x86-64 Linux:
+/// Counted at `06ea35a7d`, x86-64 Linux, over the emitted module:
 ///
 /// ```text
-/// schema roster: 62 products, 63 families, 236 constructors
-/// recorded field shapes (whole prelude + program): {"bytes": 53, "closure": 18, "family": 60, "flt": 3, "immediate": 30, "list": 40, "number": 75, "opaque": 62, "product": 42}
+/// schema roster: 12 products, 13 families, 47 constructors
+/// recorded field shapes (what the program links): {"bytes": 1, "closure": 13, "family": 8, "immediate": 2, "list": 1, "number": 13, "opaque": 14, "product": 4}
+/// spines: i31-cast 651, box 956, unbox 1021, rope-cast 114, envr-cast 67, tuple-cast 14, tuple-test 6, tuple-types 3
+/// chain: i31-cast 480, box 768, unbox 776, rope-cast 107, envr-cast 55, tuple-cast 4, tuple-test 0, tuple-types 2
+/// trees: i31-cast 471, box 752, unbox 766, rope-cast 107, envr-cast 67, tuple-cast 4, tuple-test 0, tuple-types 2
+/// churn: i31-cast 458, box 743, unbox 753, rope-cast 107, envr-cast 55, tuple-cast 4, tuple-test 0, tuple-types 2
+/// lcg: i31-cast 447, box 728, unbox 736, rope-cast 107, envr-cast 55, tuple-cast 4, tuple-test 0, tuple-types 2
+/// monad_io: i31-cast 447, box 723, unbox 735, rope-cast 107, envr-cast 60, tuple-cast 4, tuple-test 0, tuple-types 2
+/// parse_digits: i31-cast 444, box 707, unbox 773, rope-cast 107, envr-cast 55, tuple-cast 4, tuple-test 0, tuple-types 2
 /// ```
 ///
-/// **290 of 361 recorded fields — 80% — are monomorphic at erasure**, so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
+/// **42 of the 56 recorded fields `spines` links — 75% — are monomorphic at erasure**, so typed slots have a population; the opaque quarter is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, and the rope-base casts, each a Wasmtime `is_subtype` libcall, stand at 107 to 114 sites. The static counts rank *populations*, not costs: a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
 #[ignore = "measurement, counted: reports the census rather than asserting"]
 fn field_shape_census() {
