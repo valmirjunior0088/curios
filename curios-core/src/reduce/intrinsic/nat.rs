@@ -3,8 +3,11 @@
 //! `Nat` division is the one arithmetic family whose fold reaches past literals: [`nat_bound`] states how large a shape can be, and [`nat_euclid_split`] uses that to peel a quotient off a sum whose remainder cannot reach the divisor. The bound must never under-report — the split turns it into a definitional equation.
 
 use {
-    super::{operand_bound, shift_bound, sum_bound},
-    crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
+    super::{int_literal_division, operand_bound, shift_bound, sum_bound},
+    crate::{
+        Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, int_preimage,
+        same_atom,
+    },
     curios_algebra::{
         Carrier, Divided, FloorSplit, Half, Modular, Observed, Operation, cofactor, euclid_split,
         floor_law, power_of_two,
@@ -344,7 +347,7 @@ fn literal_division(
     }))
 }
 
-/// A division its fold left neutral, in a spelling whose divisor is two to a literal count — a right shift or a mask, as [`Intrinsic::nat_division`] reads one — folded by the laws of a literal divisor ([`literal_division`]), what is left divided again in that spelling: the shift's laws are the quotient's and the mask's the remainder's, read through no rule of their own.
+/// A division its fold left neutral, in a spelling whose divisor is two to a literal count — a right shift or a mask, at `Nat` or at `Int`, as [`Intrinsic::division`] reads one — folded by the laws of a literal divisor at its carrier ([`literal_division`], [`int_literal_division`]), what is left divided again in that spelling: the shift's laws are the quotient's and the mask's the remainder's, read through no rule of their own.
 ///
 /// **The power is what this rule builds, and it is charged before it exists**, under the [`shift_bound`] [`then_coefficient`] pays for a left shift's coefficient, so `shr(x, 400000000)` is refused rather than allocated; a mask's is no wider than the mask. A count past a `u64` declines, as there.
 pub fn then_power_division(
@@ -354,7 +357,7 @@ pub fn then_power_division(
     let Subterm::Intrinsic(intrinsic) = &result else {
         return Ok(result);
     };
-    let Some(division) = intrinsic.nat_division() else {
+    let Some(division) = intrinsic.division() else {
         return Ok(result);
     };
     let Some(count) = division.count().and_then(|count| count.as_nat()) else {
@@ -371,17 +374,46 @@ pub fn then_power_division(
         return Ok(result);
     };
 
-    let divided = literal_division(
-        reducer,
-        division.dividend(),
-        &divisor,
-        division.half(),
-        |rest| division.of(rest),
-    )?;
+    let divided = match division.carrier() {
+        Carrier::Integer => int_literal_division(
+            reducer,
+            division.dividend(),
+            &Integer::from(divisor),
+            division.half(),
+            division.widened(),
+            |rest| division.of(rest),
+        )?,
+        _ => literal_division(
+            reducer,
+            division.dividend(),
+            &divisor,
+            division.half(),
+            |rest| division.of(rest),
+        )?,
+    };
     Ok(match divided {
         Some(divided) => Term::unwrap_or_clone(divided),
         None => result,
     })
+}
+
+/// An `Int` right shift of a widened natural, read as the widening of the natural's shift: `shr(Nat/to_int(m), k) = Nat/to_int(shr(m, k))`, a floor of a value at least zero being the natural's quotient, so the shift goes on at `Nat`, where its folds and Euclid's recombination read it. A shift carries no proof, so the reduct invents none.
+pub fn then_widened_shift(
+    reducer: &mut impl Reducer,
+    result: Subterm,
+) -> Result<Subterm, ReduceError> {
+    let Subterm::Intrinsic(Intrinsic::IntShr(value, count)) = &result else {
+        return Ok(result);
+    };
+    let Some(natural) = int_preimage(value) else {
+        return Ok(result);
+    };
+    Ok(Term::unwrap_or_clone(reducer.reduce_forced(
+        Term::intrinsic(Intrinsic::NatToInt(Term::intrinsic(Intrinsic::NatShr(
+            natural,
+            count.clone(),
+        )))),
+    )?))
 }
 
 /// Reduce both operands of a `Nat` binary intrinsic, then either `fold` the two literals or `rebuild` the neutral term from the reduced operands.

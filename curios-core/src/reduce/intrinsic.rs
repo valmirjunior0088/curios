@@ -793,16 +793,19 @@ pub fn reduce_intrinsic(
             Intrinsic::IntLe,
         ),
         // Bitwise ops fold on unbounded ℤ, which the running program computes too: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The backend's signed i31 is a fast path that grows into a boxed magnitude, never a width that truncates.
-        Intrinsic::IntAnd(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Int(left & right)),
-                Intrinsic::IntAnd,
-            )?,
-            |l, r| bitwise_laws(l, r, intrinsic),
-        )),
+        Intrinsic::IntAnd(left, right) => {
+            let masked = then_laws(
+                reduce_int_binary(
+                    reducer,
+                    left,
+                    right,
+                    |left, right| Some(Intrinsic::Int(left & right)),
+                    Intrinsic::IntAnd,
+                )?,
+                |l, r| bitwise_laws(l, r, intrinsic),
+            );
+            then_power_division(reducer, masked)
+        }
         Intrinsic::IntOr(left, right) => Ok(then_laws(
             reduce_int_binary(
                 reducer,
@@ -877,6 +880,8 @@ pub fn reduce_intrinsic(
                 )?,
                 |l, r| shift_laws(l, r, intrinsic),
             );
+            let shifted = then_widened_shift(reducer, shifted)?;
+            let shifted = then_power_division(reducer, shifted)?;
             then_split_shift(reducer, shifted, Intrinsic::IntShr)
         }
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),

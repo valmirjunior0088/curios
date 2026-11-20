@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Atoms, Footprint, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, image_bound,
-        product_bound, same_atom, sum_bound,
+        Atoms, Division, Footprint, Intrinsic, Nat, PowerQuotient, ReduceError, Reducer, Subterm,
+        Term, image_bound, product_bound, same_atom, sum_bound,
     },
     curios_algebra::{
-        Cancelled, Carrier, Combination, Deduction, Progress, Recombination, Summand, Wanted,
+        Cancelled, Carrier, Combination, Deduction, Half, Progress, Recombination, Summand, Wanted,
         distribute, signed_cofactor,
     },
     curios_common::recurse,
@@ -330,24 +330,22 @@ fn int_euclid_pair(
             let [factor] = summand.origin.factors.as_slice() else {
                 return None;
             };
-            // Euclid's remainder is a natural, so a sum of integers holds it widened.
-            let Subterm::Intrinsic(Intrinsic::NatToInt(widened)) = &**factor else {
-                return None;
-            };
-            let Subterm::Intrinsic(Intrinsic::IntRem {
-                dividend,
-                divisor,
-                non_zero,
-            }) = &**widened
-            else {
-                return None;
-            };
-            let quotient = Term::intrinsic(Intrinsic::IntDiv {
-                dividend: dividend.clone(),
-                divisor: divisor.clone(),
-                non_zero: non_zero.clone(),
-            });
-            let (_, multiple) = int_terms(&int_multiply(divisor, &quotient));
+            // Euclid's remainder is a natural: `Int/rem` answers it and a sum of integers holds it widened, where a mask answers it widened already ([`Intrinsic::int_division`]).
+            let remainder = match &**factor {
+                Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => match &**natural {
+                    Subterm::Intrinsic(intrinsic) => intrinsic
+                        .int_division()
+                        .filter(|division| !division.widened()),
+                    _ => None,
+                },
+                Subterm::Intrinsic(intrinsic) => intrinsic
+                    .int_division()
+                    .filter(|division| division.widened()),
+                _ => None,
+            }
+            .filter(|division| division.half() == Half::Remainder)?;
+            let (_, multiple) =
+                int_terms(&int_multiply(&remainder.divisor(), &remainder.quotient()));
 
             let wanted = int_linear(multiple)
                 .into_iter()
@@ -365,27 +363,36 @@ fn int_euclid_pair(
                 })
                 .collect::<Vec<Wanted<Integer>>>();
             let recombination = Recombination::integer(index, &summand.coefficient, &wanted)?;
-            let (constant, summands) = int_terms(dividend);
+            let (constant, summands) = int_terms(remainder.dividend());
             Some((recombination, int_combination(atoms, constant, &summands)))
         })
 }
 
-/// Whether two monomials' factors are one multiset, a quotient matching a quotient on its dividend and divisor alone, as `Nat::same_monomial` compares them.
+/// Whether two monomials' factors are one multiset, a quotient matching a quotient in any of its spellings, on its dividend and divisor alone or as one quotient by a power of two, as `Nat::same_monomial` compares them.
 fn int_same_factors(left: &[Term], right: &[Term]) -> bool {
     let one = |left: &Term, right: &Term| same_atom(Carrier::Integer, left, right);
-    let same = |left: &Term, right: &Term| match (&**left, &**right) {
+    let quotient = |term: &Term| match &**term {
+        Subterm::Intrinsic(intrinsic) => intrinsic
+            .int_division()
+            .filter(|division| division.half() == Half::Quotient),
+        _ => None,
+    };
+    let same = |left: &Term, right: &Term| match (quotient(left), quotient(right)) {
         (
-            Subterm::Intrinsic(Intrinsic::IntDiv {
+            Some(Division::Proved {
                 dividend: left_dividend,
                 divisor: left_divisor,
                 ..
             }),
-            Subterm::Intrinsic(Intrinsic::IntDiv {
+            Some(Division::Proved {
                 dividend: right_dividend,
                 divisor: right_divisor,
                 ..
             }),
-        ) => one(left_dividend, right_dividend) && one(left_divisor, right_divisor),
+        ) if one(&left_dividend, &right_dividend) && one(&left_divisor, &right_divisor) => true,
+        (Some(_), Some(_)) => PowerQuotient::of(left)
+            .zip(PowerQuotient::of(right))
+            .is_some_and(|(left, right)| left.same(&right)),
         _ => one(left, right),
     };
     if left.len() != right.len() {

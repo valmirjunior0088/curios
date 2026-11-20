@@ -1,14 +1,14 @@
 use {
     super::{
         Atoms, Declaration, Division, Footprint, Intrinsic, ReduceError, Reducer, Subterm, Term,
-        product_bound, same_atom, sum_bound,
+        int_monomial, product_bound, same_atom, sum_bound,
     },
     curios_algebra::{
         Cancelled, Carrier, Combination, Deduction, Half, Monomial, Operation, Progress,
         Recombination, Summand, Wanted, distribute,
     },
     curios_common::recurse,
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
     std::collections::HashMap,
 };
 
@@ -818,25 +818,33 @@ impl Nat {
     }
 }
 
-/// A quotient by a power of two read as one: its innermost dividend, under the count its divisor is two to, summed over every right shift and every division by a power of two nested in it — `shr(x / 4, k)` is `x` under `k + 2`, a nest being one quotient by the product of its divisors on ℕ. The count is held as a literal floor beside each monomial's coefficient, so two spellings of one count compare alike.
-struct PowerQuotient {
+/// A quotient by a power of two read as one, at `Nat` or at `Int`: its innermost dividend, under the count its divisor is two to, summed over every right shift and every division by a power of two nested in it — `shr(x / 4, k)` is `x` under `k + 2`, a nest being one quotient by the product of its divisors as Euclid divides, at either carrier. The count is held as a literal floor beside each monomial's coefficient, so two spellings of one count compare alike.
+pub struct PowerQuotient {
+    carrier: Carrier,
     dividend: Term,
     floor: Natural,
     monomials: Vec<(Natural, Term)>,
 }
 
 impl PowerQuotient {
-    /// `term` read so; `None` where it is no quotient by a power of two.
-    fn of(term: &Term) -> Option<Self> {
+    /// `term` read so; `None` where it is no quotient by a power of two. A nest is read within one carrier.
+    pub fn of(term: &Term) -> Option<Self> {
+        let Subterm::Intrinsic(intrinsic) = &**term else {
+            return None;
+        };
         let mut read = PowerQuotient {
+            carrier: intrinsic.division()?.carrier(),
             dividend: term.clone(),
             floor: Natural::zero(),
             monomials: Vec::new(),
         };
         let mut nested = false;
         while let Subterm::Intrinsic(intrinsic) = &*read.dividend {
-            let dividend = match intrinsic.nat_division() {
-                Some(Division::Shifted { value, count }) => {
+            let division = intrinsic
+                .division()
+                .filter(|division| division.carrier() == read.carrier);
+            let dividend = match division {
+                Some(Division::Shifted { value, count, .. }) => {
                     read.add_count(&count);
                     value
                 }
@@ -871,9 +879,25 @@ impl PowerQuotient {
         }
     }
 
-    /// The count `divisor` is two to, where it is one: a literal power of two times powers of two to a count each, as the fold leaves `pow(2, k + 1)`. `false`, and nothing added, otherwise.
+    /// The count `divisor` is two to, where it is one: a literal power of two times powers of two to a count each, as the fold leaves `pow(2, k + 1)`, each widened at `Int`. `false`, and nothing added, otherwise.
     fn add_power(&mut self, divisor: &Term) -> bool {
-        let (coefficient, factors) = Nat::monomial(divisor);
+        let (coefficient, factors) = match self.carrier {
+            Carrier::Integer => {
+                let (coefficient, factors) = int_monomial(divisor);
+                if coefficient.sign() != Integer::from(1i32) {
+                    return false;
+                }
+                let natural = |factor: &Term| match &**factor {
+                    Subterm::Intrinsic(Intrinsic::NatToInt(natural)) => Some(natural.clone()),
+                    _ => None,
+                };
+                let Some(factors) = factors.iter().map(natural).collect::<Option<Vec<_>>>() else {
+                    return false;
+                };
+                (coefficient.magnitude(), factors)
+            }
+            _ => Nat::monomial(divisor),
+        };
         let Some(floor) = coefficient.power_of_two_exponent() else {
             return false;
         };
@@ -899,9 +923,10 @@ impl PowerQuotient {
         true
     }
 
-    /// One dividend under one count.
-    fn same(&self, other: &PowerQuotient) -> bool {
-        same_atom(Carrier::Natural, &self.dividend, &other.dividend)
+    /// One dividend under one count, at one carrier.
+    pub fn same(&self, other: &PowerQuotient) -> bool {
+        self.carrier == other.carrier
+            && same_atom(self.carrier, &self.dividend, &other.dividend)
             && self.floor == other.floor
             && self.monomials.len() == other.monomials.len()
             && self.monomials.iter().all(|(coefficient, monomial)| {

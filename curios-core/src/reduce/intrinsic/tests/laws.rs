@@ -1000,6 +1000,8 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let nat_pow = |base: Term, exponent: Term| Term::intrinsic(Intrinsic::NatPow(base, exponent));
     let nat_shr = |value: Term, count: Term| Term::intrinsic(Intrinsic::NatShr(value, count));
     let nat_and = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatAnd(left, right));
+    let int_shr = |value: Term, count: Term| Term::intrinsic(Intrinsic::IntShr(value, count));
+    let int_and = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAnd(left, right));
     let nat_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMin(left, right));
     let nat_max = |left: Term, right: Term| Term::intrinsic(Intrinsic::NatMax(left, right));
     let int_min = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMin(left, right));
@@ -1919,6 +1921,36 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 integer(-2),
             ),
             ints(),
+        ),
+        // A right shift and a mask at `Int` are the quotient and the remainder by a power of two, below zero too: the split, and Euclid's recombination with the mask on either side.
+        (
+            "shr(4 * i + 3, 2) = i",
+            int_shr(int_add(int_mul(integer(4), i.clone()), integer(3)), lit(2)),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "and(4 * i + 3, 3) = +3",
+            int_and(
+                int_add(int_mul(integer(4), i.clone()), integer(3)),
+                integer(3),
+            ),
+            integer(3),
+            ints(),
+        ),
+        (
+            "16 * shr(i, 4) + and(15, i) = i",
+            int_add(
+                int_mul(integer(16), int_shr(i.clone(), lit(4))),
+                int_and(integer(15), i.clone()),
+            ),
+            i.clone(),
+            vec![
+                vec![(&int_i, integer(-33))],
+                vec![(&int_i, integer(-1))],
+                vec![(&int_i, integer(0))],
+                vec![(&int_i, integer(37))],
+            ],
         ),
         (
             "(i + 5) % -2 = (i + 1) % -2",

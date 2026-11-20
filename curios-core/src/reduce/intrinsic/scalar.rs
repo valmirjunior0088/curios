@@ -114,7 +114,7 @@ pub fn reduce_int_division(
     left: &Term,
     right: &Term,
     half: Half,
-    rebuild: impl FnOnce(Term, Term) -> Intrinsic,
+    rebuild: impl Fn(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     // The remainder lies in `[0, |d|)`, a natural, and the quotient is an integer.
     let fold: fn(&Integer, &Integer) -> Option<Intrinsic> = match half {
@@ -158,35 +158,58 @@ pub fn reduce_int_division(
     }
 
     // A literal divisor that divides the dividend's constant and every coefficient divides each in place and leaves no remainder, whatever the signs: `i / +1` is `i`, `i / -1` is `-i`, `(i * -6) / 2` is `i * -3`. The quotient has as many monomials as the dividend, charged before it is built.
-    if let Some(divisor) = right.as_int() {
-        let (_, summands) = int_terms(&left);
-        reducer.spend(Cost::collection(summands.len() as u64 + 1))?;
-        if let Some(quotient) = int_exact_quotient(&left, &divisor) {
-            return Ok(match half {
-                Half::Quotient => Term::unwrap_or_clone(quotient),
-                Half::Remainder => zero(),
-            });
-        }
-        if let Some((quotient, remainder)) = int_euclid_split(&left, &divisor) {
-            return Ok(Term::unwrap_or_clone(match half {
-                Half::Quotient => quotient,
-                Half::Remainder => remainder,
-            }));
-        }
-
-        // The floor law alone, for a dividend the split could not close: peel the whole divisors the constant certainly carries and leave the rest divided.
-        let (constant, summands) = int_terms(&left);
-        if let Some((whole, rest)) = signed_floor_law(&constant, &divisor) {
-            let rest = int_from_linear(rest, int_linear(summands));
-            let peeled = Term::intrinsic(rebuild(rest, right.clone()));
-            return Ok(Term::unwrap_or_clone(match half {
-                Half::Quotient => int_sum(&peeled, &Term::intrinsic(Intrinsic::Int(whole))),
-                Half::Remainder => peeled,
-            }));
-        }
+    if let Some(divisor) = right.as_int()
+        && let Some(divided) =
+            int_literal_division(reducer, &left, &divisor, half, false, |rest| {
+                rebuild(rest, right.clone())
+            })?
+    {
+        return Ok(Term::unwrap_or_clone(divided));
     }
 
     Ok(Subterm::Intrinsic(rebuild(left, right)))
+}
+
+/// A half of the division of a symbolic `dividend` by the nonzero literal `divisor`, at `Int`, by the laws a literal divisor admits there: an exact multiple, the Euclidean split ([`int_euclid_split`]), then the floor law alone (`curios-algebra`'s `signed_floor_law`), which peels the whole divisors the constant certainly carries and leaves the rest divided by `divided`, in the spelling the division was read in. The remainder is a natural, answered `widened` where the spelling's remainder is an integer, as a mask's is. `None` where no law applies.
+///
+/// Every spelling of an `Int` division by a literal takes its laws here — `/` and `Int/rem` beside their proof, and a right shift or a mask by a power of two (`then_power_division`) — as `Nat`'s take theirs in one place.
+pub fn int_literal_division(
+    reducer: &mut impl Reducer,
+    dividend: &Term,
+    divisor: &Integer,
+    half: Half,
+    widened: bool,
+    divided: impl FnOnce(Term) -> Intrinsic,
+) -> Result<Option<Term>, ReduceError> {
+    reducer.spend(Cost::collection(int_terms(dividend).1.len() as u64 + 1))?;
+    // A widened remainder goes back through the reducer, which writes the widening into `Int`'s normal form.
+    let mut remainder = |natural: Term| match widened {
+        true => reducer.reduce_forced(Term::intrinsic(Intrinsic::NatToInt(natural))),
+        false => Ok(natural),
+    };
+    let (constant, summands) = int_terms(dividend);
+    if let Some(quotient) = int_exact_quotient(dividend, divisor) {
+        return Ok(Some(match half {
+            Half::Quotient => quotient,
+            Half::Remainder => remainder(Term::intrinsic(Intrinsic::Nat(Nat::Zero)))?,
+        }));
+    }
+    if let Some((quotient, natural)) = int_euclid_split(dividend, divisor) {
+        return Ok(Some(match half {
+            Half::Quotient => quotient,
+            Half::Remainder => remainder(natural)?,
+        }));
+    }
+
+    // The floor law alone, for a dividend the split could not close: peel the whole divisors the constant certainly carries and leave the rest divided.
+    let Some((whole, rest)) = signed_floor_law(&constant, divisor) else {
+        return Ok(None);
+    };
+    let peeled = Term::intrinsic(divided(int_from_linear(rest, int_linear(summands))));
+    Ok(Some(match half {
+        Half::Quotient => int_sum(&peeled, &Term::intrinsic(Intrinsic::Int(whole))),
+        Half::Remainder => peeled,
+    }))
 }
 
 /// A reduced dividend split against a nonzero literal divisor by Euclid's division into `(quotient, remainder)`, an integer and a natural, or `None` where the division is not forced: every monomial either a multiple of the divisor, which contributes its cofactor to the quotient, or a widened natural under a positive coefficient, whose bound ([`nat_bound`]) it adds to what the remainder may reach (`curios-algebra`'s `signed_euclid_split`). That is what makes `(2 · i + 1) / 2` reduce to `i` and its remainder to `1`.

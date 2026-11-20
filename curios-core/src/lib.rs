@@ -67,6 +67,7 @@ mod linear;
 pub use linear::{Aligned, LinearView, LinearViews};
 
 mod nat;
+use nat::*;
 pub use nat::{ArchivedNat, Nat};
 
 mod int;

@@ -673,6 +673,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/shl(+1, n), Nat/to_int(Nat/shl(1, n)))",
             "Eq()(+0 < Int/shl(+1, n), true)",
             "Eq()(+0 <= Int/shl(Nat/to_int(m), n), true)",
+            // A right shift of a widened natural is the widened shift, a floor of a value at least zero being the natural's quotient.
+            "Eq()(Int/shr(Nat/to_int(m), 2), Nat/to_int(Nat/shr(m, 2)))",
+            "Eq()(Int/shr(Nat/to_int(m), n), Nat/to_int(Nat/shr(m, n)))",
         ],
         refused: &[
             // Controls, and none is a law: a widened natural against an integer that may be negative, truncated subtraction as though it were the group's, and a difference of widened naturals as though it were one.
@@ -901,6 +904,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq()((i + 2) / 2, 1 + i / 2)",
             "Eq()((2 * i + 1) / 2, i)",
             "Eq()((i + 5) / -2, (i + 1) / -2 - 2)",
+            // A right shift and a mask are the quotient and the remainder by a power of two at `Int` as at `Nat`, below zero too, read where a division is: the split and the floor law, and Euclid's recombination in each spelling of either half, the mask on either side, and through a nest.
+            "Eq()(Int/shr(4 * i + 3, 2), i)",
+            "Eq()(Int/shr(i + 9, 2), Int/shr(i + 1, 2) + 2)",
+            "Eq()(Int/and(4 * i + 3, 3), +3)",
+            "Eq()(16 * Int/shr(i, 4) + Int/and(i, 15), i)",
+            "Eq()(Int/and(15, i) + 16 * (i / 16), i)",
+            "Eq()(4 * Int/shr(i, 2) + i % 4, i)",
+            "Eq()(8 * Int/shr(i / 4, 1) + i % 8, i)",
         ],
         refused: &[
             // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero, where nothing dominates: a difference, a bitwise `and`, an arithmetic shift and a quotient each pass their operand (`k = -1`; `i = -2, k = +1`; `i = -3, n = 1`; `i = -3`).
@@ -908,6 +919,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/and(i, k) <= i, true)",
             "Eq()(Int/shr(i, n) <= i, true)",
             "Eq()(i / 2 <= i, true)",
+            // The controls beside the recombination, and neither is a law: a mask of another width (`i = 8`), and a shift of another value (`i = 1, j = 16`).
+            "Eq()(16 * Int/shr(i, 4) + Int/and(i, 7), i)",
+            "Eq()(16 * Int/shr(j, 4) + Int/and(i, 15), i)",
             // And the complement is not the negation: `not(i)` is `-1 - i`.
             "Eq()(Int/xor(i, -1), +0 - i)",
         ],
