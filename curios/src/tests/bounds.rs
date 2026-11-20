@@ -74,6 +74,28 @@ const ROWS: &[Row] = &[
         "c: Nat, p: Holds(0x2400 <= c && c < 0x2440)",
         "Holds(0x20 <= c && (c < 0x7F || 0x9F < c))",
     ),
+    // `Bool/not` of an order, read as the order true exactly where it fails: a hypothesis, the goal, a side of a disjunction, a guard in either arm, at `Int`, and negated twice.
+    claim("x: Nat, p: Holds(Bool/not(10 <= x))", "Holds(x < 11)"),
+    claim("x: Nat, p: Holds(x < 10)", "Holds(Bool/not(11 <= x))"),
+    claim(
+        "x: Nat, p: Holds(x < 10)",
+        "Holds(Bool/not(x < 12) || x < 11)",
+    ),
+    body(
+        "x: Nat",
+        "{}",
+        "match Bool/not(x < 5) | true => let _: Holds(4 < x) = proved(); () | false => let _: Holds(x < 6) = proved(); () end",
+    ),
+    body(
+        "x: Nat",
+        "{}",
+        "match Bool/not(x <= 5) | true => let _: Holds(5 <= x) = proved(); () | false => let _: Holds(x < 6) = proved(); () end",
+    ),
+    claim("i: Int, p: Holds(Bool/not(i < +0))", "Holds(+0 < i + +1)"),
+    claim(
+        "x: Nat, p: Holds(Bool/not(Bool/not(x < 10)))",
+        "Holds(x < 11)",
+    ),
     // A strict bound composed with a loose one, from hypotheses and from a guard.
     body(
         "xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))",
@@ -704,6 +726,8 @@ const CONTROLS: &[Row] = &[
     // A conjunction one of whose conjuncts does not follow, and a disjunction neither of whose sides does.
     claim("x: Nat, p: Holds(x < 10)", "Holds(x < 11 && x < 5)"),
     claim("x: Nat", "Holds(x < 3 || 7 < x)"),
+    // A negated order read as the order it negates rather than the one it is.
+    claim("x: Nat, p: Holds(Bool/not(x < 10))", "Holds(x < 11)"),
     // A fact too weak for the goal.
     claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i < n)"),
     // A contradiction only over the integers: `2 * x = 3` has a rational solution, and finding the integer refutation needs a cut.

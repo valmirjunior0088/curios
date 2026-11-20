@@ -21,19 +21,6 @@ pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
         end
     end;
 
---- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
----
---- The decided pair is total, so refuting one settles the other. Reduction answers the other comparison inside a guard's own `false` arm, but a refutation held as a hypothesis is a term neither reduction nor the facts in scope read, and this is the bridge from it to the conclusion.
-pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Bool/Holds(b <= a) =
-    match a
-    | 0 =>
-        match b
-        | 0 => Bool/True/qed()
-        | _ + 1 => match p end
-        end
-    | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => of_not_lt(ap, bp, p) end
-    end;
-
 --- An equation's bound: `a = b` gives `a <= b`.
 ---
 --- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.

@@ -1893,10 +1893,6 @@ let exactly_one(
 ) -> Bool/Holds(x == 1) =
     proved();
 
--- A count not below two is above one.
-let at_least_two(x: Nat, enough: Bool/Holds(Bool/not(x < 2))) -> Bool/Holds(1 < x) =
-    proved();
-
 --- A twig is counted once at most.
 pub let present_small(@K: Type, @V: Type, h: Node(K, V)) -> Bool/Holds(present(h) <= 1) =
     match h | empty() | leaf(_, _) | branch(_, _) => Bool/True/qed() end;
@@ -2080,8 +2076,7 @@ pub let remove(
                     @(j) => Eq/trans(collapsed(at, tw2, first_in(l), twigs2, one, j), answers2(j)),
                     @Bool/True/qed())
             | false =>
-                let many: Bool/Holds(1 < count(List/set(l, i, Node/empty()))) =
-                    at_least_two(count(List/set(l, i, Node/empty())), Bool/True/qed());
+                let many: Bool/Holds(1 < count(List/set(l, i, Node/empty()))) = Bool/True/qed();
                 Removed/kept(
                     Node/branch(at, tw2),
                     @branch_emptied(at, tw, sound, i, @s, many),

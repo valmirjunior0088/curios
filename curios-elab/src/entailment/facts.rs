@@ -15,7 +15,7 @@
 //!
 //! **A remainder by a literal is lifted away.** Conversion reads `k * (x / k) + x % k` as `x` wherever one side of a comparison holds both, so a sum of facts that holds a remainder beside its quotient's multiple is not the sum of their views. Every fact over `x % k` is therefore raised by the multiple on both sides, which conversion reads as a fact over `x` ([`Lift`]), and the remainder stays out of every form the search reads.
 //!
-//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]), and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted and its atoms classed by the elaborator's conversion among those of every operand read before it ([`Reader::reading`]), so a call is one atom however each statement spells it. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
+//! **A statement is written as it is stated and read as it reduces.** A hypothesis, a field, a guard and the goal are opened by their heads alone, as a guard's resolved spelling is, to the comparison, range check or conjunction they state ([`opened`]) — `Bool/not` of a comparison being the comparison true exactly where it fails, `Bool/not(a < b)` being `b <= a` ([`sides`]) — and their sides are the operands as stated; only the view reads their reducts, each with the metavariables elaboration has solved substituted and its atoms classed by the elaborator's conversion among those of every operand read before it ([`Reader::reading`]), so a call is one atom however each statement spells it. A reduct is no spelling to write: a call reduced to the body it unfolds to carries that body's own arms, which elaborate only where they were written, and a local definition reduced to its value names locals the arm's key does not. What the facts invent over atoms is written through the spellings the atoms were read from ([`Facts::respell`]). Where opening reaches none of the three, the statement is read reduced.
 //!
 //! **A fact is `left <= right` at its carrier**, as the proof's lemmas take it: a strict fact is the loose one of its successor, which conversion reads as one proposition at `Nat` as at `Int`, and an equation is two facts. Its form is `left - right` aligned to `<=`, read by the one reader every fact and the goal share, so their atoms are one table's.
 //!
@@ -323,7 +323,7 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// The goal `decision` states, or `None` where it is no `Nat` or `Int` comparison: an order, an equality, or a disequality, `Bool/not` of an equality among them. An equality or a disequality conversion holds to be an order — `n != 0` is `0 < n` at `Nat` — is that order's goal ([`Reader::ordered`]). Read first, so its atoms are handed out before any fact's.
+    /// The goal `decision` states, or `None` where it is no `Nat` or `Int` comparison: an order, an equality, or a disequality, or `Bool/not` of one, read as the comparison true exactly where it fails ([`sides`]). An equality or a disequality conversion holds to be an order — `n != 0` is `0 < n` at `Nat` — is that order's goal ([`Reader::ordered`]). Read first, so its atoms are handed out before any fact's.
     ///
     /// `stated` is the decision as the bound spells it, where opening the bound reaches one: its comparison's operands are the goal's sides and it is what the refuting form splits on, so the refinement the split installs is keyed as the bound reads it. `decision` is its reduct, read where the stated spelling opens to no comparison.
     pub fn target(
@@ -346,12 +346,7 @@ impl<'a> Reader<'a> {
                 _ => return Ok(None),
             },
         };
-        // `Bool/not` of an equality is the disequality.
-        let read = match negated_equality(&comparison) {
-            Some((carrier, left, right)) => Some((carrier, Operation::Unequal, left, right)),
-            None => sides(&comparison),
-        };
-        let Some((carrier, relation, left, right)) = read else {
+        let Some((carrier, relation, left, right)) = sides(&comparison) else {
             return Ok(None);
         };
         // An equality or a disequality conversion holds to be an order is asked as that order, which the facts' sum meets as it stands.
@@ -491,18 +486,6 @@ impl<'a> Reader<'a> {
         proof: Term,
         origin: Origin,
     ) -> Result<(), Error> {
-        if let Some((carrier, left, right)) = negated_equality(comparison) {
-            self.read.kept.push(Kept {
-                carrier,
-                left,
-                right,
-                apart: true,
-                proof,
-                stated: stated.clone(),
-                origin,
-            });
-            return Ok(());
-        }
         match sides(comparison) {
             Some((_, Operation::Less | Operation::AtMost, ..)) => {
                 self.admit(context, comparison.clone(), proof, origin)
@@ -675,11 +658,7 @@ impl<'a> Reader<'a> {
         let comparison = match opened(context, side)? {
             Some(Opened::Comparison(comparison)) => comparison,
             _ => match &*reduce_with(context, side)? {
-                Subterm::Intrinsic(comparison)
-                    if sides(comparison).is_some() || negated_equality(comparison).is_some() =>
-                {
-                    comparison.clone()
-                }
+                Subterm::Intrinsic(comparison) if sides(comparison).is_some() => comparison.clone(),
                 _ => return Ok(false),
             },
         };
@@ -696,12 +675,7 @@ impl<'a> Reader<'a> {
         written: &Term,
         origin: Origin,
     ) -> Result<(), Error> {
-        // `Bool/not` of an equality is the equality by its other case.
-        let read = match negated_equality(comparison) {
-            Some((carrier, left, right)) => Some((carrier, Operation::Unequal, left, right)),
-            None => sides(comparison),
-        };
-        let Some((carrier, relation, left, right)) = read else {
+        let Some((carrier, relation, left, right)) = sides(comparison) else {
             self.read.unread.push((origin, written.clone()));
             return Ok(());
         };
@@ -712,15 +686,13 @@ impl<'a> Reader<'a> {
                 self.admit(context, comparison.clone(), qed, origin)
             }
             // A comparison that came back `false` is the other one.
-            (Operation::Less, false) if in_scope(context, &[order.of_not_lt]) => {
+            (Operation::Less, false) => {
                 let dual = comparison_of(carrier, Operation::AtMost, &right, &left);
-                let proof = Term::apply(global(order.of_not_lt), [left, right, qed]);
-                self.admit(context, dual, proof, origin)
+                self.admit(context, dual, qed, origin)
             }
-            (Operation::AtMost, false) if in_scope(context, &[order.of_not_le]) => {
+            (Operation::AtMost, false) => {
                 let dual = comparison_of(carrier, Operation::Less, &right, &left);
-                let proof = Term::apply(global(order.of_not_le), [left, right, qed]);
-                self.admit(context, dual, proof, origin)
+                self.admit(context, dual, qed, origin)
             }
             (Operation::Equal, true) if in_scope(context, &[order.eq_of_eql]) => {
                 let equation =
@@ -765,7 +737,7 @@ impl<'a> Reader<'a> {
     /// A disequality `a != b`, by what the scope says of the order of its two sides.
     ///
     /// - **Conversion holds it to be a strict bound**: a sum of naturals against zero is its order comparison (`LinearForm::aligned`), so `n != 0` and `0 < n` are one proposition and the disequality's own proof proves the bound.
-    /// - **Reduction decides the order**: where `a <= b` reduces to `true` the bound is `a < b`, by `lt/of_le_ne`, and where it reduces to `false` it is `b < a`, by `lt/of_not_le` — and the same of `b <= a`.
+    /// - **Reduction decides the order**: where `a <= b` reduces to `true` the bound is `a < b`, by `lt/of_le_ne`, and where it reduces to `false` it is `b < a`, by `qed`, since conversion holds a comparison's negation one with its dual — and the same of `b <= a`.
     /// - **Neither**: the split on `a <= b`, whose case that holds adds `a < b` and whose case that fails adds `b < a`, opened only where the search needs it, as `omega` splits a disjunction ([`Reader::open`]).
     fn distinct(&mut self, context: &mut Context, kept: Kept) -> Result<(), Error> {
         let (carrier, a, b) = (kept.carrier, &kept.left, &kept.right);
@@ -778,7 +750,7 @@ impl<'a> Reader<'a> {
         }
 
         let order = order(context, carrier);
-        if !in_scope(context, &[order.of_le_ne, order.of_not_le]) {
+        if !in_scope(context, &[order.of_le_ne]) {
             self.read.unread.push((kept.origin, kept.stated));
             return Ok(());
         }
@@ -792,11 +764,6 @@ impl<'a> Reader<'a> {
             let arguments = [low.clone(), high.clone(), qed.clone(), kept.proof.clone()];
             Term::apply(global(order.of_le_ne), arguments)
         };
-        // `low <= high` failing: `high < low`.
-        let failed = |low: &Term, high: &Term| {
-            let arguments = [low.clone(), high.clone(), qed.clone()];
-            Term::apply(global(order.of_not_le), arguments)
-        };
         for (low, high) in [(a, b), (b, a)] {
             match &*reduce_with(context, &loose(low, high))? {
                 Subterm::Intrinsic(Intrinsic::Bool(true)) => {
@@ -804,8 +771,8 @@ impl<'a> Reader<'a> {
                     return self.admit(context, strict(low, high), proof, kept.origin);
                 }
                 Subterm::Intrinsic(Intrinsic::Bool(false)) => {
-                    let proof = failed(low, high);
-                    return self.admit(context, strict(high, low), proof, kept.origin);
+                    // `low <= high` failing: `high < low`.
+                    return self.admit(context, strict(high, low), qed.clone(), kept.origin);
                 }
                 _ => {}
             }
@@ -815,7 +782,7 @@ impl<'a> Reader<'a> {
             reader.admit(context, strict(a, b), bounded(a, b), origin.clone())
         })?;
         let mut fails = self.apart(context, |reader, context| {
-            reader.admit(context, strict(b, a), failed(a, b), origin.clone())
+            reader.admit(context, strict(b, a), qed.clone(), origin.clone())
         })?;
         // Neither case's bound is what the scope states: a report names the disequality, once for the two.
         let stated = Term::intrinsic(comparison_of(carrier, apart, a, b));
@@ -925,7 +892,6 @@ impl<'a> Reader<'a> {
                 order.max_of_le,
                 order.max_of_ge,
                 order.of_lt,
-                order.of_not_le,
                 order.of_eq,
                 context.syntax().entailment.sym,
             ];
@@ -997,8 +963,7 @@ impl<'a> Reader<'a> {
                 self.equation(context, extremum.carrier, &node, kept, equation, origin)
             }
             false => {
-                let failed = [a.clone(), b.clone(), qed(context)];
-                let below = Term::apply(global(order.of_not_le), failed);
+                let below = qed(context);
                 let guard = comparison_of(extremum.carrier, Operation::Less, b, a);
                 self.admit(context, guard, below.clone(), Origin::Definition)?;
                 let loosened = Term::apply(global(order.of_lt), [b.clone(), a.clone(), below]);
@@ -1031,8 +996,6 @@ impl<'a> Reader<'a> {
             integer.abs_at_least_negated,
             integer.sign_at_least,
             integer.sign_at_most,
-            order.of_not_le,
-            order.of_not_lt,
             order.of_eq,
             context.syntax().entailment.sym,
         ];
@@ -1158,8 +1121,7 @@ impl<'a> Reader<'a> {
                 self.equation(context, Carrier::Integer, &widened, a, equation, origin)
             }
             false => {
-                let of_not_le = order(context, Carrier::Integer).of_not_le;
-                let below = Term::apply(global(of_not_le), [zero.clone(), a.clone(), qed(context)]);
+                let below = qed(context);
                 let guard = Intrinsic::IntLt(a.clone(), zero.clone());
                 self.admit(context, guard, below.clone(), Origin::Definition)?;
                 let equation = Term::apply(global(integer.abs_of_neg), [a.clone(), below]);
@@ -1206,9 +1168,7 @@ impl<'a> Reader<'a> {
                 self.equation(context, Carrier::Integer, &node, &value, equation, origin)
             }
             false => {
-                let of_not_lt = order(context, Carrier::Integer).of_not_lt;
-                let failed = [lower.clone(), upper.clone(), qed(context)];
-                let loose = Term::apply(global(of_not_lt), failed);
+                let loose = qed(context);
                 let guard = Intrinsic::IntLe(upper.clone(), lower.clone());
                 self.admit(context, guard, loose.clone(), Origin::Definition)?;
                 let bound = Term::apply(global(left), [a.clone(), loose]);
@@ -1351,7 +1311,6 @@ impl<'a> Reader<'a> {
             natural.difference,
             natural.residual,
             order.of_lt,
-            order.of_not_le,
             order.of_eq,
             context.syntax().entailment.sym,
         ];
@@ -1412,10 +1371,9 @@ impl<'a> Reader<'a> {
         self.equation(context, Carrier::Natural, &summed, a, cancelled, origin)
     }
 
-    /// The case that truncates: `a < b`, by `lt/of_not_le` where the scope decides `b <= a` fails, and `a - b <= 0`, stated of the atom and proved by `a <= b` through `lt/of_lt`, which conversion holds to be that very proposition, a bare difference moved across its comparison (`curios_core::LinearViews`'s `moved`).
+    /// The case that truncates: `a < b`, by `qed` where the scope decides `b <= a` fails, and `a - b <= 0`, stated of the atom and proved by `a <= b` through `lt/of_lt`, which conversion holds to be that very proposition, a bare difference moved across its comparison (`curios_core::LinearViews`'s `moved`).
     fn truncated(&mut self, context: &mut Context, a: &Term, b: &Term) -> Result<(), Error> {
-        let of_not_le = order(context, Carrier::Natural).of_not_le;
-        let below = Term::apply(global(of_not_le), [b.clone(), a.clone(), qed(context)]);
+        let below = qed(context);
         let guard = Intrinsic::NatLt(a.clone(), b.clone());
         self.admit(context, guard, below.clone(), Origin::Definition)?;
         let of_lt = order(context, Carrier::Natural).of_lt;
@@ -1873,7 +1831,7 @@ pub fn disequalities(
 
 /// The goal negated, as the facts a refutation sums: each proved where a split on the goal's own decision came back `false`, which is where `qed` shows what the negation states.
 ///
-/// - `left < right` and `left <= right`: the other order, by `le/of_not_lt` or `lt/of_not_le`.
+/// - `left < right` and `left <= right`: the other order, by `qed`, since conversion holds a comparison's negation one with its dual.
 /// - `left != right`, where conversion holds it to be no order: the equation, as its two bounds, by `eq_of_eql` — what `omega` introduces for a `≠` goal.
 /// - `left == right`, where conversion holds it to be no order: the disequality, read as every disequality is ([`Reader::distinct`]): the strict bound reduction orders it to, or no fact at all and the split on `left <= right`, put before every other in `facts`.
 ///
@@ -1894,15 +1852,13 @@ pub fn negated(
     reader.read.splits = std::mem::take(&mut facts.splits);
     let open = reader.read.splits.len();
     match target.relation {
-        Operation::Less if in_scope(context, &[order.of_not_lt]) => {
-            let proof = Term::apply(global(order.of_not_lt), [left.clone(), right.clone(), qed]);
+        Operation::Less => {
             let dual = comparison_of(carrier, Operation::AtMost, right, left);
-            reader.admit(context, dual, proof, Origin::Negated)?;
+            reader.admit(context, dual, qed, Origin::Negated)?;
         }
-        Operation::AtMost if in_scope(context, &[order.of_not_le]) => {
-            let proof = Term::apply(global(order.of_not_le), [left.clone(), right.clone(), qed]);
+        Operation::AtMost => {
             let dual = comparison_of(carrier, Operation::Less, right, left);
-            reader.admit(context, dual, proof, Origin::Negated)?;
+            reader.admit(context, dual, qed, Origin::Negated)?;
         }
         Operation::Unequal if in_scope(context, &[order.eq_of_eql]) => {
             let equation = Term::apply(global(order.eq_of_eql), [left.clone(), right.clone(), qed]);
@@ -2372,8 +2328,21 @@ fn bound(context: &mut Context, statement: Term, body: Term) -> Term {
     Term::let_(&binder, statement, body, Term::free_var(&binder))
 }
 
-/// A comparison's carrier, relation and operands, for the eight the fragment reads.
+/// A comparison's carrier, relation and operands, for the eight the fragment reads, and for `Bool/not` of one as it unfolds, `Bool/xor(c, true)`, read as the comparison true exactly when `c` is false ([`Operation::negation`]): `Bool/not(a < b)` is `b <= a` and `Bool/not(a == b)` is `a != b`. Conversion holds the two one proposition, so a proof of either is a proof of the other, and a negation is read wherever its comparison is — a fact, a guard, the goal and a side of a disjunction.
+///
+/// Read off the term as it stands and reduced no further: under a guard's own arm the comparison inside reduces to the case the arm decides.
 fn sides(comparison: &Intrinsic) -> Option<(Carrier, Operation, Term, Term)> {
+    let mut negated = false;
+    let mut comparison = comparison;
+    while let Intrinsic::BoolXor(inner, flag) = comparison {
+        let (Subterm::Intrinsic(inner), Subterm::Intrinsic(Intrinsic::Bool(true))) =
+            (&**inner, &**flag)
+        else {
+            return None;
+        };
+        comparison = inner;
+        negated = !negated;
+    }
     let (carrier, relation, left, right) = match comparison {
         Intrinsic::NatLt(left, right) => (Carrier::Natural, Operation::Less, left, right),
         Intrinsic::NatLe(left, right) => (Carrier::Natural, Operation::AtMost, left, right),
@@ -2385,24 +2354,13 @@ fn sides(comparison: &Intrinsic) -> Option<(Carrier, Operation, Term, Term)> {
         Intrinsic::IntNeq(left, right) => (Carrier::Integer, Operation::Unequal, left, right),
         _ => return None,
     };
-    Some((carrier, relation, left.clone(), right.clone()))
-}
-
-/// The carrier and the two sides of the equality `comparison` negates, where it is `Bool/not` of one as it unfolds, `Bool/xor(a == b, true)`: a disequality written through `==`, which conversion holds one with `a != b`.
-///
-/// Read off the reduct as it stands and reduced no further: under the guard's own arm the equality inside reduces to the case the arm decides.
-fn negated_equality(comparison: &Intrinsic) -> Option<(Carrier, Term, Term)> {
-    let Intrinsic::BoolXor(negated, flag) = comparison else {
-        return None;
-    };
-    let (Subterm::Intrinsic(equality), Subterm::Intrinsic(Intrinsic::Bool(true))) =
-        (&**negated, &**flag)
-    else {
-        return None;
-    };
-    match sides(equality) {
-        Some((carrier, Operation::Equal, left, right)) => Some((carrier, left, right)),
-        _ => None,
+    let (left, right) = (left.clone(), right.clone());
+    if !negated {
+        return Some((carrier, relation, left, right));
+    }
+    match relation.negation(carrier)? {
+        (relation, true) => Some((carrier, relation, right, left)),
+        (relation, false) => Some((carrier, relation, left, right)),
     }
 }
 

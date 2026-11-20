@@ -514,10 +514,6 @@ pub struct OrderSyntax {
     pub of_eq: SyntaxName,
     /// A decided equality as an equation: an `==` guard's true arm.
     pub eq_of_eql: SyntaxName,
-    /// `a < b` failing gives `b <= a`: a `<` guard's false arm, and the negated goal of a strict one.
-    pub of_not_lt: SyntaxName,
-    /// `a <= b` failing gives `b < a`: a `<=` guard's false arm, and the negated goal of a loose one.
-    pub of_not_le: SyntaxName,
     /// `a < b` gives `a <= b`: a failed `<=` guard's bound loosened to what a lemma over `<=` takes.
     pub of_lt: SyntaxName,
     /// `a <= b` and `a == b` failing give `a < b`: the case of a disequality its loose bound holds in.
@@ -540,8 +536,6 @@ impl OrderSyntax {
             mul,
             of_eq,
             eq_of_eql,
-            of_not_lt,
-            of_not_le,
             of_lt,
             of_le_ne,
             min_of_le,
@@ -551,8 +545,8 @@ impl OrderSyntax {
         } = self;
 
         [
-            add, scale, mul, of_eq, eq_of_eql, of_not_lt, of_not_le, of_lt, of_le_ne, min_of_le,
-            min_of_ge, max_of_le, max_of_ge,
+            add, scale, mul, of_eq, eq_of_eql, of_lt, of_le_ne, min_of_le, min_of_ge, max_of_le,
+            max_of_ge,
         ]
         .into_iter()
     }
