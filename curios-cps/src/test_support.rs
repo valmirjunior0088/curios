@@ -853,8 +853,8 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
     (module, join, some_jump, none_jump, x)
 }
 
-/// Nest two helpers in `owner`, both capturing its first parameter, and pad the inner helper until the owner's complete copied extent reaches `nodes`.
-pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> FunctionId {
+/// Nest two helpers in `owner`, both capturing its first parameter, and pad the inner helper with nodes of weight one until the owner's complete copied extent weighs `weight`.
+pub fn nest_helpers(module: &mut Module, owner: FunctionId, weight: usize) -> FunctionId {
     let captured = module.function(owner).unwrap().params[0];
     let inner = module.reserve_function();
     let inner_return = module.reserve_continuation();
@@ -901,18 +901,13 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
         body: module.function(owner).unwrap().body,
     });
     module.function_mut(owner).unwrap().body = body;
-    let size = crate::CopyPlan::functions(module, std::collections::BTreeSet::from([owner]))
-        .nodes()
-        .len();
-    for _ in size..nodes {
+    let size =
+        crate::CopyPlan::functions(module, std::collections::BTreeSet::from([owner])).weight();
+    for _ in size..weight {
         let result = module.add_value(None);
-        let body = module.add_node(Node::LetIntrinsic {
+        let body = module.add_node(Node::LetValue {
             result,
-            op: Intrinsic::NatAdd,
-            args: vec![
-                Atom::Literal(Literal::Nat(Natural::from(0u32))),
-                Atom::Literal(Literal::Nat(Natural::from(0u32))),
-            ],
+            value: ValueExpr::Literal(Literal::Nat(Natural::from(0u32))),
             next: module.function(inner).unwrap().body,
         });
         module.function_mut(inner).unwrap().body = body;

@@ -1,5 +1,5 @@
 use {
-    super::{SCC_CLONE_NODE_LIMIT, copy_bodies, introducing_letfun},
+    super::{SCC_CLONE_WEIGHT_LIMIT, copy_bodies, introducing_letfun},
     crate::{
         CallAnalysis, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
         function_nodes,
@@ -80,8 +80,8 @@ pub fn contify_calls(module: &mut Module) -> bool {
     changed
 }
 
-/// The one node contification adds beside the copied body: its initial transfer. The call node itself is reused.
-const CONTIFICATION_NODE_OVERHEAD: usize = 1;
+/// The weight contification adds beside the copied body: its initial transfer, one node. The call node itself is reused.
+const CONTIFICATION_OVERHEAD: usize = 1;
 
 /// One admitted loop-entry copy whose sole external caller can receive its body as a continuation.
 ///
@@ -125,7 +125,7 @@ impl LoopEntryPlan {
         if internal.is_empty() || external.len() < 2 || !tail || reentered {
             return None;
         }
-        let body_limit = SCC_CLONE_NODE_LIMIT.checked_sub(CONTIFICATION_NODE_OVERHEAD)?;
+        let body_limit = SCC_CLONE_WEIGHT_LIMIT.checked_sub(CONTIFICATION_OVERHEAD)?;
         let copy = CopyPlan::functions_with_limit(module, BTreeSet::from([callee]), body_limit)?;
         if external.iter().any(|site| copy.nodes().contains(site)) {
             return None;

@@ -28,15 +28,12 @@ fn siblings(tags: &[u32], split: usize) -> (Module, Vec<NodeId>, [FunctionId; 2]
 #[test]
 fn independent_callees_advance_together_under_one_shared_lexical_anchor() {
     let (mut module, calls, roots) = siblings(&[0, 1, 0, 1], 2);
-    let cost: usize = roots
+    let plans = roots
         .iter()
-        .map(|root| {
-            CopyPlan::functions(&module, BTreeSet::from([*root]))
-                .nodes()
-                .len()
-                + 1
-        })
-        .sum();
+        .map(|root| CopyPlan::functions(&module, BTreeSet::from([*root])))
+        .collect::<Vec<_>>();
+    let cost: usize = plans.iter().map(|plan| plan.weight() + 1).sum();
+    let copied: usize = plans.iter().map(|plan| plan.nodes().len() + 1).sum();
     let before = module.nodes().len();
     let mut budget = CopyBudget::new(cost);
     assert!(specialize_call_patterns(&mut module, &mut budget));
@@ -48,7 +45,7 @@ fn independent_callees_advance_together_under_one_shared_lexical_anchor() {
         );
     }
     assert_eq!(budget, CopyBudget::new(0));
-    assert_eq!(module.nodes().len() - before, cost);
+    assert_eq!(module.nodes().len() - before, copied);
     module.verify().unwrap();
 }
 
@@ -71,7 +68,7 @@ fn a_copied_call_into_another_generic_callee_defers_its_snapshot() {
         },
     );
     module.verify().unwrap();
-    let mut budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
+    let mut budget = CopyBudget::new(BRANCH_COPY_WEIGHT_LIMIT);
     assert!(specialize_call_patterns(&mut module, &mut budget));
     assert_ne!(known_callee(&module, calls[0]), roots[0]);
     assert_eq!(
@@ -88,10 +85,7 @@ fn a_copied_call_into_another_generic_callee_defers_its_snapshot() {
 #[test]
 fn an_insufficient_allowance_preserves_arenas_and_an_exact_allowance_succeeds() {
     let (mut module, calls, callee) = tagged_consumer(0, &[0]);
-    let cost = CopyPlan::functions(&module, BTreeSet::from([callee]))
-        .nodes()
-        .len()
-        + 1;
+    let cost = CopyPlan::functions(&module, BTreeSet::from([callee])).weight() + 1;
     let original = module.to_string();
     let sizes = (
         module.nodes().len(),
@@ -126,10 +120,7 @@ fn orphaned_call_sites_neither_win_priority_nor_retarget() {
     let orphans = (0..8)
         .map(|_| module.add_node(stale.clone()))
         .collect::<Vec<_>>();
-    let cost = CopyPlan::functions(&module, BTreeSet::from([root]))
-        .nodes()
-        .len()
-        + 1;
+    let cost = CopyPlan::functions(&module, BTreeSet::from([root])).weight() + 1;
     let mut budget = CopyBudget::new(cost);
     assert!(specialize_call_patterns(&mut module, &mut budget));
     assert_eq!(budget, CopyBudget::new(0));

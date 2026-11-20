@@ -283,11 +283,54 @@ fn a_bounded_plan_includes_nested_captures_and_rejects_the_first_excess_node() {
     let (module, outer, inner) = nesting_module();
     let original = module.to_string();
     let full = CopyPlan::functions(&module, BTreeSet::from([outer]));
-    let bound = full.nodes.len();
+    let bound = full.weight();
     assert!(full.nested.contains(&inner));
     let exact = CopyPlan::functions_with_limit(&module, BTreeSet::from([outer]), bound).unwrap();
     assert_eq!(exact.nodes, full.nodes);
     assert_eq!(exact.nested, full.nested);
     assert!(CopyPlan::functions_with_limit(&module, BTreeSet::from([outer]), bound - 1).is_none());
     assert_eq!(module.to_string(), original);
+}
+
+#[test]
+fn a_plan_weighs_an_intrinsic_by_what_its_lowering_emits() {
+    let mut module = Module::default();
+    let read = module.reserve_function();
+    let read_return = module.reserve_continuation();
+    let bytes = module.add_value(Some("bytes".into()));
+    let byte = module.add_value(Some("byte".into()));
+    let answer = module.add_node(Node::ApplyCont(Edge {
+        target: read_return,
+        args: vec![Atom::Value(byte)],
+    }));
+    let body = module.add_node(Node::LetIntrinsic {
+        result: byte,
+        op: Intrinsic::BytesGet,
+        args: vec![
+            Atom::Value(bytes),
+            Atom::Literal(Literal::Nat(curios_num::Natural::from(0u32))),
+        ],
+        next: answer,
+    });
+    module.define_function(
+        read,
+        Function {
+            lineage: None,
+            debug_name: Some("read".into()),
+            params: vec![bytes],
+            return_cont: read_return,
+            body,
+            droppable: Droppable::Never,
+            terminates: false,
+        },
+    );
+    let weight = Intrinsic::BytesGet.weight() + 1;
+    let plan = CopyPlan::functions(&module, BTreeSet::from([read]));
+    assert_eq!((plan.nodes.len(), plan.weight()), (2, weight));
+    assert!(
+        weight > plan.nodes.len(),
+        "a sequence read outweighs a node"
+    );
+    assert!(CopyPlan::functions_with_limit(&module, BTreeSet::from([read]), weight - 1).is_none());
+    assert!(CopyPlan::functions_with_limit(&module, BTreeSet::from([read]), weight).is_some());
 }

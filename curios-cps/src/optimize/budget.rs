@@ -1,40 +1,40 @@
-//! Non-refundable expansion fuel, charged for the complete copied extent and its scaffolding.
+//! Non-refundable expansion fuel, charged the weight of the complete copied extent and its scaffolding.
 
 use std::cmp::Ordering;
 
-/// A module-wide allowance of newly copied nodes. Pruning never refunds work already performed.
+/// A module-wide allowance of copied weight ([`CopyPlan::weight`](crate::CopyPlan::weight)). Pruning never refunds work already performed.
 #[derive(Debug, PartialEq, Eq)]
 pub struct CopyBudget(usize);
 
 impl CopyBudget {
-    pub fn new(nodes: usize) -> Self {
-        Self(nodes)
+    pub fn new(weight: usize) -> Self {
+        Self(weight)
     }
 
-    pub fn admits(&self, nodes: usize) -> bool {
-        nodes > 0 && nodes <= self.0
+    pub fn admits(&self, weight: usize) -> bool {
+        weight > 0 && weight <= self.0
     }
 
-    /// Spend an admitted copy's actual node count, after its rewrite succeeds.
-    pub fn charge(&mut self, nodes: usize) {
-        self.0 = self.0.checked_sub(nodes).expect("copy was admitted");
+    /// Spend an admitted copy's actual weight, after its rewrite succeeds.
+    pub fn charge(&mut self, weight: usize) {
+        self.0 = self.0.checked_sub(weight).expect("copy was admitted");
     }
 }
 
-/// Higher sharing per copied node wins; equal ratios retain the first site's identity order.
+/// More sites per copied weight wins; equal ratios retain the first site's identity order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CopyPriority {
     pub sites: usize,
-    pub nodes: usize,
+    pub weight: usize,
     pub first: usize,
 }
 
 impl Ord for CopyPriority {
     fn cmp(&self, other: &Self) -> Ordering {
-        ((other.sites as u128) * (self.nodes as u128))
-            .cmp(&((self.sites as u128) * (other.nodes as u128)))
+        ((other.sites as u128) * (self.weight as u128))
+            .cmp(&((self.sites as u128) * (other.weight as u128)))
             .then_with(|| self.first.cmp(&other.first))
-            .then_with(|| self.nodes.cmp(&other.nodes))
+            .then_with(|| self.weight.cmp(&other.weight))
             .then_with(|| self.sites.cmp(&other.sites))
     }
 }

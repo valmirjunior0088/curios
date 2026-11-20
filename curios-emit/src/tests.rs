@@ -10,3 +10,4 @@ mod int_intrinsic;
 mod module;
 mod nat_intrinsic;
 mod rope;
+mod weight;

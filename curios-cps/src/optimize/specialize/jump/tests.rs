@@ -120,17 +120,19 @@ fn target(module: &Module, node: NodeId) -> ContinuationId {
 #[test]
 fn independent_roots_advance_together_and_spend_the_actual_copy_cost() {
     let (mut module, roots, sites) = joins(false);
-    let cost: usize = roots
+    let plans = roots
         .iter()
-        .map(|root| CopyPlan::continuation(&module, *root).nodes().len() + 1)
-        .sum();
+        .map(|root| CopyPlan::continuation(&module, *root))
+        .collect::<Vec<_>>();
+    let cost: usize = plans.iter().map(|plan| plan.weight() + 1).sum();
+    let copied: usize = plans.iter().map(|plan| plan.nodes().len() + 1).sum();
     let before = module.nodes().len();
     let mut budget = CopyBudget::new(cost);
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     for (root, site) in roots.into_iter().zip(sites) {
         assert_ne!(target(&module, site), root);
     }
-    assert_eq!(module.nodes().len() - before, cost);
+    assert_eq!(module.nodes().len() - before, copied);
     assert_eq!(budget, CopyBudget::new(0));
     module.verify().unwrap();
 }
@@ -138,7 +140,7 @@ fn independent_roots_advance_together_and_spend_the_actual_copy_cost() {
 #[test]
 fn a_fresh_transfer_into_another_root_defers_that_roots_snapshot() {
     let (mut module, roots, sites) = joins(true);
-    let mut budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
+    let mut budget = CopyBudget::new(JUMP_COPY_WEIGHT_LIMIT);
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     assert_ne!(target(&module, sites[0]), roots[0]);
     assert_eq!(target(&module, sites[1]), roots[1]);
@@ -151,7 +153,7 @@ fn a_fresh_transfer_into_another_root_defers_that_roots_snapshot() {
 #[test]
 fn an_insufficient_allowance_mints_nothing_and_an_exact_allowance_succeeds() {
     let (mut module, join, _, _, _) = tagged_join();
-    let cost = CopyPlan::continuation(&module, join).nodes().len() + 1;
+    let cost = CopyPlan::continuation(&module, join).weight() + 1;
     let original = module.to_string();
     let arenas = (
         module.nodes().len(),
@@ -183,8 +185,8 @@ fn stable_ties_choose_the_same_sites_and_mint_the_same_graph() {
     let (module, _, _) = joins(false);
     let mut left = module.clone();
     let mut right = module;
-    specialize_jump_patterns(&mut left, &mut CopyBudget::new(JUMP_COPY_NODE_LIMIT));
-    specialize_jump_patterns(&mut right, &mut CopyBudget::new(JUMP_COPY_NODE_LIMIT));
+    specialize_jump_patterns(&mut left, &mut CopyBudget::new(JUMP_COPY_WEIGHT_LIMIT));
+    specialize_jump_patterns(&mut right, &mut CopyBudget::new(JUMP_COPY_WEIGHT_LIMIT));
     assert_eq!(left.to_string(), right.to_string());
 }
 
@@ -227,7 +229,7 @@ fn an_inner_specialization_defers_the_outer_source_it_changes() {
     });
     module.continuation_mut(roots[0]).unwrap().body = nested;
     module.verify().unwrap();
-    let mut budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
+    let mut budget = CopyBudget::new(JUMP_COPY_WEIGHT_LIMIT);
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     assert_eq!(target(&module, sites[0]), roots[0]);
     assert_ne!(target(&module, sites[1]), roots[1]);
@@ -268,7 +270,7 @@ fn more_matching_sites_win_a_budget_that_fits_only_one_copy() {
         },
     );
     module.verify().unwrap();
-    let cost = CopyPlan::continuation(&module, roots[1]).nodes().len() + 1;
+    let cost = CopyPlan::continuation(&module, roots[1]).weight() + 1;
     let mut budget = CopyBudget::new(cost);
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     assert_eq!(target(&module, sites[0]), roots[0]);

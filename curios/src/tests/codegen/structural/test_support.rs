@@ -330,7 +330,11 @@ pub const CALL_RESULT_SEED: &str = r#"
         let c = b * +0.5 + b * +0.25 + +1.0;
         let d = c * +0.5 + c * +0.25 + +1.0;
         let e = d * +0.5 + d * +0.25 + +1.0;
-        e * +0.5 + e * +0.25 + +1.0;
+        let f = e * +0.5 + e * +0.25 + +1.0;
+        let g = f * +0.5 + f * +0.25 + +1.0;
+        let h = g * +0.5 + g * +0.25 + +1.0;
+        let i = h * +0.5 + h * +0.25 + +1.0;
+        i * +0.5 + i * +0.25 + +1.0;
     let go(acc : Flt, k : Nat) -> Flt =
         match k
         | 0 => acc
@@ -355,7 +359,11 @@ pub const PAIR_STEP: &str = r#"
         let d = b * +0.5 + a * +0.25 + +1.0;
         let e = c * +0.5 + d * +0.25 + +1.0;
         let f = d * +0.5 + c * +0.25 + +1.0;
-        Vec2 { x = e * +0.001, y = f * +0.001 };
+        let g = e * +0.5 + f * +0.25 + +1.0;
+        let h = f * +0.5 + e * +0.25 + +1.0;
+        let i = g * +0.5 + h * +0.25 + +1.0;
+        let k = h * +0.5 + g * +0.25 + +1.0;
+        Vec2 { x = i * +0.001, y = k * +0.001 };
     let run(p : Vec2, v : Vec2, k : Nat) -> Vec2 =
         match k
         | 0 => p

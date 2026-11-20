@@ -1,7 +1,7 @@
 //! Snapshot-based join specialization: equivalent entries share a peeled copy, and dependent joins wait for fresh facts.
 
 use {
-    super::{ConstructorPattern, tagged_row_values},
+    super::{ConstructorPattern, PatternRoot, tagged_row_values},
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, ContinuationId, CopyBudget, CopyPlan,
         CopyPriority, Edge, Intrinsic, Literal, Module, Node, NodeId, ValueExpr,
@@ -17,6 +17,8 @@ struct Candidate {
     pattern: ConstructorPattern,
     intro: NodeId,
     extent: BTreeSet<NodeId>,
+    /// What a copy of `extent` weighs.
+    weight: usize,
     carriers: BTreeSet<NodeId>,
     priority: CopyPriority,
 }
@@ -29,7 +31,7 @@ fn edges(node: &Node) -> Vec<&Edge> {
     }
 }
 
-/// Apply independent patterns admitted by one snapshot, in sharing-per-copy order. The complete extent plus the head rebuild is charged against both the individual ceiling and the module's non-refundable allowance.
+/// Apply independent patterns admitted by one snapshot, in sharing-per-copy order. The weight of the complete extent plus the head rebuild is charged against both the individual ceiling and the module's non-refundable allowance.
 ///
 /// One pattern per generic join lets ordinary cleanup reconsider its remaining transfers. An earlier rewrite invalidates a candidate when it changes the copied source or introduces transfers into the join; compatible lexical-anchor appends remain admissible. Newly minted entries wait for the next snapshot. Seeded backedges retain the generic join.
 pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
@@ -116,11 +118,19 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        roots.insert(target, (intro, plan.into_nodes(), projected));
+        roots.insert(
+            target,
+            PatternRoot {
+                intro,
+                weight: plan.weight(),
+                extent: plan.into_nodes(),
+                projected,
+            },
+        );
     }
     let mut candidates = Vec::new();
     for ((target, pattern), carriers) in grouped {
-        let Some((intro, extent, projected)) = roots.get(&target) else {
+        let Some(root) = roots.get(&target) else {
             continue;
         };
         if !module
@@ -128,22 +138,23 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
             .unwrap()
             .params
             .get(pattern.index)
-            .is_some_and(|param| projected.contains(param))
+            .is_some_and(|param| root.projected.contains(param))
         {
             continue;
         }
-        let nodes = extent.len() + 1;
-        if nodes > BRANCH_SPECIALIZATION_GROWTH_LIMIT || !budget.admits(nodes) {
+        let weight = root.weight + 1;
+        if weight > BRANCH_SPECIALIZATION_GROWTH_LIMIT || !budget.admits(weight) {
             continue;
         }
         candidates.push(Candidate {
             target,
             pattern,
-            intro: *intro,
-            extent: extent.clone(),
+            intro: root.intro,
+            extent: root.extent.clone(),
+            weight: root.weight,
             priority: CopyPriority {
                 sites: carriers.len(),
-                nodes,
+                weight,
                 first: carriers.first().unwrap().index(),
             },
             carriers,
@@ -158,7 +169,7 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
         if selected.contains(&candidate.target)
             || changed_entries.contains(&candidate.target)
             || !candidate.extent.is_disjoint(&touched)
-            || !budget.admits(candidate.priority.nodes)
+            || !budget.admits(candidate.priority.weight)
             || !matches!(module.node(candidate.intro), Some(Node::LetCont { continuations, .. }) if continuations.contains(&candidate.target))
         {
             continue;
@@ -192,7 +203,7 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
             continue;
         }
         let Some(plan) =
-            CopyPlan::continuation_with_limit(module, candidate.target, candidate.extent.len())
+            CopyPlan::continuation_with_limit(module, candidate.target, candidate.weight)
         else {
             continue;
         };
@@ -264,7 +275,7 @@ pub fn specialize_jump_patterns(module: &mut Module, budget: &mut CopyBudget) ->
             );
         }
         selected.insert(candidate.target);
-        budget.charge(candidate.priority.nodes);
+        budget.charge(candidate.priority.weight);
         changed = true;
     }
     changed

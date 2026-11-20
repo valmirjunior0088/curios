@@ -234,19 +234,24 @@ fn walk_mirror_family_isolates_each_obligation() {
     }
 }
 
-/// `Nat/of_str`'s step is copied into each width of a UTF-8 scalar `Str/fold` calls it at, so no character pays a call to it: a step past the multi-site limit is a function of its own the fold calls per character, which is what `curios-cps`'s `MULTI_SITE_INLINE_LIMIT` is read against.
+/// A fold's step is copied into each width of a UTF-8 scalar `Str/fold` calls it at, so no character pays a call to it: `Nat/of_str`'s in `parse_digits`, and the step `parse_bindless` writes, whose range test of each byte weighs its comparisons at two apiece. A step past the multi-site limit is a function of its own the fold calls per character, which is what `curios-cps`'s `MULTI_SITE_INLINE_LIMIT` is read against.
 #[test]
 fn a_fold_step_is_copied_into_each_width_the_fold_calls_it_at() {
-    let wat = wat(PARSE_DIGITS);
-    let standing = functions(&wat)
-        .iter()
-        .map(|function| function.name)
-        .filter(|name| name.ends_with("/std/Nat/of_str/1"))
-        .collect::<Vec<_>>();
-    assert!(
-        standing.is_empty(),
-        "`Nat/of_str`'s step stands as a function the fold calls: {standing:?}"
-    );
+    for (label, program, step) in [
+        ("parse_digits", PARSE_DIGITS, "/std/Nat/of_str/1"),
+        ("parse_bindless", PARSE_BINDLESS, "/decode/1"),
+    ] {
+        let wat = wat(program);
+        let standing = functions(&wat)
+            .iter()
+            .map(|function| function.name)
+            .filter(|name| name.ends_with(step))
+            .collect::<Vec<_>>();
+        assert!(
+            standing.is_empty(),
+            "{label}'s fold step stands as a function the fold calls: {standing:?}"
+        );
+    }
 }
 
 /// The walk reads a character whole at its lead byte, so no scan state is carried from one turn to the next: the obligations the mirror family attributes to a per-byte walk — the returned scan state, the scan argument rebuilt — have nothing to stand on here.

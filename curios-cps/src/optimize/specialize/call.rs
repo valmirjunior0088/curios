@@ -1,7 +1,7 @@
 //! Call-pattern specialization uses one constructor/caller snapshot and gives equivalent sites a shared peeled worker.
 
 use {
-    super::{ConstructorPattern, function_introductions, tagged_row_values},
+    super::{ConstructorPattern, PatternRoot, function_introductions, tagged_row_values},
     crate::{
         Atom, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, CopyBudget, CopyPlan, CopyPriority,
         FunctionId, Intrinsic, Literal, Module, Node, NodeId, ValueExpr, ValueId, copy_bodies,
@@ -17,11 +17,13 @@ struct Candidate {
     pattern: ConstructorPattern,
     intro: NodeId,
     extent: BTreeSet<NodeId>,
+    /// What a copy of `extent` weighs.
+    weight: usize,
     sites: Vec<NodeId>,
     priority: CopyPriority,
 }
 
-/// Apply independent known-constructor contexts from one snapshot, selecting one context per generic callee so cleanup can reconsider its remaining callers. The complete extent and reconstruction node are charged only after application. New calls or changed source bodies defer dependent callees.
+/// Apply independent known-constructor contexts from one snapshot, selecting one context per generic callee so cleanup can reconsider its remaining callers. The weight of the complete extent and the reconstruction node is charged only after application. New calls or changed source bodies defer dependent callees.
 pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) -> bool {
     if !budget.admits(1) {
         return false;
@@ -100,19 +102,27 @@ pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) ->
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
-        roots.insert(callee, (intro, plan.into_nodes(), projected));
+        roots.insert(
+            callee,
+            PatternRoot {
+                intro,
+                weight: plan.weight(),
+                extent: plan.into_nodes(),
+                projected,
+            },
+        );
     }
     grouped.retain(|(callee, pattern), _| {
-        let Some((_, extent, projected)) = roots.get(callee) else {
+        let Some(root) = roots.get(callee) else {
             return false;
         };
-        budget.admits(extent.len() + 1)
+        budget.admits(root.weight + 1)
             && module
                 .function(*callee)
                 .unwrap()
                 .params
                 .get(pattern.index)
-                .is_some_and(|param| projected.contains(param))
+                .is_some_and(|param| root.projected.contains(param))
     });
     if grouped.is_empty() {
         return false;
@@ -135,15 +145,16 @@ pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) ->
         .into_iter()
         .map(|((callee, pattern), mut sites)| {
             sites.sort_unstable();
-            let (intro, extent, _) = &roots[&callee];
+            let root = &roots[&callee];
             Candidate {
                 callee,
                 pattern,
-                intro: *intro,
-                extent: extent.clone(),
+                intro: root.intro,
+                extent: root.extent.clone(),
+                weight: root.weight,
                 priority: CopyPriority {
                     sites: sites.len(),
-                    nodes: extent.len() + 1,
+                    weight: root.weight + 1,
                     first: sites[0].index(),
                 },
                 sites,
@@ -159,7 +170,7 @@ pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) ->
         if selected.contains(&candidate.callee)
             || changed_callers.contains(&candidate.callee)
             || !candidate.extent.is_disjoint(&touched)
-            || !budget.admits(candidate.priority.nodes)
+            || !budget.admits(candidate.priority.weight)
             || !matches!(module.node(candidate.intro), Some(Node::LetFun { functions, .. }) if functions.contains(&candidate.callee))
         {
             continue;
@@ -173,7 +184,7 @@ pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) ->
         let Some(plan) = CopyPlan::functions_with_limit(
             module,
             BTreeSet::from([candidate.callee]),
-            candidate.extent.len(),
+            candidate.weight,
         ) else {
             continue;
         };
@@ -209,7 +220,7 @@ pub fn specialize_call_patterns(module: &mut Module, budget: &mut CopyBudget) ->
             }
         }
         selected.insert(candidate.callee);
-        budget.charge(candidate.priority.nodes);
+        budget.charge(candidate.priority.weight);
         changed = true;
     }
     changed

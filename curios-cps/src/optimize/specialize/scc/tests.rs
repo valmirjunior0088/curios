@@ -53,11 +53,7 @@ fn independent_components_specialize_together_and_charge_their_complete_extents(
     module.verify().unwrap();
     let cost: usize = [fixture.loop_fn, copied_loop]
         .into_iter()
-        .map(|root| {
-            CopyPlan::functions(&module, BTreeSet::from([root]))
-                .nodes()
-                .len()
-        })
+        .map(|root| CopyPlan::functions(&module, BTreeSet::from([root])).weight())
         .sum();
     let before = module.functions().len();
     let mut budget = CopyBudget::new(cost);
@@ -164,10 +160,8 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
     continuations.extend(definitions);
     *body = dispatch;
     module.verify().unwrap();
-    let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-        .nodes()
-        .len();
-    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+    let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn])).weight();
+    let mut budget = CopyBudget::new(SCC_COPY_WEIGHT_LIMIT);
     assert!(specialize_scc_calls(&mut module, &mut budget));
     let copied = sites
         .iter()
@@ -177,7 +171,10 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
         copied, 69,
         "the final context stays generic for ordinary propagation"
     );
-    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT - copied * cost));
+    assert_eq!(
+        budget,
+        CopyBudget::new(SCC_COPY_WEIGHT_LIMIT - copied * cost)
+    );
     module.verify().unwrap();
 }
 
@@ -220,10 +217,8 @@ fn a_callback_bound_only_at_its_call_site_is_handed_to_a_copy_beside_it() {
         }
     }
     module.verify().unwrap();
-    let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-        .nodes()
-        .len();
-    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+    let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn])).weight();
+    let mut budget = CopyBudget::new(SCC_COPY_WEIGHT_LIMIT);
     assert!(specialize_scc_calls(&mut module, &mut budget));
     module.verify().unwrap();
     let mut copied = 0;
@@ -251,7 +246,10 @@ fn a_callback_bound_only_at_its_call_site_is_handed_to_a_copy_beside_it() {
         copied > 0,
         "a call handing a callback out of scope is given a copy"
     );
-    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT - copied * cost));
+    assert_eq!(
+        budget,
+        CopyBudget::new(SCC_COPY_WEIGHT_LIMIT - copied * cost)
+    );
 }
 
 #[test]
@@ -291,9 +289,7 @@ fn insufficient_allowance_mints_nothing_and_the_exact_extent_is_charged_once() {
     for sufficient in [false, true] {
         let fixture = polymorphic_loop(true, 0);
         let mut module = fixture.module;
-        let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn]))
-            .nodes()
-            .len();
+        let cost = CopyPlan::functions(&module, BTreeSet::from([fixture.loop_fn])).weight();
         let allowance = cost - usize::from(!sufficient);
         let mut budget = CopyBudget::new(allowance);
         let arenas = (
@@ -465,7 +461,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
 #[test]
 fn a_component_recursive_through_a_function_it_defines_is_copied_once_a_context() {
     let (mut module, call1, call2) = a_component_recursive_through_a_function_it_defines();
-    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+    let mut budget = CopyBudget::new(SCC_COPY_WEIGHT_LIMIT);
 
     assert!(specialize_scc_calls(&mut module, &mut budget));
     module.verify().unwrap();
@@ -615,10 +611,10 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
 fn a_literal_a_call_hands_is_no_context_for_a_copy() {
     let (mut module, walk, call1, call2) = a_loop_passing_on_the_literal_each_call_hands_it();
     let original = module.to_string();
-    let mut budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
+    let mut budget = CopyBudget::new(SCC_COPY_WEIGHT_LIMIT);
 
     assert!(!specialize_scc_calls(&mut module, &mut budget));
-    assert_eq!(budget, CopyBudget::new(SCC_COPY_NODE_LIMIT));
+    assert_eq!(budget, CopyBudget::new(SCC_COPY_WEIGHT_LIMIT));
     assert_eq!(known_callee(&module, call1), walk);
     assert_eq!(known_callee(&module, call2), walk);
     assert_eq!(module.to_string(), original);

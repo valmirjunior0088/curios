@@ -3,7 +3,7 @@
 use {
     super::{
         Atom, Callee, CopyBudget, CopyPlan, FunctionId, Intrinsic, Module, Node, NodeId,
-        REBUILD_CLONE_NODE_LIMIT, REBUILD_COPY_NODE_LIMIT, ValueExpr, World, copy_bodies,
+        REBUILD_CLONE_WEIGHT_LIMIT, REBUILD_COPY_WEIGHT_LIMIT, ValueExpr, World, copy_bodies,
         function_nodes, in_place, routes,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -12,7 +12,7 @@ use {
 /// Copy the reuse versions `routes` finds within their allowance, then rewrite every construction of a row `rebuilds` admits as a rebuild of the value it admits — after the optimizer and before the representation is decided, so no pass that copies, moves or merges a computation meets one. Which calls reach a copy only decides what the proof can find: the proof itself is made over the module as the copies leave it.
 pub fn rebuild_in_place(module: &mut Module) {
     curios_profile::profile!("rebuild_in_place");
-    copy_reuse_versions(module, CopyBudget::new(REBUILD_COPY_NODE_LIMIT));
+    copy_reuse_versions(module, CopyBudget::new(REBUILD_COPY_WEIGHT_LIMIT));
     // A rebuild writes its value as a row some flow reaching the value builds, which is what the verifier holds it to; one that no flow builds the row for stands in an arm no run takes, behind a row test that flow rules out.
     let flow = module.value_flow();
     let written = in_place(module);
@@ -67,12 +67,12 @@ fn copy_reuse_versions(module: &mut Module, mut budget: CopyBudget) {
         let Some(plan) = CopyPlan::functions_with_limit(
             module,
             BTreeSet::from([function]),
-            REBUILD_CLONE_NODE_LIMIT,
+            REBUILD_CLONE_WEIGHT_LIMIT,
         ) else {
             continue;
         };
-        let size = plan.nodes().len();
-        if !budget.admits(size) {
+        let weight = plan.weight();
+        if !budget.admits(weight) {
             continue;
         }
         let own = function_nodes(module, function)
@@ -91,7 +91,7 @@ fn copy_reuse_versions(module: &mut Module, mut budget: CopyBudget) {
         {
             functions.push(copy);
         }
-        budget.charge(size);
+        budget.charge(weight);
         versions.insert(
             function,
             Version {

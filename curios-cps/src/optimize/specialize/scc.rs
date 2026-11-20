@@ -7,7 +7,7 @@ use {
     },
     crate::{
         Atom, Callee, CopyBudget, CopyPlan, CopyPriority, FunctionId, Literal, Module, Node,
-        NodeId, SCC_CLONE_NODE_LIMIT, Scopes, ValueId, copy_bodies,
+        NodeId, SCC_CLONE_WEIGHT_LIMIT, Scopes, ValueId, copy_bodies,
     },
     curios_common::ArenaId,
     std::{
@@ -66,6 +66,8 @@ struct Component {
     groups: Vec<Group>,
     intro: NodeId,
     extent: BTreeSet<NodeId>,
+    /// What a copy of [`Self::extent`] weighs.
+    weight: usize,
     /// The functions every remaining call hands the component.
     baseline: BTreeMap<ValueId, Atom>,
     disabled: bool,
@@ -155,7 +157,7 @@ struct Candidate {
     intro: NodeId,
 }
 
-/// Apply independent SCC contexts under a lifetime copied-node allowance. Remaining callers are re-solved locally after each copy; newly established generic facts stop that component for cleanup. A changed source or newly copied incoming call defers dependent components, without rebuilding the module-wide call analysis.
+/// Apply independent SCC contexts under a lifetime allowance of copied weight. Remaining callers are re-solved locally after each copy; newly established generic facts stop that component for cleanup. A changed source or newly copied incoming call defers dependent components, without rebuilding the module-wide call analysis.
 pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> bool {
     if !budget.admits(1) {
         return false;
@@ -172,11 +174,11 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
     for members in eligible_sccs(module, &analysis) {
         let members = members.into_iter().collect::<BTreeSet<_>>();
         let Some(copy) =
-            CopyPlan::functions_with_limit(module, members.clone(), SCC_CLONE_NODE_LIMIT)
+            CopyPlan::functions_with_limit(module, members.clone(), SCC_CLONE_WEIGHT_LIMIT)
         else {
             continue;
         };
-        if !budget.admits(copy.nodes().len()) {
+        if !budget.admits(copy.weight()) {
             continue;
         }
         let Some(&intro) = intros.get(members.first().unwrap()) else {
@@ -235,6 +237,7 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
             external,
             groups,
             intro,
+            weight: copy.weight(),
             extent: copy.into_nodes(),
             baseline: BTreeMap::new(),
             disabled: false,
@@ -258,7 +261,7 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
                     group: index,
                     priority: CopyPriority {
                         sites: group.sites.len(),
-                        nodes: component.extent.len(),
+                        weight: component.weight,
                         first: group.sites.iter().map(|id| id.index()).min().unwrap(),
                     },
                     intro,
@@ -276,7 +279,7 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
         if component.disabled
             || !component.extent.is_disjoint(&touched)
             || !component.members.is_disjoint(&changed_callers)
-            || !budget.admits(candidate.priority.nodes)
+            || !budget.admits(candidate.priority.weight)
             || !matches!(module.node(component.intro), Some(Node::LetFun { functions, .. }) if component.members.iter().all(|member| functions.contains(member)))
             || !matches!(module.node(candidate.intro), Some(Node::LetFun { .. }))
         {
@@ -289,9 +292,11 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
         if sites.is_empty() {
             continue;
         }
-        let Some(plan) =
-            CopyPlan::functions_with_limit(module, component.members.clone(), SCC_CLONE_NODE_LIMIT)
-        else {
+        let Some(plan) = CopyPlan::functions_with_limit(
+            module,
+            component.members.clone(),
+            SCC_CLONE_WEIGHT_LIMIT,
+        ) else {
             continue;
         };
         if *plan.nodes() != component.extent {
@@ -324,7 +329,7 @@ pub fn specialize_scc_calls(module: &mut Module, budget: &mut CopyBudget) -> boo
                 changed_callers.insert(*target);
             }
         }
-        budget.charge(candidate.priority.nodes);
+        budget.charge(candidate.priority.weight);
         changed = true;
         component.disabled = !component.extent.is_disjoint(&touched)
             || component.functions(&component.remaining(module), &seeds, &scopes, module)

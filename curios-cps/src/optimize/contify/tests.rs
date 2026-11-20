@@ -260,7 +260,7 @@ fn contifies_a_callee_whose_capture_the_owner_never_mentions() {
 
 #[test]
 fn nested_definitions_count_toward_the_copy_limit() {
-    let body_limit = SCC_CLONE_NODE_LIMIT - super::CONTIFICATION_NODE_OVERHEAD;
+    let body_limit = SCC_CLONE_WEIGHT_LIMIT - super::CONTIFICATION_OVERHEAD;
     for size in [body_limit, body_limit + 1] {
         let PolymorphicLoop {
             mut module,
@@ -268,7 +268,7 @@ fn nested_definitions_count_toward_the_copy_limit() {
             ..
         } = polymorphic_loop(true, 0);
         nest_helpers(&mut module, loop_fn, size);
-        assert!(function_nodes(&module, loop_fn).len() < SCC_CLONE_NODE_LIMIT);
+        assert!(function_nodes(&module, loop_fn).len() < SCC_CLONE_WEIGHT_LIMIT);
         let before = (
             module.nodes().len(),
             module.functions().len(),
@@ -358,7 +358,7 @@ fn a_loop_copy_is_contified_immediately_with_its_capturing_helpers() {
     } = polymorphic_loop(true, 0);
     nest_helpers(&mut module, loop_fn, 0);
     let extent = crate::CopyPlan::functions(&module, std::collections::BTreeSet::from([loop_fn]));
-    let added = extent.nodes().len() + super::CONTIFICATION_NODE_OVERHEAD;
+    let added = extent.nodes().len() + super::CONTIFICATION_OVERHEAD;
     let nested = extent.nested().len();
     let before_nodes = module.live_nodes().count();
     let before_functions = module.live_functions().count();

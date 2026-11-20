@@ -449,6 +449,112 @@ impl Intrinsic {
             Self::ListGet | Self::TupleGet(_) | Self::RowGet(..) | Self::ImmediateGet => Repr::Ref,
         }
     }
+
+    /// What one application of this operation weighs in a copy's allowance, counted in the nodes every other node is one of: what the instructions its lowering emits over operands held as references weigh ([`Intrinsic::weight_of`]).
+    ///
+    /// Reference operands are the case no later analysis improves, so the weight is what the copy adds where nothing is known of what it is handed. A variadic form weighs what its own arity emits; [`Intrinsic::TupleGet`], whose lowering tests each tuple arity the module builds, weighs its smallest form. `curios-emit`'s weight suite lowers every operation and holds each weight to what it emits, so a lowering that moves one fails naming it.
+    pub fn weight(&self) -> usize {
+        match self {
+            // A variadic form grows with each operand it joins: a concatenation by one more rope node, a flat leaf by copying one more operand in, a chunk by one more byte written.
+            Self::BytesConcat(arity) => Self::weight_of(104 * arity.saturating_sub(1)),
+            Self::ListConcat(arity) => Self::weight_of(50 * arity.saturating_sub(1)),
+            Self::ListFlat(arity) => Self::weight_of(12 + 50 * arity),
+            // A chunk of three bytes or fewer packs them into the immediate, a wider one writes each into a leaf.
+            Self::BytesChunk(arity) if *arity <= 3 => Self::weight_of(1 + 12 * arity),
+            Self::BytesChunk(arity) => Self::weight_of(5 + 7 * arity),
+            Self::BytesAppend => 7,
+            Self::FltOfLeBytes => 5,
+            Self::NatShl | Self::IntShl | Self::BytesGet => 4,
+            Self::IntAbs | Self::FltToLeBytes | Self::BytesEql | Self::WindowExtent => 3,
+            Self::NatNeq
+            | Self::NatAdd
+            | Self::NatSub
+            | Self::NatMul
+            | Self::NatLt
+            | Self::NatLe
+            | Self::NatMin
+            | Self::NatMax
+            | Self::NatShr
+            | Self::IntNeq
+            | Self::IntAdd
+            | Self::IntSub
+            | Self::IntMul
+            | Self::IntDiv
+            | Self::IntLt
+            | Self::IntLe
+            | Self::IntMin
+            | Self::IntMax
+            | Self::IntShr
+            | Self::FltToNat
+            | Self::FltToInt
+            | Self::FltMantissa
+            | Self::FltExponent
+            | Self::BytesLen
+            | Self::BytesReplicate
+            | Self::ListGet
+            | Self::ListRest
+            | Self::ListAppend
+            | Self::ListSettle => 2,
+            Self::BoolAnd
+            | Self::BoolOr
+            | Self::NatEql
+            | Self::NatDiv
+            | Self::NatRem
+            | Self::NatAnd
+            | Self::NatOr
+            | Self::NatXor
+            | Self::NatPow
+            | Self::NatEqz
+            | Self::NatToInt
+            | Self::NatToFlt(_)
+            | Self::IntEql
+            | Self::IntRem
+            | Self::IntAnd
+            | Self::IntOr
+            | Self::IntXor
+            | Self::IntSign
+            | Self::IntEqz
+            | Self::IntToNat
+            | Self::IntToFlt(_)
+            | Self::FltAdd(_)
+            | Self::FltSub(_)
+            | Self::FltMul(_)
+            | Self::FltDiv(_)
+            | Self::FltFma(_)
+            | Self::FltRem
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltLe
+            | Self::FltMin
+            | Self::FltMax
+            | Self::FltNeg
+            | Self::FltAbs
+            | Self::FltSqrt(_)
+            | Self::FltRoundIntegral(_)
+            | Self::FltCopysign
+            | Self::BytesSlice
+            | Self::BytesRest
+            | Self::BytesAnd
+            | Self::BytesOr
+            | Self::BytesXor
+            | Self::ListLen
+            | Self::ListSlice
+            | Self::ListSet
+            | Self::ListOverwrite
+            | Self::TupleGet(_)
+            | Self::RowGet(..)
+            | Self::IsImmediate
+            | Self::ImmediateGet
+            | Self::IsRow(_) => 1,
+        }
+    }
+
+    /// What a lowering emitting `instructions` weighs: over the sixteen a node other than an intrinsic emits on average, rounded, and at least one.
+    pub const fn weight_of(instructions: usize) -> usize {
+        let weight = (instructions + 8) / 16;
+        if weight == 0 { 1 } else { weight }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

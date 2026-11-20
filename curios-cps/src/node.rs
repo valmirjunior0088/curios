@@ -244,6 +244,16 @@ pub enum Node {
     Unreachable,
 }
 
+impl Node {
+    /// What this node weighs in a copy's allowance: an intrinsic's [`Intrinsic::weight`], and one for every other node, the sixteen instructions or so such a node emits on average being the unit an intrinsic is weighed in.
+    pub fn weight(&self) -> usize {
+        match self {
+            Self::LetIntrinsic { op, .. } => op.weight(),
+            _ => 1,
+        }
+    }
+}
+
 /// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Panic {

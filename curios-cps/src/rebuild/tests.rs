@@ -159,7 +159,7 @@ fn called_both_ways(tested: bool) -> Module {
 #[test]
 fn a_value_a_constant_may_be_is_rebuilt_only_under_a_test_of_its_tag() {
     for tested in [true, false] {
-        for allowance in [REBUILD_COPY_NODE_LIMIT, 0] {
+        for allowance in [REBUILD_COPY_WEIGHT_LIMIT, 0] {
             let mut module = called_both_ways(tested);
             copy_reuse_versions(&mut module, CopyBudget::new(allowance));
             module.verify().unwrap();

@@ -156,18 +156,24 @@ pub fn clone_node(node: &Node, map: &Mapping<'_>) -> Node {
 ///
 /// Admission reads the same nodes execution copies, closed transitively over nested definitions. A nested body may read values bound in its enclosing body, so both must be renamed together. Explicit roots remain distinct from nested functions: a function root's recursive calls follow its copy, a continuation root's backedges retain the original target, and the inliner substitutes a function root's parameters rather than minting them.
 ///
-/// Planning reads the module without minting identities. A bounded request stops at the first excess distinct node and discards its partial extent; binding-group members are enumerated at their binding node, so their width is not bounded by the node allowance. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
+/// A plan weighs the sum of its distinct nodes' [`Node::weight`]s, what the copy adds to the emitted module in nodes of average size, and every allowance a copier is given is a weight. Planning reads the module without minting identities. A bounded request stops at the first distinct node its weight exceeds the allowance at and discards its partial extent; binding-group members are enumerated at their binding node, so their width is not bounded by the allowance. A plan is consumed before any intervening graph mutation; it is not an analysis kept across rewrites. Continuations and owned values are derived from these nodes and roots by the executing transformation, in its existing allocation order.
 pub struct CopyPlan {
     functions: BTreeSet<FunctionId>,
     continuations: BTreeSet<ContinuationId>,
     nodes: BTreeSet<NodeId>,
     nested: BTreeSet<FunctionId>,
+    weight: usize,
 }
 
 impl CopyPlan {
     /// The nodes the copy reproduces: its extent.
     pub fn nodes(&self) -> &BTreeSet<NodeId> {
         &self.nodes
+    }
+
+    /// What the copy weighs: the sum of its extent's [`Node::weight`]s.
+    pub fn weight(&self) -> usize {
+        self.weight
     }
 
     /// The functions defined lexically within the extent, which the copy reproduces with it.
@@ -180,7 +186,7 @@ impl CopyPlan {
         self.nodes
     }
 
-    /// Decline as soon as the complete lexical extent crosses `limit`, before traversing the rest of an ineligible body.
+    /// Decline as soon as the complete lexical extent weighs past `limit`, before traversing the rest of an ineligible body.
     pub fn functions_with_limit(
         module: &Module,
         functions: BTreeSet<FunctionId>,
@@ -219,14 +225,17 @@ impl CopyPlan {
             .collect::<Vec<_>>();
         let mut nodes = BTreeSet::new();
         let mut nested = BTreeSet::new();
+        let mut weight = 0;
         while let Some(id) = pending.pop() {
             if !nodes.insert(id) {
                 continue;
             }
-            if nodes.len() > limit {
+            let node = module.node(id).unwrap();
+            weight += node.weight();
+            if weight > limit {
                 return None;
             }
-            match module.node(id).unwrap() {
+            match node {
                 Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                     pending.push(*next)
                 }
@@ -257,6 +266,7 @@ impl CopyPlan {
             continuations,
             nodes,
             nested,
+            weight,
         })
     }
 }
@@ -278,6 +288,7 @@ pub fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
         continuations,
         nodes: node_ids,
         nested,
+        weight: _,
     } = plan;
     let members: BTreeSet<FunctionId> = functions.union(&nested).copied().collect();
 

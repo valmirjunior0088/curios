@@ -55,30 +55,30 @@ pub use uncurry::*;
 
 use super::{Module, known_values};
 
-/// How many nodes one copy of a callee with more than one call site may hold, past [`MULTI_SITE_INLINE_FLOOR`], and still be made at each site, where all its copies together fit [`SCC_CLONE_NODE_LIMIT`].
+/// What one copy of a callee with more than one call site may weigh, past [`MULTI_SITE_INLINE_FLOOR`], and still be made at each site, where all its copies together weigh at most [`SCC_CLONE_WEIGHT_LIMIT`].
 ///
-/// A fold's step is what it is read against: `/std/Nat/of_str`'s, which `/std/Str/fold` calls at each width of a UTF-8 scalar, holds seventeen or eighteen nodes, and under a limit of sixteen the fold calls it as a function of its own, a call `programs/parse_digits.crs` pays at every character it decodes.
+/// A fold's step is what it is read against: `/std/Str/fold` calls it at each width of a UTF-8 scalar, and the steps of `/std/Nat/of_str` and of the walks `programs/` writes over the fold weigh up to twenty-two, the comparisons a range test makes of each byte weighing two apiece. Under a smaller limit the fold calls its step as a function of its own, a call `programs/parse_digits.crs` and `programs/parse_bindless.crs` pay at every character they decode.
 ///
-/// That argues for eighteen. The value is twenty instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching. What keeps the larger limit from copying a callee of many sites into each, `/std/Map/insert` into every test that builds a map, is the bound on all its copies, not this one.
-pub const MULTI_SITE_INLINE_LIMIT: usize = 20;
-/// How many nodes a callee with more than one call site may hold and be copied into every one of them, however many: the helpers a walk calls per byte, `/std/Nat/in_range` among them, which a large program reaches from hundreds of sites.
+/// That argues for twenty-two. The value is twenty-four instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a little heavier pays the same price with nobody watching. What keeps the larger limit from copying a callee of many sites into each, `/std/Map/insert` into every test that builds a map, is the bound on all its copies, not this one.
+pub const MULTI_SITE_INLINE_LIMIT: usize = 24;
+/// What a callee with more than one call site may weigh and be copied into every one of them, however many: the helpers a walk calls per byte, `/std/Nat/in_range` among them, which a large program reaches from hundreds of sites.
 pub const MULTI_SITE_INLINE_FLOOR: usize = 8;
 pub const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 /// How many parameters a continuation may hold after a fields split. The widest admitted aggregate `curios`'s programs hold is the four-field scan state a walk reading UTF-8 a byte a turn carries beside its loop state (`programs/walk_mirror_baseline.crs`), and its corpus census finds pairs, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
 pub const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
-pub const SCC_CLONE_NODE_LIMIT: usize = 256;
-/// Maximum cumulative copying of callees with several call sites into a call that hands them a known function they apply, each copy within [`SCC_CLONE_NODE_LIMIT`].
-pub const KNOWN_FUNCTION_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
+pub const SCC_CLONE_WEIGHT_LIMIT: usize = 256;
+/// Maximum cumulative copying of callees with several call sites into a call that hands them a known function they apply, each copy within [`SCC_CLONE_WEIGHT_LIMIT`].
+pub const KNOWN_FUNCTION_COPY_WEIGHT_LIMIT: usize = 64 * SCC_CLONE_WEIGHT_LIMIT;
 /// Maximum cumulative SCC-specialization copying under the complete-extent ceiling.
-pub const SCC_COPY_NODE_LIMIT: usize = 64 * SCC_CLONE_NODE_LIMIT;
+pub const SCC_COPY_WEIGHT_LIMIT: usize = 64 * SCC_CLONE_WEIGHT_LIMIT;
 /// Maximum cumulative call-pattern copying, including head rebuilds.
-pub const BRANCH_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
+pub const BRANCH_COPY_WEIGHT_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
 /// Maximum cumulative jump-specialization copying, including head rebuilds.
-pub const JUMP_COPY_NODE_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
-/// How many nodes the reuse version of one function a rebuild in place copies may have.
-pub const REBUILD_CLONE_NODE_LIMIT: usize = SCC_CLONE_NODE_LIMIT;
-/// Maximum cumulative copying of reuse versions, each within [`REBUILD_CLONE_NODE_LIMIT`].
-pub const REBUILD_COPY_NODE_LIMIT: usize = 64 * REBUILD_CLONE_NODE_LIMIT;
+pub const JUMP_COPY_WEIGHT_LIMIT: usize = 64 * BRANCH_SPECIALIZATION_GROWTH_LIMIT;
+/// What the reuse version of one function a rebuild in place copies may weigh.
+pub const REBUILD_CLONE_WEIGHT_LIMIT: usize = SCC_CLONE_WEIGHT_LIMIT;
+/// Maximum cumulative copying of reuse versions, each within [`REBUILD_CLONE_WEIGHT_LIMIT`].
+pub const REBUILD_COPY_WEIGHT_LIMIT: usize = 64 * REBUILD_CLONE_WEIGHT_LIMIT;
 /// How many loops [`separate_loop_entries`] may copy for one more call site each, across a module.
 pub const ENTRY_CLONE_LIMIT: usize = 64;
 
@@ -96,10 +96,10 @@ pub fn optimize(module: &mut Module) {
         .verify()
         .expect("invalid high CPS before optimization");
 
-    let mut scc_clone_budget = CopyBudget::new(SCC_COPY_NODE_LIMIT);
-    let mut known_function_budget = CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT);
-    let mut branch_clone_budget = CopyBudget::new(BRANCH_COPY_NODE_LIMIT);
-    let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_NODE_LIMIT);
+    let mut scc_clone_budget = CopyBudget::new(SCC_COPY_WEIGHT_LIMIT);
+    let mut known_function_budget = CopyBudget::new(KNOWN_FUNCTION_COPY_WEIGHT_LIMIT);
+    let mut branch_clone_budget = CopyBudget::new(BRANCH_COPY_WEIGHT_LIMIT);
+    let mut jump_clone_budget = CopyBudget::new(JUMP_COPY_WEIGHT_LIMIT);
     let mut entry_clone_budget = ENTRY_CLONE_LIMIT;
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
     macro_rules! pass {

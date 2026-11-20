@@ -1,4 +1,4 @@
-//! One continuation for each class of equal ones: continuations of one function and one lineage whose extents are equal up to the values, continuations and functions they bind, and which read the same of everything else, become one, kept at the innermost `LetCont` that encloses every member, each member a jump to it. Past what the inliner copies into each of a callee's calls (`MULTI_SITE_INLINE_LIMIT`), members that read different values from outside are a class too, each value they read apart a parameter of the one kept, which each member hands what it read.
+//! One continuation for each class of equal ones: continuations of one function and one lineage whose extents are equal up to the values, continuations and functions they bind, and which read the same of everything else, become one, kept at the innermost `LetCont` that encloses every member, each member a jump to it. Past what the inliner copies into each of a callee's calls (`MULTI_SITE_INLINE_LIMIT`, an extent weighed as the inliner weighs a copy), members that read different values from outside are a class too, each value they read apart a parameter of the one kept, which each member hands what it read.
 //!
 //! **A class is found by a shape and verified member by member.** Each continuation's extent is read once, bottom up, for its size and a hash of its shape with every identity erased, which a nested definition's shape composes into without being read again. Continuations of one function, one lineage, one size and one shape are candidates, and only candidates are written out in full — what they bind numbered in the order they bind it, what they read named — and compared. Two members of a class are of one size, so neither nests in the other and their extents are disjoint, and a class nested in a member is at most half its size: the extents written out sum to a function's size once for each halving, and the work is the function's size times its logarithm at most.
 //!
@@ -41,7 +41,7 @@ pub fn merge_equal_continuations(module: &mut Module) -> bool {
             // Below the line, a class reads alike; past it, what its members read apart is handed in.
             let apart = shapes
                 .of_continuation(module, representative)
-                .is_some_and(|shape| shape.size > MULTI_SITE_INLINE_LIMIT);
+                .is_some_and(|shape| shape.weight > MULTI_SITE_INLINE_LIMIT);
             let mut members = Vec::new();
             let mut rest = Vec::new();
             for (id, other) in written.drain(..) {
@@ -301,6 +301,8 @@ fn extent(module: &Module, body: NodeId) -> Vec<NodeId> {
 #[derive(Clone, Copy)]
 struct Shape {
     size: usize,
+    /// What the extent weighs, its nodes' [`Node::weight`]s summed, as the inliner weighs a copy.
+    weight: usize,
     hash: u64,
 }
 
@@ -330,6 +332,7 @@ impl Shapes {
         (definition.params.len(), definition.terminates, body.hash).hash(&mut hasher);
         Some(Shape {
             size: body.size,
+            weight: body.weight,
             hash: hasher.finish(),
         })
     }
@@ -354,6 +357,7 @@ impl Shapes {
             .hash(&mut hasher);
         Some(Shape {
             size: body.size,
+            weight: body.weight,
             hash: hasher.finish(),
         })
     }
@@ -371,10 +375,12 @@ impl Shapes {
     fn read(&mut self, module: &Module, id: NodeId) -> Option<Shape> {
         let mut hasher = DefaultHasher::new();
         let mut size = 1;
+        let mut weight = module.node(id).map_or(1, Node::weight);
         let mut sound = true;
         let mut child = |hasher: &mut DefaultHasher, shape: Option<Shape>| match shape {
             Some(shape) => {
                 size += shape.size;
+                weight += shape.weight;
                 shape.hash.hash(hasher);
             }
             None => sound = false,
@@ -495,6 +501,7 @@ impl Shapes {
         }
         sound.then(|| Shape {
             size,
+            weight,
             hash: hasher.finish(),
         })
     }

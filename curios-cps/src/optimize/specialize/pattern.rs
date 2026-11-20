@@ -1,11 +1,19 @@
 //! One constructor-pattern vocabulary shared by call and join specialization.
 
 use {
-    crate::{Atom, RowId, ValueId},
-    std::collections::BTreeMap,
+    crate::{Atom, NodeId, RowId, ValueId},
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 pub type TaggedRows = BTreeMap<ValueId, (u32, Vec<Atom>, RowId)>;
+
+/// What a pattern specializer plans of one body it may copy, before it copies any: the binding node its definition joins, the extent a copy reproduces and what that weighs, and the parameters the body reads a row slot of.
+pub struct PatternRoot {
+    pub intro: NodeId,
+    pub extent: BTreeSet<NodeId>,
+    pub weight: usize,
+    pub projected: BTreeSet<ValueId>,
+}
 
 /// A known nominal constructor in one argument position; equal widths and tags from different rows never share a specialization.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

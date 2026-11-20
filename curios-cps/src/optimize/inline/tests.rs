@@ -190,12 +190,12 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
 }
 
 fn known_function_allowance() -> CopyBudget {
-    CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT)
+    CopyBudget::new(KNOWN_FUNCTION_COPY_WEIGHT_LIMIT)
 }
 
-/// A callee of `nodes` nodes taking a value and a function, called at `sites` sites, each handing it a function of its own: the callee calls the function on the value where `applies`, and answers the value otherwise.
+/// A callee weighing `weight` taking a value and a function, called at `sites` sites, each handing it a function of its own: the callee calls the function on the value where `applies`, and answers the value otherwise.
 fn calls_handing_a_function(
-    nodes: usize,
+    weight: usize,
     sites: usize,
     applies: bool,
 ) -> (Module, FunctionId, Vec<NodeId>) {
@@ -231,7 +231,7 @@ fn calls_handing_a_function(
             terminates: false,
         },
     );
-    pad(&mut module, callee, nodes);
+    pad(&mut module, callee, weight);
     let steps = (0..sites).map(|index| {
         let function = module.reserve_function();
         let function_return = module.reserve_continuation();
@@ -321,8 +321,8 @@ fn calls_callee(module: &Module, call: NodeId, callee: FunctionId) -> bool {
 
 #[test]
 fn a_callee_of_several_sites_is_copied_into_a_call_that_hands_it_a_function_it_applies() {
-    let nodes = MULTI_SITE_INLINE_LIMIT + 8;
-    let (mut module, callee, calls) = calls_handing_a_function(nodes, 2, true);
+    let weight = MULTI_SITE_INLINE_LIMIT + 8;
+    let (mut module, callee, calls) = calls_handing_a_function(weight, 2, true);
     let mut allowance = known_function_allowance();
 
     assert!(inline_known_calls(&mut module, &mut allowance));
@@ -331,7 +331,7 @@ fn a_callee_of_several_sites_is_copied_into_a_call_that_hands_it_a_function_it_a
     }
     assert_eq!(
         allowance,
-        CopyBudget::new(KNOWN_FUNCTION_COPY_NODE_LIMIT - 2 * nodes),
+        CopyBudget::new(KNOWN_FUNCTION_COPY_WEIGHT_LIMIT - 2 * weight),
         "each copy is charged its extent, a sweep counting the callee's sites as they stood when it began",
     );
     module.verify().unwrap();
@@ -352,9 +352,9 @@ fn a_callee_that_only_receives_the_function_keeps_the_multi_site_allowance() {
 
 #[test]
 fn a_copy_for_a_known_function_past_the_allowance_left_is_declined() {
-    let nodes = MULTI_SITE_INLINE_LIMIT + 8;
-    let (mut module, callee, calls) = calls_handing_a_function(nodes, 3, true);
-    let mut allowance = CopyBudget::new(nodes);
+    let weight = MULTI_SITE_INLINE_LIMIT + 8;
+    let (mut module, callee, calls) = calls_handing_a_function(weight, 3, true);
+    let mut allowance = CopyBudget::new(weight);
 
     assert!(inline_known_calls(&mut module, &mut allowance));
     assert_eq!(
@@ -377,11 +377,9 @@ fn arenas(module: &Module) -> [usize; 4] {
     ]
 }
 
-fn pad(module: &mut Module, function: FunctionId, nodes: usize) {
-    let size = CopyPlan::functions(module, BTreeSet::from([function]))
-        .nodes()
-        .len();
-    for _ in size..nodes {
+fn pad(module: &mut Module, function: FunctionId, weight: usize) {
+    let size = CopyPlan::functions(module, BTreeSet::from([function])).weight();
+    for _ in size..weight {
         let result = module.add_value(None);
         let body = module.add_node(Node::LetValue {
             result,
@@ -392,7 +390,7 @@ fn pad(module: &mut Module, function: FunctionId, nodes: usize) {
     }
 }
 
-fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionId, Vec<NodeId>) {
+fn sized_calls(weight: usize, sites: usize, escaping: bool) -> (Module, FunctionId, Vec<NodeId>) {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -416,7 +414,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
             terminates: false,
         },
     );
-    pad(&mut module, callee, nodes);
+    pad(&mut module, callee, weight);
     let mut calls = Vec::new();
     let mut continuations = Vec::new();
     let mut cases = BTreeMap::new();
@@ -488,26 +486,24 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
 #[test]
 fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
     for (sites, escaping, limit) in [
-        (1, false, SCC_CLONE_NODE_LIMIT),
+        (1, false, SCC_CLONE_WEIGHT_LIMIT),
         (2, false, MULTI_SITE_INLINE_LIMIT),
         (1, true, MULTI_SITE_INLINE_LIMIT),
     ] {
         for nested in [false, true] {
-            for nodes in [limit, limit + 1] {
+            for weight in [limit, limit + 1] {
                 let (mut module, callee, calls) =
-                    sized_calls(if nested { 1 } else { nodes }, sites, escaping);
+                    sized_calls(if nested { 1 } else { weight }, sites, escaping);
                 if nested {
-                    nest_helpers(&mut module, callee, nodes);
+                    nest_helpers(&mut module, callee, weight);
                 }
                 assert_eq!(
-                    CopyPlan::functions(&module, BTreeSet::from([callee]))
-                        .nodes()
-                        .len(),
-                    nodes,
+                    CopyPlan::functions(&module, BTreeSet::from([callee])).weight(),
+                    weight,
                 );
                 let before = arenas(&module);
                 let text = module.to_string();
-                let admitted = nodes <= limit;
+                let admitted = weight <= limit;
                 assert_eq!(
                     inline_known_calls(&mut module, &mut known_function_allowance()),
                     admitted
@@ -516,7 +512,7 @@ fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
                     assert_eq!(
                         matches!(module.node(call), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == callee),
                         !admitted,
-                        "sites={sites}, escaping={escaping}, nested={nested}, nodes={nodes}",
+                        "sites={sites}, escaping={escaping}, nested={nested}, weight={weight}",
                     );
                 }
                 if !admitted {
@@ -531,15 +527,15 @@ fn only_single_site_nonescaping_callees_receive_the_larger_allowance() {
 
 /// A callee between the floor and the limit, and the most sites whose copies beside the original fit the single-site allowance together.
 fn growth_boundary() -> (usize, usize) {
-    let nodes = MULTI_SITE_INLINE_FLOOR + 4;
-    (nodes, SCC_CLONE_NODE_LIMIT / nodes + 1)
+    let weight = MULTI_SITE_INLINE_FLOOR + 4;
+    (weight, SCC_CLONE_WEIGHT_LIMIT / weight + 1)
 }
 
 #[test]
 fn a_callee_past_the_floor_is_copied_where_all_its_copies_fit() {
-    let (nodes, most) = growth_boundary();
+    let (weight, most) = growth_boundary();
     for (sites, admitted) in [(most, true), (most + 1, false)] {
-        let (mut module, callee, calls) = sized_calls(nodes, sites, false);
+        let (mut module, callee, calls) = sized_calls(weight, sites, false);
         assert_eq!(
             inline_known_calls(&mut module, &mut known_function_allowance()),
             admitted
@@ -571,8 +567,8 @@ fn a_callee_at_the_floor_is_copied_however_many_sites_it_has() {
 
 #[test]
 fn an_escaping_callee_counts_a_copy_at_every_site() {
-    let (nodes, most) = growth_boundary();
-    let (mut module, callee, calls) = sized_calls(nodes, most, true);
+    let (weight, most) = growth_boundary();
+    let (mut module, callee, calls) = sized_calls(weight, most, true);
     assert!(!inline_known_calls(
         &mut module,
         &mut known_function_allowance()
@@ -580,6 +576,40 @@ fn an_escaping_callee_counts_a_copy_at_every_site() {
     for call in calls {
         assert!(calls_callee(&module, call, callee));
     }
+}
+
+#[test]
+fn a_callee_of_few_nodes_is_weighed_by_what_its_sequence_reads_emit() {
+    let reads = MULTI_SITE_INLINE_LIMIT / Intrinsic::BytesGet.weight() + 1;
+    let (mut module, callee, calls) = sized_calls(1, 2, false);
+    let param = module.function(callee).unwrap().params[0];
+    for _ in 0..reads {
+        let result = module.add_value(None);
+        let body = module.add_node(Node::LetIntrinsic {
+            result,
+            op: Intrinsic::BytesGet,
+            args: vec![
+                Atom::Value(param),
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            ],
+            next: module.function(callee).unwrap().body,
+        });
+        module.function_mut(callee).unwrap().body = body;
+    }
+    let plan = CopyPlan::functions(&module, BTreeSet::from([callee]));
+    assert!(
+        plan.nodes().len() <= MULTI_SITE_INLINE_FLOOR,
+        "a count of nodes would copy it at every site"
+    );
+    assert!(plan.weight() > MULTI_SITE_INLINE_LIMIT);
+    assert!(!inline_known_calls(
+        &mut module,
+        &mut known_function_allowance()
+    ));
+    for call in calls {
+        assert!(calls_callee(&module, call, callee));
+    }
+    module.verify().unwrap();
 }
 
 #[test]
@@ -627,9 +657,7 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
         &mut known_function_allowance()
     ));
     assert_eq!(
-        CopyPlan::functions(&module, BTreeSet::from([callee]))
-            .nodes()
-            .len(),
+        CopyPlan::functions(&module, BTreeSet::from([callee])).weight(),
         MULTI_SITE_INLINE_LIMIT + 1,
     );
     for call in calls {
