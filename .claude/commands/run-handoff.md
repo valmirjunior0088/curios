@@ -18,20 +18,20 @@ The checkout is the handoff's own while it runs: no other session builds in it o
 
 ## How it runs
 
-The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask handoff > <scratchpad>/handoff.log 2>&1`: the scope caps what the handoff's changed code may hold, so a run that outgrows it ends rather than taking the machine, and standard error, where the handoff writes each step's verdict, joins its output in the log. Nothing follows the handoff in the command, so its exit code is the handoff's, and the task's notification reports it; where the handoff fails, the log's last line names what failed and what was not run. Never detach with `&`, and never add a shell that waits on another.
+The command is a tracked background task, `systemd-run --user --scope -q -p MemoryMax=24G -p MemorySwapMax=0 cargo xtask handoff`, its output unredirected: the scope caps what the handoff's changed code may hold, so a run that outgrows it ends rather than taking the machine, and the harness keeps both streams, standard error being where the handoff writes each step's verdict, in the file it names at the launch, `<output>` below, where the user can watch the run. Nothing follows the handoff in the command, so its exit code is the handoff's, and the task's notification reports it; where the handoff fails, the last line it wrote names what failed and what was not run. Never detach with `&`, and never add a shell that waits on another.
 
-Beside it, one monitor reports each step as it ends: an event for each line of the log that ends a step or the handoff, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
+Beside it, one monitor reports each step as it ends: an event for each line of that file that ends a step or the handoff, in order, and an exit once the handoff's process is gone. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the handoff runs on, starting past the lines it already reported:
 
 ```sh
 lines=' (passed|failed) in |not run|^failed:'
-seen=$(grep -cE "$lines" <scratchpad>/handoff.log 2>/dev/null || true)
+seen=$(grep -cE "$lines" <output> 2>/dev/null || true)
 seen=${seen:-0}
 while true; do
   running=$(pgrep -f 'xtask handoff' > /dev/null && echo yes || echo no)
-  n=$(grep -cE "$lines" <scratchpad>/handoff.log 2>/dev/null || true)
+  n=$(grep -cE "$lines" <output> 2>/dev/null || true)
   n=${n:-0}
   if [ "$n" -gt "$seen" ]; then
-    grep -E "$lines" <scratchpad>/handoff.log | sed -n "$((seen+1)),${n}p"
+    grep -E "$lines" <output> | sed -n "$((seen+1)),${n}p"
     seen=$n
   fi
   [ "$running" = no ] && break
@@ -39,9 +39,9 @@ while true; do
 done
 ```
 
-The process is looked for before the log is read, so the lines a handoff writes as it exits are reported before the monitor stops.
+The process is looked for before the file is read, so the lines a handoff writes as it exits are reported before the monitor stops.
 
-Do other work between events. A step that fails is read as its event arrives and fixed then, as the next section says, while the steps that read nothing of it run on: the fix and its reruns wait only for the failed step to end, since a rebuild under a step still running overwrites what it launches, and the handoff is never stopped for one. The whole log is read once the handoff has exited.
+Do other work between events. A step that fails is read as its event arrives and fixed then, as the next section says, while the steps that read nothing of it run on: the fix and its reruns wait only for the failed step to end, since a rebuild under a step still running overwrites what it launches, and the handoff is never stopped for one. The whole file is read once the handoff has exited.
 
 ## When a step fails
 
