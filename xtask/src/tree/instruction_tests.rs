@@ -54,6 +54,25 @@ fn a_write_of_a_value_that_may_be_several_words_is_refused() {
     );
 }
 
+/// A flag is a short spelling, a long one, or one of each: two of a kind, a word with no dash, a dash with no name and a list of none are refused where they are written.
+#[test]
+fn a_flag_that_is_no_short_or_long_spelling_is_refused() {
+    for flag in [
+        "\"E\"",
+        "\"---\"",
+        "[]",
+        "[\"-E\", \"-F\"]",
+        "[\"--one\", \"--other\"]",
+    ] {
+        let variables = ["variables.only.flag = ", flag, "\n"].concat();
+
+        assert!(
+            run_refused(&variables, "[\"echo\", \"{only}\"]").contains("a flag is one spelling"),
+            "{flag}"
+        );
+    }
+}
+
 #[test]
 fn an_instruction_neither_a_command_nor_a_write_is_refused() {
     assert!(run_refused("", "[\"true\"]").contains("an instruction is a command"));

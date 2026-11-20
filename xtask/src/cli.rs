@@ -110,18 +110,19 @@ fn task(tree: &Tree, name: &Name) -> Command {
 fn argument(tree: &Tree, name: &Name) -> Arg {
     let id = dotted(name);
     match &tree.variables[name] {
-        Variable::Flag { flag, help } => {
+        Variable::Flag { flags, help } => {
             let value = name.last().expect("a variable has a name").to_uppercase();
-            let argument = Arg::new(id).value_name(value).help(help.clone());
-            match flag.strip_prefix("--") {
-                Some(long) => argument.long(long.to_string()),
-                None => argument.short(
-                    flag.trim_start_matches('-')
-                        .chars()
-                        .next()
-                        .expect("the reader refuses an empty flag"),
-                ),
-            }
+            flags.iter().fold(
+                Arg::new(id).value_name(value).help(help.clone()),
+                |argument, flag| match flag.strip_prefix("--") {
+                    Some(long) => argument.long(long.to_string()),
+                    None => argument.short(
+                        flag.chars()
+                            .nth(1)
+                            .expect("the reader takes a short flag as a dash and one character"),
+                    ),
+                },
+            )
         }
         Variable::Argument {
             placeholder, help, ..

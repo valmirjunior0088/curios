@@ -7,7 +7,7 @@ variables.edition = "2024"
 variables.loose.run = ["git", "ls-files", "--", "programs/*.rs"]
 # What Biome reads of the workspace, beside the editors' own trees: `biome.json` lists the same.
 variables.web = ["biome.json", ".claude/settings.json", "curios-browser/src", "curios-document/static"]
-variables.expression.flag = "-E"
+variables.expression.flag = ["-E", "--filterset"]
 variables.expression.help = "Run only the tests nextest's filterset selects, as `test(~name)` or `binary(=name)`; every test when omitted"
 
 [lint.rustfmt]

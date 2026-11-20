@@ -72,10 +72,17 @@ impl<'a> Values<'a> {
                     let printed = self.printed(name, command)?;
                     Ok((!printed.is_empty()).then_some(printed))
                 }
-                Variable::Flag { flag, .. } => Ok(Some(
+                // The command is handed the long spelling where the flag has one, so the echoed line reads by itself.
+                Variable::Flag { flags, .. } => Ok(Some(
                     self.given
                         .get(name)
-                        .map(|value| vec![flag.clone(), value.clone()])
+                        .and_then(|value| {
+                            let spelling = flags
+                                .iter()
+                                .find(|flag| flag.starts_with("--"))
+                                .or(flags.first())?;
+                            Some(vec![spelling.clone(), value.clone()])
+                        })
                         .unwrap_or_default(),
                 )),
                 Variable::Argument { otherwise, .. } => Ok(Some(vec![

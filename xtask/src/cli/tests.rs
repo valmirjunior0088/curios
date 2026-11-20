@@ -57,6 +57,10 @@ fn a_flag_is_taken_where_a_step_under_the_path_uses_it() {
         parsed(&["workspace", "test", "-E", "test(~cli)"]).unwrap(),
         expected
     );
+    assert_eq!(
+        parsed(&["workspace", "test", "--filterset", "test(~cli)"]).unwrap(),
+        expected
+    );
     assert!(parsed(&["workspace", "lint", "-E", "test(~cli)"]).is_err());
 }
 

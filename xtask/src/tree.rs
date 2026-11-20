@@ -162,8 +162,8 @@ pub enum Variable {
     Words(Vec<String>),
     /// What a command prints, a word to a line, asked once a run and only where a step that uses it runs.
     Output(Vec<String>),
-    /// Given on the command line by `flag` with a value: the flag and the value where it is given, nothing where it is not.
-    Flag { flag: String, help: String },
+    /// Given on the command line with a value by any of `flags`, a short spelling, a long one or both: the flag and the value where it is given, nothing where it is not.
+    Flag { flags: Vec<String>, help: String },
     /// Given on the command line as a positional argument, `otherwise` where it is not.
     Argument {
         placeholder: String,
@@ -902,6 +902,32 @@ fn text_of(file: &File<'_>, item: &Item, key: &str) -> Result<String, Refusal> {
         .ok_or_else(|| file.refuse(item.span(), format!("`{key}` is a string")))
 }
 
+/// The spellings `item` states for a flag: one string, or a list of a short spelling and a long one, `-E` and `--filterset`, each kind once.
+fn flags_of(file: &File<'_>, item: &Item) -> Result<Vec<String>, Refusal> {
+    let spellings = match (item.as_str(), item.as_array()) {
+        (Some(spelling), _) => vec![spelling.to_string()],
+        (None, Some(list)) => words_of(file, list)?,
+        (None, None) => Vec::new(),
+    };
+    let named = |name: &str| name.starts_with(char::is_alphanumeric);
+    let long = |spelling: &&String| spelling.strip_prefix("--").is_some_and(named);
+    let short = |spelling: &&String| {
+        spelling.chars().count() == 2 && spelling.strip_prefix('-').is_some_and(named)
+    };
+
+    match (
+        spellings.len(),
+        spellings.iter().filter(short).count(),
+        spellings.iter().filter(long).count(),
+    ) {
+        (1, 1, 0) | (1, 0, 1) | (2, 1, 1) => Ok(spellings),
+        _ => Err(file.refuse(
+            item.span(),
+            "a flag is one spelling, as `-E` or `--filterset`, or a list of a short one and a long one".to_string(),
+        )),
+    }
+}
+
 /// A string as written, with where it stands.
 type Placed = (String, Option<Range<usize>>);
 
@@ -1040,10 +1066,10 @@ fn variable_of(file: &File<'_>, item: &Item) -> Result<Variable, Refusal> {
             })?;
         return Ok(Variable::Output(words_of(file, list)?));
     }
-    if let Some(flag) = text("flag")? {
+    if let Some(flag) = table.get("flag") {
         only(&["flag", "help"])?;
         return Ok(Variable::Flag {
-            flag,
+            flags: flags_of(file, flag)?,
             help: text("help")?.unwrap_or_default(),
         });
     }

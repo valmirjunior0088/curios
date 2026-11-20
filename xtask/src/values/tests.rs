@@ -64,6 +64,20 @@ fn a_flag_is_its_flag_and_value_where_given_and_nothing_where_not() {
     );
 }
 
+/// A flag of a short spelling and a long one is handed to its command by the long one, so the echoed line reads by itself.
+#[test]
+fn a_flag_of_two_spellings_is_handed_on_by_its_long_one() {
+    let tree = step(
+        "variables.only = { flag = [\"-E\", \"--filterset\"] }",
+        "[\"echo\", \"{only}\"]",
+    );
+
+    assert_eq!(
+        words(&tree, &[("a.only", "test(~x)")]).unwrap(),
+        ["echo", "--filterset", "test(~x)"]
+    );
+}
+
 #[test]
 fn an_argument_is_its_default_where_none_is_given() {
     let tree = step(
