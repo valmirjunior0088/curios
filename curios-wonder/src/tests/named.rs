@@ -142,6 +142,7 @@ fn a_local_answers_where_it_is_bound_and_its_type() {
             name,
             bound,
             type_,
+            ..
         }) => (
             declares,
             name,
@@ -782,6 +783,7 @@ fn field(written: &str, within: usize) -> Fielded {
             of,
             bound,
             type_,
+            ..
         }) => Fielded {
             label,
             of,

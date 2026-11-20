@@ -4,7 +4,10 @@
 //!
 //! **A site stands in a text of its unit, as a lowered term's position does** ([`Extent`]): in the declaration it is written in. So a site holds no source, and one a recompile keeps is placed in the text its file is read as now.
 
-use crate::{Extent, Global};
+use {
+    crate::{Extent, Global},
+    curios_common::Class,
+};
 
 /// One written site no written name reads, with where it stands among its unit's texts: `None` for one written nowhere, as a name the compiler spelled is.
 #[derive(Debug, Clone, PartialEq)]
@@ -74,11 +77,15 @@ pub struct WrittenBinder {
     pub ordinal: u32,
 }
 
-/// What a written binder binds, read off the form that binds it: what a question about a place answers it as, where it is bound and where it is read.
+/// What a written binder binds, read off the form that binds it, as written: what a question about a place answers it as, where it is bound and where it is read, and what it is painted as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Binds {
-    /// A local, answered as one: a binder a term, a parameter list or a telescope's parameters bind.
+    /// A parameter, answered as a local: one a function's, a lambda's or a function type's parameters write, a destructured one's leaves among them, or a family's, a structure's or a concept's parameters and indices, or a constructor's payload.
+    Parameter,
+    /// A parameter whose stated type ends, past every function's telescope, in a sort ([`Term::ends_in_sort`](crate::Term::ends_in_sort)), answered as a local.
+    TypeParameter,
+    /// A `let`'s or a match arm's binder, answered as a local.
     Local,
     /// A structure's field, answered as the field.
     Field,
@@ -86,6 +93,24 @@ pub enum Binds {
     TupleField,
     /// A concept's method, answered as the method's declaration.
     Method,
+}
+
+impl Binds {
+    /// What a binder binding this is painted as.
+    pub fn class(self) -> Class {
+        match self {
+            Binds::Parameter => Class::Parameter,
+            Binds::TypeParameter => Class::TypeParameter,
+            Binds::Local => Class::Local,
+            Binds::Field | Binds::TupleField => Class::Field,
+            Binds::Method => Class::Method,
+        }
+    }
+
+    /// Whether a place answers the binder as a local, rather than as the member it declares.
+    pub fn is_local(self) -> bool {
+        matches!(self, Binds::Parameter | Binds::TypeParameter | Binds::Local)
+    }
 }
 
 impl WrittenBinder {

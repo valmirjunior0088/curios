@@ -216,9 +216,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// `written` with its parameters minted, when it is the function-definition sugar: what [`Self::signature_type`] and [`Self::signature_value`] lower, in whichever order the site needs.
     pub fn signature<'s>(&self, written: &'s LetSignature) -> Signature<'s> {
         let leaves = match written {
-            LetSignature::Func { params, .. } => {
-                self.mint_written(param_labels(&func_sugar_params(params)))
-            }
+            LetSignature::Func { params, .. } => self.mint_written(
+                param_labels(&func_sugar_params(params)),
+                curios_core::Binds::Parameter,
+            ),
             LetSignature::Name { .. } => Vec::new(),
         };
         Signature { written, leaves }
@@ -376,12 +377,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// [`Self::mint`] for written binders a lint reads: one that carries a span becomes a candidate, whatever its name begins with, and `_` among them, whose place a proof the elaborator writes credits as it credits a named binder's.
+    /// [`Self::mint`] for written binders a lint reads, each binding what `binds` says: one that carries a span becomes a candidate, whatever its name begins with, and `_` among them, whose place a proof the elaborator writes credits as it credits a named binder's.
     fn mint_written(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
+        binds: curios_core::Binds,
     ) -> Vec<Binder> {
-        self.mint_candidates(labels, true, curios_core::Binds::Local)
+        self.mint_candidates(labels, true, binds)
+    }
+
+    /// Note that `binder` was stated at `type_`, lowered as written: a parameter whose stated type ends in a sort is a type parameter ([`curios_core::Term::ends_in_sort`]). Nothing for a binder no candidate holds, and for one binding anything but a parameter.
+    pub fn stated(&self, binder: curios_core::Free, type_: &curios_core::Term) {
+        if !type_.ends_in_sort() {
+            return;
+        }
+        let mut candidates = self.candidates.borrow_mut();
+        if let Some(candidate) = candidates
+            .iter_mut()
+            .find(|candidate| candidate.ids.contains(&binder))
+            && candidate.binds == curios_core::Binds::Parameter
+        {
+            candidate.binds = curios_core::Binds::TypeParameter;
+        }
     }
 
     /// [`Self::mint_written`] for a telescope's binders, which no lint reads ([`Candidate::linted`]), each binding what `binds` says: each is kept where it stands, so it is answered where it is bound and read, as a written binder is.
@@ -437,7 +454,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// The binders of a written lambda's parameters.
     fn mint_params(&self, params: &[FuncParam]) -> Vec<Binder> {
-        self.mint_written(param_labels(params))
+        self.mint_written(param_labels(params), curios_core::Binds::Parameter)
     }
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
@@ -556,7 +573,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             params
                 .iter()
                 .map(|param| telescope_label(param.plicity, param.label.as_ref())),
-            curios_core::Binds::Local,
+            curios_core::Binds::Parameter,
         );
         self.func_type_over(params, &binders, output)
     }
@@ -572,6 +589,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut lowered = Vec::with_capacity(params.len());
         for (index, param) in params.iter().enumerate() {
             let domain = prefixes.under(index, || self.input_type(&param.type_))?;
+            self.stated(binders[index].1, &domain);
             lowered.push((param.plicity, binders[index].1, domain));
         }
         let output = prefixes.under(binders.len(), output)?;
@@ -951,6 +969,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .members
                 .iter()
                 .flat_map(|member| pattern_labels(&member.binder)),
+            curios_core::Binds::Local,
         );
         let (types, values, contexts) = self.context.with_sorts(SortSite::Local, || {
             self.bound(&binders, || {
@@ -1205,6 +1224,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let domain = match annotation {
                 Some(annotation) => {
                     let annotation = prefixes.under(seen, || self.input_type(annotation))?;
+                    if let Pattern::Binder(_) = pattern {
+                        self.stated(binders[seen].1, &annotation);
+                    }
                     self.wrap_pattern_chains(&chains, annotation)?
                 }
                 None => curios_core::Term::hole(self.context.fresh_metavar()),
@@ -1286,8 +1308,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// One pattern-leaf binder: its written spelling and the identity it lowers to. `_` gets an identity nothing can name, so repeated wildcards never collide.
     pub fn pattern_binder(&self, name: &Label) -> Binder {
-        self.mint_written([(name.to_string(), name.span().cloned())])
-            .remove(0)
+        self.mint_written(
+            [(name.to_string(), name.span().cloned())],
+            curios_core::Binds::Local,
+        )
+        .remove(0)
     }
 
     /// A lowered struct literal under the head it was written with. A bare head leaves the parameters to elaboration. An applied one is the type former applied as any call applies it — marks, omitted hidden arguments, `?` holes and a list with nothing written included — so it lowers as that application and the literal is stated at it, rather than the literal carrying a second argument list with rules of its own. The former is the head as it was written, and holds where.

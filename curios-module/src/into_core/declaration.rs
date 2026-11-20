@@ -127,7 +127,7 @@ pub(super) fn lower_declaration(
                             .chain(u.indices.iter().map(|(_, word, _)| {
                                 telescope_label(Plicity::Explicit, word.as_ref())
                             })),
-                        curios_core::Binds::Local,
+                        curios_core::Binds::Parameter,
                     );
                     let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
@@ -138,6 +138,7 @@ pub(super) fn lower_declaration(
                         .enumerate()
                         .map(|(i, param)| {
                             let ty = head_prefixes.under(i, || lower.input_type(&param.type_))?;
+                            lower.stated(param_binders[i].1, &ty);
                             Ok((param.plicity, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
@@ -150,6 +151,7 @@ pub(super) fn lower_declaration(
                         .map(|(i, (_, _, t))| {
                             let seen = u.params.len() + i;
                             let ty = head_prefixes.under(seen, || lower.input_type(t))?;
+                            lower.stated(index_binders[i].1, &ty);
                             Ok((index_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
@@ -164,7 +166,7 @@ pub(super) fn lower_declaration(
                                 c.payload.iter().map(|param| {
                                     telescope_label(param.plicity, param.label.as_ref())
                                 }),
-                                curios_core::Binds::Local,
+                                curios_core::Binds::Parameter,
                             );
                             let scope = [param_binders, &payload_binders].concat();
                             let mut prefixes = lower.prefixes(&scope);
@@ -176,6 +178,7 @@ pub(super) fn lower_declaration(
                                     let ty = prefixes.under(param_binders.len() + i, || {
                                         lower.input_type(&param.type_)
                                     })?;
+                                    lower.stated(payload_binders[i].1, &ty);
                                     Ok((payload_binders[i].1, ty))
                                 })
                                 .collect::<Result<Vec<_>, Error>>()?;
@@ -269,7 +272,7 @@ pub(super) fn lower_declaration(
                     s.params
                         .iter()
                         .map(|param| telescope_label(param.plicity, param.label.as_ref())),
-                    curios_core::Binds::Local,
+                    curios_core::Binds::Parameter,
                 );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = s
@@ -278,6 +281,7 @@ pub(super) fn lower_declaration(
                     .enumerate()
                     .map(|(i, param)| {
                         let ty = prefixes.under(i, || lower.input_type(&param.type_))?;
+                        lower.stated(param_binders[i].1, &ty);
                         Ok((param.plicity, param_binders[i].1, ty))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
@@ -384,7 +388,7 @@ pub(super) fn lower_declaration(
                         .params
                         .iter()
                         .map(|param| telescope_label(param.plicity, param.label.as_ref())),
-                    curios_core::Binds::Local,
+                    curios_core::Binds::Parameter,
                 );
                 let mut prefixes = lower.prefixes(&param_binders);
                 let param_tys = concept
@@ -393,6 +397,7 @@ pub(super) fn lower_declaration(
                     .enumerate()
                     .map(|(i, param)| {
                         let ty = prefixes.under(i, || lower.input_type(&param.type_))?;
+                        lower.stated(param_binders[i].1, &ty);
                         Ok((param.plicity, param_binders[i].1, ty))
                     })
                     .collect::<Result<Vec<_>, Error>>()?;

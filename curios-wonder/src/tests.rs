@@ -6,6 +6,7 @@ mod test_support;
 
 mod ask;
 mod cabinet;
+mod classes;
 mod named;
 mod record;
 mod stage;

@@ -36,6 +36,9 @@ pub use named::{
     WrittenField, described, placed,
 };
 
+mod classes;
+pub use classes::{Classed, classed};
+
 mod footprint;
 use footprint::*;
 pub use footprint::{Fate, Row};
@@ -47,8 +50,8 @@ mod ask;
 use ask::*;
 pub use ask::{
     Ended, Place, Scope, Staged, Telling, answer, file_subject, not_a_program, wonder_at,
-    wonder_diagnostics, wonder_exports, wonder_false, wonder_footprint, wonder_name,
-    wonder_named_stage, wonder_stage, wonder_tests, wonder_witnesses,
+    wonder_classes, wonder_diagnostics, wonder_exports, wonder_false, wonder_footprint,
+    wonder_name, wonder_named_stage, wonder_stage, wonder_tests, wonder_witnesses,
 };
 
 mod server;

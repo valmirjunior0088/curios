@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FALSE, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN,
-        STAGE, TEST, TESTS, WITNESSES,
+        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FALSE, FOOTPRINT, FORMAT, LINT, NAME,
+        PORT, RUN, STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -449,6 +449,8 @@ pub enum Query {
     Stage(String),
     /// The place a report closed on, whose file is the subject: what stands there, a name with the declaration it names or the term written there, answered off the check of the subject, whose lowering answers whatever the check concludes, so a file that does not check answers as one that does.
     At(Place),
+    /// Every span of the file the subject is asked through that the compiler classes, a row a line, answered off the check of the subject as a place is.
+    Classes,
     /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
     Name(Qualifier, Option<View>),
     /// Whether the checkers admit the subject's closing term at `False`: the soundness board's question, asked of a program or a text of Core text by the put the board asks it through.
@@ -462,7 +464,7 @@ impl Query {
     const GROUP: &str = "query";
 
     /// The query options, the group's members.
-    const QUERIES: [&str; 5] = ["tests", "at", "name", "false", "server"];
+    const QUERIES: [&str; 6] = ["tests", "at", "classes", "name", "false", "server"];
 
     /// The group the views of a selection form, which holds them to one.
     const VIEWS: &str = "view";
@@ -545,6 +547,12 @@ impl Args for Query {
                     .conflicts_with("subject")
                     .help("What stands at a place, written as a report closes on one: the declaration a name names, with what it is declared as, its type and where, or the term written there; takes no subject"),
             )
+            .arg(flag(
+                "classes",
+                CLASSES.query_help(
+                    "Every span of the file the subject is asked through that the compiler classes, one row each: its place, its length, its class, and `declaration` where what it names is declared there",
+                ),
+            ))
             .arg(
                 Arg::new("name")
                     .long("name")
@@ -613,6 +621,8 @@ impl FromArgMatches for Query {
             Query::Tests
         } else if let Some(place) = matches.get_one::<Place>("at") {
             Query::At(place.clone())
+        } else if matches.get_flag("classes") {
+            Query::Classes
         } else if let Some(path) = matches.get_one::<Qualifier>("name") {
             let view = if matches.get_flag("exports") {
                 Some(View::Exports)

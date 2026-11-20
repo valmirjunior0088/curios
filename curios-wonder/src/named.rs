@@ -19,7 +19,7 @@ use {
         Diagnosed, Diagnosis, Origin, Overlaid, Severity, Subject, checked, of_error, open,
         overlaid, tested_last,
     },
-    curios_common::{Code, Plicity, Qualifier, Report, Said, Source, Span},
+    curios_common::{Class, Code, Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
         Anchors, Binds, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey,
         Imports, Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
@@ -179,15 +179,17 @@ pub enum Stands {
         declares: bool,
         described: Described,
     },
-    /// A written binder, where it is bound or read: its name, where it is bound, and its type, the one it was opened at where it is bound and the one a use settled at where it is read.
+    /// A written binder, where it is bound or read: what it binds — a parameter, a type parameter or a local ([`Binds::is_local`]) — its name, where it is bound, and its type, the one it was opened at where it is bound and the one a use settled at where it is read.
     Local {
         declares: bool,
+        binds: Binds,
         name: String,
         bound: Option<Span>,
         type_: Option<String>,
     },
-    /// A field's label: the field, by its label and the path of the structure that declares it, where the structure writes it ([`Anchors::field`]), and its type as the structure declares it, over the structure's parameters.
+    /// A field's label: whether it is where the field is declared, the field, by its label and the path of the structure that declares it, where the structure writes it ([`Anchors::field`]), and its type as the structure declares it, over the structure's parameters.
     Field {
+        declares: bool,
         label: String,
         of: Option<String>,
         bound: Option<Span>,
@@ -203,6 +205,17 @@ pub enum Stands {
 }
 
 impl Answer {
+    /// What what stands here is painted as ([`Class`]): a declaration's name by what it is declared as, a binder by what it binds, a field's label as a field and a segment reaching a module as a module. `None` for a witness, whose name no reader writes, and for a term, which no name stands at.
+    pub fn class(&self) -> Option<Class> {
+        match &self.stands {
+            Stands::Declaration { described, .. } => described.declared.class(),
+            Stands::Local { binds, .. } => Some(binds.class()),
+            Stands::Field { .. } => Some(Class::Field),
+            Stands::Module { .. } => Some(Class::Module),
+            Stands::Term { .. } => None,
+        }
+    }
+
     /// What is stated of what stands here, a fact a line in the order a block states them: a declaration's ([`Described::facts`]), a local's — that it is one, and its type — and a term's type.
     pub fn facts(&self) -> Vec<Fact> {
         let typed = |type_: &Option<String>| -> Vec<Fact> {
@@ -289,6 +302,7 @@ impl Placed {
             return Some(Answer {
                 range: field.written.clone(),
                 stands: Stands::Field {
+                    declares: false,
                     label: field.label.clone(),
                     of: field.of.clone(),
                     bound: field.bound.clone(),
@@ -306,6 +320,13 @@ impl Placed {
                 Some((bound, binds)) => (Some(bound.clone()), *binds),
                 None => (None, Binds::Local),
             };
+            let local_stands = |name, bound, type_| Stands::Local {
+                declares: local.declares,
+                binds,
+                name,
+                bound,
+                type_,
+            };
             let named = bound.as_ref().unwrap_or(&local.written);
             let name = named.source.text()[named.start..named.end].to_string();
             let type_ = match local.declares {
@@ -319,6 +340,7 @@ impl Placed {
             let declaration = local.binder.declaration;
             let stands = match binds {
                 Binds::Field | Binds::TupleField => Stands::Field {
+                    declares: local.declares,
                     label: name,
                     of: declaration
                         .filter(|_| binds == Binds::Field)
@@ -338,19 +360,11 @@ impl Placed {
                             ..described.clone()
                         },
                     },
-                    None => Stands::Local {
-                        declares: local.declares,
-                        name,
-                        bound,
-                        type_,
-                    },
+                    None => local_stands(name, bound, type_),
                 },
-                Binds::Local => Stands::Local {
-                    declares: local.declares,
-                    name,
-                    bound,
-                    type_,
-                },
+                Binds::Parameter | Binds::TypeParameter | Binds::Local => {
+                    local_stands(name, bound, type_)
+                }
             };
 
             return Some(Answer {
@@ -543,7 +557,7 @@ pub fn placed(
 }
 
 /// The refusal of a question answered off a lowering, asked of Core text, which is lowered by nothing.
-fn unlowered() -> Vec<Diagnosis> {
+pub fn unlowered() -> Vec<Diagnosis> {
     let mut said = Said::line("no lowering");
     said.stating("Core text is lowered by nothing, and this question is answered off a lowering");
 

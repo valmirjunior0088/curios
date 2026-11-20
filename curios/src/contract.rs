@@ -254,6 +254,15 @@ pub const AT: Contract = Contract {
 };
 
 /// A question about one file, as [`AT`] is.
+pub const CLASSES: Contract = Contract {
+    command: "wonder --classes",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    core_text: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 /// A question about a declaration by its path, asked in the scope of a program or a library.
 pub const NAME: Contract = Contract {
     command: "wonder --name",
@@ -354,6 +363,7 @@ impl Mode {
                 Query::Stage(name) if Stage::of_a_unit(name) => &STAGE_OF_A_UNIT,
                 Query::Stage(_) => &STAGE,
                 Query::At(_) => &AT,
+                Query::Classes => &CLASSES,
                 Query::Name(_, None) => &NAME,
                 Query::Name(_, Some(View::Exports)) => &EXPORTS,
                 Query::Name(_, Some(View::Witnesses)) => &WITNESSES,

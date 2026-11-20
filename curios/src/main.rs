@@ -41,7 +41,7 @@ use {
     curios_pipeline::CompileError,
     curios_surface::{Format, Formatted},
     curios_wonder::{
-        Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at,
+        Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_classes,
         wonder_diagnostics, wonder_exports, wonder_false, wonder_footprint, wonder_name,
         wonder_named_stage, wonder_stage, wonder_tests, wonder_witnesses,
     },
@@ -840,6 +840,11 @@ fn dispatch() -> Result<(), Failure> {
                     elaboration.budget,
                     contract.admit_staged(subject, manifest, &here()?, cabinet)?,
                     &place,
+                    &mut Asking::reading(answered.clone()),
+                )?,
+                Query::Classes => wonder_classes(
+                    elaboration.budget,
+                    contract.admit_staged(subject, manifest, &here()?, cabinet)?,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, None) => wonder_name(

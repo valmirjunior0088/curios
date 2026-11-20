@@ -6,10 +6,10 @@
 
 use {
     crate::{
-        Answer, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported, Fact, Origin,
-        Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted, Unput, checked, declared_as,
-        declared_tests, described, diagnostics, exported, falsified, footprint, named_stage,
-        placed, stage, unit_stage,
+        Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
+        Fact, Origin, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted, Unput, checked,
+        classed, declared_as, declared_tests, described, diagnostics, exported, falsified,
+        footprint, named_stage, placed, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Source,
@@ -410,6 +410,27 @@ impl Asked {
         });
 
         placed
+    }
+
+    /// Every span of `file` of the subject the compiler classes ([`classed`]).
+    pub fn classed(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        file: &Path,
+        telling: &mut dyn Telling,
+    ) -> Result<Vec<Classed>, Vec<Diagnosis>> {
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
+        let classed = classed(budget, subject, file, overlay, cache, &mut |progress| {
+            telling.step(progress, cache)
+        });
+        telling.ended(match &classed {
+            Err(diagnostics) => Ended::of(diagnostics),
+            Ok(_) => Ended::Done,
+        });
+
+        classed
     }
 
     /// What `path` names in the subject's scope ([`described`]).
@@ -914,6 +935,44 @@ pub fn wonder_at(
             );
             answer(format_args!("{}\n", report.rendered(kind, &reader)));
         }
+    }
+
+    Ok(())
+}
+
+/// `wonder --classes [SUBJECT]`: every span of the file the subject is asked through that the compiler classes, `staged` being what its file is admitted as, to stdout, a row a line in the order they are written ([`classed`]): its place as a report closes on one, its length in scalar values as a column counts them, its class by its name, and `declaration` where the span is where what it names is declared. What no row covers is left to a grammar. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_classes(
+    budget: u64,
+    staged: Staged,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let overlay = Overlay::default();
+    let reader = telling.reader();
+    let (asked, file) = asked_about(staged)?;
+
+    let classed = match asked.classed(budget, &overlay, &file, telling) {
+        Ok(classed) => {
+            telling.answering();
+            classed
+        }
+        Err(diagnostics) => return Err(stopped(diagnostics)),
+    };
+    for Classed {
+        span,
+        class,
+        declaration,
+    } in classed
+    {
+        let length = span.source.text()[span.start..span.end].chars().count();
+        let modifiers = match declaration {
+            true => " declaration",
+            false => "",
+        };
+        answer(format_args!(
+            "{} {length} {}{modifiers}\n",
+            span.place(&reader),
+            class.name()
+        ));
     }
 
     Ok(())

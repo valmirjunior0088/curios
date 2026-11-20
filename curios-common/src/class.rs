@@ -61,12 +61,12 @@ classes! {
     Function => "function",
     /// Any other declaration, a witness's name in Core text among them.
     Value => "value",
-    /// A structure's field, written or projected.
+    /// A structure's or a tuple type's field, written or projected.
     Field => "field",
-    /// A function's or a lambda's binder.
+    /// A binder a parameter list writes — a function's, a lambda's or a function type's, a destructured parameter's leaves among them — or a family's, a structure's or a concept's parameters and indices, or a constructor's payload.
     Parameter => "parameter",
-    /// A binder whose stated type is a sort.
+    /// A parameter whose stated type ends, past every function's telescope, in a sort, read as a definition's is: `F: Type -> Type` as `A: Type`.
     TypeParameter => "type-parameter",
-    /// A `let`'s or a pattern's binder.
+    /// A `let`'s or a match arm's binder.
     Local => "local",
 }

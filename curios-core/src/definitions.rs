@@ -650,17 +650,24 @@ pub enum Declared {
     Test,
 }
 
-impl Declared {
-    /// A written definition stating `type_`, read as written and unfolding nothing — `Endo(Nat)` is a value's type, whatever it unfolds to: a type where it ends, past every function's telescope, in a sort; a function where it is a function's otherwise; and a value where it is neither.
-    pub fn defined(type_: &Term) -> Declared {
-        let mut result = type_;
+impl Term {
+    /// Whether this type, read as written and unfolding nothing, ends past every function's telescope in a sort: a type's type, or a type former's — `Endo(Nat)` does not, whatever it unfolds to. What makes a written definition a type ([`Declared::defined`]) and a written parameter a type parameter.
+    pub fn ends_in_sort(&self) -> bool {
+        let mut result = self;
         while let Subterm::FuncType(FuncType { telescope }) = &**result {
             result = telescope.terminal();
         }
-        match (&**result, &**type_) {
-            (Subterm::Sort(_), _) => Declared::Type,
-            (_, Subterm::FuncType(_)) => Declared::Function,
-            _ => Declared::Value,
+        matches!(&**result, Subterm::Sort(_))
+    }
+}
+
+impl Declared {
+    /// A written definition stating `type_`, read as written and unfolding nothing — `Endo(Nat)` is a value's type, whatever it unfolds to: a type where it ends, past every function's telescope, in a sort; a function where it is a function's otherwise; and a value where it is neither.
+    pub fn defined(type_: &Term) -> Declared {
+        match (type_.ends_in_sort(), &**type_) {
+            (true, _) => Declared::Type,
+            (false, Subterm::FuncType(_)) => Declared::Function,
+            (false, _) => Declared::Value,
         }
     }
 
