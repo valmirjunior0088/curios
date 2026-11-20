@@ -1,47 +1,8 @@
 use {
     super::*,
+    crate::Products,
     curios_common::{Qualifier, RootKind, digest},
 };
-
-/// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
-#[test]
-fn a_binary_nests_under_its_package() {
-    let store = Store::at(PathBuf::from("/w/u"));
-
-    assert_eq!(
-        store.built(Target::Native, "json", "serve"),
-        PathBuf::from("/w/u/.curios/native/json/serve")
-    );
-    assert_ne!(
-        store.built(Target::Native, "json", "serve"),
-        store.built(Target::Native, "other", "serve")
-    );
-}
-
-/// Each target's builds are a family of their own, spelled as `--target` spells the target, so a page and an executable of one name never stand at one path.
-#[test]
-fn each_target_builds_apart() {
-    let store = Store::at(PathBuf::from("/w/u"));
-
-    assert_eq!(
-        store.built(Target::Browser, "json", "serve"),
-        PathBuf::from("/w/u/.curios/browser/json/serve")
-    );
-    assert_ne!(
-        store.built(Target::Native, "json", "serve"),
-        store.built(Target::Browser, "json", "serve")
-    );
-}
-
-/// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
-#[test]
-fn joining_an_umbrella_moves_only_the_root() {
-    let alone = Store::at(PathBuf::from("/w/json")).built(Target::Native, "json", "serve");
-    let enclosed = Store::at(PathBuf::from("/w/u")).built(Target::Native, "json", "serve");
-
-    assert!(alone.ends_with(".curios/native/json/serve"));
-    assert!(enclosed.ends_with(".curios/native/json/serve"));
-}
 
 /// A hash's scheme is a directory of its own, which is what lets a successor sit beside `c1` rather than replace it.
 #[test]
@@ -49,7 +10,7 @@ fn a_materialized_tree_files_under_its_scheme() {
     let hash = TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap();
 
     assert_eq!(
-        Store::at(PathBuf::from("/w/u")).source(&hash),
+        Cabinet::at(Path::new("/w/u")).source(&hash),
         PathBuf::from(format!("/w/u/.curios/sources/c1/{}", "a".repeat(64)))
     );
 }
@@ -58,14 +19,15 @@ fn a_materialized_tree_files_under_its_scheme() {
 #[test]
 fn the_families_do_not_share_a_namespace() {
     let root = PathBuf::from("/w/u");
-    let store = Store::at(root.clone());
+    let products = Products::at(root.clone());
+    let cabinet = Cabinet::at(&root);
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
     let module = FileHash::parse(&format!("f1:{}", "b".repeat(64))).unwrap();
 
-    let binary = store.built(Target::Native, "c1", "tool");
-    let tree = store.source(&hash);
-    let fetched = store.foreign(&module);
+    let binary = products.built(Target::Native, "c1", "tool");
+    let tree = cabinet.source(&hash);
+    let fetched = cabinet.foreign(&module);
 
     assert!(!binary.starts_with(tree.parent().unwrap()));
     assert_eq!(
@@ -74,23 +36,23 @@ fn the_families_do_not_share_a_namespace() {
         "a fetched module sits in a family of its own"
     );
     assert!(
-        !fetched.starts_with(root.join(STORE).join("sources")),
+        !fetched.starts_with(root.join(PRODUCTS).join("sources")),
         "one digest, a tree and a module, two places"
     );
-    assert!(!tree.starts_with(root.join(STORE).join("executables")));
+    assert!(!tree.starts_with(root.join(PRODUCTS).join("executables")));
     assert!(
-        !store
+        !cabinet
             .verdict("key")
-            .starts_with(root.join(STORE).join("executables"))
+            .starts_with(root.join(PRODUCTS).join("executables"))
     );
     assert_eq!(
-        store.documentation("c1"),
+        products.documentation("c1"),
         PathBuf::from("/w/u/.curios/documentation/c1"),
         "and documentation sits beside the executables, under its package"
     );
     assert_ne!(
-        store.verdict("key"),
-        store.payload(Runs::Native { engine: "e" }, "key"),
+        cabinet.verdict("key"),
+        cabinet.payload(Runs::Native { engine: "e" }, "key"),
         "one slot name, two families, two places"
     );
 }
@@ -260,19 +222,19 @@ fn two_engines_address_two_slots() {
 /// A browser's payload is a module any browser runs, so it needs no engine in its address, and the two targets file under two directories, neither read for the other.
 #[test]
 fn each_target_files_its_payloads_apart() {
-    let store = Store::at(PathBuf::from("/w/u"));
+    let cabinet = Cabinet::at(Path::new("/w/u"));
 
     assert_ne!(
-        store.payload(Runs::Native { engine: "e" }, "key"),
-        store.payload(Runs::Browser, "key")
+        cabinet.payload(Runs::Native { engine: "e" }, "key"),
+        cabinet.payload(Runs::Browser, "key")
     );
     assert!(
-        store
+        cabinet
             .payload(Runs::Browser, "key")
             .ends_with("payloads/browser/key")
     );
     assert!(
-        store
+        cabinet
             .payload(Runs::Native { engine: "e" }, "key")
             .ends_with("payloads/native/key")
     );

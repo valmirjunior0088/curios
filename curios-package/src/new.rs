@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{
-        CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, Refused, STORE, canonical, umbrella_over,
+        CompilerVersion, EXECUTABLE, LIBRARY, MANIFEST, PRODUCTS, Refused, canonical, umbrella_over,
     },
     curios_common::{OsError, Report},
     std::{
@@ -81,7 +81,7 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, Box<Report>> {
         &program,
         &format!("use /std/{{Fmt}};\nuse /{name}/{{message}};\n\nFmt/print(\"%\\n\")(message)\n"),
     )?;
-    write(&ignore, &format!("/{STORE}/\n"))?;
+    write(&ignore, &format!("/{PRODUCTS}/\n"))?;
 
     // In the order they were written, which is the order a reader wants them: the directory that now exists, then what is in it.
     Ok(vec![

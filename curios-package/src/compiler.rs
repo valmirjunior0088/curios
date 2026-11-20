@@ -16,7 +16,7 @@
 mod tests;
 
 use {
-    crate::Store,
+    crate::Cabinet,
     curios_common::Fingerprint,
     std::{
         fs::{self, File},
@@ -33,7 +33,7 @@ use {
 /// `None` is an answer, and the answer is *do not cache*: a verdict recorded under an identity nobody can reproduce is a verdict that would later be believed on behalf of a different compiler. Failing closed here costs a re-certification; failing open costs soundness.
 ///
 /// The identity is the *running* binary, which is exactly right for the compiler and coarse for an embedder: linked into somebody's application, the running binary is their application, so their rebuild invalidates verdicts this compiler would still stand behind. That is over-invalidation — the safe direction — and it is not fixable from here, because nothing can point at the compiler-shaped part of another program.
-pub fn compiler(store: &Store) -> Option<String> {
+pub fn compiler(cabinet: &Cabinet) -> Option<String> {
     let executable = std::env::current_exe().ok()?;
     let metadata = fs::metadata(&executable).ok()?;
     let stamp = format!(
@@ -51,7 +51,7 @@ pub fn compiler(store: &Store) -> Option<String> {
         metadata.ctime_nsec(),
     );
 
-    let record = store.compiler();
+    let record = cabinet.compiler();
     if let Ok(recorded) = fs::read_to_string(&record)
         && let Some((seen, digest)) = recorded.rsplit_once(' ')
         && seen == stamp

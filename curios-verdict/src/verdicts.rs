@@ -23,7 +23,7 @@ use {
     crate::{Packs, opened, replace},
     curios_common::{Candidates, Qualifier, Source, SourceName, digest},
     curios_module::{Compiled, Overlay, PackageRoot, UnitSource},
-    curios_package::{Store, compiler, entry_slot, unit_slot},
+    curios_package::{Cabinet, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier, complete_records},
     curios_unit::{Indexed, Record, Unit, recorded},
     std::{
@@ -171,7 +171,7 @@ fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, St
 /// One handle for both because they are one store: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
     /// `None` for a handle with no store behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
-    store: Option<Store>,
+    cabinet: Option<Cabinet>,
     /// The identity of the compiler running now, asked for on the first slot that needs it and not before. `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
     ///
     /// Lazy because identifying the compiler writes its memo beside the store, and opening a store is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
@@ -193,10 +193,10 @@ pub struct Verdicts {
 impl Verdicts {
     /// The store beside `root`.
     pub fn at(root: PathBuf) -> Self {
-        let store = Store::at(root);
+        let cabinet = Cabinet::at(&root);
 
         Self {
-            store: Some(store),
+            cabinet: Some(cabinet),
             compiler: OnceCell::new(),
             taken: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
@@ -211,7 +211,7 @@ impl Verdicts {
     /// Nothing is addressed, since nothing is filed: a kept unit is told from another by which unit it is, the prefixes it claims and where it reads from ([`Session`]).
     pub fn kept_by(session: Session) -> Self {
         Self {
-            store: None,
+            cabinet: None,
             compiler: OnceCell::new(),
             taken: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
@@ -383,7 +383,7 @@ impl Verdicts {
     /// The compiler's identity, memoized on first use — see the field.
     pub(crate) fn compiler(&self) -> Option<&String> {
         self.compiler
-            .get_or_init(|| compiler(self.store.as_ref()?))
+            .get_or_init(|| compiler(self.cabinet.as_ref()?))
             .as_ref()
     }
 
@@ -402,7 +402,7 @@ impl Verdicts {
             return None;
         }
         // A handle with no store files nothing, so it addresses nothing: every unit its session keeps stands at the one slot, and is told from another by which unit it is.
-        if self.store.is_none() {
+        if self.cabinet.is_none() {
             return Some(String::new());
         }
         let compiler = self.compiler()?;
@@ -430,12 +430,12 @@ impl Verdicts {
 
     /// The packs of `slot`'s address, opened the first time this handle asks for them. `None` for a handle with no store.
     fn packs(&self, slot: &str) -> Option<Rc<Packs>> {
-        let store = self.store.as_ref()?;
+        let cabinet = self.cabinet.as_ref()?;
         let packs = self
             .packs
             .borrow_mut()
             .entry(slot.to_string())
-            .or_insert_with(|| Rc::new(Packs::at(store.objects(slot), SystemTime::now())))
+            .or_insert_with(|| Rc::new(Packs::at(cabinet.objects(slot), SystemTime::now())))
             .clone();
 
         Some(packs)
@@ -494,7 +494,7 @@ impl Verdicts {
         for source in sources {
             let slot = self.slot(source)?;
 
-            let opened = opened(&self.store.as_ref()?.verdict(&slot))?;
+            let opened = opened(&self.cabinet.as_ref()?.verdict(&slot))?;
             let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
 
             let reach = reach(source, &taken);
@@ -540,7 +540,7 @@ impl Verdicts {
         let slot = self.slot(source)?;
 
         // The record is judged before the artifact is read: a slot whose record disagrees is not worth reading past it, and a file that is not a slot is a store to ignore.
-        let opened = opened(&self.store.as_ref()?.verdict(&slot))?;
+        let opened = opened(&self.cabinet.as_ref()?.verdict(&slot))?;
 
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
@@ -579,7 +579,7 @@ impl Verdicts {
     pub fn earlier(&self, source: &UnitSource<'_>) -> Option<Earlier> {
         let slot = self.slot(source)?;
 
-        let opened = opened(&self.store.as_ref()?.verdict(&slot))?;
+        let opened = opened(&self.cabinet.as_ref()?.verdict(&slot))?;
         let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
         let index = opened.artifact()?;
         if !intact(&record.unit, &index) {
@@ -611,7 +611,7 @@ impl Verdicts {
     /// A unit this refuses has no place, and neither has a unit that could have read it: a record would vouch for a unit nothing here can produce again.
     fn placement(&self, source: &UnitSource<'_>, unit: &Unit) -> Option<Placement> {
         curios_profile::profile!("verdicts::placement");
-        let store = self.store.as_ref()?;
+        let cabinet = self.cabinet.as_ref()?;
         let slot = self.slot(source)?;
         let after = {
             let taken = self.taken.borrow();
@@ -636,7 +636,7 @@ impl Verdicts {
         let stored = unit.stored().ok()?;
 
         Some(Placement {
-            path: store.verdict(&slot),
+            path: cabinet.verdict(&slot),
             slot,
             reads,
             after,

@@ -271,7 +271,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
 
-    let placed = crate::Store::at(root.to_path_buf()).source(&hash);
+    let placed = crate::Cabinet::at(&root).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
 
@@ -361,7 +361,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     .unwrap();
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
-    let placed = crate::Store::at(root.to_path_buf()).source(&hash);
+    let placed = crate::Cabinet::at(&root).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
     let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
@@ -562,7 +562,7 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
         .unwrap();
         fs::write(delivered.join("lib.crs"), "").unwrap();
         let hash = TreeHash::of(&delivered).unwrap();
-        let placed = crate::Store::at(root.join("app")).source(&hash);
+        let placed = crate::Cabinet::at(&root.join("app")).source(&hash);
         fs::create_dir_all(placed.parent().unwrap()).unwrap();
         fs::rename(&delivered, &placed).unwrap();
 

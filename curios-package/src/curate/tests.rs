@@ -47,10 +47,9 @@ fn a_delivery_matching_its_pin_is_placed() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
-        .expect("a delivery matching its pin");
+    accept(&scratch, &Cabinet::at(&root), &acquisition).expect("a delivery matching its pin");
 
-    let placed = Store::at(root.to_path_buf()).source(&hash);
+    let placed = Cabinet::at(&root).source(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(!scratch.exists(), "the scratch directory is consumed");
 }
@@ -84,7 +83,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    let refusal = accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
+    let refusal = accept(&scratch, &Cabinet::at(&root), &acquisition)
         .expect_err("a tampered delivery")
         .render();
 
@@ -98,7 +97,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         "{refusal}"
     );
     assert!(
-        !Store::at(root.to_path_buf())
+        !Cabinet::at(&root)
             .source(&acquisition.snapshot.hash)
             .exists(),
         "nothing is placed under a hash it does not have"
@@ -289,10 +288,9 @@ fn a_fetched_revision_is_verified_and_placed() {
         written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
-    fetch(&Store::at(root.to_path_buf()), &acquisition, || {})
-        .expect("a revision this machine is serving");
+    fetch(&Cabinet::at(&root), &acquisition, || {}).expect("a revision this machine is serving");
 
-    let placed = Store::at(root.to_path_buf()).source(&expected);
+    let placed = Cabinet::at(&root).source(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(
         !placed.join(".git").exists(),
@@ -380,7 +378,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
     let refusal = fetch(
-        &Store::at(root.to_path_buf()),
+        &Cabinet::at(&root),
         &pinned(&origin, absent, &expected),
         || {},
     )
@@ -427,7 +425,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
                 ),
             )],
         );
-        let store = Store::at(root.to_path_buf());
+        let cabinet = Cabinet::at(&root);
 
         // Whichever name `git init` gave the branch is the one that exists; the other is simply absent from this remote.
         if rev == "master" || rev == "main" {
@@ -437,13 +435,13 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
             }
         }
 
-        fetch(&store, &pinned(&origin, rev, &expected), || {}).unwrap_or_else(|refusal| {
+        fetch(&cabinet, &pinned(&origin, rev, &expected), || {}).unwrap_or_else(|refusal| {
             panic!(
                 "{rev} names a revision this remote holds: {}",
                 refusal.render()
             )
         });
-        assert!(store.source(&expected).join("lib.crs").is_file(), "{rev}");
+        assert!(cabinet.source(&expected).join("lib.crs").is_file(), "{rev}");
     }
 }
 
@@ -520,7 +518,7 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     assert_eq!(fetched.packages.len(), 1, "{fetched:?}");
     assert!(
         governing
-            .store()
+            .cabinet()
             .source(&expected)
             .join("lib.crs")
             .is_file()
@@ -565,10 +563,13 @@ fn a_fetched_module_matching_its_pin_is_placed() {
         ),
     };
 
-    let store = Store::at(root.to_path_buf());
-    fetch_module(&store, &acquisition, || {}).expect("a delivery matching its pin");
+    let cabinet = Cabinet::at(&root);
+    fetch_module(&cabinet, &acquisition, || {}).expect("a delivery matching its pin");
 
-    assert_eq!(fs::read(store.foreign(&hash)).unwrap(), b"\0asm\x01\0\0\0");
+    assert_eq!(
+        fs::read(cabinet.foreign(&hash)).unwrap(),
+        b"\0asm\x01\0\0\0"
+    );
 }
 
 /// A fetched module that is not what it was pinned to is refused stating both digests, and nothing is filed — the store never holds bytes under a key they do not have.
@@ -605,8 +606,8 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
         ),
     };
 
-    let store = Store::at(root.to_path_buf());
-    let refusal = fetch_module(&store, &acquisition, || {})
+    let cabinet = Cabinet::at(&root);
+    let refusal = fetch_module(&cabinet, &acquisition, || {})
         .expect_err("a delivery failing its pin")
         .render();
 
@@ -622,5 +623,5 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
         refusal.contains("├─ try; curios pin foreign sha2 --target native --refresh"),
         "{refusal}"
     );
-    assert!(!store.foreign(&pinned).exists(), "nothing was filed");
+    assert!(!cabinet.foreign(&pinned).exists(), "nothing was filed");
 }

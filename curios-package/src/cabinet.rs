@@ -1,29 +1,4 @@
-//! Where everything a build generates or fetches is kept.
-//!
-//! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
-//!
-//! It holds eight families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
-//!
-//! ```text
-//! .curios/
-//!   native/         json/serve      what `curios compile` emits for the native target
-//!   browser/        json/serve/     what it emits for a browser: the page's directory
-//!   documentation/  json/           what `curios document` emits
-//!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
-//!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
-//!   verdicts/       <slot>          judged units, one file per unit and compiler
-//!   objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
-//!   payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
-//!                   browser/<slot>  and, natively, engine
-//! ```
-//!
-//! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Store::staging`].
-//!
-//! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
-//!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/`, `objects/` and `payloads/` families — never `native/`, `browser/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
-//!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every other family is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
+//! The cabinet: what `.curios/` keeps for reuse — materialized sources, fetched foreign modules, judged units and the objects their slots name, precompiled payloads and the compiler's memo — and the addresses a unit and a payload are filed under. Its families and their place in `.curios/` are [`crate::PRODUCTS`]'s map.
 
 #[cfg(test)]
 mod tests;
@@ -32,59 +7,38 @@ mod tests;
 mod test_support;
 
 use {
-    crate::{FileHash, Target, TreeHash},
+    crate::{FileHash, PRODUCTS, Target, TreeHash},
     curios_common::{Fingerprint, Mount, Qualifier},
     curios_module::Compiled,
-    std::path::PathBuf,
+    std::path::{Path, PathBuf},
 };
 
-/// The generated directory itself.
-pub const STORE: &str = ".curios";
-
-/// Where a project's generated things go: three families beside it, five in a cache it shares with every other project.
+/// What a project keeps for reuse: five families in a directory it shares with every project that names the same one.
 ///
-/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they stay local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
-pub struct Store {
-    /// The governing root — the umbrella's directory when one governs, the package's otherwise.
-    project: PathBuf,
-    /// The cache shared across projects.
-    shared: PathBuf,
+/// **The cabinet is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they are [`Products`](crate::Products) and stay local. Content-derived keys are what make a shared cabinet possible at all; a path-keyed one could only ever have been local.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cabinet {
+    /// The directory the families stand in.
+    directory: PathBuf,
 }
 
-impl Store {
-    /// The store a project at `project` uses, sharing whatever this machine offers.
-    pub fn at(project: PathBuf) -> Self {
+impl Cabinet {
+    /// The cabinet a project at `project` files into, sharing whatever this machine offers.
+    pub fn at(project: &Path) -> Self {
         Self {
-            shared: shared().unwrap_or_else(|| project.join(STORE)),
-            project,
+            directory: shared().unwrap_or_else(|| project.join(PRODUCTS)),
         }
-    }
-
-    /// Where a build of an executable for `target` is written: a native executable's file, or a browser page's directory, nested under the package that declares it, beside the project.
-    ///
-    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `<target>/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a build without renaming it.
-    pub fn built(&self, target: Target, package: &str, executable: &str) -> PathBuf {
-        self.project
-            .join(STORE)
-            .join(target.spelled())
-            .join(package)
-            .join(executable)
-    }
-
-    /// Where a package's generated documentation is written: nested under the package, beside the project, for the reason an executable is.
-    pub fn documentation(&self, package: &str) -> PathBuf {
-        self.project.join(STORE).join("documentation").join(package)
     }
 
     /// Where a delivery is staged while the digest that will name it is still being computed, before it is renamed onto that digest.
     ///
     /// **The one fetch in this toolchain with no pin to fetch against**, because deriving the pin is what `curios pin` is doing. Every other stages under the key it already has — `curate` uses `source(hash).with_extension("fetching")` — which is exactly what this cannot do.
     ///
-    /// It still lands in the store rather than being hashed and thrown away: the bytes that were just fetched are the bytes the next command wants, and a delivery discarded here would be downloaded a second time by the `curate` that follows. What makes filing it sound is that the digest is computed *from* the delivery, so the entry it is renamed onto holds bytes that hash to its own name by construction — and every reader re-hashes what it takes out.
+    /// It still lands in the cabinet rather than being hashed and thrown away: the bytes that were just fetched are the bytes the next command wants, and a delivery discarded here would be downloaded a second time by the `curate` that follows. What makes filing it sound is that the digest is computed *from* the delivery, so the entry it is renamed onto holds bytes that hash to its own name by construction — and every reader re-hashes what it takes out.
     ///
-    /// In the shared half beside the families, so the rename onto a digest is within one filesystem however `CURIOS_CACHE` points; `what` carries the process id, so two `pin`s at once stage two paths.
+    /// In the cabinet beside the families, so the rename onto a digest is within one filesystem wherever the cabinet stands; `what` carries the process id, so two `pin`s at once stage two paths.
     pub fn staging(&self, what: &str) -> PathBuf {
-        self.shared.join(format!("pinning.{what}"))
+        self.directory.join(format!("pinning.{what}"))
     }
 
     /// Where a materialized source tree is placed, keyed by the hash it was accepted against.
@@ -93,37 +47,37 @@ impl Store {
     pub fn source(&self, hash: &TreeHash) -> PathBuf {
         let (scheme, digest) = hash.split();
 
-        self.shared.join("sources").join(scheme).join(digest)
+        self.directory.join("sources").join(scheme).join(digest)
     }
 
     /// Where a fetched foreign module is placed, keyed by the hash it was accepted against.
     ///
-    /// Beside `sources` rather than within it, and for the reason the two are different kinds: a source is a tree a package *is*, a foreign module is one file a package *names*. Both are content-keyed and both live in the shared half, so one machine fetches a module once however many projects reach for it — which is what makes a module too large to commit affordable to depend on.
+    /// Beside `sources` rather than within it, and for the reason the two are different kinds: a source is a tree a package *is*, a foreign module is one file a package *names*. Both are content-keyed and both live in the cabinet, so one machine sharing one fetches a module once however many projects reach for it — which is what makes a module too large to commit affordable to depend on.
     ///
     /// A module the package carries has no entry here at all: it is already in the delivered tree, and the tree hash its consumer pinned covers it.
     pub fn foreign(&self, hash: &FileHash) -> PathBuf {
         let (scheme, digest) = hash.split();
 
-        self.shared.join("foreign").join(scheme).join(digest)
+        self.directory.join("foreign").join(scheme).join(digest)
     }
 
     /// Where a judged unit is filed, under the address its mounts, what it declared and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
     pub fn verdict(&self, slot: &str) -> PathBuf {
-        self.shared.join("verdicts").join(slot)
+        self.directory.join("verdicts").join(slot)
     }
 
     /// Where the objects the slots at `slot` name are kept: the packs its filings wrote, beside the slot and named by what they hold.
     ///
-    /// A directory for each address rather than one for the store, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, and two units never write one.
+    /// A directory for each address rather than one for the cabinet, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, and two units never write one.
     pub fn objects(&self, slot: &str) -> PathBuf {
-        self.shared.join("objects").join(slot)
+        self.directory.join("objects").join(slot)
     }
 
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
-    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
+    /// In the cabinet rather than the products, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, runs: Runs<'_>, slot: &str) -> PathBuf {
-        self.shared
+        self.directory
             .join("payloads")
             .join(runs.target().spelled())
             .join(slot)
@@ -131,13 +85,13 @@ impl Store {
 
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
     pub fn compiler(&self) -> PathBuf {
-        self.shared.join("compiler")
+        self.directory.join("compiler")
     }
 }
 
-/// The cache shared across projects, when something said where to put one.
+/// The cabinet shared across projects, when something said where to put one.
 ///
-/// **`CURIOS_CACHE` and nothing else — there is deliberately no divined default.** A toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for, and `.curios/` beside the project is the one generated directory this design admits to. So sharing is opt in: unset, every project keeps its own store, which costs a re-fetch and a re-certification per project and surprises nobody. Set, two projects pinning one revision materialize and compile it once.
+/// **`CURIOS_CACHE` and nothing else — there is deliberately no divined default.** A toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for, and `.curios/` beside the project is the one generated directory this design admits to. So sharing is opt in: unset, every project keeps its own cabinet, which costs a re-fetch and a re-certification per project and surprises nobody. Set, two projects pinning one revision materialize and compile it once.
 ///
 /// It also makes every test hermetic without asking for anything: nothing in a suite sets the variable, so nothing in a suite can reach past the directory it made.
 fn shared() -> Option<PathBuf> {

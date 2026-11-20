@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{
-        FileHash, MANIFEST, Manifest, Refused, Row, Step, Store, Target, TreeHash, deliver,
+        Cabinet, FileHash, MANIFEST, Manifest, Refused, Row, Step, Target, TreeHash, deliver,
         deliver_module, nearest_manifest, umbrella_over, unwritable,
     },
     curios_common::{OsError, Report, Source},
@@ -70,9 +70,9 @@ impl Pinning {
         })
     }
 
-    /// The store a fetched delivery is filed in.
-    pub fn store(&self) -> Store {
-        Store::at(self.root.clone())
+    /// The cabinet a fetched delivery is filed in.
+    pub fn cabinet(&self) -> Cabinet {
+        Cabinet::at(&self.root)
     }
 }
 
@@ -82,9 +82,9 @@ impl Pinning {
 struct Staged(PathBuf);
 
 impl Staged {
-    /// Stage a path under `store`, with nothing at it.
-    fn new(store: &Store) -> Result<Self, Box<Report>> {
-        let path = store.staging(&std::process::id().to_string());
+    /// Stage a path in `cabinet`, with nothing at it.
+    fn new(cabinet: &Cabinet) -> Result<Self, Box<Report>> {
+        let path = cabinet.staging(&std::process::id().to_string());
 
         let _ = fs::remove_dir_all(&path);
         let _ = fs::remove_file(&path);
@@ -518,14 +518,14 @@ fn plain(path: &Path, name: &str) -> Result<String, Refused> {
 
 /// Fetch `url` and file it under the digest it turns out to have, answering that digest and what arrived, described for `target`.
 fn fetched_module(
-    store: &Store,
+    cabinet: &Cabinet,
     url: &str,
     subject: &str,
     target: Target,
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<(FileHash, Probe), Box<Report>> {
-    let staged = Staged::new(store)?;
+    let staged = Staged::new(cabinet)?;
 
     told(Transport::Asked);
     deliver_module(staged.path(), url, subject).map_err(|refused| written.refuse(refused))?;
@@ -542,7 +542,7 @@ fn fetched_module(
     })?;
     let hash = FileHash::of_bytes(&bytes);
 
-    let placed = store.foreign(&hash);
+    let placed = cabinet.foreign(&hash);
     staged.file(&placed)?;
 
     Ok((hash, Probe::of(&bytes, true, placed, target)))
@@ -550,13 +550,13 @@ fn fetched_module(
 
 /// Fetch `rev` of `url` and file the tree under the digest it turns out to have, answering that digest and the package it declares itself to be.
 fn fetched_tree(
-    store: &Store,
+    cabinet: &Cabinet,
     url: &str,
     rev: &str,
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<(TreeHash, String), Box<Report>> {
-    let staged = Staged::new(store)?;
+    let staged = Staged::new(cabinet)?;
 
     fs::create_dir_all(staged.path()).map_err(|error| unwritable(staged.path(), &error))?;
     told(Transport::Asked);
@@ -566,7 +566,7 @@ fn fetched_tree(
     let hash = TreeHash::of(staged.path())?;
     let declared = declares(staged.path(), written)?;
 
-    staged.file(&store.source(&hash))?;
+    staged.file(&cabinet.source(&hash))?;
 
     Ok((hash, declared))
 }
@@ -644,7 +644,7 @@ fn settled_foreign(
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, Box<Report>> {
-    let store = pinning.store();
+    let cabinet = pinning.cabinet();
     let carried = |path: &Path| -> Result<Settled, Box<Report>> {
         let spelled = plain(path, name).map_err(|refused| written.refuse(refused))?;
         let at = pinning.directory.join(path);
@@ -672,7 +672,7 @@ fn settled_foreign(
 
     let mut fetched = |url: &str| -> Result<Settled, Box<Report>> {
         let (hash, probe) = fetched_module(
-            &store,
+            &cabinet,
             url,
             &format!("the foreign module `{name}`"),
             target,
@@ -739,7 +739,7 @@ fn settled_dependency(
     written: &Row,
     told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, Box<Report>> {
-    let store = pinning.store();
+    let cabinet = pinning.cabinet();
     let agreed = |declared: &str, at: &str| -> Result<(), Box<Report>> {
         match declared == name {
             true => Ok(()),
@@ -754,7 +754,7 @@ fn settled_dependency(
     };
 
     let mut fetched = |url: &str, rev: &str| -> Result<Settled, Box<Report>> {
-        let (hash, declared) = fetched_tree(&store, url, rev, written, told)?;
+        let (hash, declared) = fetched_tree(&cabinet, url, rev, written, told)?;
         agreed(&declared, &format!("{url} at {rev}"))?;
 
         Ok(Settled {

@@ -13,7 +13,7 @@ use {
     curios_common::{OsError, Report, Said},
     curios_native::{DeclaredModule, ForeignBindings, Unlinked, plugin_bindings},
     curios_package::{
-        Foreign, Governing, MANIFEST, Refused, Row, Step, Store, Target, declared_modules,
+        Cabinet, Foreign, Governing, MANIFEST, Refused, Row, Step, Target, declared_modules,
     },
     std::{
         fs,
@@ -28,8 +28,8 @@ struct Reached {
     stating: Vec<(String, PathBuf, Foreign)>,
     /// Each row stating none: the package that declares it, the directory its manifest sits in, its name, and what it answers.
     elsewhere: Vec<(String, PathBuf, String, Vec<String>)>,
-    /// The store a fetched delivery is read from, where a graph was walked.
-    store: Option<Store>,
+    /// The cabinet a fetched delivery is read from, where a graph was walked.
+    cabinet: Option<Cabinet>,
 }
 
 /// The rows of the graph of the package `manifest` declares that answer a declaration among `foreigns`, split by whether they state `target`'s table.
@@ -51,7 +51,7 @@ fn reached(
 
     let governing = Governing::at(manifest)?;
     let mut reached = Reached {
-        store: Some(governing.store()),
+        cabinet: Some(governing.cabinet()),
         ..Reached::default()
     };
 
@@ -205,13 +205,16 @@ pub fn bindings_of(
             .native
             .as_ref()
             .expect("a row stating the native table delivers a module");
-        let store = reached.store.as_ref().expect("a walked graph has a store");
+        let cabinet = reached
+            .cabinet
+            .as_ref()
+            .expect("a walked graph has a cabinet");
 
         let code = curios_cranelift::compile(&native.bytes(
             &foreign.name,
             Target::Native,
             &directory,
-            store,
+            cabinet,
         )?)
         .map_err(|error| {
             written(&directory, &foreign.name).refuse(
@@ -258,7 +261,10 @@ pub fn linked_of(
             .browser
             .as_ref()
             .expect("a row stating the browser table delivers a gateway");
-        let store = reached.store.as_ref().expect("a walked graph has a store");
+        let cabinet = reached
+            .cabinet
+            .as_ref()
+            .expect("a walked graph has a cabinet");
 
         let mut statics = Vec::new();
         for served in gateway.served(&foreign.name, &directory)? {
@@ -287,9 +293,12 @@ pub fn linked_of(
         linked.push(Linked {
             gateway: Placed {
                 path: gateway.stands(&foreign.name),
-                bytes: gateway
-                    .delivery
-                    .bytes(&foreign.name, Target::Browser, &directory, store)?,
+                bytes: gateway.delivery.bytes(
+                    &foreign.name,
+                    Target::Browser,
+                    &directory,
+                    cabinet,
+                )?,
             },
             // A declaration the program never reaches is no hook a page could hold to a row.
             answers: foreign

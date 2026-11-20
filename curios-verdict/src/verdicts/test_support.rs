@@ -3,10 +3,10 @@
 use super::*;
 
 impl Verdicts {
-    /// The store beside `root` and no other, whatever this machine shares ([`Store::alone`]).
+    /// The cabinet beside `root` and no other, whatever this machine shares ([`Cabinet::alone`]).
     pub fn alone(root: PathBuf) -> Self {
         Self {
-            store: Some(Store::alone(root)),
+            cabinet: Some(Cabinet::alone(&root)),
             ..Self::at(PathBuf::new())
         }
     }

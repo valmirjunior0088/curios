@@ -103,7 +103,7 @@ fn a_scaffolded_package_ignores_its_store() {
     assert!(written.contains(&ignore), "and it is reported as written");
     assert_eq!(
         fs::read_to_string(&ignore).unwrap(),
-        format!("/{STORE}/\n"),
+        format!("/{PRODUCTS}/\n"),
         "the store and nothing else"
     );
 }

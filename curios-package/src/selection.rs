@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, Executable, Governing, LIBRARY, Package, Refused, Store, Target, module_below,
-        module_of, order, reachable,
+        EXECUTABLE, Executable, Governing, LIBRARY, Package, Products, Refused, Target,
+        module_below, module_of, order, reachable,
     },
     curios_common::{Qualifier, Report, RootKind},
     curios_module::{
@@ -254,9 +254,9 @@ pub struct Home {
 }
 
 impl Home {
-    /// Where a build of the executable for `target` is written, under the governing root's store.
+    /// Where a build of the executable for `target` is written, under the governing root's `.curios/`.
     pub fn built(&self, target: Target) -> PathBuf {
-        Store::at(self.root.clone()).built(target, &self.package, &self.executable)
+        Products::at(self.root.clone()).built(target, &self.package, &self.executable)
     }
 
     /// The package the program's files are read for.

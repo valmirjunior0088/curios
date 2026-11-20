@@ -11,7 +11,7 @@ mod tests;
 
 use {
     crate::{
-        FormatSettings, MANIFEST, Manifest, Package, Refused, Step, Store, Umbrella,
+        Cabinet, FormatSettings, MANIFEST, Manifest, Package, Refused, Step, Umbrella,
         compiler_requirement, format_owner, require_compiler,
     },
     curios_common::{OsError, Report},
@@ -71,9 +71,9 @@ impl Governing {
         }
     }
 
-    /// Where this project's generated things go — its own beside it, and the shared ones in the cache every project uses.
-    pub fn store(&self) -> Store {
-        Store::at(self.root.clone())
+    /// The cabinet this project files what it keeps for reuse in.
+    pub fn cabinet(&self) -> Cabinet {
+        Cabinet::at(&self.root)
     }
 
     /// What governs an invocation, by the manifest it named when it named one and by the one nearest `directory` otherwise.

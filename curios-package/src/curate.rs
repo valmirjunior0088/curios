@@ -11,8 +11,8 @@ mod tests;
 
 use {
     crate::{
-        Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused, Row,
-        Snapshot, Step, Store, Subject, Target, TreeHash,
+        Cabinet, Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused,
+        Row, Snapshot, Step, Subject, Target, TreeHash,
     },
     curios_common::{Code, OsError, Report},
     std::{
@@ -114,7 +114,7 @@ pub fn curate(
     governing: &Governing,
     mut told: impl FnMut(Fetch<'_>),
 ) -> Result<Curated, Box<Report>> {
-    let store = governing.store();
+    let cabinet = governing.cabinet();
     let mut curated = Curated::default();
 
     // The module set converges with the trees: each round reads further manifests, so the round that fetches nothing new is also the one whose module set is complete.
@@ -123,7 +123,7 @@ pub fn curate(
         let absent = reachable
             .packages
             .into_iter()
-            .filter(|acquisition| !store.source(acquisition.hash()).is_dir())
+            .filter(|acquisition| !cabinet.source(acquisition.hash()).is_dir())
             .collect::<Vec<_>>();
 
         if absent.is_empty() {
@@ -138,7 +138,7 @@ pub fn curate(
             }
 
             told(Fetch::Package(&acquisition));
-            fetch(&store, &acquisition, || told(Fetch::Arrived))?;
+            fetch(&cabinet, &acquisition, || told(Fetch::Arrived))?;
             told(Fetch::Placed);
             curated.packages.push(acquisition);
         }
@@ -146,12 +146,12 @@ pub fn curate(
 
     // Content-keyed like a tree, so two packages naming one module fetch it once and every project on the machine shares the entry.
     for acquisition in named {
-        if store.foreign(&acquisition.hash).is_file() {
+        if cabinet.foreign(&acquisition.hash).is_file() {
             continue;
         }
 
         told(Fetch::Module(&acquisition));
-        fetch_module(&store, &acquisition, || told(Fetch::Arrived))?;
+        fetch_module(&cabinet, &acquisition, || told(Fetch::Arrived))?;
         told(Fetch::Placed);
         curated.modules.push(acquisition);
     }
@@ -260,7 +260,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
                         written,
                     });
 
-                    governing.store().source(hash)
+                    governing.cabinet().source(hash)
                 }
                 Dependency::Path { path } => base.join(path),
                 // A member is on disk already, and governance refused every entry no manifest answers before this walk began; a name the roster lacks is `order`'s to refuse, and this walk only needs somewhere further to look.
@@ -287,11 +287,11 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
 ///
 /// The scratch path is keyed by the digest the row states rather than by what arrives, so a delivery that fails its hash is removed and nothing is ever filed under a key it does not have.
 fn fetch_module(
-    store: &Store,
+    cabinet: &Cabinet,
     acquisition: &ModuleAcquisition,
     arrived: impl FnOnce(),
 ) -> Result<(), Box<Report>> {
-    let placed = store.foreign(&acquisition.hash);
+    let placed = cabinet.foreign(&acquisition.hash);
     let scratch = placed.with_extension("fetching");
 
     if let Some(parent) = placed.parent() {
@@ -438,11 +438,13 @@ fn catalogued<'a>(governing: &'a Governing, name: &str) -> Option<&'a Dependency
 ///
 /// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
 fn fetch(
-    store: &Store,
+    cabinet: &Cabinet,
     acquisition: &Acquisition,
     arrived: impl FnOnce(),
 ) -> Result<(), Box<Report>> {
-    let scratch = store.source(acquisition.hash()).with_extension("fetching");
+    let scratch = cabinet
+        .source(acquisition.hash())
+        .with_extension("fetching");
     let _ = fs::remove_dir_all(&scratch);
     fs::create_dir_all(&scratch).map_err(|error| unwritable(&scratch, &error))?;
 
@@ -451,7 +453,7 @@ fn fetch(
         .and_then(|()| {
             arrived();
 
-            accept(&scratch, store, acquisition)
+            accept(&scratch, cabinet, acquisition)
         });
 
     if outcome.is_err() {
@@ -491,7 +493,7 @@ pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), Refused> {
 }
 
 /// Verify the delivery and move it into the store.
-fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<(), Box<Report>> {
+fn accept(scratch: &Path, cabinet: &Cabinet, acquisition: &Acquisition) -> Result<(), Box<Report>> {
     let delivered = TreeHash::of(scratch)?;
 
     if &delivered != acquisition.hash() {
@@ -517,7 +519,7 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
         ));
     }
 
-    let placed = store.source(acquisition.hash());
+    let placed = cabinet.source(acquisition.hash());
     if let Some(parent) = placed.parent() {
         fs::create_dir_all(parent).map_err(|error| unwritable(parent, &error))?;
     }

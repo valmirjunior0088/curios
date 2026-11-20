@@ -35,8 +35,8 @@ use {
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost, Stop},
     curios_package::{
-        Entry, Fetch, Pinning, Refused, Repoint, Spelling, Store, Target, Transport, curate, pin,
-        scaffold,
+        Entry, Fetch, Pinning, Products, Refused, Repoint, Spelling, Target, Transport, curate,
+        pin, scaffold,
     },
     curios_pipeline::CompileError,
     curios_surface::{Format, Formatted},
@@ -507,8 +507,9 @@ fn dispatch() -> Result<(), Failure> {
                         store.as_ref(),
                         &Subject::package(&library.package),
                     )?;
-                    let directory = output_path
-                        .unwrap_or_else(|| Store::at(library.root).documentation(&library.package));
+                    let directory = output_path.unwrap_or_else(|| {
+                        Products::at(library.root).documentation(&library.package)
+                    });
                     (record, directory, tree)
                 }
             };

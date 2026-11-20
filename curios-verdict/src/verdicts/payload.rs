@@ -80,8 +80,8 @@ impl Verdicts {
         let units = self.chain(units)?;
 
         // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
-        let store = self.store.as_ref()?;
-        let filed = fs::read(store.payload(runs, &slot(self, program, runs)?)).ok()?;
+        let cabinet = self.cabinet.as_ref()?;
+        let filed = fs::read(cabinet.payload(runs, &slot(self, program, runs)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -109,7 +109,7 @@ impl Verdicts {
             return;
         };
 
-        let (Some(store), Some(slot)) = (&self.store, slot(self, program, runs)) else {
+        let (Some(cabinet), Some(slot)) = (&self.cabinet, slot(self, program, runs)) else {
             return;
         };
 
@@ -127,7 +127,7 @@ impl Verdicts {
             foreigns: foreigns.clone(),
         };
 
-        let path = store.payload(runs, &slot);
+        let path = cabinet.payload(runs, &slot);
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
             .and_then(|record| replace(&path, &record, bytes));

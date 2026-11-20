@@ -16,7 +16,7 @@ mod package_tests;
 
 use {
     crate::{
-        CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
+        Cabinet, CompilerVersion, FileHash, FormatSettings, PRODUCTS, Refused, Row, Step, Subject,
         TreeHash, decode,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
@@ -594,13 +594,13 @@ impl Delivery {
     ///
     /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a store entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
     ///
-    /// `directory` is the package's own, which a carried module's path is relative to; `store` answers for a fetched one, where the entry's name is already the digest.
+    /// `directory` is the package's own, which a carried module's path is relative to; `cabinet` answers for a fetched one, where the entry's name is already the digest.
     pub fn bytes(
         &self,
         name: &str,
         target: Target,
         directory: &Path,
-        store: &Store,
+        cabinet: &Cabinet,
     ) -> Result<Vec<u8>, Box<Report>> {
         // The row's table of this target, in its package's manifest, which is where its `hash` is written.
         let written = Row::of(
@@ -613,7 +613,7 @@ impl Delivery {
         );
         let path = match &self.module {
             Module::Filed(path) => directory.join(path),
-            Module::Fetched(_) => store.foreign(&self.hash),
+            Module::Fetched(_) => cabinet.foreign(&self.hash),
         };
 
         let bytes = fs::read(&path).map_err(|error| {
@@ -754,10 +754,10 @@ impl GatewayRow {
             held_by_the_page(&page, &subject).map_err(entry)?;
             let read = plain_static(&package, &subject, "package path").map_err(valued)?;
             // The store is the toolchain's, and a page that served it would serve every build product the project holds.
-            if read.starts_with(STORE) {
+            if read.starts_with(PRODUCTS) {
                 return Err(Refused::of("invalid path")
                     .stating(format_args!(
-                        "{subject} is read from `{package}`, under `{STORE}`"
+                        "{subject} is read from `{package}`, under `{PRODUCTS}`"
                     ))
                     .stating("that directory is the toolchain's, and no file a page serves")
                     .value(["static", page.as_str()]));

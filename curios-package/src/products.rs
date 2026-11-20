@@ -1,0 +1,69 @@
+//! Where everything a build generates or fetches is kept.
+//!
+//! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
+//!
+//! It holds nine families, each in its own subtree rather than sharing one namespace, and each named for what it holds: the three a command emits, named for the target it is built for, and the [cabinet](crate::Cabinet)'s six, named for what they hold:
+//!
+//! ```text
+//! .curios/
+//!   native/         json/serve      what `curios compile` emits for the native target
+//!   browser/        json/serve/     what it emits for a browser: the page's directory
+//!   documentation/  json/           what `curios document` emits
+//!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
+//!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
+//!   verdicts/       <slot>          judged units, one file per unit and compiler
+//!   objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
+//!   payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
+//!                   browser/<slot>  and, natively, engine
+//!   compiler                        this machine's memo of its compiler's digest
+//! ```
+//!
+//! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Cabinet::staging`](crate::Cabinet::staging).
+//!
+//! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
+//!
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the cabinet's families — never `native/`, `browser/` or `documentation/`, which belong to the package that declared them — into a cabinet keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once.
+//!
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every other family is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
+
+#[cfg(test)]
+mod tests;
+
+use {crate::Target, std::path::PathBuf};
+
+/// The generated directory itself.
+pub const PRODUCTS: &str = ".curios";
+
+/// What a project's commands emit: a build of each executable for each target and each package's documentation, beside the project.
+///
+/// Named by the package that declared them, they belong to the project that built them and stay in its `.curios/` whatever cabinet it files into.
+pub struct Products {
+    /// The governing root — the umbrella's directory when one governs, the package's otherwise.
+    project: PathBuf,
+}
+
+impl Products {
+    /// The products of the project at `project`.
+    pub fn at(project: PathBuf) -> Self {
+        Self { project }
+    }
+
+    /// Where a build of an executable for `target` is written: a native executable's file, or a browser page's directory, nested under the package that declares it, beside the project.
+    ///
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* `.curios/`: `<target>/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a build without renaming it.
+    pub fn built(&self, target: Target, package: &str, executable: &str) -> PathBuf {
+        self.project
+            .join(PRODUCTS)
+            .join(target.spelled())
+            .join(package)
+            .join(executable)
+    }
+
+    /// Where a package's generated documentation is written: nested under the package, beside the project, for the reason an executable is.
+    pub fn documentation(&self, package: &str) -> PathBuf {
+        self.project
+            .join(PRODUCTS)
+            .join("documentation")
+            .join(package)
+    }
+}
