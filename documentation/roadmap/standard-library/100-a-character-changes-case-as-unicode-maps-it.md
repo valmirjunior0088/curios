@@ -1,6 +1,10 @@
 # A character changes case as Unicode maps it
 
-**Not refined yet.** This specification reserves case mapping, case folding and the case properties of the Unicode Character Database over `Char` and `Str`. It is not an implementation plan. No module of `/std` consumes it yet: `http` compares field names without case as RFC 9110 §5.1 reads them, over ASCII, and its first consumer would be a program that matches or displays text a person wrote, which releases it.
+Adopted on 2026-11-19, since `/std` already writes a name in upper case and gets it wrong: `Char` and `Str` map and fold case as the database the toolchain pins states, and `Char` answers the case properties under their plain names, so a name a program writes in any script is shouted, lowered and compared as the Unicode Standard's default case algorithms do.
+
+## What is wrong today
+
+**`/std/Cli` shouts a name in ASCII alone.** Help and a refusal write a positional's name in upper case through `shouted` (`curios-prelude/std/Cli.crs`), which maps each character by `Char/to_ascii_upper`, so a name in any other script is half shouted: a command whose positionals are `année` and `straße` prints `Usage: cat <ANNéE> [STRAßE]`, and a missing `année` is refused as `ANNéE` (`Cli/parse.crs`), on 2026-11-19 at `f1c0ab637`, where the full mapping writes `ANNÉE` and `STRASSE`. Every other ASCII case `/std` reads is ASCII by its standard: `http` compares field names without case as RFC 9110 §5.1 reads them, `Flt/grammar` reads `inf` and `nan`, and `Url` writes a hex digit.
 
 ## What is missing
 
@@ -14,12 +18,25 @@
 - **`/sys/unicode` carries classes, and a mapping is no class.** A packed table is runs of seven bytes, a range's first scalar, its last and its class's code (`curios-unicode/src/packed.rs`), which `Char`'s private `unicode` module searches. A mapping takes a scalar to another, or to several, so a run would carry a difference from its range, as Go's [`unicode.CaseRanges`](https://pkg.go.dev/unicode#CaseRanges) do, with a mark for the ranges where upper and lower alternate.
 - **Peers split between simple and full.** Rust's [`char::to_uppercase`](https://doc.rust-lang.org/std/primitive.char.html#method.to_uppercase) yields one to three characters and `str::to_lowercase` handles the final sigma; Go's [`unicode.ToUpper`](https://pkg.go.dev/unicode#ToUpper) maps one rune to one, with `unicode.SpecialCase` for Turkish; Python's [`str.upper`](https://docs.python.org/3/library/stdtypes.html#str.upper) is the full mapping and `str.casefold` the full folding; Haskell's `Data.Char.toUpper` is the simple mapping and `Data.Text.toUpper` the full one; Lean 4's `Char.toUpper` changes ASCII alone.
 
-## Refinement
+## Open
 
 - **Which mappings.** Simple mappings on `Char`, full ones on `Str`, folding for caseless comparison; whether title case is among them; and whether the final sigma's context is honoured, which reads the characters around the one mapped.
 - **Language.** Whether the Turkish and Lithuanian mappings are offered at all, with no locale in `/std` to choose them.
 - **The predicates.** `is_lower`, `is_upper` and `is_alpha` are free for the database's `Lowercase`, `Uppercase` and `Alphabetic`, the ASCII ones keeping `ascii` in their names; which of the database's other properties join them.
 - **The tables.** How `/sys/unicode` carries a mapping, and what the tables add to the archived prelude and to every program that maps case.
 - **Normalization.** Whether caseless matching stays the folds' equality, or reaches canonical caseless matching, which needs normalization and is a capability of its own.
+
+## Stages
+
+1. **Upper case over `Str`, the full mapping.** The simple mappings of `UnicodeData.txt` and the unconditional ones of `SpecialCasing.txt` read by `curios-unicode`, carried by `/sys/unicode`, and `Str`'s upper case read off them; `Cli`'s `shouted` restated over it. Check: `année` and `straße` shouted `ANNÉE` and `STRASSE` in `Cli`'s render tests, beside `ß` lengthening a string and a character with no mapping left as it is; the prelude archive's growth named.
+2. **Lower case**, the simple mapping on `Char` and the full one on `Str`, the final sigma's context as the refinement settles it. Check: `Σ` lowered to `ς` at a word's end and to `σ` elsewhere, if the context is honoured.
+3. **Folding and caseless comparison**, `CaseFolding.txt` read, two strings caselessly equal where their folds are. Check: `Straße` and `STRASSE` caselessly equal, `http`'s ASCII comparison unchanged.
+4. **The case predicates** under their plain names, `Lowercase`, `Uppercase` and `Alphabetic` kept of `DerivedCoreProperties.txt`, and title case where the refinement takes it.
+
+## Next step
+
+Stage 1's refinement: how `/sys/unicode` carries a mapping, and which mappings `Char` and `Str` offer, under *Open*.
+
+## Retirement
 
 It retires when `Char` and `Str` map and fold case as the pinned database states, and `Char` answers the case properties under their plain names.

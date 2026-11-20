@@ -1,6 +1,6 @@
 # Arithmetic modulo a word
 
-**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which the generator delivery of [a random sequence replays from its seed](../standard-library/301-a-random-sequence-replays-from-its-seed.md) and Curios digest rounds of [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) wait on. Encodings have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which those two make once here.
+**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which Curios digest rounds of [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) wait on, as would a generator of random values a seed determines, which no consumer has asked for: the measurement corpus's generators are part of what it measures. Encodings have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which its first consumer makes once here.
 
 ## What is missing
 
@@ -14,7 +14,7 @@
 
 ## Refinement
 
-The next step is blocked until a named consumer schedules a replayable generator or Curios digest rounds. That consumer releases the shared word decision and its allocation probes, not implementation of the other consumer.
+The next step is blocked until a named consumer schedules Curios digest rounds or a replayable generator. That consumer releases the word decision and its allocation probes, and nothing else.
 
 - **The choice**, read against the two consumers' steps, a SplitMix or PCG step and a SHA-256 round, each counted in allocations under each choice.
 - **For a carrier**: its widths, whether it is signed, its operations — addition, multiplication, shifts, rotations and the bitwise ones — its conversions with `Nat`, `Int` and `Byte`, and which of its laws conversion decides.
