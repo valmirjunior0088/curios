@@ -32,7 +32,7 @@ fn int_mul_widens_to_i64_and_grows_past_the_i31() {
 fn int_div_steps_the_truncated_quotient_and_boxes_the_one_past_the_i31() {
     let wat = wat(&intrinsic_main(
         curios_cps::Intrinsic::IntDiv,
-        vec![int(-9), int(2)],
+        vec![int(-9), int(3)],
     ));
     assert_contains(&wat, "i32.div_s");
     assert_contains(&wat, "i32.mul");
@@ -49,12 +49,42 @@ fn int_div_steps_the_truncated_quotient_and_boxes_the_one_past_the_i31() {
 fn int_rem_raises_the_truncated_remainder_by_the_divisor_s_magnitude() {
     let wat = wat(&intrinsic_main(
         curios_cps::Intrinsic::IntRem,
-        vec![int(-9), int(2)],
+        vec![int(-9), int(3)],
     ));
     assert_contains(&wat, "i32.rem_s");
     assert_contains(&wat, "i32.xor");
     assert_contains(&wat, "call $big/rem");
     assert_absent(&wat, "call $big/of_i64");
+}
+
+// Euclid's quotient by a positive literal `2ᵏ` is the floor, the arithmetic shift by `k`, and the remainder the mask of the `k` low bits, whatever the dividend's sign; past the i31, the division's own helpers. A negative power is divided.
+#[test]
+fn an_int_division_by_a_positive_power_of_two_is_an_arithmetic_shift_and_a_mask() {
+    let div = wat(&intrinsic_over_unknown(
+        curios_cps::Intrinsic::IntDiv,
+        1,
+        vec![int(16)],
+    ));
+    assert_contains(&div, "i32.const 4\n");
+    assert_contains(&div, "i32.shr_s");
+    assert_absent(&div, "i32.div_s");
+    assert_contains(&div, "call $big/div");
+
+    let rem = wat(&intrinsic_over_unknown(
+        curios_cps::Intrinsic::IntRem,
+        1,
+        vec![int(16)],
+    ));
+    assert_contains(&rem, "i32.const 15\n");
+    assert_absent(&rem, "i32.rem_s");
+    assert_contains(&rem, "call $big/rem");
+
+    let negative = wat(&intrinsic_over_unknown(
+        curios_cps::Intrinsic::IntDiv,
+        1,
+        vec![int(-16)],
+    ));
+    assert_contains(&negative, "i32.div_s");
 }
 
 #[test]

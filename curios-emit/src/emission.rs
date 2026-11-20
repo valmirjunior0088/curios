@@ -315,14 +315,19 @@ impl EmissionBody {
         }
     }
 
-    fn collect_nat_literals<'a>(&'a self, out: &mut HashMap<&'a EmissionValueName, &'a Natural>) {
+    fn collect_number_literals<'a>(
+        &'a self,
+        out: &mut HashMap<&'a EmissionValueName, &'a EmissionData>,
+    ) {
         for (name, value) in &self.values {
-            if let EmissionValue::Pure(EmissionData::Nat(literal)) = value {
+            if let EmissionValue::Pure(literal @ (EmissionData::Nat(_) | EmissionData::Int(_))) =
+                value
+            {
                 out.insert(name, literal);
             }
         }
         for (_, block) in &self.blocks {
-            block.region.collect_nat_literals(out);
+            block.region.collect_number_literals(out);
         }
     }
 
@@ -472,18 +477,18 @@ impl EmissionModule {
         &self.clsrs
     }
 
-    /// Every value a `Nat` literal binds, in a body or hoisted to a const, with the literal: what an operation reads a literal operand's value through where a literal answers it with other instructions.
-    pub fn nat_literals(&self) -> HashMap<&EmissionValueName, &Natural> {
+    /// Every value a `Nat` or an `Int` literal binds, in a body or hoisted to a const, with the literal: what an operation reads a literal operand's value through where a literal answers it with other instructions.
+    pub fn number_literals(&self) -> HashMap<&EmissionValueName, &EmissionData> {
         let mut literals = HashMap::new();
         for (_, func) in &self.funcs {
-            func.region.collect_nat_literals(&mut literals);
+            func.region.collect_number_literals(&mut literals);
         }
         for (_, clsr) in &self.clsrs {
-            clsr.region.collect_nat_literals(&mut literals);
+            clsr.region.collect_number_literals(&mut literals);
         }
         for (name, data) in &self.consts {
-            if let EmissionData::Nat(literal) = data {
-                literals.insert(name, literal);
+            if let EmissionData::Nat(_) | EmissionData::Int(_) = data {
+                literals.insert(name, data);
             }
         }
         literals

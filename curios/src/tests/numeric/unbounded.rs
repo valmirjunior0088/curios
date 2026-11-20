@@ -31,6 +31,11 @@ fn folded_and_executed_scalar_ops_agree() {
         "Int/to_str(Int/div(Int/add(-6, i), +3))",
         "Nat/to_str(Int/rem(Int/add(-6, i), +3))",
         "Int/to_str(Int/div(Int/add(-1073741824, i), -1))",
+        // By a positive power of two, the arithmetic shift and the mask, below zero in the i31 and past it.
+        "Int/to_str(Int/div(Int/add(-7, i), +16))",
+        "Nat/to_str(Int/rem(Int/add(-7, i), +16))",
+        "Int/to_str(Int/div(Int/sub(i, 18446744073709551617), +16))",
+        "Nat/to_str(Int/rem(Int/sub(i, 18446744073709551617), +16))",
         "Int/to_str(Int/shl(Int/add(-3, i), 20))",
         "Int/to_str(Int/shr(Int/add(-65, i), 1))",
         // Carrier reinterpretations.

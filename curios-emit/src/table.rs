@@ -6,7 +6,7 @@ use {
         i64_const, refuse_func_name, tee, when,
     },
     curios_abi::{Carrier, ForeignFunction, Namespace, WireLeaf, WireType},
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -534,8 +534,8 @@ pub struct Table<'a> {
     closures: &'a HashMap<EmissionValueName, usize>,
     /// The values a closure construction binds, in a body or hoisted, with the closure each builds: each declared at that closure's own environment type.
     constructed: HashMap<&'a EmissionValueName, &'a EmissionClosureName>,
-    /// The values a `Nat` literal binds, in a body or hoisted, with the literal.
-    literals: HashMap<&'a EmissionValueName, &'a Natural>,
+    /// The values a `Nat` or an `Int` literal binds, in a body or hoisted, with the literal.
+    literals: HashMap<&'a EmissionValueName, &'a EmissionData>,
 }
 
 impl<'a> Table<'a> {
@@ -548,7 +548,7 @@ impl<'a> Table<'a> {
             raw,
             closures,
             constructed: module.closure_constructions(),
-            literals: module.nat_literals(),
+            literals: module.number_literals(),
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
             special_label: curios_wasm::LabelName::from("!"),
@@ -1626,7 +1626,18 @@ impl<'a> Table<'a> {
 
     /// The `Nat` literal `value_name` is bound to, where it is bound to one.
     pub fn nat_literal(&self, value_name: &EmissionValueName) -> Option<&'a Natural> {
-        self.literals.get(value_name).copied()
+        match self.literals.get(value_name)? {
+            EmissionData::Nat(literal) => Some(literal),
+            _ => None,
+        }
+    }
+
+    /// The `Int` literal `value_name` is bound to, where it is bound to one.
+    pub fn int_literal(&self, value_name: &EmissionValueName) -> Option<&'a Integer> {
+        match self.literals.get(value_name)? {
+            EmissionData::Int(literal) => Some(literal),
+            _ => None,
+        }
     }
 
     /// The heap type `value_name` is declared at where it is narrower than the uniform reference, with the arity of the closures it holds: a closure construction's own environment, and the arity's environment base for a value the representation analysis knows holds closures of it.

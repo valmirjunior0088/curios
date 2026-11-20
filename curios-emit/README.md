@@ -78,7 +78,7 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-anf` bu
 
 ### A division by a power of two is a shift and a mask
 
-**Decision.** A `Nat` division and remainder of two i31s whose divisor is a literal `2ᵏ`, `k ≥ 1`, are the right shift by `k` and the mask of the `k` low bits, `i32.shr_u` and `i32.and` against a constant (`code_emitter.rs`'s `emit_divided`), and past the i31 they call `big/div` and `big/rem` as any division does. The table knows every value a `Nat` literal binds, which is how an operation reads its operand's value.
+**Decision.** A division and a remainder of two i31s whose divisor is a literal `2ᵏ`, `k ≥ 1`, are the right shift by `k` and the mask of the `k` low bits against a constant (`code_emitter.rs`'s `emit_power_divided`): `i32.shr_u` at `Nat`, and at `Int`, whose division is Euclid's and whose quotient by a positive divisor is the floor, `i32.shr_s`; the mask, `i32.and`, at both. Past the i31 they call `big/div` and `big/rem` as any division does. The table knows every value a `Nat` or an `Int` literal binds, which is how an operation reads its operand's value.
 
 **Rationale.** A shift and a mask are a word's own instructions where `i32.div_u` and `i32.rem_u` are long ones, so a program never writes a shift for its speed where the division is what it means. Cranelift turns a `udiv` by a power of two into a shift where its own propagation proves the divisor constant, and no guarantee here rests on an engine's optimizer. The boxed half is rare and long, and keeps the helper the division already called.
 

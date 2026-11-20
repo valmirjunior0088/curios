@@ -871,37 +871,156 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_settled(dest, &[&value, &count], fast, Fast::Small, slow);
     }
 
-    /// Lower one half of a `Nat` division: `i32.div_u` or `i32.rem_u` on two i31s, and where the divisor is a literal `2ᵏ` the right shift by `k` or the mask of the `k` low bits it is, a word's own instructions where a division is a long one; `big/div` or `big/rem` past the i31, whatever the divisor.
+    /// Lower one half of a `Nat` division: `i32.div_u` or `i32.rem_u` on two i31s, and where the divisor is a literal `2ᵏ` the right shift by `k` or the mask of the `k` low bits it is ([`CodeEmitter::emit_power_divided`]); `big/div` or `big/rem` past the i31, whatever the divisor.
     fn emit_divided(
         &mut self,
         dest: &Dest<'_>,
         (dividend, divisor): (&EmissionValueName, &EmissionValueName),
         half: Half,
     ) {
+        if let Some(count) = self.power_of_two(divisor) {
+            let shift = curios_wasm::Instr::I32ShrU;
+            return self.emit_power_divided(dest, (dividend, divisor), half, (count, shift));
+        }
         let slow = vec![self.big(match half {
             Half::Quotient => BigHelper::Div,
             Half::Remainder => BigHelper::Rem,
         })];
-        let power = self.power_of_two(divisor);
+        let instr = match half {
+            Half::Quotient => curios_wasm::Instr::I32DivU,
+            Half::Remainder => curios_wasm::Instr::I32RemU,
+        };
         self.emit_arith(
             dest,
             (dividend, divisor),
-            move |dividend, divisor| {
-                let (operand, instr) = match (power, half) {
-                    (Some(count), Half::Quotient) => (
-                        vec![curios_wasm::Instr::I32Const { value: count }],
-                        curios_wasm::Instr::I32ShrU,
-                    ),
-                    (Some(count), Half::Remainder) => (
-                        vec![curios_wasm::Instr::I32Const {
-                            value: (1 << count) - 1,
-                        }],
-                        curios_wasm::Instr::I32And,
-                    ),
-                    (None, Half::Quotient) => (divisor, curios_wasm::Instr::I32DivU),
-                    (None, Half::Remainder) => (divisor, curios_wasm::Instr::I32RemU),
+            move |dividend, divisor| sequence([dividend, divisor, vec![instr]]),
+            Fast::Small,
+            slow,
+        );
+    }
+
+    /// Lower one half of an `Int` division: where the divisor is a positive literal `2ᵏ`, the arithmetic shift or the mask it is ([`CodeEmitter::emit_power_divided`]); otherwise `i32.div_s` or `i32.rem_s` on two i31s stepped to Euclid's, and `big/div` or `big/rem` past the i31.
+    fn emit_int_divided(
+        &mut self,
+        dest: &Dest<'_>,
+        (dividend, divisor): (&EmissionValueName, &EmissionValueName),
+        half: Half,
+    ) {
+        if let Some(count) = self.power_of_two(divisor) {
+            let shift = curios_wasm::Instr::I32ShrS;
+            return self.emit_power_divided(dest, (dividend, divisor), half, (count, shift));
+        }
+        let args = [dividend.clone(), divisor.clone()];
+        match half {
+            Half::Quotient => {
+                // Euclid's quotient is the truncated one stepped one away from zero where the truncated remainder `a - q · d` is below zero, toward the divisor's sign: `q - (r >> 31 & (d >> 31 | 1))`.
+                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+                let dividend = self
+                    .context
+                    .push_local("int_div_dividend", i32_type.clone());
+                let divisor = self.context.push_local("int_div_divisor", i32_type.clone());
+                let quotient = self.context.push_local("int_div_quotient", i32_type);
+                let slow = vec![self.big(BigHelper::Div)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            vec![tee(&dividend)],
+                            right,
+                            vec![
+                                tee(&divisor),
+                                curios_wasm::Instr::I32DivS,
+                                tee(&quotient),
+                                get(&dividend),
+                                get(&quotient),
+                                get(&divisor),
+                                curios_wasm::Instr::I32Mul,
+                                curios_wasm::Instr::I32Sub,
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                get(&divisor),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                curios_wasm::Instr::I32Const { value: 1 },
+                                curios_wasm::Instr::I32Or,
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32Sub,
+                            ],
+                        ])
+                    },
+                    Fast::Wide32,
+                    slow,
+                );
+            }
+            Half::Remainder => {
+                // Euclid's remainder is the truncated one raised by the divisor's magnitude where it is below zero: `r + (|d| & r >> 31)`, `|d|` being `(d ^ d >> 31) - (d >> 31)`.
+                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+                let divisor = self.context.push_local("int_rem_divisor", i32_type.clone());
+                let remainder = self
+                    .context
+                    .push_local("int_rem_remainder", i32_type.clone());
+                let sign = self.context.push_local("int_rem_sign", i32_type);
+                let slow = vec![self.big(BigHelper::Rem)];
+                self.emit_arith(
+                    dest,
+                    (&args[0], &args[1]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            right,
+                            vec![
+                                tee(&divisor),
+                                curios_wasm::Instr::I32RemS,
+                                tee(&remainder),
+                                get(&divisor),
+                                get(&divisor),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                tee(&sign),
+                                curios_wasm::Instr::I32Xor,
+                                get(&sign),
+                                curios_wasm::Instr::I32Sub,
+                                get(&remainder),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32Add,
+                            ],
+                        ])
+                    },
+                    Fast::Small,
+                    slow,
+                );
+            }
+        }
+    }
+
+    /// Lower one half of a division by the literal `2ᵏ`: on two i31s, the quotient is the shift by `k` the carrier's `shift` is — logical at `Nat`, arithmetic at `Int`, whose Euclid's quotient by a positive divisor is the floor — and the remainder the mask of the `k` low bits at both, a word's own instructions where a division is a long one; past the i31, the division's own helpers.
+    fn emit_power_divided(
+        &mut self,
+        dest: &Dest<'_>,
+        operands: (&EmissionValueName, &EmissionValueName),
+        half: Half,
+        (count, shift): (i32, curios_wasm::Instr),
+    ) {
+        let slow = vec![self.big(match half {
+            Half::Quotient => BigHelper::Div,
+            Half::Remainder => BigHelper::Rem,
+        })];
+        self.emit_arith(
+            dest,
+            operands,
+            move |dividend, _| {
+                let (operand, instr) = match half {
+                    Half::Quotient => (count, shift),
+                    Half::Remainder => ((1 << count) - 1, curios_wasm::Instr::I32And),
                 };
-                sequence([dividend, operand, vec![instr]])
+                sequence([
+                    dividend,
+                    vec![curios_wasm::Instr::I32Const { value: operand }, instr],
+                ])
             },
             Fast::Small,
             slow,
@@ -914,9 +1033,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         i32::try_from(literal).ok()
     }
 
-    /// The `k` of the `Nat` literal `2ᵏ`, `k ≥ 1`, `divisor` is bound to. A literal the i31 holds is below `2³⁰`, so `k` is a count `i32.shr_u` takes as it stands.
+    /// The `k` of the literal `2ᵏ`, `k ≥ 1`, `divisor` is bound to, a `Nat` or a positive `Int`. A literal the i31 holds is below `2³⁰`, so `k` is a count a shift takes as it stands.
     fn power_of_two(&self, divisor: &EmissionValueName) -> Option<i32> {
-        let literal = self.context.table().nat_literal(divisor)?;
+        let table = self.context.table();
+        let literal = match (table.nat_literal(divisor), table.int_literal(divisor)) {
+            (Some(literal), _) => literal.clone(),
+            (None, Some(literal)) if literal.sign() == curios_num::Integer::from(1i32) => {
+                literal.magnitude()
+            }
+            _ => return None,
+        };
+        let literal = &literal;
         let count = literal.power_of_two_exponent()?;
         match curios_cps::nat_is_small(literal) && count >= 1 {
             true => i32::try_from(count).ok(),
@@ -2243,90 +2370,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cps::Intrinsic::NatDiv => {
                 self.emit_divided(dest, (&args[0], &args[1]), Half::Quotient)
             }
-            // Euclid's quotient is the truncated one stepped one away from zero where the truncated remainder `a - q · d` is below zero, toward the divisor's sign: `q - (r >> 31 & (d >> 31 | 1))`.
             curios_cps::Intrinsic::IntDiv => {
-                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-                let dividend = self
-                    .context
-                    .push_local("int_div_dividend", i32_type.clone());
-                let divisor = self.context.push_local("int_div_divisor", i32_type.clone());
-                let quotient = self.context.push_local("int_div_quotient", i32_type);
-                let slow = vec![self.big(BigHelper::Div)];
-                self.emit_arith(
-                    dest,
-                    (&args[0], &args[1]),
-                    |left, right| {
-                        sequence([
-                            left,
-                            vec![tee(&dividend)],
-                            right,
-                            vec![
-                                tee(&divisor),
-                                curios_wasm::Instr::I32DivS,
-                                tee(&quotient),
-                                get(&dividend),
-                                get(&quotient),
-                                get(&divisor),
-                                curios_wasm::Instr::I32Mul,
-                                curios_wasm::Instr::I32Sub,
-                                curios_wasm::Instr::I32Const { value: 31 },
-                                curios_wasm::Instr::I32ShrS,
-                                get(&divisor),
-                                curios_wasm::Instr::I32Const { value: 31 },
-                                curios_wasm::Instr::I32ShrS,
-                                curios_wasm::Instr::I32Const { value: 1 },
-                                curios_wasm::Instr::I32Or,
-                                curios_wasm::Instr::I32And,
-                                curios_wasm::Instr::I32Sub,
-                            ],
-                        ])
-                    },
-                    Fast::Wide32,
-                    slow,
-                );
+                self.emit_int_divided(dest, (&args[0], &args[1]), Half::Quotient)
             }
             curios_cps::Intrinsic::NatRem => {
                 self.emit_divided(dest, (&args[0], &args[1]), Half::Remainder)
             }
-            // Euclid's remainder is the truncated one raised by the divisor's magnitude where it is below zero: `r + (|d| & r >> 31)`, `|d|` being `(d ^ d >> 31) - (d >> 31)`.
             curios_cps::Intrinsic::IntRem => {
-                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-                let divisor = self.context.push_local("int_rem_divisor", i32_type.clone());
-                let remainder = self
-                    .context
-                    .push_local("int_rem_remainder", i32_type.clone());
-                let sign = self.context.push_local("int_rem_sign", i32_type);
-                let slow = vec![self.big(BigHelper::Rem)];
-                self.emit_arith(
-                    dest,
-                    (&args[0], &args[1]),
-                    |left, right| {
-                        sequence([
-                            left,
-                            right,
-                            vec![
-                                tee(&divisor),
-                                curios_wasm::Instr::I32RemS,
-                                tee(&remainder),
-                                get(&divisor),
-                                get(&divisor),
-                                curios_wasm::Instr::I32Const { value: 31 },
-                                curios_wasm::Instr::I32ShrS,
-                                tee(&sign),
-                                curios_wasm::Instr::I32Xor,
-                                get(&sign),
-                                curios_wasm::Instr::I32Sub,
-                                get(&remainder),
-                                curios_wasm::Instr::I32Const { value: 31 },
-                                curios_wasm::Instr::I32ShrS,
-                                curios_wasm::Instr::I32And,
-                                curios_wasm::Instr::I32Add,
-                            ],
-                        ])
-                    },
-                    Fast::Small,
-                    slow,
-                );
+                self.emit_int_divided(dest, (&args[0], &args[1]), Half::Remainder)
             }
             curios_cps::Intrinsic::BoolAnd
             | curios_cps::Intrinsic::NatAnd
