@@ -1,5 +1,5 @@
 ---
-description: Triage the findings with the user, in three layers — tackle every finding first, asking the user about each fix, with its reasoning, before it lands; refine the rest of the roadmap whenever the findings leave a wait, every finding it turns up joining the queue; and, beneath both and throughout, brainstorm with the user, take their steering and collect the notes, findings and directions the session turns up — acting on no specification's plan
+description: Triage the findings with the user, in four layers — tackle every finding first, asking the user about each fix, with its reasoning, before it lands; refine the rest of the roadmap whenever the findings leave a wait, every finding it turns up joining the queue; keep the design decisions and the two references true where a wait is left past it; and, beneath all three and throughout, brainstorm with the user, take their steering and collect the notes, findings and directions the session turns up — acting on no specification's plan
 argument-hint: "[directions in prose — areas, entries, specifications, what to take first or leave alone]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Bash(mkdir:*), Bash(python3:*), Bash(systemd-run:*), WebSearch, WebFetch, AskUserQuestion
 disable-model-invocation: true
@@ -7,13 +7,14 @@ disable-model-invocation: true
 
 Triage the findings with the user, who is present in the thread throughout. `$ARGUMENTS` is directions in prose — the areas or entries to take first, the specifications to look at, what to leave alone — and without any, every area is in scope. It is one session, with no hunters, no snapshot and no workflow: every answer here is the user's or the compiler's. To ask the user, anywhere below, is to call `AskUserQuestion`, the question interface Claude Code shows: recommendation first, any draft in an option's preview, and never a question left in prose, which a reader mid-run may not see; a probe asks the compiler. It runs until the user stops it.
 
-## The three layers
+## The four layers
 
 1. **The findings, first and always.** Every findings entry is tackled, one at a time, the user asked about each fix before it lands.
 2. **The rest of the roadmap, second.** Whenever the findings leave the session waiting — a build, a suite — the rest of the roadmap is refined: the findings the queue has not reached as much as the specifications, and every finding the refining turns up joins the queue.
-3. **The conversation, beneath both and constant.** The user brainstorms and steers in the thread. Each direction is taken as it comes and folded into the work, without dropping either layer above it.
+3. **The design decisions and the references, third.** Where a wait is left once the roadmap asks nothing more, the documents that state how things are stay true: the design decisions, a crate's `README.md`'s among them, held to the code they rule, and the two references held to the compiler they describe. Every finding this turns up joins the queue.
+4. **The conversation, beneath all three and constant.** The user brainstorms and steers in the thread. Each direction is taken as it comes and folded into the work, without dropping any layer above it.
 
-Nothing else is done. The roadmap is its documents and never the plan they encode: a specification is refined and never acted upon — no stage of it delivered, no step of it taken, its next-step measurement included — so once every finding has been tackled the session goes on refining the roadmap, and whatever finding that turns up is triaged in its turn.
+Nothing else is done. The roadmap is its documents and never the plan they encode: a specification is refined and never acted upon — no stage of it delivered, no step of it taken, its next-step measurement included — so once every finding has been tackled the session goes on refining the roadmap, then keeping the decisions and the references true, and whatever finding that turns up is triaged in its turn.
 
 ## Read first
 
@@ -53,9 +54,26 @@ Whenever the findings leave a wait, and never by waiting: refine the rest of the
 
   The user is asked about what a seed shows, and on their word it is filed as `.claude/rules/findings.md` files a finding, in a commit of its own, and joins the queue; a proof of `False` is filed as an open ticket the moment it is shown, as `.claude/commands/hunt-false.md` files one, before anything else.
 
-Documentation lands in runs, one commit a run: the refinements, additions, removals and updates made between two fixes — an entry filed, restated, merged or dropped, a citation fixed, a decision the user made recorded, a specification renumbered — each amend the run's commit while it is the last one. A fix is a commit of its own, the change with its one finding deleted in the same commit, and the documentation after it begins the next run.
+Documentation lands in runs, one commit a run: the refinements, additions, removals and updates made between two fixes — an entry filed, restated, merged or dropped, a citation fixed, a decision the user made recorded, a specification renumbered, a decision or a reference restated — each amend the run's commit while it is the last one. A fix is a commit of its own, the change with its one finding deleted in the same commit, and the documentation after it begins the next run.
 
-## Layer three: the conversation
+## Layer three: the design decisions and the references
+
+Where a wait is left once the roadmap asks nothing more — its refinements made, or waiting on the user's answer — keep true the documents that state how things are, a document at a time. A finding this turns up — a decision the code breaks, a sentence of a reference the compiler contradicts — is filed on the user's word and joins the queue.
+
+**The design decisions**, `documentation/design/` and the decisions a crate's `README.md` holds, each read whole and held to the tree:
+
+- **Its rule against the code.** What it says is decided is looked for where it says it stands — the function, the type and the test it names — and probed where it rules on what a program means. A decision states the intended rule, so code that falls short of it is a finding, the sentence it breaks named, and never a caveat added to the decision.
+- **Its reasons, three times.** The rationale's premises and each **Rejected** alternative's reason are weighed against the tree as it stands: a premise the code has left, or an alternative turned down for a cost that has gone, is something to revisit, put to the user with the peers surveyed.
+- **Its citations and figures.** Each path, name, test and commit looked up and what is stale restated; a figure is the latest reading of a measurement a reader can retake, at a commit it names, and one that is neither is a finding.
+- **Its form**, as `.claude/rules/documentation.md` states one: decided, rationale and rejected; the present tense; no evidence inventoried; no retired word.
+
+**The references**, `documentation/language.md` and `documentation/usage.md`, each sentence held to this tree's compiler:
+
+- **What it states.** A form's spelling and what the grammar refuses are probed on standard input; a command, a flag, a manifest key, an exit code and a file are asked of the command itself, its `--help` and its contract. A sentence the compiler contradicts is restated where the reference is the one wrong, and is a finding where the compiler may be, neither changed until the user says which.
+- **What it lacks.** `usage.md` owns every subcommand, flag, manifest key, exit code and file, and `language.md` every form as far as its syntax conveys it: one the compiler has and the reference does not state is added.
+- **What it holds that is another's.** A reason argued in a reference is its decision's and pending work the roadmap's: each is linked from the reference and stated once, where it is owned.
+
+## Layer four: the conversation
 
 The user is in the thread for the whole session, brainstorming and steering. A message from the user is answered when it arrives, whatever is in flight, and its direction is folded into the layer it belongs to; a question of the user's about the work is answered in full, with the evidence. Brainstorm with the user as an equal: offer options, argue for a recommendation, say where you were wrong. Collect what surfaces — a note, a new finding, a new direction, a lesson — as it surfaces: the user is asked about a finding, its text exactly as it would be filed, a direction is taken into the work or the user asked about it, and a note goes into the scratchpad or memory. A question for the user is asked the moment it is ready, and a line of status is given while a long run goes.
 
