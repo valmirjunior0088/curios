@@ -51,10 +51,6 @@ pub use ord/{let ord};
 pub mod hash;
 pub use hash/{let hash};
 
---- Division with remainder rounded toward negative infinity, certified: `of` hands back the quotient and a remainder from zero to below the divisor, with Euclid's identity and the remainder's bound, the split `/` and `%` compute at a positive divisor.
-pub mod DivMod;
-pub use DivMod/{let DivMod};
-
 use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Hash, Map, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 

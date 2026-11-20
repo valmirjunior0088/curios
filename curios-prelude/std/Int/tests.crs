@@ -109,30 +109,20 @@ let _two_odd_mantissas_of_one_value_are_one(
 ) -> {count: Eq()(k, 4), value: Eq()(m, -3)} =
     Int/shl/unique(m, k, -3, 4, odd, True/qed(), e);
 
--- Floored division, which `/` and `%` are at a positive divisor: a negative dividend's quotient is the next one down where a remainder is left, the remainder lies from zero to below the divisor, a natural divides as `/` does, and `unique` names the split a caller states.
-let _a_negative_dividend_floors_its_quotient: Holds(
-    Int/DivMod/of(-7, 2).quotient == -4 && Int/DivMod/of(-7, 2).remainder == 1) =
+-- Euclid's division: a negative dividend's quotient is the next one down where a positive divisor leaves a remainder, and the next one up where a negative one does, and the remainder is a natural below the divisor's magnitude.
+let _a_negative_dividend_floors_its_quotient: Holds(-7 / 2 == -4 && Int/rem(-7, 2) == 1) =
     True/qed();
 
-let _an_exact_negative_multiple_leaves_no_remainder: Holds(
-    Int/DivMod/of(-8, 2).quotient == -4 && Int/DivMod/of(-8, 2).remainder == 0) =
+let _a_negative_divisor_ceils_its_quotient: Holds(-7 / -2 == +4 && Int/rem(-7, -2) == 1) =
     True/qed();
 
-let _a_natural_dividend_divides_as_slash_does: Holds(
-    Int/DivMod/of(+7, 2).quotient == +7 / +2 && Int/DivMod/of(+7, 2).remainder == 1) =
+let _an_exact_negative_multiple_leaves_no_remainder: Holds(-8 / 2 == -4 && Int/rem(-8, 2) == 0) =
     True/qed();
 
-let _a_stated_split_is_the_computed_one: {
-    quotient: Eq()(-4, Int/DivMod/of(-7, 2).quotient),
-    remainder: Eq()(1, Int/DivMod/of(-7, 2).remainder)} =
-    Int/DivMod/unique(-7, 2, -4, 1, Eq/refl(), True/qed());
-
--- Floored division at both signs, each split rejoined: the quotient's multiple of the divisor and the remainder are the dividend, and the remainder is below the divisor.
-test floored_division_rejoins_every_dividend_with_a_remainder_below_its_divisor =
+-- Euclid's division at both signs, each split rejoined: the quotient's multiple of the divisor and the remainder are the dividend, and the remainder is below the divisor's magnitude.
+test euclids_division_rejoins_every_dividend_with_a_remainder_below_its_divisor =
     Test/assert(
-        "floored division rejoins every dividend with a remainder below its divisor",
+        "Euclid's division rejoins every dividend with a remainder below its divisor",
         List/all(
             [-7, -6, -5, -1, +0, +1, +5, +6, +7],
-            (n: Int) =>
-                let split = Int/DivMod/of(n, 3);
-                split.quotient * +3 + Nat/to_int(split.remainder) == n && split.remainder < 3));
+            (n: Int) => n / +3 * +3 + n % +3 == n && Int/rem(n, -3) < 3));

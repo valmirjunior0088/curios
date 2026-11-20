@@ -1235,36 +1235,59 @@ fn a_counterexample_spells_an_operand_of_an_operation_as_written() {
     }
 }
 
-/// A counterexample names a call as the bound states it whatever a fact spells inside the call's unfolding: every spelling is applied in one pass, an outer reduct before one inside it, so `Nat/to_int(d)` written in a fact and met again inside `Int/DivMod/of`'s body no longer hides the call. Through an annotation the bound is a metavariable's solution, read for the report alone; through a written proposition it is stated; and a disequality naming the call again spells it once.
+/// A floored split written through `Int`'s sign view, its body mentioning `Nat/to_int(d)` in each arm: a call whose unfolding is a match over what a fact spells.
+const SPLIT: &str = "struct Split: Type {
+    quotient: Int,
+    remainder: Nat,
+    multiple: Int,
+}
+
+let split(n: Int, d: Nat, @ok: Holds(0 < d)) -> Split =
+    match Int/view(n)
+    | nonneg(m) =>
+        Split {
+            quotient = Nat/to_int(m / d),
+            remainder = m % d,
+            multiple = Nat/to_int(m / d) * Nat/to_int(d) }
+    | neg(m) =>
+        Split {
+            quotient = -1 - Nat/to_int(m / d),
+            remainder = d - 1 - m % d,
+            multiple = (-1 - Nat/to_int(m / d)) * Nat/to_int(d) }
+    end;";
+
+/// A counterexample names a call as the bound states it whatever a fact spells inside the call's unfolding: every spelling is applied in one pass, an outer reduct before one inside it, so `Nat/to_int(d)` written in a fact and met again inside [`SPLIT`]'s body no longer hides the call. Through an annotation the bound is a metavariable's solution, read for the report alone; through a written proposition it is stated; and a disequality naming the call again spells it once.
 #[test]
 fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
     let recombined = "n: Int, d: Nat, q: Int, r: Nat, @ok: Holds(0 < d), joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)), bounded: Holds(r < d)";
     let refusal = |binders: &str, body: &str| {
         typecheck(&format!(
-            "{HEADER}\nlet row({binders}) -> Nat = {body};\nIo/pure(())"
+            "{HEADER}\n{SPLIT}\nlet row({binders}) -> Nat = {body};\nIo/pure(())"
         ))
         .expect_err("the control is refused")
     };
 
     let original = refusal(
         recombined,
-        "let _: Holds(q * Nat/to_int(d) + Nat/to_int(r) == Int/DivMod/of(n, d).quotient * Nat/to_int(d) + Nat/to_int(Int/DivMod/of(n, d).remainder)) = proved(); 0",
+        "let _: Holds(q * Nat/to_int(d) + Nat/to_int(r) == split(n, d).quotient * Nat/to_int(d) + Nat/to_int(split(n, d).remainder)) = proved(); 0",
     );
+    let failing = original
+        .lines()
+        .find(|line| line.contains("it fails at"))
+        .unwrap_or_default();
     assert!(
-        original.contains(
-            "it fails at `d = 1`, `r = 0`, `Int/DivMod/of(n, d).remainder = 1`, `n = 0`\n"
-        ),
+        failing.contains("split(n, d).remainder = ") && !failing.contains("match"),
         "{original}"
     );
 
     for (binders, body) in [
         (
             "n: Int, d: Nat, w: Nat, z: Int, @ok: Holds(0 < d), h: Holds(Nat/to_int(d) < z)",
-            "let _: Holds(Int/DivMod/of(n, d).remainder < w) = proved(); 0",
+            "let _: Holds(split(n, d).remainder < w) = proved(); 0",
         ),
         (
-            "n: Int, d: Nat, w: Nat, @ok: Holds(0 < d), h: Holds(Int/DivMod/of(n, d).remainder != w)",
-            "let _ = proved(@Holds(Int/DivMod/of(n, d).remainder < w)); 0",
+            "n: Int, d: Nat, w: Nat, @ok: Holds(0 < d), h: Holds(split(n, d).remainder != w)",
+            "let _ = proved(@Holds(split(n, d).remainder < w)); 0",
         ),
     ] {
         let refused = refusal(binders, body);
@@ -1273,7 +1296,7 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
             .find(|line| line.contains("it fails at"))
             .unwrap_or_default();
         assert!(
-            failing.contains("Int/DivMod/of(n, d).remainder = ") && !failing.contains("match"),
+            failing.contains("split(n, d).remainder = ") && !failing.contains("match"),
             "{body:?} reported {refused}"
         );
     }

@@ -144,19 +144,17 @@ let backward(s: Behind) -> Date =
             end,
         s);
 
--- The days from 1970-01-01 to the first of January of `y`: Hinnant's `days_from_civil` at the first of January, over floored division.
+-- The days from 1970-01-01 to the first of January of `y`: Hinnant's `days_from_civil` at the first of January, over floored division, which `Int`'s is by a positive divisor.
 let first_of_january(y: Int) -> Int =
-    let split = Int/DivMod/of(y - 1, 400);
-    let yoe = split.remainder;
-    split.quotient * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + 306) - 719468;
+    let yoe = Int/rem(y - 1, 400);
+    (y - 1) / 400 * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + 306) - 719468;
 
 -- The year Hinnant's `civil_from_days` gives the day `n` since 1970-01-01: exact, and read only as where `of_days` starts, since nothing proves it.
 let year_of(n: Int) -> Int =
-    let split = Int/DivMod/of(n + 719468, 146097);
-    let doe = split.remainder;
+    let doe = Int/rem(n + 719468, 146097);
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let y = Nat/to_int(yoe) + split.quotient * 400;
+    let y = Nat/to_int(yoe) + (n + 719468) / 146097 * 400;
     match (5 * doy + 2) / 153 < 10 | true => y | false => y + 1 end;
 
 --- The date `n` days after 1970-01-01, or before it where `n` is below zero.
@@ -173,11 +171,10 @@ pub let of_days(n: Int) -> Date =
 pub let to_days(d: Date) -> Int =
     let m = Month/to_nat(d.month);
     let y = match m <= 2 | true => d.year - 1 | false => d.year end;
-    let split = Int/DivMod/of(y, 400);
-    let yoe = split.remainder;
+    let yoe = Int/rem(y, 400);
     let shifted = match m > 2 | true => m - 3 | false => m + 9 end;
     let doy = (153 * shifted + 2) / 5 + d.day - 1;
-    split.quotient * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + doy) - 719468;
+    y / 400 * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + doy) - 719468;
 
 --- The date `n` days after `d`, or before it where `n` is below zero.
 pub let add_days(d: Date, n: Int) -> Date =
@@ -189,8 +186,7 @@ pub let days_between(a: Date, b: Date) -> Int =
 
 --- The day of the week: 1970-01-01 was a Thursday.
 pub let weekday(d: Date) -> Weekday =
-    let split = Int/DivMod/of(to_days(d) + 3, 7);
-    Weekday/of_days_from_monday(split.remainder);
+    Weekday/of_days_from_monday(Int/rem(to_days(d) + 3, 7));
 
 --- The date as ISO 8601's extended format writes it: `2024-02-29`, and a year past four digits with its sign, `+10000-01-01`.
 pub let to_str(d: Date) -> Str =

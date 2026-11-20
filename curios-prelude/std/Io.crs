@@ -71,11 +71,12 @@ let furthest: Int =
 
 --- A handle ready once the monotonic clock has reached `i`: what a description suspends on to wait until then. One already past is ready at once; one before the clock's origin crosses as the origin, which has passed too.
 let deadline(i: Instant) -> Io(Handle) =
-    let split = Int/DivMod/of(Instant/to_nanos(i), 1000000000);
+    let (seconds, nanos) =
+        (Instant/to_nanos(i) / 1000000000, Int/rem(Instant/to_nanos(i), 1000000000));
     match
-    | split.quotient < +0 => clock_deadline(+0, 0)
-    | split.quotient > furthest => clock_deadline(furthest, 0)
-    | _ => clock_deadline(split.quotient, split.remainder)
+    | seconds < +0 => clock_deadline(+0, 0)
+    | seconds > furthest => clock_deadline(furthest, 0)
+    | _ => clock_deadline(seconds, nanos)
     end;
 
 --- Until the monotonic clock has reached `i`, on a deadline of its own, closed whether the wait ends or is cancelled. An instant already past ends the wait at once.

@@ -40,14 +40,13 @@ pub let to_timestamp(odt: OffsetDateTime) -> Timestamp =
 
 --- The moment `t` as the calendar and the clock name it at `o`. It never answers a second of `60`.
 pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =
-    let local =
-        Int/DivMod/of(Timestamp/to_unix_nanos(t) + Offset/ahead(o) * 1000000000, 1000000000);
-    let day = Int/DivMod/of(local.quotient, 86400);
+    let nanos = Timestamp/to_unix_nanos(t) + Offset/ahead(o) * 1000000000;
+    let seconds = nanos / 1000000000;
     OffsetDateTime {
         date_time =
             DateTime {
-                date = Date/of_days(day.quotient),
-                time = Time/of_seconds(day.remainder, local.remainder) },
+                date = Date/of_days(seconds / 86400),
+                time = Time/of_seconds(Int/rem(seconds, 86400), Int/rem(nanos, 1000000000)) },
         offset = o };
 
 --- The moment as ISO 8601's extended format writes it, at the offset it holds: `2024-02-29T08:49:37+05:30`.

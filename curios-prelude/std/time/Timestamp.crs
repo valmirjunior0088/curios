@@ -46,7 +46,7 @@ pub let of_unix_nanos(n: Int) -> Timestamp =
 
 --- The Unix second the moment lies in, as POSIX counts it: floored, so a moment half a second before the epoch lies in its second `-1`.
 pub let to_unix_secs(t: Timestamp) -> Int =
-    Int/DivMod/of(t.nanos, 1000000000).quotient;
+    t.nanos / 1000000000;
 
 --- The nanoseconds since the epoch, exactly.
 pub let to_unix_nanos(t: Timestamp) -> Int =
