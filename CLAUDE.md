@@ -8,6 +8,11 @@ Curios is a dependently typed functional language implemented in Rust 2024, comp
 - A problem you were not asked to solve is a finding: state it once, with its evidence, and the user decides whether it becomes work. Don't reopen what the user settled. A decision document's reasons are weighed again where a question is asked of them, and said plainly where one no longer holds.
 - Where more than one design is reasonable, present the alternatives with their trade-offs, recommend one, and wait.
 - Prefer the fix that bears load long-term to the narrow patch: Curios promises no stability yet, so a breaking change is welcome where it is the right shape.
+- A hazard is met first by the restriction that kept the subsystem unambiguous before it, and by a new mechanism only where none does.
+- A missing piece that is a shared owner's own job extends the owner; another concern is composed beside it. Never a second engine, and never a foreign concern stuffed into an owner.
+- A type whose only job is to forbid a use is a cost: find the choice that opened the gap, and split the job so the dangerous half is never a value.
+- A name that collides is settled by listing each claimant and what the word means there: the language's own sense keeps it, and the others are renamed to what they hold.
+- A recommendation that adds a crate, a shared dependency row or a file says so, with the count of what it moves, beside the smallest alternative.
 - Uncommitted changes are the user's, and other sessions commit to `main` while you work: never revert, reformat or stage what you did not write. Stage each file by its name, never a directory, `-A`, `-u` or `.`. Never discard work with a reset or a checkout: a mutation is put back from a copy kept beside it.
 - A scripted edit names the tracked files it rewrites: a sweep of the directory also reaches the worktrees under `.claude/worktrees/` and the grammar clone under `editors/zed/grammars/`.
 - Every change a tool's automatic fix makes is read before it is kept.
