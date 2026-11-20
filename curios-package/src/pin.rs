@@ -12,7 +12,7 @@ use {
         Cabinet, FileHash, MANIFEST, Manifest, Refused, Row, Step, Target, TreeHash, deliver,
         deliver_module, misshapen, nearest_manifest, umbrella_over, unwritable,
     },
-    curios_common::{Code, OsError, Report, Source},
+    curios_common::{Code, OsError, Report, Source, write_whole},
     curios_module::identity,
     std::{
         fs,
@@ -391,7 +391,7 @@ pub fn pin(
         return Ok(pinned);
     }
 
-    fs::write(&pinning.manifest, left).map_err(|error| {
+    write_whole(&pinning.manifest, left.as_bytes()).map_err(|error| {
         Refused::of("unwritable file")
             .stating(OsError(&error))
             .about_path(&pinning.manifest)

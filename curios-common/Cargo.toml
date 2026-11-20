@@ -3,7 +3,7 @@ name = "curios-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Foundational utilities shared across every Curios stage: spans, names, entropy, the typed arena, and persistent maps"
+description = "Foundational utilities shared across every Curios stage and tool: spans, names, entropy, the typed arena, persistent maps, and a file written whole"
 
 [lints]
 workspace = true

@@ -15,7 +15,7 @@ use prose::*;
 use {
     crate::Documentation,
     askama::Template,
-    curios_common::Qualifier,
+    curios_common::{Qualifier, write_whole},
     std::{collections::BTreeMap, fs, io, path::Path},
 };
 
@@ -56,9 +56,12 @@ pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Resu
 
     fs::create_dir_all(directory.join("static").join("fonts"))?;
     for (name, bytes) in STATIC {
-        fs::write(directory.join("static").join(name), bytes)?;
+        write_whole(&directory.join("static").join(name), bytes)?;
     }
-    fs::write(directory.join("static").join("index.js"), bundle.index())?;
+    write_whole(
+        &directory.join("static").join("index.js"),
+        bundle.index().as_bytes(),
+    )?;
 
     for module in &record.modules {
         let path = directory.join(bundle.page_path(&module.path));
@@ -66,7 +69,7 @@ pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Resu
             fs::create_dir_all(parent)?;
         }
         let rendered = page(&bundle, module).render().map_err(io::Error::other)?;
-        fs::write(path, rendered)?;
+        write_whole(&path, rendered.as_bytes())?;
     }
 
     Ok(())

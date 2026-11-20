@@ -4,7 +4,7 @@ use {
     crate::{Built, Failure, Then, Tree, payload_of},
     curios::{linked_of, page_name},
     curios_browser::page,
-    curios_common::{OsError, Report},
+    curios_common::{OsError, Report, write_whole},
     curios_package::{Program, Refused, Target},
     curios_verdict::Verdicts,
     std::{collections::BTreeMap, fs, io, path::Path},
@@ -68,7 +68,7 @@ pub fn emit_page(
                 .map_err(|error| unwritable("unwritable directory", parent, error))?;
         }
 
-        fs::write(&file, bytes).map_err(|error| unwritable("unwritable file", &file, error))?;
+        write_whole(&file, bytes).map_err(|error| unwritable("unwritable file", &file, error))?;
     }
 
     Ok(())

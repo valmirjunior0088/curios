@@ -56,6 +56,9 @@ pub use plicity::{ArchivedPlicity, Plicity};
 mod sign;
 pub use sign::{ArchivedSign, Sign};
 
+mod staged;
+pub use staged::{write_whole, write_whole_prepared};
+
 mod mount;
 pub use mount::{ArchivedMount, ArchivedRootKind, Mount, RootKind};
 

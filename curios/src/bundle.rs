@@ -2,7 +2,7 @@
 
 use {
     curios::fault,
-    curios_common::{OsError, Report},
+    curios_common::{OsError, Report, write_whole_prepared},
     curios_native::{Bundle, append_bundle},
     curios_package::Refused,
     std::{fs, io, os::unix::fs::PermissionsExt, path::Path},
@@ -29,14 +29,13 @@ pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), Box<Report>> {
             .map_err(|error| unwritable("unwritable directory", directory, error))?;
     }
 
-    fs::write(output, &bytes).map_err(|error| unwritable("unwritable file", output, error))?;
-
-    let mut perms = fs::metadata(output)
-        .map_err(|error| unwritable("unwritable file", output, error))?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(output, perms)
-        .map_err(|error| unwritable("unwritable file", output, error))?;
+    // Written whole and renamed into place, made executable before it takes the name: a program still running from an earlier build keeps the file it started from, where a write in place is refused as a busy text file.
+    write_whole_prepared(output, &bytes, |staged| {
+        let mut permissions = fs::metadata(staged)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(staged, permissions)
+    })
+    .map_err(|error| unwritable("unwritable file", output, error))?;
 
     // On macOS we do NOT re-sign. The embedded launcher image carries an ad-hoc signature from the linker whose code-limit covers the original image; our payload is appended *past* that limit, so the signature stays valid and the loader ignores the trailing bytes (the launcher reads them via `current_exe`). `codesign --force` would in fact reject the result ("data after signature"), so leaving the original signature in place is both correct and necessary.
 

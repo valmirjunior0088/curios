@@ -50,6 +50,14 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 
 **Rejected.** A default cache directory divined from the environment. The families kept for reuse side by side with what a command emits, which only the reference's table told apart. The variable read where a cabinet is opened, which made a suite's hermeticity the shell's.
 
+### Invocations share `.curios/` without a lock
+
+**Decision.** No invocation locks `.curios/` or its cabinet, and none waits for another. Every file one writes there, or wherever a command is told to write, takes its place whole: written beside it under a staging name and renamed in (`curios_common::write_whole`), so a reader holds the file it opened and a running program the executable it started from. Two invocations that need one unit both compile it, and the last to file it stands.
+
+**Rationale.** An editor's language server checks a document while its user builds in a terminal, and a lock makes one wait on the other: rust-analyzer gives Cargo a target directory of its own for that reason ([rust-analyzer FAQ](https://rust-analyzer.github.io/book/faq.html)), and Lake took its build lock out, since an interrupted build left it stale and it held the editor behind the terminal ([`Lake.Util.Lock`](https://lean-lang.org/doc/api/Lake/Util/Lock.html)). A whole file renamed into place is what the cabinet's writes already are, and what Go's build does with a binary it moves into place, so a lock buys nothing a reader needs: the price is the work two invocations repeat, which a cabinet hit spares the next.
+
+**Rejected.** A lock on the directory, Cargo's, which queues the editor behind the terminal and leaves a stale file to an interrupted run. A write in place, which a running executable refuses as a busy text file and a concurrent reader can read half written.
+
 ### `new` starts a package whole
 
 **Decision.** `curios new` writes the manifest, `lib.crs`, `exe.crs` and a `.gitignore` for `.curios/`, and no flag asks for fewer.
