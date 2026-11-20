@@ -323,7 +323,9 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             binary("mul", syntax, Intrinsic::IntMul),
         ),
         documented(
-            &["`a` divided by `b`, rounded toward zero."],
+            &[
+                "`a` divided by `b`, Euclid's quotient: the one whose remainder `rem(a, b)` lies in `[0, |b|)`, which rounds down where `b` is positive and up where it is negative, under the evidence that `b` is not zero.",
+            ],
             guarded_binary("div", syntax, |dividend, divisor, non_zero| {
                 Intrinsic::IntDiv {
                     dividend,
@@ -333,7 +335,9 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             }),
         ),
         documented(
-            &["What `a` leaves after dividing by `b`, taking its sign from `a`."],
+            &[
+                "What `a` leaves after dividing by `b`, Euclid's remainder, in `[0, |b|)` whatever either sign, under the evidence that `b` is not zero.",
+            ],
             guarded_binary("rem", syntax, |dividend, divisor, non_zero| {
                 Intrinsic::IntRem {
                     dividend,

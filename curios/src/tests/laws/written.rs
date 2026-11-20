@@ -631,7 +631,7 @@ const CARRIERS: &[Carrier] = &[
             // Divisibility, as on `Nat`: the argument needs integers and nothing more.
             "Eq()(i * 2 + 1 == j * 2, false)",
             "Eq()(i * 2 + 1 != j * 2, true)",
-            // Euclid's identity over truncated division, at both signs of the divisor and of the copies taken.
+            // Euclid's identity, at both signs of the divisor and of the copies taken.
             "Eq()((i / 3) * 3 + i % 3, i)",
             "Eq()(i % -3 + (i / -3) * -3, i)",
             "Eq()(+0 - i % 3 - (i / 3) * 3, +0 - i)",
@@ -639,7 +639,7 @@ const CARRIERS: &[Carrier] = &[
         refused: &[
             // The control, and not a law: constants that agree modulo the gcd meet at `i = j + 1`.
             "Eq()(i * 2 == j * 2 + 2, false)",
-            // A candidate, declined on purpose: true over truncated division, but reading it would rewrite a difference into a remainder where the recombination only ever shrinks a sum, so `i - d · (i / d)` and `i % d` stay two spellings.
+            // A candidate, declined on purpose: true of any division, but reading it would rewrite a difference into a remainder where the recombination only ever shrinks a sum, so `i - d · (i / d)` and `i % d` stay two spellings.
             "Eq()(i - (i / 3) * 3, i % 3)",
             // The control for the recombination, and not a law: a remainder taken off its multiple is no recombination, `-1` at `i = +1`.
             "Eq()(+2 * (i / +2) - i % +2, i)",
@@ -875,7 +875,7 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        // What `Int` shares with `Nat`, and what it does not: `Int` divides truncating toward zero and shifts right arithmetically.
+        // What `Int` shares with `Nat`, and what it does not: `Int` divides as Euclid does and shifts right arithmetically.
         name: "Int, the families it shares with Nat",
         binders: "i: Int, j: Int, k: Int, n: Nat, p: Int/NonZero(j)",
         held: &[
@@ -895,17 +895,17 @@ const CARRIERS: &[Carrier] = &[
             "Eq()((i * 4 + k * 6 + 8) % -2, +0)",
         ],
         refused: &[
-            // A candidate no stage moves: a remainder's magnitude is below its divisor's, a bound through `abs` nothing declares.
+            // Candidates no stage moves, each true of Euclid's division: a remainder lies from zero to below its divisor's magnitude, so an odd number's is `1`, and the floor law and the Euclidean split count whole divisors at every sign. Conversion reads none of them, since it reads no `Int` remainder as the natural it is.
             "Eq()(i % 3 < +3, true)",
-            // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero: a remainder takes its dividend's sign, so an odd number's is `-1`; the floor law and the Euclidean split count whole divisors, which a truncated quotient does not; and nothing dominates below zero, where a difference, a bitwise `and`, an arithmetic shift, a quotient and a remainder each pass their operand.
+            "Eq()(+0 <= i % 3, true)",
             "Eq()((i * 2 + 1) % 2, +1)",
             "Eq()((i + 2) / 2, 1 + i / 2)",
             "Eq()((2 * i + 1) / 2, i)",
+            // Controls, each a law of `Nat` and none of `Int`, failing at an operand below zero, where nothing dominates: a difference, a bitwise `and`, an arithmetic shift and a quotient each pass their operand (`k = -1`; `i = -2, k = +1`; `i = -3, n = 1`; `i = -3`).
             "Eq()(i - k <= i, true)",
             "Eq()(Int/and(i, k) <= i, true)",
             "Eq()(Int/shr(i, n) <= i, true)",
             "Eq()(i / 2 <= i, true)",
-            "Eq()(+0 <= i % 3, true)",
             // And the complement is not the negation: `not(i)` is `-1 - i`.
             "Eq()(Int/xor(i, -1), +0 - i)",
         ],

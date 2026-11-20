@@ -1026,16 +1026,12 @@ fn natural_image(value: &Natural) -> u64 {
     u64::try_from(&residue).expect("a residue fits a word")
 }
 
-/// `value` in the prime field, a negative one as the prime less its magnitude.
+/// `value` in the prime field: Euclid's remainder by the prime, which lies below it whatever the sign, so a negative value is the prime less its magnitude's residue.
 fn integer_image(value: &Integer) -> u64 {
     let residue = value
         .rem(&Integer::from(modulus()))
         .expect("the prime is not zero");
-    let magnitude = u64::try_from(&residue.magnitude()).expect("a residue fits a word");
-    match i32::try_from(&residue.sign()).expect("a sign fits") < 0 {
-        true => (MODULUS - magnitude) % MODULUS,
-        false => magnitude,
-    }
+    u64::try_from(&residue.magnitude()).expect("a residue fits a word")
 }
 
 /// [`agree`], with the one normalization the chain takes before its peels (`convert_intrinsics`, step 2): where either node holds a product the fold left stuck, both are read in their normal form ([`canonical`]), since a reader of sums holds two nodes one only where their normal forms agree.

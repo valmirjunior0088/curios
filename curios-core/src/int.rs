@@ -488,7 +488,7 @@ pub fn int_preimage(term: &Term) -> Option<Term> {
     })
 }
 
-/// A reduced term divided by a nonzero literal that divides its constant and every coefficient, each divided in place: `(i * 4 + k * 6 + 8) / 2` is `i * 2 + k * 3 + 4`, and `i / -1` is `-i`. The quotient of an exact multiple is exact whichever way the division rounds (`curios-algebra`'s `signed_cofactor`), so this reads no sign, and the remainder of such a division is zero. `None` where the divisor leaves a remainder of the constant or of a coefficient: the truncated quotient of such a sum follows its sign.
+/// A reduced term divided by a nonzero literal that divides its constant and every coefficient, each divided in place: `(i * 4 + k * 6 + 8) / 2` is `i * 2 + k * 3 + 4`, and `i / -1` is `-i`. The quotient of an exact multiple is exact whichever way the division rounds (`curios-algebra`'s `signed_cofactor`), so this reads no sign, and the remainder of such a division is zero. `None` where the divisor leaves a remainder of the constant or of a coefficient: the quotient of such a sum turns on its sign.
 pub fn int_exact_quotient(term: &Term, divisor: &Integer) -> Option<Term> {
     let (constant, summands) = int_terms(term);
     let constant = signed_cofactor(&constant, divisor)?;

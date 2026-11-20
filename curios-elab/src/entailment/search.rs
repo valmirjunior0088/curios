@@ -430,17 +430,11 @@ impl Rational {
         )
     }
 
-    /// The greatest integer not above it: truncating division, one less where a negative value had a remainder.
+    /// The greatest integer not above it: Euclid's quotient by the positive denominator, which is the floor.
     pub fn floor(&self) -> Integer {
-        let quotient = self
-            .numerator
+        self.numerator
             .div(&self.denominator)
-            .expect("a positive denominator");
-        let exact = quotient.clone() * self.denominator.clone() == self.numerator;
-        match exact || self.numerator >= Integer::from(0) {
-            true => quotient,
-            false => quotient - Integer::from(1),
-        }
+            .expect("a positive denominator")
     }
 
     /// The least integer not below it.

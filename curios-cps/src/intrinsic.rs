@@ -465,7 +465,11 @@ impl Intrinsic {
             Self::BytesAppend => 7,
             Self::FltOfLeBytes => 5,
             Self::NatShl | Self::IntShl | Self::BytesGet => 4,
-            Self::IntAbs | Self::FltToLeBytes | Self::BytesEql | Self::WindowExtent => 3,
+            Self::IntAbs
+            | Self::IntDiv
+            | Self::FltToLeBytes
+            | Self::BytesEql
+            | Self::WindowExtent => 3,
             Self::NatNeq
             | Self::NatAdd
             | Self::NatSub
@@ -479,7 +483,7 @@ impl Intrinsic {
             | Self::IntAdd
             | Self::IntSub
             | Self::IntMul
-            | Self::IntDiv
+            | Self::IntRem
             | Self::IntLt
             | Self::IntLe
             | Self::IntMin
@@ -508,7 +512,6 @@ impl Intrinsic {
             | Self::NatToInt
             | Self::NatToFlt(_)
             | Self::IntEql
-            | Self::IntRem
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor

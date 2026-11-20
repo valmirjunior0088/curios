@@ -25,9 +25,9 @@ pub enum BigHelper {
     Pow,
     /// `(anyref, anyref) -> (ref any)`: the product.
     Mul,
-    /// `(anyref, anyref) -> (ref any)`: the quotient, truncated toward zero.
+    /// `(anyref, anyref) -> (ref any)`: Euclid's quotient, the one whose remainder lies in `[0, |d|)`.
     Div,
-    /// `(anyref, anyref) -> (ref any)`: the remainder, with the dividend's sign.
+    /// `(anyref, anyref) -> (ref any)`: Euclid's remainder, in `[0, |d|)`.
     Rem,
     /// `(anyref, anyref) -> i32`: `-1`, `0` or `1` as the first is below, equal to or above the second.
     Cmp,
@@ -632,24 +632,60 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         self.add_helper(BigHelper::Mul, scope, Table::top_type(false), instrs);
     }
 
-    /// `big/div` and `big/rem`: truncated division, so the quotient takes the signs' agreement and the remainder the dividend's sign — the pair `d · (x / d) + x % d = x` holds of.
+    /// `big/div` and `big/rem`: Euclid's division, whose remainder lies in `[0, |d|)` — the pair `d · (x / d) + x % d = x` holds of — so the quotient takes the signs' agreement and the remainder no sign.
+    ///
+    /// A dividend at or above zero divides its magnitude as it stands. One below zero divides `|a| - 1`, one division of magnitudes either way: the quotient's magnitude is `⌈|a| / |d|⌉`, which is `(|a| - 1) / |d| + 1`, and the remainder `|d| - 1 - (|a| - 1) % |d|`.
     fn emit_big_div(&mut self, remainder: bool) {
         let (mut scope, x, y) = binary_scope();
         let (a, b, widen) = self.widen_pair(&mut scope, &x, &y);
-        let (helper, sign) = match remainder {
-            true => (BigHelper::Rem, self.sign(&a)),
+        let one = || wasm![i32_const(1), self.fixed_limbs(1)];
+        let lowered = wasm![
+            i32_const(0),
+            self.magnitude(&a),
+            one(),
+            self.helper(BigHelper::MagSub),
+            self.helper(BigHelper::Norm),
+            self.helper(BigHelper::Widen),
+            field_get(&self.big.big, &self.big.limbs_field),
+        ];
+        let divided = |want_rem: bool| {
+            wasm![
+                self.magnitude(&b),
+                i32_const(i32::from(want_rem)),
+                self.helper(BigHelper::MagDivRem),
+            ]
+        };
+        let (helper, sign, below, at_or_above) = match remainder {
             false => (
                 BigHelper::Div,
                 wasm![self.sign(&a), self.sign(&b), curios_wasm::Instr::I32Xor],
+                wasm![
+                    lowered,
+                    divided(false),
+                    one(),
+                    self.helper(BigHelper::MagAdd),
+                ],
+                wasm![self.magnitude(&a), divided(false)],
+            ),
+            true => (
+                BigHelper::Rem,
+                vec![i32_const(0)],
+                wasm![
+                    self.magnitude(&b),
+                    one(),
+                    self.helper(BigHelper::MagSub),
+                    lowered,
+                    divided(true),
+                    self.helper(BigHelper::MagSub),
+                ],
+                wasm![self.magnitude(&a), divided(true)],
             ),
         };
         let instrs = wasm![
             widen,
             sign,
-            self.magnitude(&a),
-            self.magnitude(&b),
-            i32_const(i32::from(remainder)),
-            self.helper(BigHelper::MagDivRem),
+            self.sign(&a),
+            either(self.words_type(), below, at_or_above),
             self.helper(BigHelper::Norm),
         ];
 

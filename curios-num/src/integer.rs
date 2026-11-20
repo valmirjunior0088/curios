@@ -1,7 +1,10 @@
+#[cfg(test)]
+mod tests;
+
 use {
     crate::{BigIntBytes, Natural, OutOfRange, ScalarTrap, within},
     num_bigint::{BigInt, Sign},
-    num_traits::{ToPrimitive, Zero},
+    num_traits::{Euclid, ToPrimitive, Zero},
     std::{
         fmt,
         ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Shr, Sub},
@@ -63,22 +66,22 @@ impl Integer {
         self.value.is_zero()
     }
 
-    /// Division truncating toward zero, trapping on a zero divisor.
+    /// Euclid's quotient, the one whose remainder [`Integer::rem`] lies in `[0, |d|)` — the floor at a positive divisor, the ceiling at a negative one — trapping on a zero divisor.
     pub fn div(&self, other: &Self) -> Result<Self, ScalarTrap> {
         match other.is_zero() {
             true => Err(ScalarTrap::DivisionByZero),
             false => Ok(Self {
-                value: &self.value / &other.value,
+                value: self.value.div_euclid(&other.value),
             }),
         }
     }
 
-    /// The remainder, taking the dividend's sign, and trapping on a zero divisor like [`Integer::div`].
+    /// Euclid's remainder, in `[0, |d|)` whatever either sign, so `d · (x / d) + x % d = x`, trapping on a zero divisor like [`Integer::div`].
     pub fn rem(&self, other: &Self) -> Result<Self, ScalarTrap> {
         match other.is_zero() {
             true => Err(ScalarTrap::DivisionByZero),
             false => Ok(Self {
-                value: &self.value % &other.value,
+                value: self.value.rem_euclid(&other.value),
             }),
         }
     }

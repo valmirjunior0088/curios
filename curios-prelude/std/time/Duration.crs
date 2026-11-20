@@ -1,4 +1,4 @@
-use /std/{Int, Ord, Hash, Spell, Fmt, Str, Option, Show};
+use /std/{Int, Nat, Ord, Hash, Spell, Fmt, Str, Option, Show};
 use /std/ops/{Eql, Cmp, Add, Sub};
 use /std/time/{iso8601};
 
@@ -59,13 +59,13 @@ pub let of_micros(n: Int) -> Duration =
 pub let of_nanos(n: Int) -> Duration =
     Duration { nanos = n };
 
---- The whole seconds, rounded toward zero as `Int`'s `/` rounds.
+--- The whole seconds, rounded toward zero: the magnitude's whole seconds under the length's sign.
 pub let to_secs(d: Duration) -> Int =
-    d.nanos / 1000000000;
+    Int/sign(d.nanos) * Nat/to_int(Int/abs(d.nanos) / 1000000000);
 
 --- The whole milliseconds, rounded toward zero.
 pub let to_millis(d: Duration) -> Int =
-    d.nanos / 1000000;
+    Int/sign(d.nanos) * Nat/to_int(Int/abs(d.nanos) / 1000000);
 
 --- The nanoseconds, exactly.
 pub let to_nanos(d: Duration) -> Int =

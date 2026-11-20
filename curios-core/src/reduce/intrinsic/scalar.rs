@@ -106,7 +106,7 @@ pub fn reduce_int_binary(
 
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero leaves the division stuck — mathematically undefined, and past the domain its bound states, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 ///
-/// Beside the two-literal fold stand the laws a truncated division shares with ℕ's, each reading no sign. The floor law and the Euclidean split are not among them: each is false at a dividend below zero, where truncation rounds the other way.
+/// Beside the two-literal fold stand the laws ℤ's division shares with ℕ's that read no sign. The floor law and the Euclidean split read a remainder's bounds, which are read at ℕ alone.
 pub fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -132,7 +132,7 @@ pub fn reduce_int_division(
         return Ok(Subterm::Intrinsic(Intrinsic::Int(folded)));
     }
 
-    // The laws that read no sign, the ones ℤ's truncated division shares with ℕ's: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend that is its divisor to `1` with remainder `0`, on the division's own precondition that the divisor is nonzero.
+    // The laws that read no sign, the ones ℤ's division shares with ℕ's: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend that is its divisor to `1` with remainder `0`, on the division's own precondition that the divisor is nonzero.
     let divided = match () {
         _ if int_is_zero(&left) => Some(half.of_zero()),
         _ if right.as_int() == Some(Integer::from(1i32)) => Some(half.by_one()),

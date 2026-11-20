@@ -20,6 +20,14 @@ The values of the Curios intrinsic carriers: the unbounded `Natural` and `Intege
 
 **Rejected.** A separate layer of free functions for the erased carriers beside the carriers' methods, two APIs for one operation; giving an operator the language's meaning, when `Natural`'s `-` would have to saturate for a folder and panic for a caller that knows the difference is a natural.
 
+### `Int` divides as Euclid does
+
+**Decision.** `Integer::div` and `Integer::rem` are Euclid's division: the remainder lies in `[0, |d|)` whatever either sign, and the quotient is the one that leaves it — the floor at a positive divisor and the ceiling at a negative one. Every folder computes it through these methods, and the running program computes it too: `curios-emit`'s fast path steps `i32.div_s`'s truncated quotient and remainder, and `big/div` and `big/rem` divide a negative dividend's magnitude less one.
+
+**Rationale.** A remainder that is a natural has one bound at every sign, and a quotient that floors at a positive divisor is a right shift's, so `Int/shr(i, k)` is the quotient by `2ᵏ` at every `i` and what `Nat` reads of a division holds of `Int`'s. Lean changed `Int`'s `/` and `%` to this convention after starting from C's, and SMT-LIB, Dafny, Agda — whose remainder is a natural below the divisor's magnitude — and Why3's `EuclideanDivision` state it, as Boute (*The Euclidean definition of the functions div and mod*, TOPLAS 1992) and Leijen (*Division and Modulus for Computer Scientists*, 2001) argue it.
+
+**Rejected.** Truncation toward zero, C's and WebAssembly's `div_s`, one instruction on the hardware, with a law for each half — `Int/abs(i % d)` is `Int/abs(i) % Int/abs(d)` at a literal divisor, and `Int/shr` reaches `Nat/shr` through the sign view: its remainder takes the dividend's sign, `Int`'s shift and division stay two conventions, every `Int` lemma about either goes through `Int/view`, and `/std` keeps a floor of its own. Floored division, Python's, whose remainder takes the divisor's sign and is no natural at a negative one.
+
 ### `Floating` is binary64 over every pattern, and the language's definition of it
 
 **Decision.** `Floating` is IEEE 754-2019 binary64 computed over unbounded integers: every one of the 2⁶⁴ bit patterns a distinct value, each operation computed exactly and rounded once in the `Rounding` it is given — ties to even, ties to away, toward zero, toward positive, toward negative — and one NaN rule for every operation, the default NaN where no operand is one and otherwise the greatest quieted operand pattern, read unsigned. `to_dyadic` hands out a finite value's exact mantissa and exponent, and `of_dyadic` rounds an exact value in any direction ([`Flt` is specified by a model](../documentation/design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)).

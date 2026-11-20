@@ -40,7 +40,7 @@ pub enum Operation {
     /// Truncated at `Nat`, the group's at `Int`.
     Difference,
     Product,
-    /// Floored at `Nat`, truncated at `Int`, over a nonzero divisor.
+    /// Euclid's, over a nonzero divisor: the quotient whose remainder lies in `[0, |d|)`, a floor at `Nat`.
     Quotient,
     Remainder,
     And,

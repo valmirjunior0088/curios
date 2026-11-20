@@ -47,7 +47,7 @@ test int_crosses_zero_past_every_width =
             [-1073741824 - +1, +1 - +100000000000000000000],
             [-1073741825, -99999999999999999999])]);
 
--- The sign of a product is the product of the signs, and division truncates toward zero with the remainder taking the dividend's sign.
+-- The sign of a product is the product of the signs, and division is Euclid's, its remainder from zero to below the divisor's magnitude whatever the dividend's sign.
 test int_signs_multiply_and_divide_past_every_width =
     Test/equal(
         [
@@ -56,7 +56,7 @@ test int_signs_multiply_and_divide_past_every_width =
             -4294967296 * +4294967296,
             -18446744073709551617 / +4294967296,
             -18446744073709551617 % +4294967296],
-        [+9999800001, -9999800001, -18446744073709551616, -4294967296, -1]);
+        [+9999800001, -9999800001, -18446744073709551616, -4294967297, +4294967295]);
 
 -- Order decides by sign first and only then by magnitude, reversed below zero.
 test int_orders_across_signs_past_every_width =

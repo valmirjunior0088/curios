@@ -2,7 +2,7 @@
 //!
 //! Every law here is unconditional — it holds for every value of every atom, over a divisor its caller's division states nonzero — and that is what admits it into a fold. `(a + b) / n = a / n + b / n` is not one: `1 / 2 + 1 / 2` is `0`, not `1`, and a law holding for only some values of a symbolic part would be a false definitional equation.
 //!
-//! **The floor and the Euclidean split are ℕ's.** Each counts the whole divisors a non-negative part carries, and a division that truncates toward zero carries none the same way below zero: `(i + 2) / 2` is `0` at `i = -1` where `1 + i / 2` is `1`. What ℤ shares is what reads no sign: a zero dividend, a dividend that is its divisor, and an exact multiple ([`signed_cofactor`]).
+//! **The floor and the Euclidean split are read at ℕ.** Each counts the whole divisors a part carries by the bounds of what it leaves, which are read of naturals; ℤ's division is Euclid's too, and what it shares here is what reads no sign: a zero dividend, a dividend that is its divisor, and an exact multiple ([`signed_cofactor`]).
 
 use curios_num::{Integer, Natural};
 
@@ -66,7 +66,7 @@ pub fn cofactor(coefficient: &Natural, divisor: &Natural) -> Option<Natural> {
         .then(|| coefficient / divisor)
 }
 
-/// [`cofactor`] over ℤ: the quotient of `coefficient` by a nonzero `divisor` that divides it. An exact quotient is the same whichever way a division rounds, so this reads neither sign and holds of the truncated division as of the floored one; the remainder of such a division is zero.
+/// [`cofactor`] over ℤ: the quotient of `coefficient` by a nonzero `divisor` that divides it. An exact quotient is the same whichever way a division rounds, so this reads neither sign; the remainder of such a division is zero.
 pub fn signed_cofactor(coefficient: &Integer, divisor: &Integer) -> Option<Integer> {
     let remainder = coefficient.rem(divisor).ok()?;
     match remainder.is_zero() {

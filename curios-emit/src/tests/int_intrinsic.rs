@@ -27,20 +27,34 @@ fn int_mul_widens_to_i64_and_grows_past_the_i31() {
     assert_refuses_nothing(&wat);
 }
 
-/// `-2³⁰ / -1` is the one quotient that outgrows its dividend, so the signed fast path checks its result as a sum does. The only refusal reachable is the magnitude division's zero-divisor guard, which the evidence every division carries makes the compiler's fault.
+/// Euclid's quotient is the truncated one stepped toward the divisor's sign where the truncated remainder, `a - q · d`, is below zero, so the fast path divides once and multiplies back. `-2³⁰ / -1` is the one quotient that outgrows its dividend, so it checks its result as a sum does. The only refusal reachable is the magnitude division's zero-divisor guard, which the evidence every division carries makes the compiler's fault.
 #[test]
-fn int_div_is_signed_and_boxes_the_one_quotient_past_the_i31() {
+fn int_div_steps_the_truncated_quotient_and_boxes_the_one_past_the_i31() {
     let wat = wat(&intrinsic_main(
         curios_cps::Intrinsic::IntDiv,
         vec![int(-9), int(2)],
     ));
     assert_contains(&wat, "i32.div_s");
+    assert_contains(&wat, "i32.mul");
     assert_contains(&wat, "call $big/of_i64");
     assert_contains(&wat, "call $big/div");
     assert_eq!(
         refusals_besides_the_exit(&wat),
         count(&wat, "call $refuse/invariant")
     );
+}
+
+/// Euclid's remainder is the truncated one raised by the divisor's magnitude where it is below zero, which keeps it in the i31.
+#[test]
+fn int_rem_raises_the_truncated_remainder_by_the_divisor_s_magnitude() {
+    let wat = wat(&intrinsic_main(
+        curios_cps::Intrinsic::IntRem,
+        vec![int(-9), int(2)],
+    ));
+    assert_contains(&wat, "i32.rem_s");
+    assert_contains(&wat, "i32.xor");
+    assert_contains(&wat, "call $big/rem");
+    assert_absent(&wat, "call $big/of_i64");
 }
 
 #[test]

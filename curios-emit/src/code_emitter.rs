@@ -2243,12 +2243,44 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cps::Intrinsic::NatDiv => {
                 self.emit_divided(dest, (&args[0], &args[1]), Half::Quotient)
             }
+            // Euclid's quotient is the truncated one stepped one away from zero where the truncated remainder `a - q · d` is below zero, toward the divisor's sign: `q - (r >> 31 & (d >> 31 | 1))`.
             curios_cps::Intrinsic::IntDiv => {
+                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+                let dividend = self
+                    .context
+                    .push_local("int_div_dividend", i32_type.clone());
+                let divisor = self.context.push_local("int_div_divisor", i32_type.clone());
+                let quotient = self.context.push_local("int_div_quotient", i32_type);
                 let slow = vec![self.big(BigHelper::Div)];
                 self.emit_arith(
                     dest,
                     (&args[0], &args[1]),
-                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32DivS]]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            vec![tee(&dividend)],
+                            right,
+                            vec![
+                                tee(&divisor),
+                                curios_wasm::Instr::I32DivS,
+                                tee(&quotient),
+                                get(&dividend),
+                                get(&quotient),
+                                get(&divisor),
+                                curios_wasm::Instr::I32Mul,
+                                curios_wasm::Instr::I32Sub,
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                get(&divisor),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                curios_wasm::Instr::I32Const { value: 1 },
+                                curios_wasm::Instr::I32Or,
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32Sub,
+                            ],
+                        ])
+                    },
                     Fast::Wide32,
                     slow,
                 );
@@ -2256,12 +2288,42 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cps::Intrinsic::NatRem => {
                 self.emit_divided(dest, (&args[0], &args[1]), Half::Remainder)
             }
+            // Euclid's remainder is the truncated one raised by the divisor's magnitude where it is below zero: `r + (|d| & r >> 31)`, `|d|` being `(d ^ d >> 31) - (d >> 31)`.
             curios_cps::Intrinsic::IntRem => {
+                let i32_type = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+                let divisor = self.context.push_local("int_rem_divisor", i32_type.clone());
+                let remainder = self
+                    .context
+                    .push_local("int_rem_remainder", i32_type.clone());
+                let sign = self.context.push_local("int_rem_sign", i32_type);
                 let slow = vec![self.big(BigHelper::Rem)];
                 self.emit_arith(
                     dest,
                     (&args[0], &args[1]),
-                    |left, right| sequence([left, right, vec![curios_wasm::Instr::I32RemS]]),
+                    |left, right| {
+                        sequence([
+                            left,
+                            right,
+                            vec![
+                                tee(&divisor),
+                                curios_wasm::Instr::I32RemS,
+                                tee(&remainder),
+                                get(&divisor),
+                                get(&divisor),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                tee(&sign),
+                                curios_wasm::Instr::I32Xor,
+                                get(&sign),
+                                curios_wasm::Instr::I32Sub,
+                                get(&remainder),
+                                curios_wasm::Instr::I32Const { value: 31 },
+                                curios_wasm::Instr::I32ShrS,
+                                curios_wasm::Instr::I32And,
+                                curios_wasm::Instr::I32Add,
+                            ],
+                        ])
+                    },
                     Fast::Small,
                     slow,
                 );

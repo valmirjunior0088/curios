@@ -82,7 +82,7 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-anf` bu
 
 **Rationale.** A shift and a mask are a word's own instructions where `i32.div_u` and `i32.rem_u` are long ones, so a program never writes a shift for its speed where the division is what it means. Cranelift turns a `udiv` by a power of two into a shift where its own propagation proves the divisor constant, and no guarantee here rests on an engine's optimizer. The boxed half is rare and long, and keeps the helper the division already called.
 
-**Rejected.** Rewriting the operation into `Nat/shr` and `Nat/and` before emission, which takes `big/shr` and `big/bitwise` into every module that divides by a power of two and clamps the shift's count at every site, where neither the count nor the boxed half needs it. `Int`'s division and remainder lowered the same way while `Int` divides truncating and `Int/shr` floors, which disagree below zero.
+**Rejected.** Rewriting the operation into `Nat/shr` and `Nat/and` before emission, which takes `big/shr` and `big/bitwise` into every module that divides by a power of two and clamps the shift's count at every site, where neither the count nor the boxed half needs it.
 
 ### Floats past ties to even are a helper library the emitter writes
 
