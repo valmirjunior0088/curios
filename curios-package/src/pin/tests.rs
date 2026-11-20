@@ -1,6 +1,10 @@
 //! Writing a row into a manifest: what changes, what does not, and what is refused before anything is written.
 
-use {super::*, curios_common::test_support::*, std::fs};
+use {
+    super::*,
+    curios_common::{fill, test_support::*},
+    std::{collections::BTreeMap, fs},
+};
 
 /// A package whose manifest holds `manifest`, and where a pin standing in it writes.
 ///
@@ -481,5 +485,126 @@ fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
     assert_eq!(
         fs::read_to_string(&pinning.manifest).expect("read it back"),
         manifest
+    );
+}
+
+/// A pin reads only its row, so a value on the way to it that is not the table or the array the manifest states there is refused where it stands, in the words and at the place the manifest's reader refuses it, and nothing is written.
+#[test]
+fn a_value_of_another_kind_on_the_way_to_the_row_is_refused_as_the_reader_refuses_it() {
+    for (case, rows, subject, repoint) in [
+        (
+            "foreign-table",
+            "[foreign.probe.native]\npath = \"probe.wasm\"\n",
+            Subject::Foreign(Target::Native),
+            "probe.wasm",
+        ),
+        (
+            "delivery-string",
+            "[[foreign]]\nname = \"probe\"\nnative = \"probe.wasm\"\n",
+            Subject::Foreign(Target::Native),
+            "probe.wasm",
+        ),
+        (
+            "dependencies-number",
+            "dependencies = 3\n",
+            Subject::Dependency,
+            "../probe",
+        ),
+        (
+            "dependency-string",
+            "[dependencies]\nprobe = \"1.0\"\n",
+            Subject::Dependency,
+            "../probe",
+        ),
+    ] {
+        let manifest = format!(
+            "compiler = \"{}\"\nname = \"app\"\n\n{rows}",
+            env!("CARGO_PKG_VERSION")
+        );
+        let (root, pinning) = governed(case, &manifest);
+        carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
+
+        let refused = pin(
+            &pinning,
+            subject,
+            "probe",
+            &Repoint::Carried(repoint.into()),
+            false,
+            |_| {},
+        )
+        .expect_err(case)
+        .render();
+        let read = crate::Manifest::from_path(&pinning.manifest)
+            .expect_err(case)
+            .render();
+
+        assert_eq!(refused, read, "{case}");
+        assert_eq!(
+            fs::read_to_string(&pinning.manifest).expect("read it back"),
+            manifest,
+            "{case}"
+        );
+    }
+}
+
+/// A `dependencies` table written inline is a table the manifest's reader reads, so a pin writes its row into it inline, beside the rows already there.
+#[test]
+fn a_dependency_is_pinned_into_a_dependencies_table_written_inline() {
+    let root = Temporary::new("pin", "inline-dependencies");
+    let app = root.join("app");
+    let shape = root.join("shape");
+    fs::create_dir_all(&app).expect("create the package");
+    fs::create_dir_all(&shape).expect("create the dependency");
+    fs::write(
+        app.join(MANIFEST),
+        fill!(
+            "compiler = \"${version}\"\nname = \"app\"\ndependencies = { base = { source = \"path\", path = \"../base\" } }\n",
+            version = env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("write the manifest");
+    fs::write(
+        shape.join(MANIFEST),
+        fill!(
+            "compiler = \"${version}\"\nname = \"shape\"\n",
+            version = env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("write the dependency's manifest");
+
+    let pinning = Pinning::found(None, &app, None).expect("the package's own manifest");
+    pin(
+        &pinning,
+        Subject::Dependency,
+        "shape",
+        &Repoint::Carried("../shape".into()),
+        false,
+        |_| {},
+    )
+    .expect("the row is written into the inline table");
+
+    let written = fs::read_to_string(&pinning.manifest).expect("read it back");
+    assert!(!written.contains("[dependencies]"), "{written}");
+    let crate::Manifest::Package(package) =
+        crate::Manifest::from_path(&pinning.manifest).expect("the manifest reads once pinned")
+    else {
+        panic!("a package");
+    };
+    assert_eq!(
+        package.dependencies,
+        BTreeMap::from([
+            (
+                "base".to_string(),
+                crate::Dependency::Path {
+                    path: "../base".into()
+                }
+            ),
+            (
+                "shape".to_string(),
+                crate::Dependency::Path {
+                    path: "../shape".into()
+                }
+            ),
+        ])
     );
 }

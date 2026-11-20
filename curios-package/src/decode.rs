@@ -93,10 +93,7 @@ impl Unread {
                     false => refused.entry(at),
                 }
             }
-            Why::Kind { written, takes } => Refused::of("invalid value")
-                .stating(format_args!("written: {written}"))
-                .stating(format_args!("{} {takes}", taker(&at)))
-                .value(at),
+            Why::Kind { written, takes } => misshapen(&written, takes, at),
             Why::UnknownValue { written, expected } => Refused::of("invalid value")
                 .stating(format_args!("written: {}", Code(written)))
                 .stating(format_args!(
@@ -144,6 +141,14 @@ impl de::Error for Unread {
             expected,
         })
     }
+}
+
+/// The refusal of a value of another kind than the key `at` leads to takes: what was `written`, in TOML's words — a table or an array by its kind, a scalar as it reads — and what the key `takes`, standing at the value.
+pub fn misshapen(written: &str, takes: &str, at: Vec<Step>) -> Refused {
+    Refused::of("invalid value")
+        .stating(format_args!("written: {written}"))
+        .stating(format_args!("{} {takes}", taker(&at)))
+        .value(at)
 }
 
 /// The table `at` leads to as TOML heads it: the manifest itself, a table by its header, a row of an array of tables as one of its rows.

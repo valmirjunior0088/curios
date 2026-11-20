@@ -10,15 +10,15 @@ mod tests;
 use {
     crate::{
         Cabinet, FileHash, MANIFEST, Manifest, Refused, Row, Step, Target, TreeHash, deliver,
-        deliver_module, nearest_manifest, umbrella_over, unwritable,
+        deliver_module, misshapen, nearest_manifest, umbrella_over, unwritable,
     },
-    curios_common::{OsError, Report, Source},
+    curios_common::{Code, OsError, Report, Source},
     curios_module::identity,
     std::{
         fs,
         path::{Component, Path, PathBuf},
     },
-    toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, Value},
+    toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, TableLike, Value},
 };
 
 /// Where `curios pin` writes: the manifest it was named or stands nearest, the directory a carried path is read from, and the cabinet a delivery is filed in.
@@ -310,6 +310,11 @@ pub fn pin(
             .about_path(&pinning.manifest));
     }
 
+    // Where the row is written, found before anything is delivered: a table on its way that is another kind of value is refused where it stands, as the manifest's reader refuses it, and before a fetch rather than after one.
+    let mut after = before.clone();
+    let mut row = row_mut(&mut after, subject, name)
+        .map_err(|refused| refused.located_at(&pinning.manifest))?;
+
     let settled = match subject {
         Subject::Foreign(target) => {
             settled_foreign(pinning, target, name, repoint, &before, &written, &mut told)?
@@ -343,15 +348,11 @@ pub fn pin(
         probe: settled.probe,
     };
 
-    let mut after = before.clone();
-    {
-        let mut row = row_mut(&mut after, subject, name);
-        for (key, value) in &settled.fields {
-            row.set(key, value);
-        }
-        for key in &settled.cleared {
-            row.clear(key);
-        }
+    for (key, value) in &settled.fields {
+        row.set(key, value);
+    }
+    for key in &settled.cleared {
+        row.clear(key);
     }
 
     undisturbed(&before, &after, subject, name).map_err(|refused| written.refuse(refused))?;
@@ -436,7 +437,7 @@ fn undisturbed(
                 .unwrap_or_default(),
             Subject::Dependency => document
                 .get("dependencies")
-                .and_then(Item::as_table)
+                .and_then(Item::as_table_like)
                 .map(|table| {
                     table
                         .iter()
@@ -596,7 +597,7 @@ fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Op
             .as_table_like()?
             .get(key)?
             .as_str()?,
-        Subject::Dependency => match document.get("dependencies")?.as_table()?.get(name)? {
+        Subject::Dependency => match document.get("dependencies")?.as_table_like()?.get(name)? {
             Item::Table(table) => table.get(key)?.as_str()?,
             Item::Value(Value::InlineTable(inline)) => inline.get(key)?.as_str()?,
             _ => return None,
@@ -619,7 +620,7 @@ fn present(document: &DocumentMut, subject: Subject, name: &str) -> bool {
             }),
         Subject::Dependency => document
             .get("dependencies")
-            .and_then(Item::as_table)
+            .and_then(Item::as_table_like)
             .is_some_and(|table| table.contains_key(name)),
     }
 }
@@ -829,17 +830,28 @@ fn settled_dependency(
     }
 }
 
-/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its target's delivery table, created too.
+/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its target's delivery table, created too — or the refusal of a value on the way to it that is not the table or the array a manifest states there.
 ///
-/// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A delivery table already written inline, `native = { … }`, is written inline, as a dependency row is.
-fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> RowMut<'a> {
+/// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A table already written inline, `dependencies = { … }` or `native = { … }`, is written inline, as a dependency row is.
+///
+/// **A value of another kind is refused, never overwritten.** A pin reads only its row, so nothing has held the manifest's shape before this, and overwriting `dependencies = 3` or `json = "1.0"` would discard whatever somebody meant by it: it is refused at the value, in the words the manifest's reader refuses it with.
+fn row_mut<'a>(
+    document: &'a mut DocumentMut,
+    subject: Subject,
+    name: &str,
+) -> Result<RowMut<'a>, Refused> {
     match subject {
         Subject::Foreign(target) => {
-            let tables = document
+            let foreign = document
                 .entry("foreign")
-                .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
-                .as_array_of_tables_mut()
-                .expect("`foreign` is an array of tables");
+                .or_insert(Item::ArrayOfTables(ArrayOfTables::new()));
+            let Item::ArrayOfTables(tables) = foreign else {
+                return Err(misshapen(
+                    &described(foreign),
+                    "an array",
+                    vec![Step::key("foreign")],
+                ));
+            };
 
             let found = tables
                 .iter()
@@ -855,36 +867,62 @@ fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> R
 
             let row = tables.get_mut(index).expect("the row just located");
 
-            match row
-                .entry(target.spelled())
-                .or_insert(Item::Table(Table::new()))
-            {
-                Item::Value(Value::InlineTable(inline)) => RowMut::Inline(inline),
-                item => RowMut::Table(item.as_table_mut().expect(
-                    "a foreign row's delivery is a table, as the manifest reader holds it",
-                )),
-            }
+            tabled(
+                row.entry(target.spelled())
+                    .or_insert(Item::Table(Table::new())),
+                vec![
+                    Step::key("foreign"),
+                    Step::Named(name.to_string()),
+                    Step::key(target.spelled()),
+                ],
+            )
         }
         Subject::Dependency => {
-            let table = document
+            let dependencies = document
                 .entry("dependencies")
-                .or_insert(Item::Table(Table::new()))
-                .as_table_mut()
-                .expect("`dependencies` is a table");
+                .or_insert(Item::Table(Table::new()));
+            let table: &mut dyn TableLike = match dependencies {
+                Item::Table(table) => table,
+                Item::Value(Value::InlineTable(inline)) => inline,
+                other => {
+                    return Err(misshapen(
+                        &described(other),
+                        "a table",
+                        vec![Step::key("dependencies")],
+                    ));
+                }
+            };
 
             // An inline table, which is how the reference spells a dependency and so how one written here reads beside one written by hand.
-            let entry = table
-                .entry(name)
-                .or_insert(Item::Value(Value::InlineTable(InlineTable::new())));
-
-            match entry {
-                Item::Table(table) => RowMut::Table(table),
-                Item::Value(Value::InlineTable(inline)) => RowMut::Inline(inline),
-                other => {
-                    // A `[dependencies]` key holding a string or an array is not a row this can edit, and overwriting it would discard whatever somebody meant by it.
-                    unreachable!("a dependency row is a table or an inline table, not {other:?}")
-                }
-            }
+            tabled(
+                table
+                    .entry(name)
+                    .or_insert(Item::Value(Value::InlineTable(InlineTable::new()))),
+                vec![Step::key("dependencies"), Step::key(name)],
+            )
         }
+    }
+}
+
+/// `item`, which `at` leads to, as the row it is in either of TOML's spellings, or refused as a value of another kind.
+fn tabled(item: &mut Item, at: Vec<Step>) -> Result<RowMut<'_>, Refused> {
+    match item {
+        Item::Table(table) => Ok(RowMut::Table(table)),
+        Item::Value(Value::InlineTable(inline)) => Ok(RowMut::Inline(inline)),
+        other => Err(misshapen(&described(other), "a table", at)),
+    }
+}
+
+/// What `item` is, as a refusal of a value of another kind says what was written, in the words the manifest's reader uses of one: a table or an array by its kind, a scalar as it reads.
+fn described(item: &Item) -> String {
+    match item {
+        Item::Table(_) | Item::Value(Value::InlineTable(_)) => "a table".to_string(),
+        Item::ArrayOfTables(_) | Item::Value(Value::Array(_)) => "an array".to_string(),
+        Item::Value(Value::String(string)) => Code(format!("{:?}", string.value())).to_string(),
+        Item::Value(Value::Integer(integer)) => Code(integer.value()).to_string(),
+        Item::Value(Value::Float(float)) => Code(float.value()).to_string(),
+        Item::Value(Value::Boolean(boolean)) => Code(boolean.value()).to_string(),
+        Item::Value(Value::Datetime(datetime)) => Code(datetime.value()).to_string(),
+        Item::None => "nothing".to_string(),
     }
 }
