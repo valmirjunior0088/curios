@@ -934,11 +934,11 @@ impl NominalSplit {
             }
         };
 
-        // Reducing the scrutinee type to weak-head normal form leaves its index *arguments* untouched, so an index that is an outer-arm key (`s` refined to `Scan/bad()` by an enclosing match) still reads as the bare variable. Reduce each index in the current (refined) context so inversion sees the forced value and pins arm binders against it, rather than refusing it as a key-shaped index, which refinement handles.
+        // The indices as the certifier reads them, a variable an outer arm refined (`s` to `Scan/bad()`) spelled as its value and nothing reduced: what the certifier reads a case's goal off. Inversion reads each side by the judgment's reduction itself, so an index a guard in force answers is read as its case value there.
         let actual_indices = indices
             .iter()
-            .map(|index| reduce_with(context, index))
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|index| context.certifier_spelling(index))
+            .collect::<Vec<_>>();
 
         let Some(family) = context.induct_decl(&name) else {
             return Err(Error::unknown_declaration(name));

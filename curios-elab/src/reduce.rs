@@ -237,6 +237,11 @@ impl Judge for Context<'_> {
                 UniverseConstraintOrigin::Converted,
             ))
     }
+
+    /// Typing's reduction, outside `Context::plainly`: a missed equation and two atoms that may be one are asked of this checker's conversion.
+    fn force_asking(&mut self, term: &Term) -> Result<Term, Self::Error> {
+        reduce_with(self, term)
+    }
 }
 
 enum Reduce {

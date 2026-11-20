@@ -11,11 +11,11 @@
 //! - **Cycle.** A flexible variable not solved to a value that holds it as a proper part — beneath a layer injectivity takes apart, or as a chunk of a longer word, or a summand of a greater `Nat` — makes the case unreachable too, no finite value being its own proper part ([`Unifier::cycles`]).
 //! - **Anything else is undecided.** It stands aside without taking its siblings with it and is read again after a later solution; what is still undecided at the end specializes nothing, and keeps the arm mandatory.
 //!
-//! Nothing here asks conversion: a pair conversion alone holds equal is undecided, which neither specializes nor excuses anything, and two forms the walk tells apart are never convertible.
+//! Each side is read as the arm's typing reads it, by its checker's judgment reduction ([`Judge::force_asking`]): an index that is a guard in force up to conversion is read as the guard's case value, as the arm's typing reads it. The rules themselves ask conversion nothing: a pair the reading leaves that conversion alone holds equal is undecided, which neither specializes nor excuses anything, and two forms the walk tells apart are never convertible.
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, each handing the indices as the certifier reads them, so a second implementation would be a second run of the same function on the same input rather than a second opinion. They share its composition too: [`solve_indices`] is the one substitution an arm is specialized by, so what the arm learns about its indices is computed by one function whichever checker asks. What each side supplies for itself is reduction, its refinements in force and a judgment of sorts, through [`Judge`] — see that module for the line, and for the concession borrowing a judgment represents.
+//! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, each handing the indices as the certifier reads them, so a second implementation would be a second run of the same function on the same input rather than a second opinion. They share its composition too: [`solve_indices`] is the one substitution an arm is specialized by, so what the arm learns about its indices is computed by one function whichever checker asks. What each side supplies for itself is its judgment's reduction, its refinements in force and a judgment of sorts, through [`Judge`] — see that module for the line, and for the concession borrowing a judgment represents.
 
 #[cfg(test)]
 mod tests;
@@ -324,8 +324,8 @@ impl<'f> Unifier<'f> {
                 if self.names_a_solution(actual, target) =>
             {
                 // A peel compares its atoms as written, so a pair naming a solved variable is read through the solutions first.
-                let actual = judge.force(&self.resolved(actual))?;
-                let target = judge.force(&self.resolved(target))?;
+                let actual = judge.force_asking(&self.resolved(actual))?;
+                let target = judge.force_asking(&self.resolved(target))?;
                 self.decompose(judge, &actual, &target)
             }
 
@@ -405,11 +405,11 @@ impl<'f> Unifier<'f> {
         Ok(Step::Ok)
     }
 
-    /// `term` forced, and a solved variable it forces to read as its value, forced in turn: no solution reaches its own variable, so the reading ends.
+    /// `term` forced as a judgment forces it ([`Judge::force_asking`]), and a solved variable it forces to read as its value, forced in turn: no solution reaches its own variable, so the reading ends.
     fn read<J: Judge>(&self, judge: &mut J, term: &Term) -> Result<Term, J::Error> {
-        let mut term = judge.force(term)?;
+        let mut term = judge.force_asking(term)?;
         while let Some(value) = self.solution_of(&term) {
-            term = judge.force(value)?;
+            term = judge.force_asking(value)?;
         }
 
         Ok(term)

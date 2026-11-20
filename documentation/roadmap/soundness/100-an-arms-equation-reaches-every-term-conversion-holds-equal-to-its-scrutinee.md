@@ -1,10 +1,8 @@
 # An arm's equation reaches every term conversion holds equal to its scrutinee
 
-[Case equations and their key](../../design/soundness/case-equations-and-their-key.md) has an arm's equation answer the terms conversion holds equal to its scrutinee ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)). Three readers stop short of that, each in the refusing direction: the certifier reads a scrutinee's indices by plain reduction where the elaborator reads them by its judgment, so the two checkers disagree; the filter in front of every equation counts each binder a stuck form names, where conversion reads fewer; and an equation an outer arm settled is not read again under an inner arm on an expression. A question inside a question is no fourth: [A question reduction asks is answered by plain reduction](../../design/soundness/a-question-reduction-asks-is-answered-by-plain-reduction.md) rejects the third reduction it would take.
+[Case equations and their key](../../design/soundness/case-equations-and-their-key.md) has an arm's equation answer the terms conversion holds equal to its scrutinee ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)). Two readers stop short of that, each in the refusing direction: the filter in front of every equation counts each binder a stuck form names, where conversion reads fewer; and an equation an outer arm settled is not read again under an inner arm on an expression. A question inside a question is no fourth: [A question reduction asks is answered by plain reduction](../../design/soundness/a-question-reduction-asks-is-answered-by-plain-reduction.md) rejects the third reduction it would take.
 
 ## What is wrong today
-
-**The two checkers read a scrutinee's indices apart.** The elaborator reduces each index of a scrutinee's type by its judgment's reduction before inverting it (`NominalSplit::resolve`, `curios-elab/src/elaborate/match_.rs`), which puts a stuck form to its conversion; the certifier hands `solve_indices` the indices as its inference left them, and the shared unifier reads each side by plain reduction (`Driver::force`), which asks nothing. Under `match all(xs, small) | true => () | false => match x end end`, with `x: Tag(all(xs, tiny))`, `tiny(n) = small(n)` and `Tag`'s one case `yes(): (true)`, the elaborator reads the index `false` and excuses the arm for `yes`, and the certifier refuses the declaration — "no arm for `yes` of `/Tag`, and its case is not impossible" — at `ef6a83175`. Below an index's head both read plainly, so `some(all(xs, tiny))` against a target `some(true)` is refused by both.
 
 **The filter counts a binder conversion does not read.** `curios_analysis::could_reduce_to` puts a stuck form to an equation only where every binder it names, a binder that is itself a proof apart, is one the key names, since reduction introduces no local. Conversion reads fewer: it reduces an argument under a neutral head before comparing it, and reads no proof wherever one stands. Under `match f(b) < 10`, `f(b + 0 * c) < 10` and `f(Pair { left = b, right = c }.left) < 10`, and under `match w(a, p1) < 5`, `w(a, h(c)) < 5` with `h(c)` a proof that is no variable, each converts with the guard at the top of an item and is refused `Holds` in the guard's `true` arm, at `ef6a83175`; the first is the row `curios`'s `tests::respelling` states refused. The decision states the shortfall as a caveat of the filter's paragraph, where [Writing documentation](../../../.claude/rules/documentation.md) has a gap be a roadmap item.
 
@@ -15,7 +13,6 @@ The filter is no cost to drop. With it admitting every form, counted at `ef6a831
 ## Settled
 
 - **The reach is conversion's**, the decision's rule as written, with a question inside a question left out.
-- **Inversion reads every side of an index equation by its checker's judgment.** The shared unifier reads each side through `Judge` by the checker's judgment's reduction, so both checkers hand the indices as written and the elaborator's reduction ahead of it goes: one rule, at every depth. The size order reads nothing an inversion concluded (`curios_analysis::refined_by_arm`), so totality's reading stays plain and the line `Driver::force` draws holds.
 - **The filter stays, counting a binder only where conversion reads it**: at a rigid occurrence, an argument under a neutral head that holds a binder the key does not reduced plainly before it is counted, and a proof passed over wherever it stands. Its reduction is spent only on a form that names such a binder.
 - **An inner arm on an expression restates** each equation in force whose settlement reads a local the arm's key names, read through types and values to the end as `curios_analysis::reads_solved` reads a solution, its instance pushed after the arm's own equation so its settlement sees it.
 
@@ -25,9 +22,8 @@ Counted, user-space instructions retired by a process and its threads (`perf_eve
 
 ## Stages
 
-1. **Indices read alike.** Check: the probe above accepted by both checkers; `some(all(xs, tiny))` inverted in both; an index conversion does not hold equal to the guard still refused in both; a column of `tests::respelling` putting each row's respelling at an index.
-2. **The filter reads what conversion reads.** Check: the grid's refused row restated held, rows for a projection and a proof term added held; a fixture holding the stress door at 20 within the default budget, which a filter admitting every form refuses; the stress door and `/std` counted against stage 1's.
-3. **An inner arm on an expression restates.** Check: `Holds(k(0))` in both checkers, the variable split unchanged, an inner arm whose key shares no local with the guard restating nothing.
+1. **The filter reads what conversion reads.** Check: the grid's refused row restated held, rows for a projection and a proof term added held; a fixture holding the stress door at 20 within the default budget, which a filter admitting every form refuses; the stress door and `/std` counted against the commit before it.
+2. **An inner arm on an expression restates.** Check: `Holds(k(0))` in both checkers, the variable split unchanged, an inner arm whose key shares no local with the guard restating nothing.
 
 Each stage also takes `cargo xtask workspace lint`.
 

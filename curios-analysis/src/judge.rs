@@ -14,7 +14,7 @@
 //!
 //! # The concession this records
 //!
-//! [`Driver`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Driver` borrows no opinion from its driver. [`Judge`] adds a judgment of sorts, whether a type's sort sits below a universe, and an analysis requiring it takes its driver's word on the levels. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], which it asks of a variable whose type is a sort before solving it, and it asks no conversion. If its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
+//! [`Driver`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Driver` borrows no opinion from its driver. [`Judge`] adds two judgments: whether a type's sort sits below a universe, so an analysis requiring it takes its driver's word on the levels, and the judgment's reduction, whose questions its driver's conversion answers. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], which asks the first of a variable whose type is a sort before solving it, and reads each side of an index equation by the second, so the indices an arm is specialized by are read as the arm's typing reads them. If its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
 //!
 //! # Errors belong to the driver
 //!
@@ -121,4 +121,9 @@ pub trait Driver {
 pub trait Judge: Driver {
     /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The certifier decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error>;
+
+    /// [`Driver::force`] as a judgment reduces: each question a stuck form puts — an equation in force its spelling misses, two atoms that may be one — is answered by this checker's own conversion, as its typing's reduction answers it. Inside a plain reading it is plain, as every reduction there is.
+    ///
+    /// **Inversion reads by it, and totality does not.** An arm is typed under what its scrutinee's indices are to the arm's typing, which an equation in force answers up to conversion; read plainly, an index that is a guard only up to conversion would be no value the unifier can decide. The size order reads nothing an inversion concluded ([`refined_by_arm`](crate::refined_by_arm)), so the argument [`Driver::force`] states, that totality's reading rests on no verdict of conversion's, still holds.
+    fn force_asking(&mut self, term: &Term) -> Result<Term, Self::Error>;
 }

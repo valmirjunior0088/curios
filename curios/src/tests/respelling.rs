@@ -1,6 +1,6 @@
 //! The respelling grid: whether a verdict follows how a term is spelled, stated so that both answers are checked.
 //!
-//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, a fold's operand, the arm of a second match on a variable the guard names. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the certifier's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
+//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, an index inverted in that arm, a fold's operand, the arm of a second match on a variable the guard names. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the certifier's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
 //!
 //! **Each row's control is its first column.** A pair conversion does not equate outside every arm is no respelling, and a cell over it would be refused for that and say nothing of the position; so each row states the equation at the top of an item, and it is held.
 
@@ -20,7 +20,8 @@ let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => who
 let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
 let small(n: Nat) -> Bool = n < 10;
 let tiny(n: Nat) -> Bool = small(n);
-let Naturals: Type = Nat;";
+let Naturals: Type = Nat;
+induct Tag: (Bool) -> Type | yes(): (true) end";
 
 /// The binders every cell is stated under. Two proofs of one bound, two functions and a higher-order one give the atoms that convert without being identical.
 const BINDERS: &[Binder] = &[
@@ -140,6 +141,8 @@ enum Arm {
     Type,
     /// `Holds` of the respelling's dual, in the guard's `false` arm.
     Dual,
+    /// A value of a family indexed by the respelling, taken apart by a match with no arm in the guard's `false` arm: inversion reads the index as the guard's case, which rules out the family's one case at `true`.
+    Index,
 }
 
 const ARMS: &[Arm] = &[
@@ -149,6 +152,7 @@ const ARMS: &[Arm] = &[
     Arm::Term,
     Arm::Type,
     Arm::Dual,
+    Arm::Index,
 ];
 
 const GUARDS: &[Guard] = &[
@@ -264,7 +268,14 @@ const GUARDS: &[Guard] = &[
         guard: "f(b) < 10",
         respelled: "f(b + 0 * c) < 10",
         dual: Some("10 <= f(b + 0 * c)"),
-        refused: &[Arm::Qed, Arm::Proved, Arm::Term, Arm::Type, Arm::Dual],
+        refused: &[
+            Arm::Qed,
+            Arm::Proved,
+            Arm::Term,
+            Arm::Type,
+            Arm::Dual,
+            Arm::Index,
+        ],
     },
 ];
 
@@ -301,6 +312,14 @@ impl Guard {
                             ),
                         )
                     }
+                    Arm::Index => (
+                        "{}".to_owned(),
+                        fill!(
+                            "match ${guard} | true => () | false => let _: (Tag(${respelled})) -> {} = (x) => match x end; () end",
+                            guard,
+                            respelled,
+                        ),
+                    ),
                 };
                 Some(Cell {
                     at: format!("`{guard}` respelled `{respelled}`, {arm:?}"),
@@ -677,6 +696,43 @@ fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
     assert!(
         refusal.contains("type mismatch") && !refusal.contains("the certifier refused"),
         "the elaborator refuses the Flt dual as a type mismatch, not the certifier: {refusal}",
+    );
+}
+
+/// The definitions the index tests read: a predicate written two ways and a family indexed below a constructor.
+const INDEXED: &str = r#"
+use /std/{Nat, Bool, List, Option, Io};
+let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
+let small(n: Nat) -> Bool = n < 10;
+let tiny(n: Nat) -> Bool = small(n);
+induct Nested: (Option(Bool)) -> Type | yes(): (Option/some(true)) end
+"#;
+
+/// An index is read as the guard's case below a constructor too: `some(all(xs, tiny))` against the one case's `some(true)` is taken apart by injectivity and its part read by the judgment's reduction, which the guard `all(xs, small)` at `false` answers, so the case is ruled out in both checkers.
+#[test]
+fn an_index_below_a_constructor_is_read_as_the_guards_case() {
+    let program = fill!(
+        "${definitions}let cell(xs: List(Nat), x: Nested(Option/some(all(xs, tiny)))) -> {} =
+    match all(xs, small) | true => () | false => match x end end;
+Io/pure(())",
+        definitions = INDEXED,
+    );
+    assert_eq!(typecheck(&program), Ok(()));
+}
+
+/// An index the guard does not equal leaves its case possible: under `all(xs, small)` at `false`, `all(ys, small)` is no term the equation answers, so a match with no arm is refused where it is written.
+#[test]
+fn an_index_the_guard_does_not_equal_leaves_its_case_possible() {
+    let program = fill!(
+        "${definitions}let cell(xs: List(Nat), ys: List(Nat), x: Nested(Option/some(all(ys, small)))) -> {} =
+    match all(xs, small) | true => () | false => match x end end;
+Io/pure(())",
+        definitions = INDEXED,
+    );
+    let refusal = typecheck(&program).expect_err("the case at `true` stays possible");
+    assert!(
+        refusal.contains("no arm matches") && !refusal.contains("the certifier refused"),
+        "the elaborator refuses the match for its missing arm: {refusal}",
     );
 }
 
