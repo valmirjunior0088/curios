@@ -158,9 +158,9 @@ fn two_equal_arms_are_kept_once() {
     assert!(!merge_equal_continuations(&mut module), "{module}");
 }
 
-/// Two arms reading different values from outside are no class here, and two arms of different lineages are none either.
+/// Two arms below the line the inliner copies at that read different values from outside are no class, and two arms of different lineages are none either.
 #[test]
-fn arms_reading_apart_or_of_two_lineages_stay_two() {
+fn arms_below_the_line_reading_apart_or_of_two_lineages_stay_two() {
     for (mut module, case) in [
         (two_arms(|x, y| (x, y), false), "reading `x` and `y`"),
         (two_arms(|x, _| (x, x), true), "of two lineages"),
@@ -168,6 +168,41 @@ fn arms_reading_apart_or_of_two_lineages_stay_two() {
         assert!(!merge_equal_continuations(&mut module), "{case}");
         assert_eq!(additions(&module), 2, "{case}");
     }
+}
+
+/// `return add(…add(add(read, 1), 1)…, 1)`, `count` additions deep, reading `read` once.
+fn adds(module: &mut Module, read: ValueId, count: usize, to: ContinuationId) -> NodeId {
+    let sums = (0..count)
+        .map(|_| module.add_value(None))
+        .collect::<Vec<_>>();
+    let mut next = jump(module, to, vec![Atom::Value(sums[count - 1])]);
+    for index in (0..count).rev() {
+        let operand = if index == 0 { read } else { sums[index - 1] };
+        next = module.add_node(Node::LetIntrinsic {
+            result: sums[index],
+            op: Intrinsic::NatAdd,
+            args: vec![Atom::Value(operand), literal(1)],
+            next,
+        });
+    }
+    next
+}
+
+/// Two arms past the line that read `x` and `y` are one, kept with a parameter each hands what it read: the module holds one chain of additions, and a second run finds nothing.
+///
+/// Mutation-checked: with a class kept only where its members read alike, two chains stay.
+#[test]
+fn arms_past_the_line_reading_apart_are_kept_once_with_a_parameter() {
+    let mut module = main_of(|module, x, y, main_return| {
+        let (first, second) = (module.reserve_continuation(), module.reserve_continuation());
+        let first_body = adds(module, x, MULTI_SITE_INLINE_LIMIT + 4, main_return);
+        let second_body = adds(module, y, MULTI_SITE_INLINE_LIMIT + 4, main_return);
+        split(module, x, (first, first_body), (second, second_body), None)
+    });
+    assert!(merge_equal_continuations(&mut module));
+    module.verify().unwrap();
+    assert_eq!(additions(&module), MULTI_SITE_INLINE_LIMIT + 4, "{module}");
+    assert!(!merge_equal_continuations(&mut module), "{module}");
 }
 
 /// Two equal arms, each a match of two equal arms of its own: the outer class is kept once and the inner class inside the one kept is too, in one run, which a second run finds nothing more of; what the arm that goes defined goes with it.

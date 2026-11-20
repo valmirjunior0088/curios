@@ -1,4 +1,4 @@
-//! One continuation for each class of equal ones: continuations of one function and one lineage whose extents are equal up to the values, continuations and functions they bind, and which read the same of everything else, become one, kept at the innermost `LetCont` that encloses every member, each member a jump to it.
+//! One continuation for each class of equal ones: continuations of one function and one lineage whose extents are equal up to the values, continuations and functions they bind, and which read the same of everything else, become one, kept at the innermost `LetCont` that encloses every member, each member a jump to it. Past what the inliner copies into each of a callee's calls (`MULTI_SITE_INLINE_LIMIT`), members that read different values from outside are a class too, each value they read apart a parameter of the one kept, which each member hands what it read.
 //!
 //! **A class is found by a shape and verified member by member.** Each continuation's extent is read once, bottom up, for its size and a hash of its shape with every identity erased, which a nested definition's shape composes into without being read again. Continuations of one function, one lineage, one size and one shape are candidates, and only candidates are written out in full — what they bind numbered in the order they bind it, what they read named — and compared. Two members of a class are of one size, so neither nests in the other and their extents are disjoint, and a class nested in a member is at most half its size: the extents written out sum to a function's size once for each halving, and the work is the function's size times its logarithm at most.
 //!
@@ -9,8 +9,9 @@ mod tests;
 
 use {
     crate::{
-        Atom, Callee, Continuation, ContinuationId, Droppable, Edge, FunctionId, Module, Node,
-        NodeId, ValueExpr, ValueId, forward_continuations, prune_unreachable, shrink,
+        Atom, Callee, Continuation, ContinuationId, Droppable, Edge, FunctionId,
+        MULTI_SITE_INLINE_LIMIT, Module, Node, NodeId, ValueDef, ValueExpr, ValueId,
+        forward_continuations, prune_unreachable, shrink, visit_atoms_mut,
     },
     curios_common::Lineage,
     std::{
@@ -37,26 +38,47 @@ pub fn merge_equal_continuations(module: &mut Module) -> bool {
             .collect::<Vec<_>>();
         while written.len() > 1 {
             let (representative, kept) = written.remove(0);
-            let (members, rest): (Vec<_>, Vec<_>) = written
-                .drain(..)
-                .partition(|(_, other)| other.tokens == kept.tokens);
+            // Below the line, a class reads alike; past it, what its members read apart is handed in.
+            let apart = shapes
+                .of_continuation(module, representative)
+                .is_some_and(|shape| shape.size > MULTI_SITE_INLINE_LIMIT);
+            let mut members = Vec::new();
+            let mut rest = Vec::new();
+            for (id, other) in written.drain(..) {
+                match correspondence(&kept.tokens, &other.tokens) {
+                    Some(reads) if apart || reads.iter().all(|(own, theirs)| own == theirs) => {
+                        members.push((id, other, reads));
+                    }
+                    _ => rest.push((id, other)),
+                }
+            }
             written = rest;
             if members.is_empty() {
                 continue;
             }
-            let Some(place) = tree.placement(representative, members.iter().map(|(id, _)| *id))
+            let Some(place) = tree.placement(representative, members.iter().map(|(id, ..)| *id))
             else {
                 continue;
             };
+            // What a member reads apart from the representative is handed in, in one order for every member.
+            let handed = members
+                .iter()
+                .flat_map(|(_, _, reads)| reads.iter())
+                .filter(|(own, theirs)| own != theirs)
+                .map(|(own, _)| *own)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
             let body = merge(
                 module,
                 place,
                 representative,
-                members.iter().map(|(id, _)| *id),
+                &handed,
+                members.iter().map(|(id, _, reads)| (*id, reads)),
             );
             // The kept body now stands where it is bound, so a class inside it is placed by where it stands; what the members defined is gone with them.
             tree.parent.insert(body, place);
-            for (_, member) in &members {
+            for (_, member, _) in &members {
                 gone.extend(member.defined.iter().copied());
             }
             merged = true;
@@ -105,21 +127,71 @@ fn candidates(module: &Module, tree: &Tree, shapes: &Shapes) -> Vec<Vec<Continua
     groups.into_iter().map(|(_, members)| members).collect()
 }
 
-/// Bind one continuation holding `representative`'s parameters and body in the `LetCont` at `place`, and make the representative and every member a jump to it, answering the body kept.
-fn merge(
+/// Bind one continuation holding `representative`'s parameters and body in the `LetCont` at `place`, a parameter beside them for each value of `handed`, which the body then reads in its place, and make the representative and every member a jump to it handing what each reads there, answering the body kept.
+fn merge<'r>(
     module: &mut Module,
     place: NodeId,
     representative: ContinuationId,
-    members: impl Iterator<Item = ContinuationId>,
+    handed: &[ValueId],
+    members: impl Iterator<Item = (ContinuationId, &'r BTreeMap<ValueId, ValueId>)>,
 ) -> NodeId {
     let kept = module
         .continuation(representative)
         .cloned()
         .expect("a member is live");
+    let members = members.collect::<Vec<_>>();
+    // A parameter states the register its values agree on, and none where they do not.
+    let parameters = handed
+        .iter()
+        .map(|own| {
+            let register = module
+                .value(*own)
+                .and_then(|definition| definition.register);
+            let agrees = members.iter().all(|(_, reads)| {
+                module
+                    .value(reads[own])
+                    .and_then(|definition| definition.register)
+                    == register
+            });
+            module.add_value_def(ValueDef {
+                debug_name: module
+                    .value(*own)
+                    .and_then(|definition| definition.debug_name.clone()),
+                register: if agrees { register } else { None },
+            })
+        })
+        .collect::<Vec<_>>();
+    let renamed = handed
+        .iter()
+        .copied()
+        .zip(parameters.iter().copied())
+        .collect::<BTreeMap<_, _>>();
+    if !renamed.is_empty() {
+        for node in extent(module, kept.body) {
+            let Some(node) = module.node_mut(node) else {
+                continue;
+            };
+            visit_atoms_mut(node, &mut |atom| {
+                if let Atom::Value(value) = atom
+                    && let Some(parameter) = renamed.get(value)
+                {
+                    *value = *parameter;
+                }
+            });
+            if let Node::ApplyFun {
+                callee: Callee::Closure(value),
+                ..
+            } = node
+                && let Some(parameter) = renamed.get(value)
+            {
+                *value = *parameter;
+            }
+        }
+    }
     let target = module.add_continuation(Continuation {
         lineage: kept.lineage,
         debug_name: kept.debug_name.clone(),
-        params: kept.params.clone(),
+        params: kept.params.iter().copied().chain(parameters).collect(),
         body: kept.body,
         terminates: kept.terminates,
     });
@@ -138,31 +210,91 @@ fn merge(
             module.add_value_def(definition)
         })
         .collect::<Vec<_>>();
-    let jump = |module: &mut Module, params: &[ValueId]| {
+    let jump = |module: &mut Module, params: &[ValueId], reads: &dyn Fn(ValueId) -> ValueId| {
         module.add_node(Node::ApplyCont(Edge {
             target,
-            args: params.iter().copied().map(Atom::Value).collect(),
+            args: params
+                .iter()
+                .copied()
+                .chain(handed.iter().map(|own| reads(*own)))
+                .map(Atom::Value)
+                .collect(),
         }))
     };
-    let body = jump(module, &fresh);
+    let body = jump(module, &fresh, &|own| own);
     let continuation = module
         .continuation_mut(representative)
         .expect("a member is live");
     continuation.params = fresh;
     continuation.body = body;
-    for member in members {
+    for (member, reads) in members {
         let params = module
             .continuation(member)
             .expect("a member is live")
             .params
             .clone();
-        let body = jump(module, &params);
+        let body = jump(module, &params, &|own| reads[&own]);
         module
             .continuation_mut(member)
             .expect("a member is live")
             .body = body;
     }
     kept.body
+}
+
+/// The free values `representative` reads, each beside what `other` reads in its place, where the two are one token stream but for them, one value of the representative standing for one of the other's throughout.
+fn correspondence(representative: &[Token], other: &[Token]) -> Option<BTreeMap<ValueId, ValueId>> {
+    if representative.len() != other.len() {
+        return None;
+    }
+    let mut reads = BTreeMap::new();
+    for (own, theirs) in representative.iter().zip(other) {
+        match (own, theirs) {
+            (Token::FreeValue(own), Token::FreeValue(theirs)) => {
+                if *reads.entry(*own).or_insert(*theirs) != *theirs {
+                    return None;
+                }
+            }
+            _ if own == theirs => {}
+            _ => return None,
+        }
+    }
+    Some(reads)
+}
+
+/// Every node of the extent `body` begins, what it nests included.
+fn extent(module: &Module, body: NodeId) -> Vec<NodeId> {
+    let mut found = Vec::new();
+    let mut work = vec![body];
+    while let Some(id) = work.pop() {
+        found.push(id);
+        match module.node(id) {
+            Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => work.push(*next),
+            Some(Node::LetFun { functions, body }) => {
+                work.push(*body);
+                work.extend(
+                    functions
+                        .iter()
+                        .filter_map(|function| module.function(*function))
+                        .map(|function| function.body),
+                );
+            }
+            Some(Node::LetCont {
+                continuations,
+                body,
+            }) => {
+                work.push(*body);
+                work.extend(
+                    continuations
+                        .iter()
+                        .filter_map(|continuation| module.continuation(*continuation))
+                        .map(|continuation| continuation.body),
+                );
+            }
+            _ => {}
+        }
+    }
+    found
 }
 
 /// A continuation's extent's size and the hash of its shape, every identity erased.
