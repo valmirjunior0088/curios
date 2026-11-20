@@ -677,3 +677,106 @@ fn a_check_is_told_as_a_progress_reporting_each_unit_compiled() {
     });
     assert!(reports_progress(&params));
 }
+
+/// The tokens `buffer` is answered with by a check of `program`, each as its line, its column and its length in UTF-16, its type's name and its modifiers' names: the deltas the protocol carries, read back.
+fn decoded(program: &str, buffer: &str) -> Vec<(u32, u32, u32, String, Vec<String>)> {
+    let legend = legend();
+    let mut at = (0, 0);
+
+    tokens(buffer, &checked(program))
+        .into_iter()
+        .map(|token| {
+            at = match token.delta_line {
+                0 => (at.0, at.1 + token.delta_start),
+                lines => (at.0 + lines, token.delta_start),
+            };
+            let type_ = legend.token_types[usize::try_from(token.token_type).unwrap()].as_str();
+            let modifiers = MODIFIERS
+                .iter()
+                .enumerate()
+                .filter(|(place, _)| token.token_modifiers_bitset & (1 << place) != 0)
+                .map(|(_, modifier)| modifier.as_str().to_string())
+                .collect();
+
+            (at.0, at.1, token.length, type_.to_string(), modifiers)
+        })
+        .collect()
+}
+
+/// A program whose second line holds a character past the Basic Multilingual Plane before a name: two units of UTF-16, one scalar and four bytes.
+const TOKENED: &str =
+    "let one: /std/Str = \"𝄞\";\nlet two: {/std/Str, /std/Str} = (\"𝄞\", one);\n/std/print(two.0)";
+
+/// A document's tokens are the classes its last check left, each at its line and its column in UTF-16, encoded over the legend with its modifiers: a value as a read-only variable, a segment and a type of `/std` as the default library's, and `declaration` where a name is declared.
+#[test]
+fn a_documents_tokens_are_its_classes_in_utf16() {
+    let token = |column, length, type_: &str, modifiers: &[&str]| {
+        (
+            1,
+            column,
+            length,
+            type_.to_string(),
+            modifiers
+                .iter()
+                .map(|modifier| modifier.to_string())
+                .collect(),
+        )
+    };
+    let second = decoded(TOKENED, TOKENED)
+        .into_iter()
+        .filter(|(line, ..)| *line == 1)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        second,
+        [
+            token(4, 3, "variable", &["declaration", "readonly"]),
+            token(11, 3, "namespace", &["defaultLibrary"]),
+            token(15, 3, "type", &["defaultLibrary"]),
+            token(21, 3, "namespace", &["defaultLibrary"]),
+            token(25, 3, "type", &["defaultLibrary"]),
+            token(39, 3, "variable", &["readonly"]),
+        ]
+    );
+}
+
+/// A declaration edited since its check answers no token, keeping the grammar's colours until it is checked again, and the others stand where they stand.
+#[test]
+fn a_declaration_edited_since_its_check_answers_no_token() {
+    let edited = TOKENED.replace("\"𝄞\";", "\"𝄞𝄞\";");
+    let lines = |buffer: &str| {
+        decoded(TOKENED, buffer)
+            .into_iter()
+            .map(|(line, column, ..)| (line, column))
+            .collect::<Vec<_>>()
+    };
+    let unedited = lines(TOKENED);
+
+    assert!(unedited.iter().any(|(line, _)| *line == 0));
+    assert_eq!(
+        lines(&edited),
+        unedited
+            .into_iter()
+            .filter(|(line, _)| *line != 0)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// A refresh is asked only of a client that declares it takes one.
+#[test]
+fn a_refresh_is_asked_only_of_a_client_that_takes_one() {
+    let client = |capabilities| {
+        serde_json::from_value::<InitializeParams>(
+            serde_json::json!({ "capabilities": capabilities }),
+        )
+        .expect("the parameters read")
+    };
+
+    assert!(refreshes_tokens(&client(serde_json::json!({
+        "workspace": { "semanticTokens": { "refreshSupport": true } }
+    }))));
+    assert!(!refreshes_tokens(&client(serde_json::json!({
+        "workspace": { "semanticTokens": { "refreshSupport": false } }
+    }))));
+    assert!(!refreshes_tokens(&client(serde_json::json!({}))));
+}

@@ -40,6 +40,18 @@ Point the extension at a binary of your own in `settings.json`:
 
 This is the one setting that does not depend on the environment, and the one to reach for when a project's shell environment names no `$HOME`.
 
+The server also answers semantic tokens, the compiler's class of each name and contextual word, which Zed lays over the grammar's colours only where they are turned on:
+
+```json
+{
+  "languages": {
+    "Curios": {
+      "semantic_tokens": "combined"
+    }
+  }
+}
+```
+
 ## Building it from this repository
 
 ```sh

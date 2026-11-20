@@ -20,13 +20,15 @@
 //!
 //! **A place is answered from what the last check left, by the protocol thread.** The check reads what each text of the document writes off the subject's lowering in its own fold, as the `at` query reads it (`checked`, `Fold::reading`), and completes it with what elaboration established of the subject's own declarations (`Fold::elaborating`), so a check is one fold and a refused subject answers as one that elaborates, each declaration that elaborated with its type; once the check has published, the analyst leaves the records where the protocol thread finds them ([`Answers`]): plain data, each type already spelled, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
 //!
+//! **A document's semantic tokens are the classes its last check left** (`Placed::classes`), encoded over one legend mapped from the class set ([`encoded`]) and answered as a place is, from the records and the buffer with no wait: a declaration edited since its check answers no token and keeps the grammar's colours. A check answers what the one before it left, so once a batch of checks is in, a client that takes one is asked to refresh its tokens, once a batch and never on a timer, as Lean's server refreshes while its elaboration catches up.
+//!
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
     crate::{
         Answer, Asked, Diagnosed, Diagnosis, Ended, Placed, Severity, Silent, Stands, Telling,
     },
-    curios_common::{Source, Span, Style, is_identifier_char},
+    curios_common::{Class, Source, Span, Style, is_identifier_char},
     curios_core::Declared,
     curios_module::Overlay,
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Named, Selection, Spelling},
@@ -44,10 +46,12 @@ use {
         HoverProviderCapability, ImplementationProviderCapability, InitializeParams, Location,
         MarkupContent, MarkupKind, NumberOrString, OneOf, Position, ProgressParams,
         ProgressParamsValue, PublishDiagnosticsParams, Range, Registration, RegistrationParams,
-        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, ServerCapabilities,
-        SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
-        WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams, WorkDoneProgressEnd,
-        WorkDoneProgressReport,
+        SelectionRange, SelectionRangeParams, SelectionRangeProviderCapability, SemanticToken,
+        SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensFullOptions,
+        SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
+        Uri, WorkDoneProgress, WorkDoneProgressBegin, WorkDoneProgressCreateParams,
+        WorkDoneProgressEnd, WorkDoneProgressReport,
         notification::{
             DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
             DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
@@ -55,7 +59,8 @@ use {
         request::{
             DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
             GotoDefinition, GotoImplementation, GotoImplementationParams, HoverRequest,
-            RegisterCapability, Request, SelectionRangeRequest, WorkDoneProgressCreate,
+            RegisterCapability, Request, SelectionRangeRequest, SemanticTokensFullRequest,
+            SemanticTokensRefresh, WorkDoneProgressCreate,
         },
     },
     std::{
@@ -97,6 +102,14 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
             resolve_provider: Some(false),
             work_done_progress_options: Default::default(),
         }),
+        semantic_tokens_provider: Some(
+            SemanticTokensOptions {
+                legend: legend(),
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                ..SemanticTokensOptions::default()
+            }
+            .into(),
+        ),
         ..ServerCapabilities::default()
     };
     let initialization = connection
@@ -121,6 +134,8 @@ pub fn serve(budget: u64, manifest: Option<&Path>, cabinet: Option<&Path>) -> Re
             published: BTreeMap::new(),
             spent: None,
             progress: progress.then_some(0),
+            refreshes: refreshes_tokens(&params),
+            refreshed: 0,
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
             sender: {
                 let sender = connection.sender.clone();
@@ -395,6 +410,13 @@ impl Server {
                         serde_json::from_value::<DocumentLinkParams>(params)
                             .map(|params| valued(serde_json::to_value(self.links(&params)))),
                     ),
+                    SemanticTokensFullRequest::METHOD => respond(
+                        connection,
+                        id,
+                        serde_json::from_value::<SemanticTokensParams>(params).map(|params| {
+                            valued(serde_json::to_value(self.semantic_tokens(&params)))
+                        }),
+                    ),
                     // Every other request is declined in the capabilities, so one that arrives anyway gets the protocol's "not found" rather than silence.
                     _ => reply_unhandled(connection, id, &method),
                 }
@@ -666,6 +688,17 @@ impl Server {
                 .map(|(buffer, checked)| outline(buffer, &checked))
                 .unwrap_or_default(),
         )
+    }
+
+    /// The classes of a whole document as semantic tokens ([`tokens`]): none for a document nothing has checked yet.
+    fn semantic_tokens(&self, params: &SemanticTokensParams) -> SemanticTokensResult {
+        SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: self
+                .held(&params.text_document.uri)
+                .map(|(buffer, checked)| tokens(buffer, &checked))
+                .unwrap_or_default(),
+        })
     }
 }
 
@@ -992,6 +1025,151 @@ fn symbol(name: &str, kind: SymbolKind, range: Range, label: Range) -> DocumentS
     }
 }
 
+/// The protocol's token type a class is encoded as, and whether it carries `readonly`: the class set's legend, mapped once over every class, so a class added is given its type before anything compiles (`documentation/design/tools/curios-is-coloured-from-one-class-set.md`). `None` for a lexical class, which no record answers and a grammar paints by itself.
+fn encoded(class: Class) -> Option<(SemanticTokenType, bool)> {
+    Some(match class {
+        Class::Module => (SemanticTokenType::NAMESPACE, false),
+        Class::Type => (SemanticTokenType::TYPE, false),
+        Class::Constructor => (SemanticTokenType::ENUM_MEMBER, false),
+        Class::Concept => (SemanticTokenType::INTERFACE, false),
+        Class::Method => (SemanticTokenType::METHOD, false),
+        Class::Function => (SemanticTokenType::FUNCTION, false),
+        Class::Value => (SemanticTokenType::VARIABLE, true),
+        Class::Field => (SemanticTokenType::PROPERTY, false),
+        Class::Parameter => (SemanticTokenType::PARAMETER, false),
+        Class::TypeParameter => (SemanticTokenType::TYPE_PARAMETER, false),
+        Class::Local => (SemanticTokenType::VARIABLE, false),
+        Class::Keyword => (SemanticTokenType::KEYWORD, false),
+        Class::Boolean
+        | Class::Sort
+        | Class::Number
+        | Class::String
+        | Class::Character
+        | Class::Escape
+        | Class::Comment
+        | Class::DocumentationComment
+        | Class::Operator
+        | Class::Punctuation
+        | Class::Goal
+        | Class::Decorator => return None,
+    })
+}
+
+/// The modifiers a token carries, each a bit at its place here: where what a span names is declared, where it lies in the library the compiler was built with, and a value's.
+const MODIFIERS: [SemanticTokenModifier; 3] = [
+    SemanticTokenModifier::DECLARATION,
+    SemanticTokenModifier::DEFAULT_LIBRARY,
+    SemanticTokenModifier::READONLY,
+];
+
+/// The legend tokens are encoded over: each type a class is encoded as, once, in the order the class set names them ([`encoded`]), and the [`MODIFIERS`].
+fn legend() -> SemanticTokensLegend {
+    let mut token_types = Vec::new();
+    for (type_, _) in Class::ALL.into_iter().filter_map(encoded) {
+        if !token_types.contains(&type_) {
+            token_types.push(type_);
+        }
+    }
+
+    SemanticTokensLegend {
+        token_types,
+        token_modifiers: MODIFIERS.to_vec(),
+    }
+}
+
+/// The classes `checked`, `buffer`'s last check, leaves of it ([`Placed::classes`]), as the protocol encodes semantic tokens over [`legend`]: each where it stands in the buffer, a text a difference reaches answering none as it answers no place ([`Standing`]), its line and its start in UTF-16 and each relative to the token before it, as every position here is converted at the boundary.
+fn tokens(buffer: &str, checked: &Placed) -> Vec<SemanticToken> {
+    let Some(first) = checked.texts.first() else {
+        return Vec::new();
+    };
+    let standing = Standing::of(first.text.source.text(), buffer);
+    let legend = legend();
+    let bit = |modifier: &SemanticTokenModifier| {
+        MODIFIERS
+            .iter()
+            .position(|known| known == modifier)
+            .map_or(0, |place| 1 << place)
+    };
+
+    let mut placed = Vec::new();
+    for classed in checked.classes() {
+        let Some((type_, readonly)) = encoded(classed.class) else {
+            continue;
+        };
+        let span = &classed.span;
+        let Some(moved) = checked
+            .texts
+            .iter()
+            .find(|written| written.text.start <= span.start && span.end <= written.text.end)
+            .and_then(|written| standing.moved(&written.text))
+        else {
+            continue;
+        };
+        let (Some(start), Some(end)) = (
+            span.start.checked_add_signed(moved),
+            span.end.checked_add_signed(moved),
+        ) else {
+            continue;
+        };
+        let Position { line, character } = position_of(buffer, start);
+        let length = u32::try_from(buffer[start..end].encode_utf16().count())
+            .expect("a token is shorter than a document");
+        let token_type = legend
+            .token_types
+            .iter()
+            .position(|known| *known == type_)
+            .and_then(|place| u32::try_from(place).ok())
+            .expect("the legend holds every type a class is encoded as");
+        let modifiers = [
+            (classed.declaration, SemanticTokenModifier::DECLARATION),
+            (
+                classed.default_library,
+                SemanticTokenModifier::DEFAULT_LIBRARY,
+            ),
+            (readonly, SemanticTokenModifier::READONLY),
+        ]
+        .iter()
+        .filter(|(holds, _)| *holds)
+        .fold(0, |bits, (_, modifier)| bits | bit(modifier));
+        placed.push((line, character, length, token_type, modifiers));
+    }
+    placed.sort_unstable();
+
+    let mut before = (0, 0);
+    placed
+        .into_iter()
+        .map(
+            |(line, character, length, token_type, token_modifiers_bitset)| {
+                let delta_start = match line == before.0 {
+                    true => character - before.1,
+                    false => character,
+                };
+                let delta_line = line - before.0;
+                before = (line, character);
+
+                SemanticToken {
+                    delta_line,
+                    delta_start,
+                    length,
+                    token_type,
+                    token_modifiers_bitset,
+                }
+            },
+        )
+        .collect()
+}
+
+/// Whether the client takes a request to refresh its semantic tokens, sent from the server once a check has answered what an earlier one left.
+fn refreshes_tokens(params: &InitializeParams) -> bool {
+    params
+        .capabilities
+        .workspace
+        .as_ref()
+        .and_then(|workspace| workspace.semantic_tokens.as_ref())
+        .and_then(|tokens| tokens.refresh_support)
+        .unwrap_or(false)
+}
+
 /// The analysis thread's state: the compiler's inputs, what it last published, what it leaves for a place to be answered from, and the way back to the editor.
 struct Analyst {
     answers: Answers,
@@ -1003,6 +1181,10 @@ struct Analyst {
     published: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// How long the last batch of checks took — what the settle before the next burst is a fraction of. `None` until one has run.
     spent: Option<Duration>,
+    /// Whether the client takes a request to refresh its semantic tokens ([`refreshes_tokens`]).
+    refreshes: bool,
+    /// How many refreshes were asked for: what keeps each request's id apart from the last's.
+    refreshed: u64,
     sender: Box<dyn Fn(Message) -> Result<(), String> + Send>,
     /// How many progresses this session has told, where the client takes them: what each next token is numbered by. `None` where the client advertises no work-done progress, which then hears none.
     progress: Option<u64>,
@@ -1034,9 +1216,30 @@ impl Analyst {
             if !dirty.is_empty() {
                 self.spent = Some(started.elapsed());
             }
+
+            // A document's tokens were last answered from the check before this one, so the client is asked to ask again, once a batch, and only where a document was checked.
+            if self.refreshes && dirty.values().any(|raised| *raised != Raised::Warming) {
+                self.refresh()?;
+            }
         }
 
         Ok(())
+    }
+
+    /// Ask the client to request every document's semantic tokens again, under an id no earlier request holds. The client's answer is a response the loop drops.
+    fn refresh(&mut self) -> Result<(), String> {
+        self.refreshed += 1;
+        let request = lsp_server::Request::new(
+            RequestId::from(format!(
+                "{}/{}",
+                SemanticTokensRefresh::METHOD,
+                self.refreshed
+            )),
+            SemanticTokensRefresh::METHOD.to_string(),
+            serde_json::Value::Null,
+        );
+
+        (self.sender)(Message::Request(request))
     }
 
     /// Check `document` from `overlay`, and publish what it reported.
