@@ -75,7 +75,7 @@ pub fn flt(value: f64) -> curios_cps::Atom {
     curios_cps::Atom::Literal(curios_cps::Literal::Flt(Floating::from(value)))
 }
 
-/// A nullary `main` that binds one intrinsic over `args` and exits with the result — compute one thing, exit with it. `into_wasm` does not fold, so the op lowers verbatim.
+/// A nullary `main` that binds one intrinsic over `args` and exits with the result — compute one thing, exit with it. `into_wasm` does not fold, so the op lowers verbatim; a small `Nat` literal among `args` is a word, so an operation over such literals alone is its fast path and no more.
 pub fn intrinsic_main(
     op: curios_cps::Intrinsic,
     args: Vec<curios_cps::Atom>,
@@ -98,6 +98,96 @@ pub fn intrinsic_main(
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
+            body,
+            droppable: curios_cps::Droppable::Never,
+            terminates: false,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
+/// A closure, called through its arity's table, that binds one intrinsic over its `unknown` parameters followed by `literals` and answers the result, and a `main` that exits with what it answered: an escaping function's parameters are references the emitter knows nothing of, so each is tested before the fast path and handed to the helper past it, where a small literal is a word.
+pub fn intrinsic_over_unknown(
+    op: curios_cps::Intrinsic,
+    unknown: usize,
+    literals: Vec<curios_cps::Atom>,
+) -> curios_cps::Module {
+    let mut module = curios_cps::Module::new();
+    let main = module.reserve_function();
+    let operate = module.reserve_function();
+    let apply = module.reserve_function();
+
+    let operate_return = module.reserve_continuation();
+    let params = (0..unknown)
+        .map(|index| module.add_value(Some(format!("operand{index}"))))
+        .collect::<Vec<_>>();
+    let result = module.add_value(Some("result".into()));
+    let answer = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+        target: operate_return,
+        args: vec![curios_cps::Atom::Value(result)],
+    }));
+    let args = params
+        .iter()
+        .map(|&param| curios_cps::Atom::Value(param))
+        .chain(literals)
+        .collect();
+    let operate_body = module.add_node(curios_cps::Node::LetIntrinsic {
+        result,
+        op,
+        args,
+        next: answer,
+    });
+    module.define_function(
+        operate,
+        curios_cps::Function {
+            lineage: None,
+            debug_name: Some("operate".into()),
+            params,
+            return_cont: operate_return,
+            body: operate_body,
+            droppable: curios_cps::Droppable::Never,
+            terminates: false,
+        },
+    );
+
+    let closure = module.add_value(Some("closure".into()));
+    let apply_return = module.reserve_continuation();
+    let apply_body = module.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Closure(closure),
+        args: (0..unknown).map(|index| nat(index as u32 + 1)).collect(),
+        return_to: apply_return,
+    });
+    module.define_function(
+        apply,
+        curios_cps::Function {
+            lineage: None,
+            debug_name: Some("apply".into()),
+            params: vec![closure],
+            return_cont: apply_return,
+            body: apply_body,
+            droppable: curios_cps::Droppable::Never,
+            terminates: false,
+        },
+    );
+
+    let main_return = module.reserve_continuation();
+    let call = module.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(apply),
+        args: vec![curios_cps::Atom::Fun(operate)],
+        return_to: main_return,
+    });
+    let body = module.add_node(curios_cps::Node::LetFun {
+        functions: vec![operate, apply],
+        body: call,
+    });
+    module.define_function(
+        main,
+        curios_cps::Function {
+            lineage: None,
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
             body,
             droppable: curios_cps::Droppable::Never,
             terminates: false,

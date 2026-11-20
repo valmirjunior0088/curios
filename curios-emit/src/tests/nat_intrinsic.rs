@@ -9,10 +9,11 @@ use {
 
 #[test]
 fn nat_add_keeps_an_i31_fast_path_and_grows_past_it() {
-    // A sum the representation analysis bounds below `2³⁰` rides a word with no overflow arm, so the operands are ones whose sum is `2³⁰`.
-    let wat = wat(&intrinsic_main(
+    // A sum the representation analysis bounds below `2³⁰` rides a word with no overflow arm, so the operands are a closure's parameters, which nothing bounds.
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatAdd,
-        vec![nat(1 << 29), nat(1 << 29)],
+        2,
+        vec![],
     ));
     assert_contains(&wat, "i32.add");
     // A sum leaving the i31 is boxed rather than refused, and a boxed operand takes the helper.
@@ -23,9 +24,10 @@ fn nat_add_keeps_an_i31_fast_path_and_grows_past_it() {
 
 #[test]
 fn nat_sub_is_monus_on_the_fast_path_and_nat_sub_past_it() {
-    let wat = wat(&intrinsic_main(
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatSub,
-        vec![nat(3), nat(4)],
+        2,
+        vec![],
     ));
     assert_contains(&wat, "i32.sub");
     assert_contains(&wat, "select");
@@ -35,10 +37,11 @@ fn nat_sub_is_monus_on_the_fast_path_and_nat_sub_past_it() {
 
 #[test]
 fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
-    // As for the sum: a product its operands bound below `2³⁰` rides a word, so these multiply to `2³⁰`.
-    let wat = wat(&intrinsic_main(
+    // As for the sum: a product its operands bound below `2³⁰` rides a word, so these are a closure's parameters.
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatMul,
-        vec![nat(1 << 15), nat(1 << 15)],
+        2,
+        vec![],
     ));
     assert_contains(&wat, "i64.mul");
     assert_contains(&wat, "call $big/of_i64");
@@ -48,16 +51,18 @@ fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
 
 #[test]
 fn nat_div_and_rem_are_unsigned_on_the_fast_path() {
-    let div = wat(&intrinsic_main(
+    let div = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatDiv,
-        vec![nat(9), nat(3)],
+        2,
+        vec![],
     ));
     assert_contains(&div, "i32.div_u");
     assert_contains(&div, "call $big/div");
 
-    let rem = wat(&intrinsic_main(
+    let rem = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatRem,
-        vec![nat(9), nat(3)],
+        2,
+        vec![],
     ));
     assert_contains(&rem, "i32.rem_u");
     assert_contains(&rem, "call $big/rem");
@@ -66,35 +71,63 @@ fn nat_div_and_rem_are_unsigned_on_the_fast_path() {
 // The quotient and the remainder of two i31s by a literal `2ᵏ` are the shift by `k` and the mask of the `k` low bits, and past the i31 the division's own helpers; a divisor of one is no shift, and is divided.
 #[test]
 fn a_division_and_a_remainder_by_a_power_of_two_are_a_shift_and_a_mask() {
-    let div = wat(&intrinsic_main(
+    let div = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatDiv,
-        vec![nat(9), nat(16)],
+        1,
+        vec![nat(16)],
     ));
     assert_contains(&div, "i32.const 4\n");
     assert_contains(&div, "i32.shr_u");
     assert_absent(&div, "i32.div_u");
     assert_contains(&div, "call $big/div");
 
-    let rem = wat(&intrinsic_main(
+    let rem = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatRem,
-        vec![nat(9), nat(16)],
+        1,
+        vec![nat(16)],
     ));
     assert_contains(&rem, "i32.const 15\n");
     assert_absent(&rem, "i32.rem_u");
     assert_contains(&rem, "call $big/rem");
 
-    let one = wat(&intrinsic_main(
+    let one = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatDiv,
-        vec![nat(9), nat(1)],
+        1,
+        vec![nat(1)],
     ));
     assert_contains(&one, "i32.div_u");
 }
 
+// A small literal is its own word: an operation tests only the operand it knows nothing of, and over small literals alone it is its fast path and no more.
+#[test]
+fn a_small_literal_operand_is_a_word_no_test_reads() {
+    let tested = |wat: &str| count(wat, "ref.test (ref i31)");
+    let unknown = wat(&intrinsic_over_unknown(
+        curios_cps::Intrinsic::NatAdd,
+        2,
+        vec![],
+    ));
+    let beside = wat(&intrinsic_over_unknown(
+        curios_cps::Intrinsic::NatAdd,
+        1,
+        vec![nat(1)],
+    ));
+    assert_eq!(tested(&unknown) - tested(&beside), 1);
+
+    let literals = wat(&intrinsic_main(
+        curios_cps::Intrinsic::NatAdd,
+        vec![nat(1), nat(2)],
+    ));
+    assert_contains(&literals, "i32.add");
+    assert_absent(&literals, "call $big/add");
+}
+
 #[test]
 fn nat_lt_compares_the_i31_signed_and_boxed_values_through_big_cmp() {
-    let wat = wat(&intrinsic_main(
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatLt,
-        vec![nat(3), nat(4)],
+        2,
+        vec![],
     ));
     assert_contains(&wat, "i32.lt_s");
     assert_contains(&wat, "call $big/cmp");
@@ -110,7 +143,7 @@ fn a_min_and_a_max_select_an_operand_by_a_signed_comparison_and_big_cmp_past_the
         (curios_cps::Intrinsic::IntMin, "i32.le_s"),
         (curios_cps::Intrinsic::IntMax, "i32.ge_s"),
     ] {
-        let wat = wat(&intrinsic_main(intrinsic, vec![nat(3), nat(4)]));
+        let wat = wat(&intrinsic_over_unknown(intrinsic, 2, vec![]));
         assert_contains(&wat, keeps);
         assert_contains(&wat, "select");
         assert_contains(&wat, "call $big/cmp");
@@ -136,9 +169,10 @@ fn a_power_is_squared_and_multiplied_by_big_pow_under_a_wide_count() {
 
 #[test]
 fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
-    let wat = wat(&intrinsic_main(
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatAnd,
-        vec![nat(6), nat(3)],
+        2,
+        vec![],
     ));
     assert_contains(&wat, "i32.and");
     assert_contains(&wat, "call $big/bitwise");
@@ -147,9 +181,10 @@ fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
 
 #[test]
 fn nat_to_flt_converts_an_i31_and_rounds_a_boxed_value() {
-    let wat = wat(&intrinsic_main(
+    let wat = wat(&intrinsic_over_unknown(
         curios_cps::Intrinsic::NatToFlt(Rounding::TiesToEven),
-        vec![nat(7)],
+        1,
+        vec![],
     ));
     assert_contains(&wat, "f64.convert_i32_s");
     assert_contains(&wat, "call $big/to_f64");
@@ -180,6 +215,34 @@ fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
 }
 
 /// A count past one word is handed to the shift as an `i64`, never through the position's saturating `big/word`. Both carriers share this path.
+// A literal count the word admits is a shift as it stands: the right shift clamps no count to its width, and the left shift tests none against it, so it holds its helper's call once.
+#[test]
+fn a_shift_by_a_literal_count_reads_the_count_as_it_stands() {
+    let shifted = |operation, count: Option<u32>| {
+        wat(&match count {
+            Some(count) => intrinsic_over_unknown(operation, 1, vec![nat(count)]),
+            None => intrinsic_over_unknown(operation, 2, vec![]),
+        })
+    };
+
+    let (literal, unknown) = (
+        shifted(curios_cps::Intrinsic::NatShr, Some(4)),
+        shifted(curios_cps::Intrinsic::NatShr, None),
+    );
+    assert_contains(&literal, "i32.const 4\n");
+    assert_eq!(count(&unknown, "select") - count(&literal, "select"), 1);
+
+    let (literal, unknown) = (
+        shifted(curios_cps::Intrinsic::NatShl, Some(4)),
+        shifted(curios_cps::Intrinsic::NatShl, None),
+    );
+    assert_contains(&literal, "i64.shl");
+    assert_eq!(
+        count(&unknown, "call $big/shl") - count(&literal, "call $big/shl"),
+        1
+    );
+}
+
 #[test]
 fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
     for operation in [

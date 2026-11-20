@@ -762,6 +762,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         value: &EmissionValueName,
         count: &EmissionValueName,
     ) {
+        let literal = self.literal_count(count).filter(|&count| count < 32);
         let value = self.operand(value);
         let count = self.operand(count);
         let slow: Vec<_> = value
@@ -781,15 +782,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ])
             .chain(self.finish(Fast::Wide64))
             .collect();
-        let fast = count
-            .small()
-            .into_iter()
-            .chain([
-                curios_wasm::Instr::I32Const { value: 32 },
-                curios_wasm::Instr::I32LtU,
-                either(Table::top_type(false), shifted, slow.clone()),
-            ])
-            .collect();
+        // A literal count below 32 is one the 64-bit shift takes as it stands, so only another is tested.
+        let fast = match literal {
+            Some(_) => shifted,
+            None => count
+                .small()
+                .into_iter()
+                .chain([
+                    curios_wasm::Instr::I32Const { value: 32 },
+                    curios_wasm::Instr::I32LtU,
+                    either(Table::top_type(false), shifted, slow.clone()),
+                ])
+                .collect(),
+        };
 
         self.emit_split(&[&value, &count], Table::top_type(false), fast, slow);
         self.emit_store(dest, &curios_cps::Repr::Ref);
@@ -822,26 +827,40 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         value: &EmissionValueName,
         count: &EmissionValueName,
     ) {
+        let literal = self.literal_count(count).filter(|&count| count < 31);
         let value = self.operand(value);
         let count = self.operand(count);
-        let clamp = self.context.push_local(
-            "shr_count",
-            curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-        );
-        let fast = value
-            .small()
-            .into_iter()
-            .chain(count.small())
-            .chain([
-                tee(&clamp),
-                curios_wasm::Instr::I32Const { value: 31 },
-                get(&clamp),
-                curios_wasm::Instr::I32Const { value: 31 },
-                curios_wasm::Instr::I32LtU,
-                curios_wasm::Instr::Select { val_types: vec![] },
-                curios_wasm::Instr::I32ShrS,
-            ])
-            .collect();
+        let fast = match literal {
+            // A literal count below 31 is a shift `i32.shr_s` takes as it stands.
+            Some(literal) => value
+                .small()
+                .into_iter()
+                .chain([
+                    curios_wasm::Instr::I32Const { value: literal },
+                    curios_wasm::Instr::I32ShrS,
+                ])
+                .collect(),
+            None => {
+                let clamp = self.context.push_local(
+                    "shr_count",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                );
+                value
+                    .small()
+                    .into_iter()
+                    .chain(count.small())
+                    .chain([
+                        tee(&clamp),
+                        curios_wasm::Instr::I32Const { value: 31 },
+                        get(&clamp),
+                        curios_wasm::Instr::I32Const { value: 31 },
+                        curios_wasm::Instr::I32LtU,
+                        curios_wasm::Instr::Select { val_types: vec![] },
+                        curios_wasm::Instr::I32ShrS,
+                    ])
+                    .collect()
+            }
+        };
         let slow = value
             .reference()
             .into_iter()
@@ -887,6 +906,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             Fast::Small,
             slow,
         );
+    }
+
+    /// The `Nat` literal a shift's `count` is bound to, where it is bound to one a word holds.
+    fn literal_count(&self, count: &EmissionValueName) -> Option<i32> {
+        let literal = u32::try_from(self.context.table().nat_literal(count)?).ok()?;
+        i32::try_from(literal).ok()
     }
 
     /// The `k` of the `Nat` literal `2ᵏ`, `k ≥ 1`, `divisor` is bound to. A literal the i31 holds is below `2³⁰`, so `k` is a count `i32.shr_u` takes as it stands.

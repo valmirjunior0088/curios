@@ -659,6 +659,12 @@ impl<'a> MachineFunctionBridge<'a> {
             self.function_id.index(),
             synthetic
         ));
+        // A `Nat` the i31 holds is its own word: held in a register, it reaches an operation's fast path as one, neither boxed nor tested.
+        if let curios_cps::Literal::Nat(value) = literal
+            && curios_cps::nat_is_small(value)
+        {
+            self.minted.push((name.clone(), curios_cps::Repr::Nat));
+        }
         values.push((name.clone(), EmissionValue::Pure(literal_data(literal))));
         name
     }
