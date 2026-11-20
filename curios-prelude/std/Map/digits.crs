@@ -54,38 +54,15 @@ let parts(a: Bytes, b: Bytes, g: Nat) -> Parted =
 pub let crit(a: Bytes, b: Bytes) -> Parted =
     parts(a, b, 0);
 
--- A byte is its high nibble sixteen times over and its low nibble, each below sixteen.
-let nibbles(x: Nat) -> Bool =
-    x == 16 * high(x) + low(x) && high(x) < 16 && low(x) < 16;
-
--- Of every byte, decided by running it.
-let table: Bool/Holds(Nat/all_below(256, nibbles)) =
-    Bool/True/qed();
-
-let split(x: Nat, small: Bool/Holds(x < 256)) -> Bool/Holds(nibbles(x)) =
-    Nat/all_below/at(256, nibbles, x, table, small);
-
--- A byte is its two nibbles.
-let whole(x: Nat, small: Bool/Holds(x < 256)) -> Bool/Holds(x == 16 * high(x) + low(x)) =
-    Bool/and/first(x == 16 * high(x) + low(x), high(x) < 16 && low(x) < 16, split(x, small));
-
--- A byte's nibbles are below sixteen.
-let nibbled(x: Nat, small: Bool/Holds(x < 256)) -> Bool/Holds(high(x) < 16 && low(x) < 16) =
-    Bool/and/second(x == 16 * high(x) + low(x), high(x) < 16 && low(x) < 16, split(x, small));
-
 --- A digit is below sixteen, so it indexes a fork's twigs.
 pub let small(k: Bytes, p: Nat) -> Bool/Holds(digit(k, p) < 16) =
     match p / 4 < Bytes/len(k)
     | false => Bool/True/qed()
     | true =>
-        let x = Byte/to_nat(Bytes/get(k, p / 4));
-        let both = nibbled(x, proved());
-        let up = Bool/and/first(high(x) < 16, low(x) < 16, both);
-        let down = Bool/and/second(high(x) < 16, low(x) < 16, both);
         match p % 4
         | 0 => Bool/True/qed()
-        | 1 => up
-        | 2 => down
+        | 1 => proved()
+        | 2 => proved()
         | _ + 3 => Bool/True/qed()
         end
     end;
@@ -192,8 +169,6 @@ let joined(
     down: Eq()(low(Byte/to_nat(h)), low(Byte/to_nat(k))),
 ) -> Eq()(h, k) =
     let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-    let left = whole(hn, proved());
-    let right = whole(kn, proved());
     Eq/cong((n: Nat) => Nat/to_byte(n % 256), Nat/eq_of_eql(hn, kn, proved()));
 
 -- Two bytes that differ, alike in their high nibble, differ in their low one.
@@ -318,29 +293,17 @@ pub let reheaded(
                 Eq/sym(agree(c, Bool/True/qed())),
                 apart.differs) };
 
--- A byte whose high nibble is below another's is below it.
-let higher(
-    x: Nat,
-    y: Nat,
-    small_x: Bool/Holds(x < 256),
-    small_y: Bool/Holds(y < 256),
-    up: Bool/Holds(high(x) < high(y)),
-) -> Bool/Holds(x < y) =
-    let left = split(x, small_x);
-    let right = split(y, small_y);
+-- A number whose high nibble is below another's is below it.
+let higher(x: Nat, y: Nat, up: Bool/Holds(high(x) < high(y))) -> Bool/Holds(x < y) =
     proved();
 
--- A byte alike in its high nibble with another and below it in its low one is below it.
+-- A number alike in its high nibble with another and below it in its low one is below it.
 let lower(
     x: Nat,
     y: Nat,
-    small_x: Bool/Holds(x < 256),
-    small_y: Bool/Holds(y < 256),
     up: Eq()(high(x), high(y)),
     down: Bool/Holds(low(x) < low(y)),
 ) -> Bool/Holds(x < y) =
-    let left = split(x, small_x);
-    let right = split(y, small_y);
     proved();
 
 -- Two runs whose first bytes are in order are in order.
@@ -379,14 +342,8 @@ pub let before(
         let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
         match c
         | 0 => match less end
-        | 1 => headed(h, k, t, r, higher(hn, kn, proved(), proved(), less))
-        | 2 =>
-            headed(
-                h,
-                k,
-                t,
-                r,
-                lower(hn, kn, proved(), proved(), apart.below(1, Bool/True/qed()), less))
+        | 1 => headed(h, k, t, r, higher(hn, kn, less))
+        | 2 => headed(h, k, t, r, lower(hn, kn, apart.below(1, Bool/True/qed()), less))
         | 3 => match less end
         | _ + 4 =>
             let same: Eq()(h, k) = joined(h, k, apart.below(1, proved()), apart.below(2, proved()));
