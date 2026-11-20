@@ -244,7 +244,7 @@ Why: [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/pr
 
 A function type is a parenthesized parameter list, `->` and its result. The list may be empty: `() -> T` is a function of no parameters, called `f()`.
 
-A parameter is plain, implicit (`@`) or a witness (`use`), and its type follows the mark. A plain or implicit parameter is written `name: type`, or as its type alone. A witness parameter is its type alone, `use Show(A)`: a witness is never named, since resolution reaches it.
+A parameter is plain, implicit (`@`) or a witness (`use`), and its type follows the mark. A plain or implicit parameter is written `name: type`, or as its type alone. A witness parameter is its type alone, `use Show(A)`: a witness is never named.
 
 ```text
 (Nat) -> Nat
@@ -256,7 +256,7 @@ A parameter is plain, implicit (`@`) or a witness (`use`), and its type follows 
 
 A parameter's type and the result may name the parameters before it.
 
-Every telescope is written this way: a function type, the parameters of a `let` or a `satisfy`, a constructor's payload and a declaration's type parameters. `use _`, which states no type, is refused in each. A definition and a declaration name their plain and `@` parameters, since their bodies use them.
+Every telescope is written this way: a function type, the parameters of a `let` or a `satisfy`, a constructor's payload and a declaration's type parameters. `use _`, which states no type, is refused in each. A definition and a declaration name their plain and `@` parameters.
 
 ### Tuple types
 
@@ -368,7 +368,7 @@ A lambda's parameters are a telescope, as a function type's are: an annotation m
 ((lo, hi), q: Eq()(lo, hi)) => lo
 ```
 
-A parameter carries the mark of the slot it binds: an unmarked binder binds an explicit slot, `@name` an implicit one, and `use _` holds a witness slot's place. A witness has no binder, since the body reaches it by resolution, and a lambda never states a witness's type, which its expected function type states. A lambda with no expected function type has no `use` parameter: a function that declares one is a `let` with a telescope. After `@` comes a binder and never a type, so an implicit slot the body does not name is `@_`, or `@_: T` to state its type.
+A parameter carries the mark of the slot it binds: an unmarked binder binds an explicit slot, `@name` an implicit one, and `use _` holds a witness slot's place. A witness has no binder, and a lambda never states a witness's type, which its expected function type states. A lambda with no expected function type has no `use` parameter: a function that declares one is a `let` with a telescope. After `@` comes a binder and never a type, so an implicit slot the body does not name is `@_`, or `@_: T` to state its type.
 
 ```text
 (@A, value) => value
@@ -400,7 +400,7 @@ pub let five: Nat =
     increment(4);
 ```
 
-The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named, since the body uses it. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
+The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
 
 A binder may be an irrefutable tuple or structure pattern:
 
@@ -587,7 +587,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     match option | some(value) => value | none() => 0 end;
 ```
 
-A constructor is named bare, since the scrutinee's type gives its namespace: `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value: each plain payload takes a pattern, in order, and an implicit (`@`) payload is left out, or written under `@` before the plain payload it precedes, where the arm names it. Two arms of one constructor may write different hidden payloads. A pattern takes no witness payload, so `use` is refused in one.
+A constructor is named bare, in the namespace of the scrutinee's type: `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value: each plain payload takes a pattern, in order, and an implicit (`@`) payload is left out, or written under `@` before the plain payload it precedes, where the arm names it. Two arms of one constructor may write different hidden payloads. A pattern takes no witness payload, so `use` is refused in one.
 
 ```crs
 use /std/{Nat};
@@ -927,7 +927,7 @@ A test takes no parameters. A claim about every instance is a proposition, not a
 
 A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
 
-A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. A test is never `pub`, since its name is no export, and no documentation comment precedes one.
+A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. A test is never `pub`, and no documentation comment precedes one.
 
 `Test(A)` is a monad: a test's body sequences assertions, `Io` actions and fallible actions with `!`, at its fixed type `Test({})` and through the declared embeddings, and ends in a `Test({})`. A failed assertion or a lifted error stops that test, past what `Test/all` gathers of its independent cases.
 
@@ -1186,7 +1186,7 @@ A method's call takes the concept's parameters and the witness in one parameter 
 
 A field that is no function is reached by the call that gives the witness, `Sized/Carrier(@Nat)`, and a method named where a function is expected is its field of the witness its type resolves: `List/map(xs, Show/show)`. A method is a field of its concept, and no definition of its own.
 
-Concepts whose methods' types name one another's dictionaries are one group, joined by `and` ([Recursive groups](#recursive-groups)). A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused, grouped or not, since resolution could never end.
+Concepts whose methods' types name one another's dictionaries are one group, joined by `and` ([Recursive groups](#recursive-groups)). A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused, grouped or not.
 
 The fields are a telescope: a field's type may name the fields before it. In a method's call such a name is the matching field of the resolved witness, so the call's type constrains that witness's own implementations.
 
@@ -1249,7 +1249,7 @@ satisfy Show(Meters) {
 }
 ```
 
-A witness may take implicit parameters and require other witnesses, in a telescope separated from the concept application by `=>`. It takes no explicit parameter, since resolution has no explicit argument to give.
+A witness may take implicit parameters and require other witnesses, in a telescope separated from the concept application by `=>`. It takes no explicit parameter.
 
 ```crs
 use /std/{List, Show, Str};
@@ -1355,7 +1355,7 @@ In an update, a spread copies the superclasses from the base. A `use value` afte
 
 ### Witness parameters and arguments
 
-A witness parameter is written `use Concept(args)` in a function type or a definition's parameters. It has no name, and joins the witnesses the body resolves from, which are the `use` members in scope. Its type reduces to a concept application, since resolution answers nothing else; any other type is refused where the parameter is declared, and a proof to be discharged is an `@` parameter instead. A dictionary a program names is an ordinary value — a `let`, or a plain or `@` parameter of the concept's type — and fills a witness slot through `use value`.
+A witness parameter is written `use Concept(args)` in a function type or a definition's parameters. It has no name, and joins the witnesses the body resolves from, which are the `use` members in scope. Its type reduces to a concept application; any other type is refused where the parameter is declared, and a proof to be discharged is an `@` parameter instead. A dictionary a program names is an ordinary value — a `let`, or a plain or `@` parameter of the concept's type — and fills a witness slot through `use value`.
 
 ```crs
 use /std/{List, Show, Str};
