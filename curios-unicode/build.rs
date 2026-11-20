@@ -22,7 +22,7 @@ use {
 const VERSION: &str = "18.0.0";
 
 /// Every file read, by its path under the version's `ucd/` directory, with its SHA-256.
-const FILES: [(&str, &str); 8] = [
+const FILES: [(&str, &str); 9] = [
     (
         "EastAsianWidth.txt",
         "a0cf29eacd00cfcaec4381c6b7c281685f18dbb4e7ff82b4076ccb342ca839aa",
@@ -54,6 +54,10 @@ const FILES: [(&str, &str); 8] = [
     (
         "SpecialCasing.txt",
         "8538dea57c184f1ef3783885ea79677b10f6efa06423717157e63712f14d1ad2",
+    ),
+    (
+        "CaseFolding.txt",
+        "a004797658a457bec4dc11683e39f69249ea3b595b752dbea6721c4c9f587b0d",
     ),
 ];
 
@@ -362,6 +366,24 @@ fn full(mut simple: Mapping, special: &str, column: usize) -> Mapping {
     simple
 }
 
+/// The full case folding `CaseFolding.txt` states: its common rows and its full ones, of status `C` and `F`; the simple rows, `S`, and the Turkic ones, `T`, are left out.
+fn folding(text: &str) -> Mapping {
+    text.lines()
+        .map(|line| line.split('#').next().unwrap_or("").trim())
+        .filter(|content| !content.is_empty())
+        .filter_map(|content| {
+            let fields: Vec<&str> = content.split(';').map(str::trim).collect();
+            matches!(fields[1], "C" | "F").then(|| {
+                let targets = fields[2]
+                    .split_whitespace()
+                    .map(|target| scalars(target).0)
+                    .collect();
+                (scalars(fields[0]).0, targets)
+            })
+        })
+        .collect()
+}
+
 /// One record of a mapping: the scalars `first`, `first + step`, … up to `last` each become `targets`, the first of them moved as far as the scalar is from `first`.
 struct Record {
     first: usize,
@@ -470,6 +492,7 @@ fn main() {
         unicode_data,
         properties,
         special,
+        folded,
     ] = FILES.map(|(path, sha256)| text(path, sha256));
 
     let second = |fields: &[&str]| fields.get(1).map(|class| (*class).to_string());
@@ -562,6 +585,7 @@ fn main() {
         "Lowercase_Mapping",
         &full(simple(&unicode_data, 13), &special, 1),
     );
+    mapping_table(&mut out, "FOLD", "Case_Folding", &folding(&folded));
 
     out.push_str(
         "/// Every case of `GraphemeBreakTest.txt`: a run of scalars as the clusters it segments into.\n#[cfg(any(test, feature = \"test-support\"))]\npub(crate) static GRAPHEME_BREAK_CASES: &[&[&[u32]]] = &[\n",

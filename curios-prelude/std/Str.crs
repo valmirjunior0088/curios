@@ -159,6 +159,14 @@ pub let eql_ignoring_ascii_case(a: Str, b: Str) -> Bool =
 pub let to_upper(s: Str) -> Str =
     fold(s, "", (c, written) => concat(written, Char/to_upper(c)));
 
+--- `s` folded for caseless comparison, Unicode's `toCasefold`: each character by its full folding, `Char/to_casefold`, so `Straße` and `STRASSE` both become `strasse`.
+pub let to_casefold(s: Str) -> Str =
+    fold(s, "", (c, written) => concat(written, Char/to_casefold(c)));
+
+--- Whether the two are equal regardless of case, Unicode's default caseless matching: their folds are equal, so `Straße` matches `STRASSE`. Every character's case is read, past ASCII too; `eql_ignoring_ascii_case` is the comparison a protocol that folds ASCII alone reads.
+pub let eql_ignoring_case(a: Str, b: Str) -> Bool =
+    to_casefold(a) == to_casefold(b);
+
 -- How far `to_lower` has come: the text it has written, whether the last character it read that is not case-ignorable is cased, and a capital sigma it holds back, as what the case-ignorable characters after it lower to, until the next character that is not case-ignorable, or the end, decides whether the sigma ends a word.
 struct Lowering: Type {
     written: Str,

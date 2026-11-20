@@ -1,6 +1,6 @@
 //! What another crate's tests read of the database: the conformance cases a segmentation of text is held to, what each mapping maps a scalar to, as the database's rows state it rather than as the records `/sys` carries, and the properties no compiler code reads.
 
-use crate::{CASE_IGNORABLE, CASED, LOWER_ROWS, UPPER_ROWS, property::held};
+use crate::{CASE_IGNORABLE, CASED, FOLD_ROWS, LOWER_ROWS, UPPER_ROWS, property::held};
 
 /// Every case of `GraphemeBreakTest.txt`: a run of scalars as the clusters it segments into, each cluster its scalars.
 pub fn grapheme_break_cases() -> &'static [&'static [&'static [u32]]] {
@@ -15,6 +15,11 @@ pub fn uppercase(scalar: u32) -> Vec<u32> {
 /// The scalars `scalar` becomes in lower case, its full `Lowercase_Mapping`, which reads no context: `scalar` itself where it has none.
 pub fn lowercase(scalar: u32) -> Vec<u32> {
     mapped(LOWER_ROWS, scalar)
+}
+
+/// The scalars `scalar` folds to, its full `Case_Folding`, common and full rows alike: `scalar` itself where it has none.
+pub fn casefold(scalar: u32) -> Vec<u32> {
+    mapped(FOLD_ROWS, scalar)
 }
 
 /// Whether `scalar` is `Cased`.

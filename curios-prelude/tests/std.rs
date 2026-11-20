@@ -485,7 +485,10 @@ const MAPPINGS: [&str; 2] = [
         Str/join(",", List/map(Str/to_list(s), (m) => Nat/to_str(Char/to_nat(m))));
 
     let answer(c: Char) -> Str =
-        Str/join(" ", [spelled(Char/to_upper(c)), spelled(Char/to_lower(c))]);
+        Str/join(" ", [
+            spelled(Char/to_upper(c)),
+            spelled(Char/to_lower(c)),
+            spelled(Char/to_casefold(c))]);
     "#,
 ];
 
@@ -501,9 +504,10 @@ fn mapped(scalar: char) -> String {
     let scalar = u32::from(scalar);
 
     format!(
-        "{} {}",
+        "{} {} {}",
         spelled(uppercase(scalar)),
-        spelled(lowercase(scalar))
+        spelled(lowercase(scalar)),
+        spelled(casefold(scalar))
     )
 }
 
@@ -516,9 +520,10 @@ fn shape(scalar: char) -> String {
     };
 
     format!(
-        "{} {}",
+        "{} {} {}",
         relative(uppercase(scalar)),
-        relative(lowercase(scalar))
+        relative(lowercase(scalar)),
+        relative(casefold(scalar))
     )
 }
 

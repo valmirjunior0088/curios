@@ -139,6 +139,14 @@ let lower_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/lower)) =
 pub let to_lower(c: Char) -> Str =
     unicode/mapping(/sys/unicode/lower, lower_lands, c);
 
+-- Every record of `/sys/unicode/fold` maps onto scalar values, decided by reading each when `/std` is built.
+let fold_lands: Bool/Holds(unicode/every_record_lands(/sys/unicode/fold)) =
+    Bool/True/qed();
+
+--- `c` folded for caseless comparison: its full folding, the database's `Case_Folding` of its common and full rows, as text — `ß` and `ẞ` becoming `ss`, `Σ` and `ς` both `σ` — and `c` itself where the database folds it to no other. What `Str/to_casefold` writes for each character of a text.
+pub let to_casefold(c: Char) -> Str =
+    unicode/mapping(/sys/unicode/fold, fold_lands, c);
+
 --- Whether `c` is `Cased`: a letter with case, or one the database counts among them.
 pub let is_cased(c: Char) -> Bool =
     unicode/held(/sys/unicode/cased, c);

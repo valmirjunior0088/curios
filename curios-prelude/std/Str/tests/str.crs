@@ -109,6 +109,15 @@ test to_lower_writes_a_word_s_final_sigma =
         Test/equal(Str/to_lower("ΑΣ ΑΣ."), "ας ας."),
         Test/equal(Str/to_lower("STRASSE İ"), "strasse i\u{307}")]);
 
+-- Caseless comparison is the equality of the full folds: `ß` matches `SS`, both sigmas match `Σ`, a letter past ASCII matches across case, and what differs past case still differs.
+test eql_ignoring_case_compares_the_full_folds =
+    Test/all([
+        Test/assert("Straße matches STRASSE", Str/eql_ignoring_case("Straße", "STRASSE")),
+        Test/assert("the sigmas match", Str/eql_ignoring_case("ΣΟΦΟΣ", "σοφος")),
+        Test/assert("É matches é", Str/eql_ignoring_case("É", "é")),
+        Test/assert("a does not match b", Bool/not(Str/eql_ignoring_case("a", "b"))),
+        Test/equal(Str/to_casefold("Straße ẞ"), "strasse ss")]);
+
 -- `repeat` writes its text `n` times, at no copy, at one, at an odd count, and at a count a tree of single copies would not fit a test in: a million copies of one letter have a million bytes, and each half was built once.
 test repeat_writes_its_text_n_times =
     Test/equal(

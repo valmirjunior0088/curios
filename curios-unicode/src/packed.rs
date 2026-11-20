@@ -2,8 +2,9 @@
 
 use crate::{
     CASE_IGNORABLE, CASED, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION,
-    EXTENDED_PICTOGRAPHIC, EastAsianWidth, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING, GraphemeBreak,
-    INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING, IndicConjunctBreak, LOWER, UPPER,
+    EXTENDED_PICTOGRAPHIC, EastAsianWidth, FOLD, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING,
+    GraphemeBreak, INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING, IndicConjunctBreak, LOWER,
+    UPPER,
 };
 
 /// How many bytes a run takes packed: its first scalar and its last, three bytes each, least significant first, then its class's code.
@@ -115,6 +116,10 @@ pub fn packed_mappings() -> Vec<PackedTable> {
         PackedTable {
             name: "lower",
             bytes: records(LOWER),
+        },
+        PackedTable {
+            name: "fold",
+            bytes: records(FOLD),
         },
     ]
 }

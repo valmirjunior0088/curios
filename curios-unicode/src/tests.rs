@@ -172,7 +172,11 @@ fn by_rows(rows: &[(u32, &[u32])], scalar: u32) -> Vec<u32> {
 /// A mapping's records ascend apart, step by one or two, become one to three scalars, and map every scalar as the database's rows do, which is what a reading of them in `/std` is held to.
 #[test]
 fn a_mapping_s_records_map_every_scalar_as_its_rows_do() {
-    for (name, records, rows) in [("upper", UPPER, UPPER_ROWS), ("lower", LOWER, LOWER_ROWS)] {
+    for (name, records, rows) in [
+        ("upper", UPPER, UPPER_ROWS),
+        ("lower", LOWER, LOWER_ROWS),
+        ("fold", FOLD, FOLD_ROWS),
+    ] {
         assert!(
             ascend_apart(records.iter().map(|&(first, last, _, _)| (first, last))),
             "{name}"
@@ -200,12 +204,16 @@ fn a_mapping_s_records_map_every_scalar_as_its_rows_do() {
 fn a_packed_mapping_reads_back_as_its_records() {
     let mappings = packed_mappings();
 
-    for (mapping, (name, records)) in mappings.iter().zip([("upper", UPPER), ("lower", LOWER)]) {
+    for (mapping, (name, records)) in
+        mappings
+            .iter()
+            .zip([("upper", UPPER), ("lower", LOWER), ("fold", FOLD)])
+    {
         assert_eq!(mapping.name, name);
         assert_eq!(mapping.bytes.len(), PACKED_RECORD * records.len());
         check_records(&mapping.bytes, records);
     }
-    assert_eq!(mappings.len(), 2);
+    assert_eq!(mappings.len(), 3);
 }
 
 /// Each record of `packed` reads back as the record of `records` beside it, a target the record does not have read as U+0000.

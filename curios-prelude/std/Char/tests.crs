@@ -34,6 +34,17 @@ test to_lower_is_the_full_mapping =
         Test/equal(Char/to_lower('ă'), "ă"),
         Test/equal(Char/to_lower('1'), "1")]);
 
+-- Folding is the database's full one: `ß` and `ẞ` fold to two letters, both sigmas to one, an upper letter to its lower one, and a character with no folding stays itself.
+test to_casefold_is_the_full_folding =
+    Test/all([
+        Test/equal(Char/to_casefold('A'), "a"),
+        Test/equal(Char/to_casefold('ß'), "ss"),
+        Test/equal(Char/to_casefold('ẞ'), "ss"),
+        Test/equal(Char/to_casefold('Σ'), "σ"),
+        Test/equal(Char/to_casefold('ς'), "σ"),
+        Test/equal(Char/to_casefold('ﬃ'), "ffi"),
+        Test/equal(Char/to_casefold('1'), "1")]);
+
 -- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
 test hex_digit_spells_a_nibble_modulo_sixteen =
     Test/equal(
