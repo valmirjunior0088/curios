@@ -31,6 +31,8 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **The NaN check's cost.** `flt_hot_loop.crs` runs N rounds of ties-to-even float arithmetic — a multiply, two adds, a square root and a divide — on a value that stays positive, so every NaN check the emitter places after an instruction is taken and none fires. `curios-emit`'s README owns the figure and how to retake it.
 
+**The copy weight's library workloads.** `toml_round_trip.crs` and `json_round_trip.crs` build a document of about 100 KB from N, 800 tables of TOML or 820 entries of JSON each holding a string, an integer, a float, a list of booleans and a list of strings, decode it through `/std/Toml` or `/std/Json`, and encode it back; `sort_scattered.crs` sorts N naturals scattered by a multiplicative hash. They are the library-sized workloads `curios-cps`'s README weighs a copy over, at the sizes its protocol names.
+
 **Samples.** `hello_world.crs` — also the default program of `cargo xtask profile`'s steps — and `dependent_vectors.crs`, which show the language rather than measure it.
 
 ## The cross-language workloads
