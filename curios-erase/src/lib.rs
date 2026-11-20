@@ -59,9 +59,6 @@ use link::*;
 mod evaluated;
 use evaluated::*;
 
-mod lint;
-use lint::*;
-
 #[cfg(test)]
 mod tests;
 
