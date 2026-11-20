@@ -5,6 +5,8 @@
 //! **A read the walk cannot show follows a write keeps a slot of its own.** WebAssembly validates a non-nullable local by the same block-scoped rule the walk follows — a write initializes a local until the end of the block it stands in — so every read of a non-nullable local passes it, and folding two such locals adds writes and removes none. A nullable or numeric local may be read before any write, its default being what is read; such a local is given a slot nothing else uses, from the function's start, and keeps its default.
 //!
 //! **Every local alike.** A value the continuations name and a scratch local an emitter minted are both read by the walk as they stand in the function, as LLVM's `WebAssemblyRegColoring` colors every virtual register once the code is final. Parameters keep their places.
+//!
+//! **Numbered a run per type, each run by use.** The binary declares a run of locals at every change of type, a count and a type each, and encodes a local's index in LEB128, one byte below 128, so the slots are declared one run per value type, the types by their locals' accesses, each run by its locals' accesses, ties in the order allocation made them: the declarations shortest, and the most-named locals at the lowest indices.
 
 #[cfg(test)]
 mod tests;
@@ -26,7 +28,63 @@ fn allocate(func: &mut curios_wasm::Func) {
     let ranges = Ranges::of(func);
     let (locals, renamed) = ranges.slots(&func.locals);
     rename(&mut func.expr.instrs, &renamed);
-    func.locals = locals;
+    func.locals = by_use(locals, &func.expr.instrs);
+}
+
+/// `locals` a run per value type, the types by their locals' accesses in `instrs`, each run by its locals' accesses, ties in the order given. See the module documentation.
+fn by_use(
+    mut locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
+    instrs: &[curios_wasm::Instr],
+) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+    let accesses = accesses(instrs);
+    let count = |name: &curios_wasm::LocalName| accesses.get(name).copied().unwrap_or(0);
+    // Each value type's accesses, the types in the order a local of each was first given.
+    let mut types: Vec<(curios_wasm::ValType, usize)> = Vec::new();
+    for (name, val_type) in &locals {
+        match types.iter_mut().find(|(known, _)| known == val_type) {
+            Some((_, total)) => *total += count(name),
+            None => types.push((val_type.clone(), count(name))),
+        }
+    }
+    let run = |val_type: &curios_wasm::ValType| {
+        let position = types
+            .iter()
+            .position(|(known, _)| known == val_type)
+            .expect("every local's type was counted");
+        (Reverse(types[position].1), position)
+    };
+    locals.sort_by_key(|(name, val_type)| (run(val_type), Reverse(count(name))));
+
+    locals
+}
+
+/// How many times `instrs` and every block they nest name each local.
+fn accesses(instrs: &[curios_wasm::Instr]) -> HashMap<curios_wasm::LocalName, usize> {
+    let mut accesses = HashMap::new();
+    let mut pending = vec![instrs];
+    while let Some(instrs) = pending.pop() {
+        for instr in instrs {
+            match instr {
+                curios_wasm::Instr::Block { instructions, .. }
+                | curios_wasm::Instr::Loop { instructions, .. } => pending.push(instructions),
+                curios_wasm::Instr::If {
+                    then_instructions,
+                    else_instructions,
+                    ..
+                } => {
+                    pending.push(then_instructions);
+                    pending.push(else_instructions);
+                }
+                curios_wasm::Instr::LocalGet { local_name }
+                | curios_wasm::Instr::LocalSet { local_name }
+                | curios_wasm::Instr::LocalTee { local_name } => {
+                    *accesses.entry(local_name.clone()).or_default() += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    accesses
 }
 
 /// Each local's live range over the function's positions.

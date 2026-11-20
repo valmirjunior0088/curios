@@ -146,6 +146,40 @@ fn values_of_two_types_never_share_a_local() {
     assert_eq!(declared(&f), ["a", "b"]);
 }
 
+/// Locals are declared a run per value type, the types by their locals' accesses, each run by its locals' accesses: four live together, allocated `a`, `b`, `c`, `d` with their types alternating, are declared `b` and `d`, the `i64`s named seven times, before `c` and `a`, the `i32`s named five, each run its most-named first.
+///
+/// Mutation-checked: declared in the order allocation made them, or by accesses alone, the locals interleave.
+#[test]
+fn locals_are_declared_a_run_per_type_each_run_by_use() {
+    let i64_const = |value: i64| curios_wasm::Instr::I64Const { value };
+    let mut f = func(
+        &[],
+        &[("a", i32()), ("b", i64()), ("c", i32()), ("d", i64())],
+        vec![
+            constant(1),
+            set("a"),
+            i64_const(2),
+            set("b"),
+            constant(3),
+            set("c"),
+            i64_const(4),
+            set("d"),
+            get("b"),
+            get("b"),
+            get("b"),
+            get("b"),
+            get("c"),
+            get("c"),
+            get("a"),
+            get("d"),
+            curios_wasm::Instr::Drop,
+        ],
+    );
+    allocate(&mut f);
+
+    assert_eq!(declared(&f), ["b", "d", "c", "a"]);
+}
+
 /// A value written before a loop and read inside it is read again on the next round: a value written and read inside the loop after that read does not take its local.
 #[test]
 fn a_value_read_inside_a_loop_it_was_written_before_lives_through_the_loop() {
