@@ -260,7 +260,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
         &root,
         "app/curios.toml",
         &fill!(
-            "name = \"app\"\ncompiler = \"${compiler}\"\n[dependencies]\nbase = { source = \"path\", path = \"../vendor/base\" }\n",
+            "name = \"app\"\ncompiler = \"${compiler}\"\n[dependencies]\nbase = { path = \"../vendor/base\" }\n",
             compiler = CompilerVersion::current()
         ),
     );

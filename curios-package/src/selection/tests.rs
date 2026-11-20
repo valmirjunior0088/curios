@@ -331,7 +331,7 @@ fn a_package_of_programs_alone_runs_them() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[executables]\nserve = {}\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("app/serve.crs", ""),
@@ -364,7 +364,7 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[executables]\nserve = {}\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n\n[executables]\nserve = {}\n"
                 ),
             ),
             ("app/lib.crs", ""),

@@ -64,7 +64,7 @@ fn a_path_dependency_lands_before_its_dependent() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -97,7 +97,7 @@ fn a_diamond_compiles_its_point_once() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nleft = { path = \"../left\" }\nright = { path = \"../right\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -106,7 +106,7 @@ fn a_diamond_compiles_its_point_once() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"left\"\n\n[dependencies]\nbase = { path = \"../base\" }\n"
                 ),
             ),
             ("left/lib.crs", ""),
@@ -115,7 +115,7 @@ fn a_diamond_compiles_its_point_once() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"right\"\n\n[dependencies]\nbase = { path = \"../base\" }\n"
                 ),
             ),
             ("right/lib.crs", ""),
@@ -152,7 +152,7 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nleft = { path = \"../left\" }\nright = { path = \"../right\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -161,7 +161,7 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"left\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../one\" }\n"
+                    "\"\nname = \"left\"\n\n[dependencies]\nbase = { path = \"../one\" }\n"
                 ),
             ),
             ("left/lib.crs", ""),
@@ -170,7 +170,7 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"right\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../two\" }\n"
+                    "\"\nname = \"right\"\n\n[dependencies]\nbase = { path = \"../two\" }\n"
                 ),
             ),
             ("right/lib.crs", ""),
@@ -214,7 +214,7 @@ fn a_dependency_with_no_library_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\ntool = { source = \"path\", path = \"../tool\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\ntool = { path = \"../tool\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -277,7 +277,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
 
     let row = |rev: &str, hash: &TreeHash| {
         fill!(
-            "http = { source = \"git\", url = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
+            "http = { git = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
             rev,
             hash
         )
@@ -288,7 +288,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
 
     fs::write(
         root.join("app/curios.toml"),
-        "name = \"app\"\n\n[dependencies]\nleft = { source = \"member\" }\nright = { source = \"member\" }\n",
+        "name = \"app\"\n\n[dependencies]\nleft = { member = true }\nright = { member = true }\n",
     )
     .unwrap();
 
@@ -338,11 +338,11 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
             ("right/lib.crs", ""),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nleft = { source = \"member\" }\nright = { source = \"member\" }\n",
+                "name = \"app\"\n\n[dependencies]\nleft = { member = true }\nright = { member = true }\n",
             ),
             (
                 "left/curios.toml",
-                "name = \"left\"\n\n[dependencies]\nhttp = { source = \"catalog\" }\n",
+                "name = \"left\"\n\n[dependencies]\nhttp = { catalog = true }\n",
             ),
         ],
     );
@@ -368,7 +368,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
 
     let row = |rev: &str, hash: &TreeHash| {
         fill!(
-            "http = { source = \"git\", url = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
+            "http = { git = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
             rev,
             hash
         )
@@ -413,7 +413,7 @@ fn a_dependency_cycle_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"a\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n"
+                    "\"\nname = \"a\"\n\n[dependencies]\nb = { path = \"../b\" }\n"
                 ),
             ),
             ("a/lib.crs", ""),
@@ -422,7 +422,7 @@ fn a_dependency_cycle_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"b\"\n\n[dependencies]\na = { source = \"path\", path = \"../a\" }\n"
+                    "\"\nname = \"b\"\n\n[dependencies]\na = { path = \"../a\" }\n"
                 ),
             ),
             ("b/lib.crs", ""),
@@ -450,7 +450,7 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nb = { path = \"../b\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -459,7 +459,7 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"b\"\n\n[dependencies]\nc = { source = \"path\", path = \"../c\" }\n"
+                    "\"\nname = \"b\"\n\n[dependencies]\nc = { path = \"../c\" }\n"
                 ),
             ),
             ("b/lib.crs", ""),
@@ -468,7 +468,7 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"c\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n"
+                    "\"\nname = \"c\"\n\n[dependencies]\nb = { path = \"../b\" }\n"
                 ),
             ),
             ("c/lib.crs", ""),
@@ -494,7 +494,7 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nnope = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nnope = { path = \"../base\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -530,7 +530,7 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
                     concat!(
                         "compiler = \"",
                         env!("CARGO_PKG_VERSION"),
-                        "\"\nname = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n"
+                        "\"\nname = \"app\"\n\n[dependencies]\nleft = { path = \"../left\" }\nright = { path = \"../right\" }\n"
                     ),
                 ),
                 ("app/lib.crs", ""),
@@ -568,12 +568,19 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
 
         fs::write(
             root.join(pinned).join("curios.toml"),
-            fill!(concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"${pinned}\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"${hash}\" }\n"), pinned, hash),
+            fill!(concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"${pinned}\"\n\n[dependencies]\nhttp = { git = \"https://example/http\", rev = \"abc123\", hash = \"${hash}\" }\n"), pinned, hash),
         )
         .unwrap();
         fs::write(
             root.join(live).join("curios.toml"),
-            fill!(concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"${live}\"\n\n[dependencies]\nhttp = { source = \"path\", path = \"../http\" }\n"), live),
+            fill!(
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"${live}\"\n\n[dependencies]\nhttp = { path = \"../http\" }\n"
+                ),
+                live
+            ),
         )
         .unwrap();
 
@@ -600,7 +607,7 @@ fn the_four_marker_mismatches_are_four_refusals() {
             concat!(
                 "compiler = \"",
                 env!("CARGO_PKG_VERSION"),
-                "\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n"
+                "\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { path = \"vendor/vendored\" }\n"
             ),
         ),
         ("base/curios.toml", "name = \"base\"\n"),
@@ -621,25 +628,25 @@ fn the_four_marker_mismatches_are_four_refusals() {
         // A `member` row naming something no governing umbrella enumerates.
         (
             "graph-marker-unenumerated",
-            "name = \"app\"\n\n[dependencies]\nabsent = { source = \"member\" }\n",
+            "name = \"app\"\n\n[dependencies]\nabsent = { member = true }\n",
             "the governing umbrella lists no member declaring that name",
         ),
         // A `catalog` row naming something the catalog does not hold.
         (
             "graph-marker-uncatalogued",
-            "name = \"app\"\n\n[dependencies]\nabsent = { source = \"catalog\" }\n",
+            "name = \"app\"\n\n[dependencies]\nabsent = { catalog = true }\n",
             "the governing umbrella's `[catalog]` holds no row of that name",
         ),
         // A `catalog` row whose name is a live member.
         (
             "graph-marker-member-in-catalog",
-            "name = \"app\"\n\n[dependencies]\nbase = { source = \"catalog\" }\n",
+            "name = \"app\"\n\n[dependencies]\nbase = { catalog = true }\n",
             "is a live member",
         ),
         // A direct pin of a name the umbrella enumerates.
         (
             "graph-marker-direct-member",
-            "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+            "name = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n",
             "is a live member",
         ),
     ];
@@ -665,12 +672,12 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nmembers = [\"app\"]\n\n[catalog]\nshape = { source = \"path\", path = \"vendor/shape\" }\n"
+                    "\"\nmembers = [\"app\"]\n\n[catalog]\nshape = { path = \"vendor/shape\" }\n"
                 ),
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nshape = { source = \"catalog\" }\n",
+                "name = \"app\"\n\n[dependencies]\nshape = { catalog = true }\n",
             ),
             ("app/lib.crs", ""),
         ],
@@ -701,7 +708,7 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -737,7 +744,7 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
                     concat!(
                         "compiler = \"",
                         env!("CARGO_PKG_VERSION"),
-                        "\"\nmembers = [\"base\"]\n\n[catalog]\nbase = { source = \"path\", path = \"base\" }\n"
+                        "\"\nmembers = [\"base\"]\n\n[catalog]\nbase = { path = \"base\" }\n"
                     ),
                 ),
                 ("base/curios.toml", "name = \"base\"\n"),
@@ -748,7 +755,7 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
                         concat!(
                             "compiler = \"",
                             env!("CARGO_PKG_VERSION"),
-                            "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"${marker}\" }\n"
+                            "\"\nname = \"app\"\n\n[dependencies]\nbase = { ${marker} = true }\n"
                         ),
                         marker
                     ),
@@ -780,12 +787,12 @@ fn the_markers_resolve_through_the_lists_that_answer_them() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { source = \"path\", path = \"vendor/vendored\" }\n"
+                    "\"\nmembers = [\"app\", \"base\"]\n\n[catalog]\nvendored = { path = \"vendor/vendored\" }\n"
                 ),
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\nvendored = { source = \"catalog\" }\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { member = true }\nvendored = { catalog = true }\n",
             ),
             ("app/lib.crs", ""),
             ("base/curios.toml", "name = \"base\"\n"),
@@ -821,7 +828,7 @@ fn an_unmaterialized_fetchable_row_names_curate() {
                     concat!(
                         "compiler = \"",
                         env!("CARGO_PKG_VERSION"),
-                        "\"\nname = \"app\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:${hash}\" }\n"
+                        "\"\nname = \"app\"\n\n[dependencies]\nhttp = { git = \"https://example/http\", rev = \"abc123\", hash = \"c1:${hash}\" }\n"
                     ),
                     hash = "a".repeat(64)
                 ),

@@ -893,7 +893,7 @@ fn chained(name: &str, body: &str) -> Temporary {
     let manifest = |name: &str, below: Option<&str>| {
         let dependency = below.map_or(String::new(), |below| {
             fill!(
-                "\n[dependencies]\n${below} = { source = \"path\", path = \"../${below}\" }\n",
+                "\n[dependencies]\n${below} = { path = \"../${below}\" }\n",
                 below
             )
         });

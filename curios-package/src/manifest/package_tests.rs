@@ -11,10 +11,10 @@ fn a_package_parses() {
             default = "serve"
 
             [dependencies]
-            base = { source = "member" }
-            toml_parse = { source = "catalog" }
-            http = { source = "git", url = "https://example/http", rev = "abc123", hash = "c1:${digest}" }
-            tools = { source = "path", path = "../tools" }
+            base = { member = true }
+            toml_parse = { catalog = true }
+            http = { git = "https://example/http", rev = "abc123", hash = "c1:${digest}" }
+            tools = { path = "../tools" }
 
             [executables]
             serve = {}
@@ -88,7 +88,7 @@ fn an_umbrella_parses() {
             members = ["json", "http_client", "tools/cli"]
 
             [catalog]
-            toml_parse = { source = "git", url = "https://example/toml", rev = "abc123", hash = "c1:${digest}" }
+            toml_parse = { git = "https://example/toml", rev = "abc123", hash = "c1:${digest}" }
         "#
         ),
         digest = "b".repeat(64)
@@ -135,7 +135,7 @@ fn a_nameless_package_is_refused() {
     let refusal = refuse(
         r#"
             [dependencies]
-            json = { source = "member" }
+            json = { member = true }
         "#,
     );
 
@@ -244,11 +244,11 @@ fn a_marker_in_the_catalog_is_refused() {
             members = ["json"]
 
             [catalog]
-            base = { source = "member" }
+            base = { member = true }
         "#
     ));
 
-    assert!(refusal.contains("names a marker source"), "{refusal}");
+    assert!(refusal.contains("is a marker"), "{refusal}");
 }
 
 /// There is no privilege field, and a manifest cannot invent one.

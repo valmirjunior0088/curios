@@ -468,7 +468,7 @@ fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
     let manifest = concat!(
         "compiler = \"",
         env!("CARGO_PKG_VERSION"),
-        "\"\nname = \"app\"\n\n[dependencies]\njson = { source = \"git\", url = \"https://example.invalid/json\", rev = \"abc\" }\n"
+        "\"\nname = \"app\"\n\n[dependencies]\njson = { git = \"https://example.invalid/json\", rev = \"abc\" }\n"
     );
     let (root, pinning) = governed("unreadable", manifest);
     carried(&root, "web/dom.js", b"export const click = () => {};\n");
@@ -564,7 +564,7 @@ fn a_dependency_is_pinned_into_a_dependencies_table_written_inline() {
     fs::write(
         app.join(MANIFEST),
         fill!(
-            "compiler = \"${version}\"\nname = \"app\"\ndependencies = { base = { source = \"path\", path = \"../base\" } }\n",
+            "compiler = \"${version}\"\nname = \"app\"\ndependencies = { base = { path = \"../base\" } }\n",
             version = env!("CARGO_PKG_VERSION")
         ),
     )
@@ -612,5 +612,56 @@ fn a_dependency_is_pinned_into_a_dependencies_table_written_inline() {
                 }
             ),
         ])
+    );
+}
+
+/// A row is written stating one source, so a pin clears every other source's key the row stated: a member row pinned to a sibling on disk states `path` alone, where it would otherwise state two and be refused for it.
+#[test]
+fn a_pin_clears_every_other_source_of_the_row() {
+    let root = Temporary::new("pin", "one-source");
+    let app = root.join("app");
+    let shape = root.join("shape");
+    fs::create_dir_all(&app).expect("create the package");
+    fs::create_dir_all(&shape).expect("create the dependency");
+    fs::write(
+        app.join(MANIFEST),
+        fill!(
+            "compiler = \"${version}\"\nname = \"app\"\n\n[dependencies]\nshape = { member = true }\n",
+            version = env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("write the manifest");
+    fs::write(
+        shape.join(MANIFEST),
+        fill!(
+            "compiler = \"${version}\"\nname = \"shape\"\n",
+            version = env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("write the dependency's manifest");
+
+    let pinning = Pinning::found(None, &app, None).expect("the package's own manifest");
+    pin(
+        &pinning,
+        Subject::Dependency,
+        "shape",
+        &Repoint::Carried("../shape".into()),
+        false,
+        |_| {},
+    )
+    .expect("the row is repointed");
+
+    let written = fs::read_to_string(&pinning.manifest).expect("read it back");
+    assert!(!written.contains("member"), "{written}");
+    let crate::Manifest::Package(package) =
+        crate::Manifest::from_path(&pinning.manifest).expect("the manifest reads once pinned")
+    else {
+        panic!("a package");
+    };
+    assert_eq!(
+        package.dependencies["shape"],
+        crate::Dependency::Path {
+            path: "../shape".into()
+        }
     );
 }

@@ -68,7 +68,7 @@ fn commands() -> Vec<&'static [&'static str]> {
             "pin",
             "dependency",
             "json",
-            "--url",
+            "--git",
             "https://example.invalid/json",
             "--rev",
             "abc",
@@ -570,13 +570,13 @@ pin foreign probe --target browser --url https://example.invalid/probe.js — No
   takes no subject
 pin foreign probe --target native --refresh — Nothing, cabinet None, leaves Manifest, options --target --path --url --refresh --check --manifest
   takes no subject
-pin dependency json --path ../json — Nothing, cabinet None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+pin dependency json --path ../json — Nothing, cabinet None, leaves Manifest, options --path --git --rev --refresh --check --manifest
   takes no subject
-pin dependency json --url https://example.invalid/json --rev abc — Nothing, cabinet None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+pin dependency json --git https://example.invalid/json --rev abc — Nothing, cabinet None, leaves Manifest, options --path --git --rev --refresh --check --manifest
   takes no subject
-pin dependency json --rev abc — Nothing, cabinet None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+pin dependency json --rev abc — Nothing, cabinet None, leaves Manifest, options --path --git --rev --refresh --check --manifest
   takes no subject
-pin dependency json --refresh — Nothing, cabinet None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+pin dependency json --refresh — Nothing, cabinet None, leaves Manifest, options --path --git --rev --refresh --check --manifest
   takes no subject
 new fresh — Nothing, cabinet None, leaves Package, options none
   takes no subject

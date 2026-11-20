@@ -82,7 +82,7 @@ Ten commands, and `wonder`'s five queries with the views `--name` takes — elev
 | [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
 | [`test`](#test) | anything | `--target <TARGET>`, `--port <PORT>`, `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
-| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--target <TARGET>` for `foreign`, `--path`, `--url`, `--rev` for `dependency`, `--refresh`, `--check` | one manifest row | files what it delivered |
+| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--target <TARGET>` for `foreign`, `--path`, `--url` for `foreign`, `--git` and `--rev` for `dependency`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
 | [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`format`](#format) | files, any number | `--check`, `--line-width <COLUMNS>`, `--flat-match-width <COLUMNS>`, `--flat-match-arms <ARMS>` | the files, rewritten | none |
@@ -171,7 +171,7 @@ hash mismatch
 │  pay close attention if this row pins a commit, which should not move
 │  a tree that changed under one means its history was rewritten
 │
-│  7 │ json = { source = "git", url = "https://example.org/json", rev = "v1.2", hash = "c1:ab12…" }
+│  7 │ json = { git = "https://example.org/json", rev = "v1.2", hash = "c1:ab12…" }
 │    │ ^^^^
 │
 ├─ try; curios pin dependency json --refresh
@@ -377,7 +377,7 @@ curios pin foreign sha2 --target native --path foreign/libsha2.wasm   # a module
 curios pin foreign sha2 --target native --url https://…/libsha2.wasm  # one fetched and filed in the cabinet
 curios pin foreign dom --target browser --path web/dom.js             # a gateway a browser links
 curios pin foreign sha2 --target native --refresh                     # deliver again, pin what arrives
-curios pin dependency json --url https://…/json --rev abc123
+curios pin dependency json --git https://…/json --rev abc123
 curios pin dependency json --rev def456                 # the same repository, a new revision
 curios pin dependency json --path ../json               # a live sibling on disk
 curios pin dependency json --refresh
@@ -394,14 +394,15 @@ The name is a positional and always required, on both forms, so `--rev` and `--r
 | who chooses it | you | the dependency, in its own `curios.toml` |
 | a disagreement | impossible; there is nothing to disagree with | refused naming both, before anything is written |
 
-Exactly one delivery form is required. `--path` and `--url` say where the row points; `--rev` alone keeps the repository and moves the revision; `--refresh` keeps everything and delivers again. `--url` on a dependency requires `--rev`, since a repository is pinned to a revision and nothing else.
+Exactly one delivery form is required. `--path`, and `--url` for a module or `--git` for a repository, say where the row points, each named for the key it writes; `--rev` alone keeps the repository and moves the revision; `--refresh` keeps everything and delivers again. `--git` requires `--rev`, since a repository is pinned to a revision and nothing else. A row is written stating one source, so a pin clears every other source's key the row stated: a `member = true` row pinned `--path` states `path` alone.
 
 `member` and `catalog` rows are not written here: one names a member of the governing umbrella and the other a row of its catalog, so neither has a location to deliver from, and each is one word written in the manifest.
 
 | Flag | Is |
 | --- | --- |
 | `--path <PATH>` | a module the package carries, spelled plainly and relative as an executable's path is; or a dependency in a separate project on disk, such as `../json`. A package of the same project is a `member` of its umbrella, which this command does not write |
-| `--url <URL>` | a module fetched once and filed in the cabinet, or — with `--rev` — a repository |
+| `--url <URL>` | a module fetched once and filed in the cabinet |
+| `--git <URL>` | a dependency's repository, pinned with `--rev` |
 | `--rev <REV>` | a dependency's revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
 | `--refresh` | deliver again whatever the row already names and pin what arrives. The only spelling permitted to overwrite a hash that was not asked to move |
 | `--check` | write nothing and exit nonzero if the manifest would change. The delivery still happens — what a row *should* say cannot be known without it — and only the write is withheld |
@@ -674,25 +675,28 @@ name = "app"
 compiler = "0.16.9"
 
 [dependencies]
-json = { source = "git", url = "https://github.com/you/json", rev = "…", hash = "c1:…" }
-shape = { source = "path", path = "../shape" }
+json = { git = "https://github.com/you/json", rev = "…", hash = "c1:…" }
+shape = { path = "../shape" }
+base = { member = true }
 ```
 
-| `source` | Requires | Is |
-| --- | --- | --- |
-| `git` | `url`, `rev`, `hash` | a repository at an exact revision, accepted by hash |
-| `path` | `path` | a live sibling on disk, for a project with no umbrella over it |
-| `member` | — | a live member of the governing umbrella, unpinned because live code has no pin |
-| `catalog` | — | the governing umbrella's `[catalog]` row of this name |
+A row's source is the key it states, one of these and no other: a second is refused where it is written, and so is a marker written `false`.
 
-No `url` or `rev` may begin with `-`: [`curate`](#curate) hands both to `git` as positional arguments, which would read a leading `-` as an option. `member` and `catalog` are markers rather than resolvers, so a `[catalog]` row may name neither — umbrellas do not nest, and nothing sits above one to answer a marker it wrote. A catalog row on its own fetches nothing: activation lives in the package that names it.
+| Source | Beside it | Is |
+| --- | --- | --- |
+| `git = "<URL>"` | `rev`, `hash` | a repository at an exact revision, accepted by hash |
+| `path = "<PATH>"` | — | a live sibling on disk, for a project with no umbrella over it |
+| `member = true` | — | a live member of the governing umbrella, unpinned because live code has no pin |
+| `catalog = true` | — | the governing umbrella's `[catalog]` row of this name |
+
+No `git` or `rev` may begin with `-`: [`curate`](#curate) hands both to `git` as positional arguments, which would read a leading `-` as an option. `member` and `catalog` are markers rather than resolvers, so a `[catalog]` row may name neither — umbrellas do not nest, and nothing sits above one to answer a marker it wrote. A catalog row on its own fetches nothing: activation lives in the package that names it.
 
 ```toml
 compiler = "0.16.9"
 members = ["app", "base"]
 
 [catalog]
-json = { source = "git", url = "https://github.com/you/json", rev = "…", hash = "c1:…" }
+json = { git = "https://github.com/you/json", rev = "…", hash = "c1:…" }
 ```
 
 ## Exit codes

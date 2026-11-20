@@ -237,7 +237,7 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { member = true }\n",
             ),
             ("app/lib.crs", ""),
             (
@@ -280,7 +280,7 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { member = true }\n",
             ),
             ("app/lib.crs", ""),
             ("base/curios.toml", "name = \"base\"\n"),

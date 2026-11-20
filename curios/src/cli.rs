@@ -312,7 +312,7 @@ pub enum Mode {
 /// The name is a positional on both, and mandatory on both, so `--rev` and `--refresh` have a row to name without a flag to carry it. What differs is what the name *is*: a `[foreign]` key is a handle no program refers to, and a `[dependencies]` key is the package's own declared name — which is why only the second is checked against the delivery, and why neither is ever discovered rather than stated.
 #[derive(Debug, Subcommand)]
 pub enum Pinned {
-    // Required, so a row is never written pointing nowhere; multiple, because `--url` and `--rev` are one delivery spelled in two words.
+    // Required, so a row is never written pointing nowhere; multiple, because `--git` and `--rev` are one delivery spelled in two words.
     #[command(
         about = "What a target links for this package's `foreign` declarations: a WebAssembly module natively, a JavaScript gateway in a browser",
         group = ArgGroup::new("delivery").required(true).multiple(true)
@@ -379,7 +379,7 @@ pub enum Pinned {
             long,
             value_name = "PATH",
             group = "delivery",
-            conflicts_with_all = ["url", "rev", "refresh"],
+            conflicts_with_all = ["git", "rev", "refresh"],
             help = "A live sibling on disk, by its path from the manifest"
         )]
         path: Option<PathBuf>,
@@ -392,7 +392,7 @@ pub enum Pinned {
             conflicts_with = "refresh",
             help = "A repository, pinned to the revision --rev names"
         )]
-        url: Option<String>,
+        git: Option<String>,
 
         #[arg(
             long,

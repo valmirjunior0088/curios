@@ -14,7 +14,7 @@ pub fn mounted_project(name: &str) -> Temporary {
             true => String::new(),
             false => {
                 fill!(
-                    "\n[dependencies]\n${declares} = { source = \"path\", path = \"../a\" }\n",
+                    "\n[dependencies]\n${declares} = { path = \"../a\" }\n",
                     declares
                 )
             }

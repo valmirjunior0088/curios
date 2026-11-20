@@ -25,13 +25,18 @@ fn a_refusal_stands_where_its_keys_lead() {
     let version = reported("name = \"app\"\ncompiler = \"^1.2\"\n");
     assert_eq!(placed(&version), ("\"^1.2\"".to_string(), (2, 12)));
 
-    let surplus = reported(
-        "name = \"app\"\n\n[dependencies]\njson = { source = \"path\", path = \"../json\", rev = \"1\" }\n",
-    );
-    assert_eq!(placed(&surplus), ("rev".to_string(), (4, 45)));
+    let surplus =
+        reported("name = \"app\"\n\n[dependencies]\njson = { path = \"../json\", rev = \"1\" }\n");
+    assert_eq!(placed(&surplus), ("rev".to_string(), (4, 28)));
 
-    let missing = reported("name = \"app\"\n\n[dependencies]\njson = { source = \"git\" }\n");
+    let missing = reported("name = \"app\"\n\n[dependencies]\njson = { git = \"https://e\" }\n");
     assert_eq!(placed(&missing), ("json".to_string(), (4, 1)));
+
+    let sources = reported(
+        "name = \"app\"\n\n[dependencies]\njson = { git = \"https://e\", path = \"../json\" }\n",
+    );
+    assert_eq!(sources.headline, "conflicting fields");
+    assert_eq!(placed(&sources), ("path".to_string(), (4, 29)));
 
     let path = reported(
         "name = \"app\"\n\n[executables]\nserve = {}\nbench = { path = \"../bench.crs\" }\n",

@@ -227,7 +227,7 @@ test("a dependency's files stand under its name, and a static entry's at its pag
       gateway: own,
       answers: { double: "twice" },
       statics: { assets: "web" },
-      rest: '\n[dependencies]\nchart = { source = "path", path = "../chart" }\n',
+      rest: '\n[dependencies]\nchart = { path = "../chart" }\n',
     }),
     "app/lib.crs": DOUBLE,
     "app/exe.crs": `let main() -> /std/Io({}) =

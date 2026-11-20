@@ -115,7 +115,7 @@ fn a_live_project_acquires_nothing() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { path = \"../base\" }\n"
                 ),
             ),
             ("app/lib.crs", ""),
@@ -152,7 +152,7 @@ fn a_pin_of_a_live_member_is_not_acquired() {
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"git\", url = \"https://example/base\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { git = \"https://example/base\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
             ),
             ("app/lib.crs", ""),
             ("base/curios.toml", "name = \"base\"\n"),
@@ -178,12 +178,12 @@ fn a_fetchable_catalog_row_is_acquired() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nmembers = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n"
+                    "\"\nmembers = [\"app\"]\n\n[catalog]\nhttp = { git = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n"
                 ),
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nhttp = { source = \"catalog\" }\n",
+                "name = \"app\"\n\n[dependencies]\nhttp = { catalog = true }\n",
             ),
             ("app/lib.crs", ""),
         ],
@@ -210,12 +210,12 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nmembers = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n"
+                    "\"\nmembers = [\"app\"]\n\n[catalog]\nbase = { path = \"vendor/base\" }\n"
                 ),
             ),
             (
                 "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"catalog\" }\n",
+                "name = \"app\"\n\n[dependencies]\nbase = { catalog = true }\n",
             ),
             ("app/lib.crs", ""),
             // Reached only if the base is the umbrella's root: from `app/` this path names nothing.
@@ -224,7 +224,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n"
+                    "\"\nname = \"base\"\n\n[dependencies]\nhttp = { git = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n"
                 ),
             ),
             ("vendor/base/lib.crs", ""),
@@ -480,7 +480,7 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
 
     let pin = |remote: &Path| {
         fill!(
-            "shape = { source = \"git\", url = \"file://${remote}\", rev = \"${revision}\", hash = \"${expected}\" }\n",
+            "shape = { git = \"file://${remote}\", rev = \"${revision}\", hash = \"${expected}\" }\n",
             remote = remote.display(),
             revision,
             expected
@@ -495,7 +495,7 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
                     concat!(
                         "compiler = \"",
                         env!("CARGO_PKG_VERSION"),
-                        "\"\nname = \"app\"\n\n[dependencies]\n${pin}mid = { source = \"path\", path = \"../mid\" }\n"
+                        "\"\nname = \"app\"\n\n[dependencies]\n${pin}mid = { path = \"../mid\" }\n"
                     ),
                     pin = pin(&origin)
                 ),

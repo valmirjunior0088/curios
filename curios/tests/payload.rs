@@ -282,7 +282,7 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"{compiler}\"\nname = \"app\"\n\n[executables]\napp = {{}}\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[executables]\napp = {{}}\n\n[dependencies]\ndep = {{ path = {:?} }}\n",
             &*dep,
             compiler = env!("CARGO_PKG_VERSION")
         ),
@@ -353,7 +353,7 @@ fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
     };
     let rows = dependencies
         .iter()
-        .map(|(name, path)| format!("{name} = {{ source = \"path\", path = {path:?} }}\n"))
+        .map(|(name, path)| format!("{name} = {{ path = {path:?} }}\n"))
         .collect::<String>();
 
     format!(

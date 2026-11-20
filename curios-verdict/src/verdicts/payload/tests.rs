@@ -135,7 +135,7 @@ fn declaring(root: &Path, name: &str, directory: &Path) -> String {
     let manifest = fs::read_to_string(root.join("curios.toml")).expect("a manifest to extend");
 
     fill!(
-        "${manifest}\n[dependencies]\n${name} = { source = \"path\", path = ${directory} }\n",
+        "${manifest}\n[dependencies]\n${name} = { path = ${directory} }\n",
         manifest,
         name,
         directory = format!("{directory:?}")

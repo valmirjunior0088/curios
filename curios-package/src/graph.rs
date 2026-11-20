@@ -296,7 +296,7 @@ impl Walk<'_> {
         let ungoverned = |marker: &str| {
             written.refuse(
                 Refused::of("no umbrella")
-                    .stating(format_args!("this row is `source = \"{marker}\"`"))
+                    .stating(format_args!("this row states `{marker} = true`"))
                     .stating(format_args!(
                         "no umbrella governs `{}`",
                         dependent.name
@@ -312,7 +312,7 @@ impl Walk<'_> {
                     (None, None) => Err(ungoverned("member")),
                     (None, Some(_)) => Err(written.refuse(
                         Refused::of("unknown member")
-                            .stating("this row is `source = \"member\"`")
+                            .stating("this row states `member = true`")
                             .stating("the governing umbrella lists no member declaring that name"),
                     )),
                 }
@@ -322,7 +322,7 @@ impl Walk<'_> {
                 if self.governing.members.contains_key(name) {
                     return Err(written.refuse(
                         Refused::of("shadowed by a member")
-                            .stating("this row is `source = \"catalog\"`")
+                            .stating("this row states `catalog = true`")
                             .stating(format_args!(
                                 "`{name}` is a live member of the governing umbrella"
                             ))
@@ -339,7 +339,7 @@ impl Walk<'_> {
                 let row = umbrella.catalog.get(name).ok_or_else(|| {
                     written.refuse(
                         Refused::of("unknown catalog row")
-                            .stating("this row is `source = \"catalog\"`")
+                            .stating("this row states `catalog = true`")
                             .stating(
                                 "the governing umbrella's `[catalog]` holds no row of that name",
                             ),

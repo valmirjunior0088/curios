@@ -171,6 +171,14 @@ impl Subject {
             Self::Dependency => format!("curios pin dependency {name}"),
         }
     }
+
+    /// The flag that points its row at a fetched delivery, named for the key it writes: a module's `--url`, a repository's `--git`.
+    fn fetched_by(self) -> &'static str {
+        match self {
+            Self::Foreign(_) => "--url",
+            Self::Dependency => "--git",
+        }
+    }
 }
 
 /// Where a row is to point after this.
@@ -312,7 +320,11 @@ pub fn pin(
                 "there is no {} `{name}` in this manifest to re-pin",
                 subject.noun()
             ))
-            .trying(format!("{} --url <URL>", subject.invocation(name)))
+            .trying(format!(
+                "{} {} <URL>",
+                subject.invocation(name),
+                subject.fetched_by()
+            ))
             .about_path(&pinning.manifest));
     }
 
@@ -449,7 +461,7 @@ fn undisturbed(
 
 /// One table — a row, or a table on the way to one — in whichever of TOML's two spellings it was written.
 ///
-/// Both, because a manifest is somebody's file: `json = { source = "git", … }` is what the reference shows and what this writes, and `[dependencies.json]` is the same row written the other way. A writer that understood only its own spelling would silently add a second row beside the one already there.
+/// Both, because a manifest is somebody's file: `json = { git = "…", … }` is what the reference shows and what this writes, and `[dependencies.json]` is the same row written the other way. A writer that understood only its own spelling would silently add a second row beside the one already there.
 enum RowMut<'a> {
     Table(&'a mut Table),
     Inline(&'a mut InlineTable),
@@ -724,32 +736,31 @@ fn settled_dependency(
 
         Ok(Settled {
             fields: vec![
-                ("source".to_string(), "git".to_string()),
-                ("url".to_string(), url.to_string()),
+                ("git".to_string(), url.to_string()),
                 ("rev".to_string(), rev.to_string()),
                 ("hash".to_string(), hash.to_string()),
             ],
-            cleared: vec!["path"],
+            cleared: vec!["path", "member", "catalog"],
             probe: None,
         })
     };
 
     // The existing row's own URL, for the two forms that keep it.
     let url_of = |key: &str| {
-        stated(document, Subject::Dependency, name, "url").ok_or_else(|| {
+        stated(document, Subject::Dependency, name, "git").ok_or_else(|| {
             written.refuse(
                 Refused::of("no repository")
-                    .stating(format_args!("`{name}` states no `url`"))
+                    .stating(format_args!("`{name}` states no `git`"))
                     .stating(format_args!(
                         "there is no repository for `--{key}` to deliver from"
                     ))
-                    .stating("only a `source = \"git\"` row is pinned to a revision"),
+                    .stating("only a `git` row is pinned to a revision"),
             )
         })
     };
 
     match repoint {
-        // Not held to a plain relative path, unlike a module: a module is inside this package, while a `source = "path"` dependency reaches a separate project on disk — so `../shape` is exactly what it is for. A package of this project's own is a `member` of its umbrella, which is a marker row and nothing this writes.
+        // Not held to a plain relative path, unlike a module: a module is inside this package, while a `path` dependency reaches a separate project on disk — so `../shape` is exactly what it is for. A package of this project's own is a `member` of its umbrella, which is a marker row and nothing this writes.
         Repoint::Carried(path) => {
             let spelled = path.to_string_lossy().replace('\\', "/");
             let at = pinning.directory.join(path);
@@ -757,11 +768,8 @@ fn settled_dependency(
 
             Ok(Settled {
                 // A live sibling on disk has no pin, deliberately: live code has nothing to be pinned to.
-                fields: vec![
-                    ("source".to_string(), "path".to_string()),
-                    ("path".to_string(), spelled),
-                ],
-                cleared: vec!["url", "rev", "hash"],
+                fields: vec![("path".to_string(), spelled)],
+                cleared: vec!["git", "rev", "hash", "member", "catalog"],
                 probe: None,
             })
         }
@@ -773,7 +781,7 @@ fn settled_dependency(
                             "`{name}` is fetched from a repository, which is pinned to a revision"
                         ))
                         .trying(format!(
-                            "curios pin dependency {name} --url {url} --rev <REV>"
+                            "curios pin dependency {name} --git {url} --rev <REV>"
                         )),
                 )
             })?;

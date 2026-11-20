@@ -25,18 +25,6 @@ fn a_field_no_table_takes_is_refused_at_its_key() {
     assert_eq!(at, "line-widht");
 }
 
-/// A row that leaves out a field it requires is refused at the row, by the table TOML heads it with.
-#[test]
-fn a_row_missing_a_field_it_requires_names_its_table() {
-    let (said, at) = reported("name = \"app\"\n\n[dependencies]\nhttp = { path = \"../http\" }\n");
-
-    assert_eq!(
-        said,
-        "missing field\n  `[dependencies.http]` requires `source`"
-    );
-    assert_eq!(at, "http");
-}
-
 /// A value of another kind than its key takes is refused at the value, as written, with what the key takes in TOML's words.
 #[test]
 fn a_value_of_another_kind_says_what_its_key_takes() {
@@ -47,16 +35,4 @@ fn a_value_of_another_kind_says_what_its_key_takes() {
         "invalid value\n  written: `7`\n  each entry of `members` is a string"
     );
     assert_eq!(at, "7");
-}
-
-/// A string none of the ones its key takes is refused with each it does take, as TOML writes them.
-#[test]
-fn a_string_none_its_key_takes_lists_those_it_does() {
-    let (said, at) = reported("name = \"app\"\n\n[dependencies]\nhttp = { source = \"gti\" }\n");
-
-    assert_eq!(
-        said,
-        "invalid value\n  written: `\"gti\"`\n  `source` is one of: `\"member\"`, `\"catalog\"`, `\"git\"`, `\"path\"`"
-    );
-    assert_eq!(at, "\"gti\"");
 }

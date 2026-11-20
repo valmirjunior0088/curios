@@ -6,7 +6,7 @@ use super::*;
 fn beside(name: &str, below: Option<&str>) -> String {
     let dependency = below.map_or(String::new(), |below| {
         fill!(
-            "\n[dependencies]\n${below} = { source = \"path\", path = \"../${below}\" }\n",
+            "\n[dependencies]\n${below} = { path = \"../${below}\" }\n",
             below
         )
     });

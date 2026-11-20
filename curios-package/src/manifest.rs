@@ -16,14 +16,14 @@ mod package_tests;
 
 use {
     crate::{
-        Cabinet, CompilerVersion, FileHash, FormatSettings, PRODUCTS, Refused, Row, Subject,
-        TreeHash, decode,
+        Cabinet, CompilerVersion, FileHash, FormatSettings, PRODUCTS, Refused, Row, Step, Subject,
+        TreeHash, decode, misshapen,
     },
     curios_common::{About, Code, OsError, Report, Said, Source, is_identifier, is_reserved},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
-        fmt, fs,
+        fs,
         path::{Component, Path, PathBuf},
         str::FromStr,
     },
@@ -154,7 +154,7 @@ pub struct Umbrella {
     pub format: Option<FormatSettings>,
     /// Where each member's own manifest sits, relative to this one. A member may lie arbitrarily deep on disk; umbrellas themselves do not nest.
     pub members: Vec<PathBuf>,
-    /// The rows a member reaches by declaring `source = "catalog"`. A row here fetches nothing by itself — activation lives in the package that names it.
+    /// The rows a member reaches by declaring `catalog = true`. A row here fetches nothing by itself — activation lives in the package that names it.
     pub catalog: BTreeMap<String, Dependency>,
 }
 
@@ -313,17 +313,16 @@ impl Document {
         let catalog = table(self.catalog.unwrap_or_default(), "catalog")?;
 
         // A catalog row is what a member's marker resolves *to*, so it cannot be a marker itself: umbrellas do not nest, and nothing sits above one to answer a marker it wrote.
-        if let Some((name, _)) = catalog
-            .iter()
-            .find(|(_, row)| matches!(row, Dependency::Member | Dependency::Catalog))
-        {
+        if let Some((name, marker)) = catalog.iter().find_map(|(name, row)| match row {
+            Dependency::Member => Some((name, "member")),
+            Dependency::Catalog => Some((name, "catalog")),
+            Dependency::Git { .. } | Dependency::Path { .. } => None,
+        }) {
             return Err(Refused::of("misplaced marker")
-                .stating(format_args!(
-                    "the catalog row `{name}` names a marker source"
-                ))
+                .stating(format_args!("the catalog row `{name}` is a marker"))
                 .stating("a catalog row is what a marker resolves to")
-                .stating("it names a fetchable source or `path`")
-                .value(["catalog", name.as_str(), "source"]));
+                .stating("it states `git` or `path`")
+                .entry(["catalog", name.as_str(), marker]));
         }
 
         Ok(Umbrella {
@@ -350,80 +349,105 @@ impl Document {
     }
 }
 
-/// One dependency row as TOML spells it: a resolver, and the union of every field any resolver takes.
+/// One dependency row as TOML spells it: the key that names its source, and the union of every field any source takes.
 ///
-/// The union rather than one shape per source, because which fields a row may carry is a refusal this crate writes — `source` is what a reader looks for first, and a row missing its pin should be told which pin, not told that no shape matched.
+/// The source is the key the row states — `git`, `path`, or a marker, `member` or `catalog` — as a foreign row's delivery is a carried or a fetched file by which of `path` and `url` it states, so a row means the keys it states and no field beside them says what the others mean. The union rather than one shape per source, because which fields a row may carry is a refusal this crate writes: a row missing its pin should be told which pin, not told that no shape matched.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DependencyRow {
-    source: Resolver,
-    url: Option<String>,
+    catalog: Option<bool>,
+    git: Option<String>,
+    member: Option<bool>,
+    path: Option<String>,
     rev: Option<String>,
     hash: Option<String>,
-    path: Option<String>,
 }
 
 impl DependencyRow {
-    /// What this row resolves to, or which field the source it names cannot use — or requires.
+    /// What this row resolves to, or which source it names besides another, or which field its source cannot use — or requires.
     fn dependency(self) -> Result<Dependency, Refused> {
         let Self {
-            source,
-            url,
+            catalog,
+            git,
+            member,
+            path,
             rev,
             hash,
-            path,
         } = self;
 
-        // Exactly the fields this source takes. Both directions are checked against it, so a field is never quietly ignored and never quietly defaulted: a `rev` on a live row is a pin somebody believed in.
-        let takes: &[&str] = match source {
-            Resolver::Member | Resolver::Catalog => &[],
-            Resolver::Git => &["url", "rev", "hash"],
-            Resolver::Path => &["path"],
-        };
-        let stated = [
-            ("url", url.is_some()),
-            ("rev", rev.is_some()),
-            ("hash", hash.is_some()),
+        // One source a row: two leave nothing to decide which is meant, and none names no place. The second is the later in the order the table is read.
+        let sources = [
+            ("catalog", catalog.is_some()),
+            ("git", git.is_some()),
+            ("member", member.is_some()),
             ("path", path.is_some()),
-        ];
+        ]
+        .into_iter()
+        .filter_map(|(key, stated)| stated.then_some(key))
+        .collect::<Vec<_>>();
+        let source = match sources.as_slice() {
+            [source] => *source,
+            [] => {
+                return Err(Refused::of("missing source")
+                    .stating("this row names no source")
+                    .stating("a row states `git`, `path`, `member = true` or `catalog = true`"));
+            }
+            [first, second, ..] => {
+                return Err(Refused::of("conflicting fields")
+                    .stating(format_args!("this row states `{first}` beside `{second}`"))
+                    .stating("a dependency comes from one source")
+                    .entry([*second]));
+            }
+        };
 
-        if let Some((field, _)) = stated
-            .iter()
-            .find(|(field, stated)| *stated && !takes.contains(field))
+        // A marker says yes or nothing: `member = false` would name a source and deny it at once.
+        if let Some(marker) = [("catalog", catalog), ("member", member)]
+            .into_iter()
+            .find_map(|(marker, marked)| (marked == Some(false)).then_some(marker))
+        {
+            return Err(misshapen(
+                &Code(false).to_string(),
+                "`true`",
+                vec![Step::key(marker)],
+            ));
+        }
+
+        // Exactly the pins this source takes, in both directions, so a pin is never quietly ignored and never quietly defaulted: a `rev` on a live row is a pin somebody believed in.
+        if let Some(field) = [("rev", rev.is_some()), ("hash", hash.is_some())]
+            .into_iter()
+            .find_map(|(field, stated)| (stated && git.is_none()).then_some(field))
         {
             return Err(Refused::of("surplus field")
-                .stating(format_args!("this row is `source = \"{source}\"`"))
+                .stating(format_args!("this row's source is `{source}`"))
                 .stating(format_args!("that source takes no `{field}`"))
-                .entry([*field]));
+                .entry([field]));
         }
 
         let require = |field: &str, value: Option<String>| {
             value.ok_or_else(|| {
                 Refused::of("missing field")
-                    .stating(format_args!("this row is `source = \"{source}\"`"))
+                    .stating(format_args!("this row's source is `{source}`"))
                     .stating(format_args!("that source requires `{field}`"))
             })
         };
 
-        match source {
-            Resolver::Member => Ok(Dependency::Member),
-            Resolver::Catalog => Ok(Dependency::Catalog),
-            Resolver::Git => Ok(Dependency::Git {
-                url: optionless("url", require("url", url)?)?,
+        Ok(match (git, path) {
+            (Some(url), _) => Dependency::Git {
+                url: optionless("git", url)?,
                 rev: optionless("rev", require("rev", rev)?)?,
                 hash: TreeHash::parse(&require("hash", hash)?)
                     .map_err(|said| Refused::saying(said).value(["hash"]))?,
-            }),
-            Resolver::Path => Ok(Dependency::Path {
-                path: require("path", path)?.into(),
-            }),
-        }
+            },
+            (None, Some(path)) => Dependency::Path { path: path.into() },
+            (None, None) if member.is_some() => Dependency::Member,
+            (None, None) => Dependency::Catalog,
+        })
     }
 }
 
 /// `value`, refused when it would reach a fetch as an option rather than as itself.
 ///
-/// **`curate` hands a `url` and a `rev` to a fetcher as positional arguments, and both `git` and the file fetcher a foreign provider's `url` reaches read a leading `-` as an option wherever it sits.** The hash is what a *delivery* is accepted against, and it is checked after the fetch has already run — so it answers for the bytes and not for the invocation that obtained them. This is the check that answers for the invocation, and it belongs here beside the hash's, because a row is refused where a row is read.
+/// **`curate` hands a repository's `git` and its `rev` to a fetcher as positional arguments, and both `git` and the file fetcher a foreign provider's `url` reaches read a leading `-` as an option wherever it sits.** The hash is what a *delivery* is accepted against, and it is checked after the fetch has already run — so it answers for the bytes and not for the invocation that obtained them. This is the check that answers for the invocation, and it belongs here beside the hash's, because a row is refused where a row is read.
 ///
 /// It matters past the manifest somebody wrote: `curate` walks each fetched dependency's own manifest for further rows, so a pinned tree supplies these fields for fetches on its consumer's machine. Vouching for a tree's bytes is not authorizing it to pass options to that consumer's `git`.
 ///
@@ -435,27 +459,6 @@ fn optionless(field: &str, value: String) -> Result<String, Refused> {
             .stating("`curios curate` hands it to a fetcher, which would read it as an option")
             .value([field])),
         false => Ok(value),
-    }
-}
-
-/// The resolvers a row may name. `member` and `catalog` are markers: each names exactly the umbrella-side list that answers it.
-#[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-enum Resolver {
-    Member,
-    Catalog,
-    Git,
-    Path,
-}
-
-impl fmt::Display for Resolver {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Member => "member",
-            Self::Catalog => "catalog",
-            Self::Git => "git",
-            Self::Path => "path",
-        })
     }
 }
 
@@ -510,7 +513,7 @@ pub struct Delivery {
     pub module: Module,
     /// What the file must be, whichever way it arrived.
     ///
-    /// **Stated for a carried file too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `source = "path"` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
+    /// **Stated for a carried file too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `path` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
     pub hash: FileHash,
 }
 

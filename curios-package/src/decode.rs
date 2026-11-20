@@ -38,16 +38,10 @@ enum Why {
         field: String,
         expected: &'static [&'static str],
     },
-    MissingField(&'static str),
     /// A value of another kind than its key takes: what was written, and what the key takes, each in TOML's words.
     Kind {
         written: String,
         takes: &'static str,
-    },
-    /// A string none of the ones its key takes.
-    UnknownValue {
-        written: String,
-        expected: &'static [&'static str],
     },
     /// What a key's own reader says of its value, which it read.
     Said(String),
@@ -64,7 +58,7 @@ impl Unread {
         self
     }
 
-    /// This error as the manifest's refusal: a field at its key, a value at itself, a missing one at the table that misses it.
+    /// This error as the manifest's refusal: a field at its key, and a value at itself.
     fn refused(self) -> Refused {
         let at = self.at.unwrap_or_default();
         match self.why {
@@ -84,28 +78,7 @@ impl Unread {
 
                 refused.entry(at)
             }
-            Why::MissingField(field) => {
-                let refused = Refused::of("missing field")
-                    .stating(format_args!("{} requires `{field}`", table(&at)));
-
-                match at.is_empty() {
-                    true => refused,
-                    false => refused.entry(at),
-                }
-            }
             Why::Kind { written, takes } => misshapen(&written, takes, at),
-            Why::UnknownValue { written, expected } => Refused::of("invalid value")
-                .stating(format_args!("written: {}", Code(written)))
-                .stating(format_args!(
-                    "{} one of: {}",
-                    taker(&at),
-                    expected
-                        .iter()
-                        .map(|value| Code(format!("{value:?}")).to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ))
-                .value(at),
             Why::Said(said) => Refused::of("invalid value").stating(said).value(at),
         }
     }
@@ -130,17 +103,6 @@ impl de::Error for Unread {
             expected,
         })
     }
-
-    fn missing_field(field: &'static str) -> Self {
-        Self::of(Why::MissingField(field))
-    }
-
-    fn unknown_variant(variant: &str, expected: &'static [&'static str]) -> Self {
-        Self::of(Why::UnknownValue {
-            written: format!("{variant:?}"),
-            expected,
-        })
-    }
 }
 
 /// The refusal of a value of another kind than the key `at` leads to takes: what was `written`, in TOML's words — a table or an array by its kind, a scalar as it reads — and what the key `takes`, standing at the value.
@@ -151,7 +113,7 @@ pub fn misshapen(written: &str, takes: &str, at: Vec<Step>) -> Refused {
         .value(at)
 }
 
-/// The table `at` leads to as TOML heads it: the manifest itself, a table by its header, a row of an array of tables as one of its rows.
+/// The table `at` leads to as TOML heads it: the manifest itself, or a table by its header.
 fn table(at: &[Step]) -> String {
     let header = at
         .iter()
@@ -162,10 +124,9 @@ fn table(at: &[Step]) -> String {
         .collect::<Vec<_>>()
         .join(".");
 
-    match at.last() {
-        None => "the manifest".to_string(),
-        Some(Step::Key(_)) => format!("`[{header}]`"),
-        Some(Step::Row(_)) => format!("an `[[{header}]]` row"),
+    match header.is_empty() {
+        true => "the manifest".to_string(),
+        false => format!("`[{header}]`"),
     }
 }
 
@@ -354,27 +315,12 @@ impl<'de> Deserializer<'de> for Node {
         self.deserialize_map(visitor)
     }
 
-    // An enum of the manifest is one of the strings it names, each a unit variant.
-    fn deserialize_enum<V: Visitor<'de>>(
-        self,
-        _name: &'static str,
-        _variants: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value, Unread> {
-        match self.value {
-            Value::String(string) => visitor
-                .visit_enum(IntoDeserializer::<Unread>::into_deserializer(string))
-                .map_err(|error| error.at(&self.at)),
-            _ => Err(self.kind("a string")),
-        }
-    }
-
     fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Unread> {
         visitor.visit_unit()
     }
 
     serde::forward_to_deserialize_any! {
-        i128 u128 f32 f64 char bytes byte_buf unit unit_struct tuple tuple_struct identifier
+        i128 u128 f32 f64 char bytes byte_buf unit unit_struct tuple tuple_struct enum identifier
     }
 }
 

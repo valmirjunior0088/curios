@@ -157,7 +157,7 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n"
+            "\"\nname = \"app\"\n\n[dependencies]\nshape = { path = \"../shape\" }\njson = { path = \"../json\" }\n"
         ),
     );
     write(
@@ -207,7 +207,7 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"shape\"\n\n[dependencies]\njson = { source = \"path\", path = \"../json\" }\n"
+            "\"\nname = \"shape\"\n\n[dependencies]\njson = { path = \"../json\" }\n"
         ),
     );
     write(&root, "shape/lib.crs", "pub use /json/{mod m};\n");
@@ -217,7 +217,7 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
         concat!(
             "compiler = \"",
             env!("CARGO_PKG_VERSION"),
-            "\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n"
+            "\"\nname = \"app\"\n\n[dependencies]\nshape = { path = \"../shape\" }\njson = { path = \"../json\" }\n"
         ),
     );
     write(
