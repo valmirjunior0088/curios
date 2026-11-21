@@ -1,14 +1,16 @@
 --- Waiting for a task's answer.
 pub mod Task;
 
-use /std/{Nat, List, Channel, Io};
-use /std/Io/{Ended, Future, Branch, drive, into, answered, using};
+use /std/{Nat, Channel, Io};
+use /std/Io/{let Scope, Live, Future};
 
--- How many children of a scope have not ended, in a `/sys` channel of one slot nothing waits on, and a channel notified as each ends, whose notifications coalesce while one is unread: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
-struct Live: Type {
-    count: /sys/Channel(Nat),
-    ended: Channel({}),
-}
+--- How a scope ended, as each release deferred to it is told.
+pub induct Ended: pub Type
+--- It ran to its end.
+| finished()
+--- What advanced it dropped it while it waited.
+| cancelled()
+end
 
 -- `change` applied to the count of `live`.
 let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
@@ -22,14 +24,6 @@ let ended(live: Live) -> Io({}) =
     let () = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
     let _ = Channel/try_send(live.ended, ())!;
     Io/pure(());
-
--- The children spawned since the driver last took them, the latest first, and the releases deferred so far, each a list in a `/sys` channel of one slot: nothing waits on either, so neither needs a `Channel`'s wakes, and a spawn never waits on a full queue.
---- What a scope's body spawns its children into and defers its releases to.
-pub struct Scope: Type {
-    children: /sys/Channel(List(Io({}))),
-    live: Live,
-    releases: /sys/Channel(List((Ended) -> Io({}))),
-}
 
 -- `Task` is declared here and not in its module, so that `spawn` builds it and nothing outside this subtree does.
 --- A child a scope runs: its answer once it has one.
@@ -65,41 +59,3 @@ pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
     let earlier = match held | item(rs) => rs | _ => [] end;
     let _ = /sys/Channel/push(s.releases, [release, ..earlier])!;
     Io/pure(());
-
--- Each of `releases` told `how`, in its order.
-let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =
-    match releases
-    | [] => Io/pure(())
-    | [r, ..more] => Io/bind(r(how), (()) => each(more, how))
-    end;
-
--- Every release deferred to `s`, the latest first, told `how` it ended.
-let released(s: Scope, how: Ended) -> Io({}) =
-    let held = /sys/Channel/take(s.releases)!;
-    match held | item(rs) => each(rs, how) | _ => Io/pure(()) end;
-
--- Every child spawned into `slot` since the last time it was asked, in the order they were spawned.
-let spawned(slot: /sys/Channel(List(Io({})))) -> Io(List(Branch)) =
-    let taken = /sys/Channel/take(slot)!;
-    match taken
-    | item(children) => Io/pure(List/map(List/reverse(children), Branch/fresh))
-    | _ => Io/pure([])
-    end;
-
---- `body` run with a scope it spawns children into and opens resources into, and its answer once it has one. The children run beside the body, and those still running when the body answers are cancelled where they wait: a description's answer is all it yields, so a child the body needs is joined before it answers. Then every release deferred to the scope runs, the latest first, told whether the scope `finished` or was `cancelled` where it waited — however it ends, its children are cancelled before its resources are released.
-pub let run(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
-    let children = /sys/Channel/new(@List(Io({})), 1)!;
-    let count = /sys/Channel/new(@Nat, 1)!;
-    let ended = Channel/new(@{}, 1)!;
-    let releases = /sys/Channel/new(@List((Ended) -> Io({})), 1)!;
-    let s =
-        Scope {
-            children = children,
-            live = Live { count = count, ended = ended },
-            releases = releases };
-    let answer: Future(A) = Future/new()!;
-    let driven() -> Io(A) =
-        let () = drive([into(body(s), answer)], spawned(children), answered(answer))!;
-        let () = /sys/Channel/close(children)!;
-        Future/wait(answer);
-    using((how) => released(s, how), driven());

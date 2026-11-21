@@ -62,7 +62,7 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
 -- The connection `h` served by `handler` beside the accept loop, a child of `s` in a scope of its own, which releases it as `Socket/connect`'s does once the handler ends: a TLS stream has sent its records and its closure alert before it is closed.
 let serve_conn(s: Io/Scope, h: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let served =
-        Io/Scope/run((c) =>
+        Io/scope((c) =>
             Io/bind(Io/Scope/defer(c, (how) => release(h, how)), (()) => handler(Socket { h })));
     Io/bind(Io/Scope/spawn(s, served), (_) => Io/pure(()));
 

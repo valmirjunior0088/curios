@@ -41,9 +41,9 @@ pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> T
 pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result(E, A)) =
     m.0;
 
---- `body` run with a scope, as `Io/Scope/run` runs one: its children cancelled and its resources released before the scope answers, its failure among the answers it may give.
+--- `body` run with a scope, as `Io/scope` runs one: its children cancelled and its resources released before the scope answers, its failure among the answers it may give.
 pub let scope(@E: Type, @A: Type, body: (Io/Scope) -> Try(Io, E, A)) -> Try(Io, E, A) =
-    Try { Io/Scope/run((s) => run(body(s))) };
+    Try { Io/scope((s) => run(body(s))) };
 
 -- What `x` answers, or where it fails, its failure left in `failed` and then no answer at all: a branch of `both` or `all` the first failure stops the rest of.
 let guarded(@E: Type, @A: Type, failed: Future(E), x: Try(Io, E, A)) -> Io(A) =

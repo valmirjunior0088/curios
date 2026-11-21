@@ -204,7 +204,7 @@ fn a_function_constructs_a_nested_description_before_its_scope_runs() {
                 let _ = print("body")!;
                 Io/pure(());
             let _ = print("acquire")!;
-            Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("release")), (_) => body()));
+            Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("release")), (_) => body()));
         main()
         "#;
     assert_eq!(run(source), b"acquirebodyrelease");

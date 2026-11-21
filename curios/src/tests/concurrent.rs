@@ -69,7 +69,7 @@ fn a_scope_answers_with_its_body_after_the_child_it_joins() {
             let c = Io/Scope/Task/join(f)!;
             Io/pure(c + 2);
         let entry() -> /std/Io({}) =
-            let n = Io/Scope/run(root)!;
+            let n = Io/scope(root)!;
             /std/print(Nat/to_str(n));
         entry()
         "#),
@@ -91,12 +91,12 @@ fn a_scope_inside_a_child_of_another_composes() {
             let n = Io/Scope/Task/join(f)!;
             Io/pure(n + 1);
         let outer(s: Io/Scope) -> Io(Nat) =
-            let f = Io/Scope/spawn(s, Io/Scope/run(inner))!;
+            let f = Io/Scope/spawn(s, Io/scope(inner))!;
             let _ = /std/print("outer;")!;
             let n = Io/Scope/Task/join(f)!;
             Io/pure(n * 10);
         let entry() -> /std/Io({}) =
-            let n = Io/Scope/run(outer)!;
+            let n = Io/scope(outer)!;
             /std/print(Nat/to_str(n));
         entry()
         "#),
@@ -136,7 +136,7 @@ fn race_cancels_a_started_loser_and_runs_its_release_before_answering() {
             Io/pure(20);
         let program() -> Io({}) =
             let v = Io/select([
-                Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow())),
+                Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow())),
                 Io/bind(/std/print("fast;"), (_) => Io/pure(10))
             ])!;
             /std/print(Nat/to_str(v));
@@ -185,11 +185,11 @@ fn a_scope_cancels_a_child_still_waiting_when_its_body_answers() {
             /std/print("child;");
         let body(s: Io/Scope) -> Io({}) =
             let started = Channel/new(@{}, 1)!;
-            let _ = Io/Scope/spawn(s, Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => child(started))))!;
+            let _ = Io/Scope/spawn(s, Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => child(started))))!;
             let _ = Channel/receive(started)!;
             /std/print("root;");
         let entry() -> /std/Io({}) =
-            let _ = Io/Scope/run(body)!;
+            let _ = Io/scope(body)!;
             /std/print("ended");
         entry()
         "#,
@@ -215,7 +215,7 @@ fn join_all_holds_the_body_until_every_child_has_ended() {
             let _ = Io/Scope/spawn(s, child(2, "early;"))!;
             Io/Scope/join_all(s);
         let entry() -> /std/Io({}) =
-            let _ = Io/Scope/run(body)!;
+            let _ = Io/scope(body)!;
             /std/print("done");
         entry()
         "#,
@@ -232,7 +232,7 @@ fn a_brackets_release_runs_when_its_body_completes() {
         run(r#"
         use /std/{Str, Io};
         let program: Io({}) =
-            Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("closed;")), (_) => /std/print("body;")));
+            Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("closed;")), (_) => /std/print("body;")));
         program
         "#),
         b"body;closed;"
@@ -246,7 +246,7 @@ fn a_brackets_release_runs_once() {
         run(r#"
         use /std/{Str, Io};
         let program() -> Io({}) =
-            let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("closed;")), (_) => /std/print("body;")))!;
+            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("closed;")), (_) => /std/print("body;")))!;
             /std/print("after;");
         program()
         "#),
@@ -359,10 +359,10 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
             let _ = Io/sleep(Duration/of_secs(50))!;
             let _ = /std/print("body;")!;
             Io/pure(0);
-        let released(ended: Io/Ended) -> Io({}) =
+        let released(ended: Io/Scope/Ended) -> Io({}) =
             /std/print(match ended | finished() => "finished;" | cancelled() => "cancelled;" end);
         let program() -> Io({}) =
-            let r = Io/timeout(Duration/of_secs(2), Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, released), (_) => body())))!;
+            let r = Io/timeout(Duration/of_secs(2), Io/scope((scope) => Io/bind(Io/Scope/defer(scope, released), (_) => body())))!;
             match r
             | some(v) => /std/print("some")
             | none() => /std/print("none;")
@@ -392,7 +392,7 @@ fn race_of_two_sleeps_answers_the_earlier_and_cancels_the_later() {
             let _ = /std/print("slow;")!;
             Io/pure(2);
         let program() -> Io({}) =
-            let v = Io/select([quick(), Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow()))])!;
+            let v = Io/select([quick(), Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow()))])!;
             /std/print(Nat/to_str(v));
         program()
         "#,
@@ -443,7 +443,7 @@ fn a_notification_wakes_its_waiter_and_one_sent_before_anyone_waits_is_kept() {
             let _ = Channel/try_send(s, ())!;
             let _ = Channel/receive(s)!;
             /std/print("again");
-        Io/Scope/run(body)
+        Io/scope(body)
         "#,
         system,
     )
@@ -506,7 +506,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
                 | none() => Io/pure(())
                 end!;
             Io/Scope/Task/join(task);
-        Io/Scope/run(body)
+        Io/scope(body)
         "#),
         b"receiving queued 7 acknowledged"
     );

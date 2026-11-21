@@ -620,7 +620,7 @@ test("a program suspended on no handle runs its cancel, reports the deadlock and
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
 let main() -> /std/Io({}) =
-    let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("abandoned")), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
+    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("abandoned")), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
     print("after");
 main()
 `);
@@ -753,12 +753,12 @@ test("a deadlock cancellation that suspends finishes its cleanup before reportin
     `
 use /std/{Io, print};
 use /std/time/{Duration};
-let release(_: Io/Ended) -> Io({}) =
+let release(_: Io/Scope/Ended) -> Io({}) =
     let _ = print("closing ")!;
     let _ = Io/sleep(Duration/of_millis(10))!;
     print("closed");
 let main() -> Io({}) =
-    let _ = Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
+    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
     print("after");
 main()
 `,

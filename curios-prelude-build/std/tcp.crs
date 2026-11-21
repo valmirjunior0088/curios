@@ -25,7 +25,7 @@ let courtesy(h: Handle) -> Io({}) =
     Io/pure(());
 
 -- How a scope releases a connection it owns: the courtesy where the scope finished, then, however it ended, the close.
-let release(h: Handle, how: Io/Ended) -> Io({}) =
+let release(h: Handle, how: Io/Scope/Ended) -> Io({}) =
     let () =
         match how
         | finished() => courtesy(h)

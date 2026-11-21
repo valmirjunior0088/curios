@@ -8,7 +8,7 @@ fn a_scope_releases_before_propagating_a_failure_reached_after_yielding() {
         run_tests_program(
             r#"
         use /std/{Io, Test, print};
-        let release(ended: Io/Ended) -> Io({}) =
+        let release(ended: Io/Scope/Ended) -> Io({}) =
             print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let body() -> Test({}) =
             let _ = print("body|")!;
@@ -28,7 +28,7 @@ fn a_scope_releases_before_its_successful_payload_continues() {
         run_tests_program(
             r#"
         use /std/{Nat, Io, Test, print};
-        let release(_: Io/Ended) -> Io({}) = print("released|");
+        let release(_: Io/Scope/Ended) -> Io({}) = print("released|");
         let body() -> Test(Nat) =
             let _ = Io/yield()!;
             Test/pure(42);
@@ -51,7 +51,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
     run_text(
         r#"
         use /std/{Io, Test, print};
-        let release(ended: Io/Ended) -> Io({}) =
+        let release(ended: Io/Scope/Ended) -> Io({}) =
             print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let body() -> Test({}) =
             let _ = print("waiting|")!;
@@ -84,7 +84,7 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
                 let _ = print("child-started|")!;
                 let _ = Channel/try_send(started, ())!;
                 Io/wait_filled([]);
-            Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
+            Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
         let body(s: Io/Scope) -> Test({}) =
             let started = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(s, child(started))!;
@@ -105,7 +105,7 @@ fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
             r#"
         use /std/{Io, Test, print};
         use /std/time/{Duration};
-        let release(ended: Io/Ended) -> Io({}) =
+        let release(ended: Io/Scope/Ended) -> Io({}) =
             print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let waiting() -> Test({}) =
             let _ = Io/sleep(Duration/of_secs(50))!;

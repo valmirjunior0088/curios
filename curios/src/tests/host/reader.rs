@@ -166,7 +166,7 @@ fn two_branches_on_one_reader_each_get_a_whole_line() {
             let _ = Channel/finish(sent)!;
             let _ = Io/Scope/Task/join(first)!;
             Io/Scope/Task/join(second);
-        Io/Scope/run(both_read)
+        Io/scope(both_read)
         "#,
         WIRE
     );

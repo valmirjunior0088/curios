@@ -143,9 +143,9 @@ let from_result(@A: Type, result: Result(List(Failure), A)) -> Test(A) =
     | failure(failures) => Test/failed(failures)
     end;
 
---- `body` run with a scope, as `Io/Scope/run` runs one: its children cancelled and its releases run after a success or an assertion failure, and when a suspended body is cancelled.
+--- `body` run with a scope, as `Io/scope` runs one: its children cancelled and its releases run after a success or an assertion failure, and when a suspended body is cancelled.
 pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =
-    let result = Io/Scope/run((s) => finish(body(s)))!;
+    let result = Io/scope((s) => finish(body(s)))!;
     from_result(result);
 
 --- Fail if the deadline wins, after cancelling the suspended body and running its releases.
