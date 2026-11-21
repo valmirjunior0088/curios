@@ -1,6 +1,6 @@
 //! The respelling grid: whether a verdict follows how a term is spelled, stated so that both answers are checked.
 //!
-//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, an index inverted in that arm, a fold's operand, the arm of a second match on a variable the guard names. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the certifier's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
+//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, an index inverted in that arm, a fold's operand, the arm of a second match on a variable the guard names or on an expression it meets, two such arms one inside the other. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the certifier's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
 //!
 //! **Each row's control is its first column.** A pair conversion does not equate outside every arm is no respelling, and a cell over it would be refused for that and say nothing of the position; so each row states the equation at the top of an item, and it is held.
 
@@ -13,7 +13,7 @@ use {
 const IMPORTS: &str =
     "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
-/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through; a structure over a natural, and a structure, a family and an indexed family over a proof, give the types one is spelled in.
+/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through; a structure over a natural, and a structure, a family and an indexed family over a proof, give the types one is spelled in; a match on a call's result, that call behind a definition and a match in another's arm give the guards that meet a second match's scrutinee only where one of the two is unfolded.
 const DEFINITIONS: &str =
     "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
 let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
@@ -30,7 +30,10 @@ induct Checked: Type | checked(n: Nat, at: Holds(n < 10)) end
 struct Box(n: Nat): Type { at: Nat }
 struct Within(n: Nat, at: Holds(n < 10)): Type { k: Nat }
 induct Pinned(n: Nat, at: Holds(n < 10)): Type | pinned() end
-induct Proven: (n: Nat, at: Holds(n < 10)) -> Type end";
+induct Proven: (n: Nat, at: Holds(n < 10)) -> Type end
+let pick(e: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool = match e(c) | true => k(0) | false => k(1) end;
+let test(e: (Nat) -> Bool, c: Nat) -> Bool = e(c);
+let chain(e: (Nat) -> Bool, r: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool = match e(c) | true => match r(c) | true => k(0) | false => k(1) end | false => k(2) end;";
 
 /// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical; functions of a type, of a proposition and of a structure, a type family, and a structure's value give the types and the literals a form is spelled with.
 const BINDERS: &[Binder] = &[
@@ -163,6 +166,16 @@ const BINDERS: &[Binder] = &[
         name: "pv",
         type_: "(Pinned(a, p1)) -> Nat",
         needs: &["a", "p1"],
+    },
+    Binder {
+        name: "r",
+        type_: "(Nat) -> Bool",
+        needs: &[],
+    },
+    Binder {
+        name: "m",
+        type_: "(Bool) -> Bool",
+        needs: &[],
     },
 ];
 
@@ -754,9 +767,17 @@ enum Under {
     Proved,
     /// The fact with the case's value written, by `True/qed()`.
     AtCase,
+    /// The control of the cell before it: the two matches nested the other way, the fact with the case's value written.
+    Reversed,
 }
 
-const UNDERS: &[Under] = &[Under::Outside, Under::Qed, Under::Proved, Under::AtCase];
+const UNDERS: &[Under] = &[
+    Under::Outside,
+    Under::Qed,
+    Under::Proved,
+    Under::AtCase,
+    Under::Reversed,
+];
 
 const SUBSTITUTIONS: &[Substitution] = &[
     Substitution {
@@ -796,7 +817,126 @@ const SUBSTITUTIONS: &[Substitution] = &[
         refused: &[],
         certifier: &[],
     },
+    // The same guard behind a definition: its spelling as written names no `e(c)`, so the arm on `e(c)` restates nothing and the guard's fact at the case is refused, at either case.
+    Substitution {
+        guard: "pick(e, k, c)",
+        variable: "e(c)",
+        case: "true",
+        other: "false",
+        at_case: "k(0)",
+        refused: &[Under::AtCase],
+        certifier: &[],
+    },
+    Substitution {
+        guard: "pick(e, k, c)",
+        variable: "e(c)",
+        case: "false",
+        other: "true",
+        at_case: "k(1)",
+        refused: &[Under::AtCase],
+        certifier: &[],
+    },
+    // The second match's scrutinee behind a definition: the guard's spelling holds `e(c)` and no `test(e, c)`. The fact as written is refused too: the arm's equation answers the `e(c)` inside it, so what reduction is left holding is `k(0)`, where the guard's spelling is the match.
+    Substitution {
+        guard: "(match e(c) | true => k(0) | false => k(1) end)",
+        variable: "test(e, c)",
+        case: "true",
+        other: "false",
+        at_case: "k(0)",
+        refused: &[Under::Qed, Under::Proved, Under::AtCase],
+        certifier: &[],
+    },
+    // The guard's call in an argument, which conversion compares whole: the fact is no operation of the algebra, whose atoms are classed with every equation in force.
+    Substitution {
+        guard: "m(pick(e, k, c))",
+        variable: "e(c)",
+        case: "true",
+        other: "false",
+        at_case: "m(k(0))",
+        refused: &[Under::AtCase],
+        certifier: &[],
+    },
+    // The second match's scrutinee respelled, with nothing unfolded: the guard's spelling holds `a + b < 10` and no `b + a < 10`, and the fact as written is refused as the row before's is.
+    Substitution {
+        guard: "(match a + b < 10 | true => k(0) | false => k(1) end)",
+        variable: "b + a < 10",
+        case: "true",
+        other: "false",
+        at_case: "k(0)",
+        refused: &[Under::Qed, Under::Proved, Under::AtCase],
+        certifier: &[],
+    },
 ];
+
+/// A cell no row's columns state: a guard under two matches, one inside the other, and a fact no arm's equation reaches.
+struct Nest {
+    at: &'static str,
+    body: &'static str,
+    stated: Answer,
+}
+
+const NESTS: &[Nest] = &[
+    // A guard that meets one arm's scrutinee and, in that case, another's: each arm restates nothing, in either order, and the guard innermost is the control.
+    Nest {
+        at: "`chain(e, r, k, c)` under a match on `r(c)` and one on `e(c)` inside it",
+        body: "match chain(e, r, k, c) | true => (match r(c) | true => (match e(c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    Nest {
+        at: "`chain(e, r, k, c)` under a match on `e(c)` and one on `r(c)` inside it",
+        body: "match chain(e, r, k, c) | true => (match e(c) | true => (match r(c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    Nest {
+        at: "`chain(e, r, k, c)` inside a match on `r(c)` and one on `e(c)`",
+        body: "match r(c) | true => (match e(c) | true => (match chain(e, r, k, c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end) | false => () end",
+        stated: Answer::Held,
+    },
+    // A guard that meets one arm's scrutinee, under that arm and one that says nothing of it.
+    Nest {
+        at: "`pick(e, k, c)` under a match on `r(c)` and one on `e(c)` inside it",
+        body: "match pick(e, k, c) | true => (match r(c) | true => (match e(c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    Nest {
+        at: "`pick(e, k, c)` under a match on `e(c)` and one on `r(c)` inside it",
+        body: "match pick(e, k, c) | true => (match e(c) | true => (match r(c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    // The near misses, which no reading of the two equations holds: the other case's fact, an arm on another expression, and the guard's other arm.
+    Nest {
+        at: "`pick(e, k, c)` under a match on `e(c)`, the fact of the case beside",
+        body: "match pick(e, k, c) | true => (match e(c) | true => () | false => let _: Holds(k(0)) = True/qed(); () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    Nest {
+        at: "`pick(e, k, c)` under a match on `e(a)`",
+        body: "match pick(e, k, c) | true => (match e(a) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) | false => () end",
+        stated: Answer::Refused,
+    },
+    Nest {
+        at: "`pick(e, k, c)` at `false` under a match on `e(c)`",
+        body: "match pick(e, k, c) | true => () | false => (match e(c) | true => let _: Holds(k(0)) = True/qed(); () | false => () end) end",
+        stated: Answer::Refused,
+    },
+    // A second match on the guard's own scrutinee, in the arm no value reaches: the arm's own equation answers before the guard's, so the arm holds its case. The proofs the elaborator writes for a bound rest on it, splitting a conjunction by a match on a comparison an arm around it decided.
+    Nest {
+        at: "`+0 <= i` at `false` under a second match on `+0 <= i`, its `true` arm",
+        body: "match +0 <= i | false => (match +0 <= i | true => let _: Holds(+0 <= i) = True/qed(); () | false => () end) | true => () end",
+        stated: Answer::Held,
+    },
+];
+
+impl Nest {
+    fn cell(&self) -> Cell {
+        Cell {
+            at: self.at.to_owned(),
+            result: "{}".to_owned(),
+            body: self.body.to_owned(),
+            stated: self.stated,
+        }
+    }
+}
 
 impl Substitution {
     fn cells(&self) -> Vec<Cell> {
@@ -823,6 +963,9 @@ impl Substitution {
                     Under::Qed => inside(guard, "True/qed()"),
                     Under::Proved => inside(guard, "proved()"),
                     Under::AtCase => inside(at_case, "True/qed()"),
+                    Under::Reversed => format!(
+                        "match {variable} | {case} => (match {guard} | true => let _: Holds({at_case}) = True/qed(); () | false => () end) | {other} => () end"
+                    ),
                 };
                 Cell {
                     at: format!("`{guard}` under a match on `{variable}`, {under:?}"),
@@ -908,6 +1051,13 @@ fn every_guard_under_a_match_on_its_variable_is_on_the_side_stated() {
         .iter()
         .flat_map(Substitution::cells)
         .collect::<Vec<_>>();
+    let misplaced = misplaced(&cells);
+    assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
+}
+
+#[test]
+fn every_guard_under_matches_nested_in_its_arm_is_on_the_side_stated() {
+    let cells = NESTS.iter().map(Nest::cell).collect::<Vec<_>>();
     let misplaced = misplaced(&cells);
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
 }
@@ -1019,6 +1169,7 @@ fn every_held_cell_holds_at_every_order_of_its_binders() {
         .flat_map(Guard::cells)
         .chain(ATOMS.iter().flat_map(Atoms::cells))
         .chain(SUBSTITUTIONS.iter().flat_map(Substitution::cells))
+        .chain(NESTS.iter().map(Nest::cell))
         .filter(|cell| cell.stated == Answer::Held)
         .collect::<Vec<_>>();
     let held = cells.iter().collect::<Vec<_>>();
