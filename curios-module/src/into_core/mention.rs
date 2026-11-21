@@ -33,6 +33,17 @@ pub struct Mention {
     pub declared: Option<curios_core::Declared>,
 }
 
+/// A bare name a text writes that resolved through a binding a `use` line brought into its body's scope ([`Text::brought`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Brought {
+    /// Where the name is written.
+    pub name: Span,
+    /// The line, as it is written.
+    pub line: Span,
+    /// Where the line writes what brought the name: what it selects, or a glob's module.
+    pub at: Span,
+}
+
 /// One text a unit was lowered from: a source declaration's, or the term its program closes with.
 pub struct Text<'a> {
     unit: &'a PreparedText,
@@ -251,6 +262,32 @@ impl Text<'_> {
         mentions.sort_by_key(|mention| (mention.span.start, mention.span.end));
 
         mentions
+    }
+
+    /// Each bare name this text writes that resolved through a binding a `use` line brought into its body's scope, with the line, in the order they are written: of the bare names its lowering wrote that the module's scope resolved ([`curios_core::Mints::bare`]), each one a line's imports hold the binding of in scope where the text is written ([`curios_core::Imports::bringing`]), a name a declaration of the module binds having none. None on a `use` or a `mod` line, which is the line.
+    pub fn brought(&self) -> Vec<Brought> {
+        let anchors = self.unit.anchors();
+        let owner = self.owner();
+        let mut brought = self
+            .mints()
+            .into_iter()
+            .flat_map(|mints| mints.bare.iter())
+            .filter(|at| (at.anchor, at.stamp) == self.key)
+            .filter_map(|at| {
+                let name = self.placed(at.start, at.end)?;
+                let label = &name.source.text()[name.start..name.end];
+                let line = self.unit.imports().bringing(owner.as_ref(), label)?;
+
+                Some(Brought {
+                    name,
+                    line: anchors.text_of((line.at.anchor, line.at.stamp))?,
+                    at: line.at.resolved(&[anchors])?,
+                })
+            })
+            .collect::<Vec<_>>();
+        brought.sort_by_key(|brought| (brought.name.start, brought.name.end));
+
+        brought
     }
 
     /// Where every contextual word that opened a member this text writes stands, in the order they are written ([`curios_core::Mints::words`]).

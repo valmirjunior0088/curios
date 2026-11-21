@@ -64,6 +64,7 @@ fn said(answer: &Answer) -> (&str, Declared, bool, Option<(usize, usize)>) {
         Stands::Declaration {
             declares,
             described,
+            ..
         } => row(described, *declares),
         Stands::Local { name, .. } => panic!("a local stands there, `{name}`, and no declaration"),
         Stands::Field { label, .. } => {
@@ -259,6 +260,7 @@ fn a_members_binder_answers_as_the_member() {
         Some(Stands::Declaration {
             declares: false,
             described,
+            ..
         }) => assert_eq!(
             (described.asked.as_str(), described.declared),
             ("/Shown/shown", Declared::Method)

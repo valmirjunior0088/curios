@@ -28,7 +28,8 @@ use {
     curios_document::{Documentation, Kind, ModuleDocumentation},
     curios_elab::{Resolved, Traces},
     curios_module::{
-        Exposure, Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity, written,
+        Brought, Exposure, Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity,
+        written,
     },
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
@@ -136,6 +137,8 @@ pub struct Written {
     pub modules: Vec<(Span, Qualifier)>,
     /// Where each contextual word that opened a member the text writes stands, in the order they are written (`curios_module::Text::words`).
     pub words: Vec<Span>,
+    /// Each bare name the text writes that a `use` line brought into its body's scope, with the line, in the order they are written (`curios_module::Text::brought`).
+    pub brought: Vec<Brought>,
 }
 
 /// A structure's field named by the label it is written with ([`Stands::Field`]): where the label is written, the field's label, the path of the structure that declares it, where the structure writes the field, and its type as the structure declares it, spelled for a reader standing in the text.
@@ -176,10 +179,11 @@ pub struct Answer {
 /// What stands at a place ([`Answer`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stands {
-    /// A name, and the declaration it names, its type spelled where the name is written.
+    /// A name, and the declaration it names, its type spelled where the name is written, with the `use` line that brought it into scope where it is a bare name that came in through one.
     Declaration {
         declares: bool,
         described: Described,
+        brought: Option<Box<Brought>>,
     },
     /// A written binder, where it is bound or read: what it binds — a parameter, a type parameter or a local ([`Binds::is_local`]) — its name, where it is bound, and its type, the one it was opened at where it is bound and the one a use settled at where it is read.
     Local {
@@ -291,11 +295,19 @@ impl Placed {
                 described.stated = adopted(&described.asked);
             }
 
+            let brought = written
+                .brought
+                .iter()
+                .find(|brought| brought.name == named.written)
+                .cloned()
+                .map(Box::new);
+
             return Some(Answer {
                 range: named.written.clone(),
                 stands: Stands::Declaration {
                     declares: named.declares,
                     described,
+                    brought,
                 },
             });
         }
@@ -365,6 +377,7 @@ impl Placed {
                             type_: written.types.get(&method).cloned(),
                             ..described.clone()
                         },
+                        brought: None,
                     },
                     None => local_stands(name, bound, type_),
                 },
@@ -677,6 +690,7 @@ impl Reading {
                     fields: Vec::new(),
                     modules: passage.modules(),
                     words: passage.words(),
+                    brought: passage.brought(),
                 }
             })
             .collect::<Vec<_>>();

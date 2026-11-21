@@ -908,7 +908,7 @@ fn witnessed_at(buffer: &str, checked: &Placed, offset: usize) -> Option<Vec<Spa
     )
 }
 
-/// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, a local by its name and a term by its text; then each fact a block states of it a line ([`Answer::facts`]); then the prose above a declaration.
+/// What stands at a place as an editor shows it, in Markdown: a declaration by its head as source, or the path it is exposed at where its text states none, a local by its name and a term by its text; then each fact a block states of it a line ([`Answer::facts`]); then the prose above a declaration; and last the `use` line a bare name came in through, as it is written.
 fn markup(answer: &Answer) -> String {
     let fenced = |source: &str| format!("```curios\n{source}\n```");
     let facts = answer
@@ -942,6 +942,16 @@ fn markup(answer: &Answer) -> String {
     }
     if !prose.is_empty() {
         parts.push(prose.join("\n"));
+    }
+    // The `use` line a bare name came in through, as it is written.
+    if let Stands::Declaration {
+        brought: Some(brought),
+        ..
+    } = &answer.stands
+    {
+        parts.push(fenced(
+            &brought.line.source.text()[brought.line.start..brought.line.end],
+        ));
     }
 
     parts.join("\n\n")

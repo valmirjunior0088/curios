@@ -32,7 +32,7 @@ pub use into_core::{
     ArchivedFound, ArchivedHalfEntry, ArchivedHead, ArchivedHeaded, ArchivedInterface,
     ArchivedLabelled, ArchivedLookup, ArchivedLoweredDeclaration, ArchivedLoweredItem,
     ArchivedModuleInfo, ArchivedNominal, ArchivedPreparedText, ArchivedPublicInterface,
-    ArchivedReached, ArchivedScan, Audiences, BaselineHalf, Bodies, BrokenItem, ChildInfo,
+    ArchivedReached, ArchivedScan, Audiences, BaselineHalf, Bodies, BrokenItem, Brought, ChildInfo,
     Consulted, Declared, Entry, EntryNames, Exposure, Family, Found, HalfEntry, Head, Headed,
     Heading, Interface, Labelled, Lookup, LookupReaders, LoweredDeclaration, LoweredEntry,
     LoweredItem, Mention, ModuleInfo, Nominal, PreparedText, PublicInterface, Reachability,

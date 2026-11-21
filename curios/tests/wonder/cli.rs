@@ -952,3 +952,37 @@ fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
     );
     assert_eq!(part, "let helper(x: /std/Nat) -> /std/Nat =\n    x + 1;\n");
 }
+
+/// A place's answer at a bare name a `use` line brought into scope states that line as it is written, an entry closed by where the line writes what brought the name, each name by its own line; an answer at a name the file declares, or at the line itself, states none.
+#[test]
+fn a_bare_name_is_answered_with_the_line_that_brought_it() {
+    let root = temporary("named-brought");
+    write(
+        &root,
+        "brought.crs",
+        "use /std/{Nat};\nuse /std/{Bool, print};\n\npub let same(n: Nat) -> Bool =\n    n == n;\n\npub let twice(n: Nat) -> Bool =\n    same(n);\n\nprint(\"\")\n",
+    );
+    let at = |place: &str| stdout(&curios(&root, &["wonder", "--at", place], ""));
+
+    for (place, line) in [
+        ("brought.crs:4:17", "use /std/{Nat}; brought.crs:1:11"),
+        (
+            "brought.crs:4:25",
+            "use /std/{Bool, print}; brought.crs:2:11",
+        ),
+        (
+            "brought.crs:10:1",
+            "use /std/{Bool, print}; brought.crs:2:17",
+        ),
+    ] {
+        let answered = at(place);
+        assert!(
+            answered.contains(&format!("\n├─ {line}\n")),
+            "{place}: {answered}"
+        );
+    }
+    for place in ["brought.crs:8:5", "brought.crs:1:11"] {
+        let answered = at(place);
+        assert!(!answered.contains("├─ use "), "{place}: {answered}");
+    }
+}

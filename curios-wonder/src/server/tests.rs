@@ -164,6 +164,34 @@ fn a_members_hover_shows_it_within_its_owner() {
     );
 }
 
+/// A bare name's hover ends on the `use` line that brought it into scope, as it is written, a glob's as a selection's; a name the program declares ends on none.
+#[test]
+fn a_bare_names_hover_ends_on_the_line_that_brought_it() {
+    const SELECTED: &str =
+        "use /std/{Nat, print};\nlet one: Nat = 1;\nlet two: Nat = one;\nprint(\"\")\n";
+    const GLOBBED: &str = "use /std/*;\nlet one: Nat = 1;\nprint(\"\")\n";
+    let hover = |program: &str, written: &str| {
+        let offset = program.rfind(written).expect("the program writes it");
+        let (answer, _) =
+            answered_at(program, &checked(program), offset).expect("a name stands there");
+
+        markup(&answer)
+    };
+
+    let selected = hover(SELECTED, "Nat = one");
+    assert!(
+        selected.ends_with("\n\n```curios\nuse /std/{Nat, print};\n```"),
+        "{selected}"
+    );
+    let declared = hover(SELECTED, "one;");
+    assert!(!declared.contains("use "), "{declared}");
+    let globbed = hover(GLOBBED, "Nat");
+    assert!(
+        globbed.ends_with("\n\n```curios\nuse /std/*;\n```"),
+        "{globbed}"
+    );
+}
+
 /// Every place of a program answers one record through both transports: the server's, off what the document's check left, and `wonder --at`'s, off its own question of the place, a name, a literal and the term holding them among them.
 #[test]
 fn a_place_answers_alike_through_both_transports() {

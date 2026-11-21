@@ -660,6 +660,8 @@ pub struct Declaring {
     >,
     // Every use of a written binder of the declaration being lowered that hides what the module's scope binds under its name. The declaration's, as its written binders are.
     hides: RefCell<Vec<curios_core::Hiding>>,
+    // Where each bare name of the declaration being lowered is written that the module's scope resolved. The declaration's, as its hiding uses are.
+    bare: RefCell<Vec<curios_core::Extent>>,
     // Every name the declaration being lowered resolved into a node rather than a term, where it is written. The declaration's, as its written binders are.
     named: RefCell<Vec<(curios_core::Extent, curios_core::Global)>>,
     // Every segment of a path the declaration being lowered writes that reaches a module, where it is written. The declaration's, as its written binders are.
@@ -684,6 +686,7 @@ impl Declaring {
             unread,
             written,
             hides,
+            bare,
             named,
             modules,
             words,
@@ -700,6 +703,7 @@ impl Declaring {
         unread.borrow_mut().clear();
         written.borrow_mut().clear();
         hides.borrow_mut().clear();
+        bare.borrow_mut().clear();
         named.borrow_mut().clear();
         modules.borrow_mut().clear();
         words.borrow_mut().clear();
@@ -722,6 +726,7 @@ impl Shared {
                 unread: RefCell::default(),
                 written: RefCell::default(),
                 hides: RefCell::default(),
+                bare: RefCell::default(),
                 named: RefCell::default(),
                 modules: RefCell::default(),
                 words: RefCell::default(),
@@ -917,6 +922,19 @@ impl<'a> Context<'a> {
         }
     }
 
+    // Record where the declaration being lowered writes the bare name `name`, which the module's scope resolved ([`curios_core::Mints::bare`]), where what a resolution reads is recorded.
+    fn note_bare(&self, name: &Name) {
+        if self.shared.anchoring.quiet.get() {
+            return;
+        }
+        if let Some(at) = name.span().and_then(|span| self.extent(span)) {
+            let mut bare = self.shared.declaring.bare.borrow_mut();
+            if !bare.contains(&at) {
+                bare.push(at);
+            }
+        }
+    }
+
     fn note_qualifier_use(&self, label: &str) {
         if let Some(&site) = self.qualifier_sites.get(label) {
             self.shared.sites.borrow_mut()[site].used = true;
@@ -1090,6 +1108,7 @@ impl<'a> Context<'a> {
             unread: self.shared.declaring.unread.borrow().clone(),
             written: self.shared.declaring.written.borrow().clone(),
             hides: self.shared.declaring.hides.borrow().clone(),
+            bare: self.shared.declaring.bare.borrow().clone(),
             named: self.shared.declaring.named.borrow().clone(),
             modules: self.shared.declaring.modules.borrow().clone(),
             words: self.shared.declaring.words.borrow().clone(),
@@ -1632,6 +1651,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
+        let from = self.in_scope.len();
         let result = (|| {
             let (reached, label) = self.resolve_parent_steps(name)?;
             let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
@@ -1641,12 +1661,13 @@ impl<'a> Context<'a> {
         })();
         let (reached, target) = result.map_err(|e| attach(e, name))?;
         let selected = self.line_named(target);
-        self.note_line(name, &reached, &[selected]);
+        self.note_line(name, &reached, &[selected], from);
 
         Ok(target)
     }
 
     pub fn resolve_binding_use(&mut self, name: &Name) -> Result<Qualifier, Error> {
+        let from = self.in_scope.len();
         let result = (|| {
             let (reached, label) = self.resolve_parent_steps(name)?;
             let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
@@ -1661,12 +1682,14 @@ impl<'a> Context<'a> {
             &[curios_core::LineNamed::Declaration(
                 curios_core::Global::Authored(target),
             )],
+            from,
         );
 
         Ok(target)
     }
 
     pub fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
+        let from = self.in_scope.len();
         let result = (|| {
             let (reached, label) = self.resolve_parent_steps(name)?;
             let parent = reached.last().copied().unwrap_or_else(Qualifier::empty);
@@ -1692,13 +1715,14 @@ impl<'a> Context<'a> {
         });
         let module = resolved.module.map(|module| self.line_named(module));
         let selected = declaration.into_iter().chain(module).collect::<Vec<_>>();
-        self.note_line(name, &reached, &selected);
+        self.note_line(name, &reached, &selected, from);
 
         Ok(resolved)
     }
 
     // A glob `use a/b/*` names a module directly and imports every public child and binding it exposes (including its re-exports), each under its own label.
     pub fn resolve_glob(&mut self, name: &Name) -> Result<Vec<(String, UseResolved)>, Error> {
+        let from = self.in_scope.len();
         let result = (|| {
             let reached = self.resolve_module_steps(name, name.qualifier().segments().len())?;
             let module = reached.last().copied().unwrap_or_else(Qualifier::empty);
@@ -1729,7 +1753,7 @@ impl<'a> Context<'a> {
             Ok((reached, imported))
         })();
         let (reached, imported) = result.map_err(|e| attach(e, name))?;
-        self.note_line(name, &reached, &[]);
+        self.note_line(name, &reached, &[], from);
 
         Ok(imported)
     }
@@ -1744,12 +1768,13 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Record what the `use` line being resolved writes of the path `name`, `reached` being the module each segment before the last reaches: each such segment, and the last naming each of `selected`, where the line writes it.
+    // Record what the `use` line being resolved writes of the path `name`, `reached` being the module each segment before the last reaches: each such segment, and the last naming each of `selected`, where the line writes it, the last stating the body's imports the line made from `from` on ([`curios_core::LineRole::Brings`]). A glob selects nothing: its path names the module it brings the members of, and its last segment states them.
     fn note_line(
         &mut self,
         name: &Name,
         reached: &[Qualifier],
         selected: &[curios_core::LineNamed],
+        from: usize,
     ) {
         let line = self
             .current_site
@@ -1757,24 +1782,39 @@ impl<'a> Context<'a> {
         let Some(line) = line else {
             return;
         };
+        let count =
+            |imports: usize| u32::try_from(imports).expect("a body's imports are counted in a u32");
+        let brings = curios_core::LineRole::Brings {
+            from: count(from),
+            to: count(self.in_scope.len()),
+        };
         let spans = name.segment_spans();
         let mut written = spans
             .iter()
             .zip(reached)
-            .map(|(span, module)| (span.clone(), self.line_named(*module)))
+            .map(|(span, module)| {
+                (
+                    span.clone(),
+                    self.line_named(*module),
+                    curios_core::LineRole::Reaches,
+                )
+            })
             .collect::<Vec<_>>();
-        if let Some(last) = spans.get(reached.len()) {
-            written.extend(selected.iter().map(|names| (last.clone(), *names)));
+        match spans.get(reached.len()) {
+            Some(last) => {
+                written.extend(selected.iter().map(|names| (last.clone(), *names, brings)));
+            }
+            None => {
+                if let Some((_, _, role)) = written.last_mut() {
+                    *role = brings;
+                }
+            }
         }
-        for (span, names) in written {
+        for (span, names, role) in written {
             if let Some(at) =
                 span.and_then(|span| self.shared.anchoring.line(self.prefix, &line, &span))
             {
-                self.lines.push(curios_core::LineName {
-                    at,
-                    names,
-                    declares: false,
-                });
+                self.lines.push(curios_core::LineName { at, names, role });
             }
         }
     }
@@ -1791,7 +1831,7 @@ impl<'a> Context<'a> {
         self.lines.push(curios_core::LineName {
             at,
             names: curios_core::LineNamed::Module(module),
-            declares: true,
+            role: curios_core::LineRole::Declares,
         });
     }
 
@@ -1916,6 +1956,7 @@ impl<'a> Context<'a> {
     pub fn resolve_bare(&self, name: &Name) -> Option<Found> {
         let target = self.bound(name.head(), true)?;
         self.note_binding_use(name.head());
+        self.note_bare(name);
         let found = self.found(target);
         self.asked(name, found);
 

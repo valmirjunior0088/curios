@@ -14,7 +14,7 @@ use {
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
     },
-    curios_module::{LoadError, Overlay},
+    curios_module::{Brought, LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
     curios_surface::WrittenIn,
@@ -811,13 +811,16 @@ pub fn wonder_at(
     match answered {
         None => {}
         Some(Answer {
-            stands: Stands::Declaration { described, .. },
+            stands: Stands::Declaration {
+                described, brought, ..
+            },
             ..
         }) => {
             answer(format_args!(
                 "{}\n",
                 drawn(
                     &described,
+                    brought.as_deref(),
                     Some(listing(&described.asked, Some(place.subject()))),
                     &reader
                 )
@@ -939,7 +942,12 @@ pub fn wonder_name(
     if let Some(described) = &declaration {
         answer(format_args!(
             "{}\n",
-            drawn(described, Some(listing(&path.join(), subject)), &reader)
+            drawn(
+                described,
+                None,
+                Some(listing(&path.join(), subject)),
+                &reader
+            )
         ));
         if let (None, Some(declaration)) = (&described.stated, &described.declaration) {
             answer(format_args!("\n{}\n", declaration.written()));
@@ -1082,12 +1090,24 @@ fn block(described: &Described, listing: Option<String>) -> Report {
     report
 }
 
-/// The block of `described` ([`block`]) as `wonder --name` and `wonder --at` write it for `reader`: its source, where a block shows one, the one entry on it ([`Stated`](crate::Stated)), so the answer is what its source does not show and then its source's own words.
-fn drawn(described: &Described, listing: Option<String>, reader: &Style) -> String {
+/// The block of `described` ([`block`]) as `wonder --name` and `wonder --at` write it for `reader`: its source, where a block shows one, the first entry on it ([`Stated`](crate::Stated)), so the answer is what its source does not show and then its source's own words; and where a place's answer is about a bare name a `use` line brought into scope, `brought`, the line as it is written, closed by where it writes what brought the name, as a further place is.
+fn drawn(
+    described: &Described,
+    brought: Option<&Brought>,
+    listing: Option<String>,
+    reader: &Style,
+) -> String {
+    let line = |brought: &Brought| {
+        let written = &brought.line.source.text()[brought.line.start..brought.line.end];
+        let written = written.strip_suffix(';').unwrap_or(written);
+
+        format!("{written}; {}", brought.at.place(reader))
+    };
     let entries = described
         .stated
         .iter()
         .map(|stated| stated.entry.clone())
+        .chain(brought.map(line))
         .collect::<Vec<_>>();
 
     block(described, listing).listing(Kind::Declaration, reader, &entries)

@@ -189,6 +189,8 @@ pub struct Mints {
     pub written: Vec<(WrittenBinder, Extent, Binds)>,
     /// Every use of a written binder that hides what the module's scope binds under its name ([`Hiding`]): what a mismatch at the use names beside its report. Held here, as `written` is.
     pub hides: Vec<Hiding>,
+    /// Where each bare name of the declaration is written that the module's scope resolved, whatever binds it there: what a place's answer at the name states the `use` line of, where one brought the binding ([`Imports::bringing`]). Held here, as `hides` is: the name's place and never the line's, so a declaration kept while a line above it is edited holds what a whole lowering of it holds, and every bare name the scope answered, so a lowering is a function of its text and the names it resolved.
+    pub bare: Vec<Extent>,
     /// Every name the lowering resolved into a node rather than into a term, where it is written: a literal's or a structure pattern's head, which no lowered term holds at its place. What a place's answer reads beside the names its terms write. Held here, as `written` is.
     pub named: Vec<(Extent, Global)>,
     /// Every segment of a path that reaches a module a `mod` line declares, where it is written, with the module: what a place's answer reads of a module. A segment reaching a declaration's namespace — a family's constructors, a concept's methods — is a name of the declaration (`named`). Held here, as `written` is.
@@ -256,6 +258,7 @@ impl Minted {
             unread: Vec::new(),
             written: Vec::new(),
             hides: Vec::new(),
+            bare: Vec::new(),
             named: Vec::new(),
             modules: Vec::new(),
             words: Vec::new(),
@@ -590,13 +593,25 @@ pub struct Imports {
     lines: Sorted<Qualifier, Rc<Filed<Vec<LineName>>>>,
 }
 
-/// A name a `use` or a `mod` line of a module body writes, where it stands in the line's text ([`Imports::lines`]): what it names, and whether the line declares it there, as a `mod` line declares its module.
+/// A name a `use` or a `mod` line of a module body writes, where it stands in the line's text ([`Imports::lines`]): what it names, and what it is to the line ([`LineRole`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct LineName {
     pub at: Extent,
     pub names: LineNamed,
-    pub declares: bool,
+    pub role: LineRole,
+}
+
+/// What a name a line writes is to the line ([`LineName`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum LineRole {
+    /// A segment of the path a `use` line walks to what it selects.
+    Reaches,
+    /// What a `use` line selects, or the module a glob's path names: the body's imports the selection made ([`Imports::body`]), from `from` up to `to`, the first it did not make, which bring the names it puts in scope.
+    Brings { from: u32, to: u32 },
+    /// The module a `mod` line declares.
+    Declares,
 }
 
 /// What a name a line writes names ([`LineName`]): a declaration — a binding a selector imports, or the family or the concept whose namespace a segment reaches — or a module.
@@ -765,6 +780,22 @@ impl Imports {
         self.lines
             .get(body)
             .map_or(&[][..], |lines| lines.as_slice())
+    }
+
+    /// The name of the `use` line that brought the binding `label` into scope at `owner`'s definition, or at the entrypoint tail: the selection, or the glob's module, whose imports hold the binding a bare `label` resolves to there ([`LineRole::Brings`]). `None` where no `use` line of the body brought one.
+    pub fn bringing(&self, owner: Option<&Global>, label: &str) -> Option<&LineName> {
+        let body = owner
+            .and_then(|owner| self.by_item.get(owner))
+            .unwrap_or(&self.tail)
+            .body;
+        let index = self.at(owner).iter().position(
+            |import| matches!(import, Import::Binding { spelling, .. } if spelling == label),
+        )?;
+        let index = u32::try_from(index).ok()?;
+
+        self.lines(&body).iter().find(
+            |line| matches!(line.role, LineRole::Brings { from, to } if from <= index && index < to),
+        )
     }
 
     /// The greatest body whose lines name something, in the modules' order.

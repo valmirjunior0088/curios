@@ -823,7 +823,10 @@ impl PreparedText {
         self.imports()
             .lines(&module.without_last())
             .iter()
-            .find(|line| line.declares && line.names == curios_core::LineNamed::Module(*module))
+            .find(|line| {
+                line.role == curios_core::LineRole::Declares
+                    && line.names == curios_core::LineNamed::Module(*module)
+            })
             .map(|line| line.at)
     }
 
@@ -870,7 +873,7 @@ impl PreparedText {
         });
         let mut children = lines
             .iter()
-            .filter(|line| line.declares)
+            .filter(|line| line.role == curios_core::LineRole::Declares)
             .filter_map(|line| match line.names {
                 curios_core::LineNamed::Module(child)
                     if info.get_child(child.last()) == Some(true) =>
