@@ -7,6 +7,11 @@
 #[cfg(test)]
 mod tests;
 
+// The build script's entry of the images, for its suite alone: a build script is no test target, and the library of its own package is no dependency of it.
+#[cfg(test)]
+#[path = "../entry.rs"]
+mod entry;
+
 mod restore;
 pub use restore::{documentation, root_prefixes, with_prelude};
 

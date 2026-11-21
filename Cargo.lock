@@ -921,6 +921,7 @@ dependencies = [
  "curios-unit",
  "curios-verdict",
  "curios-wonder",
+ "toml",
 ]
 
 [[package]]
