@@ -217,13 +217,10 @@ fn a_place_answers_the_name_written_there() {
         answer,
         concat!(
             "/app/util/word\n",
-            "│  public definition\n",
-            "│  type: `/std/Str`\n",
-            "│  totality: total\n",
+            "│  total\n",
+            "├─ --- The word a run prints.\n",
+            "│  pub let word: /std/Str\n",
             "└─ [declaration] util.crs:2:9\n",
-            "\n",
-            "--- The word a run prints.\n",
-            "pub let word: /std/Str\n",
         )
     );
 
@@ -411,7 +408,7 @@ fn a_module_is_answered_by_a_block_whether_or_not_a_page_shows_it() {
         stdout(&shown),
         concat!(
             "/app/util\n",
-            "│  public module, exposing 1 name and 0 modules\n",
+            "│  public module, exposing 1 name\n",
             "├─ pub let word: /std/Str\n",
             "└─ [module] lib.crs:1:9\n",
         )
@@ -429,7 +426,7 @@ fn a_module_is_answered_by_a_block_whether_or_not_a_page_shows_it() {
             "/app/kept\n",
             "│  private module, exposing 1 name and 1 module\n",
             "├─ pub let word: /std/Str\n",
-            "├─ pub mod deeper\n",
+            "├─ pub mod deeper, exposing 1 name\n",
             "└─ [module] lib.crs:2:5\n",
         )
     );
@@ -457,7 +454,7 @@ fn a_private_module_answers_where_its_library_does_not_check() {
         stdout(&kept),
         concat!(
             "/app/kept\n",
-            "│  private module, exposing 1 name and 0 modules\n",
+            "│  private module, exposing 1 name\n",
             "├─ pub let word: /std/Str\n",
             "└─ [module] lib.crs:2:5\n",
         )
@@ -494,7 +491,7 @@ fn a_path_naming_a_module_answers_the_module_beside_its_declaration() {
         stdout(&module),
         concat!(
             "/app/util\n",
-            "│  public module, exposing 1 name and 0 modules\n",
+            "│  public module, exposing 1 name\n",
             "├─ pub let word: /std/Str\n",
             "└─ [module] lib.crs:1:9\n",
         )
@@ -510,20 +507,255 @@ fn a_path_naming_a_module_answers_the_module_beside_its_declaration() {
         stdout(&facade),
         concat!(
             "/app/word\n",
-            "│  public definition, declared at `/app/word/word`\n",
-            "│  type: `Str`\n",
-            "│  totality: total\n",
+            "│  total\n",
+            "│  declared at `/app/word/word`\n",
+            "├─ pub let word: /std/Str\n",
             "└─ [declaration] word.crs:1:9\n",
             "\n",
-            "pub let word: /std/Str =\n",
-            "    \"w\";\n",
-            "\n",
             "/app/word\n",
-            "│  public module, exposing 2 names and 0 modules\n",
-            "├─ pub let word: /std/Str\n",
+            "│  public module, exposing 1 more name\n",
             "├─ pub let other: /std/Str\n",
             "└─ [module] lib.crs:2:9\n",
         )
+    );
+}
+
+/// A program of a kept structure, a sealed concept whose method is noted, a family and a concept whose representations are public, a definition not known to terminate, a proof, and a witness the compiler writes.
+const FACTS: &str = "use /std/{Nat, Eq};
+
+--- A shade, kept.
+struct Shade: Type {
+    depth: Nat,
+}
+
+--- A size.
+concept Sized(T: Type): Type {
+    --- How big.
+    size(T) -> Nat,
+}
+
+induct Tone: pub Type
+| high()
+| low()
+end
+
+concept Named(T: Type): pub Type {
+    name(T) -> Nat,
+}
+
+--- Never returns.
+let spin(n: Nat) -> Nat =
+    spin(n);
+
+--- One is one.
+let one_is_one: Eq()(1, 1) =
+    Eq/refl();
+
+struct Dot: pub Type {
+    x: Nat,
+}
+
+satisfy /std/Spell(Dot) { .. }
+
+/std/print(\"\")
+";
+
+/// A declaration's block states what its source does not show, in the words its documentation page says the same facts in — how its representation stands, that it is a proof, whether it is proven total — and holds its source as one entry: its prose above its head, its members with it whether or not a consumer sees them, and its body left out. What the source line shows, its keyword and its own `pub`, is no fact, and neither is a type the head states.
+#[test]
+fn a_block_states_what_a_source_does_not_show_and_holds_the_source() {
+    let root = temporary("named-facts");
+    write(&root, "facts.crs", FACTS);
+    let named = |path: &str| {
+        let answered = curios(&root, &["wonder", "--name", path, "facts.crs"], "");
+        assert!(
+            answered.status.success(),
+            "{}",
+            String::from_utf8_lossy(&answered.stderr)
+        );
+
+        stdout(&answered)
+    };
+
+    assert_eq!(
+        named("/Shade"),
+        concat!(
+            "/Shade\n",
+            "│  opaque\n",
+            "├─ --- A shade, kept.\n",
+            "│  struct Shade: Type {\n",
+            "│      depth: Nat,\n",
+            "│  }\n",
+            "└─ [declaration] facts.crs:4:8\n",
+        )
+    );
+    assert_eq!(
+        named("/Sized"),
+        concat!(
+            "/Sized\n",
+            "│  sealed\n",
+            "├─ --- A size.\n",
+            "│  concept Sized(T: Type): Type {\n",
+            "│      size(T) -> Nat,\n",
+            "│  }\n",
+            "└─ [declaration] facts.crs:9:9\n",
+        )
+    );
+    assert_eq!(
+        named("/Tone"),
+        concat!(
+            "/Tone\n",
+            "│  transparent\n",
+            "├─ induct Tone: pub Type\n",
+            "│  | high()\n",
+            "│  | low()\n",
+            "│  end\n",
+            "└─ [declaration] facts.crs:14:8\n",
+        )
+    );
+    assert!(named("/Named").starts_with("/Named\n│  unsealed\n"));
+    assert_eq!(
+        named("/spin"),
+        concat!(
+            "/spin\n",
+            "│  partial\n",
+            "├─ --- Never returns.\n",
+            "│  let spin(n: Nat) -> Nat\n",
+            "└─ [declaration] facts.crs:24:5\n",
+        )
+    );
+    assert_eq!(
+        named("/one_is_one"),
+        concat!(
+            "/one_is_one\n",
+            "│  proof, total\n",
+            "├─ --- One is one.\n",
+            "│  let one_is_one: Eq()(1, 1)\n",
+            "└─ [declaration] facts.crs:28:5\n",
+        )
+    );
+    // A member is answered within its owner's head and closing word, its own prose above its own line and its siblings left out.
+    assert_eq!(
+        named("/Sized/size"),
+        concat!(
+            "/Sized/size\n",
+            "├─ concept Sized(T: Type): Type {\n",
+            "│      --- How big.\n",
+            "│      size(T) -> Nat,\n",
+            "│  }\n",
+            "└─ [declaration] facts.crs:11:5\n",
+        )
+    );
+    assert_eq!(
+        named("/Tone/low"),
+        concat!(
+            "/Tone/low\n",
+            "├─ induct Tone: pub Type\n",
+            "│  | low()\n",
+            "│  end\n",
+            "└─ [declaration] facts.crs:16:3\n",
+        )
+    );
+
+    // A place answers the name written there by the same block: a proof of the file's own, once the file checks, and a witness, which has no path and is answered by its head, the compiler writing its body.
+    let at = |place: &str| stdout(&curios(&root, &["wonder", "--at", place], ""));
+    assert_eq!(at("facts.crs:28:5"), named("/one_is_one"));
+    assert_eq!(
+        at("facts.crs:35:24"),
+        concat!(
+            "/std/Spell(Dot)\n",
+            "│  derived\n",
+            "├─ satisfy /std/Spell(Dot)\n",
+            "└─ [declaration] facts.crs:35:9\n",
+        )
+    );
+}
+
+/// What the compiler provides is answered as any other declaration: by the word that says the compiler provides it, by its source as the library's documentation holds it, and on the path asked, since no reader writes the root that declares it. A facade's module then lists what it exposes beside that declaration.
+#[test]
+fn what_the_compiler_provides_is_answered_on_the_path_asked() {
+    let root = temporary("named-intrinsic");
+    fs::create_dir_all(&root).unwrap();
+    let named = |path: &str| stdout(&curios(&root, &["wonder", "--name", path], ""));
+
+    let option = named("/std/Option");
+    assert!(
+        option.starts_with("/std/Option\n│  transparent, intrinsic\n│  witnesses: "),
+        "{option}"
+    );
+    assert!(
+        option.contains(concat!(
+            "│  pub induct Option(A: Sort): pub Type\n",
+            "│  | some(A)\n",
+            "│  | none()\n",
+            "│  end\n",
+            "├─ try; curios wonder --name /std/Option --witnesses\n",
+            "└─ [declaration] /std/Option\n",
+            "\n",
+            "/std/Option\n",
+        )),
+        "{option}"
+    );
+    assert!(
+        option.contains("more names\n├─ pub use Option/{some, none}\n"),
+        "the module lists what it exposes beside the declaration: {option}"
+    );
+    assert!(!option.contains("/sys"), "{option}");
+
+    assert_eq!(
+        named("/std/Option/some"),
+        concat!(
+            "/std/Option/some\n",
+            "│  intrinsic\n",
+            "├─ pub induct Option(A: Sort): pub Type\n",
+            "│  --- The value is there.\n",
+            "│  | some(A)\n",
+            "│  end\n",
+            "└─ [declaration] /std/Option/some\n",
+        )
+    );
+
+    // A place that names what the compiler provides answers the same: its source off the library's documentation, on the path a reader writes.
+    let placed = stdout(&curios(
+        &root,
+        &["wonder", "--at", "<stdin>:1:13"],
+        "let n: /std/Nat = 1;\n/std/print(\"\")\n",
+    ));
+    assert!(
+        placed.starts_with("/std/Nat\n│  intrinsic, total\n│  witnesses: "),
+        "{placed}"
+    );
+    assert!(
+        placed.contains("│  pub let Nat: Type\n├─ try; curios wonder --name /std/Nat --witnesses -\n└─ [declaration] /std/Nat\n"),
+        "{placed}"
+    );
+}
+
+/// A block says the path a declaration is declared at where its last line does not: a declaration of a library read from no file closes on that path, and one a file holds on its place, the path above it.
+#[test]
+fn a_block_says_where_a_declaration_is_declared_once() {
+    let root = temporary("named-declared-at");
+    fs::create_dir_all(&root).unwrap();
+
+    let show = stdout(&curios(&root, &["wonder", "--name", "/std/Show"], ""));
+    assert!(
+        show.starts_with("/std/Show\n│  unsealed\n│  witnesses: "),
+        "{show}"
+    );
+    assert!(!show.contains("declared at"), "{show}");
+    assert!(
+        show.contains("\n└─ [declaration] /std/Show/Show\n"),
+        "{show}"
+    );
+
+    // A name of a unit in scope that is a proof says so where it is written, as the unit's check established it.
+    let proof = stdout(&curios(
+        &root,
+        &["wonder", "--at", "<stdin>:1:28"],
+        "let q = /std/Option/some_injective;\n/std/print(\"\")\n",
+    ));
+    assert!(
+        proof.starts_with("/std/Option/some_injective\n│  proof, total\n├─ --- "),
+        "{proof}"
     );
 }
 
@@ -559,10 +791,8 @@ fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
         stdout(&answered),
         concat!(
             "/one\n",
-            "│  private definition\n",
+            "├─ let one: /std/Nat\n",
             "└─ [declaration] <stdin>:1:5\n",
-            "\n",
-            "let one: /std/Nat\n",
         )
     );
 }
@@ -611,7 +841,7 @@ fn a_question_stopped_by_goals_alone_exits_two() {
     assert_eq!(answered.status.code(), Some(0));
 }
 
-/// `--footprint` answers the block `--name` answers with, then, a blank line before, a row a function of four tab-separated fields: here the one row of a declaration the program never reaches.
+/// `--footprint` answers the block `--name` answers with, without the source it holds there, then, a blank line before, a row a function of four tab-separated fields: here the one row of a declaration the program never reaches.
 #[test]
 fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
     let root = temporary("footprint");
@@ -633,11 +863,14 @@ fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
     let (block, rows) = stdout
         .split_once("\n\n")
         .expect("a blank line parts the block from the rows");
-    assert!(block.starts_with("/helper\n"), "{stdout}");
+    assert_eq!(
+        block, "/helper\n│  total\n└─ [declaration] <stdin>:1:5",
+        "{stdout}"
+    );
     assert_eq!(rows, "/helper\tnot linked\t-\t-\n");
 }
 
-/// `--stage` beside `--name` answers the block, then, a blank line before, the declaration's part of the rung, closed on a line of its own: at `text`, its text reprinted, and nothing of its neighbours.
+/// `--stage` beside `--name` answers the block, without the source it holds for `--name` alone, then, a blank line before, the declaration's part of the rung, closed on a line of its own: at `text`, its text reprinted, and nothing of its neighbours.
 #[test]
 fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
     let root = temporary("named-stage");
@@ -659,6 +892,9 @@ fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
     let (block, part) = stdout
         .split_once("\n\n")
         .expect("a blank line parts the block from the part");
-    assert!(block.starts_with("/helper\n"), "{stdout}");
+    assert_eq!(
+        block, "/helper\n│  total\n└─ [declaration] <stdin>:1:5",
+        "{stdout}"
+    );
     assert_eq!(part, "let helper(x: /std/Nat) -> /std/Nat =\n    x + 1;\n");
 }

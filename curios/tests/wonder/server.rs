@@ -725,7 +725,7 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         ),
     );
     assert!(
-        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```\n\nprivate definition  \ntype: `/std/Str`  \ntotality: total""#),
+        stated.contains(r#""value":"```curios\nlet one: /std/Str\n```\n\ntotal""#),
         "{stated}"
     );
     assert!(stated.contains(r#""kind":"markdown""#), "{stated}");
@@ -745,7 +745,7 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         ),
     );
     assert!(
-        typed.contains(r#""value":"```curios\npub let word: /std/Str\n```\n\npublic definition  \ntype: `/std/Str`  \ntotality: total""#),
+        typed.contains(r#""value":"```curios\npub let word: /std/Str\n```\n\ntotal""#),
         "{typed}"
     );
 

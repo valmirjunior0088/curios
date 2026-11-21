@@ -32,7 +32,7 @@ use stage::*;
 mod named;
 use named::*;
 pub use named::{
-    Answer, Declaration, Described, Fact, Local, Named, Placed, Stands, Witnessed, Written,
+    Answer, Declaration, Described, Fact, Local, Named, Placed, Stands, Stated, Witnessed, Written,
     WrittenField, described, placed,
 };
 

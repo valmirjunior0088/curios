@@ -929,6 +929,8 @@ fn markup(answer: &Answer) -> String {
             .as_ref()
             .and_then(|declaration| declaration.heading())
         {
+            // A member is shown within its owner's head, and any other by its head alone.
+            Some(heading) if heading.member => (heading.written(), heading.prose),
             Some(heading) => (heading.head, heading.prose),
             None => (described.asked.clone(), Vec::new()),
         },

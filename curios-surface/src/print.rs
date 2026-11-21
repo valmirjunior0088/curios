@@ -2462,37 +2462,6 @@ pub fn print_case_head(case: &TopCase) -> Printer {
     ])
 }
 
-/// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces, called once per parameter group — `success(A) -> Result(E, A)`, `cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)` for an indexed family, and `refl(@z: A) -> Eq()(z, z)` where every parameter is hidden.
-///
-/// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away. Of the family's own parameters it writes the explicit ones, as a signature writes the family, a hidden one being optional in the call that owns it.
-pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
-    let mut family = named(item.label.to_string());
-    if !item.params.is_empty() {
-        let explicit = item
-            .params
-            .iter()
-            .filter(|param| param.plicity == Plicity::Explicit)
-            .filter_map(|param| param.label.clone().map(pure))
-            .collect();
-        family = flat([family, listed("(", explicit, ")")]);
-    }
-    if let Some(target) = &case.target {
-        let indices = target
-            .iter()
-            .cloned()
-            .map(|index| PROGRAM.term(index))
-            .collect();
-        family = flat([family, listed("(", indices, ")")]);
-    }
-
-    flat([
-        pure(case.label.clone()),
-        PROGRAM.payload(case.payload.clone()),
-        pure(" -> "),
-        family,
-    ])
-}
-
 /// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
 pub fn print_struct_head(item: &TopStruct) -> Printer {
     flat([

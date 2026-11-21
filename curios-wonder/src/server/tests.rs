@@ -151,6 +151,19 @@ let three: /std/Nat = two;
 /std/print(\"\")
 ";
 
+/// A member's hover shows it within its owner, as a block's entry does: a constructor by its family's head, its own line and the closing word, with its prose beneath.
+#[test]
+fn a_members_hover_shows_it_within_its_owner() {
+    const PROGRAM: &str = "induct Tone: pub Type\n--- The high one.\n| high()\n| low()\nend\nlet one: Tone = Tone/high();\n/std/print(\"\")\n";
+    let offset = PROGRAM.rfind("high").expect("the program names it");
+    let (answer, _) = answered_at(PROGRAM, &checked(PROGRAM), offset).expect("a name stands there");
+
+    assert_eq!(
+        markup(&answer),
+        "```curios\ninduct Tone: pub Type\n| high()\nend\n```\n\nThe high one."
+    );
+}
+
 /// Every place of a program answers one record through both transports: the server's, off what the document's check left, and `wonder --at`'s, off its own question of the place, a name, a literal and the term holding them among them.
 #[test]
 fn a_place_answers_alike_through_both_transports() {

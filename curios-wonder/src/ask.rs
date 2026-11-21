@@ -8,8 +8,8 @@ use {
     crate::{
         Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
         Fact, Origin, Referent, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted,
-        Unput, checked, classed, declared_tests, described, diagnostics, falsified, footprint,
-        named_stage, placed, referent, stage, unit_stage,
+        Unput, checked, classed, declared_tests, described, diagnostics, exposing, falsified,
+        footprint, named_stage, placed, referent, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
@@ -637,7 +637,7 @@ fn no_lowering(name: &str) -> CompileError {
         .into()
 }
 
-/// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --stage STAGE [SUBJECT]`: the declaration `path` names in `scope`, at a rung a unit has, to stdout — the block `--name` answers with, without the source it holds there, then, a blank line before, its part of the rung, printed as the rung prints its whole (`named_stage`). A path that names nothing in scope is refused, as `core` is of a unit in scope's declaration, with the command that asks it of the file that holds it. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_named_stage(
     budget: u64,
     scope: Scope,
@@ -789,7 +789,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, opened on the path it is exposed at, then its prose and head as its author wrote them, where its text is held; for a term no name stands at, a block of what is written there, quoted at its place — and nothing where nothing stands there. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, its source the one entry on it, opened on the path it is exposed at; for a term no name stands at, a block of what is written there, quoted at its place — and nothing where nothing stands there. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -816,26 +816,12 @@ pub fn wonder_at(
         }) => {
             answer(format_args!(
                 "{}\n",
-                block(
+                drawn(
                     &described,
-                    Some(listing(&described.asked, Some(place.subject())))
+                    Some(listing(&described.asked, Some(place.subject()))),
+                    &reader
                 )
-                .rendered(Kind::Declaration, &reader)
             ));
-            if let Some(heading) = described
-                .declaration
-                .as_ref()
-                .and_then(Declaration::heading)
-            {
-                answer("\n");
-                for line in &heading.prose {
-                    match line.is_empty() {
-                        true => answer("---\n"),
-                        false => answer(format_args!("--- {line}\n")),
-                    }
-                }
-                answer(format_args!("{}\n", heading.head));
-            }
         }
         Some(Answer {
             stands: Stands::Module { path, place: at },
@@ -922,7 +908,7 @@ pub fn wonder_classes(
     Ok(())
 }
 
-/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block, then its whole text as its author wrote it, where its unit read one, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block holding its source as one entry, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it, and one whose source no block shows, Core text's, by its block and then its whole text; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between, the module's block listing what it exposes beside that declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_name(
     budget: u64,
     scope: Scope,
@@ -949,10 +935,9 @@ pub fn wonder_name(
     if let Some(described) = &declaration {
         answer(format_args!(
             "{}\n",
-            block(described, Some(listing(&path.join(), subject)))
-                .rendered(Kind::Declaration, &reader)
+            drawn(described, Some(listing(&path.join(), subject)), &reader)
         ));
-        if let Some(declaration) = &described.declaration {
+        if let (None, Some(declaration)) = (&described.stated, &described.declaration) {
             answer(format_args!("\n{}\n", declaration.written()));
         }
     }
@@ -963,14 +948,18 @@ pub fn wonder_name(
         }
         answer(format_args!(
             "{}\n",
-            module_block(path, module).listing(Kind::Module, &reader, &module.entries)
+            module_block(path, module, declaration.is_some()).listing(
+                Kind::Module,
+                &reader,
+                &module.entries
+            )
         ));
     }
 
     Ok(())
 }
 
-/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, then a row for each, its place, a tab, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, without the source it holds there, then a row for each, its place, a tab, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_witnesses(
     budget: u64,
     scope: Scope,
@@ -1000,8 +989,8 @@ pub fn wonder_witnesses(
     Ok(())
 }
 
-/// What a module is answered with, a block: its path, whether its `mod` line is written `pub` — a root, which no line declares, is a module and no more — and how many names and modules it exposes, closed on where its `mod` line names it, or on its path where the line is no place to open.
-fn module_block(path: &Qualifier, exported: &Exported) -> Report {
+/// What a module is answered with, a block: its path, whether its `mod` line is written `pub` — a root, which no line declares, is a module and no more — and how many names and modules it exposes ([`exposing`]), `more` saying a declaration answered before it stands at its path, closed on where its `mod` line names it, or on its path where the line is no place to open.
+fn module_block(path: &Qualifier, exported: &Exported, more: bool) -> Report {
     let about = match &exported.place {
         Some(place) => About::Place(place.clone()),
         None => About::Named(path.join()),
@@ -1012,19 +1001,12 @@ fn module_block(path: &Qualifier, exported: &Exported) -> Report {
         None => "module",
     };
 
-    Report::about(about, Said::line(path.join())).stating(format!(
-        "{module}, exposing {} and {}",
-        counted(exported.names, "name"),
-        counted(exported.modules, "module")
-    ))
-}
-
-/// `count` of what `noun` names, the noun plural past one.
-fn counted(count: usize, noun: &str) -> String {
-    match count {
-        1 => format!("1 {noun}"),
-        count => format!("{count} {noun}s"),
-    }
+    Report::about(about, Said::line(path.join())).stating(
+        match exposing(exported.names, exported.modules, more) {
+            Some(exposed) => format!("{module}, {exposed}"),
+            None => module.to_string(),
+        },
+    )
 }
 
 /// The command that answers what `path` names, asked in the scope of `subject` as the command line wrote it.
@@ -1071,10 +1053,11 @@ fn unknown_declaration(path: &Qualifier) -> CompileError {
         .into()
 }
 
-/// What `wonder --name`, its `--witnesses` view and `wonder --at` say of `described` first, a block: the path it is answered by, then each fact stated of it ([`Described::facts`]), a fact of several values laid over as many lines as keep each within a block's width, then `listing`, the command that lists its witnesses, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
+/// What `wonder --name`, its views and `wonder --at` say of `described` first, a block: the path it is answered by, then each fact stated of it ([`Described::facts`]), a fact of several values laid over as many lines as keep each within a block's width, then `listing`, the command that lists its witnesses, where there are any to list, closed on where its name is written, or where no file holds it on the path it is declared at — and on the path it was asked by where a root no reader names declares it.
 fn block(described: &Described, listing: Option<String>) -> Report {
     let about = match described.declaration.as_ref().and_then(Declaration::place) {
         Some(place) => About::Place(place.clone()),
+        None if described.adopted() => About::Named(described.asked.clone()),
         None => About::Named(described.path.clone()),
     };
     let mut report = Report::about(about, Said::line(&described.asked));
@@ -1092,6 +1075,17 @@ fn block(described: &Described, listing: Option<String>) -> Report {
     }
 
     report
+}
+
+/// The block of `described` ([`block`]) as `wonder --name` and `wonder --at` write it for `reader`: its source, where a block shows one, the one entry on it ([`Stated`](crate::Stated)), so the answer is what its source does not show and then its source's own words.
+fn drawn(described: &Described, listing: Option<String>, reader: &Style) -> String {
+    let entries = described
+        .stated
+        .iter()
+        .map(|stated| stated.entry.clone())
+        .collect::<Vec<_>>();
+
+    block(described, listing).listing(Kind::Declaration, reader, &entries)
 }
 
 /// A fact as a block states it: its lead, then its values, several laid over as many lines as keep each within a block's width.
@@ -1167,7 +1161,7 @@ fn no_such_stage(asked: &str) -> CompileError {
         .into()
 }
 
-/// `wonder --name PATH --footprint [SUBJECT]`: what the program holds of each function of the text of the declaration `path` names, to stdout — the block `--name` answers with, then a row for each function in the order the declaration writes them, each heap twin under its function: its hint (`-` for none), what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place, `-` for a function with no body of its own ([`Row`]). Four tab-separated fields a row, so `awk -F'\t' '$2 == "absorbed"'` is a whole question and a diff of two runs a diff of two files. A path that names nothing in scope is refused, as a subject written as a module is, which has no program. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --footprint [SUBJECT]`: what the program holds of each function of the text of the declaration `path` names, to stdout — the block `--name` answers with, without the source it holds there, then a row for each function in the order the declaration writes them, each heap twin under its function: its hint (`-` for none), what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place, `-` for a function with no body of its own ([`Row`]). Four tab-separated fields a row, so `awk -F'\t' '$2 == "absorbed"'` is a whole question and a diff of two runs a diff of two files. A path that names nothing in scope is refused, as a subject written as a module is, which has no program. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_footprint(
     budget: u64,
     program: Program,

@@ -32,48 +32,74 @@ fn a_private_definition_is_stated_by_its_head_and_the_prose_above_it() {
             &["Twice `n`.", "", "Never less than it."]
         )
     );
+    // A block shows it in one entry: the prose, each line behind the dashes that open one, above the head.
+    assert_eq!(
+        heading(DOUBLE, DOUBLE.find("double").expect("it is written"))
+            .expect("the name is a definition's")
+            .entry(),
+        "--- Twice `n`.\n---\n--- Never less than it.\nlet double(n: Nat) -> Nat"
+    );
 }
 
-/// A constructor stands apart from its type, so its head says what it builds, and a method is stated as its concept's block lists it.
+/// A member is stated within its owner: the head is its owner's, the one member listed is itself as its owner's block lists it, and the prose is its own. So it is written between its owner's head and closing word, its siblings left out, and a block's entry holds its prose above its own line.
 #[test]
-fn a_member_is_stated_as_it_stands_apart_from_its_owner() {
+fn a_member_is_stated_within_its_owner() {
+    let heading_of = |declaration: &str, name: &str| {
+        let (label, _) = declaration
+            .match_indices(name)
+            .next()
+            .expect("the declaration writes it");
+
+        heading(declaration, label).expect("the name is a definition's")
+    };
+
     const OPTION: &str =
         "pub induct Option(A: Type): pub Type\n--- A value.\n| some(A)\n| none()\nend";
+    let option = heading_of(OPTION, "Option");
     assert_eq!(
-        stated(OPTION, "Option", 0),
-        said("pub induct Option(A: Type): pub Type", &[])
+        (option.head.as_str(), option.member),
+        ("pub induct Option(A: Type): pub Type", false)
     );
+    let some = heading_of(OPTION, "some");
     assert_eq!(
-        stated(OPTION, "some", 0),
-        said("some(A) -> Option(A)", &["A value."])
-    );
-
-    const SHOW: &str =
-        "pub concept Show(A: Type): pub Type {\n    --- Its text.\n    show(A) -> Str,\n}";
-    assert_eq!(
-        stated(SHOW, "Show", 0),
-        said("pub concept Show(A: Type): pub Type", &[])
-    );
-    assert_eq!(
-        stated(SHOW, "show", 0),
-        said("show(A) -> Str", &["Its text."])
-    );
-
-    // A constructor calls its family once for each group of parameters the family writes, as a signature writes it: a hidden parameter is left out, so the call is empty, and the indices are a call of their own.
-    const EQ: &str = "pub induct Eq(@A: Sort): (A, A) -> pub Prop\n| refl(@z: A): (z, z)\nend";
-    assert_eq!(
-        stated(EQ, "refl", 0),
-        said("refl(@z: A) -> Eq()(z, z)", &[])
-    );
-
-    const VEC: &str = "pub induct Vec(T: Type): (Nat) -> pub Type\n| nil(): (0)\n| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\nend";
-    assert_eq!(
-        stated(VEC, "cons", 0),
-        said(
-            "cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)",
-            &[]
+        (some.head.as_str(), some.prose.as_slice(), some.member),
+        (
+            "pub induct Option(A: Type): pub Type",
+            &["A value.".to_string()][..],
+            true
         )
     );
+    assert_eq!(
+        some.written(),
+        "pub induct Option(A: Type): pub Type\n| some(A)\nend"
+    );
+    assert_eq!(
+        some.entry(),
+        "pub induct Option(A: Type): pub Type\n--- A value.\n| some(A)\nend"
+    );
+
+    // A method's prose stands at the indent the method is written at.
+    const SHOW: &str =
+        "pub concept Show(A: Type): pub Type {\n    --- Its text.\n    show(A) -> Str,\n}";
+    assert_eq!(heading_of(SHOW, "show").entry(), SHOW);
+
+    // A constructor is written as its family's block lists it, with the indices it targets, and not as it would stand alone, with the family it builds.
+    const VEC: &str = "pub induct Vec(T: Type): (Nat) -> pub Type\n| nil(): (0)\n| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\nend";
+    assert_eq!(
+        heading_of(VEC, "cons").written(),
+        "pub induct Vec(T: Type): (Nat) -> pub Type\n| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\nend"
+    );
+
+    // A member of a type whose representation is kept is written in the block its source writes, which whoever reads that source sees.
+    const KEPT: &str = "pub induct Shade: Type\n| light()\n| dark(Nat)\nend";
+    assert_eq!(
+        heading_of(KEPT, "dark").written(),
+        "pub induct Shade: Type\n| dark(Nat)\nend"
+    );
+    // And the type's own entry is the source's, its constructors with it, where a consumer's listing writes its head alone.
+    let kept = heading_of(KEPT, "Shade");
+    assert_eq!(kept.entry(), KEPT);
+    assert_eq!(kept.written(), "pub induct Shade: Type");
 }
 
 /// A witness is named by its head, a test by its name, and a member of a group by its own.
@@ -85,6 +111,14 @@ fn a_witness_a_test_and_a_group_member_are_each_stated() {
         stated(WITNESS, "Show(Nat)", 0),
         said("satisfy Show(Nat)", &["A number's digits."])
     );
+    // A witness whose body is `..` alone is one the compiler writes, and one that supplies its fields is not.
+    let derived = |declaration: &str, head: &str| {
+        heading(declaration, declaration.find(head).expect("it is written"))
+            .expect("the head is a witness's")
+            .derived
+    };
+    assert!(derived("satisfy Spell(Point) { .. }", "Spell(Point)"));
+    assert!(!derived(WITNESS, "Show(Nat)"));
 
     assert_eq!(
         stated("test holds =\n    assert(true);", "holds", 0),

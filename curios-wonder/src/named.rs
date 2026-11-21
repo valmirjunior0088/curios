@@ -286,6 +286,10 @@ impl Placed {
         if let Some(named) = named {
             let mut described = self.declarations.get(&named.named)?.clone();
             described.type_ = written.types.get(&named.named).cloned();
+            // What no text is held of is read off the documentation of the library that exposes it, where it is asked for.
+            if described.stated.is_none() && described.declaration.is_none() {
+                described.stated = adopted(&described.asked);
+            }
 
             return Some(Answer {
                 range: named.written.clone(),
@@ -506,6 +510,11 @@ impl Placed {
                         .types
                         .insert(name, type_.spelled(&reader).to_string());
                 }
+            }
+        }
+        for (name, described) in &mut self.declarations {
+            if owned(name) {
+                described.proof = proven(definitions, Some(&places), name);
             }
         }
         if let Some(certification) = certification {
@@ -777,7 +786,9 @@ impl<'s> Saying<'s> {
                 declared: said.declared,
                 public: said.public,
                 declaration: said.declaration,
+                stated: said.stated,
                 type_: None,
+                proof: unit.is_some_and(|unit| proven(unit.core(), Some(unit.places()), &name)),
                 totality: unit
                     .filter(|_| said.declared.is_defined())
                     .and_then(|unit| unit.certification().totality(&name)),
@@ -850,14 +861,48 @@ pub struct Described {
     pub public: Option<bool>,
     /// Where it is written, for one a name was written for.
     pub declaration: Option<Declaration>,
+    /// What its source says of it, as a block shows it ([`Stated`]): none for a declaration whose text is no program's, Core text's, and for one no text is held of and no documentation shows.
+    pub stated: Option<Stated>,
     /// The type it was elaborated at, spelled for a reader standing at it; none where the unit that declares it holds no definition under the name.
     pub type_: Option<String>,
+    /// Whether a checker marked it a proof, as the unit that declares it holds it: a definition written at a proposition, or a function into one.
+    pub proof: bool,
     /// Whether a definition terminates on every input, as the certifier recorded it of the unit that declares it: `Partial` where it is not known to, and none for anything but a definition, or where the record files none under the name.
     pub totality: Option<Totality>,
     /// Its members by name, in the order they are declared: a family's constructors, a structure's fields, a concept's methods.
     pub members: Vec<String>,
     /// The witnesses in scope it takes part in, each unit's together in scope order and by place within it: a concept's, and a type's — none where it is neither.
     pub witnesses: Option<Vec<Witnessed>>,
+}
+
+/// What a declaration's source says of it, as a block shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stated {
+    /// The declaration as its source writes it, its prose above its head and its body left out, one entry of a block ([`Heading::entry`]): a member within its owner's head and closing word.
+    pub entry: String,
+    /// Whether its representation is kept from a consumer: stated of a family, a structure and a concept, and of nothing else.
+    pub kept: Option<bool>,
+    /// Whether it is a witness whose body the compiler writes.
+    pub derived: bool,
+    /// What it is, in the word of the root that declares it, where that is a root no reader names: `intrinsic`. The path it is declared at is then no path a reader writes, and nothing says it.
+    pub adopted: Option<String>,
+}
+
+impl Stated {
+    /// What `heading` states: the entry it is shown by, and how its representation stands where it is a type's or a concept's own heading.
+    fn of(heading: &Heading) -> Self {
+        let represented = matches!(
+            heading.kind,
+            Kind::Inductive | Kind::Structure | Kind::Concept
+        );
+
+        Self {
+            entry: heading.entry(),
+            kept: (represented && !heading.member).then_some(heading.opaque),
+            derived: heading.derived,
+            adopted: None,
+        }
+    }
 }
 
 /// One thing a block or a hover states of a declaration, a line: what leads it, and the values it shows after it, each value of the program quoted. A block lays several values over as many lines as keep each within its width, and a hover joins them.
@@ -868,55 +913,97 @@ pub struct Fact {
 }
 
 impl Described {
-    /// What is stated of the declaration, a fact a line in the order a block states them: what it is declared as and whether it is written `pub`, with the path it is declared at where that is not the one it is answered by; its type; its totality; its members; and how many witnesses in scope it takes part in. The one statement both transports render ([`Placed::answer`]).
+    /// What is stated of the declaration, a fact a line in the order a block states them ([A block and a page draw one answer](../../documentation/design/tools/a-block-and-a-page-draw-one-answer.md)). Where a block shows its source ([`Stated`]), what the source does not show: one line of words, each the word a documentation page says the same fact in — how its representation stands, what the root that declares it says it is where no reader names that root, that the compiler writes its body, that it is a proof, and whether it is proven total — then the path it is declared at, where that is not the one it is answered by and the block closes on a place, which does not say it, and how many witnesses in scope it takes part in, where any does. Where no source is shown, what one would have shown stands first: what it is declared as and whether it is written `pub`, its type, and its members. The one statement both transports render ([`Placed::answer`]).
     pub fn facts(&self) -> Vec<Fact> {
-        let declared = declared_as(self.declared);
-        let mut kind = match self.public {
-            Some(true) => format!("public {declared}"),
-            Some(false) => format!("private {declared}"),
-            None => declared.to_string(),
-        };
-        if self.path != self.asked {
-            kind.push_str(&format!(", declared at {}", Code(&self.path)));
-        }
         let fact = |lead: &str, values: Vec<String>| Fact {
             lead: lead.to_string(),
             values,
         };
+        let mut facts = Vec::new();
 
-        let mut facts = vec![fact(&kind, Vec::new())];
-        if let Some(type_) = &self.type_ {
-            facts.push(fact("type:", vec![Code(type_).to_string()]));
+        if self.stated.is_none() {
+            let declared = declared_as(self.declared);
+            let kind = match self.public {
+                Some(true) => format!("public {declared}"),
+                Some(false) => format!("private {declared}"),
+                None => declared.to_string(),
+            };
+            facts.push(fact(&kind, Vec::new()));
+            if let Some(type_) = &self.type_ {
+                facts.push(fact("type:", vec![Code(type_).to_string()]));
+            }
+            let members = match self.declared {
+                Declared::Inductive => Some("constructors:"),
+                Declared::Struct => Some("fields:"),
+                Declared::Concept => Some("methods:"),
+                _ => None,
+            };
+            if let Some(members) = members.filter(|_| !self.members.is_empty()) {
+                let quoted = self
+                    .members
+                    .iter()
+                    .map(|member| Code(member).to_string())
+                    .collect();
+                facts.push(fact(members, quoted));
+            }
         }
-        match self.totality {
-            Some(Totality::Total) => facts.push(fact("totality:", vec!["total".to_string()])),
-            Some(Totality::Partial) => facts.push(fact(
-                "totality:",
-                vec!["partial, not known to terminate".to_string()],
-            )),
-            None => {}
+
+        let stated = self.stated.as_ref();
+        let representation =
+            stated
+                .and_then(|stated| stated.kept)
+                .map(|kept| match (self.declared, kept) {
+                    (Declared::Concept, false) => "unsealed",
+                    (Declared::Concept, true) => "sealed",
+                    (_, false) => "transparent",
+                    (_, true) => "opaque",
+                });
+        let adopted = stated.and_then(|stated| stated.adopted.as_deref());
+        let totality = self.totality.map(|totality| match totality {
+            Totality::Total => "total",
+            Totality::Partial => "partial",
+        });
+        let derived = stated.is_some_and(|stated| stated.derived);
+        let words = [
+            representation,
+            adopted,
+            derived.then_some("derived"),
+            self.proof.then_some("proof"),
+            totality,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        if !words.is_empty() {
+            facts.push(fact(&words.join(", "), Vec::new()));
         }
-        let members = match self.declared {
-            Declared::Inductive => Some("constructors:"),
-            Declared::Struct => Some("fields:"),
-            Declared::Concept => Some("methods:"),
-            _ => None,
-        };
-        if let Some(members) = members.filter(|_| !self.members.is_empty()) {
-            let quoted = self
-                .members
-                .iter()
-                .map(|member| Code(member).to_string())
-                .collect();
-            facts.push(fact(members, quoted));
+        let placed = self
+            .declaration
+            .as_ref()
+            .is_some_and(|declaration| declaration.place().is_some());
+        // A witness is answered by its head and declared at no path.
+        let pathed = !matches!(self.declared, Declared::Witness);
+        if pathed && self.path != self.asked && adopted.is_none() && placed {
+            facts.push(fact("declared at", vec![Code(&self.path).to_string()]));
         }
-        match self.witnesses.as_ref().map(Vec::len) {
-            Some(0) => facts.push(fact("witnesses:", vec!["none in scope".to_string()])),
-            Some(count) => facts.push(fact("witnesses:", vec![format!("{count} in scope")])),
-            None => {}
+        // A count of none is not said.
+        if let Some(count) = self
+            .witnesses
+            .as_ref()
+            .map(Vec::len)
+            .filter(|count| *count > 0)
+        {
+            facts.push(fact("witnesses:", vec![format!("{count} in scope")]));
         }
 
         facts
+    }
+
+    /// Whether a root no reader names declares it: nothing then says the path it is declared at, and a block closes on the path it was asked by.
+    pub fn adopted(&self) -> bool {
+        self.stated
+            .as_ref()
+            .is_some_and(|stated| stated.adopted.is_some())
     }
 }
 
@@ -951,6 +1038,7 @@ struct Lowered {
     declared: Declared,
     public: Option<bool>,
     declaration: Option<Declaration>,
+    stated: Option<Stated>,
     members: Vec<String>,
     witnesses: Option<Vec<Witnessed>>,
 }
@@ -1040,6 +1128,8 @@ pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> O
                 label,
                 held: true,
             }),
+        // Its text is Core text, which states no head a program's printer writes.
+        stated: None,
         members: members(unit.lexicon(), &name, declared),
         witnesses: None,
     };
@@ -1196,14 +1286,24 @@ pub fn referent(
         .as_ref()
         .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
 
+    let facade = |declaration: &Option<Described>| {
+        declaration.as_ref().map(|described| described.path.clone())
+    };
     let (declaration, module) = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
+            let declaration = described_unit(budget, &units, asked, through, &mut *progress)?;
+            let module = exported_among(
+                budget,
+                &units,
+                None,
+                asked,
+                facade(&declaration).as_deref(),
+                through,
+                progress,
+            );
 
-            (
-                described_unit(budget, &units, asked, through, &mut *progress)?,
-                exported_among(budget, &units, None, asked, through, progress),
-            )
+            (declaration, module)
         }
         Subject::Entry {
             units,
@@ -1236,30 +1336,39 @@ pub fn referent(
                     &mut *progress,
                 )?,
             };
+            let module = exported_among(
+                budget,
+                &units,
+                Some((&entrypoint, &loader)),
+                asked,
+                facade(&declaration).as_deref(),
+                through,
+                progress,
+            );
 
-            (
-                declaration,
-                exported_among(
-                    budget,
-                    &units,
-                    Some((&entrypoint, &loader)),
-                    asked,
-                    through,
-                    progress,
-                ),
-            )
+            (declaration, module)
         }
-        Subject::CoreText { origin } => (
-            described_core_text(
+        Subject::CoreText { origin } => {
+            let declaration = described_core_text(
                 budget,
                 &origin,
                 asked,
                 overlay,
                 (cache, through),
                 &mut *progress,
-            )?,
-            exported_among(budget, &[], None, asked, through, progress),
-        ),
+            )?;
+            let module = exported_among(
+                budget,
+                &[],
+                None,
+                asked,
+                facade(&declaration).as_deref(),
+                through,
+                progress,
+            );
+
+            (declaration, module)
+        }
     };
     let module = module.map_err(of_error)?;
 
@@ -1326,6 +1435,7 @@ fn exported_among(
     units: &[RootSource],
     program: Option<(&curios_surface::Entrypoint, &RootSource)>,
     asked: &Qualifier,
+    facade: Option<&str>,
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Exported>, CompileError> {
@@ -1334,7 +1444,7 @@ fn exported_among(
             let units = &units[..=holding];
             let Some((reached, lowered)) = Fold::new(budget, units, through)
                 .lowered_unit(&mut *progress, |scope, own| {
-                    listed(scope, own, false, asked, None)
+                    listed(scope, own, false, asked, None, facade)
                 })?
             else {
                 return Ok(None);
@@ -1344,17 +1454,16 @@ fn exported_among(
                 return Ok(Some(lowered));
             }
             let record = Fold::new(budget, units, through).documentation(&mut *progress)?;
-            let Some(page) = paged(record, asked) else {
+            if paged(&record, asked).is_none() {
                 return Ok(Some(lowered));
-            };
+            }
 
             Fold::new(budget, units, through).lowered_unit(progress, |scope, own| {
-                listed(scope, own, false, asked, Some(&page)).map(|(_, listed)| listed)
+                listed(scope, own, false, asked, Some(&record), facade).map(|(_, listed)| listed)
             })
         }
         Some(Holder::Prelude(record)) => {
             let root = record.prefix;
-            let page = paged(record, asked);
 
             // The prelude's own unit holding the root reads its names, the others standing beside it.
             Fold::new(budget, &[], through).units(progress, |prelude, _| {
@@ -1364,7 +1473,8 @@ fn exported_among(
                     .and_then(|unit| unit.text())
                     .expect("a prelude record is a prelude unit's");
 
-                Ok(listed(prelude, own, false, asked, page.as_ref()).map(|(_, listed)| listed))
+                Ok(listed(prelude, own, false, asked, Some(&record), facade)
+                    .map(|(_, listed)| listed))
             })
         }
         None => match program {
@@ -1372,7 +1482,9 @@ fn exported_among(
                 entrypoint,
                 loader,
                 progress,
-                |scope, own, _| listed(scope, own, true, asked, None).map(|(_, listed)| listed),
+                |scope, own, _| {
+                    listed(scope, own, true, asked, None, facade).map(|(_, listed)| listed)
+                },
             ),
             None => Ok(None),
         },
@@ -1380,11 +1492,8 @@ fn exported_among(
 }
 
 /// The page `record` shows of the module `asked`, where it shows one.
-fn paged(record: Documentation, asked: &Qualifier) -> Option<ModuleDocumentation> {
-    record
-        .modules
-        .into_iter()
-        .find(|module| module.path == *asked)
+fn paged<'r>(record: &'r Documentation, asked: &Qualifier) -> Option<&'r ModuleDocumentation> {
+    record.modules.iter().find(|module| module.path == *asked)
 }
 
 /// What a module exposes ([`exported_among`]): whether its `mod` line is written `pub`, where the line names it, how many names and child modules it exposes, and an entry for each thing it exposes.
@@ -1394,35 +1503,113 @@ pub struct Exported {
     pub public: Option<bool>,
     /// Where the `mod` line declaring the module names it, as a place to open ([`module_placed`]).
     pub place: Option<Span>,
-    /// How many names it exposes.
+    /// How many names it exposes, the declaration answered at its own path left out.
     pub names: usize,
     /// How many public child modules it has.
     pub modules: usize,
-    /// What it exposes, an entry each, as its source writes it with what a body elides left out ([`curios_module::written`]): each name in the order a documentation page lists them where one shows the module, and its body writes them where none does, a run of members it exposes beside their owner as the line that does it; then its witnesses; then its public child modules, each as the `mod` line that declares it.
+    /// What it exposes, an entry each, as its source writes it with what a body elides left out ([`curios_module::written`]): each name in the order a documentation page lists them where one shows the module, and its body writes them where none does, a run of members it exposes beside their owner as the line that does it; then its witnesses; then its public child modules, each as the `mod` line that declares it with what it exposes ([`exposing`]).
     pub entries: Vec<String>,
 }
 
-/// What `own`, the lowering that declares the module `asked`, exposes of it over the units in `scope` ([`Exported`]): read off `page` where a documentation page shows the module, and off the lowering where none does ([`PreparedText::exposure`]), what each name is declared as read by `own` and the units in `scope` as [`described`] reads one either way. A name an item the parser could not read declared is left out of a module no page shows, nothing being read of it. `owned` says `own` is the subject's own, whose `mod` line is a place to open whatever holds it ([`module_placed`]). Beside it, whether every `mod` line down to the module is written `pub` ([`Exposure::reached`]), which is what a documentation page shows it for. `None` where `own` declares no module at the path.
+/// What `own`, the lowering that declares the module `asked`, exposes of it over the units in `scope` ([`Exported`]): read off the page `record` shows of the module where a documentation page shows it, and off the lowering where none does ([`PreparedText::exposure`]), what each name is declared as read by `own` and the units in `scope` as [`described`] reads one either way. `facade` is the path of the declaration answered at the module's own path, which stands before the module's answer and in none of its entries. A name an item the parser could not read declared is left out of the lowering's listing, as it is of every answer; beside the listing stands whether a page of its unit would show the module ([`Exposure::reached`]). `None` where `own` declares no such module.
 ///
 /// # Panics
 ///
-/// Where `page` lists a name the lowering's export view holds none of.
+/// Where a page lists a name the lowering's export view holds none of.
 fn listed(
     scope: &[&Unit],
     own: &PreparedText,
     owned: bool,
     asked: &Qualifier,
-    page: Option<&ModuleDocumentation>,
+    record: Option<&Documentation>,
+    facade: Option<&str>,
 ) -> Option<(bool, Exported)> {
     let exposure = own.exposure(asked)?;
+    let page = record.and_then(|record| paged(record, asked));
     let saying = Saying::over(scope, own);
+    let (named, order) = names_of(scope, own, &exposure, page, facade);
+
+    let mut entries = Vec::new();
+    // The members a module exposes beside their owner, a run of one owner's being one line.
+    let mut run = None::<(String, Vec<&str>)>;
+    for label in &order {
+        let (name, found) = named
+            .get(label)
+            .unwrap_or_else(|| panic!("{}/{label} is exposed and declared nowhere", asked.join()));
+        let owner = matches!(found.declared, Declared::Constructor | Declared::Method)
+            .then(|| owner_of(&saying, &exposure, name));
+        if run.as_ref().map(|(held, _)| held) != owner.as_ref() {
+            entries.extend(run.take().map(exposing_line));
+            run = owner.map(|owner| (owner, Vec::new()));
+        }
+        match &mut run {
+            Some((_, labels)) => labels.push(label),
+            None => entries.push(entry_of(&saying, page, label, name, found)),
+        }
+    }
+    entries.extend(run.take().map(exposing_line));
+    match page {
+        Some(page) => entries.extend(
+            page.declarations()
+                .filter(|declaration| declaration.kind == Kind::Witness)
+                .map(|declaration| declaration.signature.text.clone()),
+        ),
+        None => {
+            entries.extend(exposure.witnesses.iter().filter_map(|witness| {
+                Some(found(scope, own, witness)?.declaration?.heading()?.head)
+            }))
+        }
+    }
+    let children = match page {
+        Some(page) => &page.children,
+        None => &exposure.children,
+    };
+    // A child module is the line that declares it, with what it exposes: the declaration this module exposes under the child's own name stands above, among the names, and beside what the child exposes.
+    entries.extend(children.iter().map(|child| {
+        let beside = named.get(child.last()).map(|(name, _)| name.path());
+        let exposed = own.exposure(child).and_then(|exposure| {
+            let page = record.and_then(|record| paged(record, child));
+            let (_, order) = names_of(scope, own, &exposure, page, beside.as_deref());
+            let modules = match page {
+                Some(page) => page.children.len(),
+                None => exposure.children.len(),
+            };
+
+            exposing(order.len(), modules, beside.is_some())
+        });
+
+        match exposed {
+            Some(exposed) => format!("pub mod {}, {exposed}", child.last()),
+            None => format!("pub mod {}", child.last()),
+        }
+    }));
+
+    Some((
+        exposure.reached,
+        Exported {
+            public: exposure.public,
+            place: module_placed(own, owned, asked),
+            names: order.len(),
+            modules: children.len(),
+            entries,
+        },
+    ))
+}
+
+/// The names `exposure` exposes of a module, each with where it is declared, and their labels in the order a block lists them: as `page` lists them where a documentation page shows the module — a name it documents where its declaration stands, and a member the module exposes beside its owner where the line that does it stands — and as the module's body writes them where none does. The name declared at `facade`, the declaration answered at the module's own path, is in the first and not in the second. A name an item the parser could not read declared is in neither where no page lists it.
+fn names_of<'e, 's>(
+    scope: &[&'s Unit],
+    own: &'s PreparedText,
+    exposure: &'e Exposure,
+    page: Option<&'e ModuleDocumentation>,
+    facade: Option<&str>,
+) -> (BTreeMap<&'e str, (Global, Found<'s>)>, Vec<&'e str>) {
     let named = exposure
         .names
         .iter()
         .filter_map(|(label, name)| Some((label.as_str(), (*name, found(scope, own, name)?))))
         .collect::<BTreeMap<_, _>>();
     let order = match page {
-        // A page lists a name it documents where its declaration stands, and a member the module exposes beside its owner where the line that does it stands.
         Some(page) => page
             .entries
             .iter()
@@ -1445,58 +1632,38 @@ fn listed(
             .filter(|label| named.contains_key(label))
             .collect(),
     };
+    let order = order
+        .into_iter()
+        .filter(|label| {
+            named
+                .get(label)
+                .is_none_or(|(name, _)| facade != Some(name.path().as_str()))
+        })
+        .collect();
 
-    let mut entries = Vec::new();
-    // The members a module exposes beside their owner, a run of one owner's being one line.
-    let mut run = None::<(String, Vec<&str>)>;
-    for label in &order {
-        let (name, found) = named
-            .get(label)
-            .unwrap_or_else(|| panic!("{}/{label} is exposed and declared nowhere", asked.join()));
-        let owner = matches!(found.declared, Declared::Constructor | Declared::Method)
-            .then(|| owner_of(&saying, &exposure, name));
-        if run.as_ref().map(|(held, _)| held) != owner.as_ref() {
-            entries.extend(run.take().map(exposing));
-            run = owner.map(|owner| (owner, Vec::new()));
-        }
-        match &mut run {
-            Some((_, labels)) => labels.push(label),
-            None => entries.push(entry_of(&saying, page, label, name, found)),
-        }
-    }
-    entries.extend(run.take().map(exposing));
-    match page {
-        Some(page) => entries.extend(
-            page.declarations()
-                .filter(|declaration| declaration.kind == Kind::Witness)
-                .map(|declaration| declaration.signature.text.clone()),
-        ),
-        None => {
-            entries.extend(exposure.witnesses.iter().filter_map(|witness| {
-                Some(found(scope, own, witness)?.declaration?.heading()?.head)
-            }))
-        }
-    }
-    let children = match page {
-        Some(page) => &page.children,
-        None => &exposure.children,
+    (named, order)
+}
+
+/// What a module is said to expose: how many names and how many child modules, a count of none unsaid, the names `more` where a declaration stands at the module's own path beside them. `None` where it exposes nothing.
+pub fn exposing(names: usize, modules: usize, more: bool) -> Option<String> {
+    let counted = |count: usize, noun: &str| match count {
+        0 => None,
+        1 => Some(format!("1 {noun}")),
+        count => Some(format!("{count} {noun}s")),
     };
-    entries.extend(
-        children
-            .iter()
-            .map(|child| format!("pub mod {}", child.last())),
-    );
-
-    Some((
-        exposure.reached,
-        Exported {
-            public: exposure.public,
-            place: module_placed(own, owned, asked),
-            names: order.len(),
-            modules: children.len(),
-            entries,
+    let names = counted(
+        names,
+        match more {
+            true => "more name",
+            false => "name",
         },
-    ))
+    );
+    let said = [names, counted(modules, "module")]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+    (!said.is_empty()).then(|| format!("exposing {}", said.join(" and ")))
 }
 
 /// The entry of the declaration `name` a module exposes as `label`, `found` where it is declared: as `page` shows it where a documentation page lists it, and as its own text states it where none does ([`Declaration::heading`]), each written as its source writes it with what a body elides left out ([`written`]). A declaration no text is held of — one the compiler writes — is the line that exposes it, by the path a reader outside every module writes it at ([`absolute`]).
@@ -1561,7 +1728,7 @@ fn owner_of(saying: &Saying<'_>, exposure: &Exposure, member: &Global) -> String
 }
 
 /// The line that exposes the members `labels` of the owner a module names `owner`, as a module writes it.
-fn exposing((owner, labels): (String, Vec<&str>)) -> String {
+fn exposing_line((owner, labels): (String, Vec<&str>)) -> String {
     format!("pub use {owner}/{{{}}}", labels.join(", "))
 }
 
@@ -1596,6 +1763,11 @@ fn said_of<'s>(saying: &Saying<'s>, name: Global) -> Option<(Lowered, Option<&'s
             public: name
                 .qualifier()
                 .and_then(|path| found.lowered.is_public(path)),
+            stated: found
+                .declaration
+                .as_ref()
+                .and_then(Declaration::heading)
+                .map(|heading| Stated::of(&heading)),
             declaration: found.declaration,
             members: members(&found.lowered.lexicon(), &name, found.declared),
             witnesses,
@@ -1764,13 +1936,91 @@ fn spelled(
         declared: said.declared,
         public: said.public,
         declaration: said.declaration,
+        stated: said.stated.or_else(|| adopted(&asked.join())),
         type_: type_.map(|type_| type_.spelled(&spelling).to_string()),
+        proof: proven(definitions, kept.map(|(_, places)| places), &name),
         totality: certification
             .filter(|_| said.declared.is_defined())
             .and_then(|certification| certification.totality(&name)),
         members: said.members,
         witnesses: said.witnesses,
     }
+}
+
+/// Whether `definitions` holds `name` as a proof, a checker's mark on its definition: read off the one item `places` say holds it, and off every item where the module is kept under none.
+fn proven(definitions: &Definitions, places: Option<&Places>, name: &Global) -> bool {
+    let marked = |item: &Item| {
+        item.definitions()
+            .into_iter()
+            .any(|definition| definition.name == *name && definition.proof)
+    };
+
+    match places {
+        Some(places) => places
+            .place(name)
+            .is_some_and(|place| marked(&definitions.items[place.item()])),
+        None => definitions.items.iter().any(marked),
+    }
+}
+
+/// What the documentation of the library the compiler was built with says of the declaration exposed at `asked`, where a root no reader names declares it and so no text is held of it ([`Stated::adopted`]): the declaration a page of that library adopts at the path, or a member of the one adopted at the path above it, stated within it. `None` for a path the library adopts nothing at.
+fn adopted(asked: &str) -> Option<Stated> {
+    let asked = Qualifier::from(asked.strip_prefix('/')?.split('/'));
+    let root = Qualifier::from([asked.head()]);
+    let record = prelude_documentation()
+        .into_iter()
+        .find(|record| record.prefix == root)?;
+    let shown = |path: Qualifier| {
+        let page = paged(&record, &path.without_last())?;
+
+        page.declarations().find(|declaration| {
+            declaration.name == path.last() && declaration.kind != Kind::Witness
+        })
+    };
+
+    let (declaration, heading) = match shown(asked) {
+        Some(declaration) => (
+            declaration,
+            Heading {
+                head: declaration.signature.text.clone(),
+                prose: declaration.prose.clone().unwrap_or_default(),
+                kind: declaration.kind,
+                opaque: declaration.opaque,
+                members: declaration
+                    .members
+                    .iter()
+                    .map(|member| member.signature.text.clone())
+                    .collect(),
+                derived: declaration.derived,
+                member: false,
+            },
+        ),
+        None => {
+            let owner = shown(asked.without_last())?;
+            let member = owner
+                .members
+                .iter()
+                .find(|member| member.name == asked.last())?;
+
+            (
+                owner,
+                Heading {
+                    head: owner.signature.text.clone(),
+                    prose: member.prose.clone().unwrap_or_default(),
+                    kind: owner.kind,
+                    opaque: owner.opaque,
+                    members: vec![member.signature.text.clone()],
+                    derived: false,
+                    member: true,
+                },
+            )
+        }
+    };
+
+    Some(Stated {
+        adopted: declaration.chip.clone(),
+        ..Stated::of(&heading)
+    })
 }
 
 /// The type `definitions` holds of `name`, read off the one item `places` say holds it ([`item_type`]).

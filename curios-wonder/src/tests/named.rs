@@ -699,26 +699,23 @@ fn exposed_in(program: &str, path: &str) -> Option<Exported> {
     named_in(program, path).and_then(|named| named.module)
 }
 
-/// A member a module exposes beside its owner is the line that does it, after the owner written whole: a family's constructors, and a concept's method.
+/// A member a module exposes beside its owner is the line that does it: a family's constructors, and a concept's method. The owner stands at the module's own path, where it is answered before the module, so it is no entry of the module's and the line opens the listing.
 #[test]
 fn a_member_a_module_exposes_beside_its_owner_is_the_line_that_does_it() {
     let option = exposed("/std/Option").expect("the library exposes the module");
-    assert_eq!(
-        option.entries[..2],
-        [
-            "pub induct Option(A: Sort): pub Type\n| some(A)\n| none()\nend",
-            "pub use Option/{some, none}",
-        ]
+    assert_eq!(option.entries[0], "pub use Option/{some, none}");
+    assert!(
+        option
+            .entries
+            .iter()
+            .all(|entry| !entry.starts_with("pub induct Option(")),
+        "{:?}",
+        option.entries
     );
 
     let show = exposed("/std/Show").expect("the library exposes the module");
-    assert_eq!(
-        show.entries[..2],
-        [
-            "pub concept Show(A: Type): pub Type {\n    show(A) -> Str,\n}",
-            "pub use Show/{show}",
-        ]
-    );
+    assert_eq!(show.entries, ["pub use Show/{show}"]);
+    assert_eq!((show.names, show.modules), (1, 0));
 }
 
 /// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing.
@@ -761,7 +758,8 @@ fn every_module_of_the_standard_library_is_reached_from_its_root() {
                 .entries
                 .iter()
                 .filter_map(|entry| entry.strip_prefix("pub mod "))
-                .map(|child| path.with(child)),
+                // The line says what the child exposes after its name.
+                .map(|child| path.with(child.split(',').next().unwrap_or(child))),
         );
         reached.insert(path);
     }
@@ -807,9 +805,16 @@ fn a_module_no_page_shows_is_listed_off_the_lowering() {
             modules: 1,
             entries: vec![
                 "pub induct Node(K: Type, V: Type): pub Type\n| empty()\n| leaf(key: K, value: V)\n| branch(at: Nat, twigs: Vec(Node(K, V), 16))\nend".to_string(),
-                "pub mod Node".to_string(),
+                internal.entries[1].clone(),
             ],
         }
+    );
+    // The child is the line that declares it with what it exposes, which is more than the family its parent exposes under its name.
+    assert!(
+        internal.entries[1].starts_with("pub mod Node, exposing ")
+            && internal.entries[1].ends_with(" more names"),
+        "{:?}",
+        internal.entries
     );
 
     let node = exposed("/std/Map/internal/Node").expect("the library declares the module");
@@ -817,6 +822,7 @@ fn a_module_no_page_shows_is_listed_off_the_lowering() {
         (node.public, node.place, node.modules),
         (Some(true), None, 0)
     );
+    // The library exports nothing at the child's path, its parent being private, so no declaration is answered before the module and its listing opens on the family.
     assert_eq!(node.entries[0], internal.entries[0]);
     assert!(
         node.entries[1].starts_with("pub let first_in("),
@@ -874,7 +880,7 @@ fn a_programs_own_module_lists_what_its_body_exposes_in_the_order_it_writes_it()
             "pub let twice(n: Nat) -> Nat",
             "pub induct Colour: pub Type\n| red()\nend",
             "pub use Colour/{red}",
-            "pub mod deeper",
+            "pub mod deeper, exposing 1 name",
         ]
     );
 }
