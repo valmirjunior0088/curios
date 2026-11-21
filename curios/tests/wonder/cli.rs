@@ -371,14 +371,17 @@ fn a_block_points_to_the_view_listing_its_witnesses() {
         &["wonder", "--name", "/std/Show", "--witnesses", "app.crs"],
         "",
     ));
-    let rows = listed
-        .split_once("\n\n")
-        .map(|(_, rows)| rows)
-        .unwrap_or_default();
-    assert!(!rows.is_empty(), "{listed}");
+    // Each witness is an entry on the block: its head as its author wrote it, closed by where it is written, or by the module that declares it where no file holds it.
     assert!(
-        rows.lines().all(|row| row.split('\t').count() == 2),
-        "{rows}"
+        listed.contains("\n├─ satisfy Show(Bool); /std/Bool\n"),
+        "{listed}"
+    );
+    assert!(!listed.contains('\t'), "{listed}");
+    assert!(
+        listed
+            .trim_end()
+            .ends_with("└─ [declaration] /std/Show/Show"),
+        "{listed}"
     );
 }
 

@@ -1024,12 +1024,27 @@ pub fn declared_as(declared: Declared) -> &'static str {
 /// One witness in scope a declaration takes part in ([`Described::witnesses`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witnessed {
-    /// Where its head is written, as a place in a file that holds it.
-    pub place: Option<Span>,
+    /// Where it is written, its name being its head, where its unit holds its text.
+    pub written: Option<Declaration>,
     /// The module that declares it.
     pub module: String,
     /// What it says of the declaration: a concept's witness by the heads it is keyed on, and a type's by the concept it satisfies, with the heads it is keyed on where that concept has more than one — each name as a reader outside every module writes it: the shortest path a module exports it at that every module may write.
     pub keyed: String,
+}
+
+impl Witnessed {
+    /// Where its head is written, as a place in a file that holds it.
+    pub fn place(&self) -> Option<&Span> {
+        self.written.as_ref().and_then(Declaration::place)
+    }
+
+    /// Its head as its author wrote it, `satisfy (@A: Type, use Show(A)) => Show(List(A))`, read off its own text ([`Declaration::heading`]) where it is asked for; and where its unit holds no text of it, what it says of the declaration ([`Witnessed::keyed`]).
+    pub fn head(&self) -> String {
+        self.written
+            .as_ref()
+            .and_then(Declaration::heading)
+            .map_or_else(|| self.keyed.clone(), |heading| heading.head)
+    }
 }
 
 /// What the lowering says of a declaration: all a [`Described`] says but its type and how it was asked for.
@@ -1868,8 +1883,14 @@ fn witnesses(saying: &Saying<'_>, found: &Found<'_>, name: &Global) -> Option<Ve
                         let keyed = keyed(&concept, &key)?;
                         let written = lowered
                             .and_then(|lowered| lowered.anchors().written(witness))
-                            .map(|(_, label)| label);
-                        let order = written.as_ref().map(|label| {
+                            .map(|(text, label)| Declaration {
+                                held: owned || label.source.file().is_some(),
+                                text,
+                                label,
+                            });
+                        let order = written.as_ref().map(|written| {
+                            let label = &written.label;
+
                             (
                                 label.source.name().cloned(),
                                 label.source.file().map(Path::to_path_buf),
@@ -1877,7 +1898,7 @@ fn witnesses(saying: &Saying<'_>, found: &Found<'_>, name: &Global) -> Option<Ve
                             )
                         });
                         let witnessed = Witnessed {
-                            place: written.filter(|label| owned || label.source.file().is_some()),
+                            written,
                             module: id.module().join(),
                             keyed,
                         };

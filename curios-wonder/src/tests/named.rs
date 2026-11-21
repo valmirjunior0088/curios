@@ -546,12 +546,11 @@ fn a_concept_is_answered_with_its_witnesses_in_scope() {
 
     assert!(keyed(&described).contains(&"/std/Nat"));
     assert_eq!(
-        (
-            point.keyed.as_str(),
-            point.place.as_ref().map(Span::line_column)
-        ),
+        (point.keyed.as_str(), point.place().map(Span::line_column)),
         ("/Point", Some((5, 9)))
     );
+    // A witness is listed by its head as its author wrote it, read off its own text.
+    assert_eq!(point.head(), "satisfy Show(Point)");
 }
 
 /// A declaration of the program's own is typed by the program's check, and one no module exports is answered by its own path.

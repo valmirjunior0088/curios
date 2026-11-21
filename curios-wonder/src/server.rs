@@ -903,7 +903,7 @@ fn witnessed_at(buffer: &str, checked: &Placed, offset: usize) -> Option<Vec<Spa
         described
             .witnesses?
             .into_iter()
-            .filter_map(|witness| witness.place)
+            .filter_map(|witness| witness.place().cloned())
             .collect(),
     )
 }

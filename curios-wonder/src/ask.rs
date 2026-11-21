@@ -959,7 +959,7 @@ pub fn wonder_name(
     Ok(())
 }
 
-/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, without the source it holds there, then a row for each, its place, a tab, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --witnesses [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, an entry on it for each witness ([`Report::listing`]): its head as its author wrote it, closed as a block closes a further place, behind `;`, by where it is written, or by the module that declares it where no file holds it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_witnesses(
     budget: u64,
     scope: Scope,
@@ -969,22 +969,23 @@ pub fn wonder_witnesses(
     let reader = telling.reader();
     let described = declaration(budget, scope, path, telling)?;
 
+    let entries = described
+        .witnesses
+        .iter()
+        .flatten()
+        .map(|witnessed| {
+            let place = match witnessed.place() {
+                Some(place) => place.place(&reader),
+                None => witnessed.module.clone(),
+            };
+
+            format!("{}; {place}", witnessed.head())
+        })
+        .collect::<Vec<_>>();
     answer(format_args!(
         "{}\n",
-        block(&described, None).rendered(Kind::Declaration, &reader)
+        block(&described, None).listing(Kind::Declaration, &reader, &entries)
     ));
-    let witnesses = described.witnesses.iter().flatten().collect::<Vec<_>>();
-    if !witnesses.is_empty() {
-        answer("\n");
-    }
-    for witnessed in witnesses {
-        let place = match &witnessed.place {
-            Some(place) => place.place(&reader),
-            None => witnessed.module.clone(),
-        };
-
-        answer(format_args!("{place}\t{}\n", witnessed.keyed));
-    }
 
     Ok(())
 }
