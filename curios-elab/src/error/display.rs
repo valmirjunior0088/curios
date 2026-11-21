@@ -348,6 +348,19 @@ fn member_noun(keyword: RecordKeyword) -> &'static str {
     }
 }
 
+/// Whether `type_`, a reduct, is headed by what a reader writes — a former, a sort, an intrinsic type, a tuple or a function type — rather than stuck on a variable or a match: a reduct a report may show in place of the type it reduces from.
+fn readable(type_: &Term) -> bool {
+    matches!(
+        &**type_,
+        Subterm::InductType(_)
+            | Subterm::StructType(_)
+            | Subterm::TupleType(_)
+            | Subterm::FuncType(_)
+            | Subterm::Sort(_)
+            | Subterm::Intrinsic(_)
+    )
+}
+
 /// What a report says of a witness's hidden parameter where it would say how to write one: nothing can, since a witness is never called and its parameters are filled from the goal it answers.
 fn witness_never_called(said: &mut Said) {
     said.stating("a witness is never called");
@@ -807,13 +820,20 @@ impl Displayed<'_> {
                 f.stating(message);
             }
             Error::NotAFunction { head_type, reduced } => {
-                let reduced = reduced.spelled(spelling).to_string();
-                let head_type = head_type.spelled(spelling).to_string();
                 f.text("not a function");
-                f.stating(format_args!("applied: a term of type {}", Code(&head_type)));
-                // The reduced form is not spelled: it is the unfolded definition stuck on its argument, and the written type is what the reader can act on.
-                if reduced != head_type {
-                    f.stating("which does not reduce to a function type");
+                // A reduct headed by a former is what the type is, and says why it takes no argument: the format a call ran out of reduces to `Io({})`. One stuck on its argument is the unfolded definition, and the written type is then what the reader can act on.
+                match readable(reduced) {
+                    true => f.stating(format_args!(
+                        "applied: a term of type {}, which takes no argument",
+                        Code(reduced.spelled(spelling))
+                    )),
+                    false => {
+                        let shown = head_type.spelled(spelling).to_string();
+                        f.stating(format_args!("applied: a term of type {}", Code(&shown)));
+                        if reduced.spelled(spelling).to_string() != shown {
+                            f.stating("which does not reduce to a function type");
+                        }
+                    }
                 }
             }
             Error::NotAFunctionType {
@@ -2059,14 +2079,18 @@ impl Displayed<'_> {
                         ));
                     }
                     Some(Need::Closing(type_)) => {
-                        f.stating("a program closes with a term whose type has one");
+                        f.stating("a program closes with an action a `Program` witness runs, such as an `Io({})`");
                         f.stating(format_args!(
                             "this one's type is {}",
                             Code(type_.spelled(spelling))
                         ));
+                        // A function is a call not finished: the arguments it still takes are what is missing.
+                        if matches!(&***type_, Subterm::FuncType(_)) {
+                            f.stating("it is a function still to be called with what it takes");
+                        }
                     }
                     Some(Need::Testing(type_)) => {
-                        f.stating("a program closes with a term whose type has one");
+                        f.stating("a program closes with an action a `Program` witness runs, such as an `Io({})`");
                         f.stating(format_args!(
                             "this one's type is {}",
                             Code(type_.spelled(spelling))

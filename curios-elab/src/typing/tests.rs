@@ -23,7 +23,7 @@ fn display_not_a_function() {
     );
     assert_eq!(
         err.to_string(),
-        "not a function\n  applied: a term of type `Nat`"
+        "not a function\n  applied: a term of type `Nat`, which takes no argument"
     );
 }
 

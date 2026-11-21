@@ -8,7 +8,8 @@ fn an_entry_that_describes_nothing_closes_no_program() {
     let error = compile(r#""zero""#).unwrap_err();
 
     assert!(
-        error.contains("a program closes with a term whose type has one") && error.contains("Str"),
+        error.contains("a program closes with an action a `Program` witness runs")
+            && error.contains("this one's type is `/std/Str`"),
         "unexpected report: {error}"
     );
 }

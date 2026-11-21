@@ -144,20 +144,31 @@ fn a_step_that_may_fail_is_refused_in_an_io_function() {
     );
 }
 
-/// A term of a type nothing executes is told so as what closes the program, not as the premise of a call its author never wrote.
+/// A term of a type nothing executes is told so as what closes the program, not as the premise of a call its author never wrote; its type is shown as it reduces where that is a function, so a format given too few arguments reads as the function it still is.
 #[test]
 fn a_term_nothing_executes_is_refused_as_what_closes_the_program() {
-    for (closing, type_) in [("7", "Nat"), ("() => print(\"x\")", "() -> Io({})")] {
-        let source = fill!("use /std/{Nat, Io, print};\n${closing}\n", closing);
+    for (closing, type_) in [
+        ("7", "Nat"),
+        ("() => print(\"x\")", "() -> Io({})"),
+        (
+            "Fmt/print(\"% and %\\n\")(1)",
+            "(@A: Type, use Show(A), a: A) -> Io({})",
+        ),
+    ] {
+        let source = fill!(
+            "use /std/{Nat, Io, Fmt, Show, print};\n${closing}\n",
+            closing
+        );
         let error = typecheck(&source).expect_err("nothing executes it");
 
         assert!(
             error.contains(&format!(
-                "a program closes with a term whose type has one\n│  this one's type is `{type_}`"
+                "a program closes with an action a `Program` witness runs, such as an `Io({{}})`\n│  this one's type is `{type_}`"
             )),
             "{closing}: {error}"
         );
         assert!(!error.contains("needed by"), "{closing}: {error}");
+        assert!(!error.contains("format_type_with"), "{closing}: {error}");
     }
 }
 

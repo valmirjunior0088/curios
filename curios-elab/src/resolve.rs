@@ -15,7 +15,7 @@ use {
     super::{
         Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, OpenKey,
         Outcome, ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge,
-        convert_outcome, declared, pending, reduce_with, resolved_for_display,
+        convert_outcome, declared, normalize, pending, reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, stuck_on_metavar},
     curios_common::{Mount, Plicity, Qualifier, Symbol, SyntaxName},
@@ -88,20 +88,31 @@ pub fn no_witness_error(
     let callee = callee(context, &provenance.func);
     let role = provenance.role.clone();
     let site = site.copied();
+    // A program's closing type is reduced here, standing among the declarations it unfolds: the report is built once the refusal has let go of the frames that hold them. The goal is then asked of the reduct, which is what it reads as.
+    let (goal, reduct) = match closing_reduct(context, goal) {
+        Some((asked, reduct)) => (asked, Some(reduct)),
+        None => (goal.clone(), None),
+    };
+    let reduced = reduct.is_some();
+    let reduct = reduct.unwrap_or_else(|| goal.clone());
 
-    pending(context, [goal], move |reporting, [goal]| {
-        let need = diagnose_need(reporting, &goal, site.as_ref());
-        let shape = diagnose_shape(reporting, &goal);
-        let open = diagnose_open(reporting, &goal);
-        Error::no_witness(
-            resolved_for_display(reporting, &goal),
-            callee,
-            role,
-            need,
-            shape,
-            open,
-        )
-    })
+    pending(
+        context,
+        [&goal, &reduct],
+        move |reporting, [goal, reduct]| {
+            let need = diagnose_need(reporting, &goal, site.as_ref(), reduced.then_some(&reduct));
+            let shape = diagnose_shape(reporting, &goal);
+            let open = diagnose_open(reporting, &goal);
+            Error::no_witness(
+                resolved_for_display(reporting, &goal),
+                callee,
+                role,
+                need,
+                shape,
+                open,
+            )
+        },
+    )
 }
 
 /// When `goal` keys on a *labeled* tuple shape and the same key with every label dropped does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule — labels are part of a tuple type's identity — rather than a bare miss. That is the surprise keying on an anonymous shape has; every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
@@ -175,10 +186,15 @@ fn diagnose_open(context: &mut Reporting, goal: &Term) -> Option<Box<OpenKey>> {
 }
 
 /// What the missing witness of `goal` was needed for, where its concept is one the compiler resolves for a form of its own ([`Need`]): an embedding, or what closes a program. `site` is where the goal was inserted, which an embedding's report reads what was written from.
-fn diagnose_need(context: &mut Reporting, goal: &Term, site: Option<&Extent>) -> Option<Need> {
+fn diagnose_need(
+    context: &mut Reporting,
+    goal: &Term,
+    site: Option<&Extent>,
+    reduct: Option<&Term>,
+) -> Option<Need> {
     diagnose_embedding(context, goal, site)
         .map(Need::Embedding)
-        .or_else(|| diagnose_closing(context, goal))
+        .or_else(|| diagnose_closing(context, goal, reduct))
         .or_else(|| diagnose_joining(context, goal).map(Need::Joining))
 }
 
@@ -212,8 +228,39 @@ fn diagnose_joining(context: &mut Reporting, goal: &Term) -> Option<Box<Joining>
     })
 }
 
-/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes — a description of a test among them, which only `curios test` runs.
-fn diagnose_closing(context: &mut Reporting, goal: &Term) -> Option<Need> {
+/// The type a program's closing term was asked at, where `goal` asks a `Program` witness of it, reduced where its head is one a reader writes, its parts normalized, beside the goal asked of it: the format a program's closing call did not finish reduces to the function it still is. Read where the refusal is raised, which stands among the declarations the type unfolds.
+fn closing_reduct(context: &mut Context, goal: &Term) -> Option<(Term, Term)> {
+    let goal = reduce_with(context, goal).ok()?;
+    let Subterm::StructType(asked) = &*goal else {
+        return None;
+    };
+    let mut asked = asked.clone();
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+    let Global::Authored(concept_path) = &concept_name else {
+        return None;
+    };
+    if *concept_path != context.syntax().program.execute.concept.qualifier() {
+        return None;
+    }
+    let [closing] = params.as_slice() else {
+        return None;
+    };
+    let reduced = reduce_with(context, closing).ok()?;
+    if !matches!(
+        &*reduced,
+        Subterm::FuncType(_) | Subterm::InductType(_) | Subterm::StructType(_)
+    ) {
+        return None;
+    }
+
+    let reduct = normalize(context, reduced.clone()).unwrap_or(reduced);
+    asked.params = vec![reduct.clone()];
+
+    Some((Term::from(Subterm::StructType(asked)), reduct))
+}
+
+/// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form, as `reduct` gives it where it reduces to a head a reader writes ([`closing_reduct`]): the type of a term that closes a program, which no witness executes — a description of a test among them, which only `curios test` runs.
+fn diagnose_closing(context: &mut Reporting, goal: &Term, reduct: Option<&Term>) -> Option<Need> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let Global::Authored(concept_path) = &concept_name else {
@@ -231,7 +278,8 @@ fn diagnose_closing(context: &mut Reporting, goal: &Term) -> Option<Need> {
         .ok()
         .and_then(|closing| HeadKey::of_whnf(&closing))
         .is_some_and(|head| head == test);
-    let type_ = Box::new(resolved_for_display(context, closing));
+    let shown = reduct.unwrap_or(closing);
+    let type_ = Box::new(resolved_for_display(context, shown));
 
     Some(match tested {
         true => Need::Testing(type_),
