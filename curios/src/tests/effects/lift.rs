@@ -470,3 +470,15 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
     );
     assert!(!error.contains("hands the action's"), "{error}");
 }
+
+/// An action of another monad a region returns, with no `!` to run it, is lifted as one a `!` runs, and the missing edge says it was returned: in a nominal region as in any other.
+#[test]
+fn a_returned_action_of_another_monad_is_said_to_be_returned() {
+    let source = "use /std/{Nat, Io, Option};\npub let wrap() -> Option(Nat) = Io/pure(1);\n()\n";
+
+    let error = typecheck(source).expect_err("a missing edge must refuse");
+    assert!(
+        error.contains("needed to return an `Io` action where this `Option` region's is expected"),
+        "{error}"
+    );
+}

@@ -2219,11 +2219,19 @@ impl Displayed<'_> {
                             Some('A' | 'E' | 'I' | 'O' | 'U' | 'a' | 'e' | 'i' | 'o' | 'u') => "an",
                             _ => "a",
                         };
-                        f.stating(format_args!(
-                            "needed to sequence {article} {} action in this {} region",
-                            Code(&source),
-                            Code(&target)
-                        ));
+                        // An action a `!` runs is sequenced in its region, and one the region returns is taken as one of the region's: no `!` was written for the second.
+                        match diagnosis.sequenced {
+                            true => f.stating(format_args!(
+                                "needed to sequence {article} {} action in this {} region",
+                                Code(&source),
+                                Code(&target)
+                            )),
+                            false => f.stating(format_args!(
+                                "needed to return {article} {} action where this {} region's is expected",
+                                Code(&source),
+                                Code(&target)
+                            )),
+                        }
                         if let Some(runner) = &diagnosis.runner {
                             f.stating(format_args!(
                                 "{} hands the action's {} back to this region",

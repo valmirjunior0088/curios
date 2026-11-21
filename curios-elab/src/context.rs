@@ -174,11 +174,13 @@ pub struct Context<'s> {
     underway: Underway<'s>,
 }
 
-/// What an auto-lift site names as written: the action, and the region's monad — its type without the value slot, as a report shows a monad. A missing embedding is reported through these rather than through the monads unification solved, which are reduced and so spell a type alias by its representation: `Of(Str, (input, offset) => Boundary(input, offset))` where the program wrote `Parse(Str, …)`. The action's monad is read off its head's declaration only when a report asks, since reading it opens the declaration's arrows.
+/// What an auto-lift site names as written: the action, and the region's monad — its type without the value slot, as a report shows a monad, where the region applies a name; a nominal region, `Job(A)`, is spelled by its reduced form already. A missing embedding is reported through these rather than through the monads unification solved, which are reduced and so spell a type alias by its representation: `Of(Str, (input, offset) => Boundary(input, offset))` where the program wrote `Parse(Str, …)`. The action's monad is read off its head's declaration only when a report asks, since reading it opens the declaration's arrows.
 #[derive(Debug, Clone)]
 pub struct EmbeddingSite {
     pub action: Term,
-    pub region: Term,
+    pub region: Option<Term>,
+    /// Whether a `!` runs the action there, or the action is what the region returns: what the report of a missing edge says it was needed for.
+    pub sequenced: bool,
 }
 
 impl<'s> Context<'s> {

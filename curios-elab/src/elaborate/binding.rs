@@ -643,7 +643,7 @@ pub fn elaborate_bang(
     let action = match (region_shape, action_shape) {
         (Some(region_shape), Some(action_shape)) if region_shape.embeds(&action_shape) => {
             let wrapped = lift_wrapped(context, &bang.action, term.extent());
-            note_embedding_site(context, &wrapped, &bang.action, &expected.type_);
+            note_embedding_site(context, &wrapped, &bang.action, &expected.type_, true);
             wrapped
         }
         _ => bang.action.clone(),
@@ -822,16 +822,23 @@ fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Extent>) -> T
     }
 }
 
-/// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records nothing: a nominal region, `Job(A)`, is spelled by its reduced form already.
-fn note_embedding_site(context: &mut Context, wrapped: &Term, action: &Term, region: &Term) {
-    let (Some(extent), Some(region)) = (wrapped.extent(), written_monad(region)) else {
+/// Record what an auto-lift names as written, for the report on a missing embedding — see [`EmbeddingSite`]. A region that applies no name records no spelling of its own, a nominal region, `Job(A)`, being spelled by its reduced form already, and the site is recorded all the same, for what it ran the action for.
+fn note_embedding_site(
+    context: &mut Context,
+    wrapped: &Term,
+    action: &Term,
+    region: &Term,
+    sequenced: bool,
+) {
+    let Some(extent) = wrapped.extent() else {
         return;
     };
     context.note_embedding_site(
         extent,
         EmbeddingSite {
             action: action.clone(),
-            region,
+            region: written_monad(region),
+            sequenced,
         },
     );
 }
@@ -867,7 +874,7 @@ pub fn lift_on_check(
         return Ok(None);
     }
     let wrapped = lift_wrapped(context, term, None);
-    note_embedding_site(context, &wrapped, term, expected);
+    note_embedding_site(context, &wrapped, term, expected, false);
     Ok(Some(wrapped))
 }
 

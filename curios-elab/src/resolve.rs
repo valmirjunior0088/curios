@@ -324,6 +324,7 @@ fn diagnose_embedding(
     let written = site
         .and_then(|extent| context.embedding_site(extent))
         .cloned();
+    let sequenced = written.as_ref().is_none_or(|site| site.sequenced);
     let written_source = written
         .as_ref()
         .and_then(|site| declared_result(context, &site.action))
@@ -332,8 +333,8 @@ fn diagnose_embedding(
         Some(source) => resolved_for_display(context, &source),
         None => resolved_for_display(context, &source_whnf),
     };
-    let target = match &written {
-        Some(site) => resolved_for_display(context, &site.region),
+    let target = match written.as_ref().and_then(|site| site.region.as_ref()) {
+        Some(region) => resolved_for_display(context, region),
         None => resolved_for_display(context, &target_whnf),
     };
     let written_goal = written.and_then(|_| match &*goal {
@@ -364,6 +365,7 @@ fn diagnose_embedding(
         written_goal,
         chain,
         runner,
+        sequenced,
     ))
 }
 

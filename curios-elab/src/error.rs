@@ -264,6 +264,8 @@ pub struct EmbeddingDiagnosis {
     chain: Vec<(String, Qualifier)>,
     /// Present where the source is the fallible wrapper the registry names and the target is no instance of it: a failure has no edge into a monad that cannot hold one, so the report names the two ways the action is written instead.
     runner: Option<Box<Runner>>,
+    /// Whether the action is one a `!` runs, where the site that asked for the edge is known; `false` for an action the region returns.
+    sequenced: bool,
 }
 
 impl EmbeddingDiagnosis {
@@ -274,6 +276,7 @@ impl EmbeddingDiagnosis {
         goal: Option<Box<Term>>,
         chain: Vec<(String, Qualifier)>,
         runner: Option<Box<Runner>>,
+        sequenced: bool,
     ) -> Self {
         Self {
             source: Box::new(source),
@@ -282,6 +285,7 @@ impl EmbeddingDiagnosis {
             goal,
             chain,
             runner,
+            sequenced,
         }
     }
 }
