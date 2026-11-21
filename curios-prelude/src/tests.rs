@@ -1,18 +1,15 @@
 //! What the sources this crate elaborates must be true of, beyond elaborating.
 //!
-//! `/sys` is projected by the build script's own module, compiled here by its path: the library reads it nowhere else.
-
-#[path = "sys_module.rs"]
-mod sys_module;
-use sys_module::*;
+//! `/sys` is projected by the build's own roster, `curios-prelude-build`'s, which these suites ask as the build does.
 
 use {
-    crate::{test_support::*, *},
+    crate::*,
     curios_abi::HostOp,
     curios_common::{Report, Source},
     curios_core::{Bound, Global, Nominal, Term},
     curios_core::{Definitions, Item},
     curios_module::{SYNTAX, prepare_prelude},
+    curios_prelude_build::{std_directory, std_source, sys_module, sys_source},
     curios_surface::{
         CoreFile, FormScope, Format, Formatted, GroupItem, Module, ReadError, Spellable, TopItem,
         UseGroup, WrittenIn, intrinsic_former, to_core,

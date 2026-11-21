@@ -4,7 +4,7 @@ use {
     crate::tests::test_support::*,
     curios_elab::{DEFAULT_BUDGET, LINT_ALLOWANCE},
     curios_module::Overlay,
-    curios_prelude::test_support::*,
+    curios_prelude_build::std_source,
     curios_profile::{Destination, fold_at, trace},
     curios_surface::WrittenIn,
     curios_wonder::{Origin, Subject, diagnostics},

@@ -1,25 +1,10 @@
-//! The fixed prelude's build, as Cargo runs it: the work is `compile.rs`'s, filed where the library that embeds the images reads them, and done once a state of the sources the build links, a run under any other configuration of the same state copying the images from the checkout's entry (`entry.rs`).
+//! The fixed prelude's build, as Cargo runs it: the work is `curios-prelude-build`'s `compile`, filed where the library that embeds the images reads them, and done once a state of the sources the build links, a run under any other configuration of the same state copying the images from the checkout's entry (`curios_prelude_build::Entry`).
 //!
 //! The compiled crate is the verdict: the build panics on the first refusal of any stage, the certifier's among them, and an entry is filed only once the work is done, so the crate compiles only if the certifier accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 
-mod compile;
-use compile::*;
-
-mod entry;
-use entry::*;
-
-// The library's module too, which a build script cannot reach as a dependency of its own package.
-#[path = "src/std_module.rs"]
-mod std_module;
-use std_module::*;
-
-// And `/sys`'s roster, for the same reason.
-#[path = "src/sys_module.rs"]
-mod sys_module;
-use sys_module::*;
-
 use {
     curios_package::MANIFEST,
+    curios_prelude_build::{Entry, compile, key, std_directory},
     std::{
         env,
         path::{Path, PathBuf},
@@ -56,9 +41,8 @@ impl Asked {
 }
 
 fn main() {
+    // `curios-prelude-build`, the work, is a build-dependency, so an edit of it runs this script again as an edit of any crate it links does.
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=compile.rs");
-    println!("cargo:rerun-if-changed=entry.rs");
     println!("cargo:rerun-if-env-changed={ASKED}");
 
     // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the library that includes them is their one reader: nothing outside the build opens an image.

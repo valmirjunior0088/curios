@@ -3,81 +3,44 @@ name = "curios-prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios's fixed prelude: /std as authored, the /sys roster, and the build that elaborates, certifies and erases the two into the certified units every compilation starts from"
+description = "Curios's fixed prelude: the certified units of /sys and /std every compilation starts from, made by this crate's build and restored for each compilation"
 build = "build.rs"
 
 [lints]
 workspace = true
 
-[features]
-# The program's dependencies, which a `[[bin]]` takes from the library's table: behind a feature, so no crate above this one reaches them.
-profile = ["dep:curios-cert", "dep:curios-elab", "dep:curios-erase", "dep:curios-package"]
-# `test_support`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
-test-support = ["dep:curios-package"]
-
-# The program that is asked for the build's profile: the build script's work under a recorder, filed beside this crate. It stands beside `build.rs` so the two share `compile.rs` as a module.
-[[bin]]
-name = "profile-prelude"
-path = "profile.rs"
-required-features = ["profile"]
-
 [dependencies]
-curios-abi = { workspace = true }
-curios-num = { workspace = true }
-curios-unicode = { workspace = true }
 curios-archive = { workspace = true }
-curios-core = { workspace = true }
+curios-common = { workspace = true }
 curios-document = { workspace = true }
 curios-profile = { workspace = true }
-curios-module = { workspace = true }
-curios-surface = { workspace = true }
 curios-unit = { workspace = true }
-curios-common = { workspace = true }
-# For `profile-prelude` alone, which makes the prelude as the build script does, and `curios-package` for `std_module` too.
-curios-cert = { workspace = true, optional = true }
-curios-elab = { workspace = true, optional = true }
-curios-erase = { workspace = true, optional = true }
-curios-package = { workspace = true, optional = true }
 
-# The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased, each root imaged as the certified unit the crate restores.
+# The prelude's one build: `/sys` and `/std` lowered, elaborated, certified and erased by `curios-prelude-build`, each root imaged as the certified unit the crate restores. `curios-package` names the manifest beside `/std`, which the script watches.
 [build-dependencies]
-curios-abi = { workspace = true }
-curios-num = { workspace = true }
-curios-unicode = { workspace = true }
-curios-archive = { workspace = true }
-curios-cert = { workspace = true }
-curios-core = { workspace = true }
-curios-document = { workspace = true }
-curios-elab = { workspace = true }
-curios-erase = { workspace = true }
+curios-prelude-build = { workspace = true }
 curios-package = { workspace = true }
-curios-module = { workspace = true }
-curios-surface = { workspace = true }
-curios-unit = { workspace = true }
-curios-common = { workspace = true }
-# `entry.rs` reads the crates the script links off the manifests, for the key of the checkout's entry; `curios-package` builds the crate already.
-toml = { workspace = true }
 
 # The library's claims compile through the whole pipeline and run under the mock host, so its suite depends on the compiler the library is a part of. Cargo admits the cycle because it runs through a dev-dependency, and the build script, which reads its build-dependencies alone, never sees it.
 [dev-dependencies]
 curios = { workspace = true, features = ["test-support"] }
 curios-abi = { workspace = true }
 curios-cert = { workspace = true, features = ["test-support"] }
-# `curios_core::test_support`'s builders, which the `/sys` roster's suite builds its fixtures with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-core = { workspace = true, features = ["test-support"] }
 curios-elab = { workspace = true }
 curios-erase = { workspace = true }
+curios-module = { workspace = true }
 curios-native = { workspace = true, features = ["test-support"] }
+curios-package = { workspace = true }
 curios-pipeline = { workspace = true }
-# This crate on itself, only to turn `test-support` on for its own tests: `tests/std.rs` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
-curios-prelude = { path = ".", features = ["test-support"] }
+# Where `/std` is authored, its source as a package and `/sys`'s roster, which the suites hold the sources and the archived units to.
+curios-prelude-build = { workspace = true }
+curios-surface = { workspace = true }
 # The scratch cabinet the claims file what they compiled into.
 curios-verdict = { workspace = true }
 # The diagnostics `curios lint` reports of a package, which the test modules are held lint clean by.
 curios-wonder = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }
-# `fill!`, for the program the conformance cases are written into, and the temporary directories the entry's suite writes its workspaces in.
+# `fill!`, for the program the conformance cases are written into.
 curios-common = { workspace = true, features = ["test-support"] }
-# The build script's `entry.rs`, which its suite includes by path, reads the manifests with it.
-toml = { workspace = true }

@@ -5,7 +5,7 @@ use {
     curios::CABINET,
     curios_common::fill,
     curios_package::Cabinet,
-    curios_prelude::test_support::*,
+    curios_prelude_build::std_directory,
     curios_surface::MIN_LINE_WIDTH,
     curios_wonder::SETTLE,
     std::{

@@ -4,7 +4,7 @@ This is the surface language a `.crs` file is written in: each form, what it mea
 
 A `.crs` file is a sequence of top-level items. A program closes with one final term, the description it performs; a module is items alone. Everything below is an item, a term, or a part of one.
 
-Every `crs` example is a whole program or module that `curios wonder` reports nothing for and `curios format` leaves as it is, which `curios/src/tests/reference.rs` holds. A `text` example shows a form on its own. The examples name declarations from `/std`, the standard library every program may name, whose source under `curios-prelude/std/` is the largest body of Curios there is.
+Every `crs` example is a whole program or module that `curios wonder` reports nothing for and `curios format` leaves as it is, which `curios/src/tests/reference.rs` holds. A `text` example shows a form on its own. The examples name declarations from `/std`, the standard library every program may name, whose source under `curios-prelude-build/std/` is the largest body of Curios there is.
 
 - [Lexical structure](#lexical-structure)
 - [Literals](#literals)

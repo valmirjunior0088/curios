@@ -348,7 +348,7 @@ fn a_place_in_the_standard_librarys_package_answers() {
 
     let root = temporary("at-std");
     copied(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude/std"),
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-build/std"),
         &root,
     );
     let text = fs::read_to_string(root.join("Bool.crs")).unwrap();

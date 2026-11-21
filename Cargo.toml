@@ -22,6 +22,7 @@ members = [
     "curios-surface",
     "curios-module",
     "curios-unit",
+    "curios-prelude-build",
     "curios-prelude",
     "curios-pipeline",
     "curios-package",
@@ -86,6 +87,7 @@ curios-erase = { path = "curios-erase" }
 curios-surface = { path = "curios-surface" }
 curios-module = { path = "curios-module" }
 curios-unit = { path = "curios-unit" }
+curios-prelude-build = { path = "curios-prelude-build" }
 curios-prelude = { path = "curios-prelude" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }

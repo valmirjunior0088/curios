@@ -2,10 +2,9 @@
 //!
 //! Cargo gives each build-script unit an `OUT_DIR` of its own and runs the script once a unit, and each configuration of the workspace is a unit: Clippy against a build, one selection against another, every feature, each profile. Every one of them makes the same bytes of one state of the sources, so the first run of a state files its images here, and a run under another configuration copies them into its own `OUT_DIR` where it would make them again. The key holds what the script links and nothing of the configuration that runs it.
 //!
-//! A module of the build script, as `compile.rs` is, and of the library for its suite alone, which includes it by path.
+//! `curios-prelude`'s build script opens the entry under its own crate's `.artifacts/images/` and keys it by the crates it links, this one among them.
 
 #[cfg(test)]
-#[path = "entry/tests.rs"]
 mod tests;
 
 use {

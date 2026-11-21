@@ -16,7 +16,8 @@ use {
     curios_module::{
         Overlay, PreparedText, RootSource, SYNTAX, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_prelude::{root_prefixes, test_support::*, with_prelude},
+    curios_prelude::{root_prefixes, with_prelude},
+    curios_prelude_build::std_directory,
     curios_surface::{
         Label, LetSignature, ReaderPosition, Spellable, Spelling, TopItem, TopLet, TopMod, WordAt,
         build_rename, display_names,

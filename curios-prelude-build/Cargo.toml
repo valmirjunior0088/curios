@@ -1,0 +1,35 @@
+[package]
+name = "curios-prelude-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The fixed prelude's build: /std as authored, the /sys roster, and the work that elaborates, certifies and erases the two into the certified units curios-prelude embeds"
+
+[lints]
+workspace = true
+
+# What the work and its program, `profile`, need: this crate is `curios-prelude`'s build-dependency alone, so none of it reaches a crate above the prelude.
+[dependencies]
+curios-abi = { workspace = true }
+curios-num = { workspace = true }
+curios-unicode = { workspace = true }
+curios-archive = { workspace = true }
+curios-cert = { workspace = true }
+curios-core = { workspace = true }
+curios-document = { workspace = true }
+curios-elab = { workspace = true }
+curios-erase = { workspace = true }
+curios-package = { workspace = true }
+curios-module = { workspace = true }
+curios-profile = { workspace = true }
+curios-surface = { workspace = true }
+curios-unit = { workspace = true }
+curios-common = { workspace = true }
+# The entry's key reads the crates the build links off the manifests.
+toml = { workspace = true }
+
+[dev-dependencies]
+# `curios_core::test_support`'s builders, which the `/sys` roster's suite builds its fixtures with.
+curios-core = { workspace = true, features = ["test-support"] }
+# The temporary directories the entry's suite writes its workspaces in.
+curios-common = { workspace = true, features = ["test-support"] }

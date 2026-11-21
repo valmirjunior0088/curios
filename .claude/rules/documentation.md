@@ -36,7 +36,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 
 The filing, refinement and retirement rules are [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md)'s.
 
-An absolute Curios path leads with its slash — `/std/Tui/View` — while a file path such as `curios-prelude/std/Tui.crs` keeps its form.
+An absolute Curios path leads with its slash — `/std/Tui/View` — while a file path such as `curios-prelude-build/std/Tui.crs` keeps its form.
 
 A command a document or a slash command tells the reader to run is spelled as its `cargo xtask` recipe wherever one exists, `cargo xtask workspace test --filterset 'test(~<name>)'` and never `cargo test -p …`; bare cargo stays only where no recipe covers the step.
 

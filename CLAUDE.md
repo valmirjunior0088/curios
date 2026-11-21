@@ -28,9 +28,9 @@ A claim about what a Curios program means is a hypothesis until this tree's comp
 - `wonder -` reports every error and goal as `run` would. It stops at the first failure, so iterate.
 - `?` is the type oracle: `let y: ? = e` reports `e`'s type; a bare `?` reports the scope, the expected type, what blocks it and candidate fits.
 - `wonder --stage <rung> -` reprints the program at one pipeline rung, `text` through `wasm`.
-- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit; its tests are each subject's private `tests` module, run by `curios test` in `curios-prelude/std`, and `--filter /std/<Subject>/tests` narrows a run to one.
+- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude-build/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit; its tests are each subject's private `tests` module, run by `curios test` in `curios-prelude-build/std`, and `--filter /std/<Subject>/tests` narrows a run to one.
 
-Every other fact is on disk: `documentation/language.md` for the surface language, `curios-prelude/std/` for idiom and signatures, `.curios/cabinet/sources/` for dependencies.
+Every other fact is on disk: `documentation/language.md` for the surface language, `curios-prelude-build/std/` for idiom and signatures, `.curios/cabinet/sources/` for dependencies.
 
 ## Build and check
 

@@ -2,13 +2,13 @@
 
 use {
     super::{test_support::*, *},
-    crate::test_support::*,
     curios_cert::certify_definitions,
     curios_common::{Qualifier, SourceName, Style, digest},
     curios_core::{Anchors, Global, Item, Size},
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
+    curios_prelude_build::std_directory,
     curios_unit::{Record, segments},
     std::{collections::BTreeSet, thread, time::Instant},
 };
@@ -115,7 +115,7 @@ fn each_record_digests_the_index_it_sits_ahead_of() {
     }
 }
 
-/// **What a compilation believes of the prelude is what the establishing walk concluded, asked of the restored bytes.** The build walks each root with the certifier and panics on the first refusal, then images the unit beside the record that walk filed (`curios-prelude/compile.rs`); every compilation mounts those bytes and never walks them again ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s second boundary), so the three things a mount reads off the record are asked here and nowhere else.
+/// **What a compilation believes of the prelude is what the establishing walk concluded, asked of the restored bytes.** The build walks each root with the certifier and panics on the first refusal, then images the unit beside the record that walk filed (`curios-prelude-build/src/compile.rs`); every compilation mounts those bytes and never walks them again ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s second boundary), so the three things a mount reads off the record are asked here and nowhere else.
 ///
 /// The record must **answer for every name** its unit holds: a mounted record is read per name (`curios_cert::Filed`), so a root whose record named fewer definitions than the root holds would fail the first compilation that reads one it misses. It must file a **vector for every former**: positivity composes through the vector the certifier filed, read per name the same way. And the unit must carry no **positional identity**, the rule the build asserts on the value before it is imaged (`validate_stored_identities`), asked again over what was restored, since an index two compilations can both hand out aliases silently rather than failing.
 #[test]

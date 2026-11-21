@@ -1,6 +1,6 @@
 //! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, certified and erased through the certifier that certified them, each imaged as the certified unit the compiler restores.
 //!
-//! A module of two programs that stand beside it. `build.rs` is the one Cargo runs, into the crate's `OUT_DIR`; `profile.rs` runs the same work under a recorder for whoever asks, into a directory of its own.
+//! Two programs run it. `curios-prelude`'s build script is the one Cargo runs, into that crate's `OUT_DIR`; this crate's `profile` runs the same work under a recorder for whoever asks, into a directory of its own.
 
 use {
     crate::{std_source, sys_source},

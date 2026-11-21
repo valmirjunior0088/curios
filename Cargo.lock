@@ -591,6 +591,7 @@ dependencies = [
  "curios-package",
  "curios-pipeline",
  "curios-prelude",
+ "curios-prelude-build",
  "curios-profile",
  "curios-surface",
  "curios-verdict",
@@ -890,6 +891,7 @@ dependencies = [
  "curios-erase",
  "curios-module",
  "curios-prelude",
+ "curios-prelude-build",
  "curios-profile",
  "curios-surface",
  "curios-unit",
@@ -911,16 +913,36 @@ dependencies = [
  "curios-erase",
  "curios-module",
  "curios-native",
- "curios-num",
  "curios-package",
  "curios-pipeline",
- "curios-prelude",
+ "curios-prelude-build",
  "curios-profile",
  "curios-surface",
  "curios-unicode",
  "curios-unit",
  "curios-verdict",
  "curios-wonder",
+]
+
+[[package]]
+name = "curios-prelude-build"
+version = "0.16.25"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-cert",
+ "curios-common",
+ "curios-core",
+ "curios-document",
+ "curios-elab",
+ "curios-erase",
+ "curios-module",
+ "curios-num",
+ "curios-package",
+ "curios-profile",
+ "curios-surface",
+ "curios-unicode",
+ "curios-unit",
  "toml",
 ]
 

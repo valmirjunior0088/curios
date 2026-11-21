@@ -2,11 +2,11 @@
 
 use {
     super::{test_support::*, *},
-    crate::test_support::*,
     curios_core::{
         Bound, Cases, Enter, Global, Item, Match, Subterm, Telescope, Term, Visit, method_labels,
     },
     curios_module::SYNTAX,
+    curios_prelude_build::std_directory,
     curios_surface::TopItem,
     std::{
         cell::{Cell, RefCell},

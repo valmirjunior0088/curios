@@ -8,27 +8,21 @@
 //!
 //! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a node's row is read into its types is `projected.rs`, and how a term is built is `helpers.rs`.
 
-// Each child is named by path, the test modules too, since rustfmt follows them whatever their `cfg`: the build script includes this file by path, and a module included so finds its children beside it rather than in `sys_module/`.
-#[path = "sys_module/constructors.rs"]
 mod constructors;
 use constructors::*;
 
-#[path = "sys_module/helpers.rs"]
 mod helpers;
 use helpers::*;
 
-#[path = "sys_module/projected.rs"]
 mod projected;
 use projected::*;
 
 #[cfg(test)]
-#[path = "sys_module/test_support.rs"]
 mod test_support;
 #[cfg(test)]
 use test_support::*;
 
 #[cfg(test)]
-#[path = "sys_module/tests.rs"]
 mod tests;
 
 use {

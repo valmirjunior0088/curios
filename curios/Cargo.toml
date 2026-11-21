@@ -64,7 +64,9 @@ curios-emit = { workspace = true }
 # Its test support too: a module's digest, the census's verdict and the weight of a description's copy, which the codegen and format suites pin.
 curios-anf = { workspace = true, features = ["test-support"] }
 curios-num = { workspace = true }
+# The prelude's units, for the suites that read them whole.
+curios-prelude = { workspace = true }
 # Where the standard library is authored, for the transport test that asks about one of its files.
-curios-prelude = { workspace = true, features = ["test-support"] }
+curios-prelude-build = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }

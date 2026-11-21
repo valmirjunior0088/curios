@@ -656,4 +656,4 @@ pub fn parse_bool_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a
         .parse(state)
 }
 
-// Intrinsic types and operations are not surface syntax — they live in `/sys` (see `curios-prelude`'s `sys_module.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) are here.
+// Intrinsic types and operations are not surface syntax — they live in `/sys` (see `curios-prelude-build`'s `sys_module.rs`) and parse as ordinary names. Only genuine literals (and the boolean keywords) are here.

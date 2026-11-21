@@ -1,6 +1,4 @@
-//! The `/std` root as a source: the package authored in this crate's `std`, read as every package is. What the build script lowers into the prelude after `/sys`, and where every suite that reads the library asks for its place.
-//!
-//! A module of the build script and the profiling program, which include it by path since a build script cannot name the library of its own package; and of the library for the suites alone, compiled for this crate's tests and behind the `test-support` feature, so no build that ships holds it there.
+//! The `/std` root as a source: the package authored in this crate's `std`, read as every package is. What the build lowers into the prelude after `/sys`, and where every suite and tool that reads the library asks for its place.
 
 use {
     curios_common::Qualifier,
