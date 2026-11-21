@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty, Channel, proved};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty, proved};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/Tui/{Frame, View, Input, Reply, Mode, render, ansi};
@@ -30,7 +30,7 @@ pub struct Session: Type {
     tty: Tty,
     input: Reader(Tty),
     support: Support,
-    slot: Channel(Kept),
+    slot: /sys/Channel(Kept),
 }
 
 -- Every mode a session may set, undone in reverse: what the host writes when the terminal is given back, however the program ends, whichever of them the terminal confirmed.
@@ -123,14 +123,16 @@ pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =
     let support = supported(read.replies);
     let () = Io/write(t, entering(support))!;
     let size = Tty/size(t)!;
-    let slot = Channel/new(@Kept, 1)!;
+    let slot = /sys/Channel/new(@Kept, 1)!;
     let _ =
-        Channel/try_send(slot, Kept { shown = Option/none(), size = size, pending = read.inputs })!;
+        /sys/Channel/push(
+            slot,
+            Kept { shown = Option/none(), size = size, pending = read.inputs })!;
     Try/pure(Session { tty = t, input = input, support = support, slot = slot });
 
 -- What `s` keeps, taken from its slot. A slot that holds nothing is a session that remembers nothing: what the terminal shows is unknown, and its size is asked.
 let taken(s: Session) -> Try(Io, Io/Error, Kept) =
-    let held = Channel/try_receive(s.slot)!;
+    let held = /sys/Channel/take(s.slot)!;
     match held
     | item(kept) => Try/pure(kept)
     | _ =>
@@ -140,7 +142,7 @@ let taken(s: Session) -> Try(Io, Io/Error, Kept) =
 
 -- `kept` put back as what `s` keeps.
 let keep(s: Session, kept: Kept) -> Io({}) =
-    let _ = Channel/try_send(s.slot, kept)!;
+    let _ = /sys/Channel/push(s.slot, kept)!;
     Io/pure(());
 
 --- The size the session last knew the terminal at: the one it was opened at, asked since, or reported in the terminal's input.

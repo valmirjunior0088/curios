@@ -1,7 +1,7 @@
 --- The pieces the named reads ask for.
 pub mod piece;
 
-use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try, Channel};
+use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try};
 use /std/ops/{Eql};
 use /std/Io/{Error};
 
@@ -58,12 +58,12 @@ struct Held: Type {
 pub struct Reader(S: Type): Type {
     stream: S,
     limit: Nat,
-    slot: Channel(Held),
+    slot: /sys/Channel(Held),
 }
 
 --- A reader over `stream` whose named reads refuse a piece past `limit` bytes.
 pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =
-    let slot = Channel/new(@Held, 1)!;
+    let slot = /sys/Channel/new(@Held, 1)!;
     Io/pure(Reader { stream = stream, limit = limit, slot = slot });
 
 --- A reader over `stream` whose named reads refuse a piece past 1 MiB.
@@ -72,7 +72,7 @@ pub let new(@S: Type, stream: S) -> Io(Reader(S)) =
 
 -- An empty slot is a reader that has read nothing yet: it holds nothing and has cut nothing.
 let taken(@S: Type, r: Reader(S)) -> Io(Held) =
-    let slot = Channel/try_receive(r.slot)!;
+    let slot = /sys/Channel/take(r.slot)!;
     Io/pure(
         match slot
         | item(held) => held
@@ -80,7 +80,7 @@ let taken(@S: Type, r: Reader(S)) -> Io(Held) =
         end);
 
 let kept(@S: Type, r: Reader(S), held: Held) -> Io({}) =
-    let _ = Channel/try_send(r.slot, held)!;
+    let _ = /sys/Channel/push(r.slot, held)!;
     Io/pure(());
 
 --- The bytes `r` holds, left where they are.
