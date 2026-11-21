@@ -10,9 +10,11 @@ fn signature(text: &str) -> Signature {
 }
 
 fn declaration(kind: Kind, name: &str, home: &[&str], members: &[&str]) -> Declaration {
+    let home = Qualifier::from(home.iter().copied());
+
     Declaration {
         name: name.to_string(),
-        home: Qualifier::from(home.iter().copied()),
+        home,
         kind,
         signature: signature(name),
         prose: None,
@@ -26,7 +28,10 @@ fn declaration(kind: Kind, name: &str, home: &[&str], members: &[&str]) -> Decla
             .collect(),
         opaque: false,
         derived: false,
-        source: None,
+        proof: false,
+        total: None,
+        parties: Vec::new(),
+        named: home.with(name),
         chip: None,
     }
 }
@@ -41,12 +46,15 @@ fn witness(text: &str) -> Declaration {
         members: Vec::new(),
         opaque: false,
         derived: false,
-        source: None,
+        proof: false,
+        total: None,
+        parties: Vec::new(),
+        named: Qualifier::from(["shapes"]),
         chip: None,
     }
 }
 
-/// A root with an inductive and a concept of its own, a facade for a declaration of a private module, a witness, and one child module. The concept's first member is its superclass constraint, which the record keeps nameless so the block prints it.
+/// A root with an inductive and a concept of its own, the line that exposes the inductive's constructor beside it, a facade for a declaration of a private module, a witness, and one child module. The concept's first member is its superclass constraint, which the record keeps nameless so the block prints it.
 fn record() -> Documentation {
     Documentation {
         prefix: Qualifier::from(["shapes"]),
@@ -56,24 +64,45 @@ fn record() -> Documentation {
                 path: Qualifier::from(["shapes"]),
                 prose: None,
                 children: vec![Qualifier::from(["shapes", "geometry"])],
-                declarations: vec![
-                    declaration(Kind::Inductive, "Shape", &["shapes"], &["circle"]),
-                    declaration(Kind::Concept, "Area", &["shapes"], &["", "area"]),
-                    witness("satisfy Show(Shape)"),
+                entries: vec![
+                    Entry::Declaration(declaration(
+                        Kind::Inductive,
+                        "Shape",
+                        &["shapes"],
+                        &["circle"],
+                    )),
+                    // `pub use Shape/*;`, which exposes the constructor at `/shapes/circle`.
+                    Entry::Exposure(ExposureLine {
+                        owner: Qualifier::from(["shapes", "Shape"]),
+                        names: vec!["circle".to_string()],
+                        signature: signature("pub use Shape/{circle}"),
+                    }),
+                    Entry::Declaration(declaration(
+                        Kind::Concept,
+                        "Area",
+                        &["shapes"],
+                        &["", "area"],
+                    )),
+                    Entry::Declaration(witness("satisfy Show(Shape)")),
                     // Declared in the private `hidden` and shown here through `pub use hidden/{Token}`, so this page is the name it carries.
-                    declaration(Kind::Inductive, "Token", &["shapes"], &["token"]),
+                    Entry::Declaration(declaration(
+                        Kind::Inductive,
+                        "Token",
+                        &["shapes"],
+                        &["token"],
+                    )),
                 ],
             },
             ModuleDocumentation {
                 path: Qualifier::from(["shapes", "geometry"]),
                 prose: None,
                 children: Vec::new(),
-                declarations: vec![declaration(
+                entries: vec![Entry::Declaration(declaration(
                     Kind::Definition,
                     "origin",
                     &["shapes", "geometry"],
                     &[],
-                )],
+                ))],
             },
         ],
     }
@@ -175,6 +204,13 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
         "{landing}"
     );
     assert!(landing.contains("href=\"#Token\""), "{landing}");
+    // The line that exposes a constructor beside its owner is a card of the line alone: no header, no anchor, and no entry of the rail, the constructor being a row of its owner's block and of the index once.
+    assert!(
+        landing.contains("<article class=\"card\">\n    <div class=\"signature \">"),
+        "{landing}"
+    );
+    assert!(landing.contains("pub use Shape/{circle}"), "{landing}");
+    assert!(!landing.contains("href=\"#circle\""), "{landing}");
     assert!(landing.contains("id=\"satisfy-1\""), "{landing}");
     // The concept's superclass edge prints as a member line and, being anonymous, carries no anchor.
     assert!(landing.contains("id=\"Area/area\""), "{landing}");

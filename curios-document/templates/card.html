@@ -1,7 +1,8 @@
-{#- One declaration other than a witness: its kind and name, the facts the signature does not spell, the signature with its members beneath, and the prose written above it. -#}
+{#- One declaration other than a witness: its kind and name, the facts the signature does not spell, the signature with its members beneath, and the prose written above it. The line by which a module exposes a declaration's members is the signature alone, under no header. -#}
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
-<article class="card" id="{{ card.anchor }}">
+<article class="card"{% if !card.exposure %} id="{{ card.anchor }}"{% endif %}>
+    {%- if !card.exposure %}
     <header><span class="tag">{{ card.keyword }}</span>
         {%- if !card.name.is_empty() -%}
             <span class="title">{{ card.name }}</span>
@@ -21,6 +22,7 @@
             </span>
         {%- endif -%}
     </header>
+    {%- endif %}
     <div class="signature {{ card.layout }}">
         <div class="line">{% call sig::segments(card.signature) %}{% endcall %}{{ card.opener }}</div>
         {%- for member in card.members %}

@@ -2,7 +2,9 @@
 
 use {
     super::{Bundle, Paragraph, Span, paragraphs, spans},
-    crate::{Block, Declaration, Kind, Marked, Member, ModuleDocumentation, Signature},
+    crate::{
+        Block, Declaration, ExposureLine, Kind, Marked, Member, ModuleDocumentation, Signature,
+    },
     askama::Template,
     curios_common::{Class, Keyword, Qualifier},
     std::collections::BTreeMap,
@@ -67,8 +69,10 @@ struct ModuleCard {
     counts: String,
 }
 
-/// One declaration on a page.
+/// One declaration on a page, or the line by which the module exposes a declaration's members beside it.
 struct Card {
+    /// Whether the card is such a line: it has no header, no name and no anchor, the signature being the line.
+    exposure: bool,
     anchor: String,
     keyword: &'static str,
     /// Empty for a witness.
@@ -185,9 +189,9 @@ pub fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
     let mut witnesses = Vec::new();
     let mut cards = Vec::new();
     let mut contents = Vec::new();
-    for declaration in &module.declarations {
-        match declaration.kind {
-            Kind::Witness => {
+    for listed in &module.entries {
+        match listed {
+            crate::Entry::Declaration(declaration) if declaration.kind == Kind::Witness => {
                 witnesses.push(WitnessRow {
                     anchor: format!("satisfy-{}", witnesses.len() + 1),
                     signature: segments(bundle, depth, &declaration.signature),
@@ -195,7 +199,7 @@ pub fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
                     prose: paragraphs(declaration.prose.as_deref()),
                 });
             }
-            _ => {
+            crate::Entry::Declaration(declaration) => {
                 let built = card(bundle, depth, declaration);
                 contents.push(Entry {
                     keyword: built.keyword,
@@ -204,6 +208,8 @@ pub fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
                 });
                 cards.push(built);
             }
+            // The line stands among the cards where the module writes it, and names nothing the rail lists.
+            crate::Entry::Exposure(line) => cards.push(exposure(bundle, depth, line)),
         }
     }
 
@@ -218,7 +224,7 @@ pub fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
                 gloss: listed
                     .and_then(|listed| paragraphs(listed.prose.as_deref()).into_iter().next()),
                 counts: listed
-                    .map(|listed| counts(&listed.declarations))
+                    .map(|listed| counts(listed.declarations()))
                     .unwrap_or_default(),
             }
         })
@@ -290,12 +296,15 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
             None => ("", "", "", "", Vec::new()),
         };
 
-    let origin = declaration.source.as_ref().map(|source| Origin {
-        text: source.join(),
-        href: bundle.href(depth, source),
+    // Another page of this bundle shows the declaration where every mark names it there; one adopted out of a root no consumer names says what it is and never where it came from.
+    let elsewhere = declaration.named != declaration.home.with(&declaration.name);
+    let origin = (elsewhere && declaration.chip.is_none()).then(|| Origin {
+        text: declaration.named.join(),
+        href: bundle.href(depth, &declaration.named),
     });
 
     Card {
+        exposure: false,
         anchor: declaration.name.clone(),
         keyword: keyword(declaration.kind),
         name: declaration.name.clone(),
@@ -310,6 +319,27 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
         prose: paragraphs(declaration.prose.as_deref()),
         origin,
         chip: declaration.chip.clone(),
+    }
+}
+
+/// The card of the line by which a module exposes a declaration's members: the line alone.
+fn exposure(bundle: &Bundle<'_>, depth: usize, line: &ExposureLine) -> Card {
+    Card {
+        exposure: true,
+        anchor: String::new(),
+        keyword: "",
+        name: String::new(),
+        badges: Vec::new(),
+        signature: segments(bundle, depth, &line.signature),
+        members: Vec::new(),
+        layout: "",
+        opener: "",
+        lead: "",
+        trail: "",
+        closer: Vec::new(),
+        prose: Vec::new(),
+        origin: None,
+        chip: None,
     }
 }
 
@@ -375,7 +405,7 @@ pub fn member_kind(kind: Kind) -> &'static str {
 }
 
 /// How many declarations of each kind, in the order of [`Kind`], skipping the kinds with none.
-fn counts(declarations: &[Declaration]) -> String {
+fn counts<'a>(declarations: impl Iterator<Item = &'a Declaration>) -> String {
     let mut tally = BTreeMap::new();
     for declaration in declarations {
         *tally.entry(declaration.kind).or_insert(0usize) += 1;

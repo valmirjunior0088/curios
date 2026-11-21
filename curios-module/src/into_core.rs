@@ -3014,7 +3014,7 @@ fn into_core_unit_within(
 ///
 /// **Built where a command asks for it, and carried by no unit.** Two commands read a record, so no compilation builds one and no image holds one. What a page shows is still read off the compilation that built the library: the direct interface, the export view and what each written name resolved to are the ones `unit`'s lowering stored, and the surface tree is discovery's, read again through `source`, which parses a text once for each thread, so a command that lowered the unit a moment ago parses nothing twice.
 ///
-/// `predecessors` are the units `unit` was lowered against, in that order. `records` are the records of the ones this unit adopts a root of — a root a consumer cannot name and this unit can, whose declarations reach a consumer only through it. An adopted root is another unit, read from another source, so its record is made by this door before its adopter's is.
+/// `predecessors` are the units `unit` was lowered against, in that order. `definitions` and `certification` are the checked module of `unit` and the certifier's record of it, which say which declarations are proofs and which are proven total: the one thing a page shows that no surface tree states. `records` are the records of the ones this unit adopts a root of — a root a consumer cannot name and this unit can, whose declarations reach a consumer only through it. An adopted root is another unit, read from another source, so its record is made by this door before its adopter's is.
 ///
 /// # Panics
 ///
@@ -3024,6 +3024,8 @@ pub fn document_unit(
     unit: &PreparedText,
     predecessors: &[&PreparedText],
     records: &[&Documentation],
+    definitions: &curios_core::Definitions,
+    certification: &curios_core::Certification,
 ) -> Result<Option<Documentation>, Error> {
     let Some((prefix, description)) = source.documented() else {
         return Ok(None);
@@ -3105,6 +3107,7 @@ pub fn document_unit(
         &unit.visible,
         records,
         &units,
+        &Checked::of(definitions, certification),
         description,
     )))
 }

@@ -2,7 +2,7 @@
 
 use {
     curios_common::{Class, Qualifier, test_support::*},
-    curios_document::{Kind, Marked, Signature},
+    curios_document::{Entry, Kind, Marked, Signature},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_package::{Governing, order},
@@ -41,6 +41,38 @@ fn the_standard_library_documents_from_the_archive() {
         documentation.modules.len()
     );
     assert_eq!(documentation.modules[0].path.join(), "/std");
+
+    let try_get = documentation
+        .modules
+        .iter()
+        .find(|module| module.path.join() == "/std/Map/try_get")
+        .expect("the module of try_get");
+    let checked = |name: &str| {
+        try_get
+            .declarations()
+            .find(|declaration| declaration.name == name)
+            .map(|declaration| (declaration.proof, declaration.total))
+    };
+    assert_eq!(checked("try_get"), Some((false, Some(true))));
+    assert_eq!(checked("of_insert"), Some((true, Some(true))));
+
+    let nat = documentation
+        .modules
+        .iter()
+        .find(|module| module.path.join() == "/std/Nat")
+        .expect("the module of Nat");
+    assert!(
+        nat.declarations().any(|declaration| {
+            declaration.kind == Kind::Witness
+                && declaration.signature.text == "satisfy Show(Nat)"
+                && declaration
+                    .parties
+                    .iter()
+                    .map(Qualifier::join)
+                    .eq(["/std/Show/Show", "/std/Nat"])
+        }),
+        "a witness of a carrier takes part in the concept and in the declaration that forms the carrier"
+    );
     assert!(
         documentation
             .description
@@ -56,8 +88,7 @@ fn the_standard_library_documents_from_the_archive() {
         .find(|module| module.path.join() == "/std/Ord/Ordering")
         .expect("an Ordering module");
     let induct = ordering
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "Ordering")
         .expect("the Ordering type");
     assert_eq!(induct.kind, Kind::Inductive);
@@ -87,8 +118,7 @@ fn the_standard_library_documents_from_the_archive() {
         .find(|module| module.path.join() == "/std/Map")
         .and_then(|module| {
             module
-                .declarations
-                .iter()
+                .declarations()
                 .find(|declaration| declaration.name == "Map")
         })
         .expect("the Map type");
@@ -102,8 +132,7 @@ fn the_standard_library_documents_from_the_archive() {
         .find(|module| module.path.join() == "/std/Ord")
         .and_then(|module| {
             module
-                .declarations
-                .iter()
+                .declarations()
                 .find(|declaration| declaration.name == "Ord")
         })
         .expect("the Ord concept");
@@ -126,8 +155,7 @@ fn the_standard_library_documents_from_the_archive() {
 
     // A signature's reference to a declaration of the same unit links within the bundle.
     let flip = ordering
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "flip")
         .expect("Ordering/flip");
     assert!(
@@ -140,10 +168,9 @@ fn the_standard_library_documents_from_the_archive() {
         flip.signature
     );
 
-    // `pub use Ordering/*` puts the constructors in the module beside the type, which is where a consumer reaches them: `Ordering/lt` and `Ordering` are siblings, so the page lists both. The constructor stays a member of its type as well, since that is where its shape belongs.
+    // `pub use Ordering/*` exposes the constructors beside the type, which is where a consumer reaches them. A constructor is no declaration of its own: it stays a row of its type's block, and the page lists the line that exposes it, where the module writes it, each name in the order the type declares them and linked to its row.
     let declared = ordering
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "Ordering")
         .expect("Ordering");
     assert!(
@@ -151,22 +178,52 @@ fn the_standard_library_documents_from_the_archive() {
         "{:?}",
         declared.members
     );
-
-    let constructor = ordering
-        .declarations
-        .iter()
-        .find(|declaration| declaration.name == "lt")
-        .expect("the constructor beside its type");
-    assert_eq!(constructor.home.join(), "/std/Ord/Ordering");
-    assert_eq!(
-        constructor.source.as_ref().map(Qualifier::join).as_deref(),
-        Some("/std/Ord/Ordering/Ordering"),
-        "a member's card names the declaration that holds it, and links to the row inside it"
-    );
     assert!(
-        constructor.signature.text.starts_with("lt("),
+        ordering
+            .declarations()
+            .all(|declaration| declaration.name != "lt"),
+        "a constructor is no declaration of the page"
+    );
+
+    let exposed = ordering
+        .entries
+        .iter()
+        .find_map(|entry| match entry {
+            Entry::Exposure(line) => Some(line),
+            Entry::Declaration(_) => None,
+        })
+        .expect("the line that exposes the constructors");
+    assert_eq!(exposed.owner.join(), "/std/Ord/Ordering/Ordering");
+    assert_eq!(exposed.names, ["lt", "eq", "gt"]);
+    assert_eq!(exposed.signature.text, "pub use Ordering/{lt, eq, gt}");
+    assert_eq!(
+        exposed
+            .signature
+            .marks
+            .iter()
+            .filter_map(|mark| match &mark.marked {
+                Marked::Name { referent, .. } => Some(referent.join()),
+                Marked::Word(_) => None,
+            })
+            .collect::<Vec<_>>(),
+        [
+            "/std/Ord/Ordering/Ordering",
+            "/std/Ord/Ordering/Ordering/lt",
+            "/std/Ord/Ordering/Ordering/eq",
+            "/std/Ord/Ordering/Ordering/gt",
+        ],
+        "the owner and each member are marked as a signature's names are"
+    );
+    // The line stands where the module writes it: right after the type it follows.
+    let after = ordering
+        .entries
+        .iter()
+        .position(|entry| matches!(entry, Entry::Declaration(declaration) if declaration.name == "Ordering"))
+        .expect("Ordering");
+    assert!(
+        matches!(&ordering.entries[after + 1], Entry::Exposure(_)),
         "{:?}",
-        constructor.signature
+        ordering.entries[after + 1]
     );
 }
 
@@ -185,8 +242,7 @@ fn a_concept_method_resolves_the_names_in_its_signature() {
         .find(|page| page.path == Qualifier::from(["std", "Show"]))
         .expect("/std/Show has a page");
     let show = page
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "Show")
         .expect("/std/Show declares the concept Show");
     let method = show
@@ -248,8 +304,7 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
             .iter()
             .find(|page| page.path == path)
             .and_then(|page| {
-                page.declarations
-                    .iter()
+                page.declarations()
                     .find(|declaration| declaration.name == label)
             });
 
@@ -289,8 +344,7 @@ fn card(
         .iter()
         .find(|page| page.path == path)
         .and_then(|page| {
-            page.declarations
-                .iter()
+            page.declarations()
                 .find(|declaration| declaration.name == label)
         })
         .unwrap_or_else(|| panic!("{module} shows no {label}"));
@@ -347,50 +401,115 @@ fn a_written_name_links_what_the_lowering_resolved_it_to() {
     );
 }
 
-/// **A constructor standing beside its family calls the family once per parameter group, as a signature writes it.** A hidden parameter is left out, so `refl` produces `Eq()(z, z)` rather than the flat `Eq(A, z, z)`, a call no surface writes; an explicit one keeps a group of its own ahead of the indices.
+/// **A constructor or a method a module exposes beside its owner is the line that exposes it, where the module writes it.** A glob over a declaration stands where it is written, its names in the order the declaration lists them; a named line files a declaration it names as one and the members it names of an owner as one line; and an owner another page declares is written by the name this module exposes it under.
 #[test]
-fn a_constructor_calls_its_family_once_per_parameter_group() {
-    let library = standard_library();
+fn a_member_a_module_exposes_is_the_line_that_exposes_it() {
+    let documentation = shades();
+    let listed = documentation.modules[0]
+        .entries
+        .iter()
+        .map(|entry| match entry {
+            Entry::Declaration(declaration) => declaration.signature.text.clone(),
+            Entry::Exposure(line) => format!("{} of {}", line.signature.text, line.owner.join()),
+        })
+        .collect::<Vec<_>>();
 
-    let (refl, _) = card(&library, "/std/Eq", "refl");
-    assert_eq!(refl, "refl(@z: A) -> Eq()(z, z)");
-    let (nil, _) = card(&library, "/std/List/Permutation", "nil");
-    assert_eq!(nil, "nil() -> Permutation()([], [])");
+    assert_eq!(
+        listed,
+        [
+            "pub induct Tone: pub Type",
+            "pub let pitch: /std/Nat",
+            "pub use Tone/{low} of /shades/tone/Tone",
+            "pub induct Shade: pub Type",
+            "pub let other: /std/Nat",
+            "pub use Shade/{dark, light} of /shades/Shade",
+            "pub concept Named(A: Type): pub Type",
+            "satisfy Named(Shade)",
+            "pub let same(s: Shade) -> /std/Eq()(s, s)",
+        ]
+    );
+}
 
+/// **A page says of a declaration what its checks established, and of a witness what it takes part in.** That a definition is a proof and that it is proven total are the checked module's and the certifier's to say, and a witness's concept and the type its key names are the lowering's.
+#[test]
+fn a_declaration_carries_what_its_checks_established() {
+    let documentation = shades();
+    let page = &documentation.modules[0];
+    let named = |name: &str| {
+        page.declarations()
+            .find(|declaration| declaration.name == name)
+            .unwrap_or_else(|| panic!("{name} on the library's page"))
+    };
+
+    let same = named("same");
+    assert!(same.proof, "a definition whose type is a proposition");
+    assert_eq!(same.total, Some(true));
+
+    let other = named("other");
+    assert!(!other.proof);
+    assert_eq!(other.total, Some(true));
+
+    // A type is neither, and a definition another page declares carries what that page's does.
+    let shade = named("Shade");
+    assert!(!shade.proof);
+    assert_eq!(shade.total, None);
+    assert_eq!(named("pitch").total, Some(true));
+
+    let witness = page
+        .declarations()
+        .find(|declaration| declaration.kind == Kind::Witness)
+        .expect("the witness");
+    assert_eq!(
+        witness
+            .parties
+            .iter()
+            .map(Qualifier::join)
+            .collect::<Vec<_>>(),
+        ["/shades/Named", "/shades/Shade"]
+    );
+    assert!(same.parties.is_empty());
+}
+
+/// The record of a package whose root exposes a family another module declares with one of its constructors, declares a family of its own with a glob over its constructors beneath, a concept with a witness, and a proof.
+fn shades() -> curios_document::Documentation {
     let root = tree(
-        "document-indexed",
+        "document-shades",
         &[
             (
                 "curios.toml",
                 concat!(
                     "compiler = \"",
                     env!("CARGO_PKG_VERSION"),
-                    "\"\nname = \"vectors\"\n"
+                    "\"\nname = \"shades\"\n"
                 ),
             ),
             (
                 "lib.crs",
                 concat!(
-                    "use /std/{Nat};\n\n",
-                    "pub induct Vec(T: Type): (Nat) -> pub Type\n",
-                    "| nil(): (0)\n",
-                    "| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\n",
-                    "end\n\n",
-                    "pub use Vec/*;\n",
+                    "pub mod tone;\n",
+                    "pub use tone/{Tone, pitch};\n",
+                    "pub use tone/Tone/{low};\n\n",
+                    "pub induct Shade: pub Type\n| dark()\n| light()\nend\n\n",
+                    "pub let other: /std/Nat =\n    1;\n\n",
+                    "pub use Shade/*;\n\n",
+                    "pub concept Named(A: Type): pub Type {\n    name(A) -> /std/Str,\n}\n\n",
+                    "satisfy Named(Shade) {\n    name(_) = \"shade\",\n}\n\n",
+                    "pub let same(s: Shade) -> /std/Eq()(s, s) =\n    /std/Eq/refl();\n",
+                ),
+            ),
+            (
+                "tone.crs",
+                concat!(
+                    "pub induct Tone: pub Type\n| high()\n| low()\nend\n\n",
+                    "pub let pitch: /std/Nat =\n    2;\n",
                 ),
             ),
         ],
     );
     let governing = Governing::found(None, &root, None).expect("a governed package");
     let units = order(&governing).expect("a scope");
-    let vectors = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
-        .expect("the package documents");
 
-    let (cons, _) = card(&vectors, "/vectors", "cons");
-    assert_eq!(
-        cons,
-        "cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)"
-    );
+    documentation(DEFAULT_BUDGET, units, &Overlay::default(), None).expect("the package documents")
 }
 
 /// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted card shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
@@ -411,7 +530,7 @@ fn an_adopted_signature_spells_its_names_below_their_root() {
     let in_full = documentation
         .modules
         .iter()
-        .flat_map(|page| &page.declarations)
+        .flat_map(|page| page.declarations())
         .filter(|declaration| declaration.chip.as_deref() == Some("intrinsic"))
         .flat_map(|declaration| {
             std::iter::once(&declaration.signature)
@@ -544,8 +663,7 @@ fn a_package_documents_its_interface_for_its_consumers() {
     assert_eq!(library.children, [Qualifier::from(["shapes", "geometry"])]);
     assert_eq!(
         library
-            .declarations
-            .iter()
+            .declarations()
             .map(|declaration| declaration.name.as_str())
             .collect::<Vec<_>>(),
         [
@@ -555,21 +673,24 @@ fn a_package_documents_its_interface_for_its_consumers() {
     );
     let named = |name: &str| {
         library
-            .declarations
-            .iter()
+            .declarations()
             .find(|declaration| declaration.name == name)
             .unwrap_or_else(|| panic!("{name} on the library's page"))
     };
 
     // Every name this page offers is named for this page, whether it was written here or exposed out of a module with none.
-    for declaration in &library.declarations {
+    for declaration in library.declarations() {
         assert_eq!(declaration.home, Qualifier::from(["shapes"]));
     }
 
     // The facade: `Token` and `unseen` are declared in `hidden`, which has no page — so their cards are this page's, under this page's name, with the prose and members written where they were declared. Nothing names `hidden`, since a consumer cannot write it.
     let token = named("Token");
     assert_eq!(token.kind, Kind::Inductive);
-    assert_eq!(token.source, None, "a private module is not a page to name");
+    assert_eq!(
+        token.named,
+        Qualifier::from(["shapes", "Token"]),
+        "a private module is not a page to name: every mark names the declaration where this page shows it"
+    );
     assert_eq!(token.prose, Some(vec!["A token.".to_string()]));
     assert_eq!(
         token
@@ -657,34 +778,28 @@ fn a_package_documents_its_interface_for_its_consumers() {
 
     // A re-export is a card of the page that offers it, naming the page it is written on; one out of a private module is a card too, and names nothing, since a consumer has no path to that module.
     let exposed = library
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "origin")
         .expect("origin");
     assert_eq!(exposed.home.join(), "/shapes");
-    assert_eq!(
-        exposed.source.as_ref().map(Qualifier::join).as_deref(),
-        Some("/shapes/geometry/origin")
-    );
+    assert_eq!(exposed.named.join(), "/shapes/geometry/origin");
 
     let facade = library
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.name == "Token")
         .expect("Token");
     assert_eq!(facade.home.join(), "/shapes");
     assert_eq!(
-        facade.source, None,
+        facade.named.join(),
+        "/shapes/Token",
         "a private module is not a page to name"
     );
 
     let geometry = &documentation.modules[1];
     assert_eq!(geometry.prose, Some(vec!["Geometry.".to_string()]));
-    assert_eq!(geometry.declarations[0].name, "origin");
-    assert_eq!(
-        geometry.declarations[0].prose,
-        Some(vec!["Where it starts.".to_string()])
-    );
+    let origin = geometry.declarations().next().expect("origin");
+    assert_eq!(origin.name, "origin");
+    assert_eq!(origin.prose, Some(vec!["Where it starts.".to_string()]));
 }
 
 /// Each span a signature marks, as `(text, class)`: a word by its class, a name by its declaration's.
@@ -736,8 +851,7 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
         .expect("the package documents");
     let signature = |label: &str| {
         &documentation.modules[0]
-            .declarations
-            .iter()
+            .declarations()
             .find(|declaration| declaration.name == label)
             .unwrap_or_else(|| panic!("the package declares {label}"))
             .signature
@@ -777,8 +891,7 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
     );
 
     let witness = &documentation.modules[0]
-        .declarations
-        .iter()
+        .declarations()
         .find(|declaration| declaration.kind == Kind::Witness)
         .expect("the package declares a witness")
         .signature;

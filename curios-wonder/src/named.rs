@@ -22,8 +22,8 @@ use {
     curios_common::{Class, Code, Plicity, Qualifier, Report, Said, Source, Span},
     curios_core::{
         Anchors, Binds, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey,
-        Imports, Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
-        UnitPaths, WitnessKey, WrittenBinder,
+        Imports, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality, UnitPaths,
+        WitnessKey, WrittenBinder,
     },
     curios_document::{Documentation, Kind, ModuleDocumentation},
     curios_elab::{Resolved, Traces},
@@ -34,9 +34,7 @@ use {
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
         spelling_for,
     },
-    curios_surface::{
-        IntrinsicForm, ReaderPosition, Spellable, Spelling, intrinsic_form, intrinsic_global, spell,
-    },
+    curios_surface::{ReaderPosition, Spellable, Spelling, carrier_former, spell},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -1424,11 +1422,21 @@ fn listed(
         .filter_map(|(label, name)| Some((label.as_str(), (*name, found(scope, own, name)?))))
         .collect::<BTreeMap<_, _>>();
     let order = match page {
+        // A page lists a name it documents where its declaration stands, and a member the module exposes beside its owner where the line that does it stands.
         Some(page) => page
-            .declarations
+            .entries
             .iter()
-            .filter(|declaration| declaration.kind != Kind::Witness)
-            .map(|declaration| declaration.name.as_str())
+            .flat_map(|entry| match entry {
+                curios_document::Entry::Declaration(declaration) => {
+                    match declaration.kind == Kind::Witness {
+                        true => Vec::new(),
+                        false => vec![declaration.name.as_str()],
+                    }
+                }
+                curios_document::Entry::Exposure(line) => {
+                    line.names.iter().map(String::as_str).collect()
+                }
+            })
             .collect::<Vec<_>>(),
         None => exposure
             .names
@@ -1459,8 +1467,7 @@ fn listed(
     entries.extend(run.take().map(exposing));
     match page {
         Some(page) => entries.extend(
-            page.declarations
-                .iter()
+            page.declarations()
                 .filter(|declaration| declaration.kind == Kind::Witness)
                 .map(|declaration| declaration.signature.text.clone()),
         ),
@@ -1501,8 +1508,7 @@ fn entry_of(
     found: &Found<'_>,
 ) -> String {
     let shown = page.and_then(|page| {
-        page.declarations
-            .iter()
+        page.declarations()
             .find(|declaration| declaration.name == label && declaration.kind != Kind::Witness)
     });
 
@@ -1715,30 +1721,6 @@ fn witnesses(saying: &Saying<'_>, found: &Found<'_>, name: &Global) -> Option<Ve
             })
             .collect(),
     )
-}
-
-/// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
-fn carrier_former(head: &HeadKey) -> Option<Global> {
-    let former = match head {
-        HeadKey::Nat => Intrinsic::NatType,
-        HeadKey::Byte => Intrinsic::ByteType,
-        HeadKey::Int => Intrinsic::IntType,
-        HeadKey::Flt => Intrinsic::FltType,
-        HeadKey::Bool => Intrinsic::BoolType,
-        HeadKey::Bytes => Intrinsic::BytesType,
-        HeadKey::Handle => Intrinsic::HandleType,
-        HeadKey::List => Intrinsic::ListType(Term::type_ground()),
-        HeadKey::Cell => Intrinsic::CellType(Term::type_ground()),
-        HeadKey::Channel => Intrinsic::ChannelType(Term::type_ground()),
-        HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
-        HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
-    };
-
-    match intrinsic_form(former, false) {
-        IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
-        IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
-        _ => None,
-    }
 }
 
 /// The member `label` of `owner`, a concept's method by the concept: declared in the namespace its owner's name opens. `None` for an owner that is no authored declaration.

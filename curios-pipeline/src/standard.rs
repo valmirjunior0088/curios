@@ -413,9 +413,17 @@ impl<'a> Fold<'a> {
                 return Err(undocumented());
             };
 
-            document_unit(source, written, &predecessors, &records)
-                .map_err(|error| CompileError::Failure(vec![error.report()]))?
-                .ok_or_else(undocumented)
+            // The unit's checked module and the certifier's record of it say which of its declarations are proofs, and which are proven total.
+            document_unit(
+                source,
+                written,
+                &predecessors,
+                &records,
+                unit.core(),
+                unit.certification(),
+            )
+            .map_err(|error| CompileError::Failure(vec![error.report()]))?
+            .ok_or_else(undocumented)
         })
     }
 

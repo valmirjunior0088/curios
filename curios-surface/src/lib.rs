@@ -41,8 +41,8 @@ mod spelling;
 use spelling::*;
 pub use spelling::{
     DisplayNames, FormScope, IntrinsicForm, IntrinsicOperand, Islands, LiteralEntry, ReaderNames,
-    ReaderPosition, Rename, Shorten, Spellable, Spelled, Spelling, build_rename, display_names,
-    intrinsic_form, intrinsic_former, intrinsic_global,
+    ReaderPosition, Rename, Shorten, Spellable, Spelled, Spelling, build_rename, carrier_former,
+    display_names, intrinsic_form, intrinsic_former, intrinsic_global,
 };
 
 mod core_text;
@@ -59,8 +59,8 @@ mod print;
 use print::*;
 pub use print::{
     print_case_head, print_case_result_head, print_concept_field_head, print_concept_head,
-    print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
-    print_struct_head, print_test_head, print_witness_head,
+    print_exposure_head, print_foreign_head, print_induct_head, print_let_head,
+    print_struct_field_head, print_struct_head, print_test_head, print_witness_head,
 };
 
 mod parse;

@@ -20,7 +20,10 @@ fn declaration(home: &Qualifier, name: &str, kind: Kind) -> Declaration {
         members: Vec::new(),
         opaque: false,
         derived: false,
-        source: None,
+        proof: false,
+        total: None,
+        parties: Vec::new(),
+        named: home.with(name),
         chip: None,
     }
 }
@@ -46,7 +49,11 @@ fn a_signature_is_cut_at_its_marks_each_painted_by_its_class() {
             path: module,
             prose: None,
             children: Vec::new(),
-            declarations: vec![declaration(&module, "Colour", Kind::Inductive)],
+            entries: vec![crate::Entry::Declaration(declaration(
+                &module,
+                "Colour",
+                Kind::Inductive,
+            ))],
         }],
     };
     let bundle = Bundle::new(&record);
@@ -109,8 +116,8 @@ fn a_module_card_tallies_kinds_in_their_order() {
 
     // A count and its word are joined by a no-break space, so the two never part at a line's end.
     assert_eq!(
-        counts(&declarations),
+        counts(declarations.iter()),
         "2\u{a0}let · 1\u{a0}induct · 1\u{a0}satisfy"
     );
-    assert_eq!(counts(&[]), "");
+    assert_eq!(counts([].iter()), "");
 }

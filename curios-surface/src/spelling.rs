@@ -1207,6 +1207,30 @@ pub fn intrinsic_global(path: &str) -> Global {
     })
 }
 
+/// The declaration under `/sys` that forms the carrier `head` keys on, `/sys/Nat/Nat` for `Nat`, read off the path its former is written at. None for a head no intrinsic former keys: a nominal one, or a tuple's shape.
+pub fn carrier_former(head: &HeadKey) -> Option<Global> {
+    let former = match head {
+        HeadKey::Nat => Intrinsic::NatType,
+        HeadKey::Byte => Intrinsic::ByteType,
+        HeadKey::Int => Intrinsic::IntType,
+        HeadKey::Flt => Intrinsic::FltType,
+        HeadKey::Bool => Intrinsic::BoolType,
+        HeadKey::Bytes => Intrinsic::BytesType,
+        HeadKey::Handle => Intrinsic::HandleType,
+        HeadKey::List => Intrinsic::ListType(Term::type_ground()),
+        HeadKey::Cell => Intrinsic::CellType(Term::type_ground()),
+        HeadKey::Channel => Intrinsic::ChannelType(Term::type_ground()),
+        HeadKey::Io => Intrinsic::IoType(Term::type_ground()),
+        HeadKey::Nominal(_) | HeadKey::TupleType(_) => return None,
+    };
+
+    match intrinsic_form(former, false) {
+        IntrinsicForm::Named(path) => Some(intrinsic_global(path)),
+        IntrinsicForm::Call { path, .. } => Some(intrinsic_global(&path)),
+        _ => None,
+    }
+}
+
 /// The intrinsic type former `/sys` declares at `global`, over `operands`: `NatType` at `/sys/Nat/Nat` over none, `ListType(T)` at `/sys/List/List` over `T`. `None` where `global` names no intrinsic former, or `operands` are not as many as it takes. What a former written by its name and applied in full is, read off the path each former is written at ([`intrinsic_form`]) once for the process: elaboration asks it of every name it meets.
 pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic> {
     static FORMERS: OnceLock<HashMap<Global, IntrinsicFormer>> = OnceLock::new();

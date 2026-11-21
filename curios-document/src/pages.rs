@@ -94,7 +94,7 @@ impl<'a> Bundle<'a> {
                 .addresses
                 .entry(module.path)
                 .or_insert((page.clone(), None));
-            for declaration in &module.declarations {
+            for declaration in module.declarations() {
                 if declaration.name.is_empty() {
                     continue;
                 }
@@ -155,7 +155,7 @@ impl<'a> Bundle<'a> {
         for module in &self.record.modules {
             let page = self.page_path(&module.path);
             row("mod", &module.path, page.clone());
-            for declaration in &module.declarations {
+            for declaration in module.declarations() {
                 if declaration.name.is_empty() {
                     continue;
                 }

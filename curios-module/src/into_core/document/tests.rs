@@ -58,6 +58,22 @@ fn a_member_is_stated_as_it_stands_apart_from_its_owner() {
         stated(SHOW, "show", 0),
         said("show(A) -> Str", &["Its text."])
     );
+
+    // A constructor calls its family once for each group of parameters the family writes, as a signature writes it: a hidden parameter is left out, so the call is empty, and the indices are a call of their own.
+    const EQ: &str = "pub induct Eq(@A: Sort): (A, A) -> pub Prop\n| refl(@z: A): (z, z)\nend";
+    assert_eq!(
+        stated(EQ, "refl", 0),
+        said("refl(@z: A) -> Eq()(z, z)", &[])
+    );
+
+    const VEC: &str = "pub induct Vec(T: Type): (Nat) -> pub Type\n| nil(): (0)\n| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)\nend";
+    assert_eq!(
+        stated(VEC, "cons", 0),
+        said(
+            "cons(@n: Nat, head: T, tail: Vec(T)(n)) -> Vec(T)(n + 1)",
+            &[]
+        )
+    );
 }
 
 /// A witness is named by its head, a test by its name, and a member of a group by its own.

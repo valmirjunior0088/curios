@@ -36,10 +36,6 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
     let std_text = lower("std", &std_modules, &[&sys_text]);
     validate_syntax_targets(&[sys_text.core(), std_text.core()]);
 
-    // The records `document --std` renders, made while each root's lowered tables are in hand and filed as an image of their own: nothing that compiles reads one, so neither unit holds one. `/sys` first, because `/std` adopts its intrinsic declarations out of that record.
-    let sys_record = documented("sys", &sys_modules, &sys_text, &[], &[]);
-    let std_record = documented("std", &std_modules, &std_text, &[&sys_text], &[&sys_record]);
-
     // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every cabinet slot is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
     let sys = unit("sys", sys_text, &Established::nothing(), &[]);
     let std = unit(
@@ -50,6 +46,10 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
             .fixed(&[true]),
         &[&sys],
     );
+
+    // The records `document --std` renders, made once each root is checked, since a page says which declarations are proofs and which are proven total, and filed as an image of their own: nothing that compiles reads one, so neither unit holds one. `/sys` first, because `/std` adopts its intrinsic declarations out of that record.
+    let sys_record = documented("sys", &sys_modules, &sys, &[], &[]);
+    let std_record = documented("std", &std_modules, &std, &[&sys], &[&sys_record]);
 
     // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
     let sys_digest = write_image(out, "sys", &sys, sys_modules.reads(), Vec::new());
@@ -81,17 +81,34 @@ fn lower(root: &str, modules: &RootSource, predecessors: &[&PreparedText]) -> Pr
     prepared
 }
 
-/// One prelude root's documentation record, from the source it was read from and the unit it lowered to, over the records of the roots before it.
+/// One prelude root's documentation record, from the source it was read from and the unit it was checked as, over the roots before it and their records.
 fn documented(
     root: &str,
     modules: &RootSource,
-    text: &PreparedText,
-    predecessors: &[&PreparedText],
+    unit: &Unit,
+    predecessors: &[&Unit],
     records: &[&Documentation],
 ) -> Documentation {
-    document_unit(&UnitSource::mounted(modules), text, predecessors, records)
-        .unwrap_or_else(|error| panic!("/{root} failed to document: {}", error.format()))
-        .unwrap_or_else(|| panic!("/{root} marks no mount as documented"))
+    let predecessors = predecessors
+        .iter()
+        .map(|unit| lowered(root, unit))
+        .collect::<Vec<_>>();
+    document_unit(
+        &UnitSource::mounted(modules),
+        lowered(root, unit),
+        &predecessors,
+        records,
+        unit.core(),
+        unit.certification(),
+    )
+    .unwrap_or_else(|error| panic!("/{root} failed to document: {}", error.format()))
+    .unwrap_or_else(|| panic!("/{root} marks no mount as documented"))
+}
+
+/// The lowering the unit of a prelude root keeps: each is lowered from text.
+fn lowered<'a>(root: &str, unit: &'a Unit) -> &'a PreparedText {
+    unit.text()
+        .unwrap_or_else(|| panic!("/{root} is documented from a root lowered from text"))
 }
 
 /// What a refusal says of `module`, a root's lowered or elaborated module, as `format` renders it, spelled against the roots before it: each one's lexicon is made here, where a root is refused, since a build that refuses stops.

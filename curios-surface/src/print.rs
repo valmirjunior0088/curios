@@ -123,7 +123,7 @@ fn telescope(items: Vec<Printer>) -> Printer {
 /// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name.
 ///
 /// No enclosing `group`, and that absence *is* the layout. A group asks whether the whole run fits on one line, which is the wrong question to put to content that would rather wrap: answering no would break a `soft_line` after the delimiter and spend a line on nothing but the delimiter itself. A fill needs no such permission, deciding each gap for itself, so the first name rides the delimiter and only the wraps are indented. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
-fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printer {
+fn filled(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
     if items.is_empty() {
         return pure(format!("{open}{close}"));
     }
@@ -132,8 +132,8 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
         .into_iter()
         .enumerate()
         .map(|(index, item)| match index == last {
-            true => pure(item),
-            false => pure(format!("{item},")),
+            true => item,
+            false => flat([item, pure(",")]),
         })
         .collect::<Vec<_>>();
     flat([
@@ -2193,18 +2193,38 @@ pub fn print_shown_entry(entry: CoreEntry<Shown>, options: ShownOptions) -> Prin
 }
 
 fn print_top_use(item: TopUse) -> Printer {
+    let path = pure(item.name.join());
+
     flat([
-        print_pub(item.vis_pub),
-        lead(&[Keyword::Use]),
-        pure(item.name.join()),
         match item.group {
-            // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
-            UseGroup::Named(items) => {
-                filled("/{", items.iter().map(print_group_item).collect(), "}")
-            }
-            UseGroup::Glob => pure("/*"),
+            UseGroup::Named(items) => use_line(
+                item.vis_pub,
+                path,
+                items
+                    .iter()
+                    .map(|item| pure(print_group_item(item)))
+                    .collect(),
+            ),
+            UseGroup::Glob => flat([
+                print_pub(item.vis_pub),
+                lead(&[Keyword::Use]),
+                path,
+                pure("/*"),
+            ]),
         },
         pure(";"),
+    ])
+}
+
+/// A `use` line naming what it brings in, without the `;` that closes it: its `pub`, the keyword, the path and the braced names.
+///
+/// Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
+fn use_line(vis_pub: bool, path: Printer, names: Vec<Printer>) -> Printer {
+    flat([
+        print_pub(vis_pub),
+        lead(&[Keyword::Use]),
+        path,
+        filled("/{", names, "}"),
     ])
 }
 
@@ -2510,6 +2530,15 @@ pub fn print_concept_head(item: &TopConcept) -> Printer {
 /// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
 pub fn print_concept_field_head(field: &ConceptField) -> Printer {
     PROGRAM.concept_field_written(field.clone())
+}
+
+/// The line by which a module exposes the members `names` of the declaration it writes `owner`, as the formatter writes a `pub use`, by the printer it writes one with: what a page shows of a constructor or a method a module exposes beside its owner, the owner and each member set apart as names.
+pub fn print_exposure_head(owner: &str, names: &[String]) -> Printer {
+    use_line(
+        true,
+        named(owner.to_string()),
+        names.iter().map(|name| named(name.clone())).collect(),
+    )
 }
 
 /// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.

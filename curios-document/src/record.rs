@@ -25,8 +25,38 @@ pub struct ModuleDocumentation {
     pub prose: Option<Vec<String>>,
     /// The public child modules, in declaration order.
     pub children: Vec<Qualifier>,
-    /// Everything a consumer reaches through this module, in the order the module writes it: its own declarations where they are declared, and each name a `pub use` exposes where that `pub use` stands. A name declared elsewhere carries a [`Declaration::source`] saying so, and one declared in a module with no page carries none — for a consumer, this page is where it lives.
-    pub declarations: Vec<Declaration>,
+    /// Everything a consumer reaches through this module, in the order the module writes it: its own declarations where they are declared, each name a `pub use` exposes where that `pub use` stands, and the members of a declaration such a line exposes beside it as the line that does ([`Entry`]).
+    pub entries: Vec<Entry>,
+}
+
+impl ModuleDocumentation {
+    /// The declarations among the module's entries, in their order.
+    pub fn declarations(&self) -> impl Iterator<Item = &Declaration> {
+        self.entries.iter().filter_map(|entry| match entry {
+            Entry::Declaration(declaration) => Some(declaration),
+            Entry::Exposure(_) => None,
+        })
+    }
+}
+
+/// One thing a module's page lists: a declaration a consumer reaches through the module, or the line by which the module exposes a declaration's members beside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Entry {
+    Declaration(Declaration),
+    Exposure(ExposureLine),
+}
+
+/// The members of one declaration a module exposes beside it by one `pub use` line: the constructors of an inductive, the methods of a concept. They are no declarations of their own, and each is shown in its owner's block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct ExposureLine {
+    /// The declaration whose members they are, by the path a consumer names it.
+    pub owner: Qualifier,
+    /// The members the line exposes, as it lists them; a glob's, in the order their owner declares them.
+    pub names: Vec<String>,
+    /// The line as a module writes it, `pub use Option/{some, none}`, the owner and each member marked as a signature's names are.
+    pub signature: Signature,
 }
 
 /// What kind of declaration a page entry is, ordered as a module card tallies the kinds.
@@ -91,8 +121,14 @@ pub struct Declaration {
     pub opaque: bool,
     /// A `satisfy` whose body the compiler writes.
     pub derived: bool,
-    /// What this card came from, under the name a consumer writes it by, when that is something else this bundle shows: the declaration itself for a name re-exported off another page, and the owning declaration for a constructor or a method a module exposes beside it. `None` both for a declaration written here and for one adopted out of a module with no page — the second has no path a consumer may write, and naming the root it came from is exactly what a consumer must not be taught.
-    pub source: Option<Qualifier>,
+    /// Whether the declaration is a proof: one a checker marks as written at a proposition, or as a function into one. Read off the check of the unit, the one fact of a page the surface tree does not state.
+    pub proof: bool,
+    /// Whether the certifier proved the definition total, where it classifies it at all: none for what is no definition, a type or a witness.
+    pub total: Option<bool>,
+    /// What a witness takes part in: the concept it witnesses and each declaration its key names, by the path a consumer names them. Empty for anything else.
+    pub parties: Vec<Qualifier>,
+    /// The path every [`Mark`] names this declaration by: its own, `home` with `name`, where this page is where a consumer finds it, and another page's where it is shown there too, so two entries of one declaration name one path. Never a path inside a root no consumer can name.
+    pub named: Qualifier,
     /// What kind of thing a declaration adopted out of a root a consumer cannot name is — the word that root's owner chose, never its path. It is the only thing a card can say about a declaration whose signature says little: `let Nat: Type` lists no constructors because there are none to list, and this is what says so.
     pub chip: Option<String>,
 }
