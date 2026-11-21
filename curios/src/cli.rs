@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, EXPORTS, FALSE, FOOTPRINT, FORMAT, LINT, NAME,
-        PORT, RUN, STAGE, TEST, TESTS, WITNESSES,
+        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, FALSE, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN,
+        STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -485,8 +485,6 @@ impl Query {
 pub enum View {
     /// The declaration's part of a rung of the pipeline, by the rung's name ([`Stage::NAMES`]).
     Stage(String),
-    /// What the module the path names exposes to a consumer.
-    Exports,
     /// What the program holds of each function of the declaration's text, and what each weighs.
     Footprint,
     /// The witnesses in scope the declaration the path names takes part in.
@@ -581,12 +579,6 @@ impl Args for Query {
                     "Beside `--name`, what the program holds of each function of the declaration's text, one row each: its hint, what became of it, the bytes its bodies weigh in the emitted module and the values they rebuild in place",
                 ),
             )))
-            .arg(Self::view(flag(
-                "exports",
-                EXPORTS.query_help(
-                    "Beside `--name`, what the module its path names exposes, as a block: an entry for each name, each witness and each public child module, as its source writes it",
-                ),
-            )))
             .arg(
                 flag(
                     "server",
@@ -601,7 +593,7 @@ impl Args for Query {
             )
             .group(
                 ArgGroup::new(Self::VIEWS)
-                    .args(["witnesses", "footprint", "exports", "stage"])
+                    .args(["witnesses", "footprint", "stage"])
                     .multiple(false),
             )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
@@ -624,9 +616,7 @@ impl FromArgMatches for Query {
         } else if matches.get_flag("classes") {
             Query::Classes
         } else if let Some(path) = matches.get_one::<Qualifier>("name") {
-            let view = if matches.get_flag("exports") {
-                Some(View::Exports)
-            } else if matches.get_flag("witnesses") {
+            let view = if matches.get_flag("witnesses") {
                 Some(View::Witnesses)
             } else if matches.get_flag("footprint") {
                 Some(View::Footprint)

@@ -273,16 +273,6 @@ pub const NAME: Contract = Contract {
     product: Product::Nothing,
 };
 
-/// A question about what a module exposes, by its path, as [`NAME`] is about a declaration.
-pub const EXPORTS: Contract = Contract {
-    command: "wonder --name --exports",
-    accepts: Accepts::Scope,
-    own_file_only: false,
-    core_text: false,
-    access: Access::Write,
-    product: Product::Nothing,
-};
-
 /// A question about the witnesses a declaration takes part in, by its path, as [`NAME`] is about the declaration.
 pub const WITNESSES: Contract = Contract {
     command: "wonder --name --witnesses",
@@ -365,7 +355,6 @@ impl Mode {
                 Query::At(_) => &AT,
                 Query::Classes => &CLASSES,
                 Query::Name(_, None) => &NAME,
-                Query::Name(_, Some(View::Exports)) => &EXPORTS,
                 Query::Name(_, Some(View::Witnesses)) => &WITNESSES,
                 Query::Name(_, Some(View::Footprint)) => &FOOTPRINT,
                 Query::Name(_, Some(View::Stage(name))) if Stage::of_a_unit(name) => {

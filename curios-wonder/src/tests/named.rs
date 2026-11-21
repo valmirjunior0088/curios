@@ -680,9 +680,9 @@ fn qualified(path: &str) -> Qualifier {
     Qualifier::from(path.trim_start_matches('/').split('/'))
 }
 
-/// What `--exports` answers of the module `path` names in the prelude's scope alone, as a question with no subject is outside every package.
+/// What `--name` answers of the module `path` names in the prelude's scope alone, as a question with no subject is outside every package.
 fn exposed(path: &str) -> Option<Exported> {
-    crate::exported(
+    crate::referent(
         DEFAULT_BUDGET,
         Subject::prelude(),
         &qualified(path),
@@ -690,28 +690,13 @@ fn exposed(path: &str) -> Option<Exported> {
         None,
         &mut |_| {},
     )
-    .expect("the prelude documents itself")
+    .unwrap_or_else(|_| panic!("the prelude's scope checks"))
+    .and_then(|named| named.module)
 }
 
-/// What `--exports` answers of the module `path` names in the scope of `program`, read of standard input.
+/// What `--name` answers of the module `path` names in the scope of `program`, read of standard input.
 fn exposed_in(program: &str, path: &str) -> Option<Exported> {
-    crate::exported(
-        DEFAULT_BUDGET,
-        Subject::Entry {
-            units: Vec::new(),
-            origin: Origin::Text {
-                text: program.to_string(),
-                written: WrittenIn::Program,
-            },
-            declares: None,
-            package: None,
-        },
-        &qualified(path),
-        &Overlay::default(),
-        None,
-        &mut |_| {},
-    )
-    .expect("the program lowers")
+    named_in(program, path).and_then(|named| named.module)
 }
 
 /// A member a module exposes beside its owner is the line that does it, after the owner written whole: a family's constructors, and a concept's method.

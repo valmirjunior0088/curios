@@ -1,6 +1,6 @@
 # A path being typed is completed from what its module exposes
 
-**Not refined yet.** A path being typed in an editor is offered the names its module exposes, as `curios wonder --name <PATH> --exports` lists them at the command line ([`wonder`](../../usage.md#wonder)): today the server answers no completion, and a reader finds what a module offers by asking the command or reading its page.
+**Not refined yet.** A path being typed in an editor is offered the names its module exposes, as `curios wonder --name <PATH>` lists a module's at the command line ([`wonder`](../../usage.md#wonder)): today the server answers no completion, and a reader finds what a module offers by asking the command or reading its page.
 
 ## What is known
 
@@ -18,4 +18,4 @@
 
 ## Verification and retirement
 
-Check, once refined: completion of an unfinished path through a scripted server session, the names offered equal to `--exports`' listing of its module. Once it lands, `documentation/usage.md`'s `--server` row states it, and this file is deleted.
+Check, once refined: completion of an unfinished path through a scripted server session, the names offered equal to the entries `--name` answers its module with. Once it lands, `documentation/usage.md`'s `--server` row states it, and this file is deleted.

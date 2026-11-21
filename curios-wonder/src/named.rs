@@ -1184,7 +1184,7 @@ fn said_by(
     })
 }
 
-/// What `asked` names in the subject's scope ([`Referent`]): the declaration, as [`described`] answers one, and the module, as [`exported`] lists one — both where a facade exports a declaration at its module's path. The subject is read once for the two. `None` where the path names nothing in scope. `overlay` and `cache` behave as they do for `diagnostics`.
+/// What `asked` names in the subject's scope ([`Referent`]): the declaration, as [`described`] answers one, and the module, as [`exported_among`] lists one — both where a facade exports a declaration at its module's path. The subject is read once for the two. A path under a unit's mount that the unit's lowering declares nothing at is asked of no check ([`declared_among`]), so one naming a module alone answers where its library does not check. `None` where the path names nothing in scope. `overlay` and `cache` behave as they do for `diagnostics`.
 pub fn referent(
     budget: u64,
     subject: Subject,
@@ -1215,9 +1215,20 @@ pub fn referent(
         } => {
             let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
             let (units, loader) = (overlaid(units, overlay), loader.tested());
-
-            (
-                described_entry(
+            let declaration = match mounting(&units, asked) {
+                // A path under a unit's mount names a declaration where that unit's lowering says so, so one that names a module alone is asked of no unit after it and of no check.
+                Some(holding)
+                    if !declared_among(
+                        budget,
+                        &units[..=holding],
+                        asked,
+                        through,
+                        &mut *progress,
+                    )? =>
+                {
+                    None
+                }
+                _ => described_entry(
                     budget,
                     &units,
                     &entrypoint,
@@ -1226,6 +1237,10 @@ pub fn referent(
                     through,
                     &mut *progress,
                 )?,
+            };
+
+            (
+                declaration,
                 exported_among(
                     budget,
                     &units,
@@ -1265,60 +1280,6 @@ pub struct Referent {
     pub module: Option<Exported>,
 }
 
-/// What the module `asked` names exposes in the subject's scope ([`exported_among`]), the program on top opened where the module may be its own — no unit in scope and no prelude root holds the path's root — and left unread otherwise, so a program that does not parse still answers a library's module. `overlay` and `cache` behave as they do for `diagnostics`.
-pub fn exported(
-    budget: u64,
-    subject: Subject,
-    asked: &Qualifier,
-    overlay: &Overlay,
-    cache: Option<&Verdicts>,
-    progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Option<Exported>, CompileError> {
-    let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = overlaid_verdicts
-        .as_ref()
-        .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
-    let (units, entry) = match subject.formed(overlay) {
-        Subject::Entry {
-            units,
-            origin,
-            declares,
-            package,
-        } => (units, Some((origin, declares, package))),
-        Subject::Unit { units } => (units, None),
-        // A text of Core text is compiled against the prelude alone.
-        Subject::CoreText { .. } => (Vec::new(), None),
-    };
-    let units = overlaid(units, overlay);
-    let opened = match entry {
-        Some((origin, declares, package)) if holder(&units, asked).is_none() => {
-            let (entrypoint, loader) =
-                open(origin, declares, package.as_ref(), overlay).map_err(|diagnostics| {
-                    CompileError::Failure(
-                        diagnostics
-                            .into_iter()
-                            .map(|diagnosis| diagnosis.report)
-                            .collect(),
-                    )
-                })?;
-
-            Some((entrypoint, loader.tested()))
-        }
-        _ => None,
-    };
-
-    exported_among(
-        budget,
-        &units,
-        opened
-            .as_ref()
-            .map(|(entrypoint, loader)| (entrypoint, loader)),
-        asked,
-        through,
-        progress,
-    )
-}
-
 /// Which unit declares the modules under a path's root ([`holder`]): one of the scope's, by its place among them, or the prelude's, by its documentation record.
 enum Holder {
     Unit(usize),
@@ -1327,18 +1288,38 @@ enum Holder {
 
 /// The unit that declares the modules under `asked`'s root: a unit of `units` whose mount is the root, and the prelude's where none is. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where neither holds the root: a module there is the program's own.
 fn holder(units: &[RootSource], asked: &Qualifier) -> Option<Holder> {
+    mounting(units, asked).map(Holder::Unit).or_else(|| {
+        let root = Qualifier::from([asked.head()]);
+
+        prelude_documentation()
+            .into_iter()
+            .find(|record| record.prefix == root)
+            .map(Holder::Prelude)
+    })
+}
+
+/// The unit of `units` whose mount is `asked`'s root, by its place among them.
+fn mounting(units: &[RootSource], asked: &Qualifier) -> Option<usize> {
     let root = Qualifier::from([asked.head()]);
 
     units
         .iter()
         .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
-        .map(Holder::Unit)
-        .or_else(|| {
-            prelude_documentation()
-                .into_iter()
-                .find(|record| record.prefix == root)
-                .map(Holder::Prelude)
+}
+
+/// Whether `asked` names a declaration by the lowering of the library that is the last of `units`, over the units before it: asked of the lowering and of no check, so a path naming a module alone is answered where its library does not check.
+fn declared_among(
+    budget: u64,
+    units: &[RootSource],
+    asked: &Qualifier,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<bool, Vec<Diagnosis>> {
+    Fold::new(budget, units, through)
+        .lowered_unit(progress, |scope, own| {
+            found(scope, own, &resolved(scope, own, asked)).is_some()
         })
+        .map_err(of_error)
 }
 
 /// What the module `asked` names exposes ([`Exported`]), by the unit that declares it ([`holder`]): a unit of `units`, the prelude's, or `program`, the program on top with the source it loads through, lowered and no further, where the root is no unit's — a module its own `mod` line declares. A module a documentation page shows lists what the page lists, the record made over the units before the unit holding it as `curios document` makes one ([`Fold::documentation`]) and the prelude's the one the image carries, so a page and the listing list one set; a module no page shows — one beneath a `mod` line written without `pub`, a program's own — lists what the lowering holds of it ([`PreparedText::exposure`]), and is answered whether or not its unit checks. `None` where no module stands at the path.
@@ -1408,7 +1389,7 @@ fn paged(record: Documentation, asked: &Qualifier) -> Option<ModuleDocumentation
         .find(|module| module.path == *asked)
 }
 
-/// What a module exposes ([`exported`]): whether its `mod` line is written `pub`, where the line names it, how many names and child modules it exposes, and an entry for each thing it exposes.
+/// What a module exposes ([`exported_among`]): whether its `mod` line is written `pub`, where the line names it, how many names and child modules it exposes, and an entry for each thing it exposes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Exported {
     /// Whether the `mod` line declaring the module is written `pub`: none for a root, which no line declares.

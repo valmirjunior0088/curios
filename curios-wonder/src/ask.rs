@@ -8,8 +8,8 @@ use {
     crate::{
         Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
         Fact, Origin, Referent, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted,
-        Unput, checked, classed, declared_tests, described, diagnostics, exported, falsified,
-        footprint, named_stage, placed, referent, stage, unit_stage,
+        Unput, checked, classed, declared_tests, described, diagnostics, falsified, footprint,
+        named_stage, placed, referent, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
@@ -472,27 +472,6 @@ impl Asked {
         });
 
         referent
-    }
-
-    /// What a consumer reaches through the module `path` names ([`exported`]), `telling` told of the compile as it goes.
-    pub fn exported(
-        self,
-        budget: u64,
-        overlay: &Overlay,
-        path: &Qualifier,
-        telling: &mut dyn Telling,
-    ) -> Result<Option<Exported>, CompileError> {
-        let (subject, verdicts) = self.taken(telling);
-        let cache = verdicts.as_ref();
-        let exported = exported(budget, subject, path, overlay, cache, &mut |progress| {
-            telling.step(progress, cache);
-        });
-        telling.ended(match &exported {
-            Err(_) => Ended::Refused,
-            Ok(_) => Ended::Done,
-        });
-
-        exported
     }
 }
 
@@ -1017,33 +996,6 @@ pub fn wonder_witnesses(
 
         answer(format_args!("{place}\t{}\n", witnessed.keyed));
     }
-
-    Ok(())
-}
-
-/// `wonder --name PATH --exports [SUBJECT]`: what the module `path` names exposes, to stdout, a block holding an entry for each thing it exposes ([`Report::listing`]). A module a documentation page shows lists what the page lists, so a page and the listing list one set, and one no page shows — one beneath a `mod` line written without `pub`, a program's own — what the lowering holds of it. A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
-pub fn wonder_exports(
-    budget: u64,
-    scope: Scope,
-    path: &Qualifier,
-    telling: &mut dyn Telling,
-) -> Result<(), CompileError> {
-    let reader = telling.reader();
-    let Some(exported) = scope
-        .asked()?
-        .exported(budget, &Overlay::default(), path, telling)?
-    else {
-        return Err(Refused::of("unknown module")
-            .stating("nothing in scope is a module at this path")
-            .about_named(path.join())
-            .into());
-    };
-    telling.answering();
-
-    answer(format_args!(
-        "{}\n",
-        module_block(path, &exported).listing(Kind::Module, &reader, &exported.entries)
-    ));
 
     Ok(())
 }

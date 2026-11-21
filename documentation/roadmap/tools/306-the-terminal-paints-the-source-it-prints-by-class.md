@@ -4,7 +4,7 @@
 
 ## What is known
 
-- **Printed source is classed already.** The terms behind a report's facts, the head `wonder --at` and `--name` print, `--exports`' heads, `--witnesses`' keys, and `--stage text`, `core` and `core-elab` are written by Curios's printers, whose `render_annotated` marks every word and name, as a page is painted from.
+- **Printed source is classed already.** The terms behind a report's facts, the head `wonder --at` and `--name` print, the entries `--name` answers a module with, `--witnesses`' keys, and `--stage text`, `core` and `core-elab` are written by Curios's printers, whose `render_annotated` marks every word and name, as a page is painted from.
 - **Verbatim source is classed in part.** A report's quoted line, and the text `--name` and `--at` print as their author wrote it, are classed by a check's record in the subject's own file — names, binders, fields, segments and contextual words (`Placed::classes`, `curios-wonder/src/classes.rs`) — and nothing the command line holds classes a comment, a string or a number in them.
 - **Some output is no Curios source**, and stays plain: the rungs past `core-elab`, `format -`'s output, which is the file's own bytes, and what a test's program writes.
 - **Peers split**: rustc and GHC print a snippet's code plain, and miette paints one only behind its opt-in `syntect-highlighter` feature, in truecolor alone ([`highlighters`](https://docs.rs/miette/latest/miette/highlighters/index.html)).

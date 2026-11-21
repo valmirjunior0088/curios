@@ -401,11 +401,7 @@ fn a_module_is_answered_by_a_block_whether_or_not_a_page_shows_it() {
         "pub let one: /std/Nat =\n    1;\n",
     );
 
-    let shown = curios(
-        &root,
-        &["wonder", "--name", "/app/util", "--exports", "app.crs"],
-        "",
-    );
+    let shown = curios(&root, &["wonder", "--name", "/app/util", "app.crs"], "");
     assert!(
         shown.status.success(),
         "{}",
@@ -421,11 +417,7 @@ fn a_module_is_answered_by_a_block_whether_or_not_a_page_shows_it() {
         )
     );
 
-    let kept = curios(
-        &root,
-        &["wonder", "--name", "/app/kept", "--exports", "app.crs"],
-        "",
-    );
+    let kept = curios(&root, &["wonder", "--name", "/app/kept", "app.crs"], "");
     assert!(
         kept.status.success(),
         "{}",
@@ -455,11 +447,7 @@ fn a_private_module_answers_where_its_library_does_not_check() {
         "pub let word: /std/Str =\n    \"kept\";\n",
     );
 
-    let kept = curios(
-        &root,
-        &["wonder", "--name", "/app/kept", "--exports", "app.crs"],
-        "",
-    );
+    let kept = curios(&root, &["wonder", "--name", "/app/kept", "app.crs"], "");
     assert!(
         kept.status.success(),
         "{}",
@@ -475,11 +463,7 @@ fn a_private_module_answers_where_its_library_does_not_check() {
         )
     );
 
-    let shown = curios(
-        &root,
-        &["wonder", "--name", "/app/util", "--exports", "app.crs"],
-        "",
-    );
+    let shown = curios(&root, &["wonder", "--name", "/app/util", "app.crs"], "");
     let refused = String::from_utf8_lossy(&shown.stderr);
     assert!(!shown.status.success());
     assert!(refused.contains("[error] util.crs:2:5"), "{refused}");
