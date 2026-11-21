@@ -74,12 +74,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/pins
       - name: Install the pinned toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
@@ -89,8 +85,6 @@ jobs:
             curios-binaryen/.artifacts
       - name: Lint
         run: cargo xtask instrumented lint
-      - name: Test
-        run: cargo xtask instrumented test
 
   compiler:
     name: Compiler

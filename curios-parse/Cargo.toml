@@ -9,7 +9,7 @@ description = "The Curios parser combinator DSL: freely backtracking ordered cho
 workspace = true
 
 [features]
-profile = ["curios-profile/enabled"]
+profile = []
 
 [dependencies]
 curios-profile = { workspace = true }

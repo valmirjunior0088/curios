@@ -9,7 +9,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::{Stage, compile_with_prelude},
-    curios_profile::{Instructions, allocated_bytes, allocation_count},
+    curios_profile::{Instructions, allocated_bytes, allocation_count, count_allocations},
     curios_surface::Entrypoint,
 };
 
@@ -30,7 +30,10 @@ struct Counters {
 }
 
 impl Counters {
+    /// The instruction counts opened, and the allocator asked to count, since no recorder listens here.
     fn open() -> Self {
+        count_allocations();
+
         Self {
             alone: Instructions::open_alone(),
             pooled: Instructions::open(),

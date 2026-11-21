@@ -1,6 +1,6 @@
 # curios-profile
 
-Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` macros every instrumenting crate uses, and — under `enabled` — `trace` and `install`, the two scopings of the subscriber that writes one tab-separated row per span and event as it happens; `fold`, which recomputes timings, allocation figures and magnitude distributions from those rows; the counting allocator this crate installs; and the instruction count a measurement reads. It is the workspace's only `tracing` and `libc` dependency ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)): every crate that instruments depends on it unconditionally and declares `profile = ["curios-profile/enabled", …]`, and its macros expand to `$crate::tracing::…`, asking nothing of the caller. What each macro expands to, what a row holds and what a fold returns belong to the crate rustdoc.
+Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` macros every instrumenting crate uses, and `trace` and `install`, the two scopings of the subscriber that writes one tab-separated row per span and event as it happens; `fold`, which recomputes timings, allocation figures and magnitude distributions from those rows; the counting allocator this crate installs; and the instruction count a measurement reads. It is the workspace's only `tracing` and `libc` dependency ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)): every crate that instruments depends on it unconditionally and declares a `profile` feature its macros expand under, and its macros expand to `$crate::tracing::…`, asking nothing of the caller. What each macro expands to, what a row holds and what a fold returns belong to the crate rustdoc.
 
 ## Taking a profile
 
@@ -60,13 +60,13 @@ The program is `curios-prelude`'s `profile-prelude`, and its stream holds each r
 
 **Rejected.** Rotating a stream at a size, to bound what an endless run writes. Every row is flushed as it is written, so a run that hangs has filed all it did with no rotation, and what the bound cost was the head of every finished stream past it, dropped with nothing said: a count read from such a file was its tail's.
 
-### The allocator counts process-wide, and this crate installs it
+### The allocator counts process-wide while someone reads, and this crate installs it
 
-**Decision.** The counting allocator maintains process-wide live, cumulative, high-water and count figures, and this crate installs it as the `#[global_allocator]` of every binary it is linked into with `enabled` on; no binary names it.
+**Decision.** The counting allocator maintains process-wide live, cumulative, high-water and count figures, and this crate installs it as the `#[global_allocator]` of every binary it is linked into; no binary names it. It counts only while someone reads the counts — a recorder, `install`'s for the rest of the process and `trace`'s for its closure, or a measurement that asked with `count_allocations` — so its live bytes are counted from where counting began, and fall below zero where more was returned since than taken.
 
-**Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A binary that had to opt in could forget, and its columns would read zero — absent evidence rather than a failure — and the opt-in was four copies of one static. This crate's own test binary counts too, so a test can hold a boundary row's readings to the allocation made inside it. Every binary built with `enabled` pays a handful of relaxed atomics per allocation.
+**Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A binary that had to opt in could forget, and its columns would read zero — absent evidence rather than a failure — and the opt-in was four copies of one static. This crate's own test binary counts too, so a test can hold a boundary row's readings to the allocation made inside it. Counting is four atomic read-modify-writes an allocation, each a locked instruction on x86; behind one relaxed load, a run nobody records pays the load alone.
 
-**Rejected.** Each binary opting in, a place to forget.
+**Rejected.** Each binary opting in, a place to forget. Counting every allocation of every run, which every compile would pay for a count nobody reads.
 
 ### A span is this crate's macro, not `tracing::instrument`
 

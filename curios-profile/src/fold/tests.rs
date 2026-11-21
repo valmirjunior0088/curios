@@ -115,6 +115,20 @@ fn the_boundary_readings_are_differenced_into_bytes() {
     assert_eq!(report.peak, 2048);
 }
 
+// Live bytes count from where counting began, so a span that returns blocks taken before it reads them below zero, and retains less than nothing.
+#[test]
+fn a_span_returning_more_than_counting_saw_taken_retains_below_zero() {
+    let report = folded(
+        "D\t0\tcurios_core\treturns\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t-100\t0\t0\t0\n\
+         X\t1\t0\t500\t-300\t0\t0\t0\n\
+         C\t1\t0\t500\n",
+    );
+
+    assert_eq!(report.summaries[0].retained, -200);
+}
+
 // A magnitude site's distribution, which is the whole reason `sample!` exists beside a span: the count says how often and the spread says what it was handed.
 #[test]
 fn an_event_site_folds_into_its_distribution() {

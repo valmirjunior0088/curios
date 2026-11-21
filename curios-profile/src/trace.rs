@@ -20,12 +20,15 @@
 //! **A stream is one file, whole.** Every row is flushed as it is written, so a run that is killed has filed all it did up to the kill, and nothing a run wrote is discarded while it goes on: a stream grows for as long as its run records, and what bounds it is whoever asked for it.
 
 use {
-    crate::{allocated_bytes, allocation_count, live_bytes, peak_bytes},
+    crate::{
+        allocated_bytes, allocation_count, begin_counting, end_counting, live_bytes, peak_bytes,
+    },
     std::{
         collections::HashMap,
         fmt,
         fs::{self, File},
         io::{self, Write},
+        panic::{self, AssertUnwindSafe},
         path::PathBuf,
         sync::{
             Mutex,
@@ -62,11 +65,20 @@ pub enum Destination {
 /// Run `operation` with a record-writing subscriber on the current thread.
 ///
 /// The error is the destination's: a file that cannot be opened is worth refusing, because a caller asked for a trace and would otherwise get a silent compile. A write that fails *after* that is dropped rather than raised — a span callback has no caller to return to, and taking a compilation down because a disk filled would be a worse failure than losing the tail of a measurement.
+///
+/// The allocator counts for as long as `operation` runs, and stops however it ends: a panic passes on through, once counting has stopped.
 pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::Result<T> {
     let recorder = Recorder::new(destination)?;
-    let result = tracing::subscriber::with_default(recorder, operation);
+    begin_counting();
+    let ended = panic::catch_unwind(AssertUnwindSafe(|| {
+        tracing::subscriber::with_default(recorder, operation)
+    }));
+    end_counting();
 
-    Ok(result)
+    match ended {
+        Ok(result) => Ok(result),
+        Err(payload) => panic::resume_unwind(payload),
+    }
 }
 
 /// Record every span and event of this process, for a binary with no closure to wrap.
@@ -75,11 +87,13 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
 ///
 /// The two compose rather than compete. `set_global_default` is consulted only where no thread-local subscriber is set, so a [`trace`] on any thread still overrides this for the duration of its closure, and the callers that need a scoped capture keep it.
 ///
-/// Configuration is still in code: the `profile` feature decides that this is called at all, and the [`Destination`] its caller names decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first.
+/// Configuration is still in code: the caller's argument decides that this is called at all, and the [`Destination`] it names decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first. Once it is installed, the allocator counts for the rest of the process.
 pub fn install(destination: Destination) -> io::Result<()> {
     let recorder = Recorder::new(destination)?;
+    tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)?;
+    begin_counting();
 
-    tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)
+    Ok(())
 }
 
 /// What a span's identity is, once the file has named it: an index into the callsite table.

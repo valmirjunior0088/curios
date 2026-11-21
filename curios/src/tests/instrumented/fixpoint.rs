@@ -47,7 +47,7 @@ impl std::io::Write for Rows {
 ///
 /// Parsing precedes the trace. The trace wraps `compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, with no package cache or stage rendering. The `compile_entrypoint` span starts after prelude restoration and covers the pipeline through Wasm emission; it excludes Binaryen, Cranelift and guest execution. The stream stays in memory and is folded after compilation; printing is outside the trace.
 ///
-/// The `profile` feature installs the process-wide counting allocator as well as tracing. Timings and allocation work include this observer, including its in-memory stream, and do not price the default-feature compiler. Allocation columns are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
+/// The allocator counts process-wide while the trace listens. Timings and allocation work include this observer, including its in-memory stream, and do not price a compiler no recorder listens to. Allocation columns are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
 ///
 /// # Latest reading
 ///

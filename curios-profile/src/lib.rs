@@ -1,20 +1,19 @@
 //! Programmatic profiling for the Curios workspace.
 //!
-//! Every crate that wants a measurement point depends on this crate unconditionally — it is close to empty until its `enabled` feature is on — and declares its own `profile` feature as `profile = ["curios-profile/enabled", …]`. A measurement point is then one statement or one wrapped expression, and this crate is the only place in the workspace that names `tracing` at all. Three macros ask three questions — how long, how big, and why:
+//! Every crate that wants a measurement point depends on this crate unconditionally and declares its own `profile` feature, which the macros expand under. A measurement point is then one statement or one wrapped expression, and this crate is the only place in the workspace that names `tracing` at all. Three macros ask three questions — how long, how big, and why:
 //!
 //! - [`profile!`] as the first statement of a function times the whole function. It takes fields after the name — a `group` field is what makes a per-item span report *which item* rather than an average over all of them — and an `=>` form times one expression rather than the enclosing function.
 //! - [`note!`] states *why* a decision went the way it did, for a refusal that has neither a duration nor a size. It carries the `profile` gate itself, and it is what keeps `tracing` named in this crate alone.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep. It is for a number that varies; a site that would always record the same number is a call counter, and a span already counts its calls.
-//! - `trace` and `install` — present under `enabled`, so they carry no link here — are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller, and they are the only producers.
-//! - `fold` — beside it — recomputes timings, allocation figures and distributions from those rows. A question the summaries do not answer is asked of the file.
-//! - The counting allocator, under `enabled` beside them, adds the memory half of a report: this crate installs it as the `#[global_allocator]` of every binary it is linked into with `enabled` on, so every boundary row carries what the process held and had taken, and no binary has to opt in.
-//! - [`Instructions`], under `enabled` too, counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
+//! - [`trace()`] and [`install`] are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller, and they are the only producers.
+//! - [`fold()`] recomputes timings, allocation figures and distributions from those rows. A question the summaries do not answer is asked of the file.
+//! - The counting allocator adds the memory half of a report: this crate installs it as the `#[global_allocator]` of every binary it is linked into, and it counts only while a recorder listens — `install`'s for the rest of the process, `trace`'s for its closure — or a measurement has asked with [`count_allocations`], so a boundary row carries what the process took and returned while counting, no binary has to opt in, and none pays for a count nobody reads.
+//! - [`Instructions`] counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
 //!
 //! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and is installed by this crate, why the library emits records rather than summaries, and why a span is this crate's macro rather than `tracing::instrument` are `README.md`'s decisions.
 //!
 //! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing.
 
-#[cfg(feature = "enabled")]
 pub use tracing;
 
 /// Time a span: as a function's first statement it times the whole function, and with `=>` it times one expression and gives back its value.
@@ -106,26 +105,16 @@ macro_rules! note {
     };
 }
 
-#[cfg(feature = "enabled")]
 mod count;
-#[cfg(feature = "enabled")]
 use count::*;
-#[cfg(feature = "enabled")]
-pub use count::{allocated_bytes, allocation_count};
+pub use count::{allocated_bytes, allocation_count, count_allocations};
 
-#[cfg(feature = "enabled")]
 mod instructions;
-#[cfg(feature = "enabled")]
 pub use instructions::Instructions;
 
-#[cfg(feature = "enabled")]
 mod fold;
-#[cfg(feature = "enabled")]
 pub use fold::{OpenSpan, Report, SampleSummary, SpanInstance, Summary, Within, fold, fold_at};
 
-#[cfg(feature = "enabled")]
 mod trace;
-#[cfg(feature = "enabled")]
 use trace::*;
-#[cfg(feature = "enabled")]
 pub use trace::{Destination, install, trace};

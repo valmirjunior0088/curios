@@ -10,7 +10,6 @@ workspace = true
 
 [features]
 profile = [
-    "curios-profile/enabled",
     "curios-pipeline/profile",
     "curios-verdict/profile",
     "curios-wonder/profile",

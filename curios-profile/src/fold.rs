@@ -26,7 +26,7 @@ pub struct Report {
     pub summaries: Vec<Summary>,
     /// Sampled magnitudes ordered from greatest to least total, one entry per [`sample!`](crate::sample) site that fired.
     pub samples: Vec<SampleSummary>,
-    /// The greatest live-byte total any row reported, which is the process's high-water mark up to the last row the file holds.
+    /// The greatest peak any row reported: the high-water mark of what the process held while counting, up to the last row the file holds.
     pub peak: usize,
     /// What ran inside each span name: every other span name entered while one of it was entered, outer name first and costliest first beneath it.
     pub within: Vec<Within>,
@@ -101,7 +101,7 @@ impl SampleSummary {
 
 /// Aggregate statistics for every span with the same target, name and group.
 ///
-/// Every figure but the two *self* ones counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, so they are all zero unless the binary that wrote the stream was built with `enabled`, which is what installs the counting allocator.
+/// Every figure but the two *self* ones counts nested spans within the span's extent, exactly as [`total`](Self::total) does: an outer stage's [`retained`](Self::retained) includes what the passes inside it retained. The allocation columns are differences of the readings the rows carry, which the counting allocator takes while a recorder listens, so they are all zero where the binary that wrote the stream was linked without this crate's allocator.
 ///
 /// **The self figures are what the inclusive ones cannot be for mutually recursive work.** A judgment that re-enters itself through another — typing calls conversion, which types again — counts each nested extent once per enclosing entry, so its inclusive row overstates it and a row per judgment cannot be added up. [`self_total`](Self::self_total) and [`self_allocated`](Self::self_allocated) subtract every span entered directly inside, so each nanosecond and each byte is attributed to exactly one span, the innermost one entered, and the self rows of one stream partition what its spans cover.
 #[derive(Debug)]
@@ -300,10 +300,11 @@ struct Entry {
 #[derive(Clone, Copy, Default)]
 struct Readings {
     at: u128,
-    live: u64,
+    /// The bytes held since counting began, below zero where more was returned than taken since.
+    live: i64,
     allocated: u64,
     allocations: u64,
-    /// The process's high-water mark as of this row, which is a reading of its own rather than the greatest `live` any row happened to catch.
+    /// The high-water mark of what counting saw held, as of this row, which is a reading of its own rather than the greatest `live` any row happened to catch.
     peak: u64,
 }
 
@@ -435,7 +436,7 @@ impl Fold {
         let allocated = readings.allocated.saturating_sub(entry.readings.allocated);
         span.elapsed += elapsed;
         span.own += elapsed.saturating_sub(entry.nested);
-        span.retained += readings.live as i64 - entry.readings.live as i64;
+        span.retained += readings.live - entry.readings.live;
         span.allocated += allocated;
         span.own_allocated += allocated.saturating_sub(entry.nested_allocated);
         span.allocations += readings

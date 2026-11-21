@@ -9,7 +9,7 @@ description = "The Curios continuation-passing IR: the arena-backed CPS graph an
 workspace = true
 
 [features]
-profile = ["curios-profile/enabled"]
+profile = []
 
 [dependencies]
 curios-profile = { workspace = true }

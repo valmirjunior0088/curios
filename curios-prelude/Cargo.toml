@@ -11,7 +11,6 @@ workspace = true
 
 [features]
 profile = [
-    "curios-profile/enabled",
     "curios-module/profile",
     "curios-elab/profile",
     "curios-erase/profile",

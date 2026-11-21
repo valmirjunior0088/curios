@@ -9,7 +9,7 @@ description = "The Curios elaborator: elaboration, typing, conversion and univer
 workspace = true
 
 [features]
-profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-surface/profile"]
+profile = ["curios-analysis/profile", "curios-surface/profile"]
 # `test_support`: a finished term printed as a report spells it, for `curios-pipeline`'s suites that print a declaration; and for `curios-erase`'s suite, the discharged bound a fold stands in, a reader with nothing in scope, and what a reading spends. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate's tests — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 
