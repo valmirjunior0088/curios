@@ -1170,7 +1170,7 @@ A concept is an interface shaped as a record, a witness is a registered value of
 
 ### Concept declarations
 
-A concept has parameters, possibly none, a representation sort, and a list of fields. The sort follows a structure's rule: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its module's subtree, so only there may a witness be declared, a concept value be written, updated or taken apart. Resolution, `use` parameters and a method called by its path work alike for both, and the concept's name has its own visibility.
+A concept has parameters, possibly none, a representation sort, and a list of fields. The sort follows a structure's rule: `: pub Type` declares an *unsealed* concept, and `: Type` a *sealed* one, whose representation is private to its module's subtree, so only there may a witness be declared, a concept value be written, updated or taken apart. Resolution, `use` parameters and a method called by its path work alike for both, and the concept's name has its own visibility.
 
 ```crs
 use /std/{Str};
@@ -1297,7 +1297,7 @@ and Show(Forest) {
 
 A concept with no parameter has no registered witness: a value of it is supplied to a `use` parameter.
 
-A second dictionary for a transparent concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module.
+A second dictionary for an unsealed concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module.
 
 ```crs
 use /std/{List, Nat, Ord};

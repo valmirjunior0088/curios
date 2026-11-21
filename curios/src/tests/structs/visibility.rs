@@ -88,7 +88,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
     );
 }
 
-// A transparent pub concept's field types are interface (its representation is public), superclass edges included.
+// An unsealed pub concept's field types are interface (its representation is public), superclass edges included.
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"

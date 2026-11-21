@@ -26,7 +26,7 @@ fn concept_rejects_foreign_satisfy() {
     assert!(error(source).contains("private"));
 }
 
-// A sealed concept also rejects a forged dictionary literal outside its module — the local-override idiom is only available on transparent concepts.
+// A sealed concept also rejects a forged dictionary literal outside its module — the local-override idiom is only available on unsealed concepts.
 #[test]
 fn concept_rejects_foreign_dictionary_literal() {
     let source = r#"
