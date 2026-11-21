@@ -40,7 +40,7 @@ pub use Spell/{let Spell};
 pub mod Monad;
 pub use Monad/{let Monad};
 
---- The witnesses for the positional tuple shapes, up to eight fields. A labeled product wanting the same is a `struct`.
+--- The witnesses for the positional tuple shapes, up to eight fields. A labelled product wanting the same is a `struct`.
 pub mod Tuple;
 
 --- One octet, `0` through `255`.
@@ -149,7 +149,9 @@ pub use Channel/{let Channel};
 pub mod Try;
 pub use Try/{let Try};
 
---- What may close a program: the concept the compiler executes a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
+--- What may close a program.
+---
+--- The concept the compiler executes a program's closing term through, witnessed by a description that yields nothing, by one over `Io` that may fail, and by a `Test`.
 pub mod Program;
 pub use Program/{let Program};
 
@@ -165,7 +167,9 @@ pub use Test/{let Test};
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
---- Clocks and the calendar: `Instant`, `Timestamp` and the `Duration` between two of either; `Date`, `Time`, `DateTime` and `Offset`, and the `OffsetDateTime` where the calendar meets the timeline.
+--- Clocks and the calendar.
+---
+--- `Instant`, `Timestamp` and the `Duration` between two of either; `Date`, `Time`, `DateTime` and `Offset`, and the `OffsetDateTime` where the calendar meets the timeline.
 ---
 --- `Instant` is a reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, signed. Each is one count of nanoseconds, and the two moments do not convert. The civil types are a date's and a time's fields under the proofs that they spell one, in the proleptic Gregorian calendar with a year 0, and a civil value names a moment only at an offset: `OffsetDateTime/of_timestamp` and `to_timestamp` are the crossings. An `Offset` is what RFC 9557 reads one as: so many seconds east of UTC, or the local offset unknown, which `Z` writes.
 pub mod time;
@@ -204,7 +208,9 @@ pub use Serial/{let Serial};
 pub mod tcp;
 
 -- Formats: codecs that reach no host operation.
---- JSON, decoded from text and encoded as text. Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
+--- JSON, decoded from text and encoded as text.
+---
+--- Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
 pub mod Json;
 pub use Json/{let Json};
 
@@ -224,15 +230,15 @@ pub use Html/{let Html};
 --- A message is read as RFC 9112 frames it, through pieces that hold no stream, and made as one a wire can carry: a field's name is a token, its value holds no control octet, and the renderers write the framing fields themselves. Each end takes one message per connection and whole bodies, within bounds it states: the client under a deadline and a redirect limit, the server answering a refused request with its status and closing only once its peer has had the reply.
 pub mod http;
 
---- A command line described as data: the commands, options and positionals a program declares, refused where they are written when they describe no one command line, and the parse a line reads into, whose type the declaration decides.
+--- A command line described as data: the commands, options and positionals a program declares, and the parse a line reads into.
 ---
---- An argument and a command are read by name, and a name the declaration lacks is refused where it is written. The token grammar is GNU's.
+--- A declaration that describes no one command line is refused where it is written, and the declaration decides the parse's type. An argument and a command are read by name, and a name the declaration lacks is refused where it is written. The token grammar is GNU's.
 pub mod Cli;
 pub use Cli/{let Cli};
 
 --- A terminal interface: a screen is a frame whose size is in its type, and a program is a model, an `update` and a `view` that the loop drives.
 ---
---- A frame that does not fill its pane is refused where it is written; `Frame/fit` is the one coercion where a runtime size meets a typed one. `drive` is the loop with no terminal, for a test.
+--- A frame that does not fill its pane is refused where it is written; `View/fit` is the one coercion where a runtime size meets a typed one. `drive` is the loop with no terminal, for a test.
 pub mod Tui;
 pub use Tui/{let Tui};
 

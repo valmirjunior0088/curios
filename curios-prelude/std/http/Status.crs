@@ -10,11 +10,14 @@ pub let bodiless(code: Nat) -> Bool =
 pub let carries_content(code: Nat) -> Bool =
     Bool/not(bodiless(code) || code == 205);
 
---- A reply's status: its code, three digits, and its reason phrase, which a client ignores and which is octets like a field's value. The version is no part of it: a reply is written as HTTP/1.1, and one that is read was framed by the version it stated.
+--- A reply's status: its three-digit code and its reason phrase.
+---
+--- The version is no part of it: a reply is written as HTTP/1.1, and one that is read was framed by the version it stated.
 pub struct Status: pub Type {
     code: Nat,
     --- Why the code is three digits.
     @three: Bool/Holds(100 <= code && code <= 999),
+    --- The reason phrase, which a client ignores: octets, like a field's value.
     reason: Field/Value,
 }
 

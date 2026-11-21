@@ -2,7 +2,9 @@ use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell,
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Status, Version, Limits, Refusal, Framing, read, syntax};
 
---- What came back: the status, the headers and the body. A reply holds content only where its status carries any, so one built with a body on a 1xx, 204, 205 or 304 status is refused where it is built, and every reply is one `render` can write.
+--- What came back: the status, the headers and the body.
+---
+--- A reply holds content only where its status carries any, so one built with a body on a 1xx, 204, 205 or 304 status is refused where it is built, and every reply is one `render` can write.
 pub struct Response: pub Type {
     status: Status,
     headers: List(Field),

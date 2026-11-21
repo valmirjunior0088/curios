@@ -81,9 +81,11 @@ pub use Directive/{let Directive};
 use /std/{Nat, Bool, List, Option, Result, Io, Try, Tty, Channel};
 use /std/time/{Duration};
 
---- A program: its first model and directive, how an event changes the model, and what the model looks like.
+--- A program the loop drives: a model, how an event changes it, and what it looks like.
 pub struct Tui(M: Type, E: Type): pub Type {
+    --- The first model, and the first thing asked of the loop.
     init: {M, Directive(E)},
+    --- The model after an event, and what it asks of the loop.
     update: (model: M, event: Event(E)) -> {M, Directive(E)},
     --- The model as a pane, drawn at the terminal's size: a view of exactly that size, its cursor where it asks for one.
     view: (model: M) -> Pane,

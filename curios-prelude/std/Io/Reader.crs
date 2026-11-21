@@ -5,9 +5,13 @@ use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try, Channel};
 use /std/ops/{Eql};
 use /std/Io/{Error};
 
---- What a piece made of the bytes it was asked of: the piece and the bytes after it, a refusal, or that it has not all arrived — with where to resume and the bytes still held, so the next look reads none of them twice. A piece holds no stream: a reader asks it again once more bytes have arrived, and whoever asked the reader decides what a stream that ended means.
+--- What a piece made of the bytes it was asked of.
+---
+--- A piece holds no stream: a reader asks it again once more bytes have arrived, and whoever asked the reader decides what a stream that ended means.
 pub induct Step(St: Type, R: Type, A: Type): pub Type
+--- Not all of it has arrived: where to resume, and the bytes still held, so the next look reads none of them twice.
 | more(St, Bytes)
+--- The piece, and the bytes after it.
 | took(A, Bytes)
 | refused(R)
 end
@@ -34,10 +38,13 @@ satisfy (
     ..
 }
 
---- How a piece went unread: it refused what arrived, the stream ended first, or the stream failed — the last two with where the piece stood. The bytes held stay in the reader each time.
+--- How a piece went unread. The bytes held stay in the reader each time.
 pub induct Stop(St: Type, R: Type): pub Type
+--- It refused what arrived.
 | refused(R)
+--- The stream ended first: where the piece stood.
 | ended(St)
+--- The stream failed: where the piece stood, and the failure.
 | failed(St, Error)
 end
 

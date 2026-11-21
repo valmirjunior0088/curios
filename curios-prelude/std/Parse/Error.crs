@@ -1,10 +1,13 @@
 use /std/{Str, Nat, Bool, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
---- Why a parser refused: what it wanted, the byte offset it stopped at, and whether the refusal is committed — the input recognized as the shape the parser was reading, so an enclosing `or` reports it rather than trying an alternative.
+--- Why a parser refused.
 pub struct Error: pub Type {
+    --- What it wanted.
     message: Str,
+    --- The byte offset it stopped at.
     offset: Nat,
+    --- Whether the input was recognized as the shape the parser was reading, so an enclosing `or` reports the refusal rather than trying an alternative.
     committed: Bool,
 }
 

@@ -24,11 +24,14 @@ pub induct Flow: pub Type
 | hardware()
 end
 
---- How a port is opened: its speed and its frame. `baud` is from 1 through 4294967295, `data_bits` is 7 or 8 and `stop_bits` 1 or 2; the host refuses any other as `other(22)`, before it touches the device.
+--- How a port is opened: its speed and its frame. The host refuses a value outside the ranges its fields state as `other(22)`, before it touches the device.
 pub struct Config: pub Type {
+    --- From 1 through 4294967295.
     baud: Nat,
+    --- 7 or 8.
     data_bits: Nat,
     parity: Parity,
+    --- 1 or 2.
     stop_bits: Nat,
     flow: Flow,
 }

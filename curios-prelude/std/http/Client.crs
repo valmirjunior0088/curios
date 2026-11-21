@@ -4,9 +4,11 @@ use /std/time/{Duration};
 use /std/tcp/{Socket};
 use /std/http/{Error, Method, Url, Request, Response, Limits, read, stream, Field};
 
---- How a client performs an exchange: how long the whole of one may take, how many redirects it follows before refusing, and how much of a reply it takes.
+--- How a client performs an exchange.
 pub struct Client: pub Type {
+    --- How long the whole of one exchange may take.
     timeout: Duration,
+    --- How many redirects it follows before refusing.
     redirects: Nat,
     --- What a reply may hold: one past them is refused as it arrives, before the rest of it is read.
     limits: Limits,

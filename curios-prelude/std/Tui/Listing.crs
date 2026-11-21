@@ -4,7 +4,9 @@ use /std/Tui/{Style, View, Pane, Key};
 --- Items of any type, one of them selected where there are any, and the first of them shown: a selection that leaves the rows shown scrolls them as little as brings it back, and one that moves within them leaves them where they are.
 pub struct Listing(A: Type): pub Type {
     items: List(A),
+    --- The selected item, none where there are no items.
     cursor: Option({i: Nat, ok: Bool/Holds(i < List/len(items))}),
+    --- The first item shown.
     first: Nat,
 }
 

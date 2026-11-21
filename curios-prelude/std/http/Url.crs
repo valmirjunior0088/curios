@@ -6,12 +6,13 @@ use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell,
 use /std/ops/{Eql};
 use /std/http/{Field};
 
---- Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
+--- Where a request goes. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
     scheme: Scheme,
     host: Str,
     port: Nat,
     path: Str,
+    --- As written after `?`, where there is one.
     query: Option(Str),
 }
 

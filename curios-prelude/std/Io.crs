@@ -139,8 +139,9 @@ pub concept Read(S: Type): pub Type {
 
 pub use Read/*;
 
---- What a stream is written through: the whole of the bytes, a short write resent, and what the stream holds of the writes it accepted handed on.
+--- What a stream is written through.
 pub concept Write(S: Type): pub Type {
+    --- Writes the whole of the bytes, a short write resent.
     write(S, Bytes) -> Try(Io, Error, {}),
     --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
     flush(S) -> Try(Io, Error, {}),

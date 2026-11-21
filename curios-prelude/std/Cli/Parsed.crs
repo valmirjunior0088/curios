@@ -1,12 +1,15 @@
 use /std/{Str, Nat, Bool, List, Option};
 use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command, positionals};
 
---- What a parse fills and `get` reads by name: an option's long name or a positional's, and the type it is read into.
+--- What a parse fills and `get` reads by name.
 pub struct Slot: pub Type {
+    --- An option's long name, or a positional's name.
     name: Str,
+    --- The type it is read into.
     T: Type,
 }
 
+--- The type a value read as `A` is held at under `presence`: an `Option` where it may be absent, and `A` itself where it is required or has a default.
 pub let presented(A: Type, presence: Presence(A)) -> Type =
     match presence
     | required() => A

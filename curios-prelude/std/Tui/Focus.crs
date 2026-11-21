@@ -5,7 +5,9 @@ use /std/Tui/{Key};
 --- The one of a program's parts that holds the keys, by its label: a ring over the labels a program names, which Tab moves on and Shift with Tab back, from either end round to the other.
 pub struct Focus(P: Type): pub Type {
     labels: List(P),
+    --- Where in `labels` the part that holds the keys is.
     at: Nat,
+    --- Why `at` is one of them.
     @inside: Bool/Holds(at < List/len(labels)),
 }
 

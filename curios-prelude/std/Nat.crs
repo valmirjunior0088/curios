@@ -4,13 +4,13 @@ pub use /sys/{let Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
     to_flt, to_byte};
 
---- `a < b`'s laws, and its crossings with `a <= b`.
+--- The laws of `a < b`, and its crossings with `a <= b`.
 ---
 --- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
 pub mod lt;
 pub use lt/{let lt};
 
---- `a <= b`'s laws.
+--- The laws of `a <= b`.
 ---
 --- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `lt`'s do.
 pub mod le;

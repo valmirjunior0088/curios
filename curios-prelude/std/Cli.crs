@@ -21,12 +21,16 @@ use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, 
     print, print_err};
 use /std/ops/{Eql};
 
---- How an argument's text is read: the type it is read into, the placeholder help shows for it, the reader, the printer help shows a default with, and the values it takes where they are a closed set, which help lists.
+--- How an argument's text is read.
 pub struct Value: pub Type {
+    --- The type it is read into.
     A: Type,
+    --- The placeholder help shows for it.
     metavar: Str,
     read: (Str) -> Result(Str, A),
+    --- Prints a value: what help shows a default with.
     show: (A) -> Str,
+    --- The texts it takes where they are a closed set, which help lists; empty otherwise.
     choices: List(Str),
 }
 
@@ -117,10 +121,11 @@ pub induct Presence(A: Type): pub Type
 | default(a: A)
 end
 
---- One flag of a choice: its name, its help, and the value it stands for.
+--- One flag of a choice.
 pub struct Alternative(A: Type): pub Type {
     long: Str,
     help: Str,
+    --- The value the flag stands for.
     value: A,
 }
 
@@ -140,13 +145,16 @@ pub induct Kind: pub Type
 | choice(A: Type, alternatives: List(Alternative(A)), presence: Presence(A))
 end
 
---- One option a command takes: its long name, the short one it may have, the other long names it answers to, its help, the environment variable that stands for it where the line does not give it, whether help leaves it out, and its kind. A choice is given by its alternatives' names, and its own long name is the one it is read by.
+--- One option a command takes. A choice is given by its alternatives' names, and its own long name is the one it is read by.
 pub struct Field: pub Type {
     long: Str,
     short: Option(Char),
+    --- The other long names it answers to.
     aliases: List(Str),
     help: Str,
+    --- The environment variable read where the command line does not give the option.
     env: Option(Str),
+    --- Whether help leaves it out.
     hidden: Bool,
     kind: Kind,
 }
@@ -199,10 +207,12 @@ pub let choice(
 ) -> Field =
     named(long, help, Kind/choice(A, alternatives, presence));
 
---- An argument read by its place: its name, which help shows and `get` reads it by, its help, and how it is read.
+--- An argument read by its place.
 pub struct Positional: pub Type {
+    --- What help shows it as and `get` reads it by.
     name: Str,
     help: Str,
+    --- How its text is read.
     v: Value,
 }
 
@@ -210,10 +220,11 @@ pub struct Positional: pub Type {
 pub let positional(name: Str, v: Value, help: Str) -> Positional =
     Positional { name = name, help = help, v = v };
 
---- What a command reads by place, in the one order a line can give them: those it requires, then those that may be absent, then the one that takes every positional after them.
+--- What a command reads by place, in the one order a line can give them: the required, then the optional, then the rest.
 pub struct Positionals: pub Type {
     required: List(Positional),
     optional: List(Positional),
+    --- The one that takes every positional after the others.
     rest: Option(Positional),
 }
 
@@ -235,10 +246,13 @@ pub use Command/*;
 pub let name(c: Command) -> Str =
     match c | leaf(n, _, _, _) | group(n, _, _, _) => n end;
 
---- A name as a line spells it: `--long`, `--no-long` for a switch's negation, or `-c`.
+--- A name as a line spells it.
 pub induct Spelled: pub Type
+--- `--long`.
 | long(Str)
+--- `--no-long`, a switch's negation.
 | negated(Str)
+--- `-c`.
 | short(Char)
 end
 
@@ -294,10 +308,12 @@ let Clear(problems: List(Problem)) -> Prop =
 pub let WellFormed(command: Command, version: Option(Str)) -> Prop =
     Clear(check/problems(command, version));
 
---- A command line a program reads: its root command, the version `--version` answers with where it has one, and the evidence that the two describe one unambiguous command line.
+--- A command line a program reads.
 pub struct Cli: pub Type {
     command: Command,
+    --- What `--version` answers with, where the program has one.
     version: Option(Str),
+    --- Why the command and the version describe one unambiguous command line.
     @ok: WellFormed(command, version),
 }
 

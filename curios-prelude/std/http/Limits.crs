@@ -1,11 +1,15 @@
 use /std/{Nat, Spell};
 use /std/ops/{Eql};
 
---- How much of a message a reader takes before it refuses the rest, in octets: its start line, its head — the start line and the fields — its content, and one chunk's size line. A chunked body's trailer section is held to the head's bound.
+--- How much of a message a reader takes before it refuses the rest, in octets.
 pub struct Limits: pub Type {
+    --- The start line.
     line: Nat,
+    --- The head: the start line and the fields. A chunked body's trailer section is held to this bound too.
     head: Nat,
+    --- The content.
     content: Nat,
+    --- One chunk's size line.
     chunk_line: Nat,
 }
 

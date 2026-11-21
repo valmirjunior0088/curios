@@ -2,9 +2,10 @@ use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Version, Limits, Refusal, Framing, read, syntax};
 
---- What is sent: the method, where to, the headers and the body. Where to is the URL, whose scheme decides the connection and whose host and port the `Host` header.
+--- What is sent: the method, where to, the headers and the body.
 pub struct Request: pub Type {
     method: Method,
+    --- Where to: its scheme decides the connection, and its host and port the `Host` header.
     url: Url,
     headers: List(Field),
     body: Bytes,
@@ -83,10 +84,12 @@ pub let render(r: Request) -> Bytes =
         '\r', '\n',
         ..r.body];
 
---- A request's head as it is read: the method, the target as its request line spells it, the version it states and its headers.
+--- A request's head as it is read.
 pub struct Head: pub Type {
     method: Method,
+    --- The target as the request line spells it.
     target: Str,
+    --- The version it states.
     version: Version,
     headers: List(Field),
 }
@@ -175,9 +178,11 @@ let resource_of(scheme: Url/Scheme, head: Head, host: Option(Str)) -> Result(Ref
         end
     end;
 
---- What a request is addressed to: a resource, by its URL, or the server as a whole, which is what `OPTIONS *` asks about (RFC 9112 §3.2.4).
+--- What a request is addressed to.
 pub induct Address: pub Type
+--- A resource, by its URL.
 | resource(Url)
+--- The server as a whole, which is what `OPTIONS *` asks about (RFC 9112 §3.2.4).
 | server()
 end
 

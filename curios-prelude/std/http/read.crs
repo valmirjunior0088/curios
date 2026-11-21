@@ -32,12 +32,17 @@ let line_end_from(
 pub let line_end(b: Bytes, i: Nat) -> Option(Found(b, i, 2)) =
     line_end_from(b, i, i);
 
---- How far a head's reading has come in the bytes held: where its start line begins, past the empty lines a lenient reading passes over; how many octets it has searched; how many of the four octets of the empty line that ends a head the searched octets end with, none of them before the start line; and whether the start line has ended among them.
+--- How far a head's reading has come in the bytes held.
 pub struct Searched: pub Type {
+    --- Where its start line begins, past the empty lines a lenient reading passes over.
     start: Nat,
+    --- How many octets it has searched.
     through: Nat,
+    --- How many of the four octets of the empty line that ends a head the searched octets end with.
     ending: Nat,
+    --- Whether the start line has ended among the searched octets.
     lined: Bool,
+    --- Why none of the ending octets stand before the start line.
     @begun: Bool/Holds(start + ending <= through),
 }
 
@@ -166,9 +171,11 @@ pub induct Chunking: pub Type
 | trailers(at: Nat, line: Nat, searched: Nat, ending: Bool)
 end
 
---- What a body's reading has decoded, and where it resumes: the content of a chunked body's whole chunks, and how far into the next it has come. A body framed otherwise decodes nothing and leaves both as they were.
+--- What a body's reading has decoded, and where it resumes. A body framed otherwise than in chunks decodes nothing and leaves both as they were.
 pub struct Decoded: pub Type {
+    --- The content of a chunked body's whole chunks.
     content: Bytes,
+    --- How far into the next chunk it has come.
     at: Chunking,
 }
 
