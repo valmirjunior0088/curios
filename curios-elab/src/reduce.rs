@@ -245,7 +245,7 @@ impl Judge for Context<'_> {
     }
 }
 
-/// Which parts of a stuck form the elaborator's conversion reads nowhere, for the filter in front of an arm's equation: each part at the type that conversion compares it at — an application's arguments at its head's function type (`apply_param_types`), a constructor's payload and a struct literal's fields at the declaration's telescope, each opened at the parts before it, and an operation's operands at its signature — where `is_prop`, asked plainly, holds it a proposition. The certifier's `proof_parts`, by the elaborator's own lookups; a refusal that is no exhaustion of the budget is that no part is known to be a proof.
+/// Which parts of a stuck form the elaborator's conversion reads nowhere, for the filter in front of an arm's equation: each part at the type that conversion compares it at — an application's arguments at its head's function type (`apply_param_types`), a constructor's parameters and a type former's parameters and indices at its family's arity, a structure type's parameters at its declaration's, a constructor's payload and a struct literal's fields at the declaration's telescope, each opened at the parts before it, and an operation's operands at its signature — where `is_prop`, asked plainly, holds it a proposition. The certifier's `proof_parts`, by the elaborator's own lookups; a refusal that is no exhaustion of the budget is that no part is known to be a proof.
 impl ReadsProofs for Context<'_> {
     fn proof_parts(&mut self, term: &Term) -> Result<Vec<usize>, ReduceError> {
         let typed = match &**term {
@@ -259,6 +259,8 @@ impl ReadsProofs for Context<'_> {
                     .collect()
             }
             Subterm::Variant(variant) => {
+                let mut typed =
+                    self.family_parts(&variant.name, &variant.universes, &variant.params, &[])?;
                 let telescope = self
                     .induct_facet(&variant.name, &variant.universes, |at| {
                         at.payload(&variant.tag, &variant.params).transpose()
@@ -266,7 +268,26 @@ impl ReadsProofs for Context<'_> {
                     .transpose()
                     .map_err(ReduceError::Universe)?
                     .flatten();
-                typed_parts(telescope, &variant.payload)
+                typed.extend(typed_parts(telescope, &variant.payload));
+                typed
+            }
+            Subterm::InductType(family) => self.family_parts(
+                &family.name,
+                &family.universes,
+                &family.params,
+                &family.indices,
+            )?,
+            Subterm::StructType(structure) => {
+                let telescope = match self.struct_decl(&structure.name).cloned() {
+                    Some(declaration) => Some(
+                        declaration
+                            .universe_context
+                            .read_at(&declaration.arity, &structure.universes)
+                            .map_err(ReduceError::Universe)?,
+                    ),
+                    None => None,
+                };
+                typed_parts(telescope, &structure.params)
             }
             Subterm::Struct(record) => {
                 let telescope = match self.struct_decl(&record.name).cloned() {
@@ -307,6 +328,43 @@ impl ReadsProofs for Context<'_> {
         }
 
         Ok(proofs)
+    }
+}
+
+impl Context<'_> {
+    /// The type the family `name`'s arity gives each of `params`, then each of `indices` at the telescope it terminates in, opened at the parameters, beside the part's identity: the types `compare_induct_type` compares an instance's arguments at. Empty where the arity holds no such telescope.
+    fn family_parts(
+        &mut self,
+        name: &Global,
+        universes: &Universes,
+        params: &[Term],
+        indices: &[Term],
+    ) -> Result<Vec<(usize, Term)>, ReduceError> {
+        let arity = self
+            .induct_facet(name, universes, |at| at.arity())
+            .transpose()
+            .map_err(ReduceError::Universe)?;
+        let Some(arity) = arity.filter(|arity| arity.len() == params.len()) else {
+            return Ok(Vec::new());
+        };
+        let mut types = Vec::with_capacity(params.len() + indices.len());
+        let rest = arity.walk(params, |_, _, type_| -> Result<(), ReduceError> {
+            types.push(type_.clone());
+            Ok(())
+        })?;
+        if rest.len() == indices.len() {
+            rest.walk(indices, |_, _, type_| -> Result<(), ReduceError> {
+                types.push(type_.clone());
+                Ok(())
+            })?;
+        }
+
+        Ok(params
+            .iter()
+            .chain(indices)
+            .map(Term::identity)
+            .zip(types)
+            .collect())
     }
 }
 

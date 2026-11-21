@@ -1659,7 +1659,7 @@ fn ground(
     compare(certifier, pairs, &Term::type_ground(), this, that)
 }
 
-/// The parts of `term` this checker's conversion compares at a proposition, by their identities (`curios_analysis::ReadsProofs`): an application's arguments at its head's telescope ([`spine_telescope`]), a constructor's payload at its signature and a struct literal's fields at the declaration's field telescope, each opened at the parts before it, and an operation's operands at its signature — the types [`compare_arguments`], the literals' arms of [`compare`] and the shared congruence compare each at, where irrelevance discharges a part unread. Empty where no lookup types the parts.
+/// The parts of `term` this checker's conversion compares at a proposition, by their identities (`curios_analysis::ReadsProofs`): an application's arguments at its head's telescope ([`spine_telescope`]), a constructor's parameters at its family's and its payload at its signature, a type former's parameters and indices at its arity and a struct literal's fields at the declaration's field telescope, each opened at the parts before it, and an operation's operands at its signature — the types [`compare_arguments`], [`induct_type_args`], [`params_at`], the literals' arms of [`compare`] and the shared congruence compare each at, where irrelevance discharges a part unread. Empty where no lookup types the parts.
 pub fn proof_parts(certifier: &mut ByValue, term: &Term) -> Result<Vec<usize>, Error> {
     match &**term {
         Subterm::Apply(apply) => {
@@ -1668,11 +1668,37 @@ pub fn proof_parts(certifier: &mut ByValue, term: &Term) -> Result<Vec<usize>, E
             at_a_proposition(certifier, telescope, &arguments)
         }
         Subterm::Variant(variant) => {
+            let params = induct_params(certifier, &variant.name, &variant.universes);
+            let mut proofs = at_a_proposition(certifier, params, &variant.params)?;
             let telescope = certifier
                 .induct_at_params(&variant.name, &variant.universes, &variant.params)
                 .ok()
                 .and_then(|at| at.signature(certifier, &variant.tag).ok().flatten());
-            at_a_proposition(certifier, telescope, &variant.payload)
+            proofs.extend(at_a_proposition(certifier, telescope, &variant.payload)?);
+            Ok(proofs)
+        }
+        // The parameters at the family's arity, then the indices at the telescope it terminates in, opened at the parameters: the types `induct_type_args` compares each at.
+        Subterm::InductType(family) => {
+            let Some(arity) = induct_params(certifier, &family.name, &family.universes) else {
+                return Ok(Vec::new());
+            };
+            let mut cursor = arity.cursor();
+            let mut proofs = Vec::new();
+            for param in &family.params {
+                let Some((_, type_)) = cursor.entry() else {
+                    return Ok(proofs);
+                };
+                cursor.advance(param.clone());
+                if certifier.sort_of(&type_)?.is_prop() {
+                    proofs.push(param.identity());
+                }
+            }
+            proofs.extend(at_a_proposition(certifier, cursor.body(), &family.indices)?);
+            Ok(proofs)
+        }
+        Subterm::StructType(structure) => {
+            let params = struct_params(certifier, &structure.name, &structure.universes);
+            at_a_proposition(certifier, params, &structure.params)
         }
         Subterm::Struct(record) => {
             let telescope = certifier

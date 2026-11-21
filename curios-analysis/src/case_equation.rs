@@ -187,7 +187,7 @@ pub fn could_answer(
 
 /// What [`could_answer`] asks its checker beyond reduction: which parts of a stuck form its conversion compares at a proposition, and so reads nowhere.
 pub trait ReadsProofs: Reducer {
-    /// The parts of `term` this checker's conversion compares at a proposition, by their identities, typed as it types each: an application's arguments by its head's telescope, a constructor's payload and a struct literal's fields by the declaration's, each opened at the parts before it, and an operation's operands by its signature. Empty where no lookup types them, which reads every part.
+    /// The parts of `term` this checker's conversion compares at a proposition, by their identities, typed as it types each: an application's arguments by its head's telescope, a type former's parameters and indices and a constructor's parameters by its arity, a constructor's payload and a struct literal's fields by the declaration's, each opened at the parts before it, and an operation's operands by its signature. Empty where no lookup types them, which reads every part.
     fn proof_parts(&mut self, term: &Term) -> Result<Vec<usize>, ReduceError>;
 }
 

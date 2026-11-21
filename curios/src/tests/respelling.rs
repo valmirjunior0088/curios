@@ -425,36 +425,26 @@ const GUARDS: &[Guard] = &[
         guard: "ft(Within(a, p1)) < 5",
         respelled: "ft(Within(a, lemma(a, c, p1))) < 5",
         dual: Some("5 <= ft(Within(a, lemma(a, c, p1)))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "ft(Pinned(a, p1)) < 5",
         respelled: "ft(Pinned(a, lemma(a, c, p1))) < 5",
         dual: Some("5 <= ft(Pinned(a, lemma(a, c, p1)))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "ft(Proven(a, p1)) < 5",
         respelled: "ft(Proven(a, lemma(a, c, p1))) < 5",
         dual: Some("5 <= ft(Proven(a, lemma(a, c, p1)))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "pv(Pinned/pinned(@a, @p1)) < 5",
         respelled: "pv(Pinned/pinned(@a, @lemma(a, c, p1))) < 5",
         dual: Some("5 <= pv(Pinned/pinned(@a, @lemma(a, c, p1)))"),
-        refused: UNREAD,
+        refused: &[],
     },
-];
-
-/// Every arm past the control: where a respelling's equation is never put to the guard's, it is refused at each.
-const UNREAD: &[Arm] = &[
-    Arm::Qed,
-    Arm::Proved,
-    Arm::Term,
-    Arm::Type,
-    Arm::Dual,
-    Arm::Index,
 ];
 
 /// A guard and a form apart from it past every reduction, with the form's dual: no conversion holds the two equal, so no arm of the guard answers the form, however the filter in front of an equation reads it.
