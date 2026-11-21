@@ -196,6 +196,44 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
+// A read dropped while it waits for the rest of a key has lost nothing: `a` arrives with the start of an escape sequence, the read keeps `a` and waits for the rest, a deadline shorter than that wait drops it there, and the next read answers `a` before the arrow the rest of the sequence makes. The scripted input's pause ends in the turn the deadline passes, and the driver steps the branches of a choice in their order, so the deadline is listed first to come before the rest of the key.
+#[test]
+fn a_read_dropped_while_it_waits_for_the_rest_of_a_key_keeps_what_it_decoded() {
+    let (host, io) = MockHost::builder()
+        .tty_size(4, 2)
+        .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"a\x1b".to_vec()])
+        .stdin_pause()
+        .stdin_chunks(vec![b"[A".to_vec()])
+        .build();
+    run_text(r#"
+        use /std/{Try, Io, print};
+        use /std/time/{Duration};
+        use /std/Tui/{Session};
+        let program() -> Io({}) =
+            let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
+                let dropped = Io/select([
+                    Io/bind(Io/sleep(Duration/of_millis(1)), (()) => Io/pure(true)),
+                    Io/bind(Try/run(Session/read(s)), (_) => Io/pure(false))])!;
+                let _ = print(match dropped | true => "dropped " | false => "answered " end)!;
+                let second = Session/read(s)!;
+                let _ = print(match second
+                    | some(events) => match events
+                        | [event, .._] => match event
+                            | key(k) => match k.code | char(_) => "char" | up() => "up" | _ => "other-key" end
+                            | _ => "other-event"
+                            end
+                        | [] => "none-read"
+                        end
+                    | none() => "eof"
+                    end)!;
+                Try/pure(()))))!;
+            Io/pure(());
+        program()
+    "# , host).expect("held input");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.contains("dropped char"), "{output:?}");
+}
+
 // A session is a handle: a draw diffs against the frame the last one wrote, and a size asked is the size it knows from then on, so a frame of another size is written whole.
 #[test]
 fn a_session_remembers_what_it_drew_and_the_size_it_was_told() {
