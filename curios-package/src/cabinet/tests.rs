@@ -65,7 +65,7 @@ fn the_families_do_not_share_a_namespace() {
 }
 
 /// Every path a cabinet gives, a family's and a pin's staging alike, for a test holding that one directory holds them all.
-fn kept(cabinet: &Cabinet) -> [PathBuf; 8] {
+fn kept(cabinet: &Cabinet) -> [PathBuf; 9] {
     let hash = TreeHash::parse(&format!("c1:{}", "c".repeat(64))).unwrap();
     let module = FileHash::parse(&format!("f1:{}", "c".repeat(64))).unwrap();
 
@@ -73,6 +73,7 @@ fn kept(cabinet: &Cabinet) -> [PathBuf; 8] {
         cabinet.source(&hash),
         cabinet.foreign(&module),
         cabinet.unit("key"),
+        cabinet.replaced("key"),
         cabinet.object("key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
         cabinet.payload(Runs::Browser, "key"),

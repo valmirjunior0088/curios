@@ -3,7 +3,7 @@
 use {
     crate::{
         Indexed, Kind, anchors_indexed, apart_parts, asked_indexed, digests, found, halved, halves,
-        imports_indexed, lowering_indexed, reads_indexed, traces_indexed,
+        imports_indexed, listed, lowering_indexed, reads_indexed, traces_indexed,
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
@@ -13,7 +13,7 @@ use {
     curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_module::{PackageRoot, PreparedText},
-    std::{borrow::Cow, cell::OnceCell, rc::Rc},
+    std::{borrow::Cow, cell::OnceCell, collections::BTreeSet, rc::Rc},
 };
 
 /// What a unit was written in: a program's sources, whose lowering it holds, or Core text, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
@@ -68,7 +68,7 @@ struct Produced {
     readers: Rc<OnceCell<Readers>>,
     /// Whether the unit is the compiler's own: restored out of bytes that are a constant of the executable, so one thing under one compiler. Never stored, being where the unit came from.
     ///
-    /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — an object's address names the compiler, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
+    /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — an object's header names the compiler that filed it, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
     #[archived_with(curios_archive::Skip)]
     fixed: bool,
 }
@@ -550,6 +550,35 @@ impl Unit {
         let (unit, apart) = halves(index).ok_or("not a unit's index")?;
 
         curios_archive::from_bytes::<Unit>(unit)?.with_apart(Bytes::from(apart.to_vec()), &find)
+    }
+
+    /// Every blob the index `index` names ([`Unit::stored`]), by its digest: the lists [`Unit::restored`] finds blobs by, read with no unit decoded and no blob found. What a cabinet holds a blob to where it is offered by its name alone. `Err` is bytes that hold no index.
+    pub fn named(index: &[u8]) -> Result<BTreeSet<Digest>, String> {
+        let (_, apart) = halves(index).ok_or("not a unit's index")?;
+        let apart = Bytes::from(apart.to_vec());
+        let [own, reads, _]: [Bytes; 3] = parted(&apart)
+            .and_then(|parts| parts.try_into().ok())
+            .ok_or("not what a certified unit stores apart from itself")?;
+        let [
+            items,
+            forms,
+            elaborated,
+            traces,
+            asked,
+            lowering,
+            scopes,
+            places,
+            ..,
+        ] = apart_parts(&own).ok_or("not what a unit stores apart from itself")?;
+
+        let mut named = BTreeSet::new();
+        for list in [
+            items, forms, elaborated, traces, asked, lowering, scopes, places, reads,
+        ] {
+            named.extend(listed(&list)?);
+        }
+
+        Ok(named)
     }
 
     /// This unit, restored for a source whose files are read for `packages`: each source of what its declarations are written in holds the file its name resolves to on this machine, where the package it is named by stands ([`PreparedText::read_for`]). A unit restored for no source holds its sources' names alone.

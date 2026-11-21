@@ -14,6 +14,8 @@ use {
 
 mod by_name;
 
+mod compilers;
+
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
 const ENTRY: &str = "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n";
 
@@ -385,7 +387,7 @@ fn a_unit_is_not_reused_under_other_claims() {
 
 /// An object filed by one project does not answer for another's source where its files hold other texts, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do: its record's names resolve to this project's files.
 ///
-/// A cabinet is shared wherever one is named for every project a run sees, so this is reachable.
+/// A cabinet is shared wherever one is named for every project a run sees, so this is reachable. `theirs` files first and alone: an object keeps the record its last filing replaced, so a record `mine` filed before would answer for `mine` beside theirs.
 #[test]
 fn an_object_does_not_answer_for_another_projects_source() {
     let mine = project("mine");
@@ -394,7 +396,6 @@ fn an_object_does_not_answer_for_another_projects_source() {
     let cabinet = shared(&directory);
 
     write(&theirs, "shape/lib.crs", &library("theirs"));
-    reused_in(&mine, &cabinet);
     reused_in(&theirs, &cabinet);
 
     assert!(

@@ -8,7 +8,7 @@ use {
     curios_prelude::with_prelude,
     curios_surface::spell,
     curios_unit::Unit,
-    std::rc::Rc,
+    std::{collections::BTreeSet, rc::Rc},
 };
 
 /// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
@@ -208,6 +208,24 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
         curios_archive::to_bytes(alone.erased()).expect("an erased unit serializes")[..]
             == curios_archive::to_bytes(after.erased()).expect("an erased unit serializes")[..],
         "the erased forms moved with its predecessors"
+    );
+}
+
+/// An index's lists, read with no unit decoded and no blob found, name every blob its unit stores and no other: what a cabinet holds a candidate to.
+#[test]
+fn an_index_names_every_blob_its_unit_stores() {
+    let lib = mounted(
+        "lib",
+        "pub let same(@A: Type, a: A) -> A = a;\npub let three: /std/Nat = same(3);",
+    );
+    let unit = compile_in_order(&[&lib])
+        .pop()
+        .expect("a unit was compiled");
+    let stored = unit.stored().expect("a unit serializes");
+
+    assert_eq!(
+        Unit::named(stored.index()).expect("a unit's index"),
+        stored.digests().copied().collect::<BTreeSet<_>>()
     );
 }
 

@@ -1,23 +1,23 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** An address names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the object is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the object's one file: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** An address names a place — this executable, for this target — and carries no file contents, no unit and no compiler, so a source edit changes what the payload is verified against rather than where it is looked for. Who built it is named in the header of its file ([`Filer`]), and what it was made from rides in a [`Record`] behind that header: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's certifier recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
-//! **Two things the unit family has no counterpart for.** The entry's own header is never read through a loader — the caller parsed it before any resolution happened — so it is recorded separately, and from the text that was parsed rather than from a re-read of the path: re-reading races an edit landing between the parse and the digest, which records newer text against an older artifact, the one direction that admits stale. And a native payload is machine code, so the engine that will run it joins the address — handed in by the caller, since the crate that can describe an engine is the one that links it — where a browser's is a module any browser runs; see [`Verdicts::payload_get`].
+//! **Two things the unit family has no counterpart for.** The entry's own header is never read through a loader — the caller parsed it before any resolution happened — so it is recorded separately, and from the text that was parsed rather than from a re-read of the path: re-reading races an edit landing between the parse and the digest, which records newer text against an older artifact, the one direction that admits stale. And a native payload is machine code, so the engine that will run it joins the compiler in the header — handed in by the caller, since the crate that can describe an engine is the one that links it — where a browser's is a module any browser runs; see [`Verdicts::payload_get`].
 
 #[cfg(test)]
 mod tests;
 
 use {
     super::resolved,
-    crate::{Verdicts, chained, payload_address, replace, sweep, unchanged},
+    crate::{Filer, Verdicts, chained, opened, payload_address, replace, sweep, unchanged},
     curios_abi::ForeignStore,
     curios_common::{Qualifier, SourceName, digest},
     curios_module::{RootSource, UnitSource},
     curios_package::Runs,
-    curios_unit::{recorded, segments},
-    std::{collections::BTreeSet, fs, io, time::SystemTime},
+    curios_unit::recorded,
+    std::{collections::BTreeSet, io, time::SystemTime},
 };
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
@@ -70,7 +70,7 @@ impl Verdicts {
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units.
     ///
-    /// `runs` is what runs the payload, as a key part: natively, the engine, which decides whether a payload compiled on this machine runs on another, since a payload, unlike a unit, is machine-dependent; in a browser, nothing of the machine. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-common`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
+    /// `runs` is what runs the payload: its target, which the directory it is filed in names, and natively the engine, which the header names beside the compiler and which decides whether a payload compiled on this machine runs on another, since a payload, unlike a unit, is machine-dependent; in a browser, nothing of the machine. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-common`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
     pub fn payload_get(
         &self,
         program: &Program<'_>,
@@ -79,14 +79,17 @@ impl Verdicts {
     ) -> Option<(Vec<u8>, ForeignStore)> {
         let units = self.chain(units)?;
 
-        // A file that is not framed, or a stored record that will not read back, is ignored, never a compile to fail.
-        let cabinet = self.cabinet.as_ref()?;
-        let filed = fs::read(cabinet.payload(runs, &address(self, program, runs)?)).ok()?;
-        let (recorded, bytes) = segments(&filed)?;
-        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
+        // A file another compiler or engine filed, one that is not framed, or a stored record that will not read back, is ignored, never a compile to fail.
+        let path = self
+            .cabinet
+            .as_ref()?
+            .payload(runs, &payload_address(program.package, program.executable));
+        let opened = opened(&path, &filer(self, runs)?)?;
+        let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
+        let bytes = opened.artifact()?;
 
-        match agrees(program, &record, &units, bytes) {
-            true => Some((bytes.to_vec(), record.foreigns)),
+        match agrees(program, &record, &units, &bytes) {
+            true => Some((bytes, record.foreigns)),
             false => None,
         }
     }
@@ -109,7 +112,7 @@ impl Verdicts {
             return;
         };
 
-        let (Some(cabinet), Some(address)) = (&self.cabinet, address(self, program, runs)) else {
+        let (Some(cabinet), Some(filer)) = (&self.cabinet, filer(self, runs)) else {
             return;
         };
 
@@ -127,10 +130,10 @@ impl Verdicts {
             foreigns: foreigns.clone(),
         };
 
-        let path = cabinet.payload(runs, &address);
+        let path = cabinet.payload(runs, &payload_address(program.package, program.executable));
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| replace(&path, &record, bytes));
+            .and_then(|record| replace(&path, &filer, &record, bytes));
 
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());
@@ -142,16 +145,14 @@ impl Verdicts {
     }
 }
 
-/// The address `program` is filed at for what `runs` it, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
-fn address(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<String> {
-    let compiler = verdicts.compiler()?;
+/// Who files a payload `runs` runs: the compiler running now, and natively the engine. `None` when the compiler cannot identify itself, for the reason `Verdicts::compiler` gives, in which case no payload is read or filed.
+fn filer(verdicts: &Verdicts, runs: Runs<'_>) -> Option<Filer> {
+    let engine = match runs {
+        Runs::Native { engine } => Some(engine),
+        Runs::Browser => None,
+    };
 
-    Some(payload_address(
-        compiler,
-        program.package,
-        program.executable,
-        runs,
-    ))
+    Some(verdicts.filer()?.running(engine))
 }
 
 /// Whether `record` still describes the world: the payload is intact, each unit of the compilation is filed as what it was, the entry is the same file holding the same text, and every file its loader read still holds the text it was read as.

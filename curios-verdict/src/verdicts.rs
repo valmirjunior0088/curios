@@ -1,12 +1,14 @@
 //! The unit family: what the fold consults before compiling a unit again, and what it files when it did.
 //!
-//! **An object is addressed, and a hit is verified.** The address (`unit_address`) names a place — these mounts, declaring these dependencies, by this compiler — and holds no file contents and no unit before it, so a project has as many objects as it has units rather than one per compile or one per scope. What the unit was compiled *from* rides in a [`Record`] ahead of it in the object's one file and is checked when the object is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the object itself holds — so a record vouches for the bytes it was written with and for no others.
+//! **An object is addressed, and a hit is verified.** The address (`unit_address`) names a place — these mounts, declaring these dependencies — and holds no compiler, no file contents and no unit before it, so a project has as many objects as it has units rather than one per compile, per compiler or per scope. Who compiled the unit is named in the header of the file the object keeps it in ([`Filer`]), and what it was compiled *from* rides in a [`Record`] behind that header, checked when the object is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the object itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
 //! That split is deliberate. Hashing the unit's source directory into the address would hash a directory that, for a package's own library, *contains this cabinet*: filing a unit would change the address it is next looked for under, so a package's own code would never hit and `objects/` would grow a directory per compile. Excluding the cabinet from the walk is no answer: a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 //!
 //! **A hit is believed whole, so it rests on every unit its unit could have read.** That is the units it may name and, in turn, the ones those may name: a term names what its unit may name, or what a term handed to it names, which that term's unit may name; a witness is declared with its concept or with the type it is at, both of which whoever states the goal can name. A record names what each of those contained and no unit beside them, so an edit to a unit outside them leaves the hit standing, and two folds that reach one unit after different others file it once.
 //!
 //! **An object whose record no longer agrees is still a baseline.** The unit it holds is compiled over, each stage asking again what its own record says it read: of the unit's own text, of the units its record names where they contain what they did, nothing, and of any other unit in scope each part by its digest (`curios_elab::Foreign`, `curios_erase::AskedItems`, `curios_core::Abroad`). So a unit after an edited dependency redoes the declarations that read what the edit changed.
+//!
+//! **An object keeps two records, each read for the compiler that filed it.** A filing keeps the record it replaces beside its own, so the object holds its last two filings, whichever compilers made them, and the blobs both name. A hit, a baseline and the candidates a compile takes come from whichever of them the running compiler filed, the newer first; another compiler's is read for nothing, since its verdicts would be believed on behalf of a compiler that never reached them. Two compilers alternating on one project each hit their own record, and a third's filing pushes the older out.
 //!
 //! What a record holds and how it is framed ahead of the unit are `curios-unit`'s, since the prelude image is written the same way by a build script below every cabinet; what a record is *verified against* is here.
 
@@ -17,8 +19,10 @@ mod payload;
 pub use payload::*;
 
 use {
-    crate::{Packs, entry_address, opened, replace, unit_address},
-    curios_common::{Candidates, Qualifier, Source, SourceName, digest},
+    crate::{Filer, Opened, Packs, entry_address, opened, replace, set_aside, unit_address},
+    curios_common::{
+        Blob, Candidates, Digest, Facet, Qualifier, Source, SourceName, candidate_prefix, digest,
+    },
     curios_module::{Compiled, Overlay, PackageRoot, UnitSource},
     curios_package::{Cabinet, compiler},
     curios_pipeline::{After, Cache, Earlier, complete_records},
@@ -165,7 +169,7 @@ fn contents(reach: &BTreeSet<String>, taken: &[Taken]) -> Option<Vec<(String, St
 
 /// The cabinet, as a compilation sees it — the fold's units through [`Cache`], and the invocation's own payload through [`Verdicts::payload_get`] and [`Verdicts::payload_put`].
 ///
-/// One handle for both because they are one cabinet: the same compiler identity decides both addresses, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
+/// One handle for both because they are one cabinet: the same compiler identity heads every file of both families, the units the fold takes *are* what a payload was made from, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
     /// `None` for a handle with no cabinet behind it ([`Verdicts::kept_by`]): nothing is read and nothing is filed, and the handle is what its session keeps a unit through.
     cabinet: Option<Cabinet>,
@@ -185,6 +189,8 @@ pub struct Verdicts {
     executable: Option<(String, String)>,
     /// The packs at each address this handle has read or filed blobs at, by the address: a pack is read once for as long as the handle lives, so a filing after a restore reads no pack the restore read.
     packs: RefCell<BTreeMap<String, Rc<Packs>>>,
+    /// What this compiler's records at each address name, by the address, as [`Verdicts::named`] read them.
+    named: RefCell<BTreeMap<String, Rc<BTreeSet<Digest>>>>,
 }
 
 impl Verdicts {
@@ -198,6 +204,7 @@ impl Verdicts {
             session: None,
             executable: None,
             packs: RefCell::new(BTreeMap::new()),
+            named: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -213,6 +220,7 @@ impl Verdicts {
             session: Some(session),
             executable: None,
             packs: RefCell::new(BTreeMap::new()),
+            named: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -392,7 +400,7 @@ impl Verdicts {
 
     /// The address `source` is filed at, or `None` when it may not be filed at all.
     ///
-    /// A source with nothing on disk has no reads to verify against, so a record of it would confirm nothing. That is the fixed prelude, which has an archive of its own. And an entry is filed as the executable this handle was told it is, so one it was told nothing of has no object.
+    /// A source with nothing on disk has no reads to verify against, so a record of it would confirm nothing. That is the fixed prelude, which has an archive of its own. And an entry is filed as the executable this handle was told it is, so one it was told nothing of has no object. The address names no compiler, but a compiler that cannot identify itself reads and files nothing, so nothing is addressed for it.
     fn address(&self, source: &UnitSource<'_>) -> Option<String> {
         if source.directories().is_empty() {
             return None;
@@ -401,12 +409,11 @@ impl Verdicts {
         if self.cabinet.is_none() {
             return Some(String::new());
         }
-        let compiler = self.compiler()?;
+        self.compiler()?;
         if source.is_entry() {
             let (package, executable) = self.executable.as_ref()?;
 
             return Some(entry_address(
-                compiler,
                 package,
                 executable,
                 source.declared(),
@@ -416,12 +423,34 @@ impl Verdicts {
         }
 
         Some(unit_address(
-            compiler,
             &source.claims(),
             source.declared(),
             source.compiled(),
             source.stand_in(),
         ))
+    }
+
+    /// Who this handle files as: the compiler running now. `None` where it cannot identify itself.
+    pub(crate) fn filer(&self) -> Option<Filer> {
+        Some(Filer::compiler(self.compiler()?))
+    }
+
+    /// The records of the object at `address` this compiler filed, the newer first, each opened as far as its record and read back: the object keeps the record of its last filing and of the one before, whichever compiler filed each, and another compiler's is read for nothing ([`Filer`]). None for a handle with no cabinet.
+    fn records(&self, address: &str) -> Vec<(Opened, Record)> {
+        let (Some(cabinet), Some(filer)) = (self.cabinet.as_ref(), self.filer()) else {
+            return Vec::new();
+        };
+
+        [cabinet.unit(address), cabinet.replaced(address)]
+            .iter()
+            .filter_map(|file| {
+                let opened = opened(file, &filer)?;
+                // A record that will not read back is ignored, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
+                let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
+
+                Some((opened, record))
+            })
+            .collect()
     }
 
     /// The packs at `address`, opened the first time this handle asks for them. `None` for a handle with no cabinet.
@@ -437,10 +466,37 @@ impl Verdicts {
         Some(packs)
     }
 
-    /// What the packs at `address` hold of declarations elaborated before, for a compile of the object there to take one from (`curios_elab::Candidating`): an object names one unit, so whatever filed them compiled the unit at hand.
+    /// What the packs at `address` hold of declarations elaborated before that a compile of the object there may take one from (`curios_elab::Candidating`): those a record of this compiler's names ([`Offered`]). `None` for a handle with no cabinet.
     fn candidates(&self, address: &str) -> Option<Rc<dyn Candidates>> {
-        self.packs(address)
-            .map(|packs| -> Rc<dyn Candidates> { packs })
+        let packs = self.packs(address)?;
+        let named = self.named(address);
+
+        Some(Rc::new(Offered { packs, named }))
+    }
+
+    /// Every blob a record of this compiler's at `address` names, read off each record's index once for as long as the handle lives, or until it files there. A record whose index is not the bytes it was written with names nothing.
+    fn named(&self, address: &str) -> Rc<BTreeSet<Digest>> {
+        if let Some(named) = self.named.borrow().get(address) {
+            return Rc::clone(named);
+        }
+        let named = Rc::new(
+            self.records(address)
+                .into_iter()
+                .filter_map(|(opened, record)| {
+                    let index = opened.artifact()?;
+
+                    intact(&record.unit, &index)
+                        .then(|| Unit::named(&index).ok())
+                        .flatten()
+                })
+                .flatten()
+                .collect::<BTreeSet<_>>(),
+        );
+        self.named
+            .borrow_mut()
+            .insert(address.to_string(), Rc::clone(&named));
+
+        named
     }
 
     /// The unit whose index the object at `address` holds as `index`, each blob it names found among its packs, restored for `source`: each source of its stored texts holds the file its name resolves to where `source`'s packages stand. `None` where one of the blobs is not found there, or the index holds no unit.
@@ -489,15 +545,16 @@ impl Verdicts {
 
         for source in sources {
             let address = self.address(source)?;
-
-            let opened = opened(&self.cabinet.as_ref()?.unit(&address))?;
-            let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
-
             let reach = reach(source, &taken);
-            let reads = agreeing(source, &record, &reach, &taken, None)?;
-            if !intact(&record.unit, &opened.artifact()?) {
-                return None;
-            }
+            // Either record of this compiler's that agrees, as a hit takes one.
+            let (reads, contained) =
+                self.records(&address)
+                    .into_iter()
+                    .find_map(|(opened, record)| {
+                        let reads = agreeing(source, &record, &reach, &taken, None)?;
+
+                        intact(&record.unit, &opened.artifact()?).then_some((reads, record.unit))
+                    })?;
 
             taken.push(Taken {
                 key: key(source),
@@ -505,7 +562,7 @@ impl Verdicts {
                 reach,
                 reads,
                 unit: None,
-                contained: Some(record.unit),
+                contained: Some(contained),
                 entry: false,
             });
         }
@@ -530,21 +587,23 @@ impl Verdicts {
         self.hit(source, Some(overlay))
     }
 
-    /// The stored unit for `source` when its record still agrees, read through `overlay` where there is one, taken into the fold on a hit.
+    /// The stored unit for `source` when a record of this compiler's still agrees, the newer first, read through `overlay` where there is one, taken into the fold on a hit.
+    ///
+    /// **Either record of the object answers.** The newer is the one the last filing wrote, and the older the one it replaced, which an edit undone brings back and which another compiler's filing pushed aside: each is verified as a hit is, so whichever agrees is believed on the evidence the other would be.
     fn hit(&self, source: &UnitSource<'_>, overlay: Option<&Overlay>) -> Option<Unit> {
         curios_profile::profile!("verdicts::hit");
         let address = self.address(source)?;
 
-        // The record is judged before the artifact is read: an object whose record disagrees is not worth reading past it, and a file that is not framed is ignored.
-        let opened = opened(&self.cabinet.as_ref()?.unit(&address))?;
+        // A record is judged before its artifact is read: one that disagrees is not worth reading past.
+        let (opened, record, reads) =
+            self.records(&address)
+                .into_iter()
+                .find_map(|(opened, record)| {
+                    let taken = self.taken.borrow();
+                    let reads = agreeing(source, &record, &reach(source, &taken), &taken, overlay)?;
 
-        // A stored unit that will not read back is ignored, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
-        let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
-
-        let reads = {
-            let taken = self.taken.borrow();
-            agreeing(source, &record, &reach(source, &taken), &taken, overlay)?
-        };
+                    Some((opened, record, reads))
+                })?;
 
         // The record agreed, so it names the bytes the object holds: a unit this session holds as those very bytes is the object's unit, and is handed back with the artifact unread.
         let contained = record.unit;
@@ -567,7 +626,7 @@ impl Verdicts {
         Some(restored)
     }
 
-    /// The unit an earlier compilation of `source` filed under this address, whatever its files and the units before it now hold, with the units of this fold it was compiled after: intact. `None` is nothing filed, or an object that will not read back. An object another project filed for a package of the same name is a baseline as any is: what a recompile keeps of it, it keeps where this project's text is the text it was lowered from.
+    /// The unit an earlier compilation of `source` by this compiler filed under this address, whatever its files and the units before it now hold, with the units of this fold it was compiled after: intact, the newer of its records first. `None` is nothing this compiler filed, or an object that will not read back. An object another project filed for a package of the same name is a baseline as any is: what a recompile keeps of it, it keeps where this project's text is the text it was lowered from. Another compiler's record is no baseline, since a baseline's verdicts are believed too.
     ///
     /// **A baseline is offered whatever moved.** What the files hold now is what the recompile lowers and compares, and what the units before it hold now is what each stage asks its own reads of again: the record says which of them contain what they did, and every other is one the baseline was not compiled after.
     ///
@@ -575,14 +634,18 @@ impl Verdicts {
     pub fn earlier(&self, source: &UnitSource<'_>) -> Option<Earlier> {
         let address = self.address(source)?;
 
-        let opened = opened(&self.cabinet.as_ref()?.unit(&address))?;
-        let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
-        let index = opened.artifact()?;
-        if !intact(&record.unit, &index) {
-            return None;
-        }
+        let (record, unit) = self
+            .records(&address)
+            .into_iter()
+            .find_map(|(opened, record)| {
+                let index = opened.artifact()?;
+                if !intact(&record.unit, &index) {
+                    return None;
+                }
+                let unit = self.restored(&address, &index, source)?;
 
-        let unit = self.restored(&address, &index, source)?;
+                Some((record, unit))
+            })?;
         let after = self
             .taken
             .borrow()
@@ -633,6 +696,8 @@ impl Verdicts {
 
         Some(Placement {
             path: cabinet.unit(&address),
+            replaced: cabinet.replaced(&address),
+            filer: self.filer()?,
             address,
             reads,
             after,
@@ -645,11 +710,37 @@ impl Verdicts {
 /// Where a unit would be filed and as what: see [`Verdicts::placement`].
 struct Placement {
     path: PathBuf,
+    /// Where the record the filing replaces is kept beside it.
+    replaced: PathBuf,
+    filer: Filer,
     address: String,
     reads: Vec<(SourceName, String)>,
     after: Vec<(String, String)>,
     contained: String,
     stored: Indexed,
+}
+
+/// The candidates a compile at an address may take ([`Verdicts::candidates`]): the blobs its packs hold under a candidate's name that a record of the running compiler kept there names.
+///
+/// **What holds a candidate to the compiler that made it.** An address names no compiler, so its packs hold what every compiler filing there wrote, and a candidate's name says what it was made from and nothing of who made it. A record names its compiler, and a candidate's name ends in the digest of what it holds (`curios_common::candidate_name`), so a blob such a record names is the bytes that compiler filed, whoever wrote the pack it stands in. Offered otherwise, a candidate's verdict would be believed on behalf of a compiler that never reached it ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)).
+struct Offered {
+    packs: Rc<Packs>,
+    named: Rc<BTreeSet<Digest>>,
+}
+
+impl Candidates for Offered {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Blob> {
+        self.packs
+            .prefixed(&candidate_prefix(facet, input))
+            .into_iter()
+            .filter(|blob| self.named.contains(&blob.digest))
+            .collect()
+    }
+
+    /// A blob by its name, whoever's record names it: a name a candidate reads is the digest of what it holds, so what it finds is what was filed under it.
+    fn blob(&self, digest: &Digest) -> Option<Blob> {
+        self.packs.find(digest)
+    }
 }
 
 /// Whether two units in hand are one: the same handle, which is what a fold hands on and a session keeps.
@@ -711,12 +802,22 @@ impl Cache for Verdicts {
             source.answered().to_vec(),
             placement.contained.clone(),
         );
-        // The blobs first, so an object never names one not yet written; then what the address's object no longer names is collected.
+        // The blobs first, so an object never names one not yet written; then the record this filing replaces, kept beside it, so the compiler that filed it reads it still; then what the address's object no longer names is collected.
         let filed = self
             .file_blobs(&placement.address, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
-            .and_then(|record| replace(&placement.path, &record, placement.stored.index()))
+            .and_then(|record| {
+                set_aside(&placement.path, &placement.replaced)?;
+                replace(
+                    &placement.path,
+                    &placement.filer,
+                    &record,
+                    placement.stored.index(),
+                )
+            })
             .and_then(|()| self.collect(&placement.address, &placement.stored));
+        // What this compiler's records name has moved, for whatever asks again in this handle's life.
+        self.named.borrow_mut().remove(&placement.address);
 
         // Best effort: a cabinet that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         match filed {

@@ -305,7 +305,7 @@ impl<'a> Established<'a> {
 
     /// This scope with `fixed` saying of each unit, in the order they stand, whether it is the compiler's own: a constant of the executable, which is one thing under one compiler. Asked before a baseline is laid over the scope.
     ///
-    /// **Nothing is recorded of a read of a fixed unit.** A baseline is offered by the compiler that made it, a cabinet's object and a session's entry naming it alike, so a fixed unit is the one every baseline was compiled after and no read of it is asked again.
+    /// **Nothing is recorded of a read of a fixed unit.** A baseline is offered by the compiler that made it, a cabinet's record naming it in its header and a session's entry by living in its process, so a fixed unit is the one every baseline was compiled after and no read of it is asked again.
     pub fn fixed(mut self, fixed: &[bool]) -> Self {
         assert_eq!(
             fixed.len(),

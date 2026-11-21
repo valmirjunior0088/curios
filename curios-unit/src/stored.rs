@@ -57,8 +57,8 @@ pub fn recorded(reads: &[(PathBuf, Arc<Source>)]) -> Option<Vec<(SourceName, Str
     Some(recorded)
 }
 
-/// What a framed file opens with, so one is told from anything else by its first bytes rather than by guessing where a record might end. Versioned by the compiler its address names rather than here: a file another compiler framed is not found rather than found and misread.
-const MAGIC: &[u8; 8] = b"crslot\0\0";
+/// What a framed file opens with, so one is told from anything else by its first bytes rather than by guessing where a record might end. Versioned not here but by who framed it: a cabinet writes its compiler ahead of every frame it files (`curios-verdict`'s header), so a file another compiler framed is read for none of it, and a prelude image is read only by the binary that embeds it.
+const MAGIC: &[u8; 8] = b"crframe\0";
 
 /// The bytes of one framed file: the magic, the record's length, the record, then the artifact.
 ///
@@ -131,18 +131,24 @@ pub fn digests<'d>(digests: impl IntoIterator<Item = &'d Digest>) -> Vec<u8> {
         .collect()
 }
 
-/// The blobs `named` names ([`digests`]), each found by `find`. `Err` for bytes that are no list of digests, or one `find` holds no blob for.
-pub fn found(named: &Bytes, find: &dyn Fn(&Digest) -> Option<Blob>) -> Result<Vec<Blob>, String> {
+/// The digests `named` lists ([`digests`]), in their order. `Err` for bytes that are no list of digests.
+pub fn listed(named: &Bytes) -> Result<Vec<Digest>, String> {
     let (digests, rest) = named.as_slice().as_chunks::<32>();
     if !rest.is_empty() {
         return Err("not a list of digests".to_string());
     }
 
-    digests
+    Ok(digests
         .iter()
-        .map(|digest| {
-            let digest = Digest::from_bytes(*digest);
+        .map(|digest| Digest::from_bytes(*digest))
+        .collect())
+}
 
+/// The blobs `named` names ([`digests`]), each found by `find`. `Err` for bytes that are no list of digests, or one `find` holds no blob for.
+pub fn found(named: &Bytes, find: &dyn Fn(&Digest) -> Option<Blob>) -> Result<Vec<Blob>, String> {
+    listed(named)?
+        .into_iter()
+        .map(|digest| {
             find(&digest).ok_or_else(|| format!("no blob {digest:?} the unit names is held"))
         })
         .collect()

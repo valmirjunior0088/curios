@@ -12,10 +12,10 @@
 //!   cabinet/
 //!     sources/        c1/<digest>/      materialized source trees, keyed by their manifest hash
 //!     foreign/        f1/<digest>       fetched foreign modules, keyed by the hash they were accepted against
-//!     objects/        <address>/        judged units, an object per unit and compiler: its `unit` file, the
-//!                                       packs of the blobs it names, and what its last collection found
-//!     payloads/       native/<address>  precompiled payloads, one file per executable, compiler and target —
-//!                     browser/<address> and, natively, engine
+//!     objects/        <address>/        judged units, an object per unit: its `unit` file and the one it
+//!                                       replaced, the packs of the blobs they name, and its last collection
+//!     payloads/       native/<address>  precompiled payloads, one file per executable and target
+//!                     browser/<address>
 //!     compiler                          this machine's memo of the digest of the compiler running now
 //! ```
 //!

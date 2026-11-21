@@ -23,21 +23,24 @@ pub fn digest(bytes: &[u8]) -> String {
 
 /// The digest of some bytes as its thirty-two bytes, for a caller that keeps many and compares them: what [`digest`] spells in hex, and what a cabinet names a blob by.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Digest([u8; 32]);
+pub struct Digest([u8; Digest::LENGTH]);
 
 impl Digest {
+    /// How many bytes a digest is.
+    pub const LENGTH: usize = 32;
+
     /// The digest of `bytes`.
     pub fn of(bytes: &[u8]) -> Self {
         Self(<Sha256 as sha2::Digest>::digest(bytes).into())
     }
 
     /// The digest whose thirty-two bytes are `bytes`, as a table that keeps digests spells them.
-    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+    pub fn from_bytes(bytes: [u8; Self::LENGTH]) -> Self {
         Self(bytes)
     }
 
     /// The thirty-two bytes of this digest.
-    pub fn as_bytes(&self) -> &[u8; 32] {
+    pub fn as_bytes(&self) -> &[u8; Self::LENGTH] {
         &self.0
     }
 
@@ -48,7 +51,7 @@ impl Digest {
 
     /// The digest `hex` spells, as [`Digest::hex`] does: `None` for text that spells none.
     pub fn from_hex(hex: &str) -> Option<Self> {
-        let mut bytes = [0; 32];
+        let mut bytes = [0; Self::LENGTH];
         if hex.len() != 2 * bytes.len() {
             return None;
         }

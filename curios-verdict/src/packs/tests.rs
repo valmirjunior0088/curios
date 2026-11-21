@@ -1,4 +1,8 @@
-use {super::*, curios_common::test_support::*, std::path::Path};
+use {
+    super::*,
+    curios_common::{Facet, candidate_name, candidate_prefix, test_support::*},
+    std::path::Path,
+};
 
 /// One blob of its own bytes.
 fn blob(text: &str) -> Blob {
@@ -64,7 +68,7 @@ fn candidates_of_an_input_are_found_across_packs() {
     let packs = Packs::at(directory.to_path_buf(), now());
     let (input, other) = (Digest::of(b"input"), Digest::of(b"other"));
     let made = |input: &Digest, text: &str| Blob {
-        digest: curios_common::candidate_name(Facet::Elaboration, input, text.as_bytes()),
+        digest: candidate_name(Facet::Elaboration, input, text.as_bytes()),
         bytes: text.as_bytes().to_vec().into(),
         member: None,
     };
@@ -78,7 +82,7 @@ fn candidates_of_an_input_are_found_across_packs() {
         .expect("a pack is written");
 
     let mut found = Packs::at(directory.to_path_buf(), now())
-        .candidates(Facet::Elaboration, &input)
+        .prefixed(&candidate_prefix(Facet::Elaboration, &input))
         .into_iter()
         .map(|blob| blob.bytes.as_slice().to_vec())
         .collect::<Vec<_>>();
@@ -86,7 +90,7 @@ fn candidates_of_an_input_are_found_across_packs() {
     assert_eq!(found, vec![b"first".to_vec(), b"second".to_vec()]);
     assert_eq!(
         packs
-            .blob(&second.digest)
+            .find(&second.digest)
             .map(|blob| blob.bytes.as_slice().to_vec()),
         Some(b"second".to_vec())
     );
@@ -94,7 +98,7 @@ fn candidates_of_an_input_are_found_across_packs() {
         first
             .digest
             .as_bytes()
-            .starts_with(&curios_common::candidate_prefix(Facet::Elaboration, &input))
+            .starts_with(&candidate_prefix(Facet::Elaboration, &input))
     );
 }
 

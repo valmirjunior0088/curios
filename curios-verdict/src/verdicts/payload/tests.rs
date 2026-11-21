@@ -12,10 +12,13 @@ use {
     curios_package::Cabinet,
     curios_pipeline::{Cache, Fold},
     curios_wasm::{Names, to_bytes},
-    std::path::{Path, PathBuf},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
 };
 
-/// The engine every invocation here files under. A constant, because the engine is the one address part this crate is handed rather than computes, and no test here is about two engines.
+/// The engine invocations here file for: the one part of a payload's header this crate is handed rather than computes, and one test alone is about two.
 const ENGINE: &str = "test-engine";
 
 /// What one invocation did.
@@ -32,15 +35,16 @@ struct Invocation {
 ///
 /// The same sequence `payload_of` runs — consult, compile what must be compiled, file what was made — minus the terminal it reports to.
 fn invoke(directory: &Path, target: Option<&str>) -> Invocation {
-    invoke_over(directory, target, Vec::new(), None)
+    invoke_over(directory, target, Vec::new(), None, ENGINE)
 }
 
-/// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply, filing into the cabinet `cabinet` names or the project's own.
+/// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply, filing into the cabinet `cabinet` names or the project's own, for the engine `engine` to run.
 fn invoke_over(
     directory: &Path,
     target: Option<&str>,
     mut scope: Vec<RootSource>,
     cabinet: Option<&Path>,
+    engine: &str,
 ) -> Invocation {
     let program = match curios_package::Selection::of(
         curios_package::Spelling::of(target),
@@ -90,7 +94,7 @@ fn invoke_over(
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     // The rows come back beside the payload and are dropped here: what this suite asks is whether the *payload* was believed, and the rows ride along rather than deciding anything.
     if let Some((payload, _foreigns)) =
-        verdicts.payload_get(&program, &sources, Runs::Native { engine: ENGINE })
+        verdicts.payload_get(&program, &sources, Runs::Native { engine })
     {
         return Invocation {
             reused: true,
@@ -110,7 +114,7 @@ fn invoke_over(
         &sources,
         &payload,
         &foreigns,
-        Runs::Native { engine: ENGINE },
+        Runs::Native { engine },
     );
 
     Invocation {
@@ -127,7 +131,7 @@ fn run(root: &Path) -> Invocation {
 
 /// [`run`], filing into the cabinet `shared` names, as every project of a run under one named cabinet does.
 fn run_in(root: &Path, shared: &Path) -> Invocation {
-    invoke_over(root, None, Vec::new(), Some(shared))
+    invoke_over(root, None, Vec::new(), Some(shared), ENGINE)
 }
 
 /// `root`'s manifest with a path dependency on the package at `directory` appended — the only way another unit enters a compilation.
@@ -248,6 +252,21 @@ fn an_edited_entry_is_not_reused() {
     );
 }
 
+/// A payload is machine code one engine runs, so a payload filed for another engine is a miss: the header names the engine beside the compiler, and the address names neither, so the other engine's filing replaced it.
+#[test]
+fn another_engines_payload_is_a_miss() {
+    let root = project("engines");
+    let on = |engine| invoke_over(&root, None, Vec::new(), None, engine).reused;
+
+    on("one");
+    assert!(on("one"), "an engine's own payload is a hit");
+    assert!(!on("two"), "another engine's is not");
+    assert!(
+        !on("one"),
+        "and the second engine's filing replaced the first's"
+    );
+}
+
 /// What an interrupted filing left staged beside the payloads is taken away by the next filing there once no filing could still be writing it, and a staging younger than that is left to the filer it may belong to.
 #[test]
 fn a_filing_sweeps_a_staging_older_than_any_filing() {
@@ -305,7 +324,7 @@ fn an_edited_dependency_is_not_reused() {
     assert!(run(&root).reused, "the recompile refiles");
 }
 
-/// Changing what a program is compiled *against* invalidates the record and leaves the address where it was: a payload's address names its executable, its compiler and its engine, and what every unit of the compilation contained is what its record vouches for. So an executable has one object whatever it has been compiled against, and each configuration files over the last.
+/// Changing what a program is compiled *against* invalidates the record and leaves the address where it was: a payload's address names its executable, its header its compiler and its engine, and what every unit of the compilation contained is what its record vouches for. So an executable has one payload whatever it has been compiled against, and each configuration files over the last.
 #[test]
 fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     let shape = temporary("addressed-shape");
@@ -531,7 +550,7 @@ fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
         read_module(root.join("supplied.crs")).expect("the supplied module parses"),
     );
 
-    let gapped = invoke_over(&root, None, vec![supplied], None);
+    let gapped = invoke_over(&root, None, vec![supplied], None, ENGINE);
     assert!(!gapped.reused, "nothing is stored for the first invocation");
     assert_eq!(
         filed(&root),

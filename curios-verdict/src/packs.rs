@@ -20,7 +20,7 @@ mod tests;
 use {
     crate::{STAGING, sweep},
     curios_archive::Bytes,
-    curios_common::{Blob, Candidates, Digest, Facet, candidate_prefix},
+    curios_common::{Blob, Digest},
     curios_unit::{Pack, pack_name, pack_names, packed, repacked},
     std::{
         cell::RefCell,
@@ -249,7 +249,7 @@ impl Packs {
     }
 
     /// Every blob whose name opens with `prefix` that a pack of this address holds, each once: read out of each pack whose table names one.
-    fn prefixed(&self, prefix: &[u8]) -> Vec<Blob> {
+    pub fn prefixed(&self, prefix: &[u8]) -> Vec<Blob> {
         let mut found = BTreeMap::new();
         for name in self.list() {
             let named = self.names(&name).is_some_and(|names| {
@@ -331,17 +331,6 @@ impl Packs {
     /// Where the pack named `name` is kept.
     fn path(&self, name: &str) -> PathBuf {
         self.directory.join(name).with_extension(EXTENSION)
-    }
-}
-
-/// The candidates of an address are the blobs its packs hold under their names ([`curios_common::candidate_name`]).
-impl Candidates for Packs {
-    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Blob> {
-        self.prefixed(&candidate_prefix(facet, input))
-    }
-
-    fn blob(&self, digest: &Digest) -> Option<Blob> {
-        self.find(digest)
     }
 }
 
