@@ -108,7 +108,7 @@ fn a_destructuring_nothing_types_is_refused_at_its_pattern() {
     );
     assert!(
         report
-            .contains("a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: `?`")
+            .contains("undetermined type\n│  a tuple pattern of 2 fields takes apart a value whose type is not known here")
             && report.contains("let (a, b) = p;"),
         "the report should point at the destructuring:\n{report}"
     );

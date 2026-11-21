@@ -1559,6 +1559,17 @@ impl Displayed<'_> {
                     Code(scrutinee.spelled(spelling))
                 ));
             }
+            // A scrutinee whose type nothing has settled where the pattern reads it is no tuple of another arity: what is missing is its type, which an annotation where the value is bound gives.
+            Error::MatrixTupleArity { written, scrutinee }
+                if matches!(&***scrutinee, Subterm::Metavar(_)) =>
+            {
+                f.text("undetermined type");
+                f.stating(format_args!(
+                    "a tuple pattern of {} takes apart a value whose type is not known here",
+                    counted(*written, "field")
+                ));
+                f.stating("write the type where the value is bound, `let x: {A, B} = ...;`, and take `x` apart");
+            }
             Error::MatrixTupleArity { written, scrutinee } => {
                 f.text("pattern mismatch");
                 match written {
