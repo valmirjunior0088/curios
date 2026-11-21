@@ -1,10 +1,10 @@
 # A transcript is drawn plain or live
 
-**Ready to deliver, stages 1 to 4 in order.** Nothing here waits on parallel work: the compiler opens one subject at a time today, and both drawings hold any number open, so [A compilation is a graph of item tasks](301-item-tasks.md) plugs its workers into them and leaves the transcript alone.
+**Ready to deliver, stages 1 to 3 in order.** Nothing here waits on parallel work: the compiler opens one subject at a time today, and both drawings hold any number open, so [A compilation is a graph of item tasks](301-item-tasks.md) plugs its workers into them and leaves the transcript alone.
 
 ## What is missing
 
-The transcript is written for one open line at a time ([A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)). `Progress` is sequential by construction (`curios-pipeline/src/compile.rs`): `Compiled`, `Filing` and `Filed` name no unit and mean whichever was announced last, and `Entry` names none. `Steps` folds those events onto trees (`curios/src/pipeline.rs`) whose every node is two writes to one line of standard error, its label before the work and its outcome after it (`Tree`, `curios/src/report.rs`), and a test's own writes go through its host straight to the stream it wrote on, ending the open line first (`TestHost`, `curios/src/test_runner/host.rs`). The narration's state is the cursor's: once units are checked side by side, a second subject's label lands inside the first one's open line, and no one stream serves a pipe, a log and a person watching a terminal alike. And nothing says what a running step is doing: a check of `/std` is one open line for as long as it takes, and no event says which of its items it is on or how many are left.
+The transcript is told as events, each naming its tree, and drawn under one lock by whoever tells it (`curios/src/report.rs`, `report/transcript.rs`), but it has one drawing, the tree (`report/tree.rs`), written for one open line at a time ([A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)): every node is two writes to one line of standard error, its label before the work and its outcome after it. Once units are checked side by side, a second subject's label lands inside the first one's open line, and no one stream serves a pipe, a log and a person watching a terminal alike. A node's label is a word the tree prints (`Tree::open`), so no other drawing could tell a step from a test without reading it. And nothing says what a running step is doing: a check of `/std` is one open line for as long as it takes, and no event says which of its items it is on or how many are left.
 
 ## The design
 
@@ -46,21 +46,18 @@ Tested `/app`: 2 passed, 1 failed, 1 exited in 0.0s
 
 ## Stages
 
-1. **The events, drawn as today.** `Progress` names its unit on every event; `Steps`, `Tree`, the test relay, the reports a command writes and the lines under no subject tell events to the transcript, which draws them as today's narration, byte for byte. Check: every test pinning the narration passing unchanged — 88 lines across 6 files under `curios/tests/` naming a node or a tally, counted at `48e29a69e` —, the refactor's own check.
-2. **The plain drawing and the choice.** The plain drawing, chosen as above, with its flag and variable; a terminal keeps today's tree for now. Check: the pins restated from a run's own output; one event record fed to both drawings, each fact found in each; a record opening several subjects at once drawn plain, each subject's lines in its own order; the flag and the variable each forcing its drawing on a terminal and in a pipe.
-3. **The live drawing**, for any number of open subjects, with the fold announcing the units it plans. Check: frame tests over a screen model of the four controls the drawing writes — carriage return, newline, cursor up and erase to the end of the screen —, on records opening one subject at a time and several at once: frames mid-run, the region's cap, the final screen equal to today's narration with one open at a time, a subject that ends behind an older one; a line cut to the width; the frame an interrupt leaves; the region cleared before a program's output.
-4. **A check tells its items.** The demand driver tells each item as it begins and as it is published, and the running node shows them behind `·`. Check: a fixture's item events in the order the driver takes them, a voided attempt counted once; the frame of a running check.
+1. **The plain drawing and the choice.** Each node says what it is, a step by its verb or a test by its path, so the tree prints a step's label and the plain drawing its verb's two forms; the plain drawing, chosen as above, with its flag and variable; a terminal keeps today's tree for now. The plain verbs are capitalized and flush left, and a node said at once, its outcome known as it opens, is its closing line alone, with what stands beneath it indented under it as one block. Check: the pins restated from a run's own output — 88 lines across 6 files under `curios/tests/` naming a node or a tally, counted at `48e29a69e`; one event record fed to both drawings, each fact found in each; a record opening several subjects at once drawn plain, each subject's lines in its own order; the flag and the variable each forcing its drawing on a terminal and in a pipe.
+2. **The live drawing**, for any number of open subjects, with the fold announcing the units it plans. Check: frame tests over a screen model of the four controls the drawing writes — carriage return, newline, cursor up and erase to the end of the screen —, on records opening one subject at a time and several at once: frames mid-run, the region's cap, the final screen equal to today's narration with one open at a time, a subject that ends behind an older one; a line cut to the width; the frame an interrupt leaves; the region cleared before a program's output.
+3. **A check tells its items.** The demand driver tells each item as it begins and as it is published, and the running node shows them behind `·`. Check: a fixture's item events in the order the driver takes them, a voided attempt counted once; the frame of a running check.
 
 ## Open
 
-- The flag's and the variable's names: `--transcript=plain|live` and `CURIOS_TRANSCRIPT` are candidates.
-- The plain verbs' casing and alignment: capitalized as sampled, and whether right-aligned as cargo aligns its own.
-- How a node with no work between its label and its outcome is drawn plain — `serve`, `try`, a `write` whose place is its outcome: on one line, or on two as every other step.
+- The flag's and the variable's names: `--transcript=plain|live` and `CURIOS_TRANSCRIPT` are the working names.
 
 ## Decisions this overturns
 
 - [A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md): the bytes being the same in a pipe as on a terminal, nothing being erased or redrawn, and its rejection of "a live display beside the transcript … two renderers, one of which a pipe cannot show", which held while one subject was open at a time; each restated as its stage lands, with the two drawings of one transcript, whose scrollback is still never rewritten. Its rejection of capturing a test's output until it fails stands.
-- `curios-pipeline`: `Progress`'s *sequential by construction*; `curios/src/report.rs`'s *nothing written is taken back*.
+- `curios/src/report.rs`'s *nothing written is taken back*.
 
 ## Peers
 
@@ -80,4 +77,4 @@ Tested `/app`: 2 passed, 1 failed, 1 exited in 0.0s
 
 ## Completion and retirement
 
-Once stage 4 lands, the narration decision and [What a command reports](../../usage.md#what-a-command-reports), with `test`'s narration and its serve, state both drawings, [A compilation is a graph of item tasks](301-item-tasks.md) states its workers tell events as the sequential compiler does, and this specification is deleted.
+Once stage 3 lands, the narration decision and [What a command reports](../../usage.md#what-a-command-reports), with `test`'s narration and its serve, state both drawings, [A compilation is a graph of item tasks](301-item-tasks.md) states its workers tell events as the sequential compiler does, and this specification is deleted.
