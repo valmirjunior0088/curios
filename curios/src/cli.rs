@@ -584,7 +584,7 @@ impl Args for Query {
             .arg(Self::view(flag(
                 "exports",
                 EXPORTS.query_help(
-                    "Beside `--name`, what the module its path names exposes to a consumer, one row each: a name, what it is declared as and its head, then each public child module with the command that lists its own",
+                    "Beside `--name`, what the module its path names exposes, as a block: an entry for each name, each witness and each public child module, as its source writes it",
                 ),
             )))
             .arg(

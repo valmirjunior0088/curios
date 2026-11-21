@@ -4,7 +4,6 @@ use {
     crate::*,
     curios_common::{Qualifier, Source, Span},
     curios_core::{Declared, Totality},
-    curios_document::ModuleDocumentation,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     curios_surface::WrittenIn,
@@ -681,13 +680,8 @@ fn qualified(path: &str) -> Qualifier {
     Qualifier::from(path.trim_start_matches('/').split('/'))
 }
 
-/// What a consumer reaches through the module `path` names, asked in the prelude's scope alone, as a question with no subject is outside every package.
-fn exported(path: &str) -> Option<ModuleDocumentation> {
-    exposed(path).map(|exported| exported.module)
-}
-
-/// What `--exports` answers of the module `path` names in the prelude's scope alone: its record, and what each name it lists is declared as.
-fn exposed(path: &str) -> Option<crate::Exported> {
+/// What `--exports` answers of the module `path` names in the prelude's scope alone, as a question with no subject is outside every package.
+fn exposed(path: &str) -> Option<Exported> {
     crate::exported(
         DEFAULT_BUDGET,
         Subject::prelude(),
@@ -699,25 +693,47 @@ fn exposed(path: &str) -> Option<crate::Exported> {
     .expect("the prelude documents itself")
 }
 
-/// A name a module exposes is said to be declared as `--name` says it, read off the lowering: a constructor a `pub use` brings out of its family is a constructor and a concept's method a method, which the documentation record, keyed by the keyword a page writes, tells from no definition.
-#[test]
-fn a_name_a_module_exposes_is_declared_as_its_declaration_says() {
-    let declared = |module: &str, name: &str| {
-        let exposed = exposed(module).unwrap_or_else(|| panic!("{module} is exposed"));
-        exposed
-            .module
-            .declarations
-            .iter()
-            .zip(exposed.declared)
-            .find(|(declaration, _)| declaration.name == name)
-            .map(|(_, declared)| declared)
-            .unwrap_or_else(|| panic!("{module} exposes {name}"))
-    };
+/// What `--exports` answers of the module `path` names in the scope of `program`, read of standard input.
+fn exposed_in(program: &str, path: &str) -> Option<Exported> {
+    crate::exported(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                text: program.to_string(),
+                written: WrittenIn::Program,
+            },
+            declares: None,
+            package: None,
+        },
+        &qualified(path),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .expect("the program lowers")
+}
 
-    assert_eq!(declared("/std/Option", "some"), Declared::Constructor);
-    assert_eq!(declared("/std/Option", "Option"), Declared::Inductive);
-    assert_eq!(declared("/std/Option", "map"), Declared::Function);
-    assert_eq!(declared("/std/Show", "show"), Declared::Method);
+/// A member a module exposes beside its owner is the line that does it, after the owner written whole: a family's constructors, and a concept's method.
+#[test]
+fn a_member_a_module_exposes_beside_its_owner_is_the_line_that_does_it() {
+    let option = exposed("/std/Option").expect("the library exposes the module");
+    assert_eq!(
+        option.entries[..2],
+        [
+            "pub induct Option(A: Sort): pub Type\n| some(A)\n| none()\nend",
+            "pub use Option/{some, none}",
+        ]
+    );
+
+    let show = exposed("/std/Show").expect("the library exposes the module");
+    assert_eq!(
+        show.entries[..2],
+        [
+            "pub concept Show(A: Type): pub Type {\n    show(A) -> Str,\n}",
+            "pub use Show/{show}",
+        ]
+    );
 }
 
 /// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing.
@@ -743,7 +759,7 @@ fn the_prelude_alone_answers_the_standard_librarys_declarations_and_nothing_else
     assert!(described("/app/main").is_none());
 }
 
-/// Every module of the standard library a consumer reaches is reached from its root by `--exports` alone, each child row's module answered in turn, and the modules so reached are the ones its documentation pages are: the listing and the pages are one reading of one record.
+/// Every module of the standard library a consumer reaches is reached from its root by its entries alone, each child's `mod` line answered in turn, and the modules so reached are the ones its documentation pages are: the listing and the pages are one reading of the record.
 #[test]
 fn every_module_of_the_standard_library_is_reached_from_its_root() {
     let std = Qualifier::from(["std"]);
@@ -754,8 +770,14 @@ fn every_module_of_the_standard_library_is_reached_from_its_root() {
     let mut reached = BTreeSet::new();
     let mut pending = vec![std];
     while let Some(path) = pending.pop() {
-        let module = exported(&path.join()).unwrap_or_else(|| panic!("{} answers", path.join()));
-        pending.extend(module.children.iter().copied());
+        let module = exposed(&path.join()).unwrap_or_else(|| panic!("{} answers", path.join()));
+        pending.extend(
+            module
+                .entries
+                .iter()
+                .filter_map(|entry| entry.strip_prefix("pub mod "))
+                .map(|child| path.with(child)),
+        );
         reached.insert(path);
     }
 
@@ -767,26 +789,123 @@ fn every_module_of_the_standard_library_is_reached_from_its_root() {
     assert_eq!(reached, paged);
 }
 
-/// A facade's path names a declaration and a module: `--name` answers the declaration, the `Map` structure, and `--exports` the module, among whose names is `insert`; a private module answers nothing, as a consumer reaches none.
+/// A facade's path names a declaration and a module: `--name` answers the declaration, the `Map` structure, and the module is listed as its documentation page lists it — `insert` among its names, its witnesses after them, which only a page lists, and its public children last.
 #[test]
-fn a_facade_answers_its_declaration_and_its_module_and_a_private_module_nothing() {
+fn a_facade_answers_its_declaration_and_its_module() {
     let declaration = described("/std/print(\"x\")", "/std/Map").expect("the library declares it");
     assert_eq!(declaration.declared, Declared::Struct);
 
-    let module = exported("/std/Map").expect("the library exposes the module");
-    assert!(
+    let module = exposed("/std/Map").expect("the library exposes the module");
+    let at = |opening: &str| {
         module
-            .declarations
+            .entries
             .iter()
-            .any(|declaration| declaration.name == "insert"),
-        "{:?}",
-        module
-            .declarations
-            .iter()
-            .map(|declaration| &declaration.name)
-            .collect::<Vec<_>>()
+            .position(|entry| entry.starts_with(opening))
+            .unwrap_or_else(|| panic!("no entry opens `{opening}`: {:?}", module.entries))
+    };
+    assert_eq!(module.public, Some(true));
+    assert!(at("pub let insert(") < at("satisfy "));
+    assert!(at("satisfy ") < at("pub mod Key"));
+    assert_eq!(module.modules, 5);
+}
+
+/// A module no documentation page shows is listed off the lowering: `Map`'s `internal`, written without `pub`, answers that it is private, the family its `pub use` exposes, written whole from its own text, and its public child; and the child, written `pub` beneath a private module, lists its own names in the order its body writes them and the constructors its glob exposed after them, by name. The library the compiler was built with holds no file, so neither is placed.
+#[test]
+fn a_module_no_page_shows_is_listed_off_the_lowering() {
+    let internal = exposed("/std/Map/internal").expect("the library declares the module");
+    assert_eq!(
+        internal,
+        Exported {
+            public: Some(false),
+            place: None,
+            names: 1,
+            modules: 1,
+            entries: vec![
+                "pub induct Node(K: Type, V: Type): pub Type\n| empty()\n| leaf(key: K, value: V)\n| branch(at: Nat, twigs: Vec(Node(K, V), 16))\nend".to_string(),
+                "pub mod Node".to_string(),
+            ],
+        }
     );
-    assert!(exported("/std/Map/internal").is_none());
+
+    let node = exposed("/std/Map/internal/Node").expect("the library declares the module");
+    assert_eq!(
+        (node.public, node.place, node.modules),
+        (Some(true), None, 0)
+    );
+    assert_eq!(node.entries[0], internal.entries[0]);
+    assert!(
+        node.entries[1].starts_with("pub let first_in("),
+        "{:?}",
+        node.entries
+    );
+    assert!(
+        node.entries
+            .contains(&"pub use Node/{branch, empty, leaf}".to_string()),
+        "{:?}",
+        node.entries
+    );
+}
+
+/// A program whose module exposes a type the compiler writes, a selector of a `use` line, a definition, a family and, by a glob, the family's constructor, beside a definition it keeps, a public child and a private one.
+const MODULES: &str = "\
+mod helpers
+    use /std/{Nat};
+    pub use /std/{Bool};
+    pub use /std/Option/{some};
+    pub let twice(n: Nat) -> Nat = n + n;
+    let hidden: Nat = 3;
+    pub induct Colour: pub Type
+    | red()
+    end
+    pub use Colour/*;
+    pub mod deeper
+        pub let one: /std/Nat = 1;
+    end
+    mod kept
+        pub let zero: /std/Nat = 0;
+    end
+end
+/std/print(\"\")";
+
+/// A program's own module is listed off its lowering, placed at its `mod` line: what it exposes in the order its body writes it — a declaration no text is held of by the line that exposes it, a member of an owner it does not expose by the owner's path, a definition by its head, a family whole — then what a glob exposed, a member of an owner it exposes by the owner's name, then its public child, and nothing it keeps.
+#[test]
+fn a_programs_own_module_lists_what_its_body_exposes_in_the_order_it_writes_it() {
+    let helpers = exposed_in(MODULES, "/helpers").expect("the program declares the module");
+
+    assert_eq!(
+        (
+            helpers.public,
+            helpers.place.map(|place| place.line_column()),
+            helpers.names,
+            helpers.modules,
+        ),
+        (Some(false), Some((1, 5)), 5, 1)
+    );
+    assert_eq!(
+        helpers.entries,
+        [
+            "pub use /std/{Bool}",
+            "pub use /std/Option/{some}",
+            "pub let twice(n: Nat) -> Nat",
+            "pub induct Colour: pub Type\n| red()\nend",
+            "pub use Colour/{red}",
+            "pub mod deeper",
+        ]
+    );
+}
+
+/// A path names a module where a `mod` line declares one: a child written `pub` answers as public, and a family's namespace, a declaration and a path nothing stands at answer no module.
+#[test]
+fn a_path_names_a_module_only_where_a_mod_line_declares_one() {
+    let deeper = exposed_in(MODULES, "/helpers/deeper").expect("the program declares the module");
+
+    assert_eq!(
+        (deeper.public, deeper.entries),
+        (Some(true), vec!["pub let one: /std/Nat".to_string()])
+    );
+    assert_eq!(exposed_in(MODULES, "/helpers/Colour"), None);
+    assert_eq!(exposed_in(MODULES, "/helpers/twice"), None);
+    assert_eq!(exposed_in(MODULES, "/nowhere"), None);
 }
 
 /// A program writing a word in each place elaboration resolves one: a structure's field labels in a literal, a projection and a pattern, a concept's method in a witness, and a constructor in a match.

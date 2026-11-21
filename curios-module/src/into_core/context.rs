@@ -462,6 +462,24 @@ pub fn concept_method<'t>(
         })
 }
 
+/// Whether every `mod` line from `root` down to `module`, a module within it, is written `pub`, each module's table read through `info`: whether whoever may name `root` reaches the module, which is what a documentation page is made for.
+pub fn reached_from<'t>(
+    root: &Qualifier,
+    module: &Qualifier,
+    info: impl Fn(&Qualifier) -> Option<&'t ModuleInfo>,
+) -> bool {
+    let mut current = *root;
+
+    module.segments()[root.segments().len()..]
+        .iter()
+        .all(|segment| {
+            let public = info(&current).and_then(|info| info.get_child(segment)) == Some(true);
+            current = current.with(segment);
+
+            public
+        })
+}
+
 /// How a module declares a label, as a step of a path reads it: a child module, or a binding, each with its visibility.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Declares {

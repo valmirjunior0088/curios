@@ -25,9 +25,11 @@ use {
         Imports, Intrinsic, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality,
         UnitPaths, WitnessKey, WrittenBinder,
     },
-    curios_document::{Documentation, ModuleDocumentation},
+    curios_document::{Documentation, Kind, ModuleDocumentation},
     curios_elab::{Resolved, Traces},
-    curios_module::{Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity},
+    curios_module::{
+        Exposure, Heading, Overlay, PreparedText, RootSource, SYNTAX, heading, identity, written,
+    },
     curios_pipeline::{
         Cache, CompileError, EntryTail, Fold, Progress, prelude_documentation, spelling_at,
         spelling_for,
@@ -1188,7 +1190,7 @@ fn said_by(
     })
 }
 
-/// What a consumer reaches through the module `asked` names, as the documentation record of the unit holding it states it ([`ModuleDocumentation`]): a unit in scope whose mount is the module's root, its record made over the units before it as `curios document` makes one ([`Fold::documentation`]), and otherwise the prelude's, which the image carries. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where no module a consumer reaches stands at the path. `overlay` and `cache` behave as they do for `diagnostics`.
+/// What the module `asked` names exposes ([`Exported`]), by the unit that declares it: a unit in scope whose mount is the path's root, the prelude's where none is, and the program itself, lowered and no further, where the root is no unit's — a module its own `mod` line declares. A module a documentation page shows lists what the page lists, the record made over the units before the unit holding it as `curios document` makes one ([`Fold::documentation`]) and the prelude's the one the image carries, so a page and the listing list one set; a module no page shows — one beneath a `mod` line written without `pub`, a program's own — lists what the lowering holds of it ([`PreparedText::exposure`]), and is answered whether or not its unit checks. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where no module stands at the path. `overlay` and `cache` behave as they do for `diagnostics`.
 pub fn exported(
     budget: u64,
     subject: Subject,
@@ -1198,84 +1200,273 @@ pub fn exported(
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Exported>, CompileError> {
     let root = Qualifier::from([asked.head()]);
-    let module = |record: Documentation| {
-        record
-            .modules
-            .into_iter()
-            .find(|module| module.path == *asked)
-    };
-    let units = match subject {
-        Subject::Entry { units, .. } | Subject::Unit { units } => units,
-        // A text of Core text is compiled against the prelude alone.
-        Subject::CoreText { .. } => Vec::new(),
-    };
     let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = overlaid_verdicts
         .as_ref()
         .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
-    let Some(holding) = units
+    let (units, entry) = match subject.formed(overlay) {
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+            package,
+        } => (units, Some((origin, declares, package))),
+        Subject::Unit { units } => (units, None),
+        // A text of Core text is compiled against the prelude alone.
+        Subject::CoreText { .. } => (Vec::new(), None),
+    };
+    let units = overlaid(units, overlay);
+
+    if let Some(holding) = units
         .iter()
         .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
-    else {
-        let Some(module) = prelude_documentation()
-            .into_iter()
-            .find(|record| record.prefix == root)
-            .and_then(module)
+    {
+        let units = &units[..=holding];
+        let Some((reached, lowered)) = Fold::new(budget, units, through)
+            .lowered_unit(&mut *progress, |scope, own| {
+                listed(scope, own, false, asked, None)
+            })?
         else {
             return Ok(None);
         };
-        // The prelude's own unit holding the root reads its names, the others standing before it.
-        let declared = Fold::new(budget, &[], through).units(progress, |prelude, _| {
+        // A page shows a module every `mod` line down to which is written `pub`, so one beneath a line written without it has none, and its unit is not checked to find that out.
+        if !reached {
+            return Ok(Some(lowered));
+        }
+        let record = Fold::new(budget, units, through).documentation(&mut *progress)?;
+        let Some(page) = paged(record, asked) else {
+            return Ok(Some(lowered));
+        };
+
+        return Fold::new(budget, units, through).lowered_unit(progress, |scope, own| {
+            listed(scope, own, false, asked, Some(&page)).map(|(_, listed)| listed)
+        });
+    }
+
+    if let Some(record) = prelude_documentation()
+        .into_iter()
+        .find(|record| record.prefix == root)
+    {
+        let page = paged(record, asked);
+
+        // The prelude's own unit holding the root reads its names, the others standing beside it.
+        return Fold::new(budget, &[], through).units(progress, |prelude, _| {
             let own = prelude
                 .iter()
                 .find(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
                 .and_then(|unit| unit.text())
                 .expect("a prelude record is a prelude unit's");
-            Ok(declared_by(prelude, own, &module))
-        })?;
 
-        return Ok(Some(Exported { module, declared }));
-    };
-    let mut units = overlaid(units, overlay);
-    units.truncate(holding + 1);
-    let Some(module) = module(Fold::new(budget, &units, through).documentation(&mut *progress)?)
-    else {
+            Ok(listed(prelude, own, false, asked, page.as_ref()).map(|(_, listed)| listed))
+        });
+    }
+
+    let Some((origin, declares, package)) = entry else {
         return Ok(None);
     };
-    let declared = Fold::new(budget, &units, through)
-        .lowered_unit(progress, |scope, own| declared_by(scope, own, &module))?;
+    let (entrypoint, loader) =
+        open(origin, declares, package.as_ref(), overlay).map_err(|diagnostics| {
+            CompileError::Failure(
+                diagnostics
+                    .into_iter()
+                    .map(|diagnosis| diagnosis.report)
+                    .collect(),
+            )
+        })?;
 
-    Ok(Some(Exported { module, declared }))
+    Fold::new(budget, &units, through).lowered(
+        &entrypoint,
+        &loader.tested(),
+        progress,
+        |scope, own, _| listed(scope, own, true, asked, None).map(|(_, listed)| listed),
+    )
 }
 
-/// What a consumer reaches through a module ([`exported`]): its documentation record, and what each name the record lists is declared as, in the order it lists them, read as `--name` reads one.
+/// The page `record` shows of the module `asked`, where it shows one.
+fn paged(record: Documentation, asked: &Qualifier) -> Option<ModuleDocumentation> {
+    record
+        .modules
+        .into_iter()
+        .find(|module| module.path == *asked)
+}
+
+/// What a module exposes ([`exported`]): whether its `mod` line is written `pub`, where the line names it, how many names and child modules it exposes, and an entry for each thing it exposes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Exported {
-    pub module: ModuleDocumentation,
-    pub declared: Vec<Declared>,
+    /// Whether the `mod` line declaring the module is written `pub`: none for a root, which no line declares.
+    pub public: Option<bool>,
+    /// Where the `mod` line declaring the module names it, as a place to open ([`module_placed`]).
+    pub place: Option<Span>,
+    /// How many names it exposes.
+    pub names: usize,
+    /// How many public child modules it has.
+    pub modules: usize,
+    /// What it exposes, an entry each, as its source writes it with what a body elides left out ([`curios_module::written`]): each name in the order a documentation page lists them where one shows the module, and its body writes them where none does, a run of members it exposes beside their owner as the line that does it; then its witnesses; then its public child modules, each as the `mod` line that declares it.
+    pub entries: Vec<String>,
 }
 
-/// What each name `module` lists is declared as, by the path a consumer writes it at, read off `own` and the units in `scope` as [`described`] reads one: a witness, which has no name to be asked by, as what its record says it is.
-fn declared_by(scope: &[&Unit], own: &PreparedText, module: &ModuleDocumentation) -> Vec<Declared> {
-    module
-        .declarations
+/// What `own`, the lowering that declares the module `asked`, exposes of it over the units in `scope` ([`Exported`]): read off `page` where a documentation page shows the module, and off the lowering where none does ([`PreparedText::exposure`]), what each name is declared as read by `own` and the units in `scope` as [`described`] reads one either way. A name an item the parser could not read declared is left out of a module no page shows, nothing being read of it. `owned` says `own` is the subject's own, whose `mod` line is a place to open whatever holds it ([`module_placed`]). Beside it, whether every `mod` line down to the module is written `pub` ([`Exposure::reached`]), which is what a documentation page shows it for. `None` where `own` declares no module at the path.
+///
+/// # Panics
+///
+/// Where `page` lists a name the lowering's export view holds none of.
+fn listed(
+    scope: &[&Unit],
+    own: &PreparedText,
+    owned: bool,
+    asked: &Qualifier,
+    page: Option<&ModuleDocumentation>,
+) -> Option<(bool, Exported)> {
+    let exposure = own.exposure(asked)?;
+    let saying = Saying::over(scope, own);
+    let named = exposure
+        .names
         .iter()
-        .map(|declaration| match declaration.kind {
-            curios_document::Kind::Witness => Declared::Witness,
-            _ => {
-                let asked = Qualifier::from(
-                    declaration
-                        .home
-                        .iter()
-                        .chain([declaration.name.as_str()])
-                        .collect::<Vec<_>>(),
-                );
-                found(scope, own, &resolved(scope, own, &asked))
-                    .unwrap_or_else(|| panic!("{} is exposed and declared nowhere", asked.join()))
-                    .declared
-            }
-        })
-        .collect()
+        .filter_map(|(label, name)| Some((label.as_str(), (*name, found(scope, own, name)?))))
+        .collect::<BTreeMap<_, _>>();
+    let order = match page {
+        Some(page) => page
+            .declarations
+            .iter()
+            .filter(|declaration| declaration.kind != Kind::Witness)
+            .map(|declaration| declaration.name.as_str())
+            .collect::<Vec<_>>(),
+        None => exposure
+            .names
+            .iter()
+            .map(|(label, _)| label.as_str())
+            .filter(|label| named.contains_key(label))
+            .collect(),
+    };
+
+    let mut entries = Vec::new();
+    // The members a module exposes beside their owner, a run of one owner's being one line.
+    let mut run = None::<(String, Vec<&str>)>;
+    for label in &order {
+        let (name, found) = named
+            .get(label)
+            .unwrap_or_else(|| panic!("{}/{label} is exposed and declared nowhere", asked.join()));
+        let owner = matches!(found.declared, Declared::Constructor | Declared::Method)
+            .then(|| owner_of(&saying, &exposure, name));
+        if run.as_ref().map(|(held, _)| held) != owner.as_ref() {
+            entries.extend(run.take().map(exposing));
+            run = owner.map(|owner| (owner, Vec::new()));
+        }
+        match &mut run {
+            Some((_, labels)) => labels.push(label),
+            None => entries.push(entry_of(&saying, page, label, name, found)),
+        }
+    }
+    entries.extend(run.take().map(exposing));
+    match page {
+        Some(page) => entries.extend(
+            page.declarations
+                .iter()
+                .filter(|declaration| declaration.kind == Kind::Witness)
+                .map(|declaration| declaration.signature.text.clone()),
+        ),
+        None => {
+            entries.extend(exposure.witnesses.iter().filter_map(|witness| {
+                Some(found(scope, own, witness)?.declaration?.heading()?.head)
+            }))
+        }
+    }
+    let children = match page {
+        Some(page) => &page.children,
+        None => &exposure.children,
+    };
+    entries.extend(
+        children
+            .iter()
+            .map(|child| format!("pub mod {}", child.last())),
+    );
+
+    Some((
+        exposure.reached,
+        Exported {
+            public: exposure.public,
+            place: module_placed(own, owned, asked),
+            names: order.len(),
+            modules: children.len(),
+            entries,
+        },
+    ))
+}
+
+/// The entry of the declaration `name` a module exposes as `label`, `found` where it is declared: as `page` shows it where a documentation page lists it, and as its own text states it where none does ([`Declaration::heading`]), each written as its source writes it with what a body elides left out ([`written`]). A declaration no text is held of — one the compiler writes — is the line that exposes it, by the path a reader outside every module writes it at ([`absolute`]).
+fn entry_of(
+    saying: &Saying<'_>,
+    page: Option<&ModuleDocumentation>,
+    label: &str,
+    name: &Global,
+    found: &Found<'_>,
+) -> String {
+    let shown = page.and_then(|page| {
+        page.declarations
+            .iter()
+            .find(|declaration| declaration.name == label && declaration.kind != Kind::Witness)
+    });
+
+    match shown {
+        Some(declaration) => written(
+            declaration.kind,
+            declaration.opaque,
+            &declaration.signature.text,
+            &declaration
+                .members
+                .iter()
+                .map(|member| member.signature.text.as_str())
+                .collect::<Vec<_>>(),
+        ),
+        None => found
+            .declaration
+            .as_ref()
+            .and_then(Declaration::heading)
+            .map_or_else(
+                || {
+                    let path = absolute(&saying.outside, name);
+
+                    match path.rsplit_once('/') {
+                        Some((module, exposed)) if !module.is_empty() => {
+                            format!("pub use {module}/{{{exposed}}}")
+                        }
+                        _ => path,
+                    }
+                },
+                |heading| heading.written(),
+            ),
+    }
+}
+
+/// How the line that exposes `member` beside its owner names the owner: by the name the module exposes the owner under, and where it exposes it under none, by the path a reader outside every module writes it at ([`absolute`]).
+fn owner_of(saying: &Saying<'_>, exposure: &Exposure, member: &Global) -> String {
+    let owner = match member {
+        Global::Authored(path) => Global::Authored(path.without_last()),
+        Global::Witness(_) => *member,
+    };
+
+    exposure
+        .names
+        .iter()
+        .find(|(_, name)| *name == owner)
+        .map_or_else(
+            || absolute(&saying.outside, &owner),
+            |(label, _)| label.clone(),
+        )
+}
+
+/// The line that exposes the members `labels` of the owner a module names `owner`, as a module writes it.
+fn exposing((owner, labels): (String, Vec<&str>)) -> String {
+    format!("pub use {owner}/{{{}}}", labels.join(", "))
+}
+
+/// Where the `mod` line of `lowered` declaring `module` names it, as a place to open: always where `owned`, the lowering being the subject's own, and otherwise where a file holds the line, as a declaration is placed ([`found`]). None for a module no line of `lowered` declares, a mount's root.
+fn module_placed(lowered: &PreparedText, owned: bool, module: &Qualifier) -> Option<Span> {
+    let place = lowered
+        .module_place(module)?
+        .resolved(&[lowered.anchors()])?;
+
+    (owned || place.source.file().is_some()).then_some(place)
 }
 
 /// The declaration `asked` names, a path read as a reader outside every module writes one: a declaration at it, or one some module exports there ([`PreparedText::named_by`]), by `own` and the units in `scope`.

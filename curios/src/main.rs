@@ -847,7 +847,6 @@ fn dispatch() -> Result<(), Failure> {
                     elaboration.budget,
                     contract.admit_scope(subject, manifest, &here()?, cabinet)?,
                     &path,
-                    subject,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(

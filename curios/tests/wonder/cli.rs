@@ -385,6 +385,106 @@ fn a_block_points_to_the_view_listing_its_witnesses() {
     );
 }
 
+/// A module is answered by a block: whether its `mod` line is written `pub`, how many names and modules it exposes, an entry behind a `├─` for each thing it exposes, and its `mod` line's place as the close. One no documentation page shows, a private one, is answered as one a page shows is, with nothing it keeps.
+#[test]
+fn a_module_is_answered_by_a_block_whether_or_not_a_page_shows_it() {
+    let root = project("exports");
+    write(&root, "lib.crs", "pub mod util;\nmod kept;\n");
+    write(
+        &root,
+        "kept.crs",
+        "pub let word: /std/Str =\n    \"kept\";\nlet hidden: /std/Str =\n    \"\";\npub mod deeper;\n",
+    );
+    write(
+        &root,
+        "kept/deeper.crs",
+        "pub let one: /std/Nat =\n    1;\n",
+    );
+
+    let shown = curios(
+        &root,
+        &["wonder", "--name", "/app/util", "--exports", "app.crs"],
+        "",
+    );
+    assert!(
+        shown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&shown.stderr)
+    );
+    assert_eq!(
+        stdout(&shown),
+        concat!(
+            "/app/util\n",
+            "│  public module, exposing 1 name and 0 modules\n",
+            "├─ pub let word: /std/Str\n",
+            "└─ [module] lib.crs:1:9\n",
+        )
+    );
+
+    let kept = curios(
+        &root,
+        &["wonder", "--name", "/app/kept", "--exports", "app.crs"],
+        "",
+    );
+    assert!(
+        kept.status.success(),
+        "{}",
+        String::from_utf8_lossy(&kept.stderr)
+    );
+    assert_eq!(
+        stdout(&kept),
+        concat!(
+            "/app/kept\n",
+            "│  private module, exposing 1 name and 1 module\n",
+            "├─ pub let word: /std/Str\n",
+            "├─ pub mod deeper\n",
+            "└─ [module] lib.crs:2:5\n",
+        )
+    );
+}
+
+/// A module no documentation page shows is read off the lowering, so it answers where its library does not check, and a module a page shows is refused there as a build is.
+#[test]
+fn a_private_module_answers_where_its_library_does_not_check() {
+    let root = project("exports-unchecked");
+    write(&root, "lib.crs", "pub mod util;\nmod kept;\n");
+    write(&root, "util.crs", "pub let word: /std/Str =\n    true;\n");
+    write(
+        &root,
+        "kept.crs",
+        "pub let word: /std/Str =\n    \"kept\";\n",
+    );
+
+    let kept = curios(
+        &root,
+        &["wonder", "--name", "/app/kept", "--exports", "app.crs"],
+        "",
+    );
+    assert!(
+        kept.status.success(),
+        "{}",
+        String::from_utf8_lossy(&kept.stderr)
+    );
+    assert_eq!(
+        stdout(&kept),
+        concat!(
+            "/app/kept\n",
+            "│  private module, exposing 1 name and 0 modules\n",
+            "├─ pub let word: /std/Str\n",
+            "└─ [module] lib.crs:2:5\n",
+        )
+    );
+
+    let shown = curios(
+        &root,
+        &["wonder", "--name", "/app/util", "--exports", "app.crs"],
+        "",
+    );
+    let refused = String::from_utf8_lossy(&shown.stderr);
+    assert!(!shown.status.success());
+    assert!(refused.contains("[error] util.crs:2:5"), "{refused}");
+}
+
 /// A place where nothing is named is an answer of nothing, and exits 0.
 #[test]
 fn a_place_naming_nothing_answers_nothing() {

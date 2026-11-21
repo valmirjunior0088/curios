@@ -136,6 +136,35 @@ fn a_declarations_block_closes_on_its_place_with_no_pane() {
     );
 }
 
+/// A listing's block hangs each entry on its trunk above its ways out: an entry's first line behind a `├─`, and the rest of it beneath on the trunk.
+#[test]
+fn a_listings_block_hangs_each_entry_on_its_trunk() {
+    let report = Report::about(
+        About::Named("/lib/shapes".to_string()),
+        Said::line("/lib/shapes"),
+    )
+    .stating("public module, exposing 2 names and 0 modules")
+    .trying("curios wonder --name /lib/shapes/area");
+    let entries = [
+        "pub induct Shape: pub Type\n| circle(Nat)\nend".to_string(),
+        "pub let area(shape: Shape) -> Nat".to_string(),
+    ];
+
+    assert_eq!(
+        report.listing(Kind::Module, &Style::plain(), &entries),
+        concat!(
+            "/lib/shapes\n",
+            "│  public module, exposing 2 names and 0 modules\n",
+            "├─ pub induct Shape: pub Type\n",
+            "│  | circle(Nat)\n",
+            "│  end\n",
+            "├─ pub let area(shape: Shape) -> Nat\n",
+            "├─ try; curios wonder --name /lib/shapes/area\n",
+            "└─ [module] /lib/shapes",
+        )
+    );
+}
+
 /// Every pane of one report shares a gutter: a line's number ends in the column the widest ends in, so the code of each begins in one column.
 #[test]
 fn the_panes_of_a_report_share_one_gutter() {

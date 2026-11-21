@@ -10,13 +10,14 @@
 mod tests;
 
 use {
-    super::{ModuleInfo, PreparedText, PublicInterface, Scoped, visible_path},
+    super::{ModuleInfo, PreparedText, PublicInterface, Scoped, reached_from, visible_path},
     curios_abi::{NEVER, WireType},
     curios_common::{
         Class, Keyword, MAX_LINE_WIDTH, Mount, Qualifier, RootKind, Source, SourceName, Span,
     },
     curios_document::{
-        Declaration, Documentation, Kind, Mark, Marked, Member, ModuleDocumentation, Signature,
+        Block, Declaration, Documentation, Kind, Mark, Marked, Member, ModuleDocumentation,
+        Signature,
     },
     curios_print::{Annotated, Printer, each_named, render_annotated},
     curios_surface::{
@@ -567,23 +568,8 @@ impl Reader<'_> {
 
     /// Whether `module` has a page of its own: every hop below the prefix is a `pub mod`. A private module, and every module beneath one, has none.
     fn has_page(&self, module: &Qualifier) -> bool {
-        let prefix = self.prefix.segments().len();
-        let segments = module.segments();
-        if segments.len() < prefix || segments[..prefix] != self.prefix.segments()[..] {
-            return false;
-        }
-        let mut current = *self.prefix;
-        for segment in &segments[prefix..] {
-            match self
-                .table
-                .get(&current)
-                .and_then(|info| info.get_child(segment))
-            {
-                Some(true) => current = current.with(segment),
-                _ => return false,
-            }
-        }
-        true
+        module.is_within(self.prefix)
+            && reached_from(self.prefix, module, |module| self.table.get(module))
     }
 
     /// The items of `module`: a file-backed module's from the map discovery filed it in, an inline module's from its parent's tree. `None` for a path that names no module — a constructor namespace, say.
@@ -897,11 +883,42 @@ fn stated(item: &TopItem) -> Vec<Stated<'_>> {
     }
 }
 
-/// What a declaration states of one definition: its head as the author wrote it, and the prose above it, a line an entry.
+/// What a declaration states of one definition: its head as the author wrote it, the prose above it, a line an entry, what kind of declaration it is, whether its representation is kept, and the members its representation shows, each as its owner's block lists it — none for a member, which has none, and none where the representation is kept.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Heading {
     pub head: String,
     pub prose: Vec<String>,
+    pub kind: Kind,
+    pub opaque: bool,
+    pub members: Vec<String>,
+}
+
+impl Heading {
+    /// The declaration as its source writes it, with what a body elides left out ([`written`]).
+    pub fn written(&self) -> String {
+        written(self.kind, self.opaque, &self.head, &self.members)
+    }
+}
+
+/// A declaration as its source writes it, with what a body elides left out: `head`, then `members`, the ones its representation shows, in the block a declaration of `kind` writes them in ([`Block`]) — a member that runs over lines keeping the block's indent on each. A declaration that writes no block a consumer sees is its head alone.
+pub fn written(kind: Kind, opaque: bool, head: &str, members: &[impl AsRef<str>]) -> String {
+    let Some(block) = Block::of(kind, opaque) else {
+        return head.to_string();
+    };
+    let indent = match block.indented {
+        true => " ".repeat(INDENT),
+        false => String::new(),
+    };
+
+    let mut lines = vec![format!("{head}{}", block.opener)];
+    lines.extend(members.iter().map(|member| {
+        let member = member.as_ref().replace('\n', &format!("\n{indent}"));
+
+        format!("{indent}{}{member}{}", block.lead, block.trail)
+    }));
+    lines.push(block.closer.to_string());
+
+    lines.join("\n")
 }
 
 /// What `declaration`, the text of one source declaration, states of the definition whose name is written `label` bytes into it: the head a page would print it by, from the printers a page prints by, with the prose above it, whether or not a consumer sees the definition. A member is stated as it stands apart from its owner, a constructor with the family it builds. `None` where the text does not parse as an item, and where no definition it declares is named there.
@@ -918,6 +935,16 @@ pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
             false => stated.members.into_iter().find(|member| named(member)),
         })
         .map(|stated| Heading {
+            kind: stated.kind,
+            opaque: stated.opaque,
+            members: match stated.shown {
+                true => stated
+                    .members
+                    .into_iter()
+                    .map(|member| render_annotated(member.head, INDENT, MAX_LINE_WIDTH).0)
+                    .collect(),
+                false => Vec::new(),
+            },
             head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, MAX_LINE_WIDTH).0,
             prose: stated.prose.unwrap_or_default(),
         })

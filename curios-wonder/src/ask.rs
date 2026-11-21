@@ -8,8 +8,8 @@ use {
     crate::{
         Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
         Fact, Origin, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted, Unput, checked,
-        classed, declared_as, declared_tests, described, diagnostics, exported, falsified,
-        footprint, named_stage, placed, stage, unit_stage,
+        classed, declared_tests, described, diagnostics, exported, falsified, footprint,
+        named_stage, placed, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
@@ -974,19 +974,17 @@ pub fn wonder_witnesses(
     Ok(())
 }
 
-/// `wonder --name PATH --exports [SUBJECT]`: what a consumer reaches through the module `path` names, to stdout — a block naming the module, then a row for each name it exposes, its own declarations and each a `pub use` exposes in the order it writes them, the name, what it is declared as in `--name`'s words and its head on one line, then a row for each public child module, with the command that lists its own. Its names and heads are read off the documentation record ([`curios_document::ModuleDocumentation`]), so a page and the listing list one set, and what each is declared as off the lowering, where `--name` reads it (`Exported`). A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH --exports [SUBJECT]`: what the module `path` names exposes, to stdout, a block holding an entry for each thing it exposes ([`Report::listing`]). A module a documentation page shows lists what the page lists, so a page and the listing list one set, and one no page shows — one beneath a `mod` line written without `pub`, a program's own — what the lowering holds of it. A path that names no module in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_exports(
     budget: u64,
     scope: Scope,
     path: &Qualifier,
-    subject: Option<&str>,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let Some(Exported { module, declared }) =
-        scope
-            .asked()?
-            .exported(budget, &Overlay::default(), path, telling)?
+    let Some(exported) = scope
+        .asked()?
+        .exported(budget, &Overlay::default(), path, telling)?
     else {
         return Err(Refused::of("unknown module")
             .stating("nothing in scope is a module at this path")
@@ -995,38 +993,31 @@ pub fn wonder_exports(
     };
     telling.answering();
 
-    let report =
-        Report::about(About::Named(path.join()), Said::line(path.join())).stating(format!(
-            "module, exposing {} and {}",
-            counted(module.declarations.len(), "name"),
-            counted(module.children.len(), "module")
-        ));
-    answer(format_args!("{}\n", report.rendered(Kind::Module, &reader)));
-    if !module.declarations.is_empty() || !module.children.is_empty() {
-        answer("\n");
-    }
-    for (declaration, declared) in module.declarations.iter().zip(declared) {
-        let head = declaration
-            .signature
-            .text
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        answer(format_args!(
-            "{}\t{}\t{head}\n",
-            declaration.name,
-            declared_as(declared)
-        ));
-    }
-    for child in &module.children {
-        answer(format_args!(
-            "{}\tmodule\t{}\n",
-            child.join(),
-            exports_listing(&child.join(), subject)
-        ));
-    }
+    answer(format_args!(
+        "{}\n",
+        module_block(path, &exported).listing(Kind::Module, &reader, &exported.entries)
+    ));
 
     Ok(())
+}
+
+/// What a module is answered with, a block: its path, whether its `mod` line is written `pub` — a root, which no line declares, is a module and no more — and how many names and modules it exposes, closed on where its `mod` line names it, or on its path where the line is no place to open.
+fn module_block(path: &Qualifier, exported: &Exported) -> Report {
+    let about = match &exported.place {
+        Some(place) => About::Place(place.clone()),
+        None => About::Named(path.join()),
+    };
+    let module = match exported.public {
+        Some(true) => "public module",
+        Some(false) => "private module",
+        None => "module",
+    };
+
+    Report::about(about, Said::line(path.join())).stating(format!(
+        "{module}, exposing {} and {}",
+        counted(exported.names, "name"),
+        counted(exported.modules, "module")
+    ))
 }
 
 /// `count` of what `noun` names, the noun plural past one.

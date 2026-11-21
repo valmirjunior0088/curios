@@ -50,7 +50,7 @@ use scoped::*;
 
 mod document;
 use document::*;
-pub use document::{Heading, heading};
+pub use document::{Heading, heading, written};
 
 mod head;
 pub use head::*;
@@ -688,6 +688,21 @@ pub struct BrokenItem {
     pub report: Report,
 }
 
+/// What a module of a unit exposes, read off the unit's lowering ([`PreparedText::exposure`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exposure {
+    /// Whether the `mod` line declaring the module is written `pub`: none for a root, which no line declares.
+    pub public: Option<bool>,
+    /// Whether every `mod` line down to the module is written `pub`: whether whoever may name its unit reaches it, and so whether a documentation page of the unit shows it, where the unit is documented.
+    pub reached: bool,
+    /// Each name the module's export view holds with the declaration it names, in the order the module's body writes them — its own declaration where its name stands, and one a `use` exposes where the line names it — and what a glob exposed, which no line names, after them by name.
+    pub names: Vec<(String, curios_core::Global)>,
+    /// The witnesses the module declares, in the order they are written.
+    pub witnesses: Vec<curios_core::Global>,
+    /// The child modules its `mod` lines declare `pub`, in the order the lines stand.
+    pub children: Vec<Qualifier>,
+}
+
 impl PreparedText {
     /// See the field.
     /// See the field.
@@ -810,6 +825,92 @@ impl PreparedText {
             .iter()
             .find(|line| line.declares && line.names == curios_core::LineNamed::Module(*module))
             .map(|line| line.at)
+    }
+
+    /// What the module `module` exposes, as this unit's lowering holds it ([`Exposure`]): the one reading of a module no documentation page shows, a private one, one beneath a private one, or a program's own. `None` for a path that names no module of this unit: a family's or a concept's namespace is its declaration's, and a root of another unit is that unit's.
+    pub fn exposure(&self, module: &Qualifier) -> Option<Exposure> {
+        let info = self.table.get(module)?;
+        let public = match self.mounts.iter().any(|mount| mount.prefix == *module) {
+            true => None,
+            false => match self
+                .table
+                .get(&module.without_last())?
+                .declares(module.last(), false)?
+            {
+                Declares::Child(ChildInfo::Ordinary { vis_pub }) => Some(vis_pub),
+                Declares::Child(_) | Declares::Binding(_) => return None,
+            },
+        };
+        let anchors = [self.anchors()];
+        let lines = self.imports().lines(module);
+        // Where the body writes the name it exposes `target` under: its own declaration's name, or the first name of a line that names the declaration. None for what a glob exposed, which no line names.
+        let written = |target: &Qualifier| {
+            let name = curios_core::Global::Authored(*target);
+
+            match target.without_last() == *module {
+                true => self.anchors().written(&name).map(|(_, label)| label.start),
+                false => lines
+                    .iter()
+                    .filter(|line| line.names == curios_core::LineNamed::Declaration(name))
+                    .filter_map(|line| line.at.resolved(&anchors))
+                    .map(|span| span.start)
+                    .min(),
+            }
+        };
+
+        let mut names = self
+            .public
+            .get(module)
+            .into_iter()
+            .flat_map(|interface| interface.bindings.iter())
+            .map(|(label, entry)| (written(&entry.target), label.clone(), entry.target))
+            .collect::<Vec<_>>();
+        names.sort_by(|(one, label, _), (other, against, _)| {
+            (one.is_none(), one, label).cmp(&(other.is_none(), other, against))
+        });
+        let mut children = lines
+            .iter()
+            .filter(|line| line.declares)
+            .filter_map(|line| match line.names {
+                curios_core::LineNamed::Module(child)
+                    if info.get_child(child.last()) == Some(true) =>
+                {
+                    Some((line.at.resolved(&anchors).map(|span| span.start), child))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        children.sort();
+        let mut witnesses = self
+            .places()
+            .witnesses()
+            .filter(|witness| match witness {
+                curios_core::Global::Witness(id) => id.module() == module,
+                curios_core::Global::Authored(_) => false,
+            })
+            .map(|witness| {
+                let written = self
+                    .anchors()
+                    .written(witness)
+                    .map(|(_, label)| label.start);
+
+                (written, *witness)
+            })
+            .collect::<Vec<_>>();
+        witnesses.sort();
+
+        Some(Exposure {
+            public,
+            reached: reached_from(&Qualifier::empty(), module, |module| {
+                self.table.get(module).map(|info| &**info)
+            }),
+            witnesses: witnesses.into_iter().map(|(_, witness)| witness).collect(),
+            names: names
+                .into_iter()
+                .map(|(_, label, target)| (label, curios_core::Global::Authored(target)))
+                .collect(),
+            children: children.into_iter().map(|(_, child)| child).collect(),
+        })
     }
 
     /// The declaration the absolute `path` names for a reader at the root, outside every module, over `predecessors` — the units this one was lowered over — and this unit: the walk a written path takes (`visible_path`), so a path some module exports a declaration at names that declaration. `None` where the path names nothing such a reader sees.

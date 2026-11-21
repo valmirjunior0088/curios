@@ -9,7 +9,7 @@ fn stated(declaration: &str, name: &str, nth: usize) -> Option<(String, Vec<Stri
         .nth(nth)
         .expect("the declaration writes it");
 
-    heading(declaration, label).map(|Heading { head, prose }| (head, prose))
+    heading(declaration, label).map(|Heading { head, prose, .. }| (head, prose))
 }
 
 fn said(head: &str, prose: &[&str]) -> Option<(String, Vec<String>)> {
@@ -80,6 +80,34 @@ fn a_witness_a_test_and_a_group_member_are_each_stated() {
     assert_eq!(
         stated(GROUP, "odd", 1),
         said("let odd(n: Nat) -> Bool", &[])
+    );
+}
+
+/// A declaration is written as its source writes it with what a body elides left out: a family whose representation shows is whole, its constructors each behind a bar and closed by `end`, and one whose representation is kept is its head alone; a structure and a concept write their members in braces, each with its comma; a definition is its head.
+#[test]
+fn a_declaration_is_written_whole_where_its_representation_shows() {
+    let written = |declaration: &str, name: &str| {
+        let (label, _) = declaration
+            .match_indices(name)
+            .next()
+            .expect("the declaration writes it");
+
+        heading(declaration, label).map(|heading| heading.written())
+    };
+    const SHADE: &str = "pub induct Shade: pub Type\n| light()\n| dark(Nat)\nend";
+    const PAIR: &str = "pub struct Pair(A: Type): pub Type {\n    first: A,\n    second: Nat,\n}";
+    const SIZED: &str = "pub concept Sized(T: Type): Type {\n    size(T) -> Nat,\n}";
+
+    assert_eq!(written(SHADE, "Shade").as_deref(), Some(SHADE));
+    assert_eq!(
+        written("pub induct Shade: Type\n| light()\nend", "Shade").as_deref(),
+        Some("pub induct Shade: Type")
+    );
+    assert_eq!(written(PAIR, "Pair").as_deref(), Some(PAIR));
+    assert_eq!(written(SIZED, "Sized").as_deref(), Some(SIZED));
+    assert_eq!(
+        written("pub let double(n: Nat) -> Nat =\n    n + n;", "double").as_deref(),
+        Some("pub let double(n: Nat) -> Nat")
     );
 }
 

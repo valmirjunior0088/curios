@@ -2,7 +2,7 @@
 
 use {
     super::{Bundle, Paragraph, Span, paragraphs, spans},
-    crate::{Declaration, Kind, Marked, Member, ModuleDocumentation, Signature},
+    crate::{Block, Declaration, Kind, Marked, Member, ModuleDocumentation, Signature},
     askama::Template,
     curios_common::{Class, Keyword, Qualifier},
     std::collections::BTreeMap,
@@ -267,23 +267,28 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
         .collect();
 
     // The block as the source writes it, where the representation is shown: an inductive's constructors each after a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. A sealed concept still lists its methods.
-    let (layout, opener, lead, trail, closer) = match (declaration.kind, declaration.opaque) {
-        (Kind::Inductive, false) => (
-            "cases",
-            "",
-            "| ",
-            "",
-            vec![Segment::Marked {
-                class: Keyword::End.class().name(),
-                text: Keyword::End.spelling().to_string(),
-                href: None,
-            }],
-        ),
-        (Kind::Structure, false) | (Kind::Concept, _) => {
-            ("fields", " {", "", ",", vec![Segment::Text("}".into())])
-        }
-        _ => ("", "", "", "", Vec::new()),
-    };
+    let (layout, opener, lead, trail, closer) =
+        match Block::of(declaration.kind, declaration.opaque) {
+            Some(block) => (
+                match block.indented {
+                    true => "fields",
+                    false => "cases",
+                },
+                block.opener,
+                block.lead,
+                block.trail,
+                // A closer that is a word of the language is set apart as one, and punctuation stays plain.
+                vec![match Keyword::read(block.closer) {
+                    Some(keyword) => Segment::Marked {
+                        class: keyword.class().name(),
+                        text: block.closer.to_string(),
+                        href: None,
+                    },
+                    None => Segment::Text(block.closer.to_string()),
+                }],
+            ),
+            None => ("", "", "", "", Vec::new()),
+        };
 
     let origin = declaration.source.as_ref().map(|source| Origin {
         text: source.join(),

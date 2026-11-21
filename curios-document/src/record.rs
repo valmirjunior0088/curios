@@ -2,7 +2,7 @@
 //!
 //! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names its home; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
-use curios_common::{Class, Qualifier};
+use curios_common::{Class, Keyword, Qualifier};
 
 /// A unit's interface, for its consumers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +39,39 @@ pub enum Kind {
     Concept,
     Witness,
     Foreign,
+}
+
+/// How a declaration's source writes the members its representation shows: what follows its head, what leads and trails each member, what closes the block, and whether its members stand indented under the head.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Block {
+    pub opener: &'static str,
+    pub lead: &'static str,
+    pub trail: &'static str,
+    pub closer: &'static str,
+    pub indented: bool,
+}
+
+impl Block {
+    /// The block a declaration of `kind` writes its members in, `opaque` saying its representation is kept: an inductive's constructors each behind a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. None for a declaration that writes none a consumer sees: a family or a structure whose representation is kept, and every other kind. A sealed concept still writes its methods, which are reached by name either way.
+    pub fn of(kind: Kind, opaque: bool) -> Option<Self> {
+        match (kind, opaque) {
+            (Kind::Inductive, false) => Some(Self {
+                opener: "",
+                lead: "| ",
+                trail: "",
+                closer: Keyword::End.spelling(),
+                indented: false,
+            }),
+            (Kind::Structure, false) | (Kind::Concept, _) => Some(Self {
+                opener: " {",
+                lead: "",
+                trail: ",",
+                closer: "}",
+                indented: true,
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// One declaration a consumer can see: its head as written, its prose, and the members its representation exposes.

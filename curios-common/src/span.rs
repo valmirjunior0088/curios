@@ -519,6 +519,16 @@ impl Report {
     ///
     /// **One gutter serves every pane of a report**: each line's number ends in the column the widest ends in, so every pane's code begins in one column. An empty line of the trunk stands above and below a pane, which sets the code apart from what is said of it.
     pub fn rendered(&self, kind: Kind, style: &Style) -> String {
+        self.drawn(kind, style, &[])
+    }
+
+    /// The report as [`Report::rendered`] draws it, each of `entries` hung on its trunk above its ways out: an entry's first line behind a `├─`, and the rest of it on the trunk beneath. What a listing's block holds of the things it lists, each a line of a program as written and none a step that came to anything, so none is joined to an outcome by a `;`.
+    pub fn listing(&self, kind: Kind, style: &Style, entries: &[String]) -> String {
+        self.drawn(kind, style, entries)
+    }
+
+    /// The block [`Report::rendered`] and [`Report::listing`] draw.
+    fn drawn(&self, kind: Kind, style: &Style, entries: &[String]) -> String {
         let trunk = style.dim("│");
         let badge = format!("[{}]", kind.word());
         let badge = match kind.troubled() {
@@ -580,6 +590,15 @@ impl Report {
             && kind.quotes_its_place()
         {
             lines.extend(pane(span));
+        }
+        for entry in entries {
+            let mut written = entry.split('\n');
+            lines.push(format!(
+                "{} {}",
+                style.dim("├─"),
+                written.next().unwrap_or_default()
+            ));
+            lines.extend(written.map(|line| format!("{trunk}  {line}")));
         }
         lines.extend(
             self.tries
