@@ -4,18 +4,26 @@
 mod tests;
 
 use {
-    crate::{Quoted, Relayed, Wrote, relay, written_past},
+    crate::{Opened, Quoted, Relayed, Wrote, relay, written_past},
     curios_abi::{ChildHandles, Failure, Handle, HostFront, HostOps, StdioMode},
     std::sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
-/// What the test in hand has written on the standard streams, shared by the host that relays each write and the runner that closes the test's node.
-#[derive(Default)]
+/// The test in hand, by the tree its node stands open on, and what it has written on the standard streams: shared by the host that relays each write and the runner that closes the test's node.
 pub struct Frame {
+    tree: Opened,
     relayed: Mutex<Relayed>,
 }
 
 impl Frame {
+    /// The test whose node stands open on `tree`, before it writes anything.
+    pub fn of(tree: Opened) -> Self {
+        Self {
+            tree,
+            relayed: Mutex::default(),
+        }
+    }
+
     /// What the test has written, held. A writer that panicked left the column it reached, so its poison is passed over.
     fn relayed(&self) -> MutexGuard<'_, Relayed> {
         self.relayed.lock().unwrap_or_else(PoisonError::into_inner)
@@ -58,11 +66,17 @@ impl<H: HostOps> HostFront for TestHost<H> {
         }
 
         // Each run the transcript frames is written whole on the stream the test wrote on, and answered with how much of it the host took.
-        let taken = relay(&mut self.frame.relayed(), quoted, &b, |run| {
-            self.host
-                .handle_write(h.clone(), run.to_vec())
-                .map(|wrote| usize::try_from(wrote).unwrap_or(usize::MAX))
-        })?;
+        let taken = relay(
+            self.frame.tree,
+            &mut self.frame.relayed(),
+            quoted,
+            &b,
+            |run| {
+                self.host
+                    .handle_write(h.clone(), run.to_vec())
+                    .map(|wrote| usize::try_from(wrote).unwrap_or(usize::MAX))
+            },
+        )?;
 
         Ok(u64::try_from(taken).unwrap_or(u64::MAX))
     }

@@ -123,34 +123,33 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its ending beneath that, closed where the test did not pass on where its name is written, and beneath its ending what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow, a line as each begins and as it ends: what a test writes stands behind its path, its ending after that, closed where the test did not pass on where its name is written, and beneath its ending what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
-            "/app\n",
-            "├─ check with its tests; ",
-            "└─ store; ",
-            "/app\n",
-            "├─ check; ",
-            "├─ build; ",
-            "├─ emit; ",
-            "├─ /app/doubling_passes; ✓ passed in ",
-            "├─ /app/addition_passes; ✓ passed in ",
-            "├─ /app/equality_fails\n│  > comparing\n│  ✗ failed in ",
+            "Checking `/app` with its tests\n",
+            "Checked `/app` with its tests in ",
+            "Stored `/app` in ",
+            "Checked `/app` in ",
+            "Built `/app` in ",
+            "Emitted `/app` in ",
+            "Testing `/app/doubling_passes`\nTested `/app/doubling_passes`: passed in ",
+            "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
+            "Testing `/app/equality_fails`\n`/app/equality_fails`> comparing\nTested `/app/equality_fails`: failed in ",
             "; lib.crs:11:6\n",
-            "│    not equal\n│      obtained: `4`\n│      expected: `5`\n",
-            "├─ /app/overflow_traps; ✗ trapped in ",
+            "  not equal\n    obtained: `4`\n    expected: `5`\n",
+            "Tested `/app/overflow_traps`: trapped in ",
             "; lib.crs:14:6\n",
-            "├─ /app/exits_seven; ✗ exited 7 in ",
+            "  panic: a Nat argument to a foreign function is past what the wire carries",
+            "Tested `/app/exits_seven`: exited 7 in ",
             "; lib.crs:17:6\n",
-            "├─ /app/effect_passes; ✓ passed in ",
-            "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
-            "/app\n",
-            "├─ check; ",
-            "└─ store; ",
-            "app\n",
-            "├─ check; ",
-            "└─ 0 passed, 0 failed\n",
+            "Tested `/app/effect_passes`: passed in ",
+            "Tested `/app`: 3 passed, 1 failed, 1 trapped, 1 exited in ",
+            "Checked `/app` in ",
+            "Stored `/app` in ",
+            "Checking `app`\n",
+            "Checked `app` in ",
+            "Tested `app`: 0 passed, 0 failed\n",
         ],
     );
     assert!(
@@ -201,17 +200,17 @@ test fails_quietly =
     in_order(
         &stderr(&output),
         &[
-            "├─ /app/quits_early; ✗ exited 0 in ",
+            "Tested `/app/quits_early`: exited 0 in ",
             "; lib.crs:3:6\n",
-            "├─ /app/fails_quietly; ✗ exited 1 in ",
+            "Tested `/app/fails_quietly`: exited 1 in ",
             "; lib.crs:6:6\n",
-            "└─ 0 passed, 0 failed, 2 exited; ",
+            "Tested `/app`: 0 passed, 0 failed, 2 exited in ",
         ],
     );
     assert_eq!(output.status.code(), Some(1));
 }
 
-/// What a test writes is never held: it reaches the stream the test wrote it on as it is written, its first byte ends the line the test's node opened on, and the node closes beneath it — after the end of a line the test left open. The frame is standard error's whichever stream the test wrote on, so the two streams read apart show each its own and read as one pipe show the test's bytes inside its node.
+/// What a test writes is never held: it reaches the stream the test wrote it on as it is written, each line behind the test's path, and the test's ending follows on a line of its own — after the end of a line the test left open. The two streams read apart show each its own, and read as one pipe show the test's lines between its beginning and its ending.
 #[test]
 fn a_test_that_writes_is_closed_beneath_what_it_wrote() {
     let root = temporary("writes");
@@ -241,14 +240,19 @@ test mutters =
     );
 
     let apart = curios(&root, &["test"]);
-    assert_eq!(stdout(&apart), "│  > drawn\n", "stderr: {}", stderr(&apart));
+    assert_eq!(
+        stdout(&apart),
+        "`/app/draws`> drawn\n",
+        "stderr: {}",
+        stderr(&apart)
+    );
     in_order(
         &stderr(&apart),
         &[
-            "├─ /app/quiet; ✓ passed in ",
-            "├─ /app/draws\n│  ✓ passed in ",
-            "├─ /app/mutters\n│  > half\n│  ✓ passed in ",
-            "└─ 3 passed, 0 failed; ",
+            "Testing `/app/quiet`\nTested `/app/quiet`: passed in ",
+            "Testing `/app/draws`\nTested `/app/draws`: passed in ",
+            "Testing `/app/mutters`\n`/app/mutters`> half\nTested `/app/mutters`: passed in ",
+            "Tested `/app`: 3 passed, 0 failed in ",
         ],
     );
 
@@ -270,9 +274,9 @@ test mutters =
     in_order(
         &together,
         &[
-            "├─ /app/quiet; ✓ passed in ",
-            "├─ /app/draws\n│  > drawn\n│  ✓ passed in ",
-            "├─ /app/mutters\n│  > half\n│  ✓ passed in ",
+            "Testing `/app/quiet`\nTested `/app/quiet`: passed in ",
+            "Testing `/app/draws`\n`/app/draws`> drawn\nTested `/app/draws`: passed in ",
+            "Testing `/app/mutters`\n`/app/mutters`> half\nTested `/app/mutters`: passed in ",
         ],
     );
 }
@@ -285,27 +289,27 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     in_order(
         &stderr(&cold),
         &[
-            "├─ emit; ",
-            "├─ /app/addition_passes; ✓ passed in ",
-            "└─ 1 passed, 0 failed, 5 skipped; ",
+            "Emitted `/app` in ",
+            "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
+            "Tested `/app`: 1 passed, 0 failed, 5 skipped in ",
         ],
     );
     assert_eq!(cold.status.code(), Some(0));
 
-    // Each payload comes back whole, so nothing of either subject's build is narrated: a subject's tree is its tests and its tally.
+    // Each payload comes back whole, so nothing of either subject's build is narrated: a subject says its tests and its tally.
     let warm = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     in_order(
         &stderr(&warm),
         &[
-            "/app\n├─ /app/addition_passes; ✓ passed in ",
-            "└─ 1 passed, 0 failed, 5 skipped; ",
-            "app\n└─ 0 passed, 0 failed\n",
+            "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
+            "Tested `/app`: 1 passed, 0 failed, 5 skipped in ",
+            "Tested `app`: 0 passed, 0 failed\n",
             "1 passed, 0 failed, 5 skipped; ",
         ],
     );
-    // No node is a check, of a unit with its tests or without.
+    // No step is a check, of a unit with its tests or without.
     assert!(
-        !stderr(&warm).contains("─ check"),
+        !stderr(&warm).contains("Checking"),
         "stderr: {}",
         stderr(&warm)
     );
@@ -370,10 +374,10 @@ end
     in_order(
         &stderr(&output),
         &[
-            "├─ /app/first; ✓ passed in ",
-            "├─ /app/second; ✓ passed in ",
-            "├─ /app/Inner/kept; ✓ passed in ",
-            "└─ 3 passed, 0 failed, 2 skipped; ",
+            "Tested `/app/first`: passed in ",
+            "Tested `/app/second`: passed in ",
+            "Tested `/app/Inner/kept`: passed in ",
+            "Tested `/app`: 3 passed, 0 failed, 2 skipped in ",
         ],
     );
     // A run of one subject ends on that subject's tally, which is the run's.
@@ -440,9 +444,9 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     in_order(
         &stderr(&executable),
         &[
-            "app\n",
-            "├─ /in_app; ✓ passed in ",
-            "└─ 1 passed, 0 failed; ",
+            "Checking `app`\n",
+            "Tested `/in_app`: passed in ",
+            "Tested `app`: 1 passed, 0 failed in ",
         ],
     );
     assert!(
@@ -455,9 +459,9 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     in_order(
         &stderr(&loose),
         &[
-            "scratch/loose.crs\n",
-            "├─ /loose/in_loose; ✓ passed in ",
-            "└─ 1 passed, 0 failed; ",
+            "Checking `scratch/loose.crs`\n",
+            "Tested `/loose/in_loose`: passed in ",
+            "Tested `scratch/loose.crs`: 1 passed, 0 failed in ",
         ],
     );
 }
@@ -473,9 +477,9 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     in_order(
         &stderr(&tested),
         &[
-            "<stdin>\n",
-            "├─ /stdin/in_piped; ✓ passed in ",
-            "└─ 1 passed, 0 failed; ",
+            "Checking `<stdin>`\n",
+            "Tested `/stdin/in_piped`: passed in ",
+            "Tested `<stdin>`: 1 passed, 0 failed in ",
         ],
     );
     assert_eq!(tested.status.code(), Some(0));
@@ -558,17 +562,15 @@ fn run_neither_runs_nor_reports_a_test() {
     let output = curios(&root, &["run"]);
 
     assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
-    // The library is checked and filed, then the program checked, built and emitted, its `emit` the last node before the program's own output: nothing announces the run.
+    // The library is checked and filed, then the program checked, built and emitted, its emit the last line before the program's own output: nothing announces the run.
     in_order(
         &stderr(&output),
         &[
-            "/app\n",
-            "├─ check; ",
-            "└─ store; ",
-            "app\n",
-            "├─ check; ",
-            "├─ build; ",
-            "└─ emit; ",
+            "Checking `/app`\nChecked `/app` in ",
+            "Storing `/app`\nStored `/app` in ",
+            "Checking `app`\nChecked `app` in ",
+            "Building `app`\nBuilt `app` in ",
+            "Emitting `app`\nEmitted `app` in ",
         ],
     );
     assert!(
@@ -675,14 +677,14 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     in_order(
         &stderr(&warm),
         &[
-            "├─ /app/lib_holds; ✓ passed in ",
-            "├─ /other_holds; ✓ passed in ",
+            "Tested `/app/lib_holds`: passed in ",
+            "Tested `/other_holds`: passed in ",
             "\n2 passed, 0 failed; ",
         ],
     );
-    // No node is a check, of a unit with its tests or without.
+    // No step is a check, of a unit with its tests or without.
     assert!(
-        !stderr(&warm).contains("─ check"),
+        !stderr(&warm).contains("Checking"),
         "stderr: {}",
         stderr(&warm)
     );

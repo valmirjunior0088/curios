@@ -25,10 +25,14 @@ mod tests;
 
 mod event;
 use event::*;
+pub use event::{Opened, Step};
+
+mod plain;
+use plain::*;
 
 mod transcript;
 use transcript::*;
-pub use transcript::{Relayed, keep, kept, relay, written_past};
+pub use transcript::{Drawing, PROGRESS, Relayed, keep, kept, relay, transcribe, written_past};
 
 mod tree;
 use tree::*;
@@ -216,9 +220,9 @@ impl fmt::Display for Subject {
 }
 
 /// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.
-pub fn alone(label: &str, outcome: impl Into<Piece>) {
+pub fn alone(step: Step, outcome: impl Into<Piece>) {
     tell(Event::Alone {
-        label: label.to_string(),
+        step,
         outcome: outcome.into(),
     });
 }
@@ -295,13 +299,39 @@ impl Tree {
         tell(Event::Left { tree: self.opened });
     }
 
-    /// Open a node for `label`, the last its tree plans or not.
-    pub fn open(&mut self, label: &str, last: bool) {
+    /// Which tree this is, for whoever relays what the work of its open node writes ([`Relayed`]).
+    pub fn opened(&self) -> Opened {
+        self.opened
+    }
+
+    /// Open a node for `step`, the last its tree plans or not.
+    pub fn open(&mut self, step: Step, last: bool) {
+        self.began(Node::Step(step), last);
+    }
+
+    /// Open a node for the test at `path`, before it runs: a test that never ends is the one whose line stands open.
+    pub fn test(&mut self, path: &str) {
+        self.began(Node::Test(path.to_string()), false);
+    }
+
+    /// Tell the transcript a node begins.
+    fn began(&mut self, node: Node, last: bool) {
         self.began = Some(Instant::now());
         tell(Event::Began {
             tree: self.opened,
-            label: label.to_string(),
+            node,
             last,
+        });
+    }
+
+    /// Say a node for `step` at once, the last its tree plans or not, with what it came to stand as and the lines beneath it: nothing runs between its label and its outcome, so a plain line says it once.
+    pub fn stood(&mut self, step: Step, last: bool, stands: impl Into<Piece>, beneath: Vec<Piece>) {
+        tell(Event::Stood {
+            tree: self.opened,
+            step,
+            last,
+            stands: stands.into(),
+            beneath,
         });
     }
 
@@ -371,6 +401,7 @@ impl Tree {
     ) {
         self.began = None;
         tell(Event::Tested {
+            tree: self.opened,
             ending: ending.to_string(),
             taken,
             place: place.map(str::to_string),

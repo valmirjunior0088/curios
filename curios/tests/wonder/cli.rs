@@ -62,7 +62,7 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     // The check is narrated beside the answer, closed by what stopped it.
     let narrated = String::from_utf8_lossy(&answered.stderr);
     assert!(
-        narrated.starts_with("<stdin>\n└─ check; 1 goal in "),
+        narrated.starts_with("Checking `<stdin>`\nChecked `<stdin>`: 1 goal in "),
         "{narrated}"
     );
 }
@@ -948,7 +948,7 @@ fn a_question_stopped_by_goals_alone_exits_two() {
     assert_eq!(answered.status.code(), Some(0));
 }
 
-/// A check of a package compiles its library twice where an executable stands on it, with its tests, which the check reads, and as the executable is built over it: the transcript says which the first is, so the two trees of one unit are told apart.
+/// A check of a package compiles its library twice where an executable stands on it, with its tests, which the check reads, and as the executable is built over it: the transcript says which the first is, so the two compiles of one unit are told apart.
 #[test]
 fn a_library_checked_with_its_tests_is_narrated_as_that() {
     let root = project("tested-narrated");
@@ -960,19 +960,21 @@ fn a_library_checked_with_its_tests_is_narrated_as_that() {
     // Each line up to what its step took, which no two runs share.
     let steps = narrated
         .lines()
-        .map(|line| line.split(';').next().unwrap_or(line))
+        .map(|line| line.split(" in ").next().unwrap_or(line))
         .collect::<Vec<_>>();
     assert_eq!(
         steps,
         [
-            "/app",
-            "├─ check with its tests",
-            "└─ store",
-            "/app",
-            "├─ check",
-            "└─ store",
-            "app",
-            "└─ check",
+            "Checking `/app` with its tests",
+            "Checked `/app` with its tests",
+            "Storing `/app`",
+            "Stored `/app`",
+            "Checking `/app`",
+            "Checked `/app`",
+            "Storing `/app`",
+            "Stored `/app`",
+            "Checking `app`",
+            "Checked `app`",
         ],
         "{narrated}"
     );

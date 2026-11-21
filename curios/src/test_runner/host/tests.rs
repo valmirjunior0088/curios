@@ -2,9 +2,9 @@
 
 use {super::*, curios_native::test_support::*};
 
-/// A host in front of a mock, the frame it tells, and what the mock was handed.
+/// A host in front of a mock, the frame it tells, and what the mock was handed: the frame of a tree the transcript was told nothing of, which it frames as a tree's node.
 fn fronted() -> (TestHost<MockHost>, Arc<Frame>, MockIo) {
-    let frame = Arc::new(Frame::default());
+    let frame = Arc::new(Frame::of(Opened::minted()));
     let (host, io) = MockHost::builder().build();
 
     (TestHost::new(host, Arc::clone(&frame)), frame, io)

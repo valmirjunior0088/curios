@@ -22,7 +22,7 @@
 //! ```
 
 use {
-    super::{Closing, Event, Opened, bold, dim, seconds, trouble, troubled, worded},
+    super::{Closing, Event, Node, Opened, bold, dim, seconds, trouble, troubled, worded},
     crate::Piece,
     curios_common::Style,
     std::collections::BTreeMap,
@@ -200,47 +200,38 @@ impl Trees {
 
                 Piece::default()
             }
-            Event::Began { tree, label, last } => {
-                let drawn = self.drawn.entry(tree).or_default();
-                drawn.last = last;
-                let connector = match last {
-                    true => CORNER,
-                    false => BRANCH,
+            Event::Began { tree, node, last } => {
+                let label = match &node {
+                    Node::Step(step) => step.label(),
+                    Node::Test(path) => path,
                 };
 
-                drawn
-                    .headed()
-                    .then(dim(connector))
-                    .then(format_args!(" {label}"))
+                self.began(tree, label, last)
             }
             Event::Closed {
                 tree,
                 closing,
                 beneath,
-            } => {
-                let last = self.drawn.get(&tree).is_some_and(|drawn| drawn.last);
-                let closed = match closing {
-                    Closing::Done(taken) => Piece::from("; ").then(dim(seconds(taken))),
-                    Closing::Ended(word, taken) => Piece::from("; ")
-                        .then(worded(&word))
-                        .then(" ")
-                        .then(dim(format_args!("in {}", seconds(taken)))),
-                    Closing::Stands(stands) => Piece::from("; ").then(stands),
-                };
-
-                beneath
-                    .into_iter()
-                    .fold(closed.then("\n"), |block, line| match last {
-                        true => block.then("     ").then(line).then("\n"),
-                        false => block.then(dim(TRUNK)).then("    ").then(line).then("\n"),
-                    })
-            }
+            } => self.closed(tree, closing, beneath),
+            // Said at once, it is the two writes of a node with nothing between them.
+            Event::Stood {
+                tree,
+                step,
+                last,
+                stands,
+                beneath,
+            } => self.began(tree, step.label(), last).then(self.closed(
+                tree,
+                Closing::Stands(stands),
+                beneath,
+            )),
             Event::Tested {
                 ending,
                 taken,
                 place,
                 wrote,
                 beneath,
+                ..
             } => {
                 let mark = match trouble(&ending) {
                     true => troubled(UNPASSED),
@@ -286,7 +277,7 @@ impl Trees {
                     false => Piece::default(),
                 }
             }
-            Event::Alone { label, outcome } => Piece::from(format_args!("{label}; "))
+            Event::Alone { step, outcome } => Piece::from(format_args!("{}; ", step.label()))
                 .then(outcome)
                 .then("\n"),
             Event::Total {
@@ -297,5 +288,40 @@ impl Trees {
             Event::Apart => Piece::from("\n"),
             Event::Said { text } => text.then("\n"),
         }
+    }
+
+    /// A node of `tree` begun: its subject's line where none has written it, then the node's connector and label, unterminated.
+    fn began(&mut self, tree: Opened, label: &str, last: bool) -> Piece {
+        let drawn = self.drawn.entry(tree).or_default();
+        drawn.last = last;
+        let connector = match last {
+            true => CORNER,
+            false => BRANCH,
+        };
+
+        drawn
+            .headed()
+            .then(dim(connector))
+            .then(format_args!(" {label}"))
+    }
+
+    /// The node open on `tree` closed as `closing` says, and each line of `beneath` under it: beside the trunk where the tree goes on, and in the trunk's column where the node was the last.
+    fn closed(&self, tree: Opened, closing: Closing, beneath: Vec<Piece>) -> Piece {
+        let last = self.drawn.get(&tree).is_some_and(|drawn| drawn.last);
+        let closed = match closing {
+            Closing::Done(taken) => Piece::from("; ").then(dim(seconds(taken))),
+            Closing::Ended(word, taken) => Piece::from("; ")
+                .then(worded(&word))
+                .then(" ")
+                .then(dim(format_args!("in {}", seconds(taken)))),
+            Closing::Stands(stands) => Piece::from("; ").then(stands),
+        };
+
+        beneath
+            .into_iter()
+            .fold(closed.then("\n"), |block, line| match last {
+                true => block.then("     ").then(line).then("\n"),
+                false => block.then(dim(TRUNK)).then("    ").then(line).then("\n"),
+            })
     }
 }

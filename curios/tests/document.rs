@@ -78,7 +78,7 @@ fn document_writes_the_bundle_among_the_products() {
     assert!(output.stdout.is_empty(), "the status line is stderr's");
     let status = String::from_utf8_lossy(&output.stderr);
     assert!(
-        status.contains("write; .curios/documentation/shapes/index.html"),
+        status.contains("Wrote `/shapes`: .curios/documentation/shapes/index.html"),
         "success names the landing page: {status}"
     );
 

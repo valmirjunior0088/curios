@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Piece, Subject, Tree, apart},
+    crate::{Piece, Step, Subject, Tree, apart},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_common::{OsError, Qualifier, Report, STDIN_NAME, Source, Style},
@@ -311,9 +311,8 @@ impl Steps {
                 let subject = Subject::Mounted(*prefix);
                 let mut tree = Tree::of(&subject, None);
                 // A question compiles its subject with its tests and then again as what stands on it is built: the first is checked as that, which tells the two trees of one unit apart.
-                let check = match compiled {
-                    Compiled::Tested => "check with its tests",
-                    Compiled::Built => "check",
+                let check = Step::Check {
+                    tested: matches!(compiled, Compiled::Tested),
                 };
 
                 tree.open(check, verdicts.is_none() && !self.goes_on(&subject));
@@ -328,7 +327,7 @@ impl Steps {
                 };
                 let mut tree = Tree::of(&self.subject, self.manifest.as_deref());
 
-                tree.open("check", last);
+                tree.open(Step::Check { tested: false }, last);
                 self.program = Some(tree);
             }
             // What the cabinet held is not narrated.
@@ -345,7 +344,7 @@ impl Steps {
                 let last = !self.goes_on(&Subject::Mounted(*unit));
 
                 if let Some(tree) = self.tree_of(unit) {
-                    tree.open("store", last);
+                    tree.open(Step::Store, last);
                 }
             }
             // A cabinet that took nothing says so at its node, and why beneath the first node it refused: a cabinet nobody can write refuses every unit for one reason, so the reason is one line however many units went past it.
@@ -375,11 +374,11 @@ impl Steps {
         match stage {
             Stage::Anf(_) => {
                 tree.done();
-                tree.open("build", false);
+                tree.open(Step::Build, false);
             }
             Stage::CpsOptm(_) => {
                 tree.done();
-                tree.open("emit", then == Then::Nothing);
+                tree.open(Step::Emit, then == Then::Nothing);
                 self.emitting = true;
             }
             _ => {}

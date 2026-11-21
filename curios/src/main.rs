@@ -30,7 +30,7 @@ use test_runner::*;
 
 use {
     curios::{CABINET, bindings_of, fault, unlinked},
-    curios_common::{Kind, OsError, Report, Source, SourceName, Style},
+    curios_common::{Code, Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, GuestMap, OsHost, Stop, start_engine},
@@ -174,6 +174,27 @@ fn dispatch() -> Result<(), Failure> {
         }
     };
 
+    // Chosen first, before anything is written, as colour is: asked on the command line, else named in the environment, else read off where standard error goes. A name that spells no drawing is refused as a flag's value is.
+    let drawing = Drawing::chosen(
+        cli.progress.map(|DrawingValue(drawing)| drawing),
+        env::var_os(PROGRESS).as_deref(),
+        io::stderr().is_terminal(),
+        env::var_os("TERM").as_deref(),
+        env::var_os("CI").is_some(),
+    )
+    .map_err(|named| {
+        Refused::of("invalid value")
+            .stating(format_args!("written: `{named}`"))
+            .stating(format_args!(
+                "`{PROGRESS}` takes one of: {}",
+                Drawing::ALL
+                    .map(|drawing| Code(drawing.spelled()).to_string())
+                    .join(", ")
+            ))
+            .about_named(PROGRESS)
+    })?;
+    transcribe(drawing);
+
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
     // The guest's map is the other half of the same ask, written where a sampler looks for it.
     let map = match cli.profile.clone() {
@@ -262,8 +283,7 @@ fn dispatch() -> Result<(), Failure> {
                 let port = port_of(&listener)?;
 
                 // The address is what the node came to, and the one fact a reader needs from what follows, which is nothing until the server is stopped.
-                tree.open("serve", true);
-                tree.outcome(url(port, &args));
+                tree.stood(Step::Serve, true, url(port, &args), Vec::new());
                 serve_page(&listener, Served { files })?;
 
                 return Ok(());
@@ -489,7 +509,7 @@ fn dispatch() -> Result<(), Failure> {
                         .bundled(curios_cranelift::serialize)
                         .map_err(|refusal| unlinked(refusal, manifest.as_deref(), cabinet))?;
 
-                    tree.open("write", true);
+                    tree.open(Step::Write, true);
 
                     let written = emit_exe(
                         &Bundle {
@@ -507,7 +527,7 @@ fn dispatch() -> Result<(), Failure> {
                     contract.access.collect(root.as_deref(), cabinet);
                     let (files, mut tree) = page?;
 
-                    tree.open("write", true);
+                    tree.open(Step::Write, true);
 
                     (emit_page(&output, &files, owned), tree)
                 }
@@ -554,7 +574,7 @@ fn dispatch() -> Result<(), Failure> {
                 }
             };
 
-            tree.open("write", true);
+            tree.open(Step::Write, true);
 
             // Where the pages landed, as `compile` ends on where its executable did: by default that is under `.curios/`, where nobody would look, and the landing page is the one file a reader opens.
             tree.stands(
@@ -568,15 +588,19 @@ fn dispatch() -> Result<(), Failure> {
         }
         Mode::New { directory } => {
             let written = scaffold(&directory)?;
-            // The directory is the subject, and each file a node spelled from inside it; the last node is the command that runs what was written.
+            // The directory is the subject, and each file a node spelled from inside it, said once it is written; the last node is the command that runs what was written.
             let mut tree = Tree::of(&Subject::Directory(directory.clone()), None);
 
             for file in written.iter().filter(|written| !written.is_dir()) {
-                tree.open("write", false);
-                tree.outcome(file.strip_prefix(&directory).unwrap_or(file).display());
+                let file = file.strip_prefix(&directory).unwrap_or(file).display();
+                tree.stood(Step::Write, false, file, Vec::new());
             }
-            tree.open("try", true);
-            tree.outcome(format!("cd {} && curios run", directory.display()));
+            tree.stood(
+                Step::Try,
+                true,
+                format!("cd {} && curios run", directory.display()),
+                Vec::new(),
+            );
         }
         Mode::Curate { .. } => {
             let entire = contract.admit_entire(subject, manifest, &here()?, cabinet, &stdin)?;
@@ -585,7 +609,7 @@ fn dispatch() -> Result<(), Failure> {
             let mut fetching: Option<(Tree, bool)> = None;
             let begun = |subject: Subject| {
                 let mut tree = Tree::of(&subject, None);
-                tree.open("fetch", true);
+                tree.open(Step::Fetch, true);
 
                 Some((tree, false))
             };
@@ -639,8 +663,8 @@ fn dispatch() -> Result<(), Failure> {
                 |delivery| match delivery {
                     // The line stands open while a delivery arrives: a module's on a node of its own, which what arrived then closes, and a dependency's, which nothing describes, on the pin's.
                     Transport::Asked => match foreign {
-                        true => tree.open("deliver", false),
-                        false => tree.open("pin", true),
+                        true => tree.open(Step::Deliver, false),
+                        false => tree.open(Step::Pin, true),
                     },
                     Transport::Answered => fetched = true,
                 },
@@ -657,11 +681,6 @@ fn dispatch() -> Result<(), Failure> {
 
             // Before what was written, because this is what the write is about to believe.
             if let Some(probe) = &pinned.probe {
-                // A carried module was read where it lies, with nothing to wait for.
-                if !tree.is_open() {
-                    tree.open("deliver", false);
-                }
-
                 // What the provider's `answers` table may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the delivery's line answers already, and wasmtime would answer again by printing both magic numbers byte by byte.
                 let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
                 let mut beneath = match probe.magic.then(|| read(&probe.at)) {
@@ -685,31 +704,32 @@ fn dispatch() -> Result<(), Failure> {
                         "nothing verified this download — the hash below is derived from it, not checked against it",
                     ));
                 }
-                tree.outcome_beneath(
-                    format!("{} bytes, {}", grouped(probe.bytes), probe.kind),
-                    beneath,
-                );
+                let delivered = format!("{} bytes, {}", grouped(probe.bytes), probe.kind);
+                // A module that arrived closes the node it arrived on; a carried one was read where it lies, with nothing to wait for, and is said at once.
+                match tree.is_open() {
+                    true => tree.outcome_beneath(delivered, beneath),
+                    false => tree.stood(Step::Deliver, false, delivered, beneath),
+                }
             }
 
-            if !tree.is_open() {
-                tree.open("pin", true);
+            let outcome = match (pinned.fields.is_empty(), pinned.wrote) {
+                // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
+                (true, _) => "unchanged",
+                (false, true) => "recorded",
+                (false, false) => "would change",
+            };
+            let fields = pinned
+                .fields
+                .iter()
+                .map(|(key, before, after)| match before {
+                    Some(before) => Piece::from(format!("{key}: {before} → {after}")),
+                    None => Piece::from(format!("{key}: {after}")),
+                })
+                .collect();
+            match tree.is_open() {
+                true => tree.outcome_beneath(outcome, fields),
+                false => tree.stood(Step::Pin, true, outcome, fields),
             }
-            tree.outcome_beneath(
-                match (pinned.fields.is_empty(), pinned.wrote) {
-                    // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
-                    (true, _) => "unchanged",
-                    (false, true) => "recorded",
-                    (false, false) => "would change",
-                },
-                pinned
-                    .fields
-                    .iter()
-                    .map(|(key, before, after)| match before {
-                        Some(before) => Piece::from(format!("{key}: {before} → {after}")),
-                        None => Piece::from(format!("{key}: {after}")),
-                    })
-                    .collect(),
-            );
 
             // `--check` is the question, and its answer is the exit code — `format --check`'s contract, for the same reason.
             if check && pinned.would_write() {
@@ -761,8 +781,7 @@ fn dispatch() -> Result<(), Failure> {
                         match (check, formatted) {
                             (true, Formatted::Changed(_)) => {
                                 let mut tree = Tree::of(&Subject::Stdin, None);
-                                tree.open("format", true);
-                                tree.outcome(becomes);
+                                tree.stood(Step::Format, true, becomes, Vec::new());
                                 changed += 1;
                                 counted = true;
                             }
@@ -787,8 +806,7 @@ fn dispatch() -> Result<(), Failure> {
                                 Formatted::from_path(&path, format).inspect_err(|_| {
                                     // A file that cannot be formatted is refused, its tree said ahead of why.
                                     let mut tree = Tree::of(&subject, None);
-                                    tree.open("format", true);
-                                    tree.outcome(troubled("refused"));
+                                    tree.stood(Step::Format, true, troubled("refused"), Vec::new());
                                     apart();
                                 })?;
 
@@ -796,16 +814,19 @@ fn dispatch() -> Result<(), Failure> {
                                 Formatted::Unchanged(_) => unchanged += 1,
                                 Formatted::Changed(text) => {
                                     let mut tree = Tree::of(&subject, None);
-                                    tree.open("format", true);
-                                    let written = match check {
-                                        true => Ok(()),
-                                        false => fs::write(&path, text).map_err(|error| {
-                                            Refused::of("unwritable file")
-                                                .stating(OsError(&error))
-                                                .about_path(&path)
-                                        }),
-                                    };
-                                    tree.stands(written, becomes)?;
+                                    match check {
+                                        // A check writes nothing, so its node is said at once.
+                                        true => tree.stood(Step::Format, true, becomes, Vec::new()),
+                                        false => {
+                                            tree.open(Step::Format, true);
+                                            let written = fs::write(&path, text).map_err(|error| {
+                                                Refused::of("unwritable file")
+                                                    .stating(OsError(&error))
+                                                    .about_path(&path)
+                                            });
+                                            tree.stands(written, becomes)?;
+                                        }
+                                    }
                                     changed += 1;
                                 }
                             }

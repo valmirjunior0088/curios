@@ -60,9 +60,9 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
         .expect("run the compiler")
 }
 
-/// Whether an invocation was served from the cabinet, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it: a program the cabinet held narrates no build, so its tree has no `emit` node.
+/// Whether an invocation was served from the cabinet, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it: a program the cabinet held narrates no build, so nothing is emitted.
 fn reused(output: &Output) -> bool {
-    !String::from_utf8_lossy(&output.stderr).contains("emit;")
+    !String::from_utf8_lossy(&output.stderr).contains("Emitting ")
 }
 
 /// The native payloads the project at `root` holds.
@@ -145,11 +145,11 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
     // A rung reprints the program, so what is narrated is the unit it stands on and never the program.
     let narrated = String::from_utf8_lossy(&shown.stderr);
     assert!(
-        narrated.contains("/app\n├─ check; ") && narrated.contains("└─ store; "),
+        narrated.contains("Checking `/app`\n") && narrated.contains("Stored `/app` in "),
         "{narrated}"
     );
     assert!(
-        !narrated.contains("build;") && !narrated.contains("emit;"),
+        !narrated.contains("Building ") && !narrated.contains("Emitting "),
         "{narrated}"
     );
     assert_eq!(payloads(&root), 0, "a question files no payload");
@@ -157,7 +157,7 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
     let run = curios(&root, &["run"]);
     let narrated = String::from_utf8_lossy(&run.stderr);
     assert!(
-        !narrated.contains("store;") && narrated.contains("emit;"),
+        !narrated.contains("Storing ") && narrated.contains("Emitting "),
         "the library is the unit the question filed, so no unit is checked and filed again: {narrated}"
     );
     assert_eq!(
@@ -227,7 +227,10 @@ fn a_file_no_unit_declares_is_built_on_its_own() {
     let ran = curios(&root, &["run", "scratch.crs"]);
     assert_eq!(ran.stdout, b"on its own");
     let stderr = String::from_utf8_lossy(&ran.stderr);
-    assert!(stderr.starts_with("scratch.crs\n├─ check; "), "{stderr}");
+    assert!(
+        stderr.starts_with("Checking `scratch.crs`\nChecked `scratch.crs` in "),
+        "{stderr}"
+    );
 
     let built = curios(&root, &["compile", "scratch.crs", "--output", "scratch"]);
     assert!(

@@ -104,7 +104,7 @@ Eleven commands. What each takes and leaves:
 
 ## What a command reports
 
-A command narrates on standard error, in one form: a subject alone on a line, and beneath it a node for each thing done for it, the node's label written before its work and what the work came to after it.
+A command narrates on standard error what it does for each subject, drawn one of two ways: `live` on a terminal, a subject alone on a line and beneath it a node for each thing done for it, the node's label written before its work and what the work came to after it; and `plain` everywhere else, a line each time a step begins or ends, each line standing alone.
 
 ```text
 /geometry
@@ -116,11 +116,22 @@ hello
 └─ emit; 0.4s
 ```
 
+```text
+Checking `/geometry`
+Checked `/geometry` in 1.6s
+Storing `/geometry`
+Stored `/geometry` in 0.1s
+Checking `hello`
+Checked `hello` in 0.1s
+```
+
 A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, or `check with its tests` where it is compiled with the tests it declares, as the one `test`, `wonder` and `lint` read is, and filed where a cabinet keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the cabinet already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest.
 
 A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `└─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
 
-Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal, colour apart.
+A plain line is a verb, the subject's name in backticks, then what the event carries. A step's two lines share its verb, its present participle where it begins and its past where it ends, `Checking` and `Checked`, and how it ended stands after the subject where it did not simply finish, `` Checked `app`: refused in 0.3s ``, as where its work came to stand does, `` Wrote `hello`: .curios/native/hello/hello ``. A step said at once, its outcome known as it begins, is its closing line alone, `` Serving `app`: http://127.0.0.1:8000/ ``, and what stands beneath a node — why a cabinet took nothing, the keys `pin` wrote — is indented under its line in one block. Lines of different subjects interleave in the order their steps happen, and each names its subject, so none needs the line before it.
+
+`--progress <DRAWING>` chooses the drawing, `plain` or `live`; without it the environment's `CURIOS_PROGRESS` does, and without either it is `live` where standard error is a terminal, `TERM` is not `dumb` and `CI` is unset, and `plain` everywhere else: in a pipe, a log file, a CI transcript, and wherever a screen reader is better served by lines that stand alone. Neither drawing rewrites or erases anything, and each writes the same bytes wherever it is drawn, colour apart.
 
 What the compiler says of a program is a report, and every report has one form, a block:
 
@@ -324,9 +335,9 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 └─ 2 passed, 1 failed; 0.1s
 ```
 
-Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`, then where the test's name is written, as a report closes on its place, since a test that did not pass is one its reader goes to. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
+Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`, then where the test's name is written, as a report closes on its place, since a test that did not pass is one its reader goes to. Plain, a test begins on `` Testing `/demo/two_is_three` `` and ends on `` Tested `/demo/two_is_three`: failed in 0.0s; lib.crs:7:6 ``, its subject's tally on `` Tested `/demo`: 2 passed, 1 failed in 0.1s ``. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
 
-What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a quote mark, `│  >`; the mark of a line on standard error is painted apart where colour is seen. Its first byte ends the line its node opened on, and the node closes beneath what was written, its outcome's mark in the quote's column, whichever stream that was; a stream sent elsewhere carries its lines behind the frame too. Beneath a test's outcome stands what only the runner holds: a trap's text, and what a failing test found — each check that failed on a line, the steps that reached it leading, a `Test/step`'s label and `case 2` for the third case of a `Test/all`, as in `parsing: case 2: not equal`, and beneath it each value it compared behind its label, in backticks. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
+What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame — in the tree its trunk and a quote mark, `│  >`, and plain the test's path in backticks and the mark, `` `/demo/render/draws_a_square`> `` —; the mark of a line on standard error is painted apart where colour is seen. In the tree its first byte ends the line its node opened on, and the node closes beneath what was written, its outcome's mark in the quote's column, whichever stream that was; a stream sent elsewhere carries its lines behind the frame too. Beneath a test's outcome stands what only the runner holds: a trap's text, and what a failing test found — each check that failed on a line, the steps that reached it leading, a `Test/step`'s label and `case 2` for the third case of a `Test/all`, as in `parsing: case 2: not equal`, and beneath it each value it compared behind its label, in backticks. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 
 A subject's tally closes its tree and the run's is the last line where more than one subject ran, one subject's tally being the run's, each with what its tests took together where any ran: `N passed, N failed` always, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
 
@@ -713,6 +724,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--core` | `wonder`, `format` | read standard input as Core text, as a `.crsc` file is read; refused beside any subject but `-` |
 | `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
+| `--progress <DRAWING>` | every command, on either side of it | draw what the command does on standard error as `plain` lines or a `live` tree, over `CURIOS_PROGRESS` and what standard error is ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version |
 | `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, and, for a program `run` hosts, `/tmp/perf-<pid>.map`, the map a sampling profiler names its functions by; nothing is recorded without it. [`profile`](#profile) reads the stream back |

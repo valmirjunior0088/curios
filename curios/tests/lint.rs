@@ -87,16 +87,22 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
         "{text}"
     );
     assert!(text.contains("└─ [lint] <stdin>:1:11"), "{text}");
-    // The program is checked under its own name, a blank line parts the tree from the report, and the count closes.
+    // The program is checked under its own name, a blank line parts the narration from the report, and the count closes.
     let narrated = String::from_utf8_lossy(&linted.stderr);
-    assert!(narrated.starts_with("<stdin>\n└─ check; "), "{narrated}");
+    assert!(
+        narrated.starts_with("Checking `<stdin>`\nChecked `<stdin>` in "),
+        "{narrated}"
+    );
     assert!(narrated.ends_with("s\n\n1 lint\n"), "{narrated}");
 
     let clean = curios(&root, &["lint", "-"], "/std/print(\"\")\n");
     assert!(clean.status.success());
     assert!(clean.stdout.is_empty());
     let narrated = String::from_utf8_lossy(&clean.stderr);
-    assert!(narrated.starts_with("<stdin>\n└─ check; "), "{narrated}");
+    assert!(
+        narrated.starts_with("Checking `<stdin>`\nChecked `<stdin>` in "),
+        "{narrated}"
+    );
     assert!(narrated.ends_with("s\n0 lints\n"), "{narrated}");
 }
 
@@ -237,7 +243,7 @@ fn a_dependency_is_reached_by_the_path_written_and_not_by_what_it_resolves_into(
     assert!(!text.contains("`shape`"), "{text}");
 }
 
-/// A cabinet that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's `store` node says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
+/// A cabinet that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's store says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
 #[test]
 fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let package = |name: &str| {
@@ -261,7 +267,7 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
     let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
-        filed.contains("└─ store; ") && !filed.contains("refused"),
+        filed.contains("Stored `/app` in ") && !filed.contains("refused"),
         "a cabinet that took the units says nothing of itself: {filed}"
     );
 
@@ -275,21 +281,21 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
 
     assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");
     assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
-    // Each unit's own node says the cabinet took nothing, and the reason hangs beneath the first alone.
+    // Each unit's own store says the cabinet took nothing, and the reason stands beneath the first alone.
     let lines = narrated.lines().collect::<Vec<_>>();
     let refused = lines
         .iter()
         .enumerate()
-        .filter(|(_, line)| line.contains("store; refused in "))
+        .filter(|(_, line)| line.starts_with("Stored ") && line.contains(": refused in "))
         .map(|(index, _)| index)
         .collect::<Vec<_>>();
     assert!(refused.len() > 1, "a library and a program: {narrated}");
     let beneath = lines[refused[0] + 1];
     assert!(
-        beneath.starts_with(['│', ' ']) && !beneath.contains('─'),
-        "a detail of the node, no node of its own: {narrated}"
+        beneath.starts_with("  "),
+        "a line beneath the store's, no step of its own: {narrated}"
     );
-    let reason = beneath.trim_start_matches(['│', ' ']);
+    let reason = beneath.trim_start();
     assert_eq!(
         narrated.matches(reason).count(),
         1,

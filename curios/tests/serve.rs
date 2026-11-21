@@ -212,7 +212,7 @@ fn run_serves_the_page_at_the_root_until_stopped() {
     let stderr = String::from_utf8_lossy(&stderr);
     assert!(stdout.is_empty(), "{stdout:?}");
     assert!(
-        stderr.contains(&format!("└─ serve; http://127.0.0.1:{port}/\n")),
+        stderr.contains(&format!("Serving `clock`: http://127.0.0.1:{port}/\n")),
         "{stderr}"
     );
 }
@@ -285,7 +285,7 @@ fn untimed(text: &str) -> String {
 
 /// What `report` holds from the line the address is said on.
 fn served(report: &str) -> &str {
-    &report[report.find("serve; ").expect("the address is said")..]
+    &report[report.find("Serving ").expect("the address is said")..]
 }
 
 /// The next reply `socket` is sent: what the command wrote, and the next step.
@@ -317,7 +317,7 @@ fn in_order(haystack: &str, needles: &[&str]) {
     }
 }
 
-/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, drives the run over the socket the runner opens there — sending each step in plan order and taking each outcome as its step's — switches the page with a subject's last outcome, writes each test as native writes one, on its subject's tree, and sends the runner what the terminal showed, and exits as `test` exits once the last step is taken.
+/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, drives the run over the socket the runner opens there — sending each step in plan order and taking each outcome as its step's — switches the page with a subject's last outcome, writes each test as native writes one, and sends the runner what the terminal showed, and exits as `test` exits once the last step is taken.
 #[test]
 fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_taken() {
     let root = Temporary::new("cli-serve", "test");
@@ -354,19 +354,16 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     in_order(
         &shown,
         &[
-            "/app\n",
-            "└─ emit; ",
-            "app\n",
-            "└─ emit; ",
-            "quiet\n",
-            "├─ check; ",
-            "└─ 0 passed, 0 failed\n",
+            "Emitted `/app` in ",
+            "Emitted `app` in ",
+            "Checking `quiet`\n",
+            "Tested `quiet`: 0 passed, 0 failed\n",
         ],
     );
-    // The step handed over is the test in hand, its node open: the one whose line stands open while its page runs.
+    // The step handed over is the test in hand, begun: the one whose ending is yet to be said while its page runs.
     assert!(
         shown.ends_with(&format!(
-            "serve; http://127.0.0.1:{port}/\n/app\n├─ /app/holds"
+            "Serving http://127.0.0.1:{port}/\nTesting `/app/holds`\n"
         )),
         "{shown}"
     );
@@ -393,41 +390,42 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (written, after) = reply(&mut socket);
     shown.push_str(&written);
     assert_eq!(after, None);
-    // Past the address, each served subject's tests on a tree of its own: a test that wrote nothing closed on its line, and one that wrote closed beneath what it wrote, each line of that behind its frame.
+    // Past the address, each served subject's tests, a line as each begins and as it ends, what a test wrote between the two, each line of it behind the test's path.
     let run = |drawn: &str| {
         format!(
             concat!(
-                "serve; http://127.0.0.1:{port}/\n",
-                "/app\n",
-                "├─ /app/holds; ✓ passed in _\n",
-                "├─ /app/fails; ✗ failed in _; lib.crs:6:6\n",
-                "│    not equal\n",
-                "│      obtained: `1`\n",
-                "│      expected: `2`\n",
-                "├─ /app/exits; ✗ exited 7 in _; lib.crs:9:6\n",
-                "└─ 1 passed, 1 failed, 1 exited; _\n",
-                "app\n",
-                "├─ /own\n",
+                "Serving http://127.0.0.1:{port}/\n",
+                "Testing `/app/holds`\n",
+                "Tested `/app/holds`: passed in _\n",
+                "Testing `/app/fails`\n",
+                "Tested `/app/fails`: failed in _; lib.crs:6:6\n",
+                "  not equal\n",
+                "    obtained: `1`\n",
+                "    expected: `2`\n",
+                "Testing `/app/exits`\n",
+                "Tested `/app/exits`: exited 7 in _; lib.crs:9:6\n",
+                "Tested `/app`: 1 passed, 1 failed, 1 exited in _\n",
+                "Testing `/own`\n",
                 "{drawn}",
-                "│  ✓ passed in _\n",
-                "└─ 1 passed, 0 failed; _\n",
+                "Tested `/own`: passed in _\n",
+                "Tested `app`: 1 passed, 0 failed in _\n",
                 "2 passed, 1 failed, 1 exited; _\n",
             ),
             port = port,
             drawn = drawn,
         )
     };
-    assert_eq!(untimed(served(&shown)), run("│  > drawn\n"));
+    assert_eq!(untimed(served(&shown)), run("`/own`> drawn\n"));
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(1));
     // The terminal showed what the runner was sent, each stream its own: what a page's test wrote on its standard output is relayed on the command's.
-    assert_eq!(String::from_utf8_lossy(&stdout), "│  > drawn\n");
+    assert_eq!(String::from_utf8_lossy(&stdout), "`/own`> drawn\n");
     let stderr = String::from_utf8_lossy(&stderr);
     assert_eq!(untimed(served(&stderr)), run(""));
     assert_eq!(
         stderr,
-        shown.replace("│  > drawn\n", ""),
+        shown.replace("`/own`> drawn\n", ""),
         "the runner is sent the run from its first line"
     );
 }
@@ -446,17 +444,17 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     in_order(
         &opening,
         &[
-            "/app\n",
-            "├─ check; ",
-            "└─ 0 passed, 0 failed, 3 skipped\n",
-            "app\n",
-            "└─ emit; ",
-            "quiet\n",
-            "└─ 0 passed, 0 failed\n",
+            "Checked `/app` in ",
+            "Tested `/app`: 0 passed, 0 failed, 3 skipped\n",
+            "Emitted `app` in ",
+            "Checking `quiet`\n",
+            "Tested `quiet`: 0 passed, 0 failed\n",
         ],
     );
     assert!(
-        opening.ends_with(&format!("serve; http://127.0.0.1:{port}/\napp\n├─ /own")),
+        opening.ends_with(&format!(
+            "Serving http://127.0.0.1:{port}/\nTesting `/own`\n"
+        )),
         "{opening}"
     );
     socket.send(posted("0", "null", "\"W10=\"")).unwrap();
@@ -465,8 +463,8 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     assert_eq!(
         untimed(&closing),
         concat!(
-            "; ✓ passed in _\n",
-            "└─ 1 passed, 0 failed; _\n",
+            "Tested `/own`: passed in _\n",
+            "Tested `app`: 1 passed, 0 failed in _\n",
             "1 passed, 0 failed, 3 skipped; _\n",
         )
     );

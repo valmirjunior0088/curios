@@ -12,12 +12,12 @@ use host::*;
 
 use {
     crate::{
-        Access, Failure, Piece, Quoted, Relayed, Reporting, Run, Served, Steps, Subject, Then,
-        Tree, Wrote, alone, bound, keep, kept, port_of, reader, relay, serve_run, total, troubled,
-        url,
+        Access, Failure, Opened, Piece, Quoted, Relayed, Reporting, Run, Served, Steps, Subject,
+        Then, Tree, Wrote, alone, bound, keep, kept, port_of, reader, relay, serve_run, total,
+        troubled, url,
     },
     curios::{Outcome, TestSubject, Tested, test_subjects},
-    curios_browser::{Posted, Step, Stream},
+    curios_browser::{Posted, Stream},
     curios_common::{Code, Qualifier, Report},
     curios_native::{OsHost, Stop, TestEnd},
     curios_package::{Refused, Selection, Target},
@@ -163,9 +163,8 @@ pub fn run_tests(
         };
 
         for index in 0..tested.scheduled().count() {
-            let frame = Arc::new(Frame::default());
-
             printer.began();
+            let frame = Arc::new(Frame::of(printer.testing()));
             let began = Instant::now();
             let end = run.run(index, |arguments| {
                 TestHost::new(OsHost::with_args(arguments), Arc::clone(&frame))
@@ -366,7 +365,12 @@ impl<'a> Printer<'a> {
         let hand = self.hand.as_mut().expect(IN_HAND);
         let path = hand.scheduled.front().expect(IN_HAND).path.join();
 
-        hand.tree.open(&path, false);
+        hand.tree.test(&path);
+    }
+
+    /// The tree the test in hand stands on, whose open node what the test writes is relayed as the work of.
+    pub fn testing(&self) -> Opened {
+        self.hand.as_ref().expect(IN_HAND).tree.opened()
     }
 
     /// The test whose node is open ended as `ending` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then what only the runner holds — what a failing test found, or a trap's text — and the subject's tally where it was the subject's last.
@@ -503,7 +507,7 @@ pub fn serve_tests(
     let listener = bound(port)?;
     let port = port_of(&listener)?;
 
-    alone("serve", url(port, &[]));
+    alone(crate::Step::Serve, url(port, &[]));
     printer.opened(tree, &modules);
 
     let run = Run::new(
@@ -528,25 +532,26 @@ struct Printing<'p, 'a> {
 }
 
 impl Reporting for Printing<'_, '_> {
-    fn began(&mut self, _step: Step) {
+    fn began(&mut self, _step: curios_browser::Step) {
         self.printer.began();
         self.relayed = Relayed::default();
     }
 
     /// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then the bytes, each line behind its frame, on this process's stream of the same name.
     fn wrote(&mut self, stream: Stream, bytes: &[u8]) {
+        let tree = self.printer.testing();
         let relayed = match stream {
-            Stream::Stdout => relay(&mut self.relayed, Quoted::Output, bytes, |run| {
+            Stream::Stdout => relay(tree, &mut self.relayed, Quoted::Output, bytes, |run| {
                 io::stdout().write_all(run).map(|()| run.len())
             }),
-            Stream::Stderr => relay(&mut self.relayed, Quoted::Error, bytes, |run| {
+            Stream::Stderr => relay(tree, &mut self.relayed, Quoted::Error, bytes, |run| {
                 io::stderr().write_all(run).map(|()| run.len())
             }),
         };
         relayed.expect("failed relaying");
     }
 
-    fn took(&mut self, _step: Step, posted: &Posted, taken: Duration) {
+    fn took(&mut self, _step: curios_browser::Step, posted: &Posted, taken: Duration) {
         self.printer
             .ended(ending_of(posted), self.relayed.wrote(), taken);
 

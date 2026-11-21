@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, FALSE, FOOTPRINT, FORMAT, LINT, NAME, PORT, RUN,
-        STAGE, TEST, TESTS, WITNESSES,
+        CLASSES, COMPILE, DIAGNOSTICS, DOCUMENT, Drawing, FALSE, FOOTPRINT, FORMAT, LINT, NAME,
+        PORT, RUN, STAGE, TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -31,6 +31,23 @@ impl ValueEnum for TargetValue {
     fn value_variants<'a>() -> &'a [Self] {
         static VARIANTS: LazyLock<Vec<TargetValue>> =
             LazyLock::new(|| Target::ALL.into_iter().map(TargetValue).collect());
+
+        &VARIANTS
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(PossibleValue::new(self.0.spelled()))
+    }
+}
+
+/// A drawing as `--progress` takes it: its one spelling, read off [`Drawing::ALL`] and [`Drawing::spelled`], so the flag and `CURIOS_PROGRESS` cannot spell one drawing two ways.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DrawingValue(pub Drawing);
+
+impl ValueEnum for DrawingValue {
+    fn value_variants<'a>() -> &'a [Self] {
+        static VARIANTS: LazyLock<Vec<DrawingValue>> =
+            LazyLock::new(|| Drawing::ALL.into_iter().map(DrawingValue).collect());
 
         &VARIANTS
     }
@@ -681,6 +698,17 @@ struct ParsedCli {
     )]
     pub color: Color,
 
+    // Global for the reason `--color` is, and decided as colour is: asked here, else named in the environment, else read off where standard error goes.
+    #[arg(
+        long = "progress",
+        value_name = "DRAWING",
+        value_enum,
+        hide_possible_values = true,
+        global = true,
+        help = "Show what the command does on standard error as `plain` lines or a `live` tree; unless `CURIOS_PROGRESS` names one, `live` where standard error is a terminal, `TERM` is not `dumb` and `CI` is unset, and `plain` elsewhere"
+    )]
+    pub progress: Option<DrawingValue>,
+
     #[command(subcommand)]
     pub mode: Mode,
 }
@@ -690,6 +718,7 @@ struct ParsedCli {
 pub struct Cli {
     pub profile: Option<PathBuf>,
     pub color: Color,
+    pub progress: Option<DrawingValue>,
     pub mode: Mode,
 }
 
@@ -872,6 +901,7 @@ impl Cli {
         Ok(Self {
             profile: parsed.profile,
             color: parsed.color,
+            progress: parsed.progress,
             mode: parsed.mode,
         })
     }
