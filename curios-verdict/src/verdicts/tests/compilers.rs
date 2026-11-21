@@ -1,6 +1,6 @@
-//! Two compilers filing one cabinet: an object's address names neither, its header names the one that filed each record, and each compiler believes its own records alone.
+//! An object's records: its address names no compiler, the header of each names the compiler that filed it, each compiler believes its own records alone, and the object holds what its last two filings name.
 
-use {super::*, curios_common::candidate_name};
+use {super::*, curios_common::candidate_name, curios_unit::pack_names};
 
 /// A handle on the own cabinet of the project at `root`, filing as the compiler identifying itself as `compiler`, in place of the binary running the suite.
 fn filing_as(root: &Path, compiler: &str) -> Verdicts {
@@ -45,6 +45,19 @@ fn packs(root: &Path, address: &str) -> BTreeSet<String> {
             let name = entry.ok()?.file_name().to_string_lossy().into_owned();
 
             name.ends_with(".pack").then_some(name)
+        })
+        .collect()
+}
+
+/// The blobs the packs of the object at `address` of the project at `root` hold, as their tables say.
+fn held(root: &Path, address: &str) -> Vec<Digest> {
+    packs(root, address)
+        .into_iter()
+        .flat_map(|pack| {
+            let mut file =
+                fs::File::open(own(root).object(address).join(pack)).expect("a pack opens");
+
+            pack_names(&mut file).expect("a pack ends with its table")
         })
         .collect()
 }
@@ -132,6 +145,44 @@ fn an_edit_undone_hits_the_record_it_replaced() {
     write(&root, "shape/lib.crs", &library("first"));
 
     assert_eq!(folded_by(&root, "one"), ["reused /shape"]);
+}
+
+/// A filing keeps what the record it replaces names whichever compiler filed that one: a compiler that filed one text reads it still after another filed another text over it.
+#[test]
+fn a_filing_keeps_what_the_record_it_replaces_names_whoever_filed_it() {
+    let root = project("replaced-across");
+
+    folded_by(&root, "one");
+    write(&root, "shape/lib.crs", &library("second"));
+    folded_by(&root, "two");
+    write(&root, "shape/lib.crs", &library("first"));
+
+    assert_eq!(folded_by(&root, "one"), ["reused /shape"]);
+}
+
+/// An object holds every blob its two records name, and fewer than twice as many: a filing keeps the blobs of the record it replaces, so an edit undone finds them, and takes away what no record names wherever that is half of a pack, so what only older records named does not pile up.
+#[test]
+fn an_object_holds_what_its_records_name_and_under_twice_as_much() {
+    let root = project("two-records");
+
+    for at in 0..8 {
+        write(&root, "shape/lib.crs", &library(&format!("text {at}")));
+        folded_by(&root, "one");
+        let [address] = addresses(&root).try_into().expect("one object");
+        let named = filing_as(&root, "one").named(&address);
+        let holds = held(&root, &address);
+
+        assert!(
+            named.iter().all(|digest| holds.contains(digest)),
+            "every blob a record names is held after filing {at}"
+        );
+        assert!(
+            holds.len() < 2 * named.len(),
+            "{} blobs held where the records name {} after filing {at}",
+            holds.len(),
+            named.len()
+        );
+    }
 }
 
 /// A candidate is held to the compiler that made it by a record of that compiler's naming its blob: the packs at an address hold what every compiler filing there wrote, and none of what another compiler's records name is offered.

@@ -19,7 +19,9 @@ mod payload;
 pub use payload::*;
 
 use {
-    crate::{Filer, Opened, Packs, entry_address, opened, replace, set_aside, unit_address},
+    crate::{
+        Filer, Opened, Packs, entry_address, opened, opened_by, replace, set_aside, unit_address,
+    },
     curios_common::{
         Blob, Candidates, Digest, Facet, Qualifier, Source, SourceName, candidate_prefix, digest,
     },
@@ -526,13 +528,13 @@ impl Verdicts {
         packs.write(&blobs)
     }
 
-    /// Collect the packs at `address`, whose object now names what `stored` names ([`Packs::collect`]).
-    fn collect(&self, address: &str, stored: &Indexed) -> io::Result<()> {
+    /// Collect the packs at `address`, keeping `kept`, what its object's two records name ([`Packs::collect`]).
+    fn collect(&self, address: &str, kept: &BTreeSet<Digest>) -> io::Result<()> {
         let packs = self
             .packs(address)
             .ok_or_else(|| io::Error::other("a cabinet collects blobs"))?;
 
-        packs.collect(&stored.digests().copied().collect())
+        packs.collect(kept)
     }
 
     /// What each unit of `sources` is filed as, in order, verified against the cabinet without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.
@@ -802,7 +804,8 @@ impl Cache for Verdicts {
             source.answered().to_vec(),
             placement.contained.clone(),
         );
-        // The blobs first, so an object never names one not yet written; then the record this filing replaces, kept beside it, so the compiler that filed it reads it still; then what the address's object no longer names is collected.
+        // The blobs first, so an object never names one not yet written; then the record this filing replaces, kept beside it, so the compiler that filed it reads it still; then what neither record names is collected.
+        let kept = kept(&placement.path, &placement.stored);
         let filed = self
             .file_blobs(&placement.address, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
@@ -815,7 +818,7 @@ impl Cache for Verdicts {
                     placement.stored.index(),
                 )
             })
-            .and_then(|()| self.collect(&placement.address, &placement.stored));
+            .and_then(|()| self.collect(&placement.address, &kept));
         // What this compiler's records name has moved, for whatever asks again in this handle's life.
         self.named.borrow_mut().remove(&placement.address);
 
@@ -856,6 +859,22 @@ fn agreeing(
         && unchanged(&reads, overlay);
 
     agrees.then_some(reads)
+}
+
+/// What a filing of the unit stored as `stored` keeps at the object whose `unit` file is at `path`: the blobs its own record names, and those the record it replaces names, whoever filed that one, so the compiler that did reads it still. A record whose index is not the bytes it was written with names nothing.
+fn kept(path: &Path, stored: &Indexed) -> BTreeSet<Digest> {
+    let replaced = opened_by(path)
+        .and_then(|(_, opened)| {
+            let record = curios_archive::from_bytes::<Record>(opened.record()).ok()?;
+            let index = opened.artifact()?;
+
+            intact(&record.unit, &index)
+                .then(|| Unit::named(&index).ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+
+    stored.digests().copied().chain(replaced).collect()
 }
 
 /// Whether `index` is the bytes a record naming `contained` was written with: what makes a damaged object that still deserializes a miss rather than a belief.

@@ -1,6 +1,6 @@
 //! What a compile made of a declaration, kept for a later compile of the same input: a candidate, a record of the cabinet named by the facet it is, the input it was made from and what it holds ([`candidate_name`]), so a cabinet finds every candidate filed for one input together ([`Candidates`]).
 //!
-//! **Many for one input.** A declaration made again from an input it was once made from is made from whatever it read then, which may stand or not: so a candidate holds what its making read, each part by the digest it had, and a cabinet keeps every candidate filed for an input until no object has named it for the time a collection keeps a blob, so an edit undone, a branch checked out again and a bisection find what was made of the text they bring back.
+//! **Many for one input.** A declaration made again from an input it was once made from is made from whatever it read then, which may stand or not: so a candidate holds what its making read, each part by the digest it had, and a cabinet keeps the candidates its object's last two records name, so an edit undone before the next filing finds what was made of the text it brings back.
 
 use {
     crate::{Blob, Digest},

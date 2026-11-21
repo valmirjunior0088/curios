@@ -1,7 +1,7 @@
 use {
     super::*,
     curios_common::{Facet, candidate_name, candidate_prefix, test_support::*},
-    std::path::Path,
+    std::{path::Path, time::Duration},
 };
 
 /// One blob of its own bytes.
@@ -12,11 +12,6 @@ fn blob(text: &str) -> Blob {
 /// The time every handle here is opened at, unless a test moves it.
 fn now() -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000)
-}
-
-/// The time `days` days after [`now`].
-fn after(days: u64) -> SystemTime {
-    now() + Duration::from_secs(days * 24 * 60 * 60)
 }
 
 /// A blob written is found by its name as the bytes it was written as, and a name nothing wrote is missing.
@@ -48,6 +43,9 @@ fn filings_one_at_a_time_keep_the_packs_geometric() {
         let filed = vec![blob(&format!("blob {at}"))];
         packs.write(&filed).expect("a pack is written");
         written.extend(filed);
+        packs
+            .collect(&written.iter().map(|blob| blob.digest).collect())
+            .expect("an address is collected");
     }
 
     let held = packs.list();
@@ -144,50 +142,67 @@ fn named(blobs: &[&Blob]) -> BTreeSet<Digest> {
     blobs.iter().map(|blob| blob.digest).collect()
 }
 
-/// A blob the object stops naming is dropped by the first collection that finds it unnamed five days after a collection first did, and kept by every one before; a blob the object names is kept whatever its pack holds beside it.
+/// A pack at least half of whose blobs no record names is written again holding the rest, a pack nothing names is taken away, and a pack less than half unnamed stands whole: what a rewrite carries is paid for by what went.
 #[test]
-fn a_blob_unnamed_for_five_days_is_dropped() {
-    let directory = Temporary::new("packs", "collected");
-    let blobs = [blob("named"), blob("dropped")];
-    Packs::at(directory.to_path_buf(), now())
-        .write(&blobs)
-        .expect("a pack is written");
-    let only = named(&[&blobs[0]]);
-    let collect = |day| {
-        Packs::at(directory.to_path_buf(), after(day))
-            .collect(&only)
-            .expect("an address is collected");
-    };
+fn a_pack_is_rewritten_once_half_of_it_is_unnamed() {
+    let directory = Temporary::new("packs", "halved");
+    let packs = Packs::at(directory.to_path_buf(), now());
+    let blobs = [blob("one"), blob("two"), blob("three")];
+    packs.write(&blobs).expect("a pack is written");
 
-    collect(0);
-    collect(1);
+    packs
+        .collect(&named(&[&blobs[0], &blobs[1]]))
+        .expect("an address is collected");
     assert_eq!(
         held(&directory, &blobs),
-        [true, true],
-        "found unnamed today"
+        [true, true, true],
+        "a third unnamed stands"
     );
-    collect(5);
+    packs
+        .collect(&named(&[&blobs[0]]))
+        .expect("an address is collected");
     assert_eq!(
         held(&directory, &blobs),
-        [true, true],
-        "unnamed for four days"
+        [true, false, false],
+        "two thirds unnamed is written again"
     );
-    collect(6);
+    packs
+        .collect(&BTreeSet::new())
+        .expect("an address is collected");
     assert_eq!(
         held(&directory, &blobs),
-        [true, false],
-        "unnamed for five days"
+        [false, false, false],
+        "and none named is taken away"
     );
+    assert!(packs.list().is_empty(), "leaving no pack behind");
 }
 
-/// What a filer stopped short of in the address's directory — an object's staged unit file as a pack's — is swept by the first collection that finds it five days old, and one younger is left to a filer that may still be writing it.
+/// A merge keeps what the records name alone: a blob no record names rides no merge, though its pack was less than half unnamed.
 #[test]
-fn a_collection_sweeps_a_staging_five_days_old() {
+fn a_merge_drops_what_no_record_names() {
+    let directory = Temporary::new("packs", "merged");
+    let packs = Packs::at(directory.to_path_buf(), now());
+    let older = [blob("a"), blob("b"), blob("gone")];
+    let newer = [blob("c"), blob("d")];
+    packs.write(&older).expect("a pack is written");
+    packs.write(&newer).expect("a pack is written");
+
+    packs
+        .collect(&named(&[&older[0], &older[1], &newer[0], &newer[1]]))
+        .expect("an address is collected");
+    assert_eq!(packs.list().len(), 1, "three blobs beside two are merged");
+    assert_eq!(held(&directory, &older), [true, true, false]);
+    assert_eq!(held(&directory, &newer), [true, true]);
+}
+
+/// What a filer stopped short of in the address's directory — an object's staged unit file as a pack's — is swept by a collection once it is a day old, and one younger is left to a filer that may still be writing it.
+#[test]
+fn a_collection_sweeps_a_staging_a_day_old() {
     let directory = Temporary::new("packs", "staged");
     fs::create_dir_all(&directory).expect("a directory for the address");
     let staged = |name: &str, written: SystemTime| {
         let path = directory.join(name);
-        fs::write(&path, "half of a verdict").expect("a staging is written");
+        fs::write(&path, "half of a unit file").expect("a staging is written");
         fs::File::options()
             .write(true)
             .open(&path)
@@ -195,86 +210,57 @@ fn a_collection_sweeps_a_staging_five_days_old() {
             .expect("a staging's time is set");
         path
     };
-    let aged = staged("verdict.1.part", now());
-    let young = staged("verdict.2.part", after(2));
-    let collect = |day| {
-        Packs::at(directory.to_path_buf(), after(day))
-            .collect(&BTreeSet::new())
-            .expect("an address is collected");
-    };
+    let aged = staged("unit.1.part", now());
+    let young = staged("unit.2.part", now() + Duration::from_secs(60 * 60));
 
-    collect(0);
-    collect(5);
+    Packs::at(directory.to_path_buf(), now() + crate::STALE)
+        .collect(&BTreeSet::new())
+        .expect("an address is collected");
 
-    assert!(!aged.exists(), "a staging five days old is swept");
+    assert!(!aged.exists(), "a staging a day old is swept");
     assert!(young.exists(), "a younger one is left");
 }
 
-/// An address is collected at most once a day: a filing within a day of the last collection drops nothing, however long what it would drop has gone unnamed.
+/// Counted: a hundred filings each replacing one blob of a thousand write fewer blobs than twice the pack the thousand were filed in, which dropping each blob as it went would write again at nearly every filing.
 #[test]
-fn an_address_is_collected_once_a_day() {
-    let directory = Temporary::new("packs", "daily");
-    let blobs = [blob("named"), blob("dropped")];
-    Packs::at(directory.to_path_buf(), now())
-        .write(&blobs)
-        .expect("a pack is written");
-    let only = named(&[&blobs[0]]);
-    let collect = |day: SystemTime| {
-        Packs::at(directory.to_path_buf(), day)
-            .collect(&only)
-            .expect("an address is collected");
+fn edits_rewrite_in_proportion_to_what_went() {
+    let directory = Temporary::new("packs", "edits");
+    let packs = Packs::at(directory.to_path_buf(), now());
+    let digests = |blobs: &[Blob]| {
+        blobs
+            .iter()
+            .map(|blob| blob.digest)
+            .collect::<BTreeSet<_>>()
     };
+    let mut live = (0..1000)
+        .map(|at| blob(&format!("first {at}")))
+        .collect::<Vec<_>>();
+    packs.write(&live).expect("a pack is written");
+    packs
+        .collect(&digests(&live))
+        .expect("an address is collected");
 
-    collect(after(0));
-    collect(after(1));
-    collect(after(10));
-    collect(after(10) + Duration::from_secs(60 * 60));
-    assert_eq!(
-        held(&directory, &blobs),
-        [true, false],
-        "dropped on day ten"
-    );
-
-    let again = [blob("named"), blob("young")];
-    Packs::at(directory.to_path_buf(), after(10))
-        .write(&again[1..])
-        .expect("a pack is written");
-    collect(after(10) + Duration::from_secs(2 * 60 * 60));
-    collect(after(20) + Duration::from_secs(3 * 60 * 60));
-    assert_eq!(
-        held(&directory, &again),
-        [true, true],
-        "found unnamed by the first collection a day after the last"
-    );
-}
-
-/// A blob named again before its five days are out is forgotten, and its time starts over if the object stops naming it again.
-#[test]
-fn a_blob_named_again_is_forgotten() {
-    let directory = Temporary::new("packs", "renamed");
-    let blobs = [blob("named"), blob("returns")];
-    Packs::at(directory.to_path_buf(), now())
-        .write(&blobs)
-        .expect("a pack is written");
-    let collect = |day, named: &BTreeSet<Digest>| {
-        Packs::at(directory.to_path_buf(), after(day))
-            .collect(named)
+    let mut written = 0;
+    for edit in 0..100 {
+        let replaced = digests(&live);
+        live[edit] = blob(&format!("edit {edit}"));
+        let before = packs.list().into_iter().collect::<BTreeSet<_>>();
+        packs.write(&live[edit..=edit]).expect("a pack is written");
+        packs
+            .collect(&digests(&live).union(&replaced).copied().collect())
             .expect("an address is collected");
-    };
-    let (both, first) = (named(&[&blobs[0], &blobs[1]]), named(&[&blobs[0]]));
+        written += packs
+            .list()
+            .into_iter()
+            .filter(|name| !before.contains(name))
+            .map(|name| packs.names(&name).map_or(0, |names| names.len()))
+            .sum::<usize>();
+    }
 
-    collect(0, &first);
-    collect(1, &first);
-    collect(4, &both);
-    collect(5, &first);
-    collect(9, &first);
-    assert_eq!(
-        held(&directory, &blobs),
-        [true, true],
-        "unnamed for four days again"
+    assert!(
+        written < 2 * 1000,
+        "{written} blobs written over a hundred one-blob edits"
     );
-    collect(10, &first);
-    assert_eq!(held(&directory, &blobs), [true, false]);
 }
 
 /// The smallest packs are merged until each left holds twice the one before it: the top of a geometric run stays, and what is merged with the small end grows to cover a pack it outweighs.

@@ -9,19 +9,21 @@
 //! **What a filer stopped short of is swept where it was staged** ([`sweep`]): a staging file is never renamed by anyone but the process that wrote it, so one that process left is taken away once it is older than any filing takes — a unit's file's and a pack's by the collection of the object's directory they stand in, a payload's by the filing that lands a payload beside it.
 
 use {
-    crate::GRACE,
     curios_common::Digest,
     curios_unit::{PREAMBLE, framed, record_length},
     std::{
         fs::{self, File},
         io::{self, Read},
         path::Path,
-        time::SystemTime,
+        time::{Duration, SystemTime},
     },
 };
 
 /// What a staging file's name ends with: a file written whole beside the name it is renamed onto, which nothing reads under this one.
 pub const STAGING: &str = "part";
+
+/// How long a staging file stands before a filing beside it takes it away ([`sweep`]): longer than any filing takes, so a filer still writing one keeps it. The one time the cabinet keeps, and a crash's: no blob, record or object is kept or dropped by age.
+pub const STALE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// What a filed file opens with, ahead of who filed it.
 const MAGIC: &[u8; 8] = b"crfiled\0";
@@ -52,6 +54,24 @@ impl Filer {
             engine: engine.map(|engine| Digest::of(engine.as_bytes())),
             ..self
         }
+    }
+
+    /// Who filed a file opening with `header` ([`Filer::header`]): `None` for bytes that open no filed file.
+    fn read(header: &[u8; HEADER]) -> Option<Self> {
+        let (magic, filer) = header.split_at(MAGIC.len());
+        let (compiler, engine) = filer.split_at(Digest::LENGTH);
+        if magic != MAGIC {
+            return None;
+        }
+
+        Some(Self {
+            compiler: Digest::from_bytes(compiler.try_into().ok()?),
+            engine: engine
+                .iter()
+                .any(|byte| *byte != 0)
+                .then(|| Some(Digest::from_bytes(engine.try_into().ok()?)))
+                .flatten(),
+        })
     }
 
     /// The header a file this filer files opens with: the magic, the compiler's digest, then the engine's, zero where it names none.
@@ -90,15 +110,23 @@ impl Opened {
     }
 }
 
-/// The file at `path`, read as far as its record where `filer` filed it: `None` where there is no file there, another filer's is, the file is not framed, or its record runs past its end.
+/// The file at `path`, read as far as its record where `filer` filed it: `None` where there is no file there, another filer's is, the file is not framed, or its record runs past its end. Another filer's file is told by its header alone, and nothing behind it is read.
 pub fn opened(path: &Path, filer: &Filer) -> Option<Opened> {
+    read(path, |by| by == filer).map(|(_, opened)| opened)
+}
+
+/// The file at `path`, read as far as its record whoever filed it, with who did: what a filing keeps the blobs of when it replaces it, for the compiler that filed it to read still. `None` where there is no file there, the file is not framed, or its record runs past its end.
+pub fn opened_by(path: &Path) -> Option<(Filer, Opened)> {
+    read(path, |_| true)
+}
+
+/// The file at `path`, read as far as its record where `accepted` takes who filed it.
+fn read(path: &Path, accepted: impl Fn(&Filer) -> bool) -> Option<(Filer, Opened)> {
     let mut file = File::open(path).ok()?;
     let size = file.metadata().ok()?.len();
     let mut header = [0; HEADER];
     file.read_exact(&mut header).ok()?;
-    if header != filer.header() {
-        return None;
-    }
+    let filer = Filer::read(&header).filter(|filer| accepted(filer))?;
     let mut preamble = [0; PREAMBLE];
     file.read_exact(&mut preamble).ok()?;
     let length = record_length(&preamble)?;
@@ -109,7 +137,7 @@ pub fn opened(path: &Path, filer: &Filer) -> Option<Opened> {
     let mut record = vec![0; length];
     file.read_exact(&mut record).ok()?;
 
-    Some(Opened { file, record })
+    Some((filer, Opened { file, record }))
 }
 
 /// File `record` and `artifact` as the file at `path`, filed by `filer`, replacing whatever it held.
@@ -153,7 +181,7 @@ pub fn set_aside(path: &Path, aside: &Path) -> io::Result<()> {
     }
 }
 
-/// Take away every staging file in `directory` last written [`GRACE`] or more before `now`: what a filer that stopped short left, since no filing takes that long and no other process renames it into place.
+/// Take away every staging file in `directory` last written [`STALE`] or more before `now`: what a filer that stopped short left, since no filing takes that long and no other process renames it into place.
 pub fn sweep(directory: &Path, now: SystemTime) -> io::Result<()> {
     for entry in fs::read_dir(directory)?.flatten() {
         let staged = entry.path();
@@ -163,7 +191,7 @@ pub fn sweep(directory: &Path, now: SystemTime) -> io::Result<()> {
         let aged = || {
             fs::metadata(&staged)
                 .and_then(|metadata| metadata.modified())
-                .is_ok_and(|written| now.duration_since(written).unwrap_or_default() >= GRACE)
+                .is_ok_and(|written| now.duration_since(written).unwrap_or_default() >= STALE)
         };
         if part && aged() {
             let _ = fs::remove_file(&staged);

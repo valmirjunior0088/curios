@@ -280,7 +280,7 @@ fn a_filing_sweeps_a_staging_older_than_any_filing() {
     fs::File::options()
         .write(true)
         .open(&aged)
-        .and_then(|file| file.set_modified(SystemTime::now() - crate::GRACE))
+        .and_then(|file| file.set_modified(SystemTime::now() - crate::STALE))
         .unwrap();
 
     write(&root, "app.crs", "/std/print(\"rewritten\")\n");

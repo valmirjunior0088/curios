@@ -1,4 +1,4 @@
-//! The packs at one address, in its object's own directory beside the object's `unit` file: the blobs the object names, written before the object names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric.
+//! The packs at one address, in its object's own directory beside the object's records: the blobs the object names, written before the object names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric and collected where a filing lands ([`Packs::collect`]).
 //!
 //! **Written whole and renamed into place, as a unit file is.** A pack is complete before it bears its name, and its name is the digest of its bytes, so a reader sees a pack whole or not at all, and two filers packing the same blobs write one file twice.
 //!
@@ -6,11 +6,11 @@
 //!
 //! **What a filing writes is decided by the packs' ends.** Which blobs a pack holds is read off its table ([`pack_names`]), so a filing reads no pack whole to know what it lacks.
 //!
-//! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the blobs of the one before it: the address holds a logarithmic number of packs, and a blob is written again a logarithmic number of times over its life. The runs of each kind the merged packs hold are run again into one ([`repacked`]), so a pack keeps one table a kind however it was made.
+//! **Collected at every filing, with no clock.** A filing keeps the blobs its object's two records name, its own and the one it replaced. A pack at least half of whose blobs neither names is written again holding the rest, and taken away where it holds nothing else; and the smallest packs are merged into one, keeping what the records name, wherever each no longer holds at least twice the blobs of the one before it. So the address holds a logarithmic number of packs, a blob is written again a logarithmic number of times over its life, and every blob a rewrite carries is paid for by one that went. A blob no record names, where its pack is less than half such, stays until it is, and no compile takes it. The runs of each kind a rewrite holds are run again into one ([`repacked`]), so a pack keeps one table a kind however it was made.
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where a blob is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
 //!
-//! **What no object names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): a blob the address's object has not named for five days is dropped from its pack, each address keeping a table of the blobs a collection found its object not naming, with when one first did, and a staging file five days old is swept ([`sweep`]). A read writes nothing. Every time is asked of the clock the handle was opened at.
+//! **What a filer stopped short of is swept where a filing lands**: a staging file [`STALE`](crate::STALE) old ([`sweep`]). A read writes nothing.
 //!
 //! Why an object's blobs are kept in packs at its address, merged so and collected so, is the crate `README.md`'s.
 
@@ -29,7 +29,7 @@ use {
         io,
         path::PathBuf,
         rc::Rc,
-        time::{Duration, SystemTime},
+        time::SystemTime,
     },
 };
 
@@ -38,15 +38,6 @@ const EXTENSION: &str = "pack";
 
 /// How many times the blobs of the pack before it each pack holds, in a geometric address.
 const FACTOR: usize = 2;
-
-/// The file that says when the address was last collected, and which blobs a collection found its object not naming, since when ([`Collection`]).
-const COLLECTION: &str = "collection";
-
-/// How long an address goes between collections.
-const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// How long a blob goes unnamed by its address's object before a collection drops it, and a staging file stands before it is swept ([`sweep`]).
-pub const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 
 /// The packs of one address.
 pub struct Packs {
@@ -57,12 +48,12 @@ pub struct Packs {
     names: RefCell<BTreeMap<String, Option<Rc<[Digest]>>>>,
     /// Each pack read whole so far, by its name, `None` for one that could not be read or was no pack.
     read: RefCell<BTreeMap<String, Option<Rc<Pack>>>>,
-    /// The time this handle collects by.
+    /// The time this handle sweeps staging files by.
     now: SystemTime,
 }
 
 impl Packs {
-    /// The packs kept in `directory`, collected at the time `now`.
+    /// The packs kept in `directory`, swept of staging files at the time `now`.
     pub fn at(directory: PathBuf, now: SystemTime) -> Self {
         Self {
             directory,
@@ -101,77 +92,99 @@ impl Packs {
             .collect()
     }
 
-    /// Collect this address where a day has passed since it was last collected, `named` being what its object names: a blob it does not name is noted with the time a collection first found it so, one named again is forgotten, and one unnamed for [`GRACE`] is dropped from its pack, which is taken away where it holds nothing else and written again holding the rest otherwise. Nothing is collected at an address never collected before, which starts its clock.
-    pub fn collect(&self, named: &BTreeSet<Digest>) -> io::Result<()> {
-        let path = self.directory.join(COLLECTION);
-        let earlier = fs::read(&path)
-            .ok()
-            .and_then(|bytes| Collection::read(&bytes));
-        let Some(earlier) = earlier else {
-            return self.collected(&Collection::at(self.now));
-        };
-        if self.since(earlier.at) < INTERVAL {
-            return Ok(());
-        }
-
-        let mut collection = Collection::at(self.now);
-        for name in self.list() {
-            let Some(names) = self.names(&name) else {
-                continue;
-            };
-            let mut dropped = false;
-            for digest in names.iter().filter(|digest| !named.contains(*digest)) {
-                let since = earlier.unnamed.get(digest).copied().unwrap_or(self.now);
-                match self.since(since) >= GRACE {
-                    true => dropped = true,
-                    false => {
-                        collection.unnamed.insert(*digest, since);
-                    }
-                }
-            }
-            // A pack that cannot be read is left where it is, and collected by a later filing that can read it.
-            if dropped && let Some(pack) = self.pack(&name) {
-                let kept = pack
-                    .blobs()
-                    .filter(|blob| {
-                        named.contains(&blob.digest)
-                            || collection.unnamed.contains_key(&blob.digest)
-                    })
-                    .collect::<Vec<_>>();
-                let into = match kept.is_empty() {
-                    true => None,
-                    false => Some(self.put(repacked(kept).map_err(io::Error::other)?)?),
-                };
-                if into.as_deref() != Some(name.as_str()) {
-                    let _ = fs::remove_file(self.path(&name));
-                }
-            }
-        }
-        sweep(&self.directory, self.now)?;
-        self.listed.borrow_mut().take();
-
-        self.collected(&collection)
-    }
-
-    /// File `collection` as what this address's last collection found, staged and renamed into place as a pack is.
-    fn collected(&self, collection: &Collection) -> io::Result<()> {
-        fs::create_dir_all(&self.directory)?;
-        let path = self.directory.join(COLLECTION);
-        let staged = path.with_extension(format!("{}.{STAGING}", std::process::id()));
-        fs::write(&staged, collection.bytes())?;
-        fs::rename(&staged, &path).inspect_err(|_| {
-            let _ = fs::remove_file(&staged);
-        })
-    }
-
-    /// File `blobs` as one pack beside what the address holds, then merge the smallest packs where they are no longer geometric. Nothing is written for no blobs.
+    /// File `blobs` as one pack beside what the address holds. Nothing is written for no blobs. What keeps the address geometric, and drops what no record names, is [`Packs::collect`], which every filing runs once its record is in place.
     pub fn write(&self, blobs: &[Blob]) -> io::Result<()> {
         if blobs.is_empty() {
             return Ok(());
         }
-        self.put(packed(blobs))?;
 
-        self.roll_up()
+        self.put(packed(blobs)).map(|_| ())
+    }
+
+    /// Collect this address at a filing, `kept` being what its object's two records name: a pack at least half of whose blobs `kept` leaves out is written again holding the rest, and taken away where it holds nothing else; then the smallest packs are merged, keeping what `kept` names, wherever they are no longer geometric; then a staging file [`STALE`](crate::STALE) old is swept. A blob `kept` leaves out stays where its pack is less than half such, and no compile takes it, since no record names it.
+    pub fn collect(&self, kept: &BTreeSet<Digest>) -> io::Result<()> {
+        for name in self.list() {
+            let Some(names) = self.names(&name) else {
+                continue;
+            };
+            let unnamed = names
+                .iter()
+                .filter(|digest| !kept.contains(*digest))
+                .count();
+            // At least half of it out, so every blob the rewrite carries is paid for by one that went.
+            if unnamed > 0 && 2 * unnamed >= names.len() {
+                self.rewrite(&name, kept)?;
+            }
+        }
+        self.roll_up(kept)?;
+
+        sweep(&self.directory, self.now)
+    }
+
+    /// The pack named `name` written again holding what `kept` names, and taken away where it holds nothing else. A pack that cannot be read is left where it is, and rewritten by a later filing that can read it.
+    fn rewrite(&self, name: &str, kept: &BTreeSet<Digest>) -> io::Result<()> {
+        let Some(pack) = self.pack(name) else {
+            return Ok(());
+        };
+        let held = pack
+            .blobs()
+            .filter(|blob| kept.contains(&blob.digest))
+            .collect::<Vec<_>>();
+        let into = self.held(held)?;
+        if into.as_deref() != Some(name) {
+            let _ = fs::remove_file(self.path(name));
+        }
+        self.listed.borrow_mut().take();
+
+        Ok(())
+    }
+
+    /// The smallest packs merged into one, wherever each no longer holds at least [`FACTOR`] times the blobs of the one before it, keeping what `kept` names, the merged ones taken away once the merge bears its name.
+    fn roll_up(&self, kept: &BTreeSet<Digest>) -> io::Result<()> {
+        let mut sized = self
+            .list()
+            .into_iter()
+            .filter_map(|name| Some((self.names(&name)?.len(), name)))
+            .collect::<Vec<_>>();
+        sized.sort();
+        let split = split(&sized.iter().map(|(count, _)| *count).collect::<Vec<_>>());
+        if split < 2 {
+            return Ok(());
+        }
+
+        let merged = sized[..split]
+            .iter()
+            .filter_map(|(_, name)| Some((name.clone(), self.pack(name)?)))
+            .collect::<Vec<_>>();
+        // A pack that could not be read is left where it is, and merged by a later filing that can read it.
+        if merged.len() < 2 {
+            return Ok(());
+        }
+        let into = self.held(
+            merged
+                .iter()
+                .flat_map(|(_, pack)| pack.blobs())
+                .filter(|blob| kept.contains(&blob.digest))
+                .collect(),
+        )?;
+        for (name, _) in &merged {
+            if into.as_deref() != Some(name.as_str()) {
+                let _ = fs::remove_file(self.path(name));
+            }
+        }
+        self.listed.borrow_mut().take();
+
+        Ok(())
+    }
+
+    /// `blobs` filed as one pack, their runs of each kind run again into one ([`repacked`]), and its name: none for no blobs, which no pack holds.
+    fn held(&self, blobs: Vec<Blob>) -> io::Result<Option<String>> {
+        if blobs.is_empty() {
+            return Ok(None);
+        }
+
+        self.put(repacked(blobs).map_err(io::Error::other)?)
+            .map(Some)
     }
 
     /// The bytes of a pack filed under their name, replacing nothing: a pack of that name holds those bytes already. The pack is held as read, since its bytes are in hand.
@@ -195,40 +208,6 @@ impl Packs {
         self.listed.borrow_mut().take();
 
         Ok(name)
-    }
-
-    /// The smallest packs merged into one, wherever each no longer holds at least [`FACTOR`] times the blobs of the one before it, the merged ones taken away once the merge bears its name. Their elaborated declarations are consed again in one table ([`repacked`]).
-    fn roll_up(&self) -> io::Result<()> {
-        let mut sized = self
-            .list()
-            .into_iter()
-            .filter_map(|name| Some((self.names(&name)?.len(), name)))
-            .collect::<Vec<_>>();
-        sized.sort();
-        let split = split(&sized.iter().map(|(count, _)| *count).collect::<Vec<_>>());
-        if split < 2 {
-            return Ok(());
-        }
-
-        let merged = sized[..split]
-            .iter()
-            .filter_map(|(_, name)| Some((name.clone(), self.pack(name)?)))
-            .collect::<Vec<_>>();
-        // A pack that could not be read is left where it is, and merged by a later filing that can read it.
-        if merged.len() < 2 {
-            return Ok(());
-        }
-        let merging =
-            repacked(merged.iter().flat_map(|(_, pack)| pack.blobs())).map_err(io::Error::other)?;
-        let into = self.put(merging)?;
-        for (name, _) in &merged {
-            if *name != into {
-                let _ = fs::remove_file(self.path(name));
-            }
-        }
-        self.listed.borrow_mut().take();
-
-        Ok(())
     }
 
     /// The names of the packs the directory holds now, kept as the last listing.
@@ -323,73 +302,9 @@ impl Packs {
         read
     }
 
-    /// How long before this handle's time `then` is: none where it is after it.
-    fn since(&self, then: SystemTime) -> Duration {
-        self.now.duration_since(then).unwrap_or_default()
-    }
-
     /// Where the pack named `name` is kept.
     fn path(&self, name: &str) -> PathBuf {
         self.directory.join(name).with_extension(EXTENSION)
-    }
-}
-
-/// What an address's last collection found: when it ran, and each blob it found the object not naming, with when a collection first did.
-struct Collection {
-    at: SystemTime,
-    unnamed: BTreeMap<Digest, SystemTime>,
-}
-
-impl Collection {
-    /// A collection run at `at` that found every blob named.
-    fn at(at: SystemTime) -> Self {
-        Self {
-            at,
-            unnamed: BTreeMap::new(),
-        }
-    }
-
-    /// The bytes this collection is filed as: when it ran, then each blob it found unnamed with since when, each time in seconds after the epoch.
-    fn bytes(&self) -> Vec<u8> {
-        let seconds = |time: SystemTime| {
-            time.duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-                .to_le_bytes()
-        };
-        let mut bytes = Vec::with_capacity(8 + 40 * self.unnamed.len());
-        bytes.extend_from_slice(&seconds(self.at));
-        for (digest, since) in &self.unnamed {
-            bytes.extend_from_slice(digest.as_bytes());
-            bytes.extend_from_slice(&seconds(*since));
-        }
-
-        bytes
-    }
-
-    /// The collection filed as `bytes` ([`Collection::bytes`]), or `None` for bytes that are no such thing.
-    fn read(bytes: &[u8]) -> Option<Self> {
-        let time = |seconds: &[u8]| {
-            let seconds = u64::from_le_bytes(seconds.try_into().ok()?);
-            SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(seconds))
-        };
-        let (at, rest) = bytes.split_first_chunk::<8>()?;
-        let (entries, left) = rest.as_chunks::<40>();
-        if !left.is_empty() {
-            return None;
-        }
-        let unnamed = entries
-            .iter()
-            .map(|entry| {
-                let digest = Digest::from_bytes(entry[..32].try_into().ok()?);
-                Some((digest, time(&entry[32..])?))
-            })
-            .collect::<Option<_>>()?;
-
-        Some(Self {
-            at: time(at)?,
-            unnamed,
-        })
     }
 }
 

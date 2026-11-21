@@ -81,7 +81,7 @@ impl Cabinet {
         self.directory.join("foreign").join(scheme).join(digest)
     }
 
-    /// The object a judged unit is kept as at `address`, which its mounts, what it declared and its kind decide: one directory, holding its [`unit`](Self::unit) file beside the packs of the blobs it names and what its address's last collection found, which `curios-verdict` names.
+    /// The object a judged unit is kept as at `address`, which its mounts, what it declared and its kind decide: one directory, holding its [`unit`](Self::unit) file and the one that file [`replaced`](Self::replaced), beside the packs of the blobs they name, which `curios-verdict` names.
     ///
     /// A directory for each address rather than a family for each kind of file, because an address is a unit's through every edit and a unit's baseline is its own object: what an object names is in its own directory, so finding it lists one directory, collecting it lists the same one, and two units never write one.
     pub fn object(&self, address: &str) -> PathBuf {
