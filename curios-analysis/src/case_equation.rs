@@ -157,9 +157,11 @@ pub fn read_scrutinee_classed(
 ///
 /// Reduction substitutes only closed definition bodies and subterms of the term it is reducing, so it can introduce a *global* name and can drop a local, but can never introduce a local the term did not already mention. A reduct of the key names no binder the key does not.
 ///
-/// **A binder counts where conversion reads it.** Conversion compares two stuck forms part by part, reducing an argument of a stuck application and a field of a constructed value before it compares them, so a binder one names that its reduction erases is one it never reads — `f(b + 0 * c)` is `f(b)` to it, and so is `f(Pair { left = b, right = c }.left)` — and it reads no proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So a binder the key does not name ends the test where it stands as a variable in a part reduction has left — the candidate as reduction leaves a stuck form, and its head, a fold's operands, a projection's head and a match's scrutinee, each as reduction left it — and an argument or a field that names one is reduced ([`Reducer::reduce_forced`]) and read in turn. A binder that is a proof is passed over, and so is an application of one, which is a proof too; and so is any part the checker's conversion compares at a proposition ([`ReadsProofs::proof_parts`]), asked only of a part that would otherwise end the test. Each checker says which are proofs.
+/// **A binder counts where conversion reads it.** Conversion compares two stuck forms part by part, reducing each part before it compares it, so a binder one names that its reduction erases is one it never reads — `f(b + 0 * c)` is `f(b)` to it, and so are `f(Pair { left = b, right = c }.left)` and `ft(Box(b + 0 * c))` — and it reads no proof: `w(a, p2) < 5` is the scrutinee `w(a, p1) < 5` under another proof of one bound. So a binder the key does not name ends the test where it stands as a variable in a part reduction has left — the candidate as reduction leaves a stuck form, and its head, a fold's operands, a projection's head and a match's scrutinee, each as reduction left it — and every other part that names one, an argument, a field, a type former's parameters and indices, a telescope's entries outside its binders, a match's goal, is reduced ([`Reducer::reduce_forced`]) and read in turn. A binder that is a proof is passed over, and so is an application of one, which is a proof too; and so is any part the checker's conversion compares at a proposition ([`ReadsProofs::proof_parts`]), asked only of a part that would otherwise end the test. Each checker says which are proofs.
 ///
-/// **What it still gives up.** A part beneath a binder of the candidate's — a lambda's body, a match's arm — and a type are read as they stand, reducing nothing below them, where conversion compares bodies reduced: `u((x) => x + 0 * c)` counts `c`. One-sided, a reading that reduced there would reduce without the other side to stop it, where conversion stops at the first difference: a recursive group unfolds to a body that holds the group again. And a part beneath a binder is read with no lookup of its type, so a proof there is read like any term. The filter fails toward refusal there, and both checkers read it on one spelling with one account of what a proof is, so they fail together.
+/// **What conversion compares only in step passes.** A part conversion meets only by opening a binder or entering an arm — a lambda's body, a stuck match's arms, a telescope's entries beneath its binders — it compares with the other side's, both reduced in step, and stops at the first difference. Reduced one side alone it has nothing to stop it: a stuck match's arm unfolds a recursive call into a match stuck again, as `/std/Nat/log2`'s does, without end. So the walk passes it, and the comparison an admitted form is put to reads it. So does a part eta never reads: a lambda's annotations, and a struct literal's parameters, each compared with a neutral through its type.
+///
+/// **Elaboration's own forms end the test.** An unsolved metavariable and an elaboration-transient node are no Core term the certifier compares, and the elaborator's conversion holds a metavariable equal to nothing but itself inside a question, so one naming a binder the key does not is no reduct of the key. Its spine read reduced would unfold a local whose definition holds the metavariable again while a recursive definition is elaborated, which the walk, filing what it read of a part only once that part is read, would not meet again.
 ///
 /// That makes this a filter and not a rule: every candidate an eager key would match still passes it, because such a candidate *is* a reduct of the key. What it excludes is the traffic — every stuck form produced under a binder some other judgment opened, which is most of what a probe at a stuck reduct sees — most of it at the first such binder, standing as an operand reduction has already left, before anything is reduced.
 ///
@@ -192,12 +194,10 @@ pub trait ReadsProofs: Reducer {
 /// How a part of a stuck form stands to reduction, which is how [`could_answer`] reads it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Stands {
-    /// As reduction left it: read as it stands, its arguments and fields reduced.
+    /// As reduction left it: read as it stands, its other parts reduced.
     Left,
-    /// Where conversion reduces it before comparing it: an argument of a stuck application, a field of a constructed value.
+    /// Where conversion reduces it before comparing it: reduced and read, or passed where a binder of the form's is in reach, which conversion compares only in step.
     Unreduced,
-    /// Beneath a binder of the form's, or a type: read as it stands, and nothing below it reduced.
-    Beneath,
 }
 
 /// One [`could_answer`] walk: the binders it counts, the proofs it passes over, and what it has read of each part.
@@ -236,71 +236,65 @@ impl<F: Fn(&Free) -> bool> Walk<'_, F> {
         term: &Term,
         stands: Stands,
     ) -> Result<bool, ReduceError> {
-        let stands = match stands {
-            Stands::Unreduced if term.reach() == 0 => {
-                let forced = reducer.reduce_forced(term.clone())?;
-                return self.reads(reducer, &forced, Stands::Left);
+        if stands == Stands::Unreduced {
+            if term.reach() > 0 {
+                return Ok(true);
             }
-            Stands::Unreduced => Stands::Beneath,
-            stands => stands,
-        };
+            let forced = reducer.reduce_forced(term.clone())?;
+            return self.reads(reducer, &forced, Stands::Left);
+        }
         match &**term {
-            Subterm::Var(_) => return Ok(false),
+            Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Transient(_) => return Ok(false),
             _ if spine_head(term).is_some_and(|head| self.proofs.contains(head)) => {
                 return Ok(true);
             }
             _ => {}
         }
-        // How each part of one reduction left stands: its head and a fold's operands as they are, its arguments and fields where conversion reduces them, and everything else — a binder's body, a type — beneath.
-        let (left, unreduced) = match (stands, &**term) {
-            (Stands::Beneath, _) => (Vec::new(), Vec::new()),
-            (_, Subterm::Apply(apply)) => (
-                vec![apply.head.identity()],
-                apply.params().map(Term::identity).collect(),
-            ),
-            (_, Subterm::Intrinsic(_)) => {
-                let mut operands = Vec::new();
-                term.any_child_term(&mut |operand| {
-                    operands.push(operand.identity());
-                    false
-                });
-                (operands, Vec::new())
+        // The parts one reduction left as they are: its head, a fold's operands, a projection's head and a match's scrutinee.
+        let left = match &**term {
+            Subterm::Apply(apply) => vec![apply.head.identity()],
+            Subterm::Intrinsic(_) => children(term),
+            Subterm::Proj(proj) => vec![proj.head.identity()],
+            Subterm::Match(matched) => vec![matched.head.identity()],
+            _ => Vec::new(),
+        };
+        // The parts conversion meets only in step, entering an arm, and the ones eta never reads: a lambda whole, its annotations and its body, a stuck match's arms, and a struct literal's parameters.
+        let unread = match &**term {
+            Subterm::Func(_) => children(term),
+            Subterm::Match(matched) => {
+                let mut read = vec![matched.head.identity(), matched.goal.identity()];
+                if let Cases::Induct {
+                    stated: Some(stated),
+                    ..
+                } = &matched.cases
+                {
+                    read.push(stated.identity());
+                }
+                children(term)
+                    .into_iter()
+                    .filter(|child| !read.contains(child))
+                    .collect()
             }
-            (_, Subterm::Proj(proj)) => (vec![proj.head.identity()], Vec::new()),
-            (_, Subterm::Match(matched)) => (vec![matched.head.identity()], Vec::new()),
-            (_, Subterm::Variant(variant)) => (
-                Vec::new(),
-                variant.payload.iter().map(Term::identity).collect(),
-            ),
-            (_, Subterm::Struct(record)) => (
-                Vec::new(),
-                record.fields.iter().map(Term::identity).collect(),
-            ),
-            (_, Subterm::Tuple(tuple)) => (
-                Vec::new(),
-                tuple.fields.iter().map(Term::identity).collect(),
-            ),
-            _ => (Vec::new(), Vec::new()),
+            Subterm::Struct(record) => record.params.iter().map(Term::identity).collect(),
+            _ => Vec::new(),
         };
         let mut parts = Vec::new();
         term.any_child_term(&mut |child| {
             let identity = child.identity();
-            let stands = match (left.contains(&identity), unreduced.contains(&identity)) {
-                (true, _) => Stands::Left,
-                (false, true) => Stands::Unreduced,
-                (false, false) => Stands::Beneath,
-            };
-            parts.push((child.clone(), stands));
+            if !unread.contains(&identity) {
+                let stands = match left.contains(&identity) {
+                    true => Stands::Left,
+                    false => Stands::Unreduced,
+                };
+                parts.push((child.clone(), stands));
+            }
             false
         });
-        // A part the checker's conversion compares at a proposition is one it reads nowhere, asked only of a part that would otherwise end the test, and only outside every binder of the candidate's, where a lookup may read the part's type.
+        // A part the checker's conversion compares at a proposition is one it reads nowhere, asked only of a part that would otherwise end the test.
         let mut proofs = None;
         for (part, stands) in parts {
             if self.reads(reducer, &part, stands)? {
                 continue;
-            }
-            if term.reach() > 0 {
-                return Ok(false);
             }
             let proofs = match &mut proofs {
                 Some(proofs) => proofs,
@@ -313,6 +307,16 @@ impl<F: Fn(&Free) -> bool> Walk<'_, F> {
 
         Ok(true)
     }
+}
+
+/// The identities of `term`'s parts, in the order a walk of them meets them.
+fn children(term: &Term) -> Vec<usize> {
+    let mut children = Vec::new();
+    term.any_child_term(&mut |child| {
+        children.push(child.identity());
+        false
+    });
+    children
 }
 
 /// The local an application spine is headed by, where a local heads it.

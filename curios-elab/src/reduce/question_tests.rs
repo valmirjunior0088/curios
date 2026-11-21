@@ -452,9 +452,9 @@ fn a_binder_an_arguments_reduction_erases_is_read_past() {
     });
 }
 
-/// A form naming a binder the scrutinee does not beneath a lambda's binder is put to no entry: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, but the filter reduces nothing beneath a binder of the form's, so it counts `c` and the form stays stuck. That is what the filter still gives up, stated so that moving it is seen. The certifier's `whnf::question_tests` holds this proposition under this name.
+/// A form naming a binder the scrutinee does not beneath a lambda's binder is left to conversion: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, comparing the two bodies in step, so the filter in front of an entry passes the body (`curios_analysis::could_answer`) and the guard's entry answers the form. The certifier's `whnf::question_tests` holds this proposition under this name.
 #[test]
-fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
+fn a_binder_beneath_a_lambda_is_left_to_conversion() {
     let mut context = context();
     let asked = Asked::over(&mut context);
     let nat_type = Term::intrinsic(Intrinsic::NatType);
@@ -475,12 +475,56 @@ fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
     assert_eq!(
         convert(&mut context, &bool_type, &guard, &respelled),
         Ok(true),
-        "the two convert, or the miss below is no limit of the filter"
+        "the two convert, or the answer below is no reading past the binder"
     );
     assumed(&mut context, guard, truth, |context| {
         assert_eq!(
             reduce(context, respelled).map(|reduct| reduct.as_bool()),
-            Ok(None)
+            Ok(Some(true))
+        );
+    });
+}
+
+/// A lambda's annotation is left to eta, which never reads it: `u2((x: T(c)) => f2(x)) < 5` converts with the guard `u2(f2) < 5` by eta at `f2`'s function type, though its annotation names `c` and the guard does not, so the filter in front of an entry passes the lambda whole and the guard's entry answers the form. The certifier's `whnf::question_tests` holds this proposition under this name.
+#[test]
+fn a_lambdas_annotation_is_left_to_eta() {
+    let mut context = context();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let [c, family, f2, u2, n, x, g] =
+        ["c", "T", "f2", "u2", "n", "x", "g"].map(|hint| context.fresh(Some(hint)));
+    let over_c = Term::apply(Term::free_var(&family), [Term::free_var(&c)]);
+    let f2_type = Term::func_type([(x, over_c.clone())], nat_type.clone());
+    context.assume(&c, &nat_type);
+    context.assume(
+        &family,
+        &Term::func_type([(n, nat_type.clone())], Term::type_ground()),
+    );
+    context.assume(&f2, &f2_type);
+    context.assume(&u2, &Term::func_type([(g, f2_type)], nat_type));
+    let below = |argument: Term| {
+        Term::intrinsic(Intrinsic::nat_lt(
+            Term::apply(Term::free_var(&u2), [argument]),
+            nat(5),
+        ))
+    };
+    let y = context.fresh(Some("y"));
+    let guard = below(Term::free_var(&f2));
+    let respelled = below(Term::func(
+        [(y, over_c)],
+        Term::apply(Term::free_var(&f2), [Term::free_var(&y)]),
+    ));
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    assert_eq!(
+        convert(&mut context, &bool_type, &guard, &respelled),
+        Ok(true),
+        "the two convert by eta, or the answer below is no reading past the annotation"
+    );
+    assumed(&mut context, guard, truth, |context| {
+        assert_eq!(
+            reduce(context, respelled).map(|reduct| reduct.as_bool()),
+            Ok(Some(true))
         );
     });
 }

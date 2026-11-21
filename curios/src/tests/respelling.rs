@@ -376,42 +376,49 @@ const GUARDS: &[Guard] = &[
         dual: Some("5 <= Nat/div(a, b, @nonzero(b, c, q))"),
         refused: &[],
     },
-    // A binder the guard does not name beneath a binder of the form's or in a type, where the filter in front of an equation reads the part as it stands and conversion reads it reduced: a lambda's body, a proof beneath a lambda, a function type's domain, an inductive type's index, a structure type's parameter, and a struct literal's parameter, which eta reads nowhere.
+    // A binder the guard does not name beneath a binder of the form's or in a type: a lambda's body, a proof beneath a lambda, a function type's domain, an inductive type's index, a structure type's parameter, and a struct literal's parameter, which eta reads nowhere. The filter in front of an equation passes what conversion compares only in step and reduces the rest, as conversion does.
     Guard {
         guard: "u((x) => x) < 10",
         respelled: "u((x) => x + 0 * c) < 10",
         dual: Some("10 <= u((x) => x + 0 * c)"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "u((x) => Nat/div(x, b, @q)) < 5",
         respelled: "u((x) => Nat/div(x, b, @nonzero(b, c, q))) < 5",
         dual: Some("5 <= u((x) => Nat/div(x, b, @nonzero(b, c, q)))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "ft((y: F(b)) -> Nat) < 5",
         respelled: "ft((y: F(b + 0 * c)) -> Nat) < 5",
         dual: Some("5 <= ft((y: F(b + 0 * c)) -> Nat)"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "fp(Eq()(b, b)) < 5",
         respelled: "fp(Eq()(b + 0 * c, b)) < 5",
         dual: Some("5 <= fp(Eq()(b + 0 * c, b))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "ft(Box(b)) < 5",
         respelled: "ft(Box(b + 0 * c)) < 5",
         dual: Some("5 <= ft(Box(b + 0 * c))"),
-        refused: UNREAD,
+        refused: &[],
     },
     Guard {
         guard: "gb(bx) < 5",
         respelled: "gb(Box { at = bx.at }) < 5",
         dual: Some("5 <= gb(Box { at = bx.at })"),
-        refused: UNREAD,
+        refused: &[],
+    },
+    // A function type's codomain beneath its own binder, which conversion compares in step, the two binders opened as one.
+    Guard {
+        guard: "ft((y: Nat) -> F(y + b)) < 5",
+        respelled: "ft((y: Nat) -> F(y + b + 0 * c)) < 5",
+        dual: Some("5 <= ft((y: Nat) -> F(y + b + 0 * c))"),
+        refused: &[],
     },
     // A binder the guard does not name inside a proof at a type's parameter or index, or at a constructor's parameter, which conversion compares at a proposition and reads nowhere.
     Guard {
@@ -457,7 +464,7 @@ struct Apart {
     dual: &'static str,
 }
 
-/// Near misses of the rows above whose binder stands beneath a binder of the form's or in a type: a lambda's body, a proof's neighbour beneath a lambda, a function type's domain, an inductive type's index and a structure type's parameter, each apart from the guard.
+/// Near misses of the rows above whose binder stands beneath a binder of the form's or in a type: a lambda's body, a proof's neighbour beneath a lambda, a function type's domain, an inductive type's index, a structure type's parameter and a function type's codomain beneath its binder, each apart from the guard.
 const APART: &[Apart] = &[
     Apart {
         guard: "u((x) => x) < 10",
@@ -483,6 +490,11 @@ const APART: &[Apart] = &[
         guard: "ft(Box(b)) < 5",
         apart: "ft(Box(b + c)) < 5",
         dual: "5 <= ft(Box(b + c))",
+    },
+    Apart {
+        guard: "ft((y: Nat) -> F(y + b)) < 5",
+        apart: "ft((y: Nat) -> F(y + b + c)) < 5",
+        dual: "5 <= ft((y: Nat) -> F(y + b + c))",
     },
 ];
 

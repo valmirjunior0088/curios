@@ -263,11 +263,11 @@ fn a_binder_an_arguments_reduction_erases_is_read_past() {
     });
 }
 
-/// A form naming a binder the key does not beneath a lambda's binder is put to no equation: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, but the filter reduces nothing beneath a binder of the form's, so it counts `c` and the form stays stuck. That is what the filter still gives up, stated so that moving it is seen; the control is the conversion itself, which holds the two equal with no arm standing.
+/// A form naming a binder the key does not beneath a lambda's binder is left to conversion: `u((x) => x + 0 * c) < 10` converts with the guard `u((x) => x) < 10`, comparing the two bodies in step, so the filter in front of an equation passes the body (`curios_analysis::could_answer`) and the guard's equation answers the form.
 ///
-/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
+/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name. Mutation-checked: with a part beneath a binder of the form's read as it stands, `c` is counted and the form stays stuck.
 #[test]
-fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
+fn a_binder_beneath_a_lambda_is_left_to_conversion() {
     let mut certifier = certifier();
     let [guard, respelled] = under(
         &mut certifier,
@@ -278,12 +278,37 @@ fn a_binder_beneath_a_lambda_is_counted_where_it_stands() {
     assert_eq!(
         convert(&mut certifier, &term("#BoolType"), &guard, &respelled),
         Ok(true),
-        "the two convert, or the miss below is no limit of the filter"
+        "the two convert, or the answer below is no reading past the binder"
     );
     guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(
             certifier.reduce(respelled).expect("reduces").as_bool(),
-            None
+            Some(true)
+        );
+    });
+}
+
+/// A lambda's annotation is left to eta, which never reads it: `u2((x: T(c)) => f2(x)) < 5` converts with the guard `u2(f2) < 5` by eta at `f2`'s function type, though its annotation names `c` and the guard does not, so the filter in front of an equation passes the lambda whole and the guard's equation answers the form.
+///
+/// `curios-elab`'s `reduce::question_tests` holds this proposition under this name. Mutation-checked: with a lambda's annotation reduced and read, `c` is counted and the form stays stuck.
+#[test]
+fn a_lambdas_annotation_is_left_to_eta() {
+    let mut certifier = certifier();
+    let [guard, respelled] = under(
+        &mut certifier,
+        "c: #NatType, T: (n: #NatType) -> Type, f2: (x: T(c)) -> #NatType, u2: (g: (x: T(c)) -> #NatType) -> #NatType",
+        "#NatLt(u2(f2), 5), #NatLt(u2((x: T(c)) => f2(x)), 5)",
+    );
+
+    assert_eq!(
+        convert(&mut certifier, &term("#BoolType"), &guard, &respelled),
+        Ok(true),
+        "the two convert by eta, or the answer below is no reading past the annotation"
+    );
+    guarded(&mut certifier, &guard, |certifier| {
+        assert_eq!(
+            certifier.reduce(respelled).expect("reduces").as_bool(),
+            Some(true)
         );
     });
 }
