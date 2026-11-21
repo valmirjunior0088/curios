@@ -33,7 +33,7 @@ pub struct Channel(A: Type): Type {
     writers: Woken,
 }
 
---- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply cell in its message.
+--- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply `Future` in its message, which the receiver fills.
 pub let new(@A: Type, capacity: Nat, @positive: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =
     let queue = /sys/Channel/new(@A, capacity, @positive)!;
     let readers = /sys/Channel/new(@Cell({}), 1)!;

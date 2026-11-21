@@ -80,13 +80,11 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
 fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Cell};
+        use /std/{Io};
         let told(ended: Io/Scope/Ended) -> Io({}) =
             /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let entry() -> /std/Io({}) =
-            let cell = Cell/new()!;
-            let _ = Cell/fill(cell, ())!;
-            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|"))))!;
+            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/yield(), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -103,12 +101,13 @@ fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
 fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Cell};
+        use /std/{Io};
+        use /std/Io/{Future};
         let told(ended: Io/Scope/Ended) -> Io({}) =
             /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let entry() -> /std/Io({}) =
-            let cell = Cell/new()!;
-            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/wait_filled([cell]), (_) => /std/print("resumed|"))))!;
+            let never = Future/new(@{})!;
+            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Future/wait(never), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -130,7 +129,7 @@ fn a_cancel_that_suspends_part_way_runs_to_its_end() {
         use /std/time/{Duration};
         let entry() -> /std/Io({}) =
             let release(_: Io/Scope/Ended) -> Io({}) = Io/bind(Io/sleep(Duration/zero), (_) => /std/print("abandoned|"));
-            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|"))))!;
+            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/select(@{}, []), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,
@@ -149,7 +148,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
         r#"
         use /std/{Io};
         let entry() -> /std/Io({}) =
-            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("abandoned|")), (_) => Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|"))))!;
+            let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("abandoned|")), (_) => Io/bind(Io/select(@{}, []), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
         "#,

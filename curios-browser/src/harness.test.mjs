@@ -161,7 +161,12 @@ test("entry exports select the direct or turn protocol for the program they run,
   for (const [source, turns, status, output] of [
     ["/std/Io/pure(())", false, 0, ""],
     ['/std/print("hello")', true, 0, "hello"],
-    ["/std/Io/wait_filled([])", true, 1, ""],
+    [
+      "/std/Io/bind(/std/Io/Future/new(@{}), (f) => /std/Io/Future/wait(f))",
+      true,
+      1,
+      "",
+    ],
   ]) {
     const compiled = compile(source);
     const module = await WebAssembly.compile(compiled.program);
@@ -620,7 +625,7 @@ test("a program suspended on no handle runs its cancel, reports the deadlock and
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
 let main() -> /std/Io({}) =
-    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("abandoned")), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
+    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("abandoned")), (_) => Io/bind(Io/select(@{}, []), (_) => print("resumed"))))!;
     print("after");
 main()
 `);
@@ -758,7 +763,7 @@ let release(_: Io/Scope/Ended) -> Io({}) =
     let _ = Io/sleep(Duration/of_millis(10))!;
     print("closed");
 let main() -> Io({}) =
-    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/wait_filled([]), (_) => print("resumed"))))!;
+    let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/select(@{}, []), (_) => print("resumed"))))!;
     print("after");
 main()
 `,

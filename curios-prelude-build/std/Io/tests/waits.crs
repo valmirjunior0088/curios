@@ -29,11 +29,10 @@ test a_sleep_holds_only_its_own_branch =
     let n = Io/select([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
     Test/assert("the branch that does not sleep wins", n == 2);
 
-test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
-    let cell = Cell/new()!;
-    let (waited, filled) =
-        Io/both(Io/bind(Io/wait_filled([cell]), (()) => Io/pure(true)), Cell/fill(cell, ()))!;
-    Test/assert("the wait goes on once the cell is filled", waited && filled);
+test a_wait_on_a_future_goes_on_once_the_branch_beside_it_fills_it =
+    let f = Future/new(@{})!;
+    let (waited, ()) = Io/both(Io/bind(Future/wait(f), (()) => Io/pure(true)), Future/fill(f, ()))!;
+    Test/assert("the wait goes on once the future is filled", waited);
 
 test a_scope_tells_its_release_a_body_ran_to_its_end =
     let endings = Channel/new(@Io/Scope/Ended, 1)!;
@@ -45,12 +44,12 @@ test a_scope_tells_its_release_a_body_ran_to_its_end =
 
 test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
     let endings = Channel/new(@Io/Scope/Ended, 1)!;
-    let never = Cell/new()!;
+    let never = Future/new(@{})!;
     let body =
         Io/scope((scope) =>
             Io/bind(
                 Io/Scope/defer(scope, (ended) => told(endings, ended)),
-                (()) => Io/bind(Io/wait_filled([never]), (()) => Io/pure(3))));
+                (()) => Io/bind(Future/wait(never), (()) => Io/pure(3))));
     let _ = Io/select([body, Io/pure(4)])!;
     let cancelled = heard(endings, false)!;
     Test/assert("the release was told the body was dropped", cancelled);
@@ -84,16 +83,16 @@ test two_woken_receivers_retry_after_only_one_can_take =
     let (x, y) =
         Io/scope((s) =>
             let c = Channel/new(@Nat, 1)!;
-            let first = Cell/new(@{})!;
+            let first = Future/new(@{})!;
             let receive() -> Io(Nat) =
                 let got = Channel/receive(c)!;
-                let _ = Cell/fill(first, ())!;
+                let () = Future/fill(first, ())!;
                 Io/pure(Option/unwrap_or(got, 0));
             let a = Io/Scope/spawn(s, receive())!;
             let b = Io/Scope/spawn(s, receive())!;
             let () = Io/yield()!;
             let _ = Channel/send(c, 1)!;
-            let () = Io/wait_filled([first])!;
+            let () = Future/wait(first)!;
             let _ = Channel/send(c, 2)!;
             let x = Io/Scope/Task/join(a)!;
             let y = Io/Scope/Task/join(b)!;
@@ -143,19 +142,18 @@ test notifications_coalesce_and_futures_preserve_their_first_answer =
         Test/assert("the two notifications coalesced into one", coalesced),
         Test/equal(answer, 7)]);
 
--- A branch waiting on a cell is cancelled where it waits once another branch wins, and its bracket is released then, once: the cell filled afterwards wakes nothing.
-test a_waiter_cancelled_on_a_cell_is_released_once =
+-- A branch waiting on a future is cancelled where it waits once another branch wins, and its bracket is released then, once: the future filled afterwards wakes nothing.
+test a_waiter_cancelled_on_a_future_is_released_once =
     let releases = Channel/new(@Nat, 2)!;
-    let c = Cell/new(@{})!;
+    let c = Future/new(@{})!;
     let release(_: Io/Scope/Ended) -> Io({}) =
         let _ = Channel/try_send(releases, 1)!;
         Io/pure(());
     let waiting =
-        Io/scope((scope) =>
-            Io/bind(Io/Scope/defer(scope, release), (()) => Io/wait_filled([c])));
+        Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (()) => Future/wait(c)));
     let () = Io/select([waiting, Io/pure(())])!;
-    let _ = Cell/fill(c, ())!;
-    let () = Io/wait_filled([c])!;
+    let () = Future/fill(c, ())!;
+    let () = Future/wait(c)!;
     let first = Channel/try_receive(releases)!;
     let second = Channel/try_receive(releases)!;
     Test/equal([found(first), found(second)], [Option/some(1), Option/none()]);

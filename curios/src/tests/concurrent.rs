@@ -480,20 +480,21 @@ fn a_selection_keeps_the_value_of_the_receive_it_did_not_take() {
     );
 }
 
-// Enqueueing is complete before receipt. A reply cell makes the acknowledgement explicit, and joining the feeder keeps the body alive until it observes that fill. The body runs on to its receive before the child it spawned starts, so the receiving comes first.
+// Enqueueing is complete before receipt. A reply future makes the acknowledgement explicit, and joining the feeder keeps the body alive until it observes that fill. The body runs on to its receive before the child it spawned starts, so the receiving comes first.
 #[test]
 fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Cell, Option, Io, print, Channel};
-        let feeder(s: Channel({Nat, Cell({})})) -> Io({}) =
-            let ack = Cell/new()!;
+        use /std/{Nat, Option, Io, print, Channel};
+        use /std/Io/{Future};
+        let feeder(s: Channel({Nat, Future({})})) -> Io({}) =
+            let ack = Future/new()!;
             let _ = Channel/send(s, (7, ack))!;
             let _ = print("queued ")!;
-            let _ = Io/wait_filled([ack])!;
+            let _ = Future/wait(ack)!;
             print("acknowledged");
         let body(scope: Io/Scope) -> Io({}) =
-            let c = Channel/new(@{Nat, Cell({})}, 1)!;
+            let c = Channel/new(@{Nat, Future({})}, 1)!;
             let task = Io/Scope/spawn(scope, feeder(c))!;
             let _ = print("receiving ")!;
             let got = Channel/receive(c)!;
@@ -501,8 +502,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
                 | some((n, ack)) =>
                     let _ = print(Nat/to_str(n))!;
                     let _ = print(" ")!;
-                    let _ = Cell/fill(ack, ())!;
-                    Io/pure(())
+                    Future/fill(ack, ())
                 | none() => Io/pure(())
                 end!;
             Io/Scope/Task/join(task);

@@ -55,7 +55,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
             print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
         let body() -> Test({}) =
             let _ = print("waiting|")!;
-            let _ = Io/wait_filled([])!;
+            let _ = Io/select(@{}, [])!;
             Test/assert("it holds", true);
         let protected() -> Test({}) = Test/scope((s) => let _ = Io/Scope/defer(s, release)!; body());
         let competing() -> Io({}) =
@@ -83,7 +83,7 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
             let waiting() -> Io({}) =
                 let _ = print("child-started|")!;
                 let _ = Channel/try_send(started, ())!;
-                Io/wait_filled([]);
+                Io/select(@{}, []);
             Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
         let body(s: Io/Scope) -> Test({}) =
             let started = Channel/new(@{}, 1)!;

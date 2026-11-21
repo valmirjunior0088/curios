@@ -20,7 +20,7 @@ pub mod Scope;
 
 use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Channel, Program, Try};
 use /std/Io/Scope/{Ended};
-use /std/internal/{Handle, Waiting, on_filled, suspend_on};
+use /std/internal/{Handle, Waiting, suspend_on, wait_filled};
 use /std/time/{Duration, Instant};
 
 satisfy Monad(Io) {
@@ -89,10 +89,6 @@ let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =
 let released(s: Scope, how: Ended) -> Io({}) =
     let held = /sys/Channel/take(s.releases)!;
     match held | item(rs) => each(rs, how) | _ => pure(()) end;
-
---- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
-pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
-    suspend_on(on_filled(cells));
 
 --- A handle ready once the monotonic clock reads at least so many seconds and nanoseconds.
 foreign clock_deadline(Int, Nat) -> Handle;
