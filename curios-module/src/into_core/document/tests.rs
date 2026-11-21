@@ -96,10 +96,17 @@ fn a_member_is_stated_within_its_owner() {
         heading_of(KEPT, "dark").written(),
         "pub induct Shade: Type\n| dark(Nat)\nend"
     );
-    // And the type's own entry is the source's, its constructors with it, where a consumer's listing writes its head alone.
+    assert_eq!(
+        heading_of(KEPT, "dark").entry(),
+        "pub induct Shade: Type\n| dark(Nat)\nend"
+    );
+    // The type's own entry is its head alone, as a consumer's listing writes it and its page shows it: nothing shows the members of a kept representation but an answer about one of them.
     let kept = heading_of(KEPT, "Shade");
-    assert_eq!(kept.entry(), KEPT);
+    assert_eq!(kept.entry(), "pub induct Shade: Type");
     assert_eq!(kept.written(), "pub induct Shade: Type");
+    // A sealed concept keeps its methods, which a consumer calls by name either way.
+    const SEALED: &str = "pub concept Sized(T: Type): Type {\n    size(T) -> Nat,\n}";
+    assert_eq!(heading_of(SEALED, "Sized").entry(), SEALED);
 }
 
 /// A witness is named by its head, a test by its name, and a member of a group by its own.

@@ -563,7 +563,7 @@ satisfy /std/Spell(Dot) { .. }
 /std/print(\"\")
 ";
 
-/// A declaration's block states what its source does not show, in the words its documentation page says the same facts in — how its representation stands, that it is a proof, whether it is proven total — and holds its source as one entry: its prose above its head, its members with it whether or not a consumer sees them, and its body left out. What the source line shows, its keyword and its own `pub`, is no fact, and neither is a type the head states.
+/// A declaration's block states what its source does not show, in the words its documentation page says the same facts in — how its representation stands, that it is a proof, whether it is proven total — and holds its source as one entry: its prose above its head, its members with it where its representation is public and its head alone where it is kept, as its page shows it, and its body left out. What the source line shows, its keyword and its own `pub`, is no fact, and neither is a type the head states.
 #[test]
 fn a_block_states_what_a_source_does_not_show_and_holds_the_source() {
     let root = temporary("named-facts");
@@ -585,9 +585,7 @@ fn a_block_states_what_a_source_does_not_show_and_holds_the_source() {
             "/Shade\n",
             "│  opaque\n",
             "├─ --- A shade, kept.\n",
-            "│  struct Shade: Type {\n",
-            "│      depth: Nat,\n",
-            "│  }\n",
+            "│  struct Shade: Type\n",
             "└─ [declaration] facts.crs:4:8\n",
         )
     );

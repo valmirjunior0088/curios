@@ -1083,7 +1083,7 @@ impl Heading {
         )
     }
 
-    /// The definition as a block that answers it shows it, one entry: its prose, each line behind the `---` that opens one, above the declaration as its source writes it with every body left out — its members whether or not a consumer sees them, since the answer is of the source and says in a word how the representation stands — and a member's prose above its own line, inside its owner's block, at the indent the member is written at.
+    /// The definition as a block that answers it shows it, one entry: its prose, each line behind the `---` that opens one, above the declaration as its source writes it with every body left out — a family's constructors and a structure's fields where its representation is public and its head alone where it is kept, as its page shows it ([`Block::of`]), and a concept's methods either way. A member is the entry's subject: it stands within its owner's head and closing word whatever its owner keeps, its prose above its own line.
     pub fn entry(&self) -> String {
         let prose = |indent: &str| {
             self.prose
@@ -1095,9 +1095,8 @@ impl Heading {
                 .collect::<Vec<_>>()
         };
 
-        // The block a declaration of the kind writes, whoever sees it: none for a definition or a witness, which is its head, and none where the representation is kept and no member of it is held, as of one read off a consumer's record.
-        let unheld = self.opaque && self.members.is_empty();
-        let Some(block) = Block::of(self.kind, false).filter(|_| !unheld) else {
+        // The block a declaration of the kind writes where its representation shows one: none for a definition or a witness, which is its head, and none for a family or a structure that keeps its representation. A member is what was asked, so it is shown within its owner either way.
+        let Some(block) = Block::of(self.kind, self.opaque && !self.member) else {
             let mut lines = prose("");
             lines.push(self.head.clone());
 
