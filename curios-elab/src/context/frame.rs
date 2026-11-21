@@ -119,10 +119,10 @@ pub struct ScrutineeEntry {
     pub alias: bool,
     /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the certifier spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
     pub withheld: bool,
-    /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`), or an arm on an expression restated it as it was (`Context::restate_read`). Its spelling is settled in this frame and goes with it.
+    /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`). Its spelling is settled in this frame and goes with it.
     pub restates: bool,
-    /// Whether an arm on an expression restated the equation, as it was, in a frame of its own inside the arm's. The recorded entry then steps aside only for what this frame's settlements and lookups read, and a settlement made outside this frame — the arm's own equation's — reads the recorded entry, as it was recorded under it. An arm's solution re-types what a settlement reads, so an entry restated under one hides the recorded entry wherever its frame stands.
-    pub restated_by_expression: bool,
+    /// The equation the entry spells, numbered among those its frame registers: an arm registers one equation under every spelling it is met by, and a catch-all one for each key it passed. What a view withholds alone while that equation's spelling is settled again ([`Frames::withhold_equation`](super::Frames::withhold_equation)).
+    pub equation: usize,
 }
 
 /// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.
@@ -179,6 +179,36 @@ impl Spelling {
     /// The entry's reduced spelling while `stands` says what it rests on beyond its frames still stands, and nothing once it does not.
     pub fn settled_while(self, stands: impl FnOnce(&Footing) -> bool) -> Option<Option<Settled>> {
         stands(&self.footing).then_some(self.settled)
+    }
+}
+
+/// What a settlement of an entry's spelling again, at a height past its own, left: its spelling there, beside the entry's own spelling it was reduced on from.
+///
+/// **It answers only while that is still the entry's own.** An entry's own spelling is settled again where what it rests on moves (a solution landing where it held an unsolved metavariable, a rewrite of levels, an answer withdrawn), and a spelling reduced on from the one before is no reduct of the new one; its own footing reads only what its own reduction met.
+#[derive(Debug, Clone)]
+pub struct SpelledAgain {
+    /// The own spelling's unerased reduct it was reduced on from, or `None` where that one refused.
+    from: Option<Term>,
+    spelling: Spelling,
+}
+
+impl SpelledAgain {
+    pub fn new(from: Option<Term>, settled: Option<Settled>, footing: Footing) -> Self {
+        Self {
+            from,
+            spelling: Spelling { settled, footing },
+        }
+    }
+
+    /// The spelling again while `from` is still the entry's own spelling it was reduced on from, and `stands` says what it rests on still stands.
+    pub fn settled_from(
+        &self,
+        from: &Option<Term>,
+        stands: impl FnOnce(&Footing) -> bool,
+    ) -> Option<Option<Settled>> {
+        (self.from == *from)
+            .then(|| self.spelling.clone().settled_while(stands))
+            .flatten()
     }
 }
 
@@ -362,6 +392,12 @@ pub struct Frame {
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the certifier settles an equation's reduct once for each.
     scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
+    /// The reduced spelling again of each scrutinee entry registered in a frame outside this one, settled with this frame the innermost in view that registers a refinement: under the entry's frame's depth and its key, for each of the two reductions as [`Frame::scrutinee_spellings`] is.
+    ///
+    /// **An arm moves what an entry outside it is spelled as, and nothing else of it.** The arm registers an equation of its own, which an entry registered outside did not read: under a guard `pick(c)` whose definition matches on `e(c)`, an arm on `e(c)` is where the guard's spelling is a case of that match. Which entries an arm's own moves is known only by settling them under it, so every entry is settled again at each height it is asked at ([`Frames::height`](super::Frames::height)), from its own spelling and with its own equation alone withheld ([`Frames::withhold_equation`](super::Frames::withhold_equation)), and none until a probe asks. The entry keeps its frame and its value, so an arm's own equation still answers before one registered outside it.
+    ///
+    /// **It lives as long as this frame registers nothing more.** It rests on the refinements of this frame and the frames beneath, which hold still until this one registers another, and it is forgotten there; otherwise it stands while its [`Footing`] does, as an entry's own spelling does.
+    spellings_again: RefCell<[HashMap<(usize, Term), SpelledAgain>; 2]>,
     /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///
     /// **It rests on the refinements it read, and on the deepest frame it read.** Every settlement of such an entry withholds the frames from its entry's inwards and reads the refinements of this frame and the frames beneath, which hold still while this one registers nothing more: a registration, and an equation withheld, land in the innermost frame and forget what is kept here. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the deepest frame it read ([`Prefix`], `Frames::begin_reads`) and answers only while that frame still stands, and with a footing that reads every part, since its reducts are many.
@@ -408,6 +444,7 @@ impl Frame {
                 refinement_projections: Recorded::new(),
                 refinement_scrutinees: Recorded::new(),
                 scrutinee_spellings: Default::default(),
+                spellings_again: Default::default(),
                 settled_windows: Default::default(),
                 dead_arm: None,
                 arm: None,
@@ -444,6 +481,7 @@ impl Frame {
             refinement_projections: Recorded::new(),
             refinement_scrutinees: Recorded::new(),
             scrutinee_spellings: Default::default(),
+            spellings_again: Default::default(),
             settled_windows: Default::default(),
             dead_arm: beneath.dead_arm.clone(),
             arm: None,

@@ -1431,29 +1431,6 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     Ok(())
 }
 
-/// `body`, in the arm an arm opener has just entered over `keys` ([`refine_head`]) — the scrutinee, or a catch-all's tests — with every equation in force whose settlement meets one of them whole restated ([`Context::equations_read_by`]): in a frame of its own inside the arm's, so each is settled with the arm's own equations in view, as the certifier settles an equation it restates after the arm's. Where none is, `body` runs in the arm's frame as it stands. A variable scrutinee restates what reads it where it is refined ([`Context::refine`]).
-pub fn under_restated<R>(
-    context: &mut Context,
-    keys: &[Term],
-    body: impl FnOnce(&mut Context) -> R,
-) -> R {
-    if let [key] = keys
-        && let Subterm::Var(var) = &**key
-        && var.as_free().is_some()
-    {
-        return body(context);
-    }
-    let equations = context.equations_read_by(keys);
-    if equations.is_empty() {
-        return body(context);
-    }
-
-    context.with_frame(|context| {
-        context.restate_read(equations);
-        body(context)
-    })
-}
-
 /// The most-general solution of a case's index equations, `actuals ~ targets` over the case's `binders` and the outer variables, each side as the certifier is handed it ([`Context::certifier_spelling`]). A variable an arm in force refined is spelled as its value there, so the outer variables are the same locals to both checkers and none is one an arm already solved, and the occurs check reads what the elaborator's store would read back.
 pub fn solve_case_indices(
     context: &mut Context,

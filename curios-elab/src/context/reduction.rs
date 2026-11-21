@@ -1,7 +1,7 @@
 //! The context's doors to reduction's caches and to the protocol by which reduction asks conversion.
 
 use {
-    super::{ElabProbe, ElaborationStamp, Footing},
+    super::{ElabProbe, ElaborationStamp, Footing, SpelledAgain},
     crate::{AskedAt, Context, Settled, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{Bound, ClosedMemo, Free, Level, ReduceError, Sort, Term},
@@ -115,8 +115,24 @@ impl<'s> Context<'s> {
         self.typing.caches.proof_insert(name, proof);
     }
 
-    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`](super::Frame::scrutinee_spellings) carries how long one stands.
+    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`, at the height the view in force reads one at ([`Context::scrutinee_height`]): `None` if no probe has asked for it there yet, `Some(None)` if reducing it refused. Up to one past its frame that is its own spelling ([`Context::settled_own_key`]); past it, the spelling settled again there, while the own spelling it was reduced on from is still the entry's own.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
+        let height = self.scrutinee_height();
+        let own = self.settled_own_key(frame, key);
+        if height <= frame + 1 {
+            return own;
+        }
+        let from = own?.map(|own| own.unerased);
+        let again =
+            self.typing
+                .frames
+                .spelling_again(frame, key, self.typing.asking.plain(), height)?;
+
+        again.settled_from(&from, |footing| self.stands(footing))
+    }
+
+    /// The own reduced spelling of the scrutinee entry `key` registered in `frame`, whatever the height in view: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`](super::Frame::scrutinee_spellings) carries how long one stands.
+    pub(crate) fn settled_own_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
         let spelling = self
             .typing
             .frames
@@ -125,7 +141,12 @@ impl<'s> Context<'s> {
         spelling.settled_while(|footing| self.stands(footing))
     }
 
-    /// Record a settlement, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
+    /// The height the view in force reads a reduced spelling at ([`Frames::height`](super::Frames::height)).
+    pub(crate) fn scrutinee_height(&self) -> usize {
+        self.typing.frames.height()
+    }
+
+    /// Record a settlement of an entry's own spelling, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
     pub(crate) fn record_settled_key(
         &mut self,
         frame: usize,
@@ -139,6 +160,25 @@ impl<'s> Context<'s> {
             self.typing.asking.plain(),
             settled,
             footing,
+        );
+    }
+
+    /// Record a settlement of an entry's spelling again at `height`, past its own: what it settled to, on what it rests on, beside `from`, the own spelling it was reduced on from — `None` where that one refused. Recorded whatever its metavariables, for [`Context::record_settled_key`]'s reason.
+    pub(crate) fn record_settled_key_again(
+        &mut self,
+        frame: usize,
+        key: Term,
+        height: usize,
+        from: Option<Term>,
+        settled: Option<Settled>,
+        footing: Footing,
+    ) {
+        self.typing.frames.settle_spelling_again(
+            frame,
+            key,
+            self.typing.asking.plain(),
+            height,
+            SpelledAgain::new(from, settled, footing),
         );
     }
 

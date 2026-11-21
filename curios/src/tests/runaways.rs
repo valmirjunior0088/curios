@@ -2,7 +2,7 @@
 //!
 //! A runaway is a short program whose one claim makes a checker do more the longer it is let run: a recursion that takes a step a unit, a pair of calls whose unfolding meets the pair again, a sum that gains a summand or a product a factor at every step, a type that nests a constructor at every step. None is refused for what it is written as. Each is answered by a verdict where a rule decides it, inside a budget its fixture states, and ended by its budget where none does; what a unit of that budget buys is the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a count of units cannot show.
 //!
-//! A runaway that answers inside a stated budget is a fixture here; `runaway_measurements`, among the instrumented tests, counts what every one costs at a budget and at twice it.
+//! A runaway that answers inside a stated budget is a fixture here, and so is a proof a rule keeps inside one, stated whole; `runaway_measurements`, among the instrumented tests, counts what every runaway costs at a budget and at twice it.
 //!
 //! What a budget may never do is decide: the two fixtures at the end are a program refused at every budget, where a clash concluded from an unfinished computation would have excused an arm at an equation a lemma inhabits, and a pair of programs with one edge, where a memo crossing a declaration boundary would have let a neighbour pay for a fold. Both are stated at budgets rather than at sizes, so they read what exhaustion is allowed to conclude rather than what a unit buys.
 
@@ -297,6 +297,79 @@ fn two_types_nested_alike_are_told_apart_inside_their_budget() {
     let report = refused(1_000_000, Runaway::Nests(500));
 
     assert!(report.contains("type mismatch"), "{report}");
+}
+
+/// A proof whose guards meet an arm on an expression at every step: `/std`'s former `Int/DivMod/unique`, which splits an integer by its sign and bounds both splits through the elaborator's procedure, every bound a match on a comparison inside the arms of the ones before it.
+const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
+    use /std/{Nat, Int, Eq, proved, Bool, Io};
+
+    struct DivMod(n: Int, d: Nat): Type {
+        quotient: Int,
+        remainder: Nat,
+        joined: Eq()(n, quotient * Nat/to_int(d) + Nat/to_int(remainder)),
+        bounded: Bool/Holds(remainder < d),
+    }
+
+    let of(n: Int, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =
+        match Int/view(n)
+        | nonneg(m) =>
+            DivMod {
+                quotient = Nat/to_int(m / d),
+                remainder = m % d,
+                joined =
+                    Int/eq_of_eql(
+                        Nat/to_int(m),
+                        Nat/to_int(m / d) * Nat/to_int(d) + Nat/to_int(m % d),
+                        proved()),
+                bounded = Bool/True/qed() }
+        | neg(m) =>
+            DivMod {
+                quotient = -1 - Nat/to_int(m / d),
+                remainder = d - 1 - m % d,
+                joined =
+                    Int/eq_of_eql(
+                        -1 - Nat/to_int(m),
+                        (-1 - Nat/to_int(m / d)) * Nat/to_int(d) + Nat/to_int(d - 1 - m % d),
+                        proved()),
+                bounded = proved() }
+        end;
+
+    let unique(
+        n: Int,
+        d: Nat,
+        q: Int,
+        r: Nat,
+        @ok: Bool/Holds(0 < d),
+        joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)),
+        bounded: Bool/Holds(r < d),
+    ) -> {quotient: Eq()(q, of(n, d).quotient), remainder: Eq()(r, of(n, d).remainder)} =
+        let split = of(n, d);
+        let same: Bool/Holds(
+            q * Nat/to_int(d) + Nat/to_int(r)
+                == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) = proved();
+        let quotient: Eq()(q, split.quotient) = Int/eq_of_eql(q, split.quotient, proved());
+        let rest: Bool/Holds(
+            split.quotient * Nat/to_int(d) + Nat/to_int(r)
+                == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) =
+            Eq/subst(
+                (x: Int) =>
+                    Bool/Holds(
+                        x * Nat/to_int(d) + Nat/to_int(r)
+                            == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)),
+                quotient,
+                same);
+        (quotient = quotient, remainder = Nat/eq_of_eql(r, split.remainder, proved()));
+
+    Io/pure(())
+    "#;
+
+/// A proof whose guards meet an arm on an expression at every step answers inside a million units, in both checkers: under each arm every guard in force is settled again from its own spelling, a walk of the term its key already reduced to, where settled again from its key each guard would unfold again at every arm inside it.
+#[test]
+fn a_proof_whose_guards_every_arm_settles_again_answers_inside_its_budget() {
+    assert_eq!(
+        typecheck_within(1_000_000, A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN),
+        Ok(())
+    );
 }
 
 /// A clash the budget cannot finish is not concluded, at any budget. `countdown(2000)` is `0`, so `Eq()(countdown(2000), 0)` is inhabited — and `zero` proves it by induction without running the recursion, a cheap proof of an expensive equation. The arm of `match h end` may be left out only where the two forcings of `refl`'s binder definitely clash; they never do, because the two sides are one number. A budget that cannot reduce the recursion leaves them undecided and one that can holds them one, so the program is refused at every budget, below for exhaustion and above for the arm.

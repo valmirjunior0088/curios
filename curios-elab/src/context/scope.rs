@@ -7,13 +7,13 @@ use {
         Context, DeadArm, HeldFrames, Question, RegionOwner, ScrutineeEntry, hold_at_one_instance,
         key_spelling, shallow_scrutinee, zonk_solved_term_metas,
     },
-    curios_analysis::{meets_one_of, reads_one_of, records_case_equation},
+    curios_analysis::{reads_one_of, records_case_equation},
     curios_common::Plicity,
     curios_core::{
         Advance, DefinitionKind, Free, Global, HeadTag, Label, Mention, RecGroup, Subterm, Term,
         Universes, project_erased_universes,
     },
-    std::rc::Rc,
+    std::{collections::HashMap, rc::Rc},
 };
 
 impl<'s> Context<'s> {
@@ -359,14 +359,18 @@ impl<'s> Context<'s> {
             .frames
             .scrutinee_equations()
             .into_iter()
-            .filter_map(|(key, entry)| {
+            .filter_map(|(frame, key, entry)| {
                 let original = zonk_solved_term_metas(self, &entry.original);
                 reads_one_of(&original, &[*name], |local| self.readings(local))
-                    .then_some((key, entry, original))
+                    .then_some((frame, key, entry, original))
             })
             .collect::<Vec<_>>();
 
-        for (key, entry, original) in named {
+        // Each equation restated is one equation in the arm's frame, all its spellings one number, as they were one where it was registered: the view an equation's spelling is settled again in withholds every spelling of it.
+        let mut equations = HashMap::new();
+        for (frame, key, entry, original) in named {
+            let next = self.typing.frames.next_equation();
+            let equation = *equations.entry((frame, entry.equation)).or_insert(next);
             let original = original.substitute(&solution);
             let restated_key = shallow_scrutinee(self, &original);
             let restates = restated_key == key;
@@ -376,7 +380,7 @@ impl<'s> Context<'s> {
                 alias: entry.alias,
                 withheld: false,
                 restates,
-                restated_by_expression: false,
+                equation,
             };
             if !restates {
                 self.typing.frames.withhold_scrutinee(key, entry);
@@ -404,44 +408,6 @@ impl<'s> Context<'s> {
             .collect()
     }
 
-    /// The equations in force, recorded outside the frame being elaborated, whose settlement would meet one of `keys` whole as the certifier spells it: one whose scrutinee holds such a key, or a local whose type or definition holds one, read through to the end (`curios_analysis::meets_one_of`, the rule the certifier restates by). An arm on an expression assumes an equation over each of its keys, which such an equation's spelling, settled outside the arm, cannot have read ([`Context::restate_read`]).
-    pub(crate) fn equations_read_by(&self, keys: &[Term]) -> Vec<(Term, ScrutineeEntry)> {
-        if !self.typing.frames.has_scrutinee_refinements() {
-            return Vec::new();
-        }
-        let keys = keys
-            .iter()
-            .map(|key| self.certifier_spelling(key))
-            .collect::<Vec<_>>();
-        let arm = self.typing.frames.innermost_depth();
-
-        self.typing
-            .frames
-            .visible_scrutinee_entries()
-            .filter(|(frame, _, _)| *frame < arm)
-            .filter(|(_, _, entry)| {
-                let original = zonk_solved_term_metas(self, &entry.original);
-                meets_one_of(&original, &keys, |local| self.readings(local))
-            })
-            .map(|(_, key, entry)| (key.clone(), entry.clone()))
-            .collect()
-    }
-
-    /// Register each of `equations` again in the frame being elaborated, standing in for its recorded entry while the frame stands ([`ScrutineeEntry::restates`]): an arm on an expression restating the equations its own reads ([`Context::equations_read_by`]). The frame is one of its own inside the arm's, so a settlement, which withholds its entry's frame and every frame inside it, settles each with the arm's equation in view, as the certifier settles an equation it restates after the arm's own.
-    pub(crate) fn restate_read(&mut self, equations: Vec<(Term, ScrutineeEntry)>) {
-        for (key, entry) in equations {
-            self.typing.frames.refine_scrutinee(
-                key,
-                ScrutineeEntry {
-                    withheld: false,
-                    restates: true,
-                    restated_by_expression: true,
-                    ..entry
-                },
-            );
-        }
-    }
-
     /// [`Frames::spelled_as_refined`](super::Frames::spelled_as_refined).
     pub(crate) fn spelled_as_refined(&self, term: &Term) -> Term {
         self.typing.frames.spelled_as_refined(term)
@@ -467,9 +433,11 @@ impl<'s> Context<'s> {
             .frames
             .scrutinee_equations()
             .into_iter()
-            .filter(|(_, entry)| !records_case_equation(&self.certifier_spelling(&entry.original)))
+            .filter(|(_, _, entry)| {
+                !records_case_equation(&self.certifier_spelling(&entry.original))
+            })
             .collect::<Vec<_>>();
-        for (key, entry) in closed {
+        for (_, key, entry) in closed {
             self.typing.frames.withhold_scrutinee(key, entry);
         }
     }
@@ -563,6 +531,8 @@ impl<'s> Context<'s> {
         value: &Term,
     ) {
         self.typing.caches.invalidate_for_refinement();
+        // One equation under every spelling: the view its spelling is settled again in withholds them all.
+        let equation = self.typing.frames.next_equation();
         for (canonical, original, alias) in spellings {
             self.typing.frames.refine_scrutinee(
                 canonical,
@@ -572,7 +542,7 @@ impl<'s> Context<'s> {
                     alias,
                     withheld: false,
                     restates: false,
-                    restated_by_expression: false,
+                    equation,
                 },
             );
         }
@@ -606,7 +576,12 @@ impl<'s> Context<'s> {
 
     /// Every equation in force with the key it is held under, aliases among them, innermost frame first.
     pub(crate) fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
-        self.typing.frames.scrutinee_equations()
+        self.typing
+            .frames
+            .scrutinee_equations()
+            .into_iter()
+            .map(|(_, key, entry)| (key, entry))
+            .collect()
     }
 
     /// What the arms in force refine, each as a term naming the refined term's locals beside its value: each variable an arm refines, each projection by the term it projects, and each scrutinee equation in force under its key and its unerased spelling ([`curios_analysis::Driver::refined`]).
@@ -619,7 +594,9 @@ impl<'s> Context<'s> {
         let scrutinees = frames
             .scrutinee_equations()
             .into_iter()
-            .flat_map(|(key, entry)| [(key, entry.value.clone()), (entry.original, entry.value)]);
+            .flat_map(|(_, key, entry)| {
+                [(key, entry.value.clone()), (entry.original, entry.value)]
+            });
 
         variables
             .chain(frames.projection_refinements())
@@ -687,5 +664,47 @@ impl<'s> Context<'s> {
         }
 
         result
+    }
+
+    /// Run `f` with the entries of the one equation `equation` registered in `frame` withheld alone among the frames before `height`, and the refinements of every frame from `height` inwards: the bracket an entry's spelling is settled again under at a height past its own ([`Frames::withhold_equation`](super::Frames::withhold_equation)). The caches set the live window's scoped answers aside for it as for any settlement, and it starts from nothing a settlement kept and keeps nothing: what it remembers rests on frames inside the entry's, which a settlement of another entry does not read alike.
+    pub(crate) fn with_equation_withheld<R>(
+        &mut self,
+        height: usize,
+        frame: usize,
+        equation: usize,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let plain = self.typing.asking.plain();
+        self.typing.frames.begin_reads(0);
+        self.typing
+            .caches
+            .enter_window(Bracket::Settlement { plain }, None);
+        let previous = self
+            .typing
+            .frames
+            .withhold_equation(height, frame, equation);
+        let result = f(self);
+        self.typing.frames.restore_withheld_refinements(previous);
+        self.typing.frames.end_reads();
+        self.typing.caches.leave_window();
+
+        result
+    }
+
+    /// Run `f` in the view the spelling of the entry `key` registered in `frame` is settled in at `height`, and asked about: up to its own height, one past its frame, that frame and every frame inside it withheld ([`Context::with_refinements_withheld_from`]); past it, the entry's equation alone among the frames before `height` ([`Context::with_equation_withheld`]).
+    pub(crate) fn settling<R>(
+        &mut self,
+        frame: usize,
+        key: &Term,
+        height: usize,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        match (height > frame + 1)
+            .then(|| self.typing.frames.scrutinee_equation(frame, key))
+            .flatten()
+        {
+            Some(equation) => self.with_equation_withheld(height, frame, equation, f),
+            None => self.with_refinements_withheld_from(frame, f),
+        }
     }
 }

@@ -13,8 +13,8 @@
 use {
     super::{
         Binding, ByValue, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry,
-        Recorded, ScrutineeEntry, Settled, Spelling, at, refined_through, refinements_within,
-        stand,
+        Recorded, ScrutineeEntry, Settled, SpelledAgain, Spelling, at, refined_through,
+        refinements_within, stand,
     },
     crate::DefinedGroup,
     crate::{
@@ -57,6 +57,8 @@ pub struct Frames<'s> {
     ///
     /// The bracket the certifier has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
+    /// The one equation withheld alone among the frames a settlement leaves in view, as the depth of the frame that registers it and its number there ([`ScrutineeEntry::equation`]) — `None` outside the settlement of an entry's spelling again past its own height, and outside a question asked in that view ([`Frames::withhold_equation`]).
+    masked_equation: Option<(usize, usize)>,
     /// How many frames have been entered: the number the next one takes ([`Frame::number`]).
     entered: u64,
     /// The deepest frame each settlement under way has read, the innermost settlement last ([`Frames::begin_reads`]).
@@ -120,6 +122,7 @@ impl<'s> Frames<'s> {
             stood: 0,
             members: HashMap::new(),
             withhold_refinements_from: None,
+            masked_equation: None,
             entered: 0,
             reads: RefCell::new(Vec::new()),
         }
@@ -373,11 +376,6 @@ impl<'s> Frames<'s> {
         rebound(self.top.as_ref()) == rebound(held.innermost())
     }
 
-    /// The depth of the innermost frame, the one being elaborated.
-    pub fn innermost_depth(&self) -> usize {
-        self.innermost_frame().depth
-    }
-
     /// The innermost frame as it stands: the frame a block's end leaves.
     pub fn innermost_frame(&self) -> &Frame {
         self.read_scope();
@@ -418,7 +416,10 @@ impl<'s> Frames<'s> {
         self.stands.push(self.stood);
 
         SetAside {
-            withheld: self.withhold_refinements_from.take(),
+            withheld: Withheld {
+                from: self.withhold_refinements_from.take(),
+                equation: self.masked_equation.take(),
+            },
         }
     }
 
@@ -426,7 +427,7 @@ impl<'s> Frames<'s> {
     pub fn stand_back(&mut self, aside: SetAside) {
         self.top = self.aside.pop().expect("a stand set its frames aside");
         self.stands.pop();
-        self.withhold_refinements_from = aside.withheld;
+        self.restore_withheld_refinements(aside.withheld);
     }
 
     /// Drop the declaration `name`: its type, its universe context and its definition, undone when its item is refused.
@@ -680,11 +681,24 @@ impl<'s> Frames<'s> {
         frame.refinement_scrutinees.insert(canonical, entry);
         forget_settled_windows(frame);
     }
-    /// What the entry `key` registered in the frame at depth `frame` settled to under the reduction `plain` names, where a probe has asked for it, beside what it rests on: the context reads whether that still stands (`Context::settled_key`).
+    /// What the entry `key` registered in the frame at depth `frame` settled to under the reduction `plain` names, where a probe has asked for it, beside what it rests on: the context reads whether that still stands (`Context::settled_own_key`). The entry's own spelling, kept by its frame.
     pub fn spelling(&self, frame: usize, key: &Term, plain: bool) -> Option<Spelling> {
         self.read(frame);
         self.frame_at(frame)?.scrutinee_spellings.borrow()[usize::from(plain)]
             .get(key)
+            .cloned()
+    }
+    /// What the entry `key` registered in the frame at depth `frame` settled to again at `height`, past its own, under the reduction `plain` names, where a probe has asked for it there: kept by the frame the height's view ends at ([`Frame::spellings_again`](super::Frame)). The context reads whether it still stands (`Context::settled_key`).
+    pub fn spelling_again(
+        &self,
+        frame: usize,
+        key: &Term,
+        plain: bool,
+        height: usize,
+    ) -> Option<SpelledAgain> {
+        self.read(height - 1);
+        self.frame_at(height - 1)?.spellings_again.borrow()[usize::from(plain)]
+            .get(&(frame, key.clone()))
             .cloned()
     }
     /// File what the entry `key` registered in the frame at depth `frame` settled to under the reduction `plain` names, on what it rests on. Filed in the frame's own memo, which every holder of the frame reads: the live context and a judgment standing on the frame settle a key once between them.
@@ -701,12 +715,34 @@ impl<'s> Frames<'s> {
                 .insert(key, Spelling { settled, footing });
         }
     }
+    /// File what the entry `key` registered in the frame at depth `frame` settled to again at `height`, past its own, under the reduction `plain` names: `again`, beside the own spelling it was reduced on from. Filed in the memo of the frame the height's view ends at, which every holder of that frame reads.
+    pub fn settle_spelling_again(
+        &mut self,
+        frame: usize,
+        key: Term,
+        plain: bool,
+        height: usize,
+        again: SpelledAgain,
+    ) {
+        if let Some(under) = self.frame_at(height - 1) {
+            under.spellings_again.borrow_mut()[usize::from(plain)].insert((frame, key), again);
+        }
+    }
     /// Forget the settled spellings a fresh definition of `name` can change: the ones naming it, which were stuck on its absence, and the ones that refused. Asked of the frames that stand and of those set aside, where a frame that registers a scrutinee entry is one that registers a refinement: a frame that has left the context names no binder defined since.
     pub fn forget_spellings_naming(&mut self, name: &Mention) {
         for frame in self.refined_everywhere() {
             for spellings in frame.scrutinee_spellings.borrow_mut().iter_mut() {
                 spellings.retain(|_, spelling| {
                     spelling
+                        .settled
+                        .as_ref()
+                        .is_some_and(|settled| !settled.unerased.mentions_name(name))
+                });
+            }
+            for spellings in frame.spellings_again.borrow_mut().iter_mut() {
+                spellings.retain(|_, again| {
+                    again
+                        .spelling
                         .settled
                         .as_ref()
                         .is_some_and(|settled| !settled.unerased.mentions_name(name))
@@ -802,6 +838,7 @@ impl<'s> Frames<'s> {
             frame
                 .refinement_scrutinees
                 .get(canonical)
+                .filter(|entry| !self.masked(frame.depth, entry))
                 .map(|entry| (frame.depth, entry))
         })?;
 
@@ -817,14 +854,17 @@ impl<'s> Frames<'s> {
                 .refinement_scrutinees
                 .iter()
                 .filter(move |(key, entry)| {
-                    !entry.alias && !entry.withheld && !self.withheld_inside(frame.depth, key)
+                    !entry.alias
+                        && !entry.withheld
+                        && !self.masked(frame.depth, entry)
+                        && !self.withheld_inside(frame.depth, key)
                 })
                 .map(move |(key, entry)| (frame.depth, key, entry))
         })
     }
 
-    /// Every equation the window leaves in force with the key it is held under, aliases among them, innermost frame first: what a variable's refinement is read against.
-    pub fn scrutinee_equations(&self) -> Vec<(Term, ScrutineeEntry)> {
+    /// Every equation the window leaves in force with the depth of the frame that registers it and the key it is held under, aliases among them, innermost frame first: what a variable's refinement is read against.
+    pub fn scrutinee_equations(&self) -> Vec<(usize, Term, ScrutineeEntry)> {
         self.refined_in_view()
             .flat_map(|frame| {
                 frame
@@ -833,9 +873,17 @@ impl<'s> Frames<'s> {
                     .filter(move |(key, entry)| {
                         !entry.withheld && !self.withheld_inside(frame.depth, key)
                     })
-                    .map(|(key, entry)| (key.clone(), entry.clone()))
+                    .map(|(key, entry)| (frame.depth, key.clone(), entry.clone()))
             })
             .collect()
+    }
+
+    /// The equation the entry `key` registered in the frame at depth `frame` spells ([`ScrutineeEntry::equation`]).
+    pub fn scrutinee_equation(&self, frame: usize, key: &Term) -> Option<usize> {
+        self.frame_at(frame)?
+            .refinement_scrutinees
+            .get(key)
+            .map(|entry| entry.equation)
     }
 
     /// Every equation an arm in the window withholds, as the entry withholding it, innermost frame first.
@@ -865,21 +913,17 @@ impl<'s> Frames<'s> {
         forget_settled_windows(frame);
     }
 
-    /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it — one an arm on an expression restated only for a settlement made at or inside that frame ([`ScrutineeEntry::restated_by_expression`]).
+    /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it.
     ///
     /// **Past a settlement's ceiling too.** A settlement withholds the refinements of the frames from its own inwards, and an arm's step-aside is no refinement: the recorded equation steps aside in the arm that restated or withheld it from every lookup and every settlement made while the arm stands, as the certifier's `Scope::restate` has it, so a restatement settled with its own frame withheld settles under the arm's re-typing and goes with it, and the recorded equation settles only where the arm does not stand.
     fn withheld_inside(&self, frame: usize, key: &Term) -> bool {
         self.refined_standing()
             .filter(|inner| frame < inner.depth)
             .any(|inner| {
-                inner.refinement_scrutinees.get(key).is_some_and(|entry| {
-                    entry.withheld
-                        || (entry.restates
-                            && (!entry.restated_by_expression
-                                || self
-                                    .withhold_refinements_from
-                                    .is_none_or(|ceiling| inner.depth <= ceiling)))
-                })
+                inner
+                    .refinement_scrutinees
+                    .get(key)
+                    .is_some_and(|entry| entry.withheld || entry.restates)
             })
     }
 
@@ -953,13 +997,53 @@ impl<'s> Frames<'s> {
     /// Begin withholding the refinements of the frame at depth `frame` and every frame inside it, returning the previous limit — the bracket intrinsic for `Context::with_refinements_withheld_from`.
     ///
     /// Always at or outside the current limit, since a settlement is only ever asked for an entry the window already shows, so nesting narrows the window and restoring widens it back.
-    pub fn withhold_refinements_from(&mut self, frame: usize) -> Option<usize> {
-        self.withhold_refinements_from.replace(frame)
+    pub fn withhold_refinements_from(&mut self, frame: usize) -> Withheld {
+        Withheld {
+            from: self.withhold_refinements_from.replace(frame),
+            equation: self.masked_equation.take(),
+        }
     }
 
-    /// Restore a limit taken by [`withhold_refinements_from`](Self::withhold_refinements_from).
-    pub fn restore_withheld_refinements(&mut self, previous: Option<usize>) {
-        self.withhold_refinements_from = previous;
+    /// Begin withholding the entries of one equation alone — the one numbered `equation` among those the frame at depth `frame` registers — among the frames before `height`, and the refinements of every frame from `height` inwards, returning what was withheld before: the bracket intrinsic for `Context::with_equation_withheld`, the view an entry's spelling is settled again in at a height past its own, and asked about.
+    ///
+    /// The certifier's `Scope::mask_refinement`. The frames registered since the entry's are in view, which is what the spelling is settled again for; the equation itself is withheld for the reason its own settlement withholds its frame. One equation and not its frame: a catch-all registers an equation for each key it passed, and the others stay in view while one is settled again.
+    pub fn withhold_equation(&mut self, height: usize, frame: usize, equation: usize) -> Withheld {
+        Withheld {
+            from: self.withhold_refinements_from.replace(height),
+            equation: self.masked_equation.replace((frame, equation)),
+        }
+    }
+
+    /// Restore what [`withhold_refinements_from`](Self::withhold_refinements_from) or [`withhold_equation`](Self::withhold_equation) replaced.
+    pub fn restore_withheld_refinements(&mut self, previous: Withheld) {
+        self.withhold_refinements_from = previous.from;
+        self.masked_equation = previous.equation;
+    }
+
+    /// The height the view in force reads a reduced spelling at: one past the depth of the innermost frame in view that registers a refinement, or zero where none does. With one equation withheld alone, whose spelling is being settled again or asked about, the view is read one frame short: the others answer as they did before the innermost of them was registered.
+    ///
+    /// The certifier's `Scope::height`, over frames: an entry's spelling at a height is a function of the spellings beneath it, so which of two entries a probe asked first moves neither.
+    pub fn height(&self) -> usize {
+        let ceiling = self.refinement_ceiling() - usize::from(self.masked_equation.is_some());
+        self.refined_standing()
+            .map(|frame| frame.depth)
+            .find(|depth| *depth < ceiling)
+            .map_or(0, |depth| depth + 1)
+    }
+
+    /// Whether the view in force withholds `entry`, registered in the frame at depth `frame`, as the one equation withheld alone.
+    fn masked(&self, frame: usize, entry: &ScrutineeEntry) -> bool {
+        self.masked_equation == Some((frame, entry.equation))
+    }
+
+    /// The number the next equation the innermost frame registers takes ([`ScrutineeEntry::equation`]): one past the greatest it holds.
+    pub fn next_equation(&self) -> usize {
+        self.innermost_frame()
+            .refinement_scrutinees
+            .iter()
+            .map(|(_, entry)| entry.equation + 1)
+            .max()
+            .unwrap_or(0)
     }
 
     /// The frozen telescope and identity spine for the *current* Γ, shared: the innermost frame's, which the frames extend a binder at a time ([`Frame`]), so minting a metavariable costs nothing more than the one before it, whatever the scope.
@@ -977,12 +1061,21 @@ impl<'s> Frames<'s> {
 /// Forget what the settlements made under `frame`'s refinements remembered: the frame registers another, which they were not made under.
 fn forget_settled_windows(frame: &Frame) {
     *frame.settled_windows.borrow_mut() = Default::default();
+    // A spelling settled again with this frame innermost in view read what the frame registered then.
+    *frame.spellings_again.borrow_mut() = Default::default();
 }
 
 /// What a judgment standing on held frames set aside beside the frames themselves ([`Frames::stand_on`]): the withholding in force among them.
 #[derive(Debug)]
 pub struct SetAside {
-    withheld: Option<usize>,
+    withheld: Withheld,
+}
+
+/// What a settlement, or a question asked in a settlement's view, withholds of the refinement stack, as [`Frames::restore_withheld_refinements`] puts it back: the frame it withholds from, and the one equation it withholds alone.
+#[derive(Debug, Clone, Copy)]
+pub struct Withheld {
+    from: Option<usize>,
+    equation: Option<(usize, usize)>,
 }
 
 /// What the elaboration holds of the declarations it has made: each top-level name's type and universe scheme, and its definition where it has one, read back in the order they were defined ([`Recorded`]). Beneath every frame and never inside one, since a declaration stands for the whole elaboration: only one whose item is refused is forgotten ([`Frames::forget`]).

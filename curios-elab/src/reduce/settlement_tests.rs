@@ -69,8 +69,13 @@ fn entry(context: &Context) -> (usize, Term) {
         .expect("an entry is registered")
 }
 
-/// Whether the entry at `at` has a settled spelling a probe would read.
+/// Whether the entry at `at` has its own spelling settled: what its key reduces to with nothing inside its frame in view, which a probe at any height starts from.
 fn settled(context: &Context, at: &(usize, Term)) -> bool {
+    context.settled_own_key(at.0, &at.1).is_some()
+}
+
+/// Whether the entry at `at` has a spelling settled at the height in view, which a probe there reads: past its own height, its spelling settled again.
+fn settled_here(context: &Context, at: &(usize, Term)) -> bool {
     context.settled_key(at.0, &at.1).is_some()
 }
 
@@ -287,5 +292,78 @@ fn a_settled_spelling_dies_with_its_frame() {
         let at = entry(context);
 
         assert!(!settled(context, &at));
+    });
+}
+
+/// A spelling settled again under an arm is read at its height while that height's view holds still, and is forgotten where the frame it ends at registers another equation, which it was not settled with in view. Its own spelling stays.
+///
+/// Mutation-checked: with a frame's registration leaving its spellings settled again alone, the spelling settled before the second registration is read after it.
+#[test]
+fn a_spelling_settled_again_is_forgotten_where_its_height_registers_another() {
+    let Guarded {
+        mut context,
+        small,
+        n,
+    } = guarded();
+    let guard = Term::apply(Term::free_var(&small), [Term::free_var(&n)]);
+
+    context.with_frame(|context| {
+        let at = settle(context, &guard, carrier(Term::free_var(&n)));
+
+        context.with_frame(|context| {
+            let other = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(3)));
+            refine_head(context, &other, &truth()).expect("the arm's equation registers");
+            assert!(!settled_here(context, &at), "nothing asked for it here yet");
+            super::reduce(context, carrier(Term::free_var(&n))).expect("reduces");
+            assert!(settled_here(context, &at), "the probe settled it again");
+
+            let another = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(5)));
+            refine_head(context, &another, &truth()).expect("the arm's equation registers");
+            assert!(
+                !settled_here(context, &at),
+                "another registration at its height"
+            );
+            assert!(settled(context, &at), "its own spelling stays");
+        });
+    });
+}
+
+/// A spelling settled again answers only beside the own spelling it was reduced on from: where the entry's own is settled anew to another term, what was reduced on from the one before is no reduct of it.
+///
+/// Mutation-checked: with a spelling settled again read whatever its entry's own spelling is now, it answers beside the new one.
+#[test]
+fn a_spelling_settled_again_answers_only_beside_the_own_spelling_it_came_from() {
+    let Guarded {
+        mut context,
+        small,
+        n,
+    } = guarded();
+    let guard = Term::apply(Term::free_var(&small), [Term::free_var(&n)]);
+
+    context.with_frame(|context| {
+        let at = settle(context, &guard, carrier(Term::free_var(&n)));
+
+        context.with_frame(|context| {
+            let other = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(3)));
+            refine_head(context, &other, &truth()).expect("the arm's equation registers");
+            super::reduce(context, carrier(Term::free_var(&n))).expect("reduces");
+            assert!(settled_here(context, &at), "the probe settled it again");
+
+            let anew = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(7)));
+            let footing = context.footing(false, None, false, false);
+            context.record_settled_key(
+                at.0,
+                at.1.clone(),
+                Some(Settled {
+                    compared: anew.clone(),
+                    unerased: anew,
+                }),
+                footing,
+            );
+            assert!(
+                !settled_here(context, &at),
+                "its own spelling settled anew to another term"
+            );
+        });
     });
 }

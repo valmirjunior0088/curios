@@ -58,34 +58,6 @@ pub fn retyped<D: Driver>(
         .collect()
 }
 
-/// Whether reading `term` meets one of `keys` whole: one occurs in `term` as a subterm ([`Term::mentions_term`]), or in the reading of a local `term` names — its type, and its definition where it has one, as `reads` answers them — followed to the end.
-///
-/// **What an arm on an expression moves of an equation's reduced spelling.** The arm assumes an equation over each of its keys, which answers a spelling where a reduction meets the key whole. A settlement reduces an equation's key and reads each local it names at its type and by its definition, so a spelling settled outside the arm can differ under it where the key, or a reading of a local it names, holds one of the arm's: such an equation is restated in the arm (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_read`). A key a definition the spelling calls holds only once unfolded is not met, which leaves the spelling as settled outside the arm: a filter failing toward refusal, where restating every equation reading a local the arm's key names restates nearly every guard of a proof at every arm inside it.
-pub fn meets_one_of(term: &Term, keys: &[Term], mut reads: impl FnMut(&Free) -> Vec<Term>) -> bool {
-    if keys.is_empty() {
-        return false;
-    }
-    let holds = |term: &Term| keys.iter().any(|key| term.mentions_term(key));
-    if holds(term) {
-        return true;
-    }
-    let mut seen = HashSet::new();
-    let mut pending = term.mentions().locals().copied().collect::<Vec<_>>();
-    while let Some(name) = pending.pop() {
-        if !seen.insert(name) {
-            continue;
-        }
-        for read in reads(&name) {
-            if holds(&read) {
-                return true;
-            }
-            pending.extend(read.mentions().locals().copied());
-        }
-    }
-
-    false
-}
-
 /// Whether reading `term` reads one of `locals`: `term` names one, or names a local whose reading — its type, and its definition where it has one, as `reads` answers them — reads one in turn, followed to the end.
 ///
 /// **What an equation's reduced spelling rests on.** A settlement reduces the equation's key with the equations inside it withheld, and reads, besides the definition store and the equations outside it, each local the key names: a local definition by its value, and every local at its type, where a question reduction puts to conversion is answered. A case moves exactly those readings: it re-types each local whose type names a variable it solves ([`retyped`]), and the certifier binds again each local definition whose value names one. So with `locals` the variables a case solves, a spelling settled under the case's arm rests on its solution where this holds and nowhere else, and such an equation is restated in the arm rather than settled there (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_equations`).

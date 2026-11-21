@@ -36,7 +36,7 @@ pub use invert::{
 };
 
 mod specialize;
-pub use specialize::{meets_one_of, reads_one_of, retyped, scrutinee_solution};
+pub use specialize::{reads_one_of, retyped, scrutinee_solution};
 
 mod unfolding;
 use unfolding::*;

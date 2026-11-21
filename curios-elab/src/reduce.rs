@@ -1226,7 +1226,7 @@ fn answered(
         if consulted.contains(&entry) {
             continue;
         }
-        let frame = entry.0;
+        let (frame, registered) = entry.clone();
         consulted.push(entry);
         if levels_clash_to_conversion(context, value, &unerased)? {
             continue;
@@ -1247,7 +1247,8 @@ fn answered(
                 )?
             }
             Answered::Whole => {
-                asked_scrutinee(context, frame, probe, &unerased, &assumed)?.then_some(assumed)
+                asked_scrutinee(context, frame, &registered, probe, &unerased, &assumed)?
+                    .then_some(assumed)
             }
         };
         if answer.is_some() {
@@ -1377,20 +1378,22 @@ fn asked_within(context: &mut Context, within: &mut Within) -> Result<(), Reduce
     })
 }
 
-/// Whether `term` is the scrutinee of the entry registered in `frame`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra: compared with that frame's refinements and every frame's inside it withheld, the view the spelling was settled under, since under its own equation the key reduces to the case value.
+/// Whether `term` is the scrutinee of the entry registered in `frame` under `registered`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra: compared in the view the spelling was settled in ([`Context::settling`]), since under its own equation the key reduces to the case value.
 ///
 /// **Two calls apart in their head's instance alone are asked about by their arguments** (`curios_analysis::one_up_to_instances`), as the certifier asks them. Each written call of a universe-polymorphic definition takes an instance of its own, and a comparison that commits nothing answers no to two instances still open, so two calls of a recursive one would never be one here, however their arguments stand. Where the case value may hold a type, an instance can be part of it, and a yes rests on the two being one: they are committed one, as a key's hit commits them ([`hold_at_one_instance`]), so the certifier compares them at one level.
 fn asked_scrutinee(
     context: &mut Context,
     frame: usize,
+    registered: &Term,
     term: &Term,
     key: &Term,
     value: &Term,
 ) -> Result<bool, ReduceError> {
     curios_profile::profile!("reduce::asked_scrutinee");
     context.note_question();
+    let height = context.scrutinee_height();
     let asked = context.plainly(|context| {
-        context.with_refinements_withheld_from(frame, |context| {
+        context.settling(frame, registered, height, |context| {
             one_up_to_instances(term, key, &mut |this, that| {
                 Ok(same_uncommitted(context, this, that)
                     .probed()?
@@ -1500,61 +1503,96 @@ fn scan_settled(
     })
 }
 
-/// Settle the reduced spelling of the entry `key` registered in `frame`: its unerased spelling reduced with that frame and every frame inside it withheld, then brought to [`reduct_spelling`]'s form.
+/// Settle the reduced spelling of the entry `key` registered in `frame` at the height in view ([`Context::scrutinee_height`]), brought to [`reduct_spelling`]'s form. Its own spelling, up to one past its frame, is its unerased spelling reduced with that frame and every frame inside it withheld; past it, its spelling again is its own reduced on with its equation alone withheld ([`Context::settling`]), its own settled first where no probe has asked for it.
+///
+/// **Settled again from its own spelling, never from its key**, as the certifier settles one. Its own spelling is what its key reduces to with nothing of the arms inside in view, so reducing it on with them in view is the key's settlement there, and where their equations answer no stuck part of it, one walk of a term already stuck. From the key, a proof would unfold every guard again at every arm inside it.
 ///
 /// **Withheld for the certifier's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
 ///
 /// **Bounded by the declaration's budget alone**, as the certifier's settlement is. What a settlement spends reads what the tables remember, a hit being free, so a ceiling below the budget would make whether an entry settles follow when the tables were last cleared, and with it what the program elaborates to. A guard over a subject an accumulation built reduces that accumulation, which the declaration pays for as it pays for any reduction it asks. The certifier settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where what the spelling rests on has moved — a solution it read unwound, a level it holds rewritten, an answer it was given withdrawn, the definitions in view changed at once, or a solution landed where it held an unsolved metavariable (`Frame::scrutinee_spellings`). A refusal settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration propagates.
 ///
-/// **To count settlements.** Under `profile` each call opens a `reduce::settle` span carrying its key and its frame. In the stream `cargo xtask profile prelude` files, a span is nested where another `reduce::settle` span is open on its thread as it opens, and one inside a `declaration` span is a repeat where an earlier one in that span carried its frame and key. Counted at `aa026bb2e`: 4,573 spans, 240 of them nested, and in elaboration 2,506 first settlements and 1,828 repeats.
+/// **To count settlements.** Under `profile` each call opens a `reduce::settle` span carrying its key, its frame and its height. In the stream `cargo xtask profile prelude` files, a span is nested where another `reduce::settle` span is open on its thread as it opens, and one inside a `declaration` span is a repeat where an earlier one in that span carried its frame and key. Counted at `aa026bb2e`: 4,573 spans, 240 of them nested, and in elaboration 2,506 first settlements and 1,828 repeats.
 fn settle(
     context: &mut Context,
     frame: usize,
     key: Term,
     original: &Term,
 ) -> Result<(), ReduceError> {
-    // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
-    curios_profile::profile!("reduce::settle", key = %original.faithful(), frame);
+    let own = frame + 1;
+    let height = context.scrutinee_height();
+    if height <= own {
+        return settle_at(context, frame, key, original, own);
+    }
+    if context.settled_own_key(frame, &key).is_none() {
+        settle_at(context, frame, key.clone(), original, own)?;
+    }
+    match context.settled_own_key(frame, &key) {
+        Some(Some(spelled)) => settle_at(context, frame, key, &spelled.unerased, height),
+        _ => {
+            // Its own spelling refused, so there is nothing to reduce on from, and its spelling again refuses with it.
+            let footing = context.footing(false, None, original.has_universe_meta(), false);
+            context.record_settled_key_again(frame, key, height, None, None, footing);
+            Ok(())
+        }
+    }
+}
+
+/// [`settle`] at `height`: `start`, the entry's unerased spelling at its own height and its own reduced spelling past it, reduced in the view [`Context::settling`] gives the height, and recorded beside what it rests on.
+fn settle_at(
+    context: &mut Context,
+    frame: usize,
+    key: Term,
+    start: &Term,
+    height: usize,
+) -> Result<(), ReduceError> {
+    // The term reduced and its frame are what a hunt for repeated settlements needs: the same pair recurring at an entry's own height is the entry settled anew, and the costliest calls name the keys that pay. The height tells one settled again under an arm from one settled anew.
+    curios_profile::profile!("reduce::settle", key = %start.faithful(), frame, height);
     let declined = context.declined();
     let questions = context.questions();
-    let settled = context.with_refinements_withheld_from(frame, |context| {
-        reduce(context, original.clone())
+    let settled = context.settling(frame, &key, height, |context| {
+        reduce(context, start.clone())
             .and_then(|reduct| reduct_spelling(context, &reduct))
             .probed()
     });
 
     // What a solution still to land could change: a key reducing through a metavariable, or stuck on one.
-    let unsolved = !zonk_solved_term_metas(context, original)
-        .metavars()
-        .is_empty();
+    let unsolved = !zonk_solved_term_metas(context, start).metavars().is_empty();
     // And what either solver could: a question declined for a commit while the key was reduced.
     let levels = (context.declined() != declined).then(|| context.universe_state());
     // And what a withdrawal of level constraints could: an answer conversion gave while the key was reduced.
     let asked = context.questions() != questions;
+    // A spelling again is read beside the own spelling it was reduced on from, which a settlement anew of that one replaces.
+    let again = (height > frame + 1).then(|| start.clone());
 
-    match settled {
+    let (settled, footing, outcome) = match settled {
         Ok(reduct) => {
             let unsolved = unsolved
                 || reduct
                     .as_ref()
                     .is_some_and(|unerased| !unerased.metavars().is_empty());
             // And what a rewrite of levels could: a universe metavariable the key or its spelling holds.
-            let universes = original.has_universe_meta()
-                || reduct.as_ref().is_some_and(Term::has_universe_meta);
+            let universes =
+                start.has_universe_meta() || reduct.as_ref().is_some_and(Term::has_universe_meta);
             let footing = context.footing(unsolved, levels, universes, asked);
             let settled = reduct.map(|unerased| Settled {
                 compared: project_erased_universes(&unerased),
                 unerased,
             });
-            context.record_settled_key(frame, key, settled, footing);
-            Ok(())
+            (settled, footing, Ok(()))
         }
         Err(error) => {
-            let footing = context.footing(unsolved, levels, original.has_universe_meta(), asked);
-            context.record_settled_key(frame, key, None, footing);
-            Err(error)
+            let footing = context.footing(unsolved, levels, start.has_universe_meta(), asked);
+            (None, footing, Err(error))
         }
+    };
+    match again {
+        Some(from) => {
+            context.record_settled_key_again(frame, key, height, Some(from), settled, footing);
+        }
+        None => context.record_settled_key(frame, key, settled, footing),
     }
+
+    outcome
 }
 
 /// The spelling a reduct is compared in: its operands in weak-head normal form where it is a tagged comparison — a connective's right operand behind a stuck left is otherwise left as written, and the two sides would differ by exactly the fold this probe exists to see through — and its solved metavariables materialized. Unerased: a hit reads its universe instance from it, and erasure is the comparison's.
