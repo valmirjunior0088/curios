@@ -25,11 +25,11 @@ curios-profile = { workspace = true }
 curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-common = { workspace = true }
-# The entry's key reads the crates the build links off the manifests.
+# The images' key reads the crates the build links off the manifests.
 toml = { workspace = true }
 
 [dev-dependencies]
 # `curios_core::test_support`'s builders, which the `/sys` roster's suite builds its fixtures with.
 curios-core = { workspace = true, features = ["test-support"] }
-# The temporary directories the entry's suite writes its workspaces in.
+# The temporary directories the images' suite writes its workspaces in.
 curios-common = { workspace = true, features = ["test-support"] }

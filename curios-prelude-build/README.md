@@ -1,6 +1,6 @@
 # curios-prelude-build
 
-The fixed prelude's build: `/sys`'s roster, projected from `curios-abi`'s host store and the intrinsic table (`src/sys_module.rs`), the `/std` package as it is authored, in `std/`, and the work that makes the prelude of the two (`src/compile.rs`), with the checkout's entry of its images (`src/entry.rs`). [`curios-prelude`](../curios-prelude/README.md)'s build script takes this crate as a build-dependency and runs the work into its own `OUT_DIR`; `profile`, this crate's program, runs the same work under a recorder (`cargo xtask profile prelude`); and the suites that read the library or the roster ask `std_directory`, `std_source` and `sys_module`.
+The fixed prelude's build: `/sys`'s roster, projected from `curios-abi`'s host store and the intrinsic table (`src/sys_module.rs`), the `/std` package as it is authored, in `std/`, and the work that makes the prelude of the two (`src/compile.rs`), with the images the checkout keeps (`src/images.rs`). [`curios-prelude`](../curios-prelude/README.md)'s build script takes this crate as a build-dependency and runs the work into its own `OUT_DIR`; `profile`, this crate's program, runs the same work under a recorder (`cargo xtask profile prelude`); and the suites that read the library or the roster ask `std_directory`, `std_source` and `sys_module`.
 
 ## Design
 

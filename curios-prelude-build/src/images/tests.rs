@@ -1,4 +1,4 @@
-//! The key, over a workspace of four crates the fixtures write, and the entry, over images they make up.
+//! The key, over a workspace of four crates the fixtures write, and the images, over ones they make up.
 
 use {super::*, curios_common::test_support::Temporary, std::fs};
 
@@ -25,7 +25,7 @@ b = { path = "../b" }
 
 /// A workspace whose prelude, `p`, build-depends on `a`, which depends on `b`, while `c` stands beside them, linked by none.
 fn workspace(name: &str) -> Temporary {
-    let root = Temporary::new("prelude-entry", name);
+    let root = Temporary::new("prelude-images", name);
     written(&root, "Cargo.toml", ROOT);
     written(&root, "Cargo.lock", "");
     written(&root, "rust-toolchain.toml", "");
@@ -113,18 +113,18 @@ fn the_key_is_the_same_wherever_the_workspace_stands() {
     assert_eq!(key_of(&workspace("here")), key_of(&workspace("there")));
 }
 
-/// An entry under `root` filled for the key `state` from two made-up images, with the directory they were made in.
-fn filled(root: &Path) -> (Entry, PathBuf) {
+/// Images under `root` filed for the key `state`, two made up, with the directory they were made in.
+fn filled(root: &Path) -> (Images, PathBuf) {
     written(root, "out/sys.rkyv", "sys");
     written(root, "out/std.rkyv", "std");
     let out = root.join("out");
-    let entry = Entry::open(root.join("images"));
-    entry.fill("state", &out, &[PathBuf::from("lib.crs")]);
+    let images = Images::open(root.join("images"));
+    images.fill("state", &out, &[PathBuf::from("lib.crs")]);
 
-    (entry, out)
+    (images, out)
 }
 
-/// A directory under `root` for a run to copy an entry's images into.
+/// A directory under `root` for a run to copy the images into.
 fn taken(root: &Path) -> PathBuf {
     let taken = root.join("taken");
     fs::create_dir_all(&taken).unwrap();
@@ -134,13 +134,13 @@ fn taken(root: &Path) -> PathBuf {
 
 #[test]
 fn an_entry_is_reused_for_its_key_alone() {
-    let root = Temporary::new("prelude-entry", "reused");
-    let (entry, _) = filled(&root);
+    let root = Temporary::new("prelude-images", "reused");
+    let (images, _) = filled(&root);
     let taken = taken(&root);
 
-    assert_eq!(entry.reuse("another", &taken), None);
+    assert_eq!(images.reuse("another", &taken), None);
     assert_eq!(
-        entry.reuse("state", &taken),
+        images.reuse("state", &taken),
         Some(vec![PathBuf::from("lib.crs")])
     );
     assert_eq!(fs::read(taken.join("std.rkyv")).unwrap(), b"std");
@@ -148,27 +148,27 @@ fn an_entry_is_reused_for_its_key_alone() {
 
 #[test]
 fn an_image_other_than_the_one_its_marker_names_is_not_reused() {
-    let root = Temporary::new("prelude-entry", "altered");
-    let (entry, _) = filled(&root);
+    let root = Temporary::new("prelude-images", "altered");
+    let (images, _) = filled(&root);
     written(&root, "images/std.rkyv", "altered");
 
-    assert_eq!(entry.reuse("state", &taken(&root)), None);
+    assert_eq!(images.reuse("state", &taken(&root)), None);
 }
 
 #[test]
 fn made_images_are_compared_with_the_entry_of_their_key_alone() {
-    let root = Temporary::new("prelude-entry", "compared");
-    let (entry, out) = filled(&root);
+    let root = Temporary::new("prelude-images", "compared");
+    let (images, out) = filled(&root);
 
-    assert_eq!(entry.compare("state", &out), Ok(true));
-    assert_eq!(entry.compare("another", &out), Ok(false));
+    assert_eq!(images.compare("state", &out), Ok(true));
+    assert_eq!(images.compare("another", &out), Ok(false));
 }
 
 #[test]
 fn an_image_made_otherwise_than_the_entry_of_its_key_holds_is_refused() {
-    let root = Temporary::new("prelude-entry", "refused");
-    let (entry, out) = filled(&root);
+    let root = Temporary::new("prelude-images", "refused");
+    let (images, out) = filled(&root);
     written(&root, "out/std.rkyv", "otherwise");
 
-    assert!(entry.compare("state", &out).is_err());
+    assert!(images.compare("state", &out).is_err());
 }

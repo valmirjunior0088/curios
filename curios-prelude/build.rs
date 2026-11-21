@@ -1,10 +1,10 @@
-//! The fixed prelude's build, as Cargo runs it: the work is `curios-prelude-build`'s `compile`, filed where the library that embeds the images reads them, and done once a state of the sources the build links, a run under any other configuration of the same state copying the images from the checkout's entry (`curios_prelude_build::Entry`).
+//! The fixed prelude's build, as Cargo runs it: the work is `curios-prelude-build`'s `compile`, filed where the library that embeds the images reads them, and done once a state of the sources the build links, a run under any other configuration of the same state copying them from the images the checkout keeps (`curios_prelude_build::Images`).
 //!
-//! The compiled crate is the verdict: the build panics on the first refusal of any stage, the certifier's among them, and an entry is filed only once the work is done, so the crate compiles only if the certifier accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
+//! The compiled crate is the verdict: the build panics on the first refusal of any stage, the certifier's among them, and images are filed only once the work is done, so the crate compiles only if the certifier accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 
 use {
     curios_package::MANIFEST,
-    curios_prelude_build::{Entry, compile, key, std_directory},
+    curios_prelude_build::{Images, compile, key, std_directory},
     std::{
         env,
         path::{Path, PathBuf},
@@ -12,19 +12,19 @@ use {
     },
 };
 
-/// What a run is asked to do with the checkout's entry, `reuse` or `compare`, which the step holding the entry asks of two cargo modes; unset, a run takes the entry's images where they are its state's and makes them where they are not.
+/// What a run is asked to do with the images the checkout keeps, `reuse` or `compare`, which the step holding them asks of two cargo modes; unset, a run takes the kept images where they are its state's and makes them where they are not.
 ///
 /// One variable with two answers, so no run is asked both. Declared to Cargo, so a step that sets it runs this script whatever ran before it; a unit that never sets it is never run again for it.
-const ASKED: &str = "CURIOS_PRELUDE_ENTRY";
+const ASKED: &str = "CURIOS_PRELUDE_IMAGES";
 
-/// What a run is asked to do with the checkout's entry: what [`ASKED`] says.
+/// What a run is asked to do with the images the checkout keeps: what [`ASKED`] says.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Asked {
-    /// Unset: the entry's images where they are this state's, made and filed where they are not.
+    /// Unset: the kept images where they are this state's, made and filed where they are not.
     Either,
-    /// `reuse`: the entry's images, and a refusal where making them is the run's only way to have them.
+    /// `reuse`: the kept images, and a refusal where making them is the run's only way to have them.
     Reuse,
-    /// `compare`: the images made again, and a refusal where the entry holds others for this state.
+    /// `compare`: the images made again, and a refusal where the kept images are others for this state.
     Compare,
 }
 
@@ -58,14 +58,14 @@ fn main() {
         .expect("the prelude's crate sits at the workspace's root");
     let images = prelude.join(".artifacts").join("images");
     // Held until the images are in `out` and filed: a unit of another profile may run beside this one, and it waits for these images rather than making its own.
-    let entry = Entry::open(images.clone());
+    let kept = Images::open(images.clone());
     let rustc = rustc_identity();
     let state = key(workspace, &prelude, &rustc);
 
-    // Every configuration takes the entry's images where they are its state's, whatever its profile, since the same sources make the same bytes in each; a run asked to compare makes them again, which is how the step holding the entry catches a key that leaves out an input its build reads.
+    // Every configuration takes the kept images where they are its state's, whatever its profile, since the same sources make the same bytes in each; a run asked to compare makes them again, which is how the step holding them catches a key that leaves out an input its build reads.
     let asked = Asked::read();
     let reads = match (asked != Asked::Compare)
-        .then(|| entry.reuse(&state, &out))
+        .then(|| kept.reuse(&state, &out))
         .flatten()
     {
         Some(reads) => {
@@ -81,7 +81,7 @@ fn main() {
             }
             let reads = made(&out);
             let held = asked == Asked::Compare
-                && entry
+                && kept
                     .compare(&state, &out)
                     .unwrap_or_else(|difference| panic!("{difference}"));
             if held {
@@ -90,7 +90,7 @@ fn main() {
                     images.display()
                 );
             } else if key(workspace, &prelude, &rustc) == state {
-                entry.fill(&state, &out, &reads);
+                kept.fill(&state, &out, &reads);
                 println!("the prelude's images filed in {}", images.display());
             } else {
                 // A source read after the work began may be in the images or not, so they are filed under no key, which only a run that read it whole could name.
@@ -102,7 +102,7 @@ fn main() {
         }
     };
 
-    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its cabinet's memo there. The entry names each under `std/`, so one taken from another checkout watches this one's.
+    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its cabinet's memo there. The kept images name each under `std/`, so images taken from another checkout watch this one's.
     let std = std_directory();
     for read in &reads {
         println!("cargo:rerun-if-changed={}", std.join(read).display());

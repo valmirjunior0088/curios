@@ -310,7 +310,7 @@ fn certified(
 
 /// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to `<root>.pack`, one pack as a cabinet keeps beside an object's unit file, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
-/// The image carries no version and is no stable interchange format: it is made again, or taken from the checkout's entry of the same key (`entry.rs`), whenever what the build links changes — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare one state of the sources against itself.
+/// The image carries no version and is no stable interchange format: it is made again, or taken from the images the checkout keeps under the same key (`images.rs`), whenever what the build links changes — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare one state of the sources against itself.
 ///
 /// The record is the compiler's own account of the tree the root was built from: each file by the name the package `std` gives it, with the digest of its text, the same bytes wherever the tree stood. A checkout claiming `/std` holds the tree the archive came from exactly when its files hold those texts.
 fn write_image(

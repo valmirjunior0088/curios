@@ -1,8 +1,8 @@
-//! The checkout's one entry of the prelude's images, and the key a state of the sources the build script links is known by.
+//! The prelude's images the checkout keeps, and the key a state of the sources the build script links is known by.
 //!
 //! Cargo gives each build-script unit an `OUT_DIR` of its own and runs the script once a unit, and each configuration of the workspace is a unit: Clippy against a build, one selection against another, every feature, each profile. Every one of them makes the same bytes of one state of the sources, so the first run of a state files its images here, and a run under another configuration copies them into its own `OUT_DIR` where it would make them again. The key holds what the script links and nothing of the configuration that runs it.
 //!
-//! `curios-prelude`'s build script opens the entry under its own crate's `.artifacts/images/` and keys it by the crates it links, this one among them.
+//! `curios-prelude`'s build script opens the images under its own crate's `.artifacts/images/` and keys it by the crates it links, this one among them.
 
 #[cfg(test)]
 mod tests;
@@ -20,12 +20,12 @@ use {
 /// The files at the workspace's root that every crate's build reads: the manifest, the lock, and the toolchain file naming the compiler.
 const ROOT_FILES: [&str; 3] = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"];
 
-/// The file an entry names its key, its images and the files the lowering read in, written last.
+/// The file that names the images' key, each image and the files the lowering read in, written last.
 const MARKER: &str = "marker";
 
 /// What the build script links, as one digest: `rustc`, the compiler's own account of itself, the files at the workspace's root that every build reads, and every file of `prelude`'s crate and of each workspace crate it links, each by its path under the root and then its bytes.
 ///
-/// Nothing of the configuration that runs the script is in it — no profile, feature, target or `OUT_DIR` — so every unit of one state of the sources reads one key. A path is read under the root, so a checkout elsewhere holding the same files reads the same key, and an entry copied into it is right there.
+/// Nothing of the configuration that runs the script is in it — no profile, feature, target or `OUT_DIR` — so every unit of one state of the sources reads one key. A path is read under the root, so a checkout elsewhere holding the same files reads the same key, and images copied into it are right there.
 pub fn key(workspace: &Path, prelude: &Path, rustc: &str) -> String {
     let workspace = canonical(workspace);
     let mut fingerprint = Fingerprint::new();
@@ -154,14 +154,14 @@ fn files(directory: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// The checkout's one entry, held: the images one state of the sources made, beside the marker that names the state's key, each image's digest and the files the lowering read. The marker is written last, so an entry cut short anywhere holds none and is no hit. The lock is taken where the entry is opened and let go where it is dropped, so no two units of the checkout fill or read it at once.
-pub struct Entry {
+/// The checkout's images, held: those one state of the sources made, beside the marker that names the state's key, each image's digest and the files the lowering read. The marker is written last, so images cut short anywhere hold none and are no hit. The lock is taken where the images are opened and let go where it is dropped, so no two units of the checkout fill or read it at once.
+pub struct Images {
     directory: PathBuf,
     /// Held, never read: dropping it lets the lock go.
     _lock: File,
 }
 
-/// What an entry's marker names.
+/// What the images' marker names.
 #[derive(Default)]
 struct Marker {
     pub key: String,
@@ -171,8 +171,8 @@ struct Marker {
     pub reads: Vec<PathBuf>,
 }
 
-impl Entry {
-    /// The entry in `directory`, made where there is none, once no other unit holds it.
+impl Images {
+    /// The images in `directory`, made where there are none, once no other unit holds it.
     pub fn open(directory: PathBuf) -> Self {
         fs::create_dir_all(&directory)
             .unwrap_or_else(|error| panic!("create {}: {error}", directory.display()));
@@ -193,14 +193,14 @@ impl Entry {
         }
     }
 
-    /// The files the lowering read, named under `std/`, where the entry holds `key`'s images whole, each then copied into `out`. `None` where it holds another key or none, and where an image is not the one its marker names, which a warning says, since the run that misses fills the entry again.
+    /// The files the lowering read, named under `std/`, where they are `key`'s images whole, each then copied into `out`. `None` where it holds another key or none, and where an image is not the one its marker names, which a warning says, since the run that misses files them again.
     pub fn reuse(&self, key: &str, out: &Path) -> Option<Vec<PathBuf>> {
         let marker = self.marker().filter(|marker| marker.key == key)?;
         for (name, held) in &marker.images {
             let path = self.directory.join(name);
             if fs::read(&path).ok().map(|bytes| digest(&bytes)).as_ref() != Some(held) {
                 println!(
-                    "cargo:warning={} is not the image its entry's marker names, so the prelude is made again",
+                    "cargo:warning={} is not the image its marker names, so the prelude is made again",
                     path.display()
                 );
                 return None;
@@ -239,7 +239,7 @@ impl Entry {
             .unwrap_or_else(|error| panic!("write {}: {error}", marker.display()));
     }
 
-    /// Whether `out` holds the images the entry holds for `key`, by the digests its marker names: `false` where it names another key or none, and a refusal where an image differs. A run asked to compare, which makes its images again, answers so of the run that filed the entry, since the same sources made both.
+    /// Whether `out` holds the images these hold for `key`, by the digests its marker names: `false` where it names another key or none, and a refusal where an image differs. A run asked to compare, which makes its images again, answers so of the run that filed them, since the same sources made both.
     pub fn compare(&self, key: &str, out: &Path) -> Result<bool, String> {
         let Some(marker) = self.marker().filter(|marker| marker.key == key) else {
             return Ok(false);
@@ -261,7 +261,7 @@ impl Entry {
         Ok(true)
     }
 
-    /// The marker the entry was filled under, or `None` where there is none or it says what no fill writes.
+    /// The marker the images were filed under, or `None` where there is none or it says what no fill writes.
     fn marker(&self) -> Option<Marker> {
         let text = fs::read_to_string(self.directory.join(MARKER)).ok()?;
         let mut marker = Marker::default();
