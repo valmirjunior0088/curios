@@ -2,27 +2,34 @@ mod tests;
 
 pub use /sys/Channel/{Push, Take};
 
-use /std/{Nat, Bool, Option, Cell, Io};
+use /std/{Nat, Bool, Option, Cell, Box, Io};
 use /std/internal/{on_filled, until};
 
--- The cell the waiters of one side wait on, kept in a capacity-one channel until a change of that side fills it and the next waiter makes another.
+-- The cell the waiters of one side wait on, kept until a change of that side fills it and the next waiter makes another.
 struct Woken: Type {
-    /sys/Channel(Cell({})),
+    Box(Option(Cell({}))),
 }
 
--- The cell a waiter of `side` waits on: the one there, or a fresh one left there.
+-- The cell a waiter of `side` waits on: the one there, or a fresh one left there. The cell is made before the change that leaves it, since a change cannot make one, and only where none is there.
 let waited(side: Woken) -> Io(Cell({})) =
-    let held = /sys/Channel/take(side.0)!;
-    let cell = match held | item(cell) => Io/pure(cell) | _ => Cell/new() end!;
-    let _ = /sys/Channel/push(side.0, cell)!;
-    Io/pure(cell);
+    let there = Box/held(side.0)!;
+    match there
+    | some(cell) => Io/pure(cell)
+    | none() =>
+        let fresh = Cell/new()!;
+        Box/change(side.0, (held: Option(Cell({}))) =>
+            match held
+            | some(cell) => (held, cell)
+            | none() => (Option/some(fresh), fresh)
+            end)
+    end;
 
 -- Fill the cell the waiters of `side` wait on, if one does: every one of them is woken, and checks again.
 let changed(side: Woken) -> Io({}) =
-    let held = /sys/Channel/take(side.0)!;
-    match held
-    | item(cell) => Io/bind(Cell/fill(cell, ()), (_) => Io/pure(()))
-    | _ => Io/pure(())
+    let taken = Box/change(side.0, (held: Option(Cell({}))) => (Option/none(), held))!;
+    match taken
+    | some(cell) => Io/bind(Cell/fill(cell, ()), (_) => Io/pure(()))
+    | none() => Io/pure(())
     end;
 
 -- The queue and the two sides waited on: readers wait for a value or the finish, writers for room or the finish. Every change goes through `try_send`, `try_receive` and `finish`, which wake the side it concerns.
@@ -36,8 +43,8 @@ pub struct Channel(A: Type): Type {
 --- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply `Future` in its message, which the receiver fills.
 pub let new(@A: Type, capacity: Nat, @positive: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =
     let queue = /sys/Channel/new(@A, capacity, @positive)!;
-    let readers = /sys/Channel/new(@Cell({}), 1)!;
-    let writers = /sys/Channel/new(@Cell({}), 1)!;
+    let readers = Box/new(@Option(Cell({})), Option/none())!;
+    let writers = Box/new(@Option(Cell({})), Option/none())!;
     Io/pure(Channel { queue = queue, readers = Woken { readers }, writers = Woken { writers } });
 
 --- Put `a` in without waiting, answering this attempt's own outcome: `taken`, `full` while the channel is open and at capacity, or `closed` once it is finished.

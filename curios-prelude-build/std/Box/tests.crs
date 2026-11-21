@@ -1,0 +1,19 @@
+-- `/std/Box`: a change answers beside the value it leaves, and changes made from branches that wait between them are each kept.
+use /std/{Box, Io, Nat, Test};
+
+-- What the function answers is the change's answer, and what it leaves is what the box holds after.
+test a_change_answers_what_its_function_answers_and_keeps_what_it_leaves =
+    let b = Box/new(@Nat, 10)!;
+    let before = Box/change(b, (n: Nat) => (n * 2, n))!;
+    let after = Box/held(b)!;
+    Test/equal([before, after], [10, 20]);
+
+-- Two branches that each wait and then change the box keep both changes: a wait falls only between changes, never inside one.
+test changes_from_branches_that_wait_between_them_are_each_kept =
+    let b = Box/new(@Nat, 10)!;
+    let bump() -> Io({}) =
+        let () = Io/yield()!;
+        Box/change(b, (n: Nat) => (n + 1, ()));
+    let _ = Io/both(bump(), bump())!;
+    let n = Box/held(b)!;
+    Test/equal(n, 12);

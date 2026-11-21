@@ -143,6 +143,10 @@ pub use Cell/{let Cell};
 pub mod Channel;
 pub use Channel/{let Channel};
 
+--- One value kept for whoever holds the box, changed only by a pure function of it.
+pub mod Box;
+pub use Box/{let Box};
+
 --- The error channel over a monad: an `M(Result(E, A))` sequenced so that a failure stops the region.
 ---
 --- A bare `Result`, an action of the base monad, and an `Io` action where the base admits one all sequence in a `Try` region with `!`. Every host operation that can fail is a `Try` over its base, and `both` and `all` run actions that may fail side by side, the first failure answering for all of them.

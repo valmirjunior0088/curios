@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty, proved};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Box, Io, Try, Tty, proved};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/Tui/{Frame, View, Input, Reply, Mode, render, ansi};
@@ -30,7 +30,7 @@ pub struct Session: Type {
     tty: Tty,
     input: Reader(Tty),
     support: Support,
-    slot: /sys/Channel(Kept),
+    kept: Box(Kept),
 }
 
 -- Every mode a session may set, undone in reverse: what the host writes when the terminal is given back, however the program ends, whichever of them the terminal confirmed.
@@ -123,45 +123,23 @@ pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =
     let support = supported(read.replies);
     let () = Io/write(t, entering(support))!;
     let size = Tty/size(t)!;
-    let slot = /sys/Channel/new(@Kept, 1)!;
-    let _ =
-        /sys/Channel/push(
-            slot,
-            Kept { shown = Option/none(), size = size, pending = read.inputs })!;
-    Try/pure(Session { tty = t, input = input, support = support, slot = slot });
-
--- What `s` keeps, taken from its slot. A slot that holds nothing is a session that remembers nothing: what the terminal shows is unknown, and its size is asked.
-let taken(s: Session) -> Try(Io, Io/Error, Kept) =
-    let held = /sys/Channel/take(s.slot)!;
-    match held
-    | item(kept) => Try/pure(kept)
-    | _ =>
-        let size = Tty/size(s.tty)!;
-        Try/pure(Kept { shown = Option/none(), size = size, pending = [] })
-    end;
-
--- `kept` put back as what `s` keeps.
-let keep(s: Session, kept: Kept) -> Io({}) =
-    let _ = /sys/Channel/push(s.slot, kept)!;
-    Io/pure(());
+    let kept = Box/new(Kept { shown = Option/none(), size = size, pending = read.inputs })!;
+    Try/pure(Session { tty = t, input = input, support = support, kept = kept });
 
 --- The size the session last knew the terminal at: the one it was opened at, asked since, or reported in the terminal's input.
 pub let size(s: Session) -> Try(Io, Io/Error, Tty/Size) =
-    let kept = taken(s)!;
-    let () = keep(s, kept)!;
+    let kept = Box/held(s.kept)!;
     Try/pure(kept.size);
 
 --- The terminal's size now, asked of it and kept.
 pub let measure(s: Session) -> Try(Io, Io/Error, Tty/Size) =
     let now = Tty/size(s.tty)!;
-    let kept = taken(s)!;
-    let () = keep(s, Kept { ..kept, size = now })!;
+    let () = Box/change(s.kept, (kept: Kept) => (Kept { ..kept, size = now }, ()))!;
     Try/pure(now);
 
 --- Keep `now` as the terminal's size, as a resize the terminal reported states it.
 pub let resized(s: Session, now: Tty/Size) -> Try(Io, Io/Error, {}) =
-    let kept = taken(s)!;
-    keep(s, Kept { ..kept, size = now });
+    Box/change(s.kept, (kept: Kept) => (Kept { ..kept, size = now }, ()));
 
 --- Whether the terminal reports its size in its input as it changes, so nothing need ask it.
 pub let reports_size(s: Session) -> Bool =
@@ -169,22 +147,25 @@ pub let reports_size(s: Session) -> Bool =
 
 --- Take the terminal's screen as unknown, so the next draw writes it whole.
 pub let forget(s: Session) -> Try(Io, Io/Error, {}) =
-    let kept = taken(s)!;
-    keep(s, Kept { ..kept, shown = Option/none() });
+    Box/change(s.kept, (kept: Kept) => (Kept { ..kept, shown = Option/none() }, ()));
+
+-- The frame `shown` holds, where it was drawn at `w` by `h`.
+let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
+    match shown
+    | some(p), p.w == w && p.h == h =>
+        let as_wide = Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
+        Option/some(Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
+    | _ => Option/none()
+    end;
 
 --- `v` written as the difference from the frame the terminal shows where the size is unchanged, and whole where it is not or no frame is known to be shown, the terminal's cursor where `v` asks for it or hidden. A write that fails is raised, and leaves the terminal's screen unknown, so the next draw is whole.
 pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {}) =
     let frame = Frame/of_view(v);
-    let kept = taken(s)!;
     let before: Option(Frame(w, h)) =
-        match kept.shown
-        | some(p), p.w == w && p.h == h =>
-            let as_wide =
-                Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
-            Option/some(Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
-        | _ => Option/none()
-        end;
-    let () = keep(s, Kept { ..kept, shown = Option/some(Shown { w = w, h = h, frame = frame }) })!;
+        Box/change(s.kept, (kept: Kept) =>
+            (
+                Kept { ..kept, shown = Option/some(Shown { w = w, h = h, frame = frame }) },
+                drawn_at(w, h, kept.shown)))!;
     let wrote =
         Try/run(Io/write(s.tty, render(before, frame, View/cursor(v), s.support.synchronized)))!;
     match wrote
@@ -205,10 +186,10 @@ let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =
 
 --- The next burst of input, waiting until one arrives; `none` once the terminal's input has ended. What arrived where the session opened is the first burst. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike. Where the terminal speaks the kitty keyboard protocol its Escape key is a sequence of its own, so bytes a burst leaves held are always the start of one and wait for the next; elsewhere a lone Escape is the key once nothing more comes.
 pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
-    let kept = taken(s)!;
-    let () = keep(s, Kept { ..kept, pending = [] })!;
-    match kept.pending
-    | [_, .._] => Try/pure(Option/some(kept.pending))
+    let pending =
+        Box/change(s.kept, (kept: Kept) => (Kept { ..kept, pending = [] }, kept.pending))!;
+    match pending
+    | [_, .._] => Try/pure(Option/some(pending))
     | [] => arrived(s)
     end;
 
@@ -254,6 +235,7 @@ pub let release(@A: Type, s: Session, action: Io(A)) -> Try(Io, Io/Error, A) =
     let answer = Tty/released(s.tty, leaving, action)!;
     let () = Io/write(s.tty, entering(s.support))!;
     let now = Tty/size(s.tty)!;
-    let kept = taken(s)!;
-    let () = keep(s, Kept { ..kept, shown = Option/none(), size = now })!;
+    let () =
+        Box/change(s.kept, (kept: Kept) =>
+            (Kept { ..kept, shown = Option/none(), size = now }, ()))!;
     Try/pure(answer);

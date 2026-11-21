@@ -1,7 +1,7 @@
 --- The pieces the named reads ask for.
 pub mod piece;
 
-use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try};
+use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Box, Io, Try};
 use /std/ops/{Eql};
 use /std/Io/{Error};
 
@@ -48,7 +48,7 @@ pub induct Stop(St: Type, R: Type): pub Type
 | failed(St, Error)
 end
 
--- What a reader's slot holds: the bytes read past the last piece, and how many pieces have been cut from them.
+-- What a reader keeps: the bytes read past the last piece, and how many pieces have been cut from them.
 struct Held: Type {
     cuts: Nat,
     bytes: Bytes,
@@ -58,48 +58,55 @@ struct Held: Type {
 pub struct Reader(S: Type): Type {
     stream: S,
     limit: Nat,
-    slot: /sys/Channel(Held),
+    ahead: Box(Held),
 }
 
 --- A reader over `stream` whose named reads refuse a piece past `limit` bytes.
 pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =
-    let slot = /sys/Channel/new(@Held, 1)!;
-    Io/pure(Reader { stream = stream, limit = limit, slot = slot });
+    let ahead = Box/new(Held { cuts = 0, bytes = x[] })!;
+    Io/pure(Reader { stream = stream, limit = limit, ahead = ahead });
 
 --- A reader over `stream` whose named reads refuse a piece past 1 MiB.
 pub let new(@S: Type, stream: S) -> Io(Reader(S)) =
     within(stream, 1048576);
 
--- An empty slot is a reader that has read nothing yet: it holds nothing and has cut nothing.
-let taken(@S: Type, r: Reader(S)) -> Io(Held) =
-    let slot = /sys/Channel/take(r.slot)!;
-    Io/pure(
-        match slot
-        | item(held) => held
-        | _ => Held { cuts = 0, bytes = x[] }
-        end);
-
-let kept(@S: Type, r: Reader(S), held: Held) -> Io({}) =
-    let _ = /sys/Channel/push(r.slot, held)!;
-    Io/pure(());
-
 --- The bytes `r` holds, left where they are.
 pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =
-    let now = taken(r)!;
-    let () = kept(r, now)!;
-    Io/pure(now.bytes);
+    Box/change(r.ahead, (now: Held) => (now, now.bytes));
 
 -- Everything `r` holds, taken as one piece.
 let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =
-    let now = taken(r)!;
-    let () = kept(r, Held { cuts = now.cuts + 1, bytes = x[] })!;
-    Io/pure(now.bytes);
+    Box/change(r.ahead, (now: Held) => (Held { cuts = now.cuts + 1, bytes = x[] }, now.bytes));
 
 -- Whether `r` holds other than the `bytes` a piece left at `cuts`: what another reader cut or took in meanwhile, which the piece has not been asked of.
 let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =
-    let now = taken(r)!;
-    let () = kept(r, now)!;
-    Io/pure(Bool/not(now.cuts == cuts && Bytes/len(now.bytes) == Bytes/len(bytes)));
+    Box/change(r.ahead, (now: Held) =>
+        (now, Bool/not(now.cuts == cuts && Bytes/len(now.bytes) == Bytes/len(bytes))));
+
+-- `piece` asked of what `now` holds, from `from` where no other reader has cut since `seen` and from `state` where one has: what it answers, beside what the reader keeps after it and how many pieces it has cut by then. A piece that kept fewer bytes than it was asked of has cut some.
+let looked(
+    @St: Type,
+    @R: Type,
+    @A: Type,
+    piece: (St, Bytes) -> Step(St, R, A),
+    state: St,
+    from: St,
+    seen: Nat,
+    now: Held,
+) -> {Held, {Step(St, R, A), Nat}} =
+    let at = match seen == now.cuts | true => from | false => state end;
+    let step = piece(at, now.bytes);
+    match step
+    | took(_, rest) => (Held { cuts = now.cuts + 1, bytes = rest }, (step, now.cuts + 1))
+    | refused(_) => (now, (step, now.cuts))
+    | more(_, bytes) =>
+        let cuts =
+            match Bytes/len(bytes) == Bytes/len(now.bytes)
+            | true => now.cuts
+            | false => now.cuts + 1
+            end;
+        (Held { cuts = cuts, bytes = bytes }, (step, cuts))
+    end;
 
 --- `piece` asked of the bytes `r` holds, and asked again each time its stream yields more, until it answers: the piece, or how it went unread. The bytes after the piece, and all of them where there is none, stay in `r`.
 ---
@@ -115,28 +122,18 @@ pub let take(
     state: St,
 ) -> Io(Result(Stop(St, R), A)) =
     let go(from: St, seen: Nat) -> Io(Result(Stop(St, R), A)) =
-        let now = taken(r)!;
-        let at = match seen == now.cuts | true => from | false => state end;
-        match piece(at, now.bytes)
-        | took(a, rest) =>
-            let () = kept(r, Held { cuts = now.cuts + 1, bytes = rest })!;
-            Io/pure(Result/success(a))
-        | refused(why) =>
-            let () = kept(r, now)!;
-            Io/pure(Result/failure(Stop/refused(why)))
+        let (step, cuts) =
+            Box/change(r.ahead, (now: Held) => looked(piece, state, from, seen, now))!;
+        match step
+        | took(a, _) => Io/pure(Result/success(a))
+        | refused(why) => Io/pure(Result/failure(Stop/refused(why)))
         | more(next, bytes) =>
-            -- A piece that kept fewer bytes than it was asked of has cut some.
-            let cuts =
-                match Bytes/len(bytes) == Bytes/len(now.bytes)
-                | true => now.cuts
-                | false => now.cuts + 1
-                end;
-            let () = kept(r, Held { cuts = cuts, bytes = bytes })!;
             let arrived = Try/run(Io/read(@S, r.stream, 65536))!;
             match arrived
             | success(bytes(fresh)) =>
-                let then = taken(r)!;
-                let () = kept(r, Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] })!;
+                let () =
+                    Box/change(r.ahead, (then: Held) =>
+                        (Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] }, ()))!;
                 go(next, cuts)
             | success(ended()) =>
                 let moved = touched(r, cuts, bytes)!;

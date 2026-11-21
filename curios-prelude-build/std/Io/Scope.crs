@@ -1,7 +1,7 @@
 --- Waiting for a task's answer.
 pub mod Task;
 
-use /std/{Nat, Channel, Io};
+use /std/{Nat, List, Option, Channel, Box, Io};
 use /std/Io/{let Scope, Live, Future};
 
 --- How a scope ended, as each release deferred to it is told.
@@ -12,12 +12,9 @@ pub induct Ended: pub Type
 | cancelled()
 end
 
--- `change` applied to the count of `live`.
-let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
-    let held = /sys/Channel/take(live.count)!;
-    let n = match held | item(n) => n | _ => 0 end;
-    let _ = /sys/Channel/push(live.count, change(n))!;
-    Io/pure(());
+-- `by` applied to the count of `live`.
+let counted(live: Live, by: (Nat) -> Nat) -> Io({}) =
+    Box/change(live.count, (n: Nat) => (by(n), ()));
 
 -- One child of `live` ended.
 let ended(live: Live) -> Io({}) =
@@ -36,16 +33,17 @@ pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let f = Future/new()!;
     let () = counted(s.live, (n) => n + 1)!;
     let finished = Io/bind(child, (a) => Io/bind(Future/fill(f, a), (()) => ended(s.live)));
-    let held = /sys/Channel/take(s.children)!;
-    let earlier = match held | item(cs) => cs | _ => [] end;
-    let _ = /sys/Channel/push(s.children, [finished, ..earlier])!;
+    let () =
+        Box/change(s.children, (held: Option(List(Io({})))) =>
+            match held
+            | some(earlier) => (Option/some([finished, ..earlier]), ())
+            | none() => (Option/none(), ())
+            end)!;
     Io/pure(Task { f });
 
 --- Until every child spawned into `s` has ended, those spawned meanwhile among them: what a body that needs all of its children finished asks before it answers.
 pub let join_all(s: Scope) -> Io({}) =
-    let held = /sys/Channel/take(s.live.count)!;
-    let n = match held | item(n) => n | _ => 0 end;
-    let _ = /sys/Channel/push(s.live.count, n)!;
+    let n = Box/held(s.live.count)!;
     match n
     | 0 => Io/pure(())
     | _ =>
@@ -55,7 +53,4 @@ pub let join_all(s: Scope) -> Io({}) =
 
 --- `release` run when `s` ends, told how it ended: after its children are cancelled, and before every release deferred to it earlier. What a scope's resources are closed by, so nothing opened into a scope outlives it.
 pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
-    let held = /sys/Channel/take(s.releases)!;
-    let earlier = match held | item(rs) => rs | _ => [] end;
-    let _ = /sys/Channel/push(s.releases, [release, ..earlier])!;
-    Io/pure(());
+    Box/change(s.releases, (earlier: List((Ended) -> Io({}))) => ([release, ..earlier], ()));

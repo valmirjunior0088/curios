@@ -1,0 +1,31 @@
+mod tests;
+
+use /std/{Io, Proc};
+
+-- Held in a `/sys` channel of one slot, which is full whenever no change is under way: a change takes the value, applies a pure function and puts back what it leaves, with nothing between that can wait.
+--- One value kept for whoever holds the box, changed only by a pure function of it: nothing waits inside a change, so no branch sees a change half made, and no cancellation leaves one. A box is shared, not copied: every copy of a value holding it holds the one box. A change is one box's: two boxes are two places, and changes to them one after the other are seen apart by any branch that runs between them. A value read with `held` and kept across a wait may be stale by the time it is used; a change computed from the value `change` hands its function is not.
+pub struct Box(A: Type): Type {
+    /sys/Channel(A),
+}
+
+--- A box holding `a`.
+pub let new(@A: Type, a: A) -> Io(Box(A)) =
+    let queue = /sys/Channel/new(@A, 1)!;
+    let _ = /sys/Channel/push(queue, a)!;
+    Io/pure(Box { queue });
+
+--- What `f` answers beside the value it leaves in `b`, given the value `b` holds.
+pub let change(@A: Type, @B: Type, b: Box(A), f: (A) -> {A, B}) -> Io(B) =
+    let held = /sys/Channel/take(b.0)!;
+    match held
+    | item(a) =>
+        let (left, answer) = f(a);
+        let _ = /sys/Channel/push(b.0, left)!;
+        Io/pure(answer)
+    -- Nothing but a change takes from the queue, and a change puts back before it answers: a queue found empty is this module's fault, and the program ends on it with sysexits' code for an internal software error.
+    | _ => Proc/exit(70)
+    end;
+
+--- The value `b` holds.
+pub let held(@A: Type, b: Box(A)) -> Io(A) =
+    change(b, (a: A) => (a, a));

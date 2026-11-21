@@ -44,6 +44,7 @@ claims! {
     char => ["Char"],
     cell => ["Cell"],
     channel => ["Channel"],
+    box_ => ["Box"],
     rand => ["rand"],
     json => ["Json"],
     toml => ["Toml"],
