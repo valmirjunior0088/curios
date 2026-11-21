@@ -100,7 +100,7 @@ pub fn footprint(
 ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = reached.as_ref().map(|cache| cache as &dyn Cache);
-    let (units, origin, declares, package) = match subject.formed(overlay) {
+    let (units, origin, declares, package) = match subject {
         Subject::Entry {
             units,
             origin,

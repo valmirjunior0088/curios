@@ -30,7 +30,7 @@ pub fn falsified(
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = reached.as_ref().map(|cache| cache as &dyn Cache);
 
-    match subject.formed(overlay) {
+    match subject {
         Subject::Unit { .. } => Err(Unput::Unit),
         Subject::Entry {
             units,

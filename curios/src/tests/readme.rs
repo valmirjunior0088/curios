@@ -6,7 +6,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::{Format, Formatted, WrittenIn},
-    curios_wonder::{Origin, Subject, diagnostics},
+    curios_wonder::{diagnostics, test_support::*},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -62,12 +62,7 @@ fn the_error_shown_is_what_wonder_prints() {
     // Held as the file the reader saves it in, which no disk of the suite's holds, so the place a report closes on is that file's.
     let file = PathBuf::from(ERROR_EXAMPLE);
     let overlay = Overlay::of([(file.clone(), example)]);
-    let subject = Subject::Entry {
-        units: Vec::new(),
-        origin: Origin::File(file),
-        declares: None,
-        package: None,
-    };
+    let subject = file_subject(&file, Path::new("."), &overlay);
     let reports = diagnostics(DEFAULT_BUDGET, subject, &overlay, None, &mut |_| {});
     let printed: Vec<String> = reports
         .diagnostics

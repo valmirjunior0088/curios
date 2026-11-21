@@ -560,7 +560,6 @@ pub fn placed(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Answer>, Vec<Diagnosis>> {
-    let subject = subject.formed(overlay);
     if let Subject::CoreText { .. } = subject {
         return Err(unlowered());
     }
@@ -1086,7 +1085,7 @@ pub fn described(
         .as_ref()
         .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
 
-    match subject.formed(overlay) {
+    match subject {
         Subject::Unit { units } => described_unit(
             budget,
             &tested_last(overlaid(units, overlay)),
@@ -1318,7 +1317,7 @@ pub fn referent(
     let facade = |declaration: &Option<Described>| {
         declaration.as_ref().map(|described| described.path.clone())
     };
-    let (declaration, module) = match subject.formed(overlay) {
+    let (declaration, module) = match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             let declaration = described_unit(budget, &units, asked, through, &mut *progress)?;

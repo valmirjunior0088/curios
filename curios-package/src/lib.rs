@@ -67,7 +67,10 @@ mod refused;
 pub use refused::{At, Refused, Row, Step};
 
 mod selection;
-pub use selection::{Entire, Entry, Home, Library, Named, Program, Selection, Spelling, Supplied};
+pub use selection::{
+    Entire, Entry, Home, Library, LooseModule, Named, Program, STDIN_MOUNT, Selection, Spelling,
+    Supplied,
+};
 
 mod served;
 pub use served::Served;

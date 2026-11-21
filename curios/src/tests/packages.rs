@@ -31,7 +31,9 @@ fn resolved(directory: &Path, subject: Option<&str>) -> (PathBuf, Vec<RootSource
     {
         Selection::Program(program) => program,
         Selection::Entire(entire) => entire.default_program().expect("a governed package"),
-        Selection::Library(_) => panic!("these fixtures name their executables, never a library"),
+        Selection::Library(_) | Selection::Module(_) => {
+            panic!("these fixtures name their executables, never a library or a module")
+        }
     };
     let Entry::File(entry) = program.entry().clone() else {
         panic!("these fixtures name a subject on disk");

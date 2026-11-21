@@ -60,7 +60,7 @@ fn invoke_over(
         curios_package::Selection::Entire(entire) => {
             entire.default_program().expect("a governed package")
         }
-        curios_package::Selection::Library(_) => {
+        curios_package::Selection::Library(_) | curios_package::Selection::Module(_) => {
             panic!("these fixtures declare their executables")
         }
     };

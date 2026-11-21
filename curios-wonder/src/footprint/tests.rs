@@ -1,19 +1,14 @@
 use {
-    super::*, crate::*, curios_elab::DEFAULT_BUDGET, curios_module::Overlay,
+    super::*,
+    crate::{test_support::*, *},
+    curios_elab::DEFAULT_BUDGET,
+    curios_module::Overlay,
     curios_surface::WrittenIn,
 };
 
-/// `text` as a loose subject, the way the one-shot transport forms one from standard input.
+/// `text` as a loose subject, the way the one-shot transport admits one from standard input: a program, or a module of its own.
 fn loose(text: &str) -> Subject {
-    Subject::Entry {
-        units: Vec::new(),
-        origin: Origin::Text {
-            text: text.to_string(),
-            written: WrittenIn::Program,
-        },
-        declares: None,
-        package: None,
-    }
+    stdin_subject(text, WrittenIn::Program)
 }
 
 /// What the program `text` holds of the declaration at `path`, asked the way the one-shot transport asks.

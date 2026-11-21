@@ -1,16 +1,15 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    crate::{Diagnosis, Placed, Reading, STDIN_MOUNT, Severity},
-    curios_common::{
-        About, OsError, Qualifier, Report, Said, Source, SourceName, Span, is_identifier,
-    },
+    crate::{Diagnosis, Placed, Reading, Severity},
+    curios_common::{About, OsError, Qualifier, Report, Said, Source, SourceName},
     curios_module::{
         Overlay, PackageRoot, PreparedText, RootSource, UnitSource, open_entrypoint,
         overlay_entrypoint, supply_entrypoint,
     },
+    curios_package::STDIN_MOUNT,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold, Progress},
-    curios_surface::{CoreFile, Entrypoint, Form, WrittenIn},
+    curios_surface::{Entrypoint, WrittenIn},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -32,7 +31,7 @@ pub struct Diagnosed {
 
 /// What a question is about.
 ///
-/// The transport decides this and the engine compiles it: a file a package's library declares is asked about as that whole unit, one an executable declares as that executable's origin, and a file no unit declares on its own — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own; the one thing it decides is the form a loose program is written in (`Subject::formed`).
+/// The transport decides this and the engine compiles it: a file a package's library declares is asked about as that whole unit, one an executable declares as that executable's origin, and a file no unit declares on its own, as the program or the module it is written as — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own, nor reads what form a text takes.
 pub enum Subject {
     /// A program: the entry compiled against `units`, in the order given.
     Entry {
@@ -52,98 +51,15 @@ pub enum Subject {
 }
 
 impl Subject {
-    /// The refusal of a loose file written as a module whose stem is no name a module can take: it can be mounted nowhere to be checked item by item, and checked as a program it would be refused at its last line for a term it was never meant to hold.
-    fn unnameable(&self, overlay: &Overlay) -> Option<Diagnosis> {
-        let Subject::Entry {
-            units,
-            origin: Origin::File(path),
-            declares: None,
-            ..
-        } = self
-        else {
-            return None;
-        };
-        if !units.is_empty() {
-            return None;
-        }
-
-        let text = match overlay.get(path) {
-            Some(text) => text.to_string(),
-            None => fs::read_to_string(path).ok()?,
-        };
-        let stem = path.file_stem()?.to_str()?;
-        let module = match WrittenIn::of(path) {
-            WrittenIn::Program => Form::of(path, &text) == Form::Module,
-            WrittenIn::CoreText => CoreFile::parse(&Source::held(path, text.as_str()))
-                .is_ok_and(|file| file.entry.is_none()),
-        };
-        if !module || is_identifier(stem) {
-            return None;
-        }
-
-        let mut said = Said::line("unnameable module");
-        said.stating(format_args!(
-            "{} is written as a module, with no final term",
-            path.display()
-        ));
-        said.stating(format_args!(
-            "its stem `{stem}` is no name a module can take"
-        ));
-        said.stating(
-            "rename the file to an identifier, or end it in a term to check it as a program",
-        );
-
-        Some(Diagnosis {
-            severity: Severity::Error,
-            report: Report::of(Some(Span::new(Source::held(path, &text), 0, 0)), said),
-        })
-    }
-
-    /// The prelude's scope alone: a loose program of no text, which holds nothing of its own.
+    /// The prelude's scope alone: a module of no text over it, mounted where a module on standard input is, which holds nothing of its own.
     pub fn prelude() -> Self {
-        Subject::Entry {
-            units: Vec::new(),
-            origin: Origin::Text {
-                text: String::new(),
-                written: WrittenIn::Program,
-            },
-            declares: None,
-            package: None,
-        }
-    }
+        let empty = RootSource::supplied_module(
+            STDIN_MOUNT,
+            &Source::named(SourceName::stdin(), String::new()),
+        )
+        .expect("a text of nothing is a module");
 
-    /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have. A loose text of Core text, as its name or standard input says, is a subject of its own, whichever form it is written in.
-    pub fn formed(self, overlay: &Overlay) -> Self {
-        match self {
-            Subject::Entry {
-                units,
-                origin,
-                declares: None,
-                package: None,
-            } if units.is_empty() => {
-                if origin.written() == WrittenIn::CoreText {
-                    return Subject::CoreText { origin };
-                }
-                let module = match &origin {
-                    Origin::File(path) => RootSource::loose_module(path, overlay),
-                    Origin::Text { text, .. } => RootSource::supplied_module(
-                        STDIN_MOUNT,
-                        &Source::named(SourceName::stdin(), text.as_str()),
-                    ),
-                };
-
-                match module {
-                    Some(unit) => Subject::Unit { units: vec![unit] },
-                    None => Subject::Entry {
-                        units,
-                        origin,
-                        declares: None,
-                        package: None,
-                    },
-                }
-            }
-            subject => subject,
-        }
+        Subject::Unit { units: vec![empty] }
     }
 }
 
@@ -249,14 +165,6 @@ fn diagnosed_reading(
         .as_ref()
         .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
 
-    if let Some(refusal) = subject.unnameable(overlay) {
-        return Diagnosed {
-            diagnostics: vec![refusal],
-            reached: BTreeSet::new(),
-            placed: None,
-        };
-    }
-
     // The subject's lowering, as the fold makes or restores it, read for what `file` writes.
     let reading = file.map(Reading::of);
     let placed = RefCell::new(None);
@@ -283,7 +191,7 @@ fn diagnosed_reading(
         }
     };
 
-    let mut diagnosed = match subject.formed(overlay) {
+    let mut diagnosed = match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             // A refused library's findings, reported beside its refusal as a refused program's are.

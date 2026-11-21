@@ -9,7 +9,8 @@
 use {
     super::{Error, LoadError, PackageRoot},
     curios_common::{Mount, Qualifier, RootKind, Source, SourceName, is_identifier},
-    curios_surface::{Form, Module, TopItem},
+    curios_parse::ParserError,
+    curios_surface::{Module, TopItem},
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashMap},
@@ -147,33 +148,13 @@ impl RootSource {
             .collect()
     }
 
-    /// `path` mounted as a unit of its own at its stem, when its text — `overlay`'s where it holds one — is written as a module and its stem is a name a mount can take: how a file no unit declares is checked item by item, rather than refused at its end for lacking the term a program would end in.
-    pub fn loose_module(path: &Path, overlay: &Overlay) -> Option<Self> {
-        let text = match overlay.get(path) {
-            Some(text) => text.to_string(),
-            None => fs::read_to_string(path).ok()?,
-        };
-        if Form::of(path, &text) != Form::Module {
-            return None;
-        }
-
-        let stem = path.file_stem()?.to_str()?;
-
-        is_identifier(stem)
-            .then(|| Self::mounted(stem, RootKind::Ordinary, path, Self::namespace_of(path)))
-    }
-
-    /// The text of `source` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input, named [`SourceName::stdin`] — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. Text sits in no directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
-    pub fn supplied_module(prefix: &str, source: &Arc<Source>) -> Option<Self> {
-        if Form::of(source.file().unwrap_or(Path::new("")), source.text()) != Form::Module {
-            return None;
-        }
-
-        let module = Module::parse(source).ok()?;
+    /// The module `source` holds supplied as a unit of its own at `prefix`: how a module that arrived as text rather than as a file — on standard input, named [`SourceName::stdin`] — is checked item by item, as a loose file written as a module is mounted at its stem. Text sits in no directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way. A text the module grammar does not read is refused with what it does not read.
+    pub fn supplied_module(prefix: &str, source: &Arc<Source>) -> Result<Self, ParserError> {
+        let module = Module::parse(source)?;
         let mut unit = Self::supplied();
         unit.insert_root(prefix, RootKind::Ordinary, module);
 
-        Some(unit)
+        Ok(unit)
     }
 
     /// A unit's modules supplied already parsed, claiming nothing until [`insert_root`](Self::insert_root) says so. Nothing is read, which is what lets a build script or an embedder hand a whole unit over.

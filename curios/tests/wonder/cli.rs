@@ -192,7 +192,7 @@ fn an_entry_of_declarations_alone_is_refused_for_its_term_by_every_reader() {
     assert!(stopped.contains(refusal), "{stopped}");
 }
 
-/// A file written as a module whose stem is no name a module can take is mounted nowhere, so it is checked item by item by nothing: the answer says so, where the program's grammar refused its last line for a term it was never meant to hold. The same text under a stem that is a name is checked as a module and reports nothing.
+/// A file written as a module whose stem is no name a module can take can be mounted nowhere, so it is refused where it is admitted, for its stem, by every command alike: the check, a test run and a question in its scope, none of which answers it as anything else. The same text under a stem that is a name is checked as a module and reports nothing.
 #[test]
 fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     let root = temporary("stemless");
@@ -201,14 +201,20 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     write(&root, "my-file.crs", module);
     write(&root, "myfile.crs", module);
 
-    let refused = stdout(&curios(&root, &["wonder", "my-file.crs"], ""));
-    assert!(
-        refused.contains(
-            "my-file.crs is written as a module, with no final term\n│  its stem `my-file` is no name a module can take"
-        ),
-        "{refused}"
-    );
-    assert!(!refused.contains("expected a term"), "{refused}");
+    for command in [
+        &["wonder", "my-file.crs"][..],
+        &["test", "my-file.crs"],
+        &["wonder", "--name", "/std/Nat/succ", "my-file.crs"],
+    ] {
+        let refused = curios(&root, command, "");
+        let said = String::from_utf8_lossy(&refused.stderr);
+        assert_eq!(refused.status.code(), Some(1), "{command:?}: {said}");
+        assert!(refused.stdout.is_empty(), "{command:?}: {said}");
+        assert!(
+            said.starts_with("unnameable module\n│  my-file.crs is written as a module, with no final term\n│  its stem `my-file` is no name a module can take"),
+            "{command:?}: {said}"
+        );
+    }
 
     let named = stdout(&curios(&root, &["wonder", "myfile.crs"], ""));
     assert_eq!(named, "");

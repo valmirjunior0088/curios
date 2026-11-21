@@ -1,8 +1,8 @@
 use {
     super::{
-        Argument, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS,
-        Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
-        TupleTypeParam, WordAt, clear_comments, parse_file_head, parse_optional_term,
+        Argument, CoreFile, Dialect, FlatMatch, FuncParam, FuncSugarParam, FuncTypeParam,
+        ITEM_HEADS, Intrinsic, Label, LetSignature, Name, Program, Subterm, Term, Tuple, TupleType,
+        TupleTypeParam, WordAt, WrittenIn, clear_comments, parse_file_head, parse_optional_term,
         parse_program_end, parse_term, parse_top_item, print_module_items, print_term,
         signature_type, take_comments,
     },
@@ -623,11 +623,16 @@ pub enum Form {
 }
 
 impl Form {
-    /// The form `text`, held for `path`, is written in — read off the one grammar that admits both, which reads a file whole or not at all: items alone are a module, and anything else is a program, a text that does not parse included, since a program's own reading is the one that says where it went wrong.
-    pub fn of(path: &Path, text: &str) -> Self {
-        match parse_for_format(&Source::held(path, text)) {
-            Ok(FormatInput { tail: None, .. }) => Self::Module,
-            Ok(FormatInput { tail: Some(_), .. }) | Err(_) => Self::Program,
+    /// The form `source`, written in `written`, takes — read off the one grammar of its dialect that admits both, which reads a text whole or not at all: declarations alone are a module, and anything else is a program, a text that does not parse included, since a program's own reading is the one that says where it went wrong.
+    pub fn of(source: &Arc<Source>, written: WrittenIn) -> Self {
+        let closes = match written {
+            WrittenIn::Program => parse_for_format(source).map(|input| input.tail.is_some()),
+            WrittenIn::CoreText => CoreFile::parse(source).map(|file| file.entry.is_some()),
+        };
+
+        match closes {
+            Ok(false) => Self::Module,
+            Ok(true) | Err(_) => Self::Program,
         }
     }
 }

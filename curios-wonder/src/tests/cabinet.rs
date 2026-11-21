@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_common::test_support::*,
+    curios_common::{RootKind, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource, UnitSource},
     curios_package::Cabinet,
@@ -755,7 +755,13 @@ fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
     let session = Session::default();
     let folded = |overlay: &Overlay| {
         let verdicts = Verdicts::kept_by(session.clone());
-        let unit = RootSource::loose_module(&file, overlay).expect("written as a module");
+        // Mounted at its stem, as a loose module is.
+        let unit = RootSource::mounted(
+            "Loose",
+            RootKind::Ordinary,
+            &file,
+            RootSource::namespace_of(&file),
+        );
         let units = crate::overlaid(vec![unit], overlay);
 
         let mut events = Vec::new();

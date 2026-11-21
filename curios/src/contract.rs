@@ -18,7 +18,7 @@ use {
     curios_pipeline::Stage,
     curios_surface::{Format, WrittenIn},
     curios_verdict::{Verdicts, collect_project},
-    curios_wonder::{Scope, Staged, file_subject},
+    curios_wonder::{Scope, Staged, file_subject, not_a_program},
     std::{
         env,
         path::{Path, PathBuf},
@@ -623,6 +623,7 @@ impl Contract {
                     None => refused.about_path(&library.manifest),
                 });
             }
+            Selection::Module(module) => return Err(not_a_program(module.entry())),
         };
 
         if self.own_file_only
@@ -664,6 +665,7 @@ impl Contract {
                 Selection::Program(program) => Staged::Program(program),
                 Selection::Entire(entire) => Staged::Program(entire.default_program()?),
                 Selection::Library(library) => Staged::Library(library),
+                Selection::Module(module) => Staged::Module(module),
             },
         )
     }
@@ -688,6 +690,7 @@ impl Contract {
             match self.selection(subject, manifest, directory, cabinet, stdin)? {
                 Selection::Program(program) => Scope::Program(program),
                 Selection::Library(library) => Scope::Library(library),
+                Selection::Module(module) => Scope::Module(module),
                 Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
                     (Ok(program), _) => Scope::Program(program),
                     (Err(_), Some(library)) => Scope::Library(library),
@@ -708,6 +711,17 @@ impl Contract {
     ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
+        let not_a_library = |entry: &Entry| {
+            let refused = Refused::of("not a library")
+                .stating(format_args!("`{}` takes a library", self.command))
+                .stating("a program is not one");
+
+            Err(match entry {
+                Entry::File(path) => refused.about_path(path),
+                Entry::Stdin(_) => refused.about_named(STDIN_NAME),
+            })
+        };
+
         match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
@@ -719,16 +733,8 @@ impl Contract {
                     ))
                     .about_path(&entire.governing.manifest)
             }),
-            Selection::Program(program) => {
-                let refused = Refused::of("not a library")
-                    .stating(format_args!("`{}` takes a library", self.command))
-                    .stating("a program is not one");
-
-                Err(match program.entry() {
-                    Entry::File(path) => refused.about_path(path),
-                    Entry::Stdin(_) => refused.about_named(STDIN_NAME),
-                })
-            }
+            Selection::Program(program) => not_a_library(program.entry()),
+            Selection::Module(module) => not_a_library(module.entry()),
         }
     }
 
@@ -759,12 +765,14 @@ impl Contract {
 
         match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Entire(entire) => Ok(*entire),
-            Selection::Library(_) | Selection::Program(_) => Err(Refused::of("surplus subject")
-                .stating(format_args!(
-                    "`{}` takes the governing package entire, and no subject",
-                    self.command
-                ))
-                .about_named(subject.unwrap_or_default())),
+            Selection::Library(_) | Selection::Program(_) | Selection::Module(_) => {
+                Err(Refused::of("surplus subject")
+                    .stating(format_args!(
+                        "`{}` takes the governing package entire, and no subject",
+                        self.command
+                    ))
+                    .about_named(subject.unwrap_or_default()))
+            }
         }
     }
 
@@ -819,6 +827,16 @@ impl Contract {
                     let format = settings.format_under(Some(&governing))?;
                     Rewritten::Files(program.declared_files()?, format)
                 }
+                // A loose module declares no file but its own, formatted as the file it is.
+                Selection::Module(module) => match module.entry() {
+                    Entry::Stdin(supplied) => {
+                        Rewritten::Stdin(settings.format_under(None)?, supplied.clone())
+                    }
+                    Entry::File(path) => Rewritten::Files(
+                        vec![path.clone()],
+                        settings.format_of_file(path, manifest, cabinet)?,
+                    ),
+                },
             },
         })
     }

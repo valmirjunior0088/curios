@@ -9,9 +9,6 @@
 #[cfg(test)]
 mod tests;
 
-/// The prefix a module on standard input is mounted at. A loose file written as a module is mounted at its stem, and standard input has none, so it is mounted under the name of where it came from: the `one` a heredoc declares is `/stdin/one`.
-pub const STDIN_MOUNT: &str = "stdin";
-
 mod record;
 use record::*;
 pub use record::{Diagnosis, Severity};

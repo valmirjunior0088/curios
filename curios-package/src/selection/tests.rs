@@ -52,6 +52,16 @@ fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String>
         Selection::Program(program) => Ok(program),
         Selection::Entire(entire) => entire.default_program().map_err(|report| report.render()),
         Selection::Library(_) => panic!("{argument:?} selects a library"),
+        Selection::Module(_) => panic!("{argument:?} selects a module"),
+    }
+}
+
+/// Whether `argument`, standing in `directory`, selects a text no package declares: a loose program or a loose module.
+fn loose(argument: Option<&str>, directory: &Path) -> bool {
+    match selection(argument, directory) {
+        Ok(Selection::Program(program)) => program.home().is_none(),
+        Ok(Selection::Module(_)) => true,
+        Ok(Selection::Entire(_) | Selection::Library(_)) | Err(_) => false,
     }
 }
 
@@ -210,7 +220,7 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
             ),
             ("lib.crs", ""),
             ("serve.crs", "/std/print(\"\")\n"),
-            ("scratch.crs", ""),
+            ("scratch.crs", "/std/print(\"\")\n"),
         ],
     );
 
@@ -229,7 +239,7 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
 /// A file no manifest governs is loose, and has nothing to be told.
 #[test]
 fn a_file_argument_needs_no_project() {
-    let root = tree("run-standalone", &[("scratch.crs", "")]);
+    let root = tree("run-standalone", &[("scratch.crs", "/std/print(\"\")\n")]);
 
     let program = selected(Some("scratch.crs"), &root).expect("a loose file");
     assert_eq!(program.entry(), &Entry::File(root.join("scratch.crs")));
@@ -600,8 +610,9 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
     assert_eq!(module.entry(), &Entry::File(root.join("serve.crs")));
     assert_eq!(module.through(), Some(root.join("helper.crs").as_path()));
 
-    let other = selected(Some("other.crs"), &root).expect("an undeclared module");
-    assert!(other.home().is_none());
+    let Ok(Selection::Module(other)) = selection(Some("other.crs"), &root) else {
+        panic!("an undeclared module is a module of its own");
+    };
     assert_eq!(other.entry(), &Entry::File(root.join("other.crs")));
 }
 
@@ -624,7 +635,7 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
             ("parse/lexer.crs", ""),
             ("deep/inner.crs", ""),
             ("notes.txt", ""),
-            ("odd-name.crs", ""),
+            ("odd-name.crs", "/std/print(\"\")\n"),
         ],
     );
     for file in [
@@ -633,8 +644,7 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
         "./notes.txt",
         "odd-name.crs",
     ] {
-        let program = selected(Some(file), &root).expect("a loose file");
-        assert!(program.home().is_none(), "{file}");
+        assert!(loose(Some(file), &root), "{file}");
     }
 
     // A program beside the manifest reads its modules beside itself, and one in a directory of its own reads them there.
@@ -656,15 +666,14 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
         ],
     );
     for file in ["stray.crs", "notes/stray.crs"] {
-        let program = selected(Some(file), &programs).expect("a loose file");
-        assert!(program.home().is_none(), "{file}");
+        assert!(loose(Some(file), &programs), "{file}");
     }
 }
 
 /// A file no manifest above it governs is loose, with nothing to be told.
 #[test]
 fn a_placed_file_no_manifest_governs_is_loose() {
-    let root = tree("placed-loose", &[("scratch.crs", "")]);
+    let root = tree("placed-loose", &[("scratch.crs", "/std/print(\"\")\n")]);
 
     let Selection::Program(program) =
         selection(Some("scratch.crs"), &root).expect("an answer, not a refusal")
@@ -704,8 +713,7 @@ fn a_file_no_member_holds_under_an_umbrella_is_loose() {
     let root = umbrella("umbrella-stray");
 
     for stray in ["scratch.crs", "tools/scratch.crs"] {
-        let program = selected(Some(stray), &root).expect("an answer, not a refusal");
-        assert!(program.home().is_none(), "{stray}");
+        assert!(loose(Some(stray), &root), "{stray}");
     }
 }
 
@@ -759,4 +767,59 @@ fn a_named_manifest_places_no_file_outside_its_package() {
     };
     let refusal = refusal.render();
     assert!(refusal.contains("is outside the package"), "{refusal}");
+}
+
+/// **The form.** A text no package declares is selected as what it is written as, read once, here: a module where no term closes its declarations — a file mounted at its stem and standard input at `/stdin`, Core text as much as a program's text — and a program where one does, a file's text read through the overlay an editor holds before the disk. A module whose stem is no name can be mounted nowhere, and is refused here for it.
+#[test]
+fn a_loose_text_is_selected_as_what_it_is_written_as() {
+    const MODULE: &str = "pub let one : /std/Nat = 1;\n";
+    let root = tree(
+        "loose-form",
+        &[
+            ("double.crs", MODULE),
+            ("program.crs", STDIN),
+            ("proof.crsc", ""),
+            ("held.crs", STDIN),
+            ("my-file.crs", MODULE),
+        ],
+    );
+    let select = |spelling, overlay: &Overlay, text: &str| {
+        Selection::of(spelling, None, &root, overlay, None, || {
+            Ok(Supplied {
+                text: text.to_string(),
+                written: WrittenIn::Program,
+            })
+        })
+    };
+    let mounted = |selection: Result<Selection, Box<Report>>| match selection {
+        Ok(Selection::Module(module)) => prefixes(vec![module.unit().expect("its unit")]),
+        Ok(_) => vec!["no module".to_string()],
+        Err(report) => vec![report.render()],
+    };
+    let none = Overlay::default();
+    let file = |name: &str| Spelling::File(root.join(name));
+
+    assert_eq!(mounted(select(file("double.crs"), &none, "")), ["/double"]);
+    assert_eq!(mounted(select(Spelling::Stdin, &none, MODULE)), ["/stdin"]);
+    assert_eq!(
+        mounted(select(file("program.crs"), &none, "")),
+        ["no module"]
+    );
+    assert_eq!(
+        mounted(select(Spelling::Stdin, &none, STDIN)),
+        ["no module"]
+    );
+    assert!(matches!(
+        select(file("proof.crsc"), &none, ""),
+        Ok(Selection::Module(module)) if module.entry() == &Entry::File(root.join("proof.crsc"))
+    ));
+
+    let editing = Overlay::of([(root.join("held.crs"), MODULE.to_string())]);
+    assert_eq!(mounted(select(file("held.crs"), &editing, "")), ["/held"]);
+
+    let refused = mounted(select(file("my-file.crs"), &none, "")).join("");
+    assert!(
+        refused.contains("unnameable module") && refused.contains("its stem `my-file`"),
+        "{refused}"
+    );
 }

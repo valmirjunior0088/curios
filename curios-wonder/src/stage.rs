@@ -73,7 +73,7 @@ pub fn stage(
         }
     };
 
-    let compiled = match subject.formed(overlay) {
+    let compiled = match subject {
         Subject::Unit { .. } => return Err(Refusal::Unit),
         Subject::Entry {
             units,
@@ -224,7 +224,7 @@ pub fn named_stage(
         return program_part(budget, subject, asked, name, overlay, through, progress);
     }
 
-    match subject.formed(overlay) {
+    match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             let Some(described) = described_unit(budget, &units, asked, through, &mut *progress)
@@ -393,7 +393,7 @@ fn program_part(
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<(Described, String)>, Refusal> {
-    let (units, origin, declares, package) = match subject.formed(overlay) {
+    let (units, origin, declares, package) = match subject {
         Subject::Entry {
             units,
             origin,

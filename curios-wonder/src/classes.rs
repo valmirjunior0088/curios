@@ -110,7 +110,6 @@ pub fn classed(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<Classed>, Vec<Diagnosis>> {
-    let subject = subject.formed(overlay);
     if let Subject::CoreText { .. } = subject {
         return Err(unlowered());
     }

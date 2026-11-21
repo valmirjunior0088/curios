@@ -40,7 +40,7 @@ pub fn lint(
                 .cloned()
                 .collect::<Vec<_>>(),
         ),
-        Selection::Library(_) | Selection::Program(_) => None,
+        Selection::Library(_) | Selection::Program(_) | Selection::Module(_) => None,
     };
 
     let mut seen = Renderings::default();

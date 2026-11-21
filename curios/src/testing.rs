@@ -11,20 +11,17 @@ use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
     curios_abi::{ForeignStore, HostOps, TEST_ANSWER},
     curios_browser::page,
-    curios_common::{Qualifier, Report, STDIN_NAME, Source, SourceName},
-    curios_module::{Overlay, PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
+    curios_common::{Qualifier, Report, Source, SourceName},
+    curios_module::{PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{
-        Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Supplied, Target, order,
-        tests_filed_as,
+        Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order, tests_filed_as,
     },
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, fold_sources},
-    curios_surface::{Entrypoint, Form, WrittenIn},
+    curios_surface::Entrypoint,
     curios_verdict::{Program, Verdicts},
-    curios_wonder::{STDIN_MOUNT, not_a_program},
     std::{
         collections::BTreeMap,
-        fs,
         path::{Path, PathBuf},
         sync::Arc,
     },
@@ -67,8 +64,14 @@ pub struct TestSubject {
     filing: Option<Filing>,
 }
 
-/// Every subject `selection` declares tests in, in the order a run takes them: for the governing package entire its library, where it has one, then each executable in declaration order. A loose program is a subject in the form it is written in — a module as a unit of its own, and a program as its entry.
+/// Every subject `selection` declares tests in, in the order a run takes them: for the governing package entire its library, where it has one, then each executable in declaration order. A loose module is a unit of its own, and a loose program its entry.
 pub fn test_subjects(selection: Selection) -> Result<Vec<TestSubject>, CompileError> {
+    // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
+    let invoked = |entry: &Entry| match entry {
+        Entry::File(path) => path.clone(),
+        Entry::Stdin(_) => PathBuf::from(Spelling::STDIN),
+    };
+
     match selection {
         Selection::Entire(entire) => {
             let governing = &entire.governing;
@@ -96,38 +99,24 @@ pub fn test_subjects(selection: Selection) -> Result<Vec<TestSubject>, CompileEr
         )]),
         Selection::Program(program) => match program.home() {
             Some(_) => Ok(vec![TestSubject::declared(program)?]),
-            None => match program.entry() {
-                Entry::File(path) => {
-                    Ok(vec![
-                        match RootSource::loose_module(path, &Overlay::default()) {
-                            Some(unit) => {
-                                TestSubject::loose_module(unit, path, Named::File(path.clone()))
-                            }
-                            None => TestSubject::loose_program(
-                                opened(path, None)?,
-                                path,
-                                Named::File(path.clone()),
-                            ),
-                        },
-                    ])
-                }
-                Entry::Stdin(stdin) => {
-                    // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
-                    let invoked = Path::new(Spelling::STDIN);
-                    Ok(vec![match RootSource::supplied_module(
-                        STDIN_MOUNT,
-                        &Source::named(SourceName::stdin(), stdin.text.as_str()),
-                    ) {
-                        Some(unit) => TestSubject::loose_module(unit, invoked, Named::Stdin),
-                        None => TestSubject::loose_program(
-                            supplied(&stdin.text)?,
-                            invoked,
-                            Named::Stdin,
-                        ),
-                    }])
-                }
-            },
+            None => {
+                let opened = match program.entry() {
+                    Entry::File(path) => opened(path, None)?,
+                    Entry::Stdin(stdin) => supplied(&stdin.text)?,
+                };
+
+                Ok(vec![TestSubject::loose_program(
+                    opened,
+                    &invoked(program.entry()),
+                    program.named(),
+                )])
+            }
         },
+        Selection::Module(module) => Ok(vec![TestSubject::loose_module(
+            module.unit()?,
+            &invoked(module.entry()),
+            module.named(),
+        )]),
     }
 }
 
@@ -465,29 +454,17 @@ impl TestRun {
     }
 }
 
-/// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused, where no package declares it and its text is written as a module, as the module it is rather than as missing the term a program ends in. A declared entry is a program by its declaration, and the program grammar's refusal says what it lacks.
+/// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused, where the program grammar does not read it, in the grammar's words: a text admitted as a program is one by its declaration or by the term that closes it, so one that does not parse is a program written wrong.
 pub fn opened(
     path: &Path,
     package: Option<&PackageRoot>,
 ) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    open_entrypoint(path, package).map_err(|error| match (package, fs::read_to_string(path)) {
-        (None, Ok(text)) if Form::of(path, &text) == Form::Module => {
-            not_a_program(&Entry::File(path.to_path_buf())).into()
-        }
-        _ => CompileError::Failure(vec![error.report()]),
-    })
+    open_entrypoint(path, package).map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file when it is written as a module.
+/// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file.
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    supply_entrypoint(text).map_err(|error| match Form::of(Path::new(STDIN_NAME), text) {
-        Form::Module => not_a_program(&Entry::Stdin(Supplied {
-            text: text.to_string(),
-            written: WrittenIn::Program,
-        }))
-        .into(),
-        Form::Program => CompileError::Failure(vec![error.report()]),
-    })
+    supply_entrypoint(text).map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
 /// What the cabinet files for one test program: its modules and each prefix it was selected under that selects nothing, by their segments, beside the target's payload — none where it schedules no test — one archive as every other artifact in the cabinet is, under the target's own payload directory, which says what the bytes are. A corrupt or foreign payload fails to decode and is a miss, never an error.

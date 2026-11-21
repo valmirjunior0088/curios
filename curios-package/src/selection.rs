@@ -4,7 +4,7 @@
 //!
 //! That is also why `-` is spelled at all, rather than a bare invocation reading standard input when one is piped in. No argument already means the governing package, and deciding between the two would mean asking whether a terminal is attached — which makes one command line mean different things in a shell and in a pipeline.
 //!
-//! **What is selected is one of three things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; or a program. A program is *declared*, with a home in its package's `.curios/` and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more.
+//! **What is selected is one of four things.** The package entire — its library and every program it declares, which a command that needs one program narrows to the sole or `default` one; a library; a program; or a loose module. A program is *declared*, with a home in its package's `.curios/` and the units it is compiled against, or *loose*, with neither: a loose program is compiled against the prelude and nothing else, and the type has no field that could carry more. A loose text is a program where a term closes its declarations and a module where none does — a unit of its own, as a library is, mounted at its stem — and which it is is read here, once, so every command is handed what the text is and none reads it again.
 //!
 //! **A file is placed by what declares it, never by where it sits** (law 1). It is an executable's when it is that executable's entry or a module a `mod` chain from the entry reaches, the library's when a chain from `lib.crs` reaches it, and loose otherwise, as a file of Core text always is, no `mod` line reaching one — carrying, when a package's directory holds it, why it is in none of that package's units and what would put it in one, so a question can say so before it answers. Every command places a file this one way; what a command then does with a program or a library is its contract's to decide.
 
@@ -16,13 +16,19 @@ use {
         Cabinet, EXECUTABLE, Executable, Governing, LIBRARY, Package, Products, Refused, Target,
         module_below, module_of, order, reachable,
     },
-    curios_common::{Qualifier, Report, RootKind},
+    curios_common::{Qualifier, Report, RootKind, Source, SourceName, is_identifier},
     curios_module::{
         Overlay, PackageRoot, RootSource, identity, open_entrypoint, overlay_entrypoint,
     },
-    curios_surface::WrittenIn,
-    std::path::{Path, PathBuf},
+    curios_surface::{Form, WrittenIn},
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
 };
+
+/// The prefix a module on standard input is mounted at. A loose file written as a module is mounted at its stem, and standard input has none, so it is mounted under the name of where it came from: the `one` a heredoc declares is `/stdin/one`.
+pub const STDIN_MOUNT: &str = "stdin";
 
 /// How an argument is spelled, decided before anything looks at a manifest or the disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,15 +77,18 @@ pub enum Selection {
     Library(Library),
     /// One program.
     Program(Program),
+    /// A text no package declares, written as declarations alone.
+    Module(LooseModule),
 }
 
 impl Selection {
-    /// The governing root of what this selects, which `.curios/` sits beside: `None` for a program no package declares, which has none.
+    /// The governing root of what this selects, which `.curios/` sits beside: `None` for a program or a module no package declares, which has none.
     pub fn root(&self) -> Option<&Path> {
         match self {
             Self::Entire(entire) => Some(&entire.governing.root),
             Self::Library(library) => Some(&library.root),
             Self::Program(program) => program.home().map(|home| home.root.as_path()),
+            Self::Module(_) => None,
         }
     }
 
@@ -101,7 +110,7 @@ impl Selection {
                         .stating(format_args!("drop `--manifest {}`", manifest.display()))
                         .about_named("--manifest"));
                 }
-                None => Self::Program(Program::loose(Entry::Stdin(stdin()?))),
+                None => loose(Entry::Stdin(stdin()?), overlay)?,
             },
             Spelling::File(path) => placed(path, manifest, overlay, cabinet)?,
             Spelling::Name(name) => {
@@ -396,14 +405,14 @@ fn placed(
 ) -> Result<Selection, Box<Report>> {
     // No `mod` line reaches Core text, so a file of it is in no unit, wherever it sits.
     if WrittenIn::of(&file) == WrittenIn::CoreText {
-        return Ok(loose(file));
+        return loose(Entry::File(file), overlay);
     }
 
     let spelled = identity(&file);
 
     // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.
     let Some(governing) = Governing::of_file(&file, manifest, cabinet)? else {
-        return Ok(loose(file));
+        return loose(Entry::File(file), overlay);
     };
     let directory = identity(&governing.directory);
     let package = PackageRoot::new(&governing.package.name, &directory);
@@ -460,12 +469,98 @@ fn placed(
         }
     }
 
-    Ok(loose(file))
+    loose(Entry::File(file), overlay)
 }
 
-/// `file`, loose: a program compiled against the prelude alone.
-fn loose(file: PathBuf) -> Selection {
-    Selection::Program(Program::loose(Entry::File(file)))
+/// The text `entry` holds, which no package declares, as what it is written as: a program compiled against the prelude alone where a term closes its declarations, and a module otherwise. A file's text is read through `overlay` before the disk, and one that cannot be read is a program, whose compilation reports the read; a module whose stem is no name a mount can take is refused, there being nowhere to mount it.
+fn loose(entry: Entry, overlay: &Overlay) -> Result<Selection, Box<Report>> {
+    let (source, written) = match &entry {
+        Entry::File(path) => {
+            let text = match overlay.get(path) {
+                Some(text) => text.to_string(),
+                None => match fs::read_to_string(path) {
+                    Ok(text) => text,
+                    Err(_) => return Ok(Selection::Program(Program::loose(entry))),
+                },
+            };
+
+            (Source::held(path, text), WrittenIn::of(path))
+        }
+        Entry::Stdin(stdin) => (
+            Source::named(SourceName::stdin(), stdin.text.as_str()),
+            stdin.written,
+        ),
+    };
+    if Form::of(&source, written) == Form::Program {
+        return Ok(Selection::Program(Program::loose(entry)));
+    }
+
+    if let Entry::File(path) = &entry {
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default();
+        if !is_identifier(stem) {
+            return Err(Refused::of("unnameable module")
+                .stating(format_args!(
+                    "{} is written as a module, with no final term",
+                    path.display()
+                ))
+                .stating(format_args!(
+                    "its stem `{stem}` is no name a module can take"
+                ))
+                .stating(
+                    "rename the file to an identifier, or end it in a term to make it a program",
+                )
+                .about_path(path));
+        }
+    }
+
+    Ok(Selection::Module(LooseModule { entry }))
+}
+
+/// A text no package declares, written as declarations alone: a unit of its own, compiled against the prelude alone and filed nowhere, mounted at its stem, or at [`STDIN_MOUNT`] on standard input, as a library is mounted at its package's name.
+pub struct LooseModule {
+    entry: Entry,
+}
+
+impl LooseModule {
+    /// Where its text comes from.
+    pub fn entry(&self) -> &Entry {
+        &self.entry
+    }
+
+    /// The module, as a report names it: the file it was given as, or standard input.
+    pub fn named(&self) -> Named {
+        match &self.entry {
+            Entry::File(path) => Named::File(path.clone()),
+            Entry::Stdin(_) => Named::Stdin,
+        }
+    }
+
+    /// The unit it is mounted as, written as a program's text is: a file at its stem, read as every unit's files are, and standard input's text at [`STDIN_MOUNT`], supplied, refused where the module grammar does not read it. Core text is mounted by its own reader.
+    pub fn unit(&self) -> Result<RootSource, Box<Report>> {
+        match &self.entry {
+            Entry::File(path) => {
+                let stem = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .expect("a loose module's stem is a name, as its selection checked");
+
+                Ok(RootSource::mounted(
+                    stem,
+                    RootKind::Ordinary,
+                    path,
+                    RootSource::namespace_of(path),
+                ))
+            }
+            Entry::Stdin(stdin) => RootSource::supplied_module(
+                STDIN_MOUNT,
+                &Source::named(SourceName::stdin(), stdin.text.as_str()),
+            )
+            .map_err(|error| Box::new(error.report())),
+        }
+    }
 }
 
 /// Whether a `mod` chain from `entry`, an executable of `package`, reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.

@@ -6,7 +6,7 @@ use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::{Format, Formatted, WrittenIn},
-    curios_wonder::{Origin, Subject, diagnostics},
+    curios_wonder::{diagnostics, test_support::*},
     std::{fs, path::Path},
 };
 
@@ -30,18 +30,9 @@ fn every_crs_example_reports_nothing() {
                 report.rendered(Kind::Error, &Style::plain())
             )),
         }
-        let subject = Subject::Entry {
-            units: Vec::new(),
-            origin: Origin::Text {
-                text: example,
-                written: WrittenIn::Program,
-            },
-            declares: None,
-            package: None,
-        };
         let reports = diagnostics(
             DEFAULT_BUDGET,
-            subject,
+            stdin_subject(&example, WrittenIn::Program),
             &Overlay::default(),
             None,
             &mut |_| {},

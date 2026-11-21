@@ -15,8 +15,9 @@ use {
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
     },
     curios_module::{Brought, LoadError, Overlay},
-    curios_package::{Entry, Home, Library, Program, Refused, Selection},
+    curios_package::{Entry, Home, Library, LooseModule, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
+    curios_surface::WrittenIn,
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -146,11 +147,12 @@ pub struct Asked {
 }
 
 impl Asked {
-    /// Every subject `selection` is asked about: one for a program or a library, and for the governing package entire its library and then every program it declares, each a subject of its own.
+    /// Every subject `selection` is asked about: one for a program, a library or a loose module, and for the governing package entire its library and then every program it declares, each a subject of its own.
     pub fn every(selection: Selection) -> Result<Vec<Self>, Box<Report>> {
         Ok(match selection {
             Selection::Program(program) => vec![Self::about_program(program)?],
             Selection::Library(library) => vec![Self::about_library(library)],
+            Selection::Module(module) => vec![Self::about_module(module)?],
             Selection::Entire(entire) => {
                 let mut asked = Vec::new();
                 if let Some(library) = entire.library()? {
@@ -164,15 +166,9 @@ impl Asked {
         })
     }
 
-    /// A program, asked about as its entry: a file, or what standard input held where the program was admitted.
+    /// A program, asked about as its entry: a file, or what standard input held where the program was admitted — of Core text, read by Core text's own door, a `.crsc` being loose wherever it sits.
     fn about_program(program: Program) -> Result<Self, Box<Report>> {
-        let origin = match program.entry() {
-            Entry::Stdin(stdin) => Origin::Text {
-                text: stdin.text.clone(),
-                written: stdin.written,
-            },
-            Entry::File(path) => Origin::File(path.clone()),
-        };
+        let origin = origin_of(program.entry());
         let verdicts = program.home().map(|home| {
             Verdicts::at(home.cabinet.clone()).executing(&home.package, &home.executable)
         });
@@ -180,17 +176,39 @@ impl Asked {
         let package = program.home().map(Home::package_root);
         let named = program.named();
         let manifest = program.home().map(|home| home.manifest.clone());
-
-        Ok(Self {
-            subject: Subject::Entry {
+        let subject = match origin.written() {
+            WrittenIn::Program => Subject::Entry {
                 units: program.into_units(),
                 origin,
                 declares,
                 package,
             },
+            WrittenIn::CoreText => Subject::CoreText { origin },
+        };
+
+        Ok(Self {
+            subject,
             named: Some(named),
             manifest,
             verdicts,
+        })
+    }
+
+    /// A loose module, asked about as the unit it is, mounted at its stem or at `/stdin` — of Core text, read by Core text's own door. No manifest declares it, and no cabinet files it.
+    fn about_module(module: LooseModule) -> Result<Self, Box<Report>> {
+        let origin = origin_of(module.entry());
+        let subject = match origin.written() {
+            WrittenIn::Program => Subject::Unit {
+                units: vec![module.unit()?],
+            },
+            WrittenIn::CoreText => Subject::CoreText { origin },
+        };
+
+        Ok(Self {
+            subject,
+            named: Some(module.named()),
+            manifest: None,
+            verdicts: None,
         })
     }
 
@@ -542,16 +560,18 @@ pub fn rendered(
         .collect()
 }
 
-/// What `wonder --stage` reprints a rung of: a program, at any rung, or a library through one of its files, at the rungs a unit has.
+/// What `wonder --stage` reprints a rung of: a program, at any rung, or a library through one of its files or a loose module, at the rungs a unit has.
 pub enum Staged {
     Program(Program),
     Library(Library),
+    Module(LooseModule),
 }
 
-/// What `wonder --name` and its views ask in: a program's scope, a library's, or the prelude's alone, which a question with no subject asks in outside every package.
+/// What `wonder --name` and its views ask in: a program's scope, a library's, a loose module's, or the prelude's alone, which a question with no subject asks in outside every package.
 pub enum Scope {
     Program(Program),
     Library(Library),
+    Module(LooseModule),
     Prelude,
 }
 
@@ -561,6 +581,7 @@ impl Scope {
         Ok(match self {
             Self::Program(program) => Asked::about_program(program)?,
             Self::Library(library) => Asked::about_library(library),
+            Self::Module(module) => Asked::about_module(module)?,
             Self::Prelude => Asked::about_the_prelude(),
         })
     }
@@ -580,6 +601,7 @@ pub fn wonder_stage(
         Staged::Library(library) => {
             return library_stage(budget, name, library, &overlay, telling);
         }
+        Staged::Module(module) => return Err(not_a_program(module.entry()).into()),
     };
 
     let refusal = not_a_program(program.entry());
@@ -629,7 +651,7 @@ pub fn wonder_named_stage(
     let reader = telling.reader();
     let refusal = match &scope {
         Scope::Program(program) => Some(not_a_program(program.entry())),
-        Scope::Library(_) | Scope::Prelude => None,
+        Scope::Library(_) | Scope::Module(_) | Scope::Prelude => None,
     };
     let staged = scope
         .asked()?
@@ -1135,14 +1157,13 @@ fn listed(lead: &str, items: &[String]) -> String {
     lines.join("\n")
 }
 
-/// The question `staged` is asked as, beside the file a question about one file of it is about: the one it was selected through, a program's own entry, or a library's header.
+/// The question `staged` is asked as, beside the file a question about one file of it is about: the one it was selected through, a program's own entry or a loose module's text, or a library's header.
 fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
     match staged {
         Staged::Program(program) => {
-            let file = match (program.through(), program.entry()) {
-                (Some(module), _) => module.to_path_buf(),
-                (None, Entry::File(entry)) => entry.clone(),
-                (None, Entry::Stdin(_)) => PathBuf::from(STDIN_NAME),
+            let file = match program.through() {
+                Some(module) => module.to_path_buf(),
+                None => entry_file(program.entry()),
             };
 
             Ok((Asked::about_program(program)?, file))
@@ -1152,6 +1173,19 @@ fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
 
             Ok((Asked::about_library(library), file))
         }
+        Staged::Module(module) => {
+            let file = entry_file(module.entry());
+
+            Ok((Asked::about_module(module)?, file))
+        }
+    }
+}
+
+/// The file a question about `entry`'s text names it by: its path, or `<stdin>` for what standard input held.
+fn entry_file(entry: &Entry) -> PathBuf {
+    match entry {
+        Entry::File(path) => path.clone(),
+        Entry::Stdin(_) => PathBuf::from(STDIN_NAME),
     }
 }
 
@@ -1253,6 +1287,17 @@ pub fn file_subject(path: PathBuf) -> Result<PathBuf, Box<Report>> {
     match readable {
         Ok(()) => Ok(path),
         Err(error) => Err(Box::new(LoadError::Read { path, error }.report())),
+    }
+}
+
+/// Where the text of `entry` comes from, as the engine reads it: a file, or what standard input held where its subject was admitted.
+fn origin_of(entry: &Entry) -> Origin {
+    match entry {
+        Entry::Stdin(stdin) => Origin::Text {
+            text: stdin.text.clone(),
+            written: stdin.written,
+        },
+        Entry::File(path) => Origin::File(path.clone()),
     }
 }
 

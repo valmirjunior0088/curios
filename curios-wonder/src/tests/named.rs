@@ -1,7 +1,7 @@
 //! What `wonder --at` and the server's requests answer — what stands at each place of a file, read off its subject as its check's fold left it: a name with the declaration it names, or a term — and what `wonder --name` and `wonder --witnesses` answer of the declaration a path names.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_common::{Qualifier, Source, Span},
     curios_core::{Declared, Totality},
     curios_elab::DEFAULT_BUDGET,
@@ -900,19 +900,11 @@ fn a_path_names_a_module_only_where_a_mod_line_declares_one() {
     assert_eq!(exposed_in(MODULES, "/nowhere"), None);
 }
 
-/// What `--name` answers of `path` in the scope of `program`, read of standard input.
-fn named_in(program: &str, path: &str) -> Option<Referent> {
+/// What `--name` answers of `path` in the scope of `text`, read of standard input as `curios wonder -` admits it: a program, or a module of its own.
+fn named_in(text: &str, path: &str) -> Option<Referent> {
     crate::referent(
         DEFAULT_BUDGET,
-        Subject::Entry {
-            units: Vec::new(),
-            origin: Origin::Text {
-                text: program.to_string(),
-                written: WrittenIn::Program,
-            },
-            declares: None,
-            package: None,
-        },
+        stdin_subject(text, WrittenIn::Program),
         &qualified(path),
         &Overlay::default(),
         None,

@@ -5,15 +5,21 @@ use {
     crate::*,
     clap::CommandFactory,
     curios_common::{About, Report, STDIN_NAME, Style, test_support::*},
+    curios_package::LooseModule,
     std::{collections::BTreeSet, fmt::Write, fs, iter},
 };
 
 /// Where a command line spells its subject.
 const SUBJECT: &str = "SUBJECT";
 
-/// What standard input holds wherever a row spells `-`: a program, as admission drains it.
-fn held() -> Result<String, Box<Report>> {
+/// What standard input holds wherever a row of [`EXPECTED`] spells `-`: a program, as admission drains it.
+fn a_program() -> Result<String, Box<Report>> {
     Ok("/std/print(\"\")\n".to_string())
+}
+
+/// What standard input holds wherever a row of [`MODULE_ON_STDIN`] spells `-`: declarations alone.
+fn a_module() -> Result<String, Box<Report>> {
+    Ok("pub let one : /std/Nat = 1;\n".to_string())
 }
 
 /// A refusal on one line of the table: its tag, each fact, each way out and what it is about.
@@ -286,6 +292,14 @@ impl Standing<'_> {
         }
     }
 
+    /// A loose module as a row writes it, by its file or `-`.
+    fn module(&self, module: &LooseModule) -> String {
+        match module.entry() {
+            Entry::Stdin(_) => "module -".to_string(),
+            Entry::File(path) => format!("module {}", self.path(path)),
+        }
+    }
+
     fn library(&self, library: &Library) -> String {
         format!(
             "library {}{}",
@@ -318,14 +332,14 @@ impl Standing<'_> {
         }
     }
 
-    /// What `mode` admits its argument as, standing here, or the refusal it earns.
-    fn admitted(&self, mode: &Mode) -> String {
+    /// What `mode` admits its argument as, standing here, with what `held` reads on standard input, or the refusal it earns.
+    fn admitted(&self, mode: &Mode, held: &dyn Fn() -> Result<String, Box<Report>>) -> String {
         let contract = mode.contract();
         let subject = mode.subject();
         let directory = self.directory.as_path();
         let stdin = StandardInput {
             core: mode.core(),
-            read: &held,
+            read: held,
         };
 
         let admitted = match contract.accepts {
@@ -337,12 +351,14 @@ impl Standing<'_> {
                 .map(|staged| match staged {
                     Staged::Program(program) => self.program(&program),
                     Staged::Library(library) => self.library(&library),
+                    Staged::Module(module) => self.module(&module),
                 }),
             Accepts::Scope => contract
                 .admit_scope(subject, None, directory, None, &stdin)
                 .map(|scope| match scope {
                     Scope::Program(program) => self.program(&program),
                     Scope::Library(library) => self.library(&library),
+                    Scope::Module(module) => self.module(&module),
                     Scope::Prelude => "the prelude".to_string(),
                 }),
             Accepts::Library => contract
@@ -353,6 +369,7 @@ impl Standing<'_> {
                 .map(|selection| match selection {
                     Selection::Program(program) => self.program(&program),
                     Selection::Library(library) => self.library(&library),
+                    Selection::Module(module) => self.module(&module),
                     Selection::Entire(entire) => package_entire(&entire),
                 }),
             Accepts::Entire => contract
@@ -425,7 +442,7 @@ fn table(root: &Path) -> String {
                 directory: root.join(standpoint),
             };
             let argument = written.map(|written| standing.argument(written));
-            let admitted = standing.admitted(&parsed(line, argument.as_deref()));
+            let admitted = standing.admitted(&parsed(line, argument.as_deref()), &a_program);
 
             writeln!(
                 table,
@@ -465,10 +482,10 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), cabinet Write,
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → refused: core text: `run` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `run` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -486,10 +503,10 @@ compile SUBJECT — Program (its own file), cabinet Write, leaves Executable, op
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → refused: missing output: `compile` files what it builds under the package that declares it · this file has none · try; curios compile <root>/work/app/stray.crs --output stray → <root>/work/app/stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → refused: missing output: `compile` files what it builds under the package that declares it · this file has none · try; curios compile <root>/scratch.crs --output scratch → <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -507,10 +524,10 @@ compile SUBJECT --output out — Program (its own file), cabinet Write, leaves E
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → refused: core text: `compile` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → refused: not a program: `compile` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -551,10 +568,10 @@ test SUBJECT — Any, cabinet Write, leaves Nothing, options --target --port --f
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → refused: core text: `test` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -594,10 +611,10 @@ lint SUBJECT — Any, cabinet Write, leaves Nothing, options --budget --manifest
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → refused: core text: `lint` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -657,10 +674,10 @@ wonder SUBJECT — Any, cabinet Write, leaves Nothing, options --tests --stage -
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -678,10 +695,10 @@ wonder --tests SUBJECT — Any, cabinet Write, leaves Nothing, options --tests -
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -699,10 +716,10 @@ wonder --stage core SUBJECT — ProgramOrLibrary, cabinet Write, leaves Nothing,
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -720,10 +737,10 @@ wonder --stage anf SUBJECT — Program, cabinet Write, leaves Nothing, options -
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `wonder --stage` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `wonder --stage` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → refused: not a program: `wonder --stage` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -740,10 +757,10 @@ wonder --at SUBJECT:1:1 — ProgramOrLibrary, cabinet Write, leaves Nothing, opt
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → refused: core text: `wonder --at` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work/app/helper: bench → program bench
@@ -757,10 +774,10 @@ wonder --classes SUBJECT — ProgramOrLibrary, cabinet Write, leaves Nothing, op
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → refused: core text: `wonder --classes` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -778,10 +795,10 @@ wonder --name /std/Bool/not SUBJECT — Scope, cabinet Write, leaves Nothing, op
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -799,10 +816,10 @@ wonder --name /std/Show --witnesses SUBJECT — Scope, cabinet Write, leaves Not
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -820,10 +837,10 @@ wonder --name /std/Bool/not --footprint SUBJECT — Program, cabinet Write, leav
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `wonder --name --footprint` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `wonder --name --footprint` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → refused: not a program: `wonder --name --footprint` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -841,10 +858,10 @@ wonder --false SUBJECT — Program, cabinet Write, leaves Nothing, options --tes
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `wonder --false` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `wonder --false` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → refused: not a program: `wonder --false` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -862,10 +879,10 @@ wonder --name /std/Bool/not --stage core SUBJECT — Scope, cabinet Write, leave
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → module stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → module <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -883,10 +900,10 @@ wonder --name /std/Bool/not --stage anf SUBJECT — Program, cabinet Write, leav
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: not a program: `wonder --name --stage` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/lib.crs
   work/app: util.crs → refused: not a program: `wonder --name --stage` takes a program · this file belongs to the library of `/app` · name an executable or a program file → <root>/work/app/util.crs
-  work/app: stray.crs → loose stray.crs
+  work/app: stray.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/work/app/stray.crs
   work/app: proof.crsc → loose proof.crsc
   work/app: nested/lib.crs → refused: not a program: `wonder --name --stage` takes a program · this file belongs to the library of `/nested` · name an executable or a program file → <root>/work/app/nested/lib.crs
-  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a program: this file is written as a module · it has no final term to compile a program from → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -906,6 +923,48 @@ fn every_command_admits_what_the_table_says() {
 
     assert!(table == expected(), "the table now reads:\n{table}");
 }
+
+/// **The table of a module on standard input.** Every command whose argument is its subject, admitting `-` while standard input holds declarations alone: a unit of its own wherever a library's file is one, and refused by every command that needs a program or a library.
+#[test]
+fn every_command_admits_a_module_on_standard_input_as_what_it_is() {
+    let root = tree();
+    let standing = Standing {
+        root: &root,
+        directory: root.join("work/app"),
+    };
+    let mut table = String::new();
+
+    for line in commands() {
+        if !line.contains(&SUBJECT) {
+            continue;
+        }
+        let admitted = standing.admitted(&parsed(line, Some("-")), &a_module);
+        writeln!(table, "{}: {admitted}", line.join(" ")).unwrap();
+    }
+
+    assert!(table == MODULE_ON_STDIN, "the table now reads:\n{table}");
+}
+
+const MODULE_ON_STDIN: &str = r#"run SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+compile SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+compile SUBJECT --output out: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+document SUBJECT: refused: not a library: `document` takes a library · a program is not one → <stdin>
+test SUBJECT: module -
+lint SUBJECT: module -
+format SUBJECT: standard input within 100
+format --core SUBJECT: standard input within 100 as Core text
+wonder SUBJECT: module -
+wonder --tests SUBJECT: module -
+wonder --stage core SUBJECT: module -
+wonder --stage anf SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+wonder --classes SUBJECT: module -
+wonder --name /std/Bool/not SUBJECT: module -
+wonder --name /std/Show --witnesses SUBJECT: module -
+wonder --name /std/Bool/not --footprint SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+wonder --false SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+wonder --name /std/Bool/not --stage core SUBJECT: module -
+wonder --name /std/Bool/not --stage anf SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
+"#;
 
 /// `--core` speaks of standard input alone: beside a file, an executable's name or no subject it is refused, and beside `-` it says the text is Core text.
 #[test]

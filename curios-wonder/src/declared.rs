@@ -20,7 +20,7 @@ pub fn declared_tests(
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
 
-    let paths = match subject.formed(overlay) {
+    let paths = match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             Fold::new(budget, &units, cache).test_paths(&mut *progress)?

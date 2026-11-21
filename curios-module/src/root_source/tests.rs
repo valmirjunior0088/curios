@@ -109,7 +109,7 @@ fn text_written_as_a_module_is_supplied_at_the_prefix_given() {
     ));
 
     let program = Source::named(SourceName::stdin(), "/std/print(\"\")\n");
-    assert!(RootSource::supplied_module("stdin", &program).is_none());
+    assert!(RootSource::supplied_module("stdin", &program).is_err());
 }
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
