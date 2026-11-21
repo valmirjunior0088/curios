@@ -52,6 +52,7 @@ fn invoke_over(
         directory,
         &curios_module::Overlay::default(),
         cabinet,
+        || unreachable!("these fixtures declare their executables"),
     )
     .expect("a governed package")
     {

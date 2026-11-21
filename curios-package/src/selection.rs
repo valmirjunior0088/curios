@@ -74,14 +74,6 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// This selection, a program on standard input read as written in `written` ([`Program::read_stdin_as`]).
-    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
-        match self {
-            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
-            selection => selection,
-        }
-    }
-
     /// The governing root of what this selects, which `.curios/` sits beside: `None` for a program no package declares, which has none.
     pub fn root(&self) -> Option<&Path> {
         match self {
@@ -91,16 +83,17 @@ impl Selection {
         }
     }
 
-    /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks, and filing into the cabinet `cabinet` names or the governing root's own.
+    /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks, and filing into the cabinet `cabinet` names or the governing root's own. Standard input is drained by `stdin`, here and only where `-` asks for it, so what it holds travels with what is selected and nothing past admission reads it.
     pub fn of(
         spelling: Spelling,
         manifest: Option<&Path>,
         directory: &Path,
         overlay: &Overlay,
         cabinet: Option<&Path>,
+        stdin: impl FnOnce() -> Result<Supplied, Box<Report>>,
     ) -> Result<Self, Box<Report>> {
         Ok(match spelling {
-            // Answered before anything looks for a manifest, which is also why no manifest can govern it.
+            // Answered before anything looks for a manifest, which is also why no manifest can govern it, and refused before standard input is drained.
             Spelling::Stdin => match manifest {
                 Some(manifest) => {
                     return Err(Refused::of("surplus flag")
@@ -108,7 +101,7 @@ impl Selection {
                         .stating(format_args!("drop `--manifest {}`", manifest.display()))
                         .about_named("--manifest"));
                 }
-                None => Self::Program(Program::loose(Entry::Stdin(WrittenIn::Program))),
+                None => Self::Program(Program::loose(Entry::Stdin(stdin()?))),
             },
             Spelling::File(path) => placed(path, manifest, overlay, cabinet)?,
             Spelling::Name(name) => {
@@ -214,10 +207,17 @@ impl Library {
 /// Where a program's text comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
-    /// Standard input, drained to end — anonymous, so it has no entry path, and written in what the command line says it is, having no name to say it by.
-    Stdin(WrittenIn),
+    /// Standard input, as it was drained where its subject was selected — anonymous, so it has no entry path.
+    Stdin(Supplied),
     /// A file on disk.
     File(PathBuf),
+}
+
+/// What standard input held, drained to end where `-` asked for it, and what it is written in, which the command line says, having no name to say it by. Drained once: the program's own standard input is gone once the compiler has read the source out of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Supplied {
+    pub text: String,
+    pub written: WrittenIn,
 }
 
 /// Which subject a program or a library is, as a report names it: what was asked for, never the file it resolved to.
@@ -303,17 +303,6 @@ impl Program {
     /// Where its text comes from.
     pub fn entry(&self) -> &Entry {
         &self.entry
-    }
-
-    /// This program, its text on standard input read as written in `written`, where it is on standard input: what a command reading Core text is told by `--core`.
-    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
-        match self.entry {
-            Entry::Stdin(_) => Self {
-                entry: Entry::Stdin(written),
-                ..self
-            },
-            Entry::File(_) => self,
-        }
     }
 
     /// The program, as a report names it: the executable its package declares it as, the file it was given as, or standard input.

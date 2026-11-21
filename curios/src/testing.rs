@@ -15,7 +15,8 @@ use {
     curios_module::{Overlay, PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{
-        Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order, tests_filed_as,
+        Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Supplied, Target, order,
+        tests_filed_as,
     },
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, fold_sources},
     curios_surface::{Entrypoint, Form, WrittenIn},
@@ -66,11 +67,8 @@ pub struct TestSubject {
     filing: Option<Filing>,
 }
 
-/// Every subject `selection` declares tests in, in the order a run takes them: for the governing package entire its library, where it has one, then each executable in declaration order. A loose program is a subject in the form it is written in — a module as a unit of its own, and a program as its entry — and `stdin` is drained once, before its form is known, where the program is standard input.
-pub fn test_subjects(
-    selection: Selection,
-    stdin: impl FnOnce() -> Result<String, CompileError>,
-) -> Result<Vec<TestSubject>, CompileError> {
+/// Every subject `selection` declares tests in, in the order a run takes them: for the governing package entire its library, where it has one, then each executable in declaration order. A loose program is a subject in the form it is written in — a module as a unit of its own, and a program as its entry.
+pub fn test_subjects(selection: Selection) -> Result<Vec<TestSubject>, CompileError> {
     match selection {
         Selection::Entire(entire) => {
             let governing = &entire.governing;
@@ -113,16 +111,19 @@ pub fn test_subjects(
                         },
                     ])
                 }
-                Entry::Stdin(_) => {
-                    let text = stdin()?;
+                Entry::Stdin(stdin) => {
                     // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
                     let invoked = Path::new(Spelling::STDIN);
                     Ok(vec![match RootSource::supplied_module(
                         STDIN_MOUNT,
-                        &Source::named(SourceName::stdin(), text.as_str()),
+                        &Source::named(SourceName::stdin(), stdin.text.as_str()),
                     ) {
                         Some(unit) => TestSubject::loose_module(unit, invoked, Named::Stdin),
-                        None => TestSubject::loose_program(supplied(&text)?, invoked, Named::Stdin),
+                        None => TestSubject::loose_program(
+                            supplied(&stdin.text)?,
+                            invoked,
+                            Named::Stdin,
+                        ),
                     }])
                 }
             },
@@ -480,7 +481,11 @@ pub fn opened(
 /// The program `text`, arrived on standard input, parsed — and refused as [`opened`] refuses a file when it is written as a module.
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     supply_entrypoint(text).map_err(|error| match Form::of(Path::new(STDIN_NAME), text) {
-        Form::Module => not_a_program(&Entry::Stdin(WrittenIn::Program)).into(),
+        Form::Module => not_a_program(&Entry::Stdin(Supplied {
+            text: text.to_string(),
+            written: WrittenIn::Program,
+        }))
+        .into(),
         Form::Program => CompileError::Failure(vec![error.report()]),
     })
 }

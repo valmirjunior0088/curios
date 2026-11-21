@@ -311,6 +311,7 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
             &root,
             &Overlay::default(),
             None,
+            || unreachable!("a file is spelled, so standard input is never drained"),
         )
         .expect("the file is in none of the package's units");
         let Selection::Program(program) = selected else {
@@ -325,6 +326,7 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
         &root,
         &Overlay::default(),
         None,
+        || unreachable!("a file is spelled, so standard input is never drained"),
     )
     .err()
     .expect("a declared file uses its package's version")

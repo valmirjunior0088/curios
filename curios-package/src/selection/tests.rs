@@ -17,15 +17,33 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
     root
 }
 
-/// What `argument` selects standing in `directory` — a file argument made whole under `directory`, since placement reads a file where it is and a test cannot move the process there.
+/// What standard input holds wherever a test spells `-`: a program.
+const STDIN: &str = "/std/print(\"\")\n";
+
+/// [`STDIN`], as standard input supplies it.
+fn supplied() -> Result<Supplied, Box<Report>> {
+    Ok(Supplied {
+        text: STDIN.to_string(),
+        written: WrittenIn::Program,
+    })
+}
+
+/// What `argument` selects standing in `directory` — a file argument made whole under `directory`, since placement reads a file where it is and a test cannot move the process there — with [`STDIN`] on standard input.
 fn selection(argument: Option<&str>, directory: &Path) -> Result<Selection, String> {
     let spelling = match Spelling::of(argument) {
         Spelling::File(path) => Spelling::File(directory.join(path)),
         spelling => spelling,
     };
 
-    Selection::of(spelling, None, directory, &Overlay::default(), None)
-        .map_err(|report| report.render())
+    Selection::of(
+        spelling,
+        None,
+        directory,
+        &Overlay::default(),
+        None,
+        supplied,
+    )
+    .map_err(|report| report.render())
 }
 
 /// The program `argument` means to a command that needs one, standing in `directory`, or the refusal it earns.
@@ -277,19 +295,19 @@ fn a_dash_is_standard_input_everywhere() {
     for directory in [&*root, Path::new(".")] {
         let program = selected(Some("-"), directory).expect("standard input needs no project");
         assert!(
-            matches!(program.entry(), Entry::Stdin(WrittenIn::Program)) && program.home().is_none(),
+            matches!(program.entry(), Entry::Stdin(_)) && program.home().is_none(),
             "`-` should dispatch as standard input in {}",
             directory.display()
         );
     }
 }
 
-/// An anonymous program has no file to read, so the answer is absent rather than invented.
+/// An anonymous program has no file to read, so its entry is what standard input held, drained where it was selected, rather than a path invented for it.
 #[test]
-fn standard_input_has_no_entry_file() {
+fn standard_input_is_drained_where_it_is_selected() {
     let program = selected(Some("-"), Path::new(".")).expect("standard input");
 
-    assert_eq!(program.entry(), &Entry::Stdin(WrittenIn::Program));
+    assert_eq!(program.entry(), &Entry::Stdin(supplied().unwrap()));
 }
 
 /// Standard input is answered before any manifest is looked for, so naming one beside it is refused rather than ignored.
@@ -313,6 +331,7 @@ fn standard_input_is_governed_by_no_manifest() {
         &root,
         &Overlay::default(),
         None,
+        || panic!("standard input is refused before it is drained"),
     ) else {
         panic!("a manifest cannot govern standard input");
     };
@@ -497,10 +516,15 @@ fn no_argument_selects_the_package_entire() {
         ],
     );
 
-    let Selection::Entire(entire) =
-        Selection::of(Spelling::Nothing, None, &root, &Overlay::default(), None)
-            .expect("a governed package")
-    else {
+    let Selection::Entire(entire) = Selection::of(
+        Spelling::Nothing,
+        None,
+        &root,
+        &Overlay::default(),
+        None,
+        supplied,
+    )
+    .expect("a governed package") else {
         panic!("no argument is the package entire");
     };
 
@@ -710,6 +734,7 @@ fn an_umbrella_named_outright_is_still_refused() {
         &root,
         &Overlay::default(),
         None,
+        supplied,
     ) else {
         panic!("an umbrella named by hand is refused");
     };
@@ -728,6 +753,7 @@ fn a_named_manifest_places_no_file_outside_its_package() {
         &root,
         &Overlay::default(),
         None,
+        supplied,
     ) else {
         panic!("a file outside the named package is refused");
     };

@@ -13,7 +13,7 @@ use host::*;
 use {
     crate::{
         Access, Column, Failure, Piece, Quoted, Reporting, Run, Served, Steps, Subject, Then, Tree,
-        Wrote, alone, answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed,
+        Wrote, alone, answered, bound, cut, framed, keep, kept, port_of, reader, relayed,
         serve_run, total, troubled, url,
     },
     curios::{Outcome, TestSubject, Tested, test_subjects},
@@ -140,7 +140,7 @@ pub fn run_tests(
 ) -> Result<bool, CompileError> {
     let mut printer = Printer::new(filters);
 
-    for subject in test_subjects(selection, || Ok(drained()?))? {
+    for subject in test_subjects(selection)? {
         let shown = Subject::of(subject.named());
         let verdicts = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(
@@ -451,7 +451,7 @@ pub fn serve_tests(
     let mut planned = VecDeque::new();
     let mut pages = Vec::new();
 
-    for subject in test_subjects(selection, || Ok(drained()?))? {
+    for subject in test_subjects(selection)? {
         let shown = Subject::of(subject.named());
         let verdicts = subject.filed(|cabinet| access.filed(cabinet));
         let (tested, tree) = compiled(

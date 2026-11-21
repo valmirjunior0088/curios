@@ -17,7 +17,6 @@ use {
     curios_module::{Brought, LoadError, Overlay},
     curios_package::{Entry, Home, Library, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
-    curios_surface::WrittenIn,
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -165,12 +164,12 @@ impl Asked {
         })
     }
 
-    /// A program, asked about as its entry — the one place the transport drains standard input on the engine's behalf.
+    /// A program, asked about as its entry: a file, or what standard input held where the program was admitted.
     fn about_program(program: Program) -> Result<Self, Box<Report>> {
         let origin = match program.entry() {
-            Entry::Stdin(written) => Origin::Text {
-                text: read_stdin()?,
-                written: *written,
+            Entry::Stdin(stdin) => Origin::Text {
+                text: stdin.text.clone(),
+                written: stdin.written,
             },
             Entry::File(path) => Origin::File(path.clone()),
         };
@@ -556,25 +555,7 @@ pub enum Scope {
     Prelude,
 }
 
-impl Staged {
-    /// This subject, a program on standard input read as written in `written` (`Program::read_stdin_as`).
-    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
-        match self {
-            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
-            library => library,
-        }
-    }
-}
-
 impl Scope {
-    /// This scope, a program on standard input read as written in `written` (`Program::read_stdin_as`).
-    pub fn read_stdin_as(self, written: WrittenIn) -> Self {
-        match self {
-            Self::Program(program) => Self::Program(program.read_stdin_as(written)),
-            scope => scope,
-        }
-    }
-
     /// The question asked in this scope.
     fn asked(self) -> Result<Asked, Box<Report>> {
         Ok(match self {
@@ -1287,14 +1268,4 @@ pub fn not_a_program(entry: &Entry) -> Box<Report> {
         Entry::File(path) => refused("file").about_path(path),
         Entry::Stdin(_) => refused("text").about_named(STDIN_NAME),
     }
-}
-
-/// Standard input, drained to end.
-fn read_stdin() -> Result<String, Box<Report>> {
-    io::read_to_string(io::stdin()).map_err(|error| {
-        Refused::of("unreadable input")
-            .stating("standard input could not be read")
-            .stating(OsError(&error))
-            .about_named(STDIN_NAME)
-    })
 }

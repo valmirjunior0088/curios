@@ -1276,6 +1276,7 @@ impl Analyst {
             directory,
             overlay,
             self.cabinet.as_deref(),
+            || unreachable!("a document or the workspace is asked about, never `-`"),
         );
         // The project a check that filed collects, where it files into the project's own cabinet: one the command line named for every project is collected within each address alone.
         let collected = match (&selection, &self.cabinet) {

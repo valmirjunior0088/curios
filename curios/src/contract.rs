@@ -13,7 +13,7 @@ use {
     curios_module::Overlay,
     curios_package::{
         Cabinet, Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection,
-        Spelling, nearest_manifest,
+        Spelling, Supplied, nearest_manifest,
     },
     curios_pipeline::Stage,
     curios_surface::{Format, WrittenIn},
@@ -97,6 +97,12 @@ impl Product {
     fn filed_under_a_package(self) -> bool {
         matches!(self, Self::Executable | Self::Pages | Self::Sources)
     }
+}
+
+/// What an invocation states of standard input: whether `--core` says it is Core text, and the read that drains it, which admission draws on only where `-` asks for it.
+pub struct StandardInput<'a> {
+    pub core: bool,
+    pub read: &'a dyn Fn() -> Result<String, Box<Report>>,
 }
 
 /// What a command accepts, how it reaches the cabinet, and what it leaves behind.
@@ -399,6 +405,23 @@ impl Mode {
         }
     }
 
+    /// Whether the command was told standard input is Core text — `false` for a command that reads none.
+    pub fn core(&self) -> bool {
+        match self {
+            Mode::Wonder { core, .. } | Mode::Format { core, .. } => core.core,
+            Mode::Run { .. }
+            | Mode::Compile { .. }
+            | Mode::Document { .. }
+            | Mode::Test { .. }
+            | Mode::Curate { .. }
+            | Mode::Pin { .. }
+            | Mode::New { .. }
+            | Mode::Lint { .. } => false,
+            #[cfg(feature = "profile")]
+            Mode::Profile { .. } => false,
+        }
+    }
+
     /// The manifest the command was told governs — `None` when it was told none, or reads no manifest.
     pub fn manifest(&self) -> Option<&Path> {
         self.manifest_flag()?.manifest.as_deref()
@@ -456,8 +479,8 @@ impl Mode {
 pub enum Rewritten {
     /// Files on disk, rewritten in place: the files of one subject, which one package governs or none does, so one format serves them all.
     Files(Vec<PathBuf>, Format),
-    /// Standard input, written back to standard output, in the format the command line states, since no manifest governs it, and written in what the command line says it is.
-    Stdin(Format, WrittenIn),
+    /// What standard input held, written back to standard output, in the format the command line states, since no manifest governs it.
+    Stdin(Format, Supplied),
 }
 
 impl Contract {
@@ -504,21 +527,35 @@ impl Contract {
         }
     }
 
-    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks — save Core text, which a command that reads none refuses first.
+    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks — save Core text, which a command that reads none refuses first, and `--core` beside any subject but `-`. Standard input is drained here, by `stdin`'s read, where `-` is the subject, and nowhere else.
     fn selection(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Selection, Box<Report>> {
+        let written = Self::stdin_written_in(stdin.core, subject)?;
         let spelling = match Spelling::of(subject) {
             // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
             Spelling::File(path) => Spelling::File(self.read_here(file_subject(path)?)?),
             spelling => spelling,
         };
 
-        Selection::of(spelling, manifest, directory, &Overlay::default(), cabinet)
+        Selection::of(
+            spelling,
+            manifest,
+            directory,
+            &Overlay::default(),
+            cabinet,
+            || {
+                Ok(Supplied {
+                    text: (stdin.read)()?,
+                    written,
+                })
+            },
+        )
     }
 
     /// `path`, where the command reads what its name says it is written in: a command that reads no Core text refuses a `.crsc` before anything reads it, rather than reading it as the program it is not.
@@ -537,7 +574,7 @@ impl Contract {
     }
 
     /// What standard input is written in where `core` says it is Core text, refused beside any subject but standard input, whose text alone the flag speaks of: a file says what it is written in by its name.
-    pub fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
+    fn stdin_written_in(core: bool, subject: Option<&str>) -> Result<WrittenIn, Box<Report>> {
         match (core, Spelling::of(subject)) {
             (false, _) => Ok(WrittenIn::Program),
             (true, Spelling::Stdin) => Ok(WrittenIn::CoreText),
@@ -565,10 +602,11 @@ impl Contract {
         output: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Program, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
-        let program = match self.selection(subject, manifest, directory, cabinet)? {
+        let program = match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
             Selection::Library(library) => {
@@ -617,11 +655,12 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Staged, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
 
         Ok(
-            match self.selection(subject, manifest, directory, cabinet)? {
+            match self.selection(subject, manifest, directory, cabinet, stdin)? {
                 Selection::Program(program) => Staged::Program(program),
                 Selection::Entire(entire) => Staged::Program(entire.default_program()?),
                 Selection::Library(library) => Staged::Library(library),
@@ -636,15 +675,17 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Scope, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Scope, "{}", self.command);
 
         if subject.is_none() && manifest.is_none() && nearest_manifest(directory).is_none() {
+            Self::stdin_written_in(stdin.core, subject)?;
             return Ok(Scope::Prelude);
         }
 
         Ok(
-            match self.selection(subject, manifest, directory, cabinet)? {
+            match self.selection(subject, manifest, directory, cabinet, stdin)? {
                 Selection::Program(program) => Scope::Program(program),
                 Selection::Library(library) => Scope::Library(library),
                 Selection::Entire(entire) => match (entire.default_program(), entire.library()?) {
@@ -663,10 +704,11 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        match self.selection(subject, manifest, directory, cabinet)? {
+        match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
                 Refused::of("no library")
@@ -697,10 +739,11 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Selection, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        self.selection(subject, manifest, directory, cabinet)
+        self.selection(subject, manifest, directory, cabinet, stdin)
     }
 
     /// The governing package entire, which is all a command taking no subject selects.
@@ -710,10 +753,11 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Entire, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
-        match self.selection(subject, manifest, directory, cabinet)? {
+        match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Entire(entire) => Ok(*entire),
             Selection::Library(_) | Selection::Program(_) => Err(Refused::of("surplus subject")
                 .stating(format_args!(
@@ -724,20 +768,20 @@ impl Contract {
         }
     }
 
-    /// What `subject` rewrites, and within which format: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input. A file takes the format of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::format_under`]).
-    /// Standard input is read as Core text where `core` says so, which is refused beside any other subject.
+    /// What `subject` rewrites, and within which format: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or what standard input holds. A file takes the format of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::format_under`]).
+    /// Standard input is read as Core text where `stdin` says so, which is refused beside any other subject.
     pub fn admit_files(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
-        core: bool,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
-        self.rewritten(subject, manifest, directory, settings, core, cabinet)
+        self.rewritten(subject, manifest, directory, settings, cabinet, stdin)
     }
 
     fn rewritten(
@@ -746,20 +790,19 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
-        core: bool,
         cabinet: Option<&Path>,
+        stdin: &StandardInput,
     ) -> Result<Rewritten, Box<Report>> {
-        let stdin = Self::stdin_written_in(core, subject)?;
-
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
+                Self::stdin_written_in(stdin.core, subject)?;
                 let path = file_subject(path)?;
                 let format = settings.format_of_file(&path, manifest, cabinet)?;
                 Rewritten::Files(vec![path], format)
             }
-            spelling => match self.selection(subject, manifest, directory, cabinet)? {
-                Selection::Program(_) if spelling == Spelling::Stdin => {
-                    Rewritten::Stdin(settings.format_under(None)?, stdin)
+            _ => match self.selection(subject, manifest, directory, cabinet, stdin)? {
+                Selection::Program(ref program) if let Entry::Stdin(supplied) = program.entry() => {
+                    Rewritten::Stdin(settings.format_under(None)?, supplied.clone())
                 }
                 Selection::Entire(entire) => {
                     let format = settings.format_under(Some(&entire.governing))?;

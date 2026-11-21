@@ -92,6 +92,7 @@ fn library() -> TestSubject {
         &std_directory(),
         &Overlay::default(),
         None,
+        || unreachable!("the package entire reads nothing on standard input"),
     )
     .unwrap_or_else(|refusal| {
         panic!(
@@ -99,10 +100,8 @@ fn library() -> TestSubject {
             refusal.render()
         )
     });
-    let mut subjects = test_subjects(selection, || {
-        unreachable!("the package entire reads nothing on standard input")
-    })
-    .unwrap_or_else(|error| panic!("the standard library is no test subject:\n{error}"));
+    let mut subjects = test_subjects(selection)
+        .unwrap_or_else(|error| panic!("the standard library is no test subject:\n{error}"));
 
     assert_eq!(subjects.len(), 1, "the standard library is one library");
     subjects.remove(0)

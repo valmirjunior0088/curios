@@ -11,6 +11,11 @@ use {
 /// Where a command line spells its subject.
 const SUBJECT: &str = "SUBJECT";
 
+/// What standard input holds wherever a row spells `-`: a program, as admission drains it.
+fn held() -> Result<String, Box<Report>> {
+    Ok("/std/print(\"\")\n".to_string())
+}
+
 /// A refusal on one line of the table: its tag, each fact, each way out and what it is about.
 fn spelled(refusal: &Report) -> String {
     let about = match &refusal.about {
@@ -300,8 +305,8 @@ impl Standing<'_> {
                     .join(" "),
                 within.line_width.columns()
             ),
-            Rewritten::Stdin(within, written) => {
-                let read = match written {
+            Rewritten::Stdin(within, stdin) => {
+                let read = match stdin.written {
                     WrittenIn::Program => "",
                     WrittenIn::CoreText => " as Core text",
                 };
@@ -318,52 +323,51 @@ impl Standing<'_> {
         let contract = mode.contract();
         let subject = mode.subject();
         let directory = self.directory.as_path();
+        let stdin = StandardInput {
+            core: mode.core(),
+            read: &held,
+        };
 
         let admitted = match contract.accepts {
             Accepts::Program => contract
-                .admit_program(subject, None, mode.output(), directory, None)
+                .admit_program(subject, None, mode.output(), directory, None, &stdin)
                 .map(|program| self.program(&program)),
-            Accepts::ProgramOrLibrary => {
-                contract
-                    .admit_staged(subject, None, directory, None)
-                    .map(|staged| match staged {
-                        Staged::Program(program) => self.program(&program),
-                        Staged::Library(library) => self.library(&library),
-                    })
-            }
+            Accepts::ProgramOrLibrary => contract
+                .admit_staged(subject, None, directory, None, &stdin)
+                .map(|staged| match staged {
+                    Staged::Program(program) => self.program(&program),
+                    Staged::Library(library) => self.library(&library),
+                }),
             Accepts::Scope => contract
-                .admit_scope(subject, None, directory, None)
+                .admit_scope(subject, None, directory, None, &stdin)
                 .map(|scope| match scope {
                     Scope::Program(program) => self.program(&program),
                     Scope::Library(library) => self.library(&library),
                     Scope::Prelude => "the prelude".to_string(),
                 }),
             Accepts::Library => contract
-                .admit_library(subject, None, directory, None)
+                .admit_library(subject, None, directory, None, &stdin)
                 .map(|library| self.library(&library)),
             Accepts::Any => contract
-                .admit_any(subject, None, directory, None)
+                .admit_any(subject, None, directory, None, &stdin)
                 .map(|selection| match selection {
                     Selection::Program(program) => self.program(&program),
                     Selection::Library(library) => self.library(&library),
                     Selection::Entire(entire) => package_entire(&entire),
                 }),
             Accepts::Entire => contract
-                .admit_entire(subject, None, directory, None)
+                .admit_entire(subject, None, directory, None, &stdin)
                 .map(|entire| package_entire(&entire)),
-            Accepts::Files => {
-                let core = matches!(mode, Mode::Format { core, .. } if core.core);
-                contract
-                    .admit_files(
-                        subject,
-                        None,
-                        directory,
-                        &FormatSettings::default(),
-                        core,
-                        None,
-                    )
-                    .map(|rewritten| self.rewritten(&rewritten))
-            }
+            Accepts::Files => contract
+                .admit_files(
+                    subject,
+                    None,
+                    directory,
+                    &FormatSettings::default(),
+                    None,
+                    &stdin,
+                )
+                .map(|rewritten| self.rewritten(&rewritten)),
             Accepts::Nothing => Ok("takes no subject".to_string()),
         };
 

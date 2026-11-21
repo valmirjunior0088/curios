@@ -25,6 +25,7 @@ fn resolved(directory: &Path, subject: Option<&str>) -> (PathBuf, Vec<RootSource
         directory,
         &Overlay::default(),
         None,
+        || unreachable!("these fixtures name a subject on disk"),
     )
     .expect("a governed package")
     {
@@ -559,12 +560,16 @@ fn a_unit_reached_after_different_others_is_filed_once() {
 
 /// The one test subject of the package at `root`, as `curios test` selects it: its library.
 fn library(root: &Path) -> TestSubject {
-    let selection = Selection::of(Spelling::of(None), None, root, &Overlay::default(), None)
-        .expect("a governed package");
-    let mut subjects = test_subjects(selection, || {
-        unreachable!("the package reads nothing on standard input")
-    })
-    .expect("the package is a test subject");
+    let selection = Selection::of(
+        Spelling::of(None),
+        None,
+        root,
+        &Overlay::default(),
+        None,
+        || unreachable!("the package reads nothing on standard input"),
+    )
+    .expect("a governed package");
+    let mut subjects = test_subjects(selection).expect("the package is a test subject");
 
     subjects.remove(0)
 }

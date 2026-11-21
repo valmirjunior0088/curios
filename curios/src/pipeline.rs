@@ -44,11 +44,7 @@ pub fn payload_of(
         Target::Browser => Runs::Browser,
     };
 
-    // A loose program has no project, so it has no cabinet to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
-    let entry = match program.entry() {
-        Entry::Stdin(_) => None,
-        Entry::File(path) => Some(path.clone()),
-    };
+    let entry = program.entry().clone();
     let declared = program
         .home()
         .map(|home| (home.package.clone(), home.executable.clone()));
@@ -58,7 +54,7 @@ pub fn payload_of(
     let units = program.into_units();
 
     // Opened before the cabinet is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
-    let (entrypoint, loader, source) = open(entry.as_deref(), package.as_ref())?;
+    let (entrypoint, loader, source) = open(&entry, package.as_ref())?;
     // What the manifest declared, onto the resolver the entry's own names go through. A loose program has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
     let loader = match declares {
         Some(declares) => loader.declaring(declares),
@@ -155,20 +151,18 @@ pub fn documentation_of(
     documented.map(|documentation| (documentation, steps.into_tree()))
 }
 
-/// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, read for `package` where a package declares it, and otherwise standard input, drained to end.
-///
-/// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so a read of it reports the end of the input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
+/// The entry program, what its own modules resolve against, and the text it was parsed from: a file, read for `package` where a package declares it, or what standard input held where its subject was admitted.
 pub fn open(
-    entry: Option<&Path>,
+    entry: &Entry,
     package: Option<&PackageRoot>,
 ) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     match entry {
-        Some(path) => opened(path, package),
-        None => supplied(&drained()?),
+        Entry::File(path) => opened(path, package),
+        Entry::Stdin(stdin) => supplied(&stdin.text),
     }
 }
 
-/// Standard input, drained to end — once, since a second read finds nothing.
+/// Standard input, drained to end — once, by admission, since a second read finds nothing. The program's own standard input is gone once the compiler has read the source out of it, so a read of it reports the end of the input: unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
 pub fn drained() -> Result<String, Box<Report>> {
     io::read_to_string(io::stdin()).map_err(|error| {
         Refused::of("unreadable input")

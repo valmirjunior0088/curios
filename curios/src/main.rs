@@ -218,6 +218,11 @@ fn dispatch() -> Result<(), Failure> {
     // Read once, here, as `NO_COLOR` is, and handed to whatever opens a governing root (`curios::CABINET`).
     let cabinet = env::var_os(CABINET).map(PathBuf::from);
     let cabinet = cabinet.as_deref();
+    // Drained by admission, where `-` is the subject and nowhere else, so what it held travels with what is admitted.
+    let stdin = StandardInput {
+        core: mode.core(),
+        read: &drained,
+    };
 
     match mode {
         Mode::Run {
@@ -236,7 +241,8 @@ fn dispatch() -> Result<(), Failure> {
                     .into());
             }
 
-            let program = contract.admit_program(subject, manifest, None, &here()?, cabinet)?;
+            let program =
+                contract.admit_program(subject, manifest, None, &here()?, cabinet, &stdin)?;
             let root = program.home().map(|home| home.root.clone());
 
             // The program's arguments reach it through the page's address, and its name is its first.
@@ -328,7 +334,7 @@ fn dispatch() -> Result<(), Failure> {
                     .into());
             }
 
-            let selection = contract.admit_any(subject, manifest, &here()?, cabinet)?;
+            let selection = contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?;
             let root = selection.root().map(Path::to_path_buf);
             let green = match target {
                 Target::Native => {
@@ -351,7 +357,7 @@ fn dispatch() -> Result<(), Failure> {
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
         Mode::Lint { elaboration, .. } => {
-            let selection = contract.admit_any(subject, manifest, &here()?, cabinet)?;
+            let selection = contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?;
             let root = selection.root().map(Path::to_path_buf);
             let linted = lint(
                 elaboration.budget,
@@ -394,8 +400,14 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let program =
-                contract.admit_program(subject, manifest, destination, &here()?, cabinet)?;
+            let program = contract.admit_program(
+                subject,
+                manifest,
+                destination,
+                &here()?,
+                cabinet,
+                &stdin,
+            )?;
             let root = program.home().map(|home| home.root.clone());
 
             // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
@@ -521,7 +533,8 @@ fn dispatch() -> Result<(), Failure> {
                     (record, directory, tree)
                 }
                 None => {
-                    let library = contract.admit_library(subject, manifest, &here()?, cabinet)?;
+                    let library =
+                        contract.admit_library(subject, manifest, &here()?, cabinet, &stdin)?;
                     let verdicts = contract.access.filed(&library.cabinet);
                     let documented = documentation_of(
                         elaboration.budget,
@@ -563,7 +576,7 @@ fn dispatch() -> Result<(), Failure> {
             tree.outcome(format!("cd {} && curios run", directory.display()));
         }
         Mode::Curate { .. } => {
-            let entire = contract.admit_entire(subject, manifest, &here()?, cabinet)?;
+            let entire = contract.admit_entire(subject, manifest, &here()?, cabinet, &stdin)?;
 
             // The fetch in hand's tree, and whether its transport has delivered: each is a subject of its own, its one node open while it arrives.
             let mut fetching: Option<(Tree, bool)> = None;
@@ -697,7 +710,6 @@ fn dispatch() -> Result<(), Failure> {
             subjects,
             check,
             settings,
-            core,
             ..
         } => {
             let directory = here()?;
@@ -713,8 +725,7 @@ fn dispatch() -> Result<(), Failure> {
             let admitted = subjects
                 .into_iter()
                 .map(|subject| {
-                    contract
-                        .admit_files(subject, manifest, &directory, &settings, core.core, cabinet)
+                    contract.admit_files(subject, manifest, &directory, &settings, cabinet, &stdin)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -730,11 +741,10 @@ fn dispatch() -> Result<(), Failure> {
             for admitted in admitted {
                 match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
-                    Rewritten::Stdin(format, written) => {
-                        let text = drained()?;
+                    Rewritten::Stdin(format, supplied) => {
                         let formatted = Formatted::from_source(
-                            &Source::named(SourceName::stdin(), text.as_str()),
-                            written,
+                            &Source::named(SourceName::stdin(), supplied.text.as_str()),
+                            supplied.written,
                             format,
                         )?;
 
@@ -802,26 +812,17 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Wonder {
-            query,
-            elaboration,
-            core,
-            ..
+            query, elaboration, ..
         } => {
-            // What standard input is written in, said once for every query and refused beside any other subject.
-            let stdin = Contract::stdin_written_in(core.core, subject)?;
             match query {
                 Query::Check => wonder_diagnostics(
                     elaboration.budget,
-                    contract
-                        .admit_any(subject, manifest, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?,
                     &mut Asking::checking(answered.clone()),
                 )?,
                 Query::Tests => wonder_tests(
                     elaboration.budget,
-                    contract
-                        .admit_any(subject, manifest, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?,
                     &mut Asking::checking(answered.clone()),
                 )?,
                 Query::Stage(name) => wonder_stage(
@@ -830,7 +831,7 @@ fn dispatch() -> Result<(), Failure> {
                     // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
                     match contract.accepts {
                         Accepts::ProgramOrLibrary => {
-                            contract.admit_staged(subject, manifest, &here()?, cabinet)?
+                            contract.admit_staged(subject, manifest, &here()?, cabinet, &stdin)?
                         }
                         _ => Staged::Program(contract.admit_program(
                             subject,
@@ -838,44 +839,38 @@ fn dispatch() -> Result<(), Failure> {
                             None,
                             &here()?,
                             cabinet,
+                            &stdin,
                         )?),
-                    }
-                    .read_stdin_as(stdin),
+                    },
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::At(place) => wonder_at(
                     elaboration.budget,
-                    contract.admit_staged(subject, manifest, &here()?, cabinet)?,
+                    contract.admit_staged(subject, manifest, &here()?, cabinet, &stdin)?,
                     &place,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Classes => wonder_classes(
                     elaboration.budget,
-                    contract.admit_staged(subject, manifest, &here()?, cabinet)?,
+                    contract.admit_staged(subject, manifest, &here()?, cabinet, &stdin)?,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, None) => wonder_name(
                     elaboration.budget,
-                    contract
-                        .admit_scope(subject, manifest, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_scope(subject, manifest, &here()?, cabinet, &stdin)?,
                     &path,
                     subject,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, Some(View::Witnesses)) => wonder_witnesses(
                     elaboration.budget,
-                    contract
-                        .admit_scope(subject, manifest, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_scope(subject, manifest, &here()?, cabinet, &stdin)?,
                     &path,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Name(path, Some(View::Footprint)) => wonder_footprint(
                     elaboration.budget,
-                    contract
-                        .admit_program(subject, manifest, None, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_program(subject, manifest, None, &here()?, cabinet, &stdin)?,
                     &path,
                     &mut Asking::reading(answered.clone()),
                 )?,
@@ -889,19 +884,17 @@ fn dispatch() -> Result<(), Failure> {
                             None,
                             &here()?,
                             cabinet,
+                            &stdin,
                         )?),
-                        _ => contract.admit_scope(subject, manifest, &here()?, cabinet)?,
-                    }
-                    .read_stdin_as(stdin),
+                        _ => contract.admit_scope(subject, manifest, &here()?, cabinet, &stdin)?,
+                    },
                     &path,
                     &name,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::False => wonder_false(
                     elaboration.budget,
-                    contract
-                        .admit_program(subject, manifest, None, &here()?, cabinet)?
-                        .read_stdin_as(stdin),
+                    contract.admit_program(subject, manifest, None, &here()?, cabinet, &stdin)?,
                     &mut Asking::reading(answered.clone()),
                 )?,
                 Query::Server => serve(elaboration.budget, manifest, cabinet).map_err(|words| {
