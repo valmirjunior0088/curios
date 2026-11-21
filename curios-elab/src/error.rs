@@ -12,9 +12,9 @@ use {
     },
     curios_core::{
         Anchors, ArgumentSite, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion,
-        Extent, Free, Global, Hiding, Item, Level, Lexicon, Mention, Minted, Places, Polarity,
-        ReduceError, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError, Unresolved,
-        WitnessKey, WitnessRole,
+        Extent, Free, Global, Hiding, Item, Level, Lexicon, Mention, Minted, Nominal, Places,
+        Polarity, ReduceError, Spellings, Subterm, Term, UniverseConstraintOrigin, UniverseError,
+        Unresolved, WitnessKey, WitnessRole,
     },
     curios_surface::{
         DisplayNames, Islands, ReaderNames, ReaderPosition, Rename, Spellable, Spelling,
@@ -81,22 +81,35 @@ impl ReaderScope {
 /// One member of an [`Error::DeclarationCycle`] or an [`Error::GroupApart`]: a declaration by its name, or a witness, which a reader knows by the type it is declared at and a report places by its identity.
 #[derive(Debug)]
 pub enum CycleMember {
+    /// A definition, by its name.
     Named(Global),
-    Witness { name: Global, type_: Box<Term> },
+    /// A type or a concept, by its former's name: what a group of formers declares, `struct … and …`.
+    Former(Global),
+    /// A concept in a cycle, by its name: declared in a group as a type is, `concept … and …`, though no group admits a cycle through its `use` fields.
+    Concept(Global),
+    Witness {
+        name: Global,
+        type_: Box<Term>,
+    },
 }
 
 impl CycleMember {
     /// Where a report places it.
     fn name(&self) -> &Global {
         match self {
-            CycleMember::Named(name) | CycleMember::Witness { name, .. } => name,
+            CycleMember::Named(name)
+            | CycleMember::Former(name)
+            | CycleMember::Concept(name)
+            | CycleMember::Witness { name, .. } => name,
         }
     }
 
     /// How a report names it: a declaration by its name, a witness by the type it is declared at.
     fn spelled(&self, spelling: &Rc<Spelling>) -> String {
         match self {
-            CycleMember::Named(name) => format!("`{}`", spelling.symbol(name)),
+            CycleMember::Named(name) | CycleMember::Former(name) | CycleMember::Concept(name) => {
+                format!("`{}`", spelling.symbol(name))
+            }
             CycleMember::Witness { type_, .. } => {
                 format!("the witness of {}", Code(type_.spelled(spelling)))
             }
@@ -1979,10 +1992,15 @@ impl Error {
                             },
                             _ => CycleMember::Named(definition.name),
                         });
-                    let formers = item
-                        .nominals()
-                        .into_iter()
-                        .map(|(name, _)| CycleMember::Named(*name));
+                    let formers =
+                        item.nominals()
+                            .into_iter()
+                            .map(|(name, nominal)| match nominal {
+                                Nominal::Concept { .. } => CycleMember::Concept(*name),
+                                Nominal::Inductive(_) | Nominal::Struct(_) => {
+                                    CycleMember::Former(*name)
+                                }
+                            });
                     defined.chain(formers).collect::<Vec<_>>()
                 })
                 .collect(),
@@ -2016,7 +2034,7 @@ impl Error {
                 .iter()
                 .map(|part| {
                     part.iter()
-                        .map(|&index| CycleMember::Named(names[index]))
+                        .map(|&index| CycleMember::Former(names[index]))
                         .collect()
                 })
                 .collect(),

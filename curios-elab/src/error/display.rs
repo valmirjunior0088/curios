@@ -1942,13 +1942,14 @@ impl Displayed<'_> {
                     .iter()
                     .map(|member| member.spelled(spelling))
                     .collect::<Vec<_>>();
-                // Neither group's spelling holds a definition beside a witness, so a cycle through both is pointed at the two ways out it does have.
-                let across = members
-                    .iter()
-                    .any(|member| matches!(member, CycleMember::Named(_)))
-                    && members
-                        .iter()
-                        .any(|member| matches!(member, CycleMember::Witness { .. }));
+                // The way out is the group the kinds in the cycle can be declared as; neither group's spelling holds a definition beside a witness, so a cycle through both is pointed at the two ways out it does have.
+                let holds = |kind: fn(&CycleMember) -> bool| members.iter().any(kind);
+                let definitions = holds(|member| matches!(member, CycleMember::Named(_)));
+                let formers = holds(|member| {
+                    matches!(member, CycleMember::Former(_) | CycleMember::Concept(_))
+                });
+                let concepts = holds(|member| matches!(member, CycleMember::Concept(_)));
+                let witnesses = holds(|member| matches!(member, CycleMember::Witness { .. }));
                 f.text("declaration cycle");
                 match named.split_last() {
                     Some((last, rest)) if !rest.is_empty() => {
@@ -1956,22 +1957,28 @@ impl Displayed<'_> {
                             "{} and {last} need one another",
                             rest.join(", ")
                         ));
-                        f.stating("a declaration elaborates after what it reads");
-                        f.stating("each of these reads another before it can finish");
                         f.stating(
-                            "by a name it writes, or by the witness a goal of its resolves to",
+                            "each reads another before it can be elaborated, so none can be first",
                         );
-                        f.stating("a definition may call itself, and a witness may resolve through its own entry");
-                        f.stating("a cycle through two has no order to elaborate them in");
-                        match across {
-                            true => {
-                                f.stating("no group holds a definition beside a witness");
-                                f.stating("let the definition call by its name the function it means, the witness delegating to it");
-                                f.stating("or write its body in the witness, which may read its own methods");
-                            }
-                            false => {
+                        if definitions && witnesses {
+                            f.stating("no group holds a definition beside a witness");
+                            f.stating("let the definition call by its name the function it means, the witness delegating to it");
+                            f.stating(
+                                "or write its body in the witness, which may read its own methods",
+                            );
+                        } else {
+                            if definitions {
                                 f.stating("declare definitions that call one another as one group, `let ... and ...`");
-                                f.stating("and witnesses that resolve through one another as `satisfy C(A) { ... } and D(B) { ... }`");
+                            }
+                            if formers {
+                                f.stating("declare types and concepts that name one another as one group, `struct ... and ...` or `concept ... and ...`");
+                            }
+                            // Whether the cycle runs through `use` fields is the concepts' own elaboration to find, which a cycle keeps from running: both facts are said.
+                            if concepts {
+                                f.stating("a concept's `use` fields form no cycle, grouped or not");
+                            }
+                            if witnesses {
+                                f.stating("declare witnesses that resolve through one another as one group, `satisfy ... and ...`");
                             }
                         }
                     }

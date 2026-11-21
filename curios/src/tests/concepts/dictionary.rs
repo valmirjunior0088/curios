@@ -362,3 +362,22 @@ fn a_superclass_cycle_is_refused_inside_a_group() {
         "expected the cycle refused as a superclass cycle:\n{report}"
     );
 }
+
+// Apart, the two concepts are a cycle of declarations, which no concept can be elaborated first in, so whether it runs through their `use` fields is never found: the report offers the group and says that a cycle of `use` fields is refused in one too.
+#[test]
+fn a_superclass_cycle_apart_is_told_no_group_admits_it() {
+    let source = r#"
+        use /std/{Nat};
+        concept A(T : Type) : pub Type { use B(T), fa(T) -> Nat }
+        concept B(T : Type) : pub Type { use A(T), fb(T) -> Nat }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("`A` and `B` need one another")
+            && report.contains("`concept ... and ...`")
+            && report.contains("a concept's `use` fields form no cycle, grouped or not"),
+        "{report}"
+    );
+}

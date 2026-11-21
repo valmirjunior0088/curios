@@ -170,7 +170,9 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
         "expected the cycle named by its two concept applications:\n{report}"
     );
     assert!(
-        report.contains("satisfy C(A) { ... } and D(B) { ... }"),
+        report.contains(
+            "declare witnesses that resolve through one another as one group, `satisfy ... and ...`"
+        ),
         "expected the report to name the way out:\n{report}"
     );
     assert_eq!(
