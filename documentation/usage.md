@@ -716,7 +716,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version |
-| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`; nothing is recorded without it. [`profile`](#profile) reads the stream back |
+| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, and, for a program `run` hosts, `/tmp/perf-<pid>.map`, the map a sampling profiler names its functions by; nothing is recorded without it. [`profile`](#profile) reads the stream back |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `--help` prints the default this build carries.
 
@@ -769,7 +769,7 @@ What a command emits is nested under the name of the package that declared it, a
 
 A command that files — `run`, `compile`, `test`, `lint` and `document` — takes away from its project's own cabinet, as it ends, what the project no longer reaches: the object of a unit or an executable no manifest of the project declares, the payload of an executable or a test run it no longer has, a source tree or a foreign module no manifest pins, and any entry of `.curios/` or of the cabinet that none of the families above holds. Nothing is taken while a manifest is refused or a dependency is not yet curated. [`wonder --server`](#wonder) does the same after a check that filed ([why](../curios-verdict/README.md#a-projects-own-cabinet-keeps-what-the-project-reaches)).
 
-Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a command sees, in place of each one's own `cabinet/`, so projects share what they keep for reuse; unset, each project keeps its own. A named cabinet keeps whatever is filed into it until you clear it, since no run knows every project that files there. `.curios/` and the cabinet it names are the only directories the toolchain writes into ([why](../curios-package/README.md#curios-goes-where-a-manifest-governs-and-its-cabinet-nowhere-it-was-not-pointed)).
+Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a command sees, in place of each one's own `cabinet/`, so projects share what they keep for reuse; unset, each project keeps its own. A named cabinet keeps whatever is filed into it until you clear it, since no run knows every project that files there. `.curios/` and the cabinet it names are the only directories the toolchain writes into of its own accord ([why](../curios-package/README.md#curios-goes-where-a-manifest-governs-and-its-cabinet-nowhere-it-was-not-pointed)); `--profile` writes where it is told, and the guest's map where a sampler looks for it.
 
 ## Reusing what was already built
 

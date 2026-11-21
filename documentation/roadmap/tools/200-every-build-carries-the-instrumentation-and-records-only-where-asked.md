@@ -1,16 +1,10 @@
 # Every build carries the instrumentation, and records only where asked
 
-This specification removes the cost of the instrumentation being a build of its own: what only a feature compiles takes a second compilation of the workspace at every check, and the compiler a user installs could profile nothing. Every build now carries the macros, the recorder, `--profile` and `curios profile`, and the prelude's profiling program is `curios-prelude-build`'s, behind no feature; what stays behind one is the guest's code map, with the step that compiles it. The next step is the delivery of stage 1.
+This specification removes the cost of the instrumentation being a build of its own: what only a feature compiles takes a second compilation of the workspace at every check, and the compiler a user installs could profile nothing. Every build now carries the macros, the recorder, `--profile` and `curios profile`, the prelude's profiling program is `curios-prelude-build`'s, and the guest's map follows `--profile`; what is left is the step that compiled the features. The next step is the delivery of stage 1.
 
 ## What is wrong today
 
-- **The guest's code map rides a feature.** `curios-native`'s `profile` sets `ProfilingStrategy::PerfMap` on the shared engine (`curios-native/src/engine.rs`), and nothing turns that feature on any longer, so no build writes the map a sampler names the guest's functions by. Which names a payload carries is its writer's to say (`curios_wasm::Names`).
-- **What only a feature compiles takes a compilation of its own at every check.** `cargo xtask instrumented lint` lints the workspace with every feature on, a second compilation of all `workspace lint` compiles, among the checks CLAUDE.md names for every change and a job of `.github/workflows/check.yml`, for the feature above alone: every other feature is a crate's `test-support`, which a dev-dependency of another crate turns on, so `workspace lint`'s `--all-targets` compiles it already ([Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md)).
-
-## Context
-
-- **The engine is built once, at its first use**, in a `LazyLock` any caller may reach first: `curios-cranelift`'s compile and precompile, the plugin host, the engine's own tests. Its profiling strategy is no input of the compatibility hash a payload's address reads (`precompile_compatibility_hash`), so a `.cwasm` made with the map or without deserializes under either. The launcher is `curios-native` built alone, which links no `curios-profile`.
-- **`--profile` in the released compiler writes where it is told**, and, once the guest's map follows it, `/tmp/perf-<pid>.map`, a predictable name in a shared directory, which [the usage reference](../../usage.md) does not list among what the toolchain writes.
+- **A step compiles what no feature turns on any longer.** `cargo xtask instrumented lint` lints the workspace with every feature on, a second compilation of all `workspace lint` compiles, among the checks CLAUDE.md names for every change and a job of `.github/workflows/check.yml`; every feature of the workspace is now a crate's `test-support`, which a dev-dependency of another crate turns on, so `workspace lint`'s `--all-targets` compiles it already, and the step finds nothing `workspace lint` does not ([Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md)). The measurements' recorded commands spell `--all-features`, which turns nothing on.
 
 ## Peers
 
@@ -41,19 +35,10 @@ Counted at `decbf4ff5`, in the user-space instructions retired by a subject's pr
 - **Bytes**: the release `curios` grows by 1,028,376 bytes under B, 0.49%; the bundle's `curios_js.wasm`, built for `wasm32-unknown-unknown`, by 330,591, 0.26%.
 - **Outputs**: every program's executable and the prelude's five images are one digest across the six builds.
 
-## Settled
-
-- **The ask stays one argument**, `--profile <PATH>`, read where it is written ([`curios-profile`'s README](../../../curios-profile/README.md#profiling-is-configured-in-code-never-from-the-environment)): nothing records unasked, in any build.
-- **`--profile` turns on the guest's map too**, settled by the user on 2026-11-20: one ask makes a compile and its run legible, the stream where the argument says and the map where a sampler looks for it, `/tmp/perf-<pid>.map`, a path the engine's agent offers no other choice of. A run without it writes none, in any build.
-- **The engine is started with its choice**, settled by the user on 2026-11-21: `curios-native`'s engine is started explicitly, with the map or without, by whoever runs it — `curios`'s `main` as `--profile` says, the launcher's without, a test's through `curios-native`'s test support without — and refuses use before it is started; starting it again with the same choice answers the same engine, and with another is refused. The start records the choice and the engine is still built at its first use, so a command that runs no module never builds it. `curios-native` names no `curios-profile`, so the launcher a compiled program carries links none of it.
-
-With nothing kept to a build of its own, `instrumented` goes whole.
-
 ## Stages
 
-1. **The engine started with its choice, and the guest's map where `--profile` asks**, which the usage reference counts among what the toolchain writes when asked; `curios-native`'s `profile` feature goes. Check: tests that a run under `--profile` leaves a map naming the guest's functions, that one without leaves none, and that a second, different choice is refused, each mutation-checked.
-2. **The jig builds nothing of its own.** `instrumented` goes, with its job in `check.yml`, its line in CLAUDE.md's checks and its paragraphs in `xtask`'s README and [Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md); the measurements' recorded commands drop `--all-features`. Check: `cargo xtask tools test`, `cargo xtask docs build`.
+1. **The jig builds nothing of its own.** `instrumented` goes, with its job in `check.yml`, its subject in the handoff's `requires`, its line in CLAUDE.md's checks and its paragraphs in `xtask`'s README and [Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md); the measurements' recorded commands drop `--all-features`. Check: `cargo xtask tools test`, `cargo xtask docs build`.
 
 ## Retirement
 
-Once stage 2 lands, `curios-profile`'s README holds *What the study found* as the argument of its decision that every build carries the instrumentation, and this file is deleted.
+Once stage 1 lands, `curios-profile`'s README holds *What the study found* as the argument of its decision that every build carries the instrumentation, and this file is deleted.

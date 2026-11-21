@@ -168,3 +168,12 @@ fn every_host_answer_crosses_as_its_row() {
         .unwrap_or_else(|refusal| panic!("{refusal}"));
     }
 }
+
+// The engine is built once, so a process that started it one way keeps it that way: a start with the same choice is answered as the first was, and one with the other is refused.
+#[test]
+fn a_start_with_the_other_choice_is_refused() {
+    start_test_engine();
+
+    assert!(start_engine(GuestMap::Unwritten).is_ok());
+    assert!(start_engine(GuestMap::Written).is_err());
+}

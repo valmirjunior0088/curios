@@ -175,11 +175,16 @@ fn dispatch() -> Result<(), Failure> {
     };
 
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
-    if let Some(path) = cli.profile.clone() {
-        install_profiling(path);
-    }
+    // The guest's map is the other half of the same ask, written where a sampler looks for it.
+    let map = match cli.profile.clone() {
+        Some(path) => {
+            install_profiling(path);
+            GuestMap::Written
+        }
+        None => GuestMap::Unwritten,
+    };
     // The first start of the process, so none is refused; the engine itself is built where a command first runs or compiles a module.
-    start_engine(GuestMap::Unwritten).expect("the engine is started once, here, before any use");
+    start_engine(map).expect("the engine is started once, here, before any use");
 
     // Decided once, before anything is written: asked for or refused outright, and otherwise on where standard error goes and whether the reader has said `NO_COLOR`, which a value that is not empty says.
     let seen = |terminal: bool| match cli.color {
