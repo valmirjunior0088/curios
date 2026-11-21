@@ -18,9 +18,4 @@ impl Cabinet {
             .map(|object| object.expect("a listed object").path().join(UNIT))
             .collect()
     }
-
-    /// The directory `target`'s payloads are filed in.
-    pub fn payloads(&self, target: Target) -> PathBuf {
-        self.directory.join(PAYLOADS).join(target.spelled())
-    }
 }

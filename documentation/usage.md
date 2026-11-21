@@ -761,11 +761,13 @@ Everything generated lands under one `.curios/`, beside the governing manifest �
 | `cabinet/payloads/<target>/<address>` | precompiled payloads, one file per executable and target, each target's in a directory of its own |
 | `cabinet/compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary |
 
-One transient entry passes through the cabinet beside its families: [`pin`](#pin) stages a delivery at `cabinet/pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
+One transient entry passes through the cabinet beside its families: [`pin`](#pin) stages a delivery at `cabinet/pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it; a command that files takes one away once it is a day old.
 
 What a command emits is nested under the name of the package that declared it, and always stays in the project's `.curios/`. What the cabinet holds is keyed by what it is, never by which project asked, and a cleared cabinet costs the next command the work it held and nothing else. A source's hash scheme is a directory of its own.
 
-Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a command sees, in place of each one's own `cabinet/`, so projects share what they keep for reuse; unset, each project keeps its own. `.curios/` and the cabinet it names are the only directories the toolchain writes into ([why](../curios-package/README.md#curios-goes-where-a-manifest-governs-and-its-cabinet-nowhere-it-was-not-pointed)).
+A command that files — `run`, `compile`, `test`, `lint` and `document` — takes away from its project's own cabinet, as it ends, what the project no longer reaches: the object of a unit or an executable no manifest of the project declares, the payload of an executable or a test run it no longer has, a source tree or a foreign module no manifest pins, and any entry of `.curios/` or of the cabinet that none of the families above holds. Nothing is taken while a manifest is refused or a dependency is not yet curated. [`wonder --server`](#wonder) does the same after a check that filed ([why](../curios-verdict/README.md#a-projects-own-cabinet-keeps-what-the-project-reaches)).
+
+Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a command sees, in place of each one's own `cabinet/`, so projects share what they keep for reuse; unset, each project keeps its own. A named cabinet keeps whatever is filed into it until you clear it, since no run knows every project that files there. `.curios/` and the cabinet it names are the only directories the toolchain writes into ([why](../curios-package/README.md#curios-goes-where-a-manifest-governs-and-its-cabinet-nowhere-it-was-not-pointed)).
 
 ## Reusing what was already built
 

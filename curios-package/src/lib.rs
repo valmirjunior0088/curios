@@ -7,7 +7,7 @@
 //! Every refusal here fires before elaboration and names both parties. A manifest declaring two modes, a name no path could spell, a dependency row missing the pin its source requires: each is diagnosed against the file somebody wrote, never surfaced downstream as an unbound name.
 
 mod cabinet;
-pub use cabinet::{Cabinet, Runs};
+pub use cabinet::{Cabinet, Families, Runs};
 
 mod compatibility;
 pub use compatibility::CompilerVersion;
@@ -59,6 +59,9 @@ pub use pin::{Pinned, Pinning, Probe, Repoint, Subject, Transport, pin};
 mod products;
 pub use products::Products;
 use products::*;
+
+mod reach;
+pub use reach::{Reach, Reached, tests_filed_as};
 
 mod refused;
 pub use refused::{At, Refused, Row, Step};

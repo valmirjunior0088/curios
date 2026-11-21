@@ -5,7 +5,7 @@ mod tests;
 
 use {
     curios_common::{Fingerprint, Mount, Qualifier},
-    curios_module::Compiled,
+    curios_module::{Compiled, UnitSource},
 };
 
 /// What version of the unit family's layout an address names.
@@ -43,6 +43,16 @@ pub fn unit_address(
     feed_stand_in(&mut fingerprint, stand_in);
 
     fingerprint.hex()
+}
+
+/// The address a mounted unit compiled from `source` is filed under ([`unit_address`]): its mounts, what it declared, its kind and its fold's stand-in, as the source the fold hands over states them (`curios_pipeline::fold_sources`).
+pub fn mounted_address(source: &UnitSource<'_>) -> String {
+    unit_address(
+        &source.claims(),
+        source.declared(),
+        source.compiled(),
+        source.stand_in(),
+    )
 }
 
 /// The address the unit of an entry's own declarations is filed under: `package`'s `executable`, declaring `declared`, `compiled` built or tested, and over the stand-in `stand_in` names where its fold has one.

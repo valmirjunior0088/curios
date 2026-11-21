@@ -82,6 +82,15 @@ impl Selection {
         }
     }
 
+    /// The governing root of what this selects, which `.curios/` sits beside: `None` for a program no package declares, which has none.
+    pub fn root(&self) -> Option<&Path> {
+        match self {
+            Self::Entire(entire) => Some(&entire.governing.root),
+            Self::Library(library) => Some(&library.root),
+            Self::Program(program) => program.home().map(|home| home.root.as_path()),
+        }
+    }
+
     /// What `spelling` selects, under the manifest `manifest` names or the one nearest `directory`, reading `overlay`'s text before the disk for every header a file's placement walks, and filing into the cabinet `cabinet` names or the governing root's own.
     pub fn of(
         spelling: Spelling,

@@ -2,10 +2,13 @@
 //!
 //! The cabinet's layout belongs to `curios-package`, [`Cache`](curios_pipeline::Cache) is `curios-pipeline`'s trait, and reading and writing a `Unit` through the one to implement the other is this crate, with the addresses a unit and a payload are filed under (`address`), beside the record each pairs with; every product that consults a cabinet — the native compiler for what it runs, the `wonder` engine for what it is asked — takes it from here, and the engine that will run a payload is handed in by the crate that owns the runtime. Where this crate sits, and why it links no back end, are `README.md`'s "Beside the pipeline, over the package, and under neither".
 //!
-//! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md). Everything in `verdicts` is the mechanism the argument is about. The payload family in `payload` is that same argument one level up, with [Reused payloads](../../documentation/design/soundness/reused-payloads.md) stating what it adds. An object's `unit` file and a payload are each one file, framed as `curios-unit` states a stored unit is, and replaced whole by `file`.
+//! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md). Everything in `verdicts` is the mechanism the argument is about. The payload family in `payload` is that same argument one level up, with [Reused payloads](../../documentation/design/soundness/reused-payloads.md) stating what it adds. An object's `unit` file and a payload are each one file, framed as `curios-unit` states a stored unit is, and replaced whole by `file`. What a project's own cabinet keeps of them is what the project's manifests reach, the rest collected as a filing command ends (`collection`).
 
 mod address;
 use address::*;
+
+mod collection;
+pub use collection::collect_project;
 
 mod file;
 use file::*;

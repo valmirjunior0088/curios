@@ -14,7 +14,9 @@ use {
     curios_common::{Qualifier, Report, STDIN_NAME, Source, SourceName},
     curios_module::{Overlay, PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
-    curios_package::{Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
+    curios_package::{
+        Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order, tests_filed_as,
+    },
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, fold_sources},
     curios_surface::{Entrypoint, Form, WrittenIn},
     curios_verdict::{Program, Verdicts},
@@ -153,7 +155,7 @@ impl TestSubject {
                 entry: SourceName::of(package, Path::new(LIBRARY))
                     .expect("a package's name and its header's are plain names"),
                 executable: None,
-                reserved: "tests/".to_string(),
+                reserved: tests_filed_as(None),
                 manifest: manifest.to_path_buf(),
             }),
         }
@@ -176,7 +178,7 @@ impl TestSubject {
                 .cloned()
                 .expect("a declared program's entry is named by its package"),
             executable: Some(home.executable.clone()),
-            reserved: format!("tests/{}", home.executable),
+            reserved: tests_filed_as(Some(&home.executable)),
             manifest: home.manifest.clone(),
         };
         let loader = match declares {

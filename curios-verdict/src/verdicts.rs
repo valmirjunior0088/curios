@@ -20,7 +20,7 @@ pub use payload::*;
 
 use {
     crate::{
-        Filer, Opened, Packs, entry_address, opened, opened_by, replace, set_aside, unit_address,
+        Filer, Opened, Packs, entry_address, mounted_address, opened, opened_by, replace, set_aside,
     },
     curios_common::{
         Blob, Candidates, Digest, Facet, Qualifier, Source, SourceName, candidate_prefix, digest,
@@ -30,7 +30,7 @@ use {
     curios_pipeline::{After, Cache, Earlier, complete_records},
     curios_unit::{Indexed, Record, Unit, recorded},
     std::{
-        cell::{OnceCell, RefCell},
+        cell::{Cell, OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet},
         fs, io,
         path::{Path, PathBuf},
@@ -58,6 +58,15 @@ use {
 #[derive(Clone, Default)]
 pub struct Session {
     units: Rc<RefCell<BTreeMap<Identity, Kept>>>,
+    /// Whether a handle keeping in this session has filed a unit since [`Session::take_filed`] was last asked.
+    filed: Rc<Cell<bool>>,
+}
+
+impl Session {
+    /// Whether a handle keeping in this session filed a unit since this was last asked: what a server asks after a check, which collects its project where one did ([`collect_project`](crate::collect_project)).
+    pub fn take_filed(&self) -> bool {
+        self.filed.take()
+    }
 }
 
 /// Which unit a source is, whatever scope it is compiled in: the prefixes it claims, the directories it reads from, and what it is compiled for, a source built and tested being two units.
@@ -310,11 +319,12 @@ impl Verdicts {
         }
     }
 
-    /// Say of the unit this session holds for `source` at `address`, where it is `unit`, that the object now holds it as the bytes `contained` names: a later hit on them is answered with it.
+    /// Say of the unit this session holds for `source` at `address`, where it is `unit`, that the object now holds it as the bytes `contained` names: a later hit on them is answered with it. And say that a unit was filed ([`Session::take_filed`]).
     fn filed_as(&self, source: &UnitSource<'_>, address: &str, unit: &Unit, contained: &str) {
         let Some(session) = &self.session else {
             return;
         };
+        session.filed.set(true);
         if let Some(kept) = session.units.borrow_mut().get_mut(&identity(source))
             && kept.address == address
             && kept.unit.same(unit)
@@ -424,12 +434,7 @@ impl Verdicts {
             ));
         }
 
-        Some(unit_address(
-            &source.claims(),
-            source.declared(),
-            source.compiled(),
-            source.stand_in(),
-        ))
+        Some(mounted_address(source))
     }
 
     /// Who this handle files as: the compiler running now. `None` where it cannot identify itself.

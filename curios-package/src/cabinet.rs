@@ -14,6 +14,12 @@ use {
 /// The directory of `.curios/` a project's own cabinet is, where nothing names another.
 const OWN: &str = "cabinet";
 
+/// The family of materialized source trees, a directory for each hash scheme.
+const SOURCES: &str = "sources";
+
+/// The family of fetched foreign modules, a directory for each hash scheme.
+const FOREIGN: &str = "foreign";
+
 /// The family of judged units as the cabinet keeps them, an object a directory.
 const OBJECTS: &str = "objects";
 
@@ -25,6 +31,9 @@ const REPLACED: &str = "replaced";
 
 /// The family of precompiled payloads, a directory for each target.
 const PAYLOADS: &str = "payloads";
+
+/// The file of this machine's memo of its compiler's digest.
+const COMPILER: &str = "compiler";
 
 /// What a project keeps for reuse: five families in a directory it shares with every project that names the same one.
 ///
@@ -67,7 +76,7 @@ impl Cabinet {
     pub fn source(&self, hash: &TreeHash) -> PathBuf {
         let (scheme, digest) = hash.split();
 
-        self.directory.join("sources").join(scheme).join(digest)
+        self.directory.join(SOURCES).join(scheme).join(digest)
     }
 
     /// Where a fetched foreign module is placed, keyed by the hash it was accepted against.
@@ -78,7 +87,7 @@ impl Cabinet {
     pub fn foreign(&self, hash: &FileHash) -> PathBuf {
         let (scheme, digest) = hash.split();
 
-        self.directory.join("foreign").join(scheme).join(digest)
+        self.directory.join(FOREIGN).join(scheme).join(digest)
     }
 
     /// The object a judged unit is kept as at `address`, which its mounts, what it declared and its kind decide: one directory, holding its [`unit`](Self::unit) file and the one that file [`replaced`](Self::replaced), beside the packs of the blobs they name, which `curios-verdict` names.
@@ -102,15 +111,55 @@ impl Cabinet {
     ///
     /// In the cabinet rather than the products, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, runs: Runs<'_>, address: &str) -> PathBuf {
-        self.directory
-            .join(PAYLOADS)
-            .join(runs.target().spelled())
-            .join(address)
+        self.payloads(runs.target()).join(address)
+    }
+
+    /// The directory `target`'s payloads are filed in.
+    pub fn payloads(&self, target: Target) -> PathBuf {
+        self.directory.join(PAYLOADS).join(target.spelled())
     }
 
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
     pub fn compiler(&self) -> PathBuf {
-        self.directory.join("compiler")
+        self.directory.join(COMPILER)
+    }
+
+    /// Every entry the cabinet holds of its own, each where it stands. Anything else in it is a staging on its way into a family ([`Cabinet::staging`]), or what a layout moved away from left behind.
+    pub fn families(&self) -> Families {
+        Families {
+            sources: self.directory.join(SOURCES),
+            foreign: self.directory.join(FOREIGN),
+            objects: self.directory.join(OBJECTS),
+            payloads: self.directory.join(PAYLOADS),
+            compiler: self.compiler(),
+        }
+    }
+}
+
+/// Where each family of a cabinet stands, and the compiler's memo beside them ([`Cabinet::families`]).
+pub struct Families {
+    /// Materialized source trees, a directory for each hash scheme ([`Cabinet::source`]).
+    pub sources: PathBuf,
+    /// Fetched foreign modules, a directory for each hash scheme ([`Cabinet::foreign`]).
+    pub foreign: PathBuf,
+    /// Judged units, an object a directory ([`Cabinet::object`]).
+    pub objects: PathBuf,
+    /// Precompiled payloads, a directory for each target ([`Cabinet::payloads`]).
+    pub payloads: PathBuf,
+    /// This machine's memo of its compiler's digest ([`Cabinet::compiler`]).
+    pub compiler: PathBuf,
+}
+
+impl Families {
+    /// Each of them.
+    pub fn all(self) -> [PathBuf; 5] {
+        [
+            self.sources,
+            self.foreign,
+            self.objects,
+            self.payloads,
+            self.compiler,
+        ]
     }
 }
 

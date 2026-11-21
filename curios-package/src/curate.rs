@@ -190,6 +190,33 @@ pub fn declared_modules(governing: &Governing) -> Result<Vec<Provider>, Box<Repo
     Ok(acquisitions(governing)?.providers)
 }
 
+/// What a graph's manifests pin, by the hash each is accepted against: what its project's own cabinet keeps of its sources and its foreign modules ([`Reach`](crate::Reach)).
+#[derive(Default)]
+pub struct Pins {
+    /// Every tree a dependency row pins.
+    pub trees: BTreeSet<TreeHash>,
+    /// Every foreign module a `url` row fetches.
+    pub modules: BTreeSet<FileHash>,
+}
+
+/// What the governing package's graph pins, read in the walk its fetch reads it in, for the reason `acquisitions` gives.
+pub fn pins(governing: &Governing) -> Result<Pins, Box<Report>> {
+    let reachable = acquisitions(governing)?;
+
+    Ok(Pins {
+        trees: reachable
+            .packages
+            .into_iter()
+            .map(|acquisition| acquisition.snapshot.hash)
+            .collect(),
+        modules: reachable
+            .fetches
+            .into_iter()
+            .map(|acquisition| acquisition.hash)
+            .collect(),
+    })
+}
+
 fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
     let mut reachable = Reachable::default();
     let mut seen = BTreeSet::new();

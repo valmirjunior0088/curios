@@ -25,7 +25,7 @@
 //!
 //! That tree is what a project gets when nothing points elsewhere. A cabinet named for every project a run sees (`CURIOS_CABINET`, which the command line reads) stands in for `cabinet/` whole — never for `native/`, `browser/` or `documentation/`, which belong to the package that declared them — so two projects pinning one revision materialize and compile it once, and a project shares, moves or clears what it keeps for reuse as one directory.
 //!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of what it holds: sources, foreign modules, objects and payloads. A rename orphans entries under an old name rather than misreading them, since an address holds its family's schema tag and nothing looks in the old directory, so an existing tree rebuilds once.
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of what it holds: sources, foreign modules, objects and payloads. A rename orphans entries under an old name rather than misreading them, since an address holds its family's schema tag and nothing looks in the old directory, so an existing tree rebuilds once; and a filing in the project's own cabinet takes away what no family of the running compiler holds, the orphans with it (`curios-verdict`'s `collect_project`).
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +34,9 @@ use {crate::Target, std::path::PathBuf};
 
 /// The generated directory itself.
 pub const PRODUCTS: &str = ".curios";
+
+/// The family of every package's documentation.
+const DOCUMENTATION: &str = "documentation";
 
 /// What a project's commands emit: a build of each executable for each target and each package's documentation, beside the project.
 ///
@@ -53,8 +56,7 @@ impl Products {
     ///
     /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* `.curios/`: `<target>/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a build without renaming it.
     pub fn built(&self, target: Target, package: &str, executable: &str) -> PathBuf {
-        self.project
-            .join(PRODUCTS)
+        self.directory()
             .join(target.spelled())
             .join(package)
             .join(executable)
@@ -62,9 +64,20 @@ impl Products {
 
     /// Where a package's generated documentation is written: nested under the package, beside the project, for the reason an executable is.
     pub fn documentation(&self, package: &str) -> PathBuf {
-        self.project
-            .join(PRODUCTS)
-            .join("documentation")
-            .join(package)
+        self.directory().join(DOCUMENTATION).join(package)
+    }
+
+    /// `.curios/` itself.
+    pub fn directory(&self) -> PathBuf {
+        self.project.join(PRODUCTS)
+    }
+
+    /// Every family of what a command emits, each where it stands: a build's for each target, and the documentation's. Beside them `.curios/` holds the project's own cabinet, and nothing else of its own.
+    pub fn families(&self) -> Vec<PathBuf> {
+        Target::ALL
+            .into_iter()
+            .map(|target| self.directory().join(target.spelled()))
+            .chain([self.directory().join(DOCUMENTATION)])
+            .collect()
     }
 }

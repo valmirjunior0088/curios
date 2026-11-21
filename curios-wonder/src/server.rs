@@ -6,7 +6,7 @@
 //!
 //! **Edits coalesce on the analyst, and a burst settles before it is compiled.** A job carries the whole overlay as it stood when the edit arrived; before compiling, the analyst drains every job queued behind it and keeps the latest overlay and the union of the documents to check, so a burst of keystrokes during one check costs one more check from the newest text rather than one per keystroke. Draining what is already queued is not enough on its own, because the analyst is *idle* when the first keystroke of a burst arrives: it would start a check on text the next keystroke replaces, and then publish an answer about a buffer nobody is looking at any more. So the drain waits for each further job — `SETTLE_SHARE` of what the last check cost, capped at `SETTLE` — which is the one figure this cadence needs and the reason it needs no second one per project. Incrementality inside a unit is not here, because it is the fold's: a unit the cabinet holds from an earlier text is a baseline the edited unit is compiled over (`curios-pipeline`), so a check after a keystroke re-elaborates the closure of the edit rather than the unit, and this module hands the fold the overlay and one thing more: the analyst's `Session`, which keeps the last unit it compiled for each unit it reached, so the baseline is the last keystroke's rather than the last build's and the closure is this edit's rather than every edit's since.
 //!
-//! **Every notification is answered by a check, and a save asks about every open document.** A check reads more than the overlay — the disk under every file no editor holds, a file looked for and missing, the manifests a document's placement walks — so an overlay equal to the last check's says nothing of whether that check's answer stands, and a skip keyed on it would answer a save from a check the disk has since moved under. Whether anything moved is the fold's to decide (`curios-verdict`): a unit the cabinet holds is handed back where the disk still holds what its record says it read, and any other is compiled over the last unit the session kept for it, redoing what moved, so a check under which nothing moved costs little, and a save's check files the text the save put on disk. A keystroke asks about the document it edits, which is where the editor is looking. A save is the editor's gesture for the disk having moved, under the files no editor holds and under the readers of the document saved, so it asks about every document the editor holds.
+//! **Every notification is answered by a check, and a save asks about every open document.** A check reads more than the overlay — the disk under every file no editor holds, a file looked for and missing, the manifests a document's placement walks — so an overlay equal to the last check's says nothing of whether that check's answer stands, and a skip keyed on it would answer a save from a check the disk has since moved under. Whether anything moved is the fold's to decide (`curios-verdict`): a unit the cabinet holds is handed back where the disk still holds what its record says it read, and any other is compiled over the last unit the session kept for it, redoing what moved, so a check under which nothing moved costs little, and a save's check files the text the save put on disk, and a check that filed collects the project's own cabinet to what the project reaches (`curios-verdict`'s `collect_project`). A keystroke asks about the document it edits, which is where the editor is looking. A save is the editor's gesture for the disk having moved, under the files no editor holds and under the readers of the document saved, so it asks about every document the editor holds.
 //!
 //! **A change on disk the editor watched is answered as a save.** A checkout, a rebase, another editor or a formatter run from a terminal moves the disk with no save, so where the client watches files on request the server registers, before it reads a notification, for every module and every manifest under the workspace, and a change the client reports is answered as a save is: one check of every open document against the overlay as it stands. A client that does not watch on request is asked for nothing, and the save stays its gesture. `curios-wonder`'s README says why the watching is the client's and why every open document is checked rather than the readers of the paths that changed.
 //!
@@ -33,7 +33,7 @@ use {
     curios_module::Overlay,
     curios_package::{EXTENSION, FormatSettings, MANIFEST, Named, Selection, Spelling},
     curios_surface::{Formatted, WrittenIn},
-    curios_verdict::{Session, Verdicts},
+    curios_verdict::{Session, Verdicts, collect_project},
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
@@ -69,7 +69,7 @@ use {
         str::FromStr,
         sync::{Arc, Mutex, PoisonError, mpsc},
         thread,
-        time::{Duration, Instant},
+        time::{Duration, Instant, SystemTime},
     },
 };
 
@@ -1260,14 +1260,19 @@ impl Analyst {
                 document.parent().unwrap_or(document),
             ),
         };
-        let asked = Selection::of(
+        let selection = Selection::of(
             spelling,
             self.manifest.as_deref(),
             directory,
             overlay,
             self.cabinet.as_deref(),
-        )
-        .and_then(Asked::every);
+        );
+        // The project a check that filed collects, where it files into the project's own cabinet: one the command line named for every project is collected within each address alone.
+        let collected = match (&selection, &self.cabinet) {
+            (Ok(selection), None) => selection.root().map(Path::to_path_buf),
+            _ => None,
+        };
+        let asked = selection.and_then(Asked::every);
         let budget = self.budget;
         // What the document writes, read off the subject's lowering in this check's own fold: a file selects one subject, the unit that declares it or itself.
         let mut written = None;
@@ -1306,6 +1311,12 @@ impl Analyst {
                 report: *report,
             }],
         };
+
+        if session.take_filed()
+            && let Some(root) = &collected
+        {
+            collect_project(root, SystemTime::now());
+        }
 
         // A warming check is run for what it leaves on this thread and in the cabinet, never for what it says: it names a directory, so every record it holds is about a file no editor has opened, and a manifest it cannot find is not a fault to report to anybody.
         if raised == Raised::Warming {

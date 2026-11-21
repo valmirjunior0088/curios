@@ -1,14 +1,15 @@
 //! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a cabinet mechanism.
 //!
-//! The cabinet's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a payload may be believed. These decide what the *subcommands* do with the answer — that one object serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
+//! The cabinet's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a payload may be believed. These decide what the *subcommands* do with the answer — that one object serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, that a bare file has nothing to do with any of it, and that a filing command keeps of its project's own cabinet what the project reaches and nothing more.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
 use {
     curios::CABINET,
-    curios_common::test_support::*,
+    curios_common::{fill, test_support::*},
     curios_package::{Cabinet, Target},
     std::{
+        collections::BTreeSet,
         fs,
         path::Path,
         process::{Command, Output},
@@ -465,4 +466,129 @@ fn a_named_cabinet_takes_what_is_kept_and_leaves_what_is_emitted() {
     );
     assert!(cabinet.payloads(Target::Native).is_dir(), "and the payload");
     assert!(cabinet.compiler().is_file(), "and the compiler's memo");
+}
+
+/// The manifest of a package `app` declaring each of `executables`.
+fn declaring(executables: &[&str]) -> String {
+    let compiler = env!("CARGO_PKG_VERSION");
+    let rows = executables
+        .iter()
+        .map(|executable| fill!("${executable} = {}\n", executable))
+        .collect::<String>();
+
+    fill!(
+        "compiler = \"${compiler}\"\nname = \"app\"\n\n[executables]\n${rows}",
+        compiler,
+        rows
+    )
+}
+
+/// A package `app` whose library and each of whose `executables` declares a test.
+fn tested(name: &str, executables: &[&str]) -> Temporary {
+    let root = temporary(name);
+    write(&root, "curios.toml", &declaring(executables));
+    write(
+        &root,
+        "lib.crs",
+        "pub let word : /std/Str = \"kept\";\n\ntest holds = /std/Test/assert(\"it holds\", true);\n",
+    );
+    for executable in executables {
+        write(
+            &root,
+            &format!("{executable}.crs"),
+            "test holds = /std/Test/assert(\"it holds\", true);\n\n/std/print(/app/word)\n",
+        );
+    }
+
+    root
+}
+
+/// The entries of `directory`, by name: none where there is no such directory.
+fn listed(directory: &Path) -> BTreeSet<String> {
+    fs::read_dir(directory).map_or_else(
+        |_| BTreeSet::new(),
+        |entries| {
+            entries
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect()
+        },
+    )
+}
+
+/// A filing command keeps what its project reaches and takes the rest: after a test run and a run of each executable, a run takes nothing they filed but what no family of the cabinet holds, and once the manifest drops an executable the next run takes its entry and its payloads.
+#[test]
+fn a_filing_command_keeps_what_its_project_reaches_and_takes_the_rest() {
+    let root = tested("collected", &["app", "other"]);
+    for arguments in [&["test"][..], &["run", "app"], &["run", "other"]] {
+        let ran = curios(&root, arguments);
+        assert!(
+            ran.status.success(),
+            "{arguments:?}: {}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    }
+    let cabinet = Cabinet::of(&root, None);
+    let objects = listed(&cabinet.objects());
+    let payloads = listed(&cabinet.payloads(Target::Native));
+    assert_eq!(
+        objects.len(),
+        6,
+        "the library and each entry, built and tested"
+    );
+    assert_eq!(
+        payloads.len(),
+        5,
+        "each executable's, and the tests' of each and of the library"
+    );
+
+    let left = cabinet.directory().join("verdicts/left");
+    fs::create_dir_all(left.parent().unwrap()).unwrap();
+    fs::write(&left, "left behind").unwrap();
+    assert!(curios(&root, &["run", "app"]).status.success());
+    assert_eq!(listed(&cabinet.objects()), objects, "nothing it reaches");
+    assert_eq!(listed(&cabinet.payloads(Target::Native)), payloads);
+    assert!(
+        !cabinet.directory().join("verdicts").exists(),
+        "but what no family holds"
+    );
+
+    write(&root, "curios.toml", &declaring(&["app"]));
+    assert!(curios(&root, &["run", "app"]).status.success());
+    let kept = listed(&cabinet.objects());
+    assert!(kept.is_subset(&objects) && kept.len() == 4, "{kept:?}");
+    let kept = listed(&cabinet.payloads(Target::Native));
+    assert!(kept.is_subset(&payloads) && kept.len() == 3, "{kept:?}");
+}
+
+/// A run filing into a cabinet named for every project collects nothing: the cabinet named keeps what no project reaches, since a run knows its own project alone, and an executable the manifest drops leaves its entry in it; and the project's own cabinet, which the run filed nothing into, is left as it stands.
+#[test]
+fn a_run_filing_into_a_named_cabinet_collects_nothing() {
+    let root = tested("collected-named", &["app", "other"]);
+    let named = temporary("collected-named-cabinet");
+    let left = Cabinet::of(&root, None).directory().join("verdicts/left");
+    fs::create_dir_all(left.parent().unwrap()).unwrap();
+    fs::write(&left, "left behind").unwrap();
+    let run = |executable: &str| {
+        let ran = Command::new(env!("CARGO_BIN_EXE_curios"))
+            .env(CABINET, named.as_os_str())
+            .current_dir(&root)
+            .args(["run", executable])
+            .output()
+            .expect("run the compiler");
+        assert!(
+            ran.status.success(),
+            "{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    };
+    run("app");
+    run("other");
+    let cabinet = Cabinet::of(&root, Some(&named));
+    let objects = listed(&cabinet.objects());
+    write(&root, "curios.toml", &declaring(&["app"]));
+    run("app");
+
+    assert_eq!(objects.len(), 3, "the library, and each entry");
+    assert_eq!(listed(&cabinet.objects()), objects);
+    assert!(left.exists(), "and the project's own cabinet stands");
 }

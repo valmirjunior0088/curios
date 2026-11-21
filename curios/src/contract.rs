@@ -2,7 +2,7 @@
 //!
 //! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the cabinet and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A SUBJECT's help is read off the same contract, so the help cannot describe an argument its command admits another way.
 //!
-//! **A question's access is a build's, and what it files is decided below.** A command that asks the `wonder` engine reads the cabinet and files what it compiled as a build would have: the engine opens the cabinet beside what it is asked about and files a unit where the disk holds every text its fold has read. What dispatch chooses from a contract is a build's cabinet: whether one is opened for it to file into.
+//! **A question's access is a build's, and what it files is decided below.** A command that asks the `wonder` engine reads the cabinet and files what it compiled as a build would have: the engine opens the cabinet beside what it is asked about and files a unit where the disk holds every text its fold has read. What dispatch chooses from a contract is a build's cabinet: whether one is opened for it to file into, and whether the project's own is collected once the command has filed ([`Access::collect`]).
 
 #[cfg(test)]
 mod tests;
@@ -17,11 +17,12 @@ use {
     },
     curios_pipeline::Stage,
     curios_surface::{Format, WrittenIn},
-    curios_verdict::Verdicts,
+    curios_verdict::{Verdicts, collect_project},
     curios_wonder::{Scope, Staged, file_subject},
     std::{
         env,
         path::{Path, PathBuf},
+        time::SystemTime,
     },
 };
 
@@ -61,6 +62,13 @@ impl Access {
         match self {
             Self::Write => Some(Verdicts::at(cabinet.clone())),
             Self::None => None,
+        }
+    }
+
+    /// Collect the project at `root` once a command of this access has filed into its own cabinet, whatever the filing came to ([`collect_project`]): nothing for a command that files nothing, for a subject no package declares, which has no `root`, and for a cabinet the command line `named` for every project a run sees, which is collected within each address alone.
+    pub fn collect(self, root: Option<&Path>, named: Option<&Path>) {
+        if let (Self::Write, Some(root), None) = (self, root, named) {
+            collect_project(root, SystemTime::now());
         }
     }
 }

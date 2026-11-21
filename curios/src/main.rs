@@ -237,6 +237,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let program = contract.admit_program(subject, manifest, None, &here()?, cabinet)?;
+            let root = program.home().map(|home| home.root.clone());
 
             // The program's arguments reach it through the page's address, and its name is its first.
             if target == Target::Browser {
@@ -245,7 +246,9 @@ fn dispatch() -> Result<(), Failure> {
 
                     Some(verdicts.executing(&home.package, &home.executable))
                 });
-                let (files, mut tree) = built(elaboration.budget, program, verdicts, cabinet)?;
+                let page = built(elaboration.budget, program, verdicts, cabinet);
+                contract.access.collect(root.as_deref(), cabinet);
+                let (files, mut tree) = page?;
                 let listener = bound(port.unwrap_or(PORT))?;
                 let port = port_of(&listener)?;
 
@@ -269,17 +272,19 @@ fn dispatch() -> Result<(), Failure> {
             });
             // Kept before the program is consumed: binding needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
-            let Built {
-                payload: cwasm,
-                foreigns,
-                tree,
-            } = payload_of(
+            let compiled = payload_of(
                 elaboration.budget,
                 program,
                 verdicts,
                 Target::Native,
                 Then::Nothing,
-            )?;
+            );
+            contract.access.collect(root.as_deref(), cabinet);
+            let Built {
+                payload: cwasm,
+                foreigns,
+                tree,
+            } = compiled?;
             let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
             // Linked here as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
             bindings
@@ -324,9 +329,11 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let selection = contract.admit_any(subject, manifest, &here()?, cabinet)?;
+            let root = selection.root().map(Path::to_path_buf);
             let green = match target {
                 Target::Native => {
-                    run_tests(elaboration.budget, selection, contract.access, &filter)?
+                    run_tests(elaboration.budget, selection, contract.access, &filter)
+                        .map_err(Failure::from)
                 }
                 Target::Browser => serve_tests(
                     elaboration.budget,
@@ -334,24 +341,29 @@ fn dispatch() -> Result<(), Failure> {
                     contract.access,
                     &filter,
                     port.unwrap_or(PORT),
-                )?,
+                ),
             };
+            contract.access.collect(root.as_deref(), cabinet);
 
-            if !green {
+            if !green? {
                 return Err(Failure::Concluded(Concluded::Failed));
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
         Mode::Lint { elaboration, .. } => {
+            let selection = contract.admit_any(subject, manifest, &here()?, cabinet)?;
+            let root = selection.root().map(Path::to_path_buf);
+            let linted = lint(
+                elaboration.budget,
+                selection,
+                &mut Asking::checking(answered.clone()),
+            );
+            contract.access.collect(root.as_deref(), cabinet);
             let Linted {
                 lints,
                 errors,
                 goals,
-            } = lint(
-                elaboration.budget,
-                contract.admit_any(subject, manifest, &here()?, cabinet)?,
-                &mut Asking::checking(answered.clone()),
-            )?;
+            } = linted?;
             // The count of lints always, since it is what the command is asked for, and of what else was reported where anything was.
             let counted = |count: usize, one: &str| match count {
                 1 => format!("1 {one}"),
@@ -384,6 +396,7 @@ fn dispatch() -> Result<(), Failure> {
         } => {
             let program =
                 contract.admit_program(subject, manifest, destination, &here()?, cabinet)?;
+            let root = program.home().map(|home| home.root.clone());
 
             // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
             let owned = output_path.is_none();
@@ -441,11 +454,14 @@ fn dispatch() -> Result<(), Failure> {
 
             let (written, mut tree) = match target {
                 Target::Native => {
+                    let compiled =
+                        payload_of(elaboration.budget, program, verdicts, target, Then::More);
+                    contract.access.collect(root.as_deref(), cabinet);
                     let Built {
                         payload,
                         foreigns,
                         mut tree,
-                    } = payload_of(elaboration.budget, program, verdicts, target, Then::More)?;
+                    } = compiled?;
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns, cabinet)?;
@@ -472,7 +488,9 @@ fn dispatch() -> Result<(), Failure> {
                     (written, tree)
                 }
                 Target::Browser => {
-                    let (files, mut tree) = built(elaboration.budget, program, verdicts, cabinet)?;
+                    let page = built(elaboration.budget, program, verdicts, cabinet);
+                    contract.access.collect(root.as_deref(), cabinet);
+                    let (files, mut tree) = page?;
 
                     tree.open("write", true);
 
@@ -505,12 +523,14 @@ fn dispatch() -> Result<(), Failure> {
                 None => {
                     let library = contract.admit_library(subject, manifest, &here()?, cabinet)?;
                     let verdicts = contract.access.filed(&library.cabinet);
-                    let (record, tree) = documentation_of(
+                    let documented = documentation_of(
                         elaboration.budget,
                         &library.units,
                         verdicts.as_ref(),
                         &Subject::package(&library.package),
-                    )?;
+                    );
+                    contract.access.collect(Some(&library.root), cabinet);
+                    let (record, tree) = documented?;
                     let directory = output_path.unwrap_or_else(|| {
                         Products::at(library.root).documentation(&library.package)
                     });

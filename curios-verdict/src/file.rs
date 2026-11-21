@@ -188,15 +188,17 @@ pub fn sweep(directory: &Path, now: SystemTime) -> io::Result<()> {
         let part = staged
             .extension()
             .is_some_and(|extension| extension == STAGING);
-        let aged = || {
-            fs::metadata(&staged)
-                .and_then(|metadata| metadata.modified())
-                .is_ok_and(|written| now.duration_since(written).unwrap_or_default() >= STALE)
-        };
-        if part && aged() {
+        if part && aged(&staged, now) {
             let _ = fs::remove_file(&staged);
         }
     }
 
     Ok(())
+}
+
+/// Whether what is at `path` was last written [`STALE`] or more before `now`.
+pub fn aged(path: &Path, now: SystemTime) -> bool {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .is_ok_and(|written| now.duration_since(written).unwrap_or_default() >= STALE)
 }

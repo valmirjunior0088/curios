@@ -973,6 +973,47 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     );
 }
 
+/// A check that filed collects its project, and one that filed nothing takes nothing: what no family of the cabinet holds is gone once a document holding its file's text has been checked, and what is left after it outlives a keystroke.
+#[test]
+fn a_check_that_filed_collects_its_project() {
+    let root = project("server-collects");
+    let cabinet = Cabinet::of(&root, None);
+    let left = |family: &str| {
+        let path = cabinet.directory().join(family).join("left");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "left behind").unwrap();
+        path
+    };
+    let before = left("verdicts");
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word: /std/Str =\n    \"placed\";\n"}}}"#, uri));
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+    assert!(!before.exists(), "the check that filed took it");
+
+    let after = left("slots");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"typed\";\n"}]}}"#, uri));
+    let republished = editor.receive();
+    assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
+    assert!(
+        after.exists(),
+        "a keystroke filed nothing, and took nothing"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// A question about a file no package governs, or about standard input, opens no cabinet: nothing is written beside it.
 #[test]
 fn a_loose_file_and_standard_input_leave_nothing_generated() {
