@@ -141,6 +141,27 @@ fn each_span_is_classed_as_what_stands_there() {
     );
 }
 
+/// A local group's member is classed where it is read, as a `let`'s binder is: a sibling's read of it and the tail's are each a row.
+#[test]
+fn a_local_groups_member_is_classed_where_it_is_read() {
+    let rows = classes(WORDS).expect("the program lowers");
+    let members = rows
+        .iter()
+        .filter(|(written, ..)| written == "left" || written == "right")
+        .map(|(written, class, declaration, _)| (written.as_str(), *class, *declaration))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        members,
+        [
+            ("left", "local", true),
+            ("right", "local", false),
+            ("right", "local", true),
+            ("left", "local", false),
+        ]
+    );
+}
+
 const AGAIN: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\n/std/print(\"\")";
 
 /// A local read again is classed where it stands, as its first read is: each read of a parameter is a row of its own.

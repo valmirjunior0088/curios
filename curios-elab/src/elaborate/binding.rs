@@ -100,12 +100,18 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
 
 /// Elaborate a local `rec` group and its tail. The group's mutually-recursive bindings are one node, so this handles them at once; the tail recurses through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
 pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, Term), Error> {
+    // What a member's site is classed against, as a `let`'s binder's is ([`elaborate_let`]).
+    let region = match &mode {
+        Mode::Check(expected) => Some(expected.type_.clone()),
+        Mode::Infer => None,
+    };
     context.with_frame(|context| {
         let group = rec.group();
+        // Each member from its label, as every walk of written binders opens one, so a read of it answers the binder it reads.
         let labels = rec
             .tail()
-            .hint_iter()
-            .map(|l| context.fresh(l))
+            .label_iter()
+            .map(|label| context.fresh_from(label))
             .collect::<Vec<_>>();
 
         let label_terms = labels.iter().map(Term::free_var).collect::<Vec<_>>();
@@ -123,9 +129,12 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
 
         // In scope from its own signature on, at the type it elaborated to, as `elaborate_module_rec` brings a member in: a signature reads the members written before it.
         let mut types_elaborated = Vec::with_capacity(items.len());
-        for (label, (type_, _)) in labels.iter().zip(&items) {
+        for (index, (label, (type_, _))) in labels.iter().zip(&items).enumerate() {
             let type_ = check_is_sort(context, type_)?.0;
             context.assume(label, &type_);
+            let place = rec.tail().label(index).and_then(Label::written);
+            let binding = context.site_binding(place, region.as_ref());
+            context.open_site(place, &type_, binding);
             types_elaborated.push(type_);
         }
 

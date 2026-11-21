@@ -178,6 +178,41 @@ fn a_locals_type_is_spelled_with_its_own_binders_names() {
     assert_eq!(read, Some("(taken: /std/Nat) -> /std/Nat".to_string()));
 }
 
+const GROUP: &str = "let outer(given: /std/Nat) -> /std/Nat =\n    let left(k: /std/Nat) -> /std/Nat = right(k)\n    and right(m: /std/Nat) -> /std/Nat = m;\n    left(given);\n/std/print(\"\")";
+
+/// A local group's member answers as a `let`'s binder does: where the group declares it, where a sibling reads it and where the block's tail reads it, each with where it is bound and the type it was opened at.
+#[test]
+fn a_local_groups_member_answers_as_a_lets_binder_does() {
+    let local = |written, nth| match at(GROUP, written, nth, 0).map(|answer| answer.stands) {
+        Some(Stands::Local {
+            declares,
+            bound,
+            type_,
+            ..
+        }) => (declares, bound.map(|bound| bound.line_column()), type_),
+        stands => panic!("no local stands at `{written}`: {stands:?}"),
+    };
+    let left = |declares| {
+        (
+            declares,
+            Some((2, 9)),
+            Some("(k: /std/Nat) -> /std/Nat".to_string()),
+        )
+    };
+    let right = |declares| {
+        (
+            declares,
+            Some((3, 9)),
+            Some("(m: /std/Nat) -> /std/Nat".to_string()),
+        )
+    };
+
+    assert_eq!(local("left", 0), left(true));
+    assert_eq!(local("left", 1), left(false));
+    assert_eq!(local("right", 0), right(false));
+    assert_eq!(local("right", 1), right(true));
+}
+
 const TELESCOPE: &str = "induct Shape(A: Type): Type\n| circle(radius: A)\nend\nlet apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";
 
 /// A telescope's binder answers where it is bound and where it is read, as a function's parameter does: a family's parameter, a constructor's payload binder and a function type's parameter.
