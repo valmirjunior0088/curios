@@ -592,7 +592,9 @@ macro_rules! shown_terms {
             } => {
                 $visit(goal);
                 $visit(first);
-                $visit(second);
+                if let Some(second) = second {
+                    $visit(second);
+                }
             }
             Self::InvalidWitnessHead { head, .. } => $visit(head),
             Self::DeclarationCycle { members } => {
@@ -1146,11 +1148,11 @@ pub enum Error {
         /// The declaring module — see [`Error::DuplicateWitness`].
         witness: Qualifier,
     },
-    /// Two distinct superclass projections of local `use` binders match a goal at the same minimal depth — no principled tiebreak exists.
+    /// Two distinct superclass projections of local `use` binders match a goal at the same minimal depth — no principled tiebreak exists. Each is named by the type of the premise it is reached from, which the reader wrote; `second` is `None` where both are reached from one premise, by two paths.
     AmbiguousWitness {
         goal: Box<Term>,
         first: Box<Term>,
-        second: Box<Term>,
+        second: Option<Box<Term>>,
     },
     /// The superclass graph (concepts' `use`-marked fields) has a cycle.
     CyclicSuperclass {
@@ -2167,15 +2169,15 @@ impl Error {
         }
     }
 
-    pub fn ambiguous_witness<T: Into<Term>, U: Into<Term>, V: Into<Term>>(
+    pub fn ambiguous_witness<T: Into<Term>, U: Into<Term>>(
         goal: T,
         first: U,
-        second: V,
+        second: Option<Term>,
     ) -> Self {
         Self::AmbiguousWitness {
             goal: Box::new(goal.into()),
             first: Box::new(first.into()),
-            second: Box::new(second.into()),
+            second: second.map(Box::new),
         }
     }
 

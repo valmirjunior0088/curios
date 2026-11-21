@@ -639,11 +639,22 @@ pub fn resolve_witness(
                     _ => unreachable!("a probed match commits deterministically"),
                 }
             }
+            // Each match is named by the premise it is reached from, which the reader wrote: the projection spells a binder no program names. The frontier is seeded last binder first, so the second match is named first, as its premise is written.
             _ => {
-                let (one, another) = (matched[0].0.clone(), matched[1].0.clone());
-                return Err(pending(context, [&goal_whnf], move |reporting, [goal]| {
-                    Error::ambiguous_witness(resolved_for_display(reporting, &goal), one, another)
-                }));
+                let (one, one_type) = premise(context, &matched[1].0)?;
+                let (another, another_type) = premise(context, &matched[0].0)?;
+                let apart = one != another;
+                return Err(pending(
+                    context,
+                    [&goal_whnf, &one_type, &another_type],
+                    move |reporting, [goal, one, another]| {
+                        Error::ambiguous_witness(
+                            resolved_for_display(reporting, &goal),
+                            resolved_for_display(reporting, &one),
+                            apart.then(|| resolved_for_display(reporting, &another)),
+                        )
+                    },
+                ));
             }
         }
 
@@ -766,6 +777,15 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     }
 
     Ok(out)
+}
+
+/// The local `use` premise a step-2 projection is reached from, the binder at the root of its chain of superclass projections, beside its type.
+fn premise(context: &mut Context, projection: &Term) -> Result<(Term, Term), Error> {
+    let mut root = projection;
+    while let Subterm::Proj(proj) = &**root {
+        root = &proj.head;
+    }
+    Ok((root.clone(), node_type(context, root)?))
 }
 
 /// The type of a step-2 node: an assumption for a variable, or the projected field type for a projection (recursing on its head).

@@ -142,3 +142,24 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
         "{report}"
     );
 }
+
+// Two `use` premises that each hold the goal as a superclass, as near as the other, leave no tiebreak: the report names both premises as they are written, and no binder the compiler made for them.
+#[test]
+fn an_ambiguous_superclass_names_the_premises_it_is_reached_from() {
+    let source = r#"
+        use /std/{Str, Show};
+        concept Pretty(T: Type): Type { use Show(T), }
+        concept Loud(T: Type): Type { use Show(T), }
+        pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);
+        /std/print("")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("ambiguous witness")
+            && report.contains(
+                "`use Pretty(T)` and `use Loud(T)` both hold it as a superclass, neither nearer than the other"
+            ),
+        "{report}"
+    );
+}

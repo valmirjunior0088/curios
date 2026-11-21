@@ -2357,11 +2357,17 @@ impl Displayed<'_> {
             } => {
                 f.text("ambiguous witness");
                 f.stating(format_args!("wanted: {}", Code(goal.spelled(spelling))));
-                f.stating(format_args!(
-                    "both {} and {} match at the same superclass depth",
-                    Code(first.spelled(spelling)),
-                    Code(second.spelled(spelling))
-                ));
+                match second {
+                    Some(second) => f.stating(format_args!(
+                        "`use {}` and `use {}` both hold it as a superclass, neither nearer than the other",
+                        first.spelled(spelling),
+                        second.spelled(spelling)
+                    )),
+                    None => f.stating(format_args!(
+                        "`use {}` holds it as a superclass by two paths, neither nearer than the other",
+                        first.spelled(spelling)
+                    )),
+                }
             }
             Error::CyclicSuperclass { concept } => {
                 f.text("superclass cycle");
