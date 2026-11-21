@@ -50,7 +50,13 @@ fn worded(site: &Unread, class: impl Fn(&WrittenBinder) -> Option<SiteClass>) ->
                 Some(SiteClass::Unit) => "write `()` in its name's place",
                 Some(SiteClass::Action) | None => "write `_` in its name's place",
             };
-            Lint::unused(LintKind::UnusedBinder, *at, "binder", name, way_out)
+            let mut lint = Lint::unused(LintKind::UnusedBinder, *at, "binder", name, way_out);
+            // A `_` before a name keeps a declaration unused and no binder, which `_` alone does: what another language's habit expects is said where it fails.
+            if name.to_string().starts_with('_') {
+                lint.said
+                    .stating("a `_` before a name keeps a declaration unused, and no binder");
+            }
+            lint
         }
         // A `_` that binds `{}`, underlined at it: `()` checks what `_` discards.
         Unread::Wildcard { at, .. } => {

@@ -142,7 +142,7 @@ fn a_wildcard_binder_is_never_reported() {
     );
 }
 
-/// A `_` prefix keeps no binder: a name nothing reads is reported whatever it begins with, and one the body reads is used.
+/// A `_` prefix keeps no binder: a name nothing reads is reported whatever it begins with, saying so to a reader whose other language's habit expected it to, and one the body reads is used.
 #[test]
 fn an_underscore_prefixed_binder_is_reported_where_nothing_reads_it() {
     assert_eq!(
@@ -152,7 +152,9 @@ fn an_underscore_prefixed_binder_is_reported_where_nothing_reads_it() {
         f
     "#
         ),
-        ["unused-binder: unused binder\n  `_n` is never used\n  write `_` in its name's place"]
+        [
+            "unused-binder: unused binder\n  `_n` is never used\n  write `_` in its name's place\n  a `_` before a name keeps a declaration unused, and no binder"
+        ]
     );
 }
 
