@@ -15,9 +15,9 @@ use {
     },
     curios_common::{InfixOp, Keyword, Plicity, Span, Standing, is_identifier_char, recurse},
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, many1,
-        mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
-        take_eof, take_exact, take_n, take_while, unseen,
+        Parsed, Parser, ParserState, commit, fail, fail_after, fail_from, is_blank, look_ahead,
+        many0, many1, mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown,
+        spanned, take_eof, take_exact, take_n, take_while, unseen,
     },
     std::iter,
 };
@@ -616,15 +616,25 @@ fn refuse_juxtaposed_term<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
                 .take_while(|char| is_identifier_char(*char))
                 .map(char::len_utf8)
                 .sum::<usize>();
-            let foreign = [&first[first.len() - ending..], &rest[..word_length]]
-                .into_iter()
-                .find_map(|word| written_instead_of(word).map(|form| (word, form)));
+            // The word that ends the first term stands where the first ends, and the one that begins the second where the second begins.
+            let ends_first = here.start - skipped.len() - ending;
+            let foreign = [
+                (&first[first.len() - ending..], ends_first),
+                (&rest[..word_length], here.start),
+            ]
+            .into_iter()
+            .find_map(|(word, at)| written_instead_of(word).map(|form| (word, form, at)));
+            // A word another language reserves is the whole of what the author meant by it, so it is said alone, where it is written.
+            if let Some((word, form, at)) = foreign {
+                let mut placed = here.clone();
+                placed.start = at;
+                placed.end = at;
+                let refusal = vec![format!("`{word}` is no keyword of Curios: {form}")];
+                return commit(fail_after(&placed, refusal)).boxed();
+            }
             let refusal = TERMS_SIDE_BY_SIDE
                 .iter()
                 .map(|fact| fact.to_string())
-                .chain(
-                    foreign.map(|(word, form)| format!("`{word}` is no keyword of Curios: {form}")),
-                )
                 .collect::<Vec<_>>();
             mark()
                 .and_drop(take_n(1))

@@ -9,16 +9,12 @@ fn refusal(source: &str) -> String {
 #[test]
 fn two_terms_on_one_line_are_refused_as_standing_side_by_side() {
     for source in [
-        // In a `let`'s body, in an argument and in an arm's body.
-        "let big(n : Nat) -> Nat = if n > 10 then 1 else 0;\nbig(1)",
-        "let double(n : Nat) -> Nat = return n + n;\ndouble(1)",
+        // In a `let`'s body, in an argument and in an arm's body; a word another language reserves is the next test's.
         "let three : Nat = add 1 2;\nthree",
         "f(add 1 2)",
         "match b | true => add 1 2 | false => 0 end",
         // Glued, as another language indexes.
         "let first(xs : List(Nat)) -> Nat = xs[0];\nfirst([1])",
-        // And past a program's final term on its own line, where a later line is the program's end to word.
-        "fn double(n : Nat) -> Nat { n + n }",
     ] {
         let report = refusal(source);
         assert!(
@@ -127,7 +123,7 @@ fn a_match_on_a_structure_literal_is_still_a_match() {
     }
 }
 
-/// A word another language reserves, standing in the refusal of two terms, is named with what Curios writes in its place, whether it ends the first term or begins the second. Each is a name like any other: a function declared under one and called compiles as it did.
+/// A word another language reserves, standing in the refusal of two terms, is named with what Curios writes in its place, whether it ends the first term or begins the second, and is the whole of the refusal: the lines on calls and operators say nothing its author meant, and the caret stands on the word. Each is a name like any other: a function declared under one and called compiles as it did.
 #[test]
 fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
     let leading = [
@@ -144,10 +140,20 @@ fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
                 .map(|word| (word, format!("let f(n : Nat) -> Nat = n {word} 1;\nf(1)"))),
         );
     for (word, source) in written {
-        let report = refusal(&source);
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+        let column = source
+            .find(&format!("{word} "))
+            .expect("the word is written")
+            + 1;
         assert!(
-            report.contains("two terms stand side by side")
-                && report.contains(&format!("`{word}` is no keyword of Curios")),
+            report.contains(&format!("`{word}` is no keyword of Curios"))
+                && !report.contains("two terms stand side by side"),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span().expect("located").line_column(),
+            (1, column),
             "{source:?} reported {report}"
         );
 
