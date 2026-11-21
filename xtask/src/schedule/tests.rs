@@ -67,22 +67,17 @@ fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
     );
 }
 
-/// A filter given to the tests picks the suite, whose run takes it, and leaves the Binaryen and prelude checks, which ask about other crates' builds.
+/// A filter given to the workspace picks the suite, whose run takes it, and leaves every other step, the lint and the cache checks, which ask about other crates' builds.
 #[test]
 fn a_variable_given_runs_only_the_steps_that_use_it() {
     assert_eq!(
-        scheduled("workspace test", &[("workspace.expression", "test(~cli)")]),
+        scheduled("workspace", &[("workspace.expression", "test(~cli)")]),
         ["launcher build", "workspace test suite"]
     );
-    assert_eq!(
-        scheduled("workspace test", &[]),
-        [
-            "launcher build",
-            "workspace test suite",
-            "workspace test binaryen-cache",
-            "workspace test prelude-cache"
-        ]
-    );
+    let whole = scheduled("workspace", &[]);
+    for step in ["workspace lint clippy", "workspace caches prelude"] {
+        assert!(whole.iter().any(|run| run == step), "{whole:?}");
+    }
 }
 
 #[test]

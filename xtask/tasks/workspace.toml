@@ -43,14 +43,15 @@ run = [
     ["cargo", "nextest", "run", "{shipped}", "--all-targets", "--no-fail-fast", "--no-tests=warn", "{expression}"],
 ]
 
-[test.binaryen-cache]
+# What two builds no other step makes do with their caches, a group apart from the suite: the prelude's step elaborates the library again after any edit to a crate it links, which nearly every change to the compiler is.
+[caches.binaryen]
 description = "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash"
 run = [
     ["cargo", "build", "--package", "curios-binaryen"],
     ["CURIOS_BINARYEN_CACHED=1", "cargo", "clippy", "--package", "curios-binaryen", "--all-targets", "--keep-going"],
 ]
 
-[test.prelude-cache]
+[caches.prelude]
 description = "Hold the checkout's entry of the prelude's images: the prelude built alone, asked to compare, makes them again and refuses any the entry holds otherwise for their state, and linted alone, asked to reuse, takes them rather than making them; each a unit no other step builds, so the step runs the script after every edit to a crate it links"
 run = [
     ["CURIOS_PRELUDE_ENTRY=compare", "cargo", "build", "--package", "curios-prelude"],
