@@ -1,4 +1,4 @@
-//! How the paths and the counts a report names are spelled, and what a piece of a line holds beside its paint.
+//! How the paths and the counts a report names are spelled, what a piece of a line holds beside its paint, and how the tree drawing closes a node.
 
 use {super::*, std::path::Path};
 
@@ -77,5 +77,47 @@ fn a_manifest_is_spelled_from_where_the_invocation_stands() {
     assert_eq!(
         spelled_from(manifest, Path::new("/elsewhere")).as_deref(),
         Some("/work/app/curios.toml")
+    );
+}
+
+/// The lines a node came to stand beneath its closing in one block: beside the trunk where its tree goes on, and in the trunk's column where the node was the last.
+#[test]
+fn a_nodes_lines_beneath_are_drawn_with_its_closing() {
+    let mut trees = Trees::default();
+    let tree = Opened::minted();
+    let drawn = [
+        Event::Named {
+            tree,
+            subject: "/app".to_string(),
+            manifest: None,
+        },
+        Event::Began {
+            tree,
+            label: "store".to_string(),
+            last: false,
+        },
+        Event::Closed {
+            tree,
+            closing: Closing::Ended("refused".to_string(), Duration::ZERO),
+            beneath: vec![Piece::from("the cabinet is read-only")],
+        },
+        Event::Began {
+            tree,
+            label: "pin".to_string(),
+            last: true,
+        },
+        Event::Closed {
+            tree,
+            closing: Closing::Stands(Piece::from("recorded")),
+            beneath: vec![Piece::from("rev: a → b"), Piece::from("hash: c → d")],
+        },
+    ]
+    .into_iter()
+    .map(|event| trees.draw(event).plain)
+    .collect::<String>();
+
+    assert_eq!(
+        drawn,
+        "/app\n├─ store; refused in 0.0s\n│    the cabinet is read-only\n└─ pin; recorded\n     rev: a → b\n     hash: c → d\n"
     );
 }

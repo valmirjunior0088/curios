@@ -74,9 +74,6 @@ pub trait Telling {
 
     /// Whoever reads the answer on standard output: where they stand and whether they see colour, which is what a diagnostic of the answer is written for.
     fn reader(&self) -> Style;
-
-    /// Whoever reads what is said beside the answer, on standard error.
-    fn bystander(&self) -> Style;
 }
 
 /// A question asked in silence.
@@ -92,10 +89,6 @@ impl Telling for Silent {
     fn answering(&mut self) {}
 
     fn reader(&self) -> Style {
-        Style::plain()
-    }
-
-    fn bystander(&self) -> Style {
         Style::plain()
     }
 }
@@ -589,20 +582,24 @@ impl Scope {
 }
 
 /// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted by the driver's own rendering, to stdout. `telling` is told as [`wonder_diagnostics`]' is.
+///
+/// What stopped the compilation past the rung comes back, for the caller to say beside the rendering: a rung the driver emitted is an answer, a later failure does not unmake it, and a pipeline reading the rendering is unaffected by what is said beside it.
 pub fn wonder_stage(
     budget: u64,
     name: &str,
     staged: Staged,
     telling: &mut dyn Telling,
-) -> Result<(), CompileError> {
+) -> Result<Vec<Diagnosis>, CompileError> {
     let overlay = Overlay::default();
 
     let program = match staged {
         Staged::Program(program) => program,
         Staged::Library(library) => {
-            return library_stage(budget, name, library, &overlay, telling);
+            return library_stage(budget, name, library, &overlay, telling).map(|()| Vec::new());
         }
-        Staged::Module(module) => return module_stage(budget, name, module, &overlay, telling),
+        Staged::Module(module) => {
+            return module_stage(budget, name, module, &overlay, telling).map(|()| Vec::new());
+        }
     };
 
     let refusal = not_a_program(program.entry());
@@ -612,14 +609,7 @@ pub fn wonder_stage(
     let shown = |text: &str| answer(format_args!("{text}\n"));
     let reached = asked.staged(budget, &overlay, name, shown, telling);
     match reached {
-        Ok(rendering) => {
-            // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
-            let bystander = telling.bystander();
-            for diagnostic in &rendering.diagnostics {
-                eprintln!("{}", diagnostic.rendered(&bystander));
-            }
-            Ok(())
-        }
+        Ok(rendering) => Ok(rendering.diagnostics),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),

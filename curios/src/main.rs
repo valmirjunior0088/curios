@@ -69,7 +69,7 @@ use {
 /// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
 fn install_profiling(path: PathBuf) {
     if let Err(error) = install(Destination::File(path)) {
-        eprintln!("profiling unavailable: {error}");
+        said(format!("profiling unavailable: {error}"));
     }
 }
 
@@ -661,48 +661,55 @@ fn dispatch() -> Result<(), Failure> {
                 if !tree.is_open() {
                     tree.open("deliver", false);
                 }
-                tree.outcome(format!("{} bytes, {}", grouped(probe.bytes), probe.kind));
 
-                // What the provider's `answers` table may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
+                // What the provider's `answers` table may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the delivery's line answers already, and wasmtime would answer again by printing both magic numbers byte by byte.
                 let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
-                match probe.magic.then(|| read(&probe.at)) {
-                    None => {}
-                    Some(Ok(exports)) if exports.is_empty() => {
-                        tree.detail(
-                            "exports: none — nothing here can answer a `foreign` declaration",
-                        );
+                let mut beneath = match probe.magic.then(|| read(&probe.at)) {
+                    None => Vec::new(),
+                    Some(Ok(exports)) if exports.is_empty() => vec![Piece::from(
+                        "exports: none — nothing here can answer a `foreign` declaration",
+                    )],
+                    Some(Ok(exports)) => {
+                        vec![Piece::from(format!("exports: {}", exports.join(", ")))]
                     }
-                    Some(Ok(exports)) => tree.detail(format!("exports: {}", exports.join(", "))),
                     // Onto one line, because a report is one fact per line and an engine's diagnostics are written for a terminal of their own.
-                    Some(Err(error)) => tree.detail(format!(
+                    Some(Err(error)) => vec![Piece::from(format!(
                         "will not compile: {}",
                         error.split_whitespace().collect::<Vec<_>>().join(" ")
-                    )),
-                }
+                    ))],
+                };
 
                 // Only for a fetch. A module the package carries arrived inside the tree its consumer pinned; one that came over the wire is vouched for by nothing until this row says what it must hash to.
                 if probe.fetched {
-                    tree.detail(
+                    beneath.push(Piece::from(
                         "nothing verified this download — the hash below is derived from it, not checked against it",
-                    );
+                    ));
                 }
+                tree.outcome_beneath(
+                    format!("{} bytes, {}", grouped(probe.bytes), probe.kind),
+                    beneath,
+                );
             }
 
             if !tree.is_open() {
                 tree.open("pin", true);
             }
-            tree.outcome(match (pinned.fields.is_empty(), pinned.wrote) {
-                // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
-                (true, _) => "unchanged",
-                (false, true) => "recorded",
-                (false, false) => "would change",
-            });
-            for (key, before, after) in &pinned.fields {
-                match before {
-                    Some(before) => tree.detail(format!("{key}: {before} → {after}")),
-                    None => tree.detail(format!("{key}: {after}")),
-                }
-            }
+            tree.outcome_beneath(
+                match (pinned.fields.is_empty(), pinned.wrote) {
+                    // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
+                    (true, _) => "unchanged",
+                    (false, true) => "recorded",
+                    (false, false) => "would change",
+                },
+                pinned
+                    .fields
+                    .iter()
+                    .map(|(key, before, after)| match before {
+                        Some(before) => Piece::from(format!("{key}: {before} → {after}")),
+                        None => Piece::from(format!("{key}: {after}")),
+                    })
+                    .collect(),
+            );
 
             // `--check` is the question, and its answer is the exit code — `format --check`'s contract, for the same reason.
             if check && pinned.would_write() {
@@ -828,25 +835,35 @@ fn dispatch() -> Result<(), Failure> {
                     contract.admit_any(subject, manifest, &here()?, cabinet, &stdin)?,
                     &mut Asking::checking(answered.clone()),
                 )?,
-                Query::Stage(name) => wonder_stage(
-                    elaboration.budget,
-                    &name,
-                    // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
-                    match contract.accepts {
-                        Accepts::ProgramOrLibrary => {
-                            contract.admit_staged(subject, manifest, &here()?, cabinet, &stdin)?
-                        }
-                        _ => Staged::Program(contract.admit_program(
-                            subject,
-                            manifest,
-                            None,
-                            &here()?,
-                            cabinet,
-                            &stdin,
-                        )?),
-                    },
-                    &mut Asking::reading(answered.clone()),
-                )?,
+                Query::Stage(name) => {
+                    let beside = wonder_stage(
+                        elaboration.budget,
+                        &name,
+                        // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
+                        match contract.accepts {
+                            Accepts::ProgramOrLibrary => contract.admit_staged(
+                                subject,
+                                manifest,
+                                &here()?,
+                                cabinet,
+                                &stdin,
+                            )?,
+                            _ => Staged::Program(contract.admit_program(
+                                subject,
+                                manifest,
+                                None,
+                                &here()?,
+                                cabinet,
+                                &stdin,
+                            )?),
+                        },
+                        &mut Asking::reading(answered.clone()),
+                    )?;
+                    // What stopped the compilation past the rung is said beside it, on standard error, so a pipeline reading the rung is unaffected.
+                    for diagnosis in &beside {
+                        said(Piece::rendered(|style| diagnosis.rendered(style)));
+                    }
+                }
                 Query::At(place) => wonder_at(
                     elaboration.budget,
                     contract.admit_staged(subject, manifest, &here()?, cabinet, &stdin)?,
@@ -927,7 +944,7 @@ fn main() -> ExitCode {
     match dispatch() {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Stopped(stopped)) => {
-            eprintln!("{}", stopped.rendered(reader()));
+            said(Piece::rendered(|style| stopped.rendered(style)));
 
             // Written goals alone are the incomplete state; anything refused beside them is a failure.
             match stopped {
@@ -936,12 +953,12 @@ fn main() -> ExitCode {
             }
         }
         Err(Failure::Refused(report)) => {
-            eprintln!("{}", report.rendered(Kind::Error, reader()));
+            said(Piece::rendered(|style| report.rendered(Kind::Error, style)));
 
             ExitCode::FAILURE
         }
         Err(Failure::Halted(stop)) => {
-            eprintln!("{stop}");
+            said(stop.to_string());
 
             ExitCode::FAILURE
         }

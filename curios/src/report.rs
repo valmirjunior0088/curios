@@ -1,6 +1,6 @@
 //! What the CLI says while it works.
 //!
-//! One transcript. A subject stands alone on a line, and beneath it a node for each thing done for it, written `label; outcome` ([`Tree`]):
+//! One transcript, told as events ([`Event`]) and drawn where it is told ([`tell`]): each subject a tree, and beneath it a node for each thing done for it, written `label; outcome` ([`Trees`]):
 //!
 //! ```text
 //! /geometry
@@ -14,36 +14,36 @@
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a line of the transcript written there would corrupt `curios run report.crs > report.json`.
 //!
-//! **Nothing written is taken back.** There is no cursor control and no repainting: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart. Rust's stderr is unbuffered, so a label reaches the reader before the work it names with no flushing of its own.
+//! **An event is data until it is drawn**, as a report is: what happened to which tree, its words as text, so whoever tells it holds nothing of the drawing and the drawing nothing of the compiler. Nothing written is taken back: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart.
 //!
-//! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, and a line is made of pieces built in both forms ([`Piece`]), as whoever reads standard error sees one and plain, which is what is kept of the transcript for a page.
+//! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, and a line is made of pieces built in both forms ([`Piece`]), as whoever reads standard error sees one and plain, which is what is kept of the transcript for a page ([`keep`]).
 //!
-//! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written here, from then on, is what a page is sent, so the page shows what the terminal showed.
-//!
-//! **What is said of no one subject stands under none**: a step taken for every subject ([`alone`]), and what the whole invocation came to, as its last line ([`total`]).
+//! **What is said of no one subject stands under none**: a step taken for every subject ([`alone`]), what the whole invocation came to, as its last line ([`total`]), and a block written whole ([`said`]), such as the report of what stopped a command.
 
 #[cfg(test)]
 mod tests;
+
+mod event;
+use event::*;
+
+mod transcript;
+use transcript::*;
+pub use transcript::{Relayed, keep, kept, relay, written_past};
+
+mod tree;
+use tree::*;
+pub use tree::{Quoted, Wrote};
 
 use {
     curios_common::{Qualifier, STDIN_NAME, Style},
     curios_package::Named,
     std::{
         env, fmt,
-        io::Write,
         path::{Path, PathBuf},
-        sync::{Mutex, MutexGuard, OnceLock, PoisonError},
+        sync::OnceLock,
         time::{Duration, Instant},
     },
 };
-
-/// What the transcript wrote since a run asked for it to be kept, where one did.
-static KEPT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
-
-/// What is kept of the transcript, held. A writer that panicked left every byte it wrote, so its poison is passed over.
-fn held() -> MutexGuard<'static, Option<Vec<u8>>> {
-    KEPT.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 /// The reader no style was decided for: standing nowhere, seeing no colour.
 static PLAIN: Style = Style {
@@ -90,6 +90,14 @@ impl Piece {
         Self {
             shown: paint(style, &plain),
             plain,
+        }
+    }
+
+    /// What `render` makes of something for whoever reads standard error, beside what it makes of it for a reader who sees no colour: a report, rendered for each.
+    pub fn rendered(render: impl Fn(&Style) -> String) -> Self {
+        Self {
+            shown: render(reader()),
+            plain: render(&PLAIN),
         }
     }
 
@@ -154,34 +162,6 @@ fn worded(ending: &str) -> Piece {
     }
 }
 
-/// The one path every byte of the transcript takes: to stderr as its reader sees it, and, plain, onto what is kept of it where a run keeps it.
-fn say(piece: impl Into<Piece>) {
-    let piece = piece.into();
-
-    eprint!("{}", piece.shown);
-    if let Some(kept) = held().as_mut() {
-        kept.extend_from_slice(piece.plain.as_bytes());
-    }
-}
-
-/// Keep what the transcript writes from here on. A run that sends pages its report asks before its first line, so what a page is sent is what the terminal showed and the two cannot drift.
-pub fn keep() {
-    held().get_or_insert_default();
-}
-
-/// What the transcript wrote since it was asked kept, in the order written, and nothing where it was not.
-pub fn kept() -> Vec<u8> {
-    held().clone().unwrap_or_default()
-}
-
-/// Relay what a test run elsewhere wrote on one of its standard streams, framed: `shown` to `stream`, this process's of the same name, and `kept`, the same bytes unpainted, onto what is kept of the transcript, where they fell.
-pub fn relayed(mut stream: impl Write, shown: &[u8], kept: &[u8]) {
-    stream.write_all(shown).expect("failed relaying");
-    if let Some(transcript) = held().as_mut() {
-        transcript.extend_from_slice(kept);
-    }
-}
-
 /// What a tree is about, named on its first line.
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
@@ -237,27 +217,28 @@ impl fmt::Display for Subject {
 
 /// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.
 pub fn alone(label: &str, outcome: impl Into<Piece>) {
-    say(Piece::from(format_args!("{label}; "))
-        .then(outcome)
-        .then("\n"));
+    tell(Event::Alone {
+        label: label.to_string(),
+        outcome: outcome.into(),
+    });
 }
 
 /// What a whole invocation came to, as its last line, with the time `taken` by all it sums where that was measured: `3 passed, 1 failed; 0.2s`.
 pub fn total(text: impl Into<Piece>, taken: Option<Duration>) {
-    match taken {
-        Some(taken) => say(text.into().then("; ").then(dim(seconds(taken))).then("\n")),
-        None => say(text.into().then("\n")),
-    }
+    tell(Event::Total {
+        text: text.into(),
+        taken,
+    });
 }
 
 /// A blank line, between a tree and the report of what stopped it.
 pub fn apart() {
-    say("\n");
+    tell(Event::Apart);
 }
 
-/// End the line of the node standing open, where what it names is about to write of its own: its outcome then closes it beneath ([`Tree::ended`]). Free of any tree because whoever sees the write holds none: a test's host, which runs where the test does.
-pub fn cut() {
-    say("\n");
+/// `text` written whole, under no subject: the report of what stopped a command, a running program's stop, what stopped a rung's compile past it.
+pub fn said(text: impl Into<Piece>) {
+    tell(Event::Said { text: text.into() });
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.
@@ -283,248 +264,87 @@ pub fn from_here(path: &Path) -> String {
     reader().spelled(path)
 }
 
-/// The connector of a node more are planned after.
-const BRANCH: &str = "├─";
-
-/// The connector of the last node a tree plans.
-const CORNER: &str = "└─";
-
-/// The trunk, beside what stands beneath a node more are planned after.
-const TRUNK: &str = "│";
-
-/// The mark a test's own lines stand behind, in the column its ending closes in: what is written there is quoted from the test, not said by the runner.
-const QUOTE: &str = ">";
-
-/// The mark of a test that passed, where its ending is said.
-const PASSED: &str = "✓";
-
-/// The mark of a test that did not pass — it failed, trapped or exited — where its ending is said.
-const UNPASSED: &str = "✗";
-
-/// The standard stream a test wrote a line of its own on, which its quote mark is painted for: one on standard error stands apart from one on standard output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Quoted {
-    Output,
-    Error,
-}
-
-/// Where a test's writes stand in the line they are on, which says whether its next byte opens a line and so stands behind the frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Column {
-    /// At a line's start.
-    #[default]
-    Start,
-    /// Past a line's start.
-    Within,
-    /// Past a carriage return, which left the line standing: the next byte writes over it from its start, unless it ends it.
-    Returned,
-}
-
-impl Column {
-    /// The column a stream is left in by `written`, the bytes last written from this one.
-    pub fn after(self, written: &[u8]) -> Self {
-        match written.last() {
-            None => self,
-            Some(b'\n') => Column::Start,
-            Some(b'\r') => Column::Returned,
-            Some(_) => Column::Within,
-        }
-    }
-}
-
-/// What a line of a test's own is owed before the run that opens it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Owed {
-    /// Nothing: the line is under way.
-    Nothing,
-    /// The frame, and a blank before the run.
-    Frame,
-    /// The frame alone, before a run that is only its line's end.
-    Bare,
-}
-
-/// The first run of `bytes`, which a test writes from `column`: what the line it goes on is owed before it, and how many of the bytes go on that line, through the one that ends or leaves it.
-pub fn framed_run(column: Column, bytes: &[u8]) -> (Owed, usize) {
-    let length = bytes
-        .iter()
-        .position(|byte| matches!(byte, b'\n' | b'\r'))
-        .map_or(bytes.len(), |end| end + 1);
-    let owed = match (column, bytes.first()) {
-        // A line's end after a carriage return is the one line's end, written in two bytes.
-        (_, None) | (Column::Within, _) | (Column::Returned, Some(b'\n')) => Owed::Nothing,
-        (Column::Start | Column::Returned, Some(b'\n' | b'\r')) => Owed::Bare,
-        (Column::Start | Column::Returned, Some(_)) => Owed::Frame,
-    };
-
-    (owed, length)
-}
-
-/// What a line the test wrote on `quoted` is `owed`, as a reader of `style` sees it: the tree's trunk and the quote mark, which stands in the column the test's ending closes in.
-pub fn frame_of(owed: Owed, quoted: Quoted, style: &Style) -> String {
-    let mark = match quoted {
-        Quoted::Output => style.dim(QUOTE),
-        Quoted::Error => style.aside(QUOTE),
-    };
-    let frame = format!("{}  {mark}", style.dim(TRUNK));
-
-    match owed {
-        Owed::Nothing => String::new(),
-        Owed::Bare => frame,
-        Owed::Frame => format!("{frame} "),
-    }
-}
-
-/// `bytes`, which a test wrote on `quoted` from `column` on, each line behind its frame for a reader of `style`: what a run that writes a test's output once the test has ended hands over whole. `column` is left where the bytes leave the stream.
-pub fn framed(column: &mut Column, bytes: &[u8], quoted: Quoted, style: &Style) -> Vec<u8> {
-    let mut framed = Vec::with_capacity(bytes.len());
-    let mut rest = bytes;
-    while !rest.is_empty() {
-        let (owed, length) = framed_run(*column, rest);
-        let (own, after) = rest.split_at(length);
-        framed.extend_from_slice(frame_of(owed, quoted, style).as_bytes());
-        framed.extend_from_slice(own);
-        *column = column.after(own);
-        rest = after;
-    }
-
-    framed
-}
-
-/// What a node's work wrote of its own on the standard streams while the node's line stood open, as whoever watched them saw it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Wrote {
-    /// Nothing: the node's line is open still, and its outcome closes it.
-    Nothing,
-    /// Something, the last of it a line's end.
-    Lines,
-    /// Something that left a line open.
-    Open,
-}
-
-impl Wrote {
-    /// What a node's work wrote, from whether it `wrote` anything and the `column` its writes left the streams in.
-    pub fn of(wrote: bool, column: Column) -> Self {
-        match (wrote, column) {
-            (false, _) => Wrote::Nothing,
-            (true, Column::Start) => Wrote::Lines,
-            (true, Column::Within | Column::Returned) => Wrote::Open,
-        }
-    }
-}
-
-/// One subject's tree: the subject alone on a line, and beneath it a node for each thing done for it, written `label; outcome`.
-///
-/// ```text
-/// /geometry
-/// ├─ check; 1.6s
-/// └─ store; 0.1s
-/// ```
-///
-/// **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the cabinet already held is not narrated.
-///
-/// **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
-///
-/// **The connector is the plan's.** `├─` is written where more nodes are planned and `└─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
-///
-/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands quoted as it is written ([`framed_run`]), and the outcome closes the node beneath it, its mark in the quote's column. A test's ending leads with its mark wherever it stands, `✓` where it passed and `✗` where it did not:
-///
-/// ```text
-/// ├─ /geometry/is_square; ✓ passed in 0.0s
-/// ├─ /geometry/draws_a_square
-/// │  > ■■■■
-/// │  ✓ passed in 0.1s
-/// ```
+/// One subject's tree, as whoever tells it holds it: which tree it is, and when its open node's work began. The transcript draws it ([`Trees`]).
 pub struct Tree {
-    /// The subject's line, until the first node writes it.
-    line: Option<Piece>,
-    /// Whether the line names the manifest that governs the subject.
-    governed: bool,
+    opened: Opened,
     /// When the open node's work began, where one is open.
-    opened: Option<Instant>,
-    /// Whether the node last opened is the last its tree plans, which is whether the trunk goes on beside what stands beneath it.
-    last: bool,
+    began: Option<Instant>,
 }
 
 impl Tree {
     /// A tree for `subject`, naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
     pub fn of(subject: &Subject, manifest: Option<&Path>) -> Self {
         let here = env::current_dir().and_then(|here| here.canonicalize());
-        let spelled = manifest
-            .zip(here.ok())
-            .and_then(|(manifest, here)| spelled_from(manifest, &here));
+        let opened = Opened::minted();
+        tell(Event::Named {
+            tree: opened,
+            subject: subject.to_string(),
+            manifest: manifest
+                .zip(here.ok())
+                .and_then(|(manifest, here)| spelled_from(manifest, &here)),
+        });
 
         Self {
-            governed: spelled.is_some(),
-            line: Some(match spelled {
-                Some(manifest) => bold(subject)
-                    .then(" ")
-                    .then(dim(format_args!("({manifest})"))),
-                None => bold(subject),
-            }),
-            opened: None,
-            last: false,
+            opened,
+            began: None,
         }
     }
 
     /// Leave the tree as it stands. A subject no node was written for says nothing, unless its line names the manifest that governs it: that is said whatever was done, since nothing else tells which package the invocation reached.
-    pub fn close(mut self) {
-        if self.governed {
-            self.headed();
-        }
+    pub fn close(self) {
+        tell(Event::Left { tree: self.opened });
     }
 
-    /// The subject's line, written ahead of its first node.
-    fn headed(&mut self) {
-        if let Some(line) = self.line.take() {
-            say(line.then("\n"));
-        }
-    }
-
-    /// Open a node for `label`, the last its tree plans or not, leaving its line unterminated.
+    /// Open a node for `label`, the last its tree plans or not.
     pub fn open(&mut self, label: &str, last: bool) {
-        self.headed();
-        say(dim(match last {
-            true => CORNER,
-            false => BRANCH,
-        })
-        .then(format_args!(" {label}")));
-        self.opened = Some(Instant::now());
-        self.last = last;
-    }
-
-    /// One line of what the node last closed came to, beneath it and beside the trunk where the trunk goes on: the keys a `pin` wrote, under the node that wrote them.
-    pub fn detail(&mut self, text: impl Into<Piece>) {
-        match self.last {
-            true => say(Piece::from("     ").then(text).then("\n")),
-            false => say(dim(TRUNK).then("    ").then(text).then("\n")),
-        }
+        self.began = Some(Instant::now());
+        tell(Event::Began {
+            tree: self.opened,
+            label: label.to_string(),
+            last,
+        });
     }
 
     /// Whether a node is open: its label written and its outcome not yet.
     pub fn is_open(&self) -> bool {
-        self.opened.is_some()
+        self.began.is_some()
     }
 
     /// Close the open node with what its work took: `; 1.4s`.
     pub fn done(&mut self) {
-        say(Piece::from("; ").then(dim(self.taken())).then("\n"));
+        let taken = self.taken();
+        self.closed(Closing::Done(taken), Vec::new());
     }
 
     /// Close the open node with how its work ended where it did not simply finish, and what it took: `; refused in 0.3s`.
     pub fn ending(&mut self, ending: &str) {
-        let taken = self.taken();
+        self.ending_beneath(ending, Vec::new());
+    }
 
-        say(Piece::from("; ")
-            .then(worded(ending))
-            .then(" ")
-            .then(dim(format_args!("in {taken}")))
-            .then("\n"));
+    /// [`Tree::ending`], with the lines of `beneath` under it, one block with the node's line: why a cabinet took nothing.
+    pub fn ending_beneath(&mut self, ending: &str, beneath: Vec<Piece>) {
+        let taken = self.taken();
+        self.closed(Closing::Ended(ending.to_string(), taken), beneath);
     }
 
     /// Close the open node with what its work came to stand as, where that is the one fact it is read for: `; .curios/native/hello/hello`.
     pub fn outcome(&mut self, outcome: impl Into<Piece>) {
-        self.opened = None;
-        say(Piece::from("; ").then(outcome).then("\n"));
+        self.outcome_beneath(outcome, Vec::new());
+    }
+
+    /// [`Tree::outcome`], with the lines of `beneath` under it, one block with the node's line: the keys a `pin` wrote.
+    pub fn outcome_beneath(&mut self, outcome: impl Into<Piece>, beneath: Vec<Piece>) {
+        self.began = None;
+        self.closed(Closing::Stands(outcome.into()), beneath);
+    }
+
+    /// Tell the transcript the open node closed.
+    fn closed(&self, closing: Closing, beneath: Vec<Piece>) {
+        tell(Event::Closed {
+            tree: self.opened,
+            closing,
+            beneath,
+        });
     }
 
     /// Close the open node with where its work came to stand, or as `failed` where it could not be done: why is `done`'s to say, handed back for whoever reports it beneath.
@@ -540,7 +360,7 @@ impl Tree {
         done
     }
 
-    /// Close the open test's node with its ending, led by its mark, the time `taken` whoever ran it measured, and the `place` its name is written at where one is said, then what only they know of it, a line of `beneath` each under the ending's word: `; ✓ passed in 0.1s` on the node's own line, `; ✗ failed in 0.1s; tests.crs:4:6` with a place, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
+    /// Close the open test's node with its ending, the time `taken` whoever ran it measured and the `place` its name is written at where one is said, as what the test `wrote` of its own leaves the node's line, then what only they know of it, a line of `beneath` each: `; ✓ passed in 0.1s` on the node's own line, `; ✗ failed in 0.1s; tests.crs:4:6` with a place, or beneath what the test wrote.
     pub fn ended(
         &mut self,
         ending: &str,
@@ -549,48 +369,28 @@ impl Tree {
         wrote: Wrote,
         beneath: &[String],
     ) {
-        let mark = match trouble(ending) {
-            true => troubled(UNPASSED),
-            false => PASSED.into(),
-        };
-        let closing = mark
-            .then(" ")
-            .then(worded(ending))
-            .then(" ")
-            .then(dim(format_args!("in {}", seconds(taken))));
-        let closing = match place {
-            Some(place) => closing.then("; ").then(place.to_string()),
-            None => closing,
-        };
-
-        self.opened = None;
-        match wrote {
-            Wrote::Nothing => say(Piece::from("; ").then(closing).then("\n")),
-            Wrote::Lines | Wrote::Open => {
-                if wrote == Wrote::Open {
-                    say("\n");
-                }
-                say(dim(TRUNK).then("  ").then(closing).then("\n"));
-            }
-        }
-        for line in beneath {
-            say(dim(TRUNK).then(format_args!("    {line}\n")));
-        }
+        self.began = None;
+        tell(Event::Tested {
+            ending: ending.to_string(),
+            taken,
+            place: place.map(str::to_string),
+            wrote,
+            beneath: beneath.to_vec(),
+        });
     }
 
     /// Close the tree with the node that sums it up, and the time `taken` by all it sums where any of it ran: `└─ 2 passed, 1 failed; 0.1s`.
-    pub fn summed(mut self, sum: impl Into<Piece>, taken: Option<Duration>) {
-        self.headed();
-        let summed = dim(CORNER).then(" ").then(sum);
-        match taken {
-            Some(taken) => say(summed.then("; ").then(dim(seconds(taken))).then("\n")),
-            None => say(summed.then("\n")),
-        }
+    pub fn summed(self, sum: impl Into<Piece>, taken: Option<Duration>) {
+        tell(Event::Summed {
+            tree: self.opened,
+            sum: sum.into(),
+            taken,
+        });
     }
 
     /// What the open node's work took, which closes it.
-    fn taken(&mut self) -> String {
-        seconds(self.opened.take().map_or(Duration::ZERO, |at| at.elapsed()))
+    fn taken(&mut self) -> Duration {
+        self.began.take().map_or(Duration::ZERO, |at| at.elapsed())
     }
 }
 

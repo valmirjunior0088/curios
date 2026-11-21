@@ -12,13 +12,13 @@ use host::*;
 
 use {
     crate::{
-        Access, Column, Failure, Piece, Quoted, Reporting, Run, Served, Steps, Subject, Then, Tree,
-        Wrote, alone, answered, bound, cut, framed, keep, kept, port_of, reader, relayed,
-        serve_run, total, troubled, url,
+        Access, Failure, Piece, Quoted, Relayed, Reporting, Run, Served, Steps, Subject, Then,
+        Tree, Wrote, alone, bound, keep, kept, port_of, reader, relay, serve_run, total, troubled,
+        url,
     },
     curios::{Outcome, TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step, Stream},
-    curios_common::{Code, Qualifier, Report, Style},
+    curios_common::{Code, Qualifier, Report},
     curios_native::{OsHost, Stop, TestEnd},
     curios_package::{Refused, Selection, Target},
     curios_pipeline::{CompileError, ScheduledTest, TestModule},
@@ -27,7 +27,8 @@ use {
         cell::RefCell,
         cmp::Reverse,
         collections::VecDeque,
-        io, iter, mem,
+        io::{self, Write},
+        iter,
         sync::Arc,
         time::{Duration, Instant},
     },
@@ -510,8 +511,7 @@ pub fn serve_tests(
         Printing {
             printer: &mut printer,
             planned,
-            wrote: false,
-            column: Column::Start,
+            relayed: Relayed::default(),
         },
     );
     serve_run(&listener, run)?;
@@ -523,50 +523,32 @@ pub fn serve_tests(
 struct Printing<'p, 'a> {
     printer: &'p mut Printer<'a>,
     planned: VecDeque<(Tree, Vec<TestModule>)>,
-    /// Whether the test in hand has written anything, and where its writes stand in their line: what a native test's host holds of it.
-    wrote: bool,
-    column: Column,
+    /// What the test in hand has written, and where its writes stand in their line: what a native test's host holds of it.
+    relayed: Relayed,
 }
 
 impl Reporting for Printing<'_, '_> {
     fn began(&mut self, _step: Step) {
         self.printer.began();
-        self.wrote = false;
-        self.column = Column::Start;
+        self.relayed = Relayed::default();
     }
 
     /// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then the bytes, each line behind its frame, on this process's stream of the same name.
     fn wrote(&mut self, stream: Stream, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        if !mem::replace(&mut self.wrote, true) {
-            cut();
-        }
-
-        // What is kept is what was shown, unpainted, from the same column.
-        let quoted = match stream {
-            Stream::Stdout => Quoted::Output,
-            Stream::Stderr => Quoted::Error,
+        let relayed = match stream {
+            Stream::Stdout => relay(&mut self.relayed, Quoted::Output, bytes, |run| {
+                io::stdout().write_all(run).map(|()| run.len())
+            }),
+            Stream::Stderr => relay(&mut self.relayed, Quoted::Error, bytes, |run| {
+                io::stderr().write_all(run).map(|()| run.len())
+            }),
         };
-        let kept = framed(&mut self.column.clone(), bytes, quoted, &Style::plain());
-        match stream {
-            Stream::Stdout => relayed(
-                io::stdout(),
-                &framed(&mut self.column, bytes, quoted, answered()),
-                &kept,
-            ),
-            Stream::Stderr => relayed(
-                io::stderr(),
-                &framed(&mut self.column, bytes, quoted, reader()),
-                &kept,
-            ),
-        }
+        relayed.expect("failed relaying");
     }
 
     fn took(&mut self, _step: Step, posted: &Posted, taken: Duration) {
         self.printer
-            .ended(ending_of(posted), Wrote::of(self.wrote, self.column), taken);
+            .ended(ending_of(posted), self.relayed.wrote(), taken);
 
         // The subject's last test closes it, and opens the next subject or ends the run.
         if !self.printer.in_hand() {

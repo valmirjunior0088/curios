@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Subject, Tree, apart, reader},
+    crate::{Piece, Subject, Tree, apart},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_common::{OsError, Qualifier, Report, STDIN_NAME, Source, Style},
@@ -355,10 +355,9 @@ impl Steps {
                 if let Some(tree) = self.tree_of(unit) {
                     match refusal {
                         Some(reason) => {
-                            tree.ending("refused");
-                            if !WHY_UNSTORED.swap(true, Ordering::Relaxed) {
-                                tree.detail(reason);
-                            }
+                            let why = (!WHY_UNSTORED.swap(true, Ordering::Relaxed))
+                                .then(|| Piece::from(reason));
+                            tree.ending_beneath("refused", why.into_iter().collect());
                         }
                         None => tree.done(),
                     }
@@ -519,9 +518,5 @@ impl Telling for Asking {
 
     fn reader(&self) -> Style {
         self.answered.clone()
-    }
-
-    fn bystander(&self) -> Style {
-        reader().clone()
     }
 }

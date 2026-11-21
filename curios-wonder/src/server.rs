@@ -269,10 +269,6 @@ impl Telling for Reporting<'_> {
     fn reader(&self) -> Style {
         Style::plain()
     }
-
-    fn bystander(&self) -> Style {
-        Style::plain()
-    }
 }
 
 /// Whether the client watches the disk for a server that asks it to, at a registration made while the session runs.
