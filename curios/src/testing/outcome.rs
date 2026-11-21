@@ -7,7 +7,7 @@ use curios_surface::{ListEntry, Literal, ProofLiteral, StructLitEntry, Subterm, 
 
 /// What a test found: each check that failed, in the order the test met them, and none where the test held.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Verdict {
+pub struct Outcome {
     pub failures: Vec<FailedCheck>,
 }
 
@@ -19,8 +19,8 @@ pub struct FailedCheck {
     pub facts: Vec<(String, String)>,
 }
 
-impl Verdict {
-    /// The verdict `answer` spells: the text a derived `Spell` writes of `/std/Test`'s failures, a list of structure literals read back as Curios. `Err` says what of it is no verdict, which a test program never answers, so its runner reports it as its own fault.
+impl Outcome {
+    /// The outcome `answer` spells: the text a derived `Spell` writes of `/std/Test`'s failures, a list of structure literals read back as Curios. `Err` says what of it is no outcome, which a test program never answers, so its runner reports it as its own fault.
     pub fn read(answer: &[u8]) -> Result<Self, String> {
         let text = str::from_utf8(answer).map_err(|_| "the answer is no text".to_string())?;
         let term = text

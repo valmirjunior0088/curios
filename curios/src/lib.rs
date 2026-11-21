@@ -12,7 +12,7 @@ pub use link::{bindings_of, linked_of, unlinked};
 
 mod testing;
 pub use testing::{
-    FailedCheck, TestRun, TestSubject, Tested, Verdict, opened, page_name, supplied, test_subjects,
+    FailedCheck, Outcome, TestRun, TestSubject, Tested, opened, page_name, supplied, test_subjects,
 };
 
 /// The variable naming the cabinet every project a run sees files into, in place of each project's own.

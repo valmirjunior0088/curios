@@ -1,12 +1,12 @@
 use super::*;
 
 #[test]
-fn a_verdict_reads_back_the_failures_a_derived_spell_writes() {
+fn an_outcome_reads_back_the_failures_a_derived_spell_writes() {
     let answer = br#"[Failure { steps = ["case 2"], statement = "not equal", facts = [("expected", "\"a\""), ("obtained", "\"a\\n\"")] }]"#;
 
     assert_eq!(
-        Verdict::read(answer),
-        Ok(Verdict {
+        Outcome::read(answer),
+        Ok(Outcome {
             failures: vec![FailedCheck {
                 steps: vec!["case 2".to_string()],
                 statement: "not equal".to_string(),
@@ -21,11 +21,11 @@ fn a_verdict_reads_back_the_failures_a_derived_spell_writes() {
 
 #[test]
 fn an_empty_list_is_a_test_that_held() {
-    assert!(Verdict::read(b"[]").is_ok_and(|verdict| verdict.held()));
+    assert!(Outcome::read(b"[]").is_ok_and(|outcome| outcome.held()));
 }
 
 #[test]
-fn an_answer_that_spells_no_verdict_says_what_it_spells() {
+fn an_answer_that_spells_no_outcome_says_what_it_spells() {
     for (answer, why) in [
         (&b""[..], "the answer is no term"),
         (b"true", "`true` is no list"),
@@ -35,7 +35,7 @@ fn an_answer_that_spells_no_verdict_says_what_it_spells() {
             "has no `facts`",
         ),
     ] {
-        let refusal = Verdict::read(answer).expect_err("no verdict");
+        let refusal = Outcome::read(answer).expect_err("no outcome");
 
         assert!(refusal.contains(why), "{refusal}");
     }

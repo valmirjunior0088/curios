@@ -574,7 +574,7 @@ fn dispatch() -> Result<(), Failure> {
             });
             // A fetch that stopped closes its node with how: its transport failed where nothing arrived, and what arrived was refused where something did.
             if let (Err(_), Some((mut tree, arrived))) = (&curated, fetching) {
-                tree.verdict(match arrived {
+                tree.ending(match arrived {
                     true => "refused",
                     false => "failed",
                 });
@@ -611,7 +611,7 @@ fn dispatch() -> Result<(), Failure> {
             );
             // A pin that stopped with a node open closes it with how: the transport failed where nothing arrived, and a rule refused what did. One refused before any delivery began has no node to close.
             if pinned.is_err() && tree.is_open() {
-                tree.verdict(match fetched {
+                tree.ending(match fetched {
                     true => "refused",
                     false => "failed",
                 });
@@ -698,7 +698,7 @@ fn dispatch() -> Result<(), Failure> {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
+            // The formatter is pure and reports changedness in its result; whether a `Changed` answer fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
             //
             // A file that changes is a subject, its one node saying what became of it; one that does not is counted, and the count is the last line. Standard input formatted onto standard output is an answer, of which nothing is said.
             let (mut changed, mut unchanged, mut counted) = (0usize, 0usize, false);

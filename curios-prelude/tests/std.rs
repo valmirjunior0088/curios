@@ -3,7 +3,7 @@
 //! One Rust test per module of tests, because nextest runs each in a process of its own: the modules' back ends run on every core, and a failure names the module. Each process compiles the tested `/std` over the archived one, so only its tests are elaborated, and files what it compiled into one cabinet under the build's scratch directory, which a rerun of an unchanged build takes whole.
 
 use {
-    curios::{TestSubject, Verdict, test_subjects, test_support::*},
+    curios::{Outcome, TestSubject, test_subjects, test_support::*},
     curios_common::{Qualifier, Style, fill},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
@@ -181,7 +181,7 @@ fn run_module(module: &Qualifier) {
     let mut failures = String::new();
     for (index, record) in tested.scheduled().enumerate() {
         let mut held = None;
-        let outcome = run.run(index, |arguments| {
+        let end = run.run(index, |arguments| {
             let (host, io) = MockHost::builder().args(arguments).build();
             held = Some(io);
             host
@@ -190,15 +190,15 @@ fn run_module(module: &Qualifier) {
             String::from_utf8_lossy(&io.output()).into_owned()
         });
 
-        let failed = match outcome {
-            Ok(TestEnd::Answered(answer)) => match Verdict::read(&answer) {
+        let failed = match end {
+            Ok(TestEnd::Answered(answer)) => match Outcome::read(&answer) {
                 // The test answered that nothing it checked failed.
-                Ok(verdict) if verdict.held() => None,
+                Ok(outcome) if outcome.held() => None,
                 // What the test found, drawn as this suite draws it, beneath what it wrote; its path is what only the schedule knows.
-                Ok(verdict) => Some(format!("failed\n{reported}{:#?}", verdict.failures)),
-                Err(why) => Some(format!("answered no verdict: {why}\n{reported}")),
+                Ok(outcome) => Some(format!("failed\n{reported}{:#?}", outcome.failures)),
+                Err(why) => Some(format!("answered no outcome: {why}\n{reported}")),
             },
-            // An exit is a failure whatever its code: a verdict is answered, never exited with.
+            // An exit is a failure whatever its code: an outcome is answered, never exited with.
             Ok(TestEnd::Exited(code)) => Some(format!("exited {code}\n{reported}")),
             Err(error) => Some(format!("{error}\n{reported}")),
         };

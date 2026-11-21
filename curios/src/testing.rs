@@ -4,8 +4,8 @@
 //!
 //! **The cabinet is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no cabinet, so its tests are compiled every time.
 
-mod verdict;
-pub use verdict::{FailedCheck, Verdict};
+mod outcome;
+pub use outcome::{FailedCheck, Outcome};
 
 use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
@@ -449,7 +449,7 @@ pub struct TestRun {
 }
 
 impl TestRun {
-    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test answers what it found, which [`Verdict::read`] reads; a trap is the error.
+    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test answers what it found, which [`Outcome::read`] reads; a trap is the error.
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         index: usize,

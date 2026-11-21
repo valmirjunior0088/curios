@@ -1,7 +1,7 @@
 //! What the suites share: a program compiled and run as a fixture states it, the refusal or the stage a fixture reads off it, and a host that answers one row with a scripted reply and every other with a [`MockHost`]'s, which is how one call of a row fails where the mock's script only succeeds.
 
 use {
-    crate::{Verdict, test_support::*},
+    crate::{Outcome, test_support::*},
     curios_abi::{
         Answer, ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, HostOp, HostOps,
         Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
@@ -158,20 +158,20 @@ pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<
     let scheduled = program.modules.iter().flat_map(|module| &module.scheduled);
     for (index, test) in scheduled.enumerate() {
         let (system, io) = host().args(["prog".to_string(), index.to_string()]).build();
-        let outcome = compiled.run_test(system, ForeignBindings::empty());
-        let Ok(TestEnd::Answered(answer)) = outcome else {
-            panic!("`{}` ran to {outcome:?}", test.join());
+        let end = compiled.run_test(system, ForeignBindings::empty());
+        let Ok(TestEnd::Answered(answer)) = end else {
+            panic!("`{}` ran to {end:?}", test.join());
         };
-        let verdict = Verdict::read(&answer)
-            .unwrap_or_else(|why| panic!("`{}` answered no verdict: {why}", test.join()));
+        let outcome = Outcome::read(&answer)
+            .unwrap_or_else(|why| panic!("`{}` answered no outcome: {why}", test.join()));
 
         drawn.extend_from_slice(&io.output());
-        let ended = match verdict.held() {
+        let ended = match outcome.held() {
             true => "passed",
             false => "failed",
         };
         drawn.extend_from_slice(format!("{}: {ended}\n", test.join()).as_bytes());
-        for check in &verdict.failures {
+        for check in &outcome.failures {
             let stated = check
                 .steps
                 .iter()

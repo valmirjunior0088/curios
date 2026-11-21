@@ -141,16 +141,16 @@ pub fn troubled(text: impl fmt::Display) -> Piece {
     Piece::painted(reader(), text, |style, text| style.troubled(text))
 }
 
-/// Whether `verdict` says something went wrong: a rule refused, the machine failed, a test trapped or exited.
-fn trouble(verdict: &str) -> bool {
-    matches!(verdict, "refused" | "failed" | "trapped") || verdict.starts_with("exited ")
+/// Whether `ending` says something went wrong: a rule refused, the machine failed, a test trapped or exited.
+fn trouble(ending: &str) -> bool {
+    matches!(ending, "refused" | "failed" | "trapped") || ending.starts_with("exited ")
 }
 
-/// `verdict` as it is painted: as trouble where it says something went wrong.
-fn worded(verdict: &str) -> Piece {
-    match trouble(verdict) {
-        true => troubled(verdict),
-        false => verdict.into(),
+/// `ending` as it is painted: as trouble where it says something went wrong.
+fn worded(ending: &str) -> Piece {
+    match trouble(ending) {
+        true => troubled(ending),
+        false => ending.into(),
     }
 }
 
@@ -292,13 +292,13 @@ const CORNER: &str = "└─";
 /// The trunk, beside what stands beneath a node more are planned after.
 const TRUNK: &str = "│";
 
-/// The mark a test's own lines stand behind, in the column its verdict closes in: what is written there is quoted from the test, not said by the runner.
+/// The mark a test's own lines stand behind, in the column its ending closes in: what is written there is quoted from the test, not said by the runner.
 const QUOTE: &str = ">";
 
-/// The mark of a test that passed, where its verdict is said.
+/// The mark of a test that passed, where its ending is said.
 const PASSED: &str = "✓";
 
-/// The mark of a test that did not pass — it failed, trapped or exited — where its verdict is said.
+/// The mark of a test that did not pass — it failed, trapped or exited — where its ending is said.
 const UNPASSED: &str = "✗";
 
 /// The standard stream a test wrote a line of its own on, which its quote mark is painted for: one on standard error stands apart from one on standard output.
@@ -359,7 +359,7 @@ pub fn framed_run(column: Column, bytes: &[u8]) -> (Owed, usize) {
     (owed, length)
 }
 
-/// What a line the test wrote on `quoted` is `owed`, as a reader of `style` sees it: the tree's trunk and the quote mark, which stands in the column the test's verdict closes in.
+/// What a line the test wrote on `quoted` is `owed`, as a reader of `style` sees it: the tree's trunk and the quote mark, which stands in the column the test's ending closes in.
 pub fn frame_of(owed: Owed, quoted: Quoted, style: &Style) -> String {
     let mark = match quoted {
         Quoted::Output => style.dim(QUOTE),
@@ -426,7 +426,7 @@ impl Wrote {
 ///
 /// **The connector is the plan's.** `├─` is written where more nodes are planned and `└─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
 ///
-/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands quoted as it is written ([`framed_run`]), and the outcome closes the node beneath it, its mark in the quote's column. A test's verdict leads with its mark wherever it stands, `✓` where it passed and `✗` where it did not:
+/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands quoted as it is written ([`framed_run`]), and the outcome closes the node beneath it, its mark in the quote's column. A test's ending leads with its mark wherever it stands, `✓` where it passed and `✗` where it did not:
 ///
 /// ```text
 /// ├─ /geometry/is_square; ✓ passed in 0.0s
@@ -511,11 +511,11 @@ impl Tree {
     }
 
     /// Close the open node with how its work ended where it did not simply finish, and what it took: `; refused in 0.3s`.
-    pub fn verdict(&mut self, verdict: &str) {
+    pub fn ending(&mut self, ending: &str) {
         let taken = self.taken();
 
         say(Piece::from("; ")
-            .then(worded(verdict))
+            .then(worded(ending))
             .then(" ")
             .then(dim(format_args!("in {taken}")))
             .then("\n"));
@@ -532,7 +532,7 @@ impl Tree {
         match &done {
             Ok(()) => self.outcome(place),
             Err(_) => {
-                self.verdict("failed");
+                self.ending("failed");
                 apart();
             }
         }
@@ -540,15 +540,15 @@ impl Tree {
         done
     }
 
-    /// Close the open test's node with its verdict, led by its mark, and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each under the verdict's word: `; ✓ passed in 0.1s` on the node's own line, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
-    pub fn ended(&mut self, verdict: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
-        let mark = match trouble(verdict) {
+    /// Close the open test's node with its ending, led by its mark, and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each under the ending's word: `; ✓ passed in 0.1s` on the node's own line, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
+    pub fn ended(&mut self, ending: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
+        let mark = match trouble(ending) {
             true => troubled(UNPASSED),
             false => PASSED.into(),
         };
         let closing = mark
             .then(" ")
-            .then(worded(verdict))
+            .then(worded(ending))
             .then(" ")
             .then(dim(format_args!("in {}", seconds(taken))));
 

@@ -356,7 +356,7 @@ impl Steps {
                 if let Some((_, tree)) = &mut self.unit {
                     match refusal {
                         Some(reason) => {
-                            tree.verdict("refused");
+                            tree.ending("refused");
                             if !WHY_UNSTORED.swap(true, Ordering::Relaxed) {
                                 tree.detail(reason);
                             }
@@ -404,10 +404,10 @@ impl Steps {
 
         match how {
             How::Done => tree.done(),
-            How::Goals(1) => tree.verdict("1 goal"),
-            How::Goals(goals) => tree.verdict(&format!("{goals} goals")),
-            How::Stopped if emitting => tree.verdict("failed"),
-            How::Stopped => tree.verdict("refused"),
+            How::Goals(1) => tree.ending("1 goal"),
+            How::Goals(goals) => tree.ending(&format!("{goals} goals")),
+            How::Stopped if emitting => tree.ending("failed"),
+            How::Stopped => tree.ending("refused"),
         }
 
         true

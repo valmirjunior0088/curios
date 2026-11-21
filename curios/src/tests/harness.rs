@@ -5,7 +5,7 @@ mod sequence;
 
 use {
     super::test_support::*,
-    crate::{FailedCheck, Verdict, test_support::*},
+    crate::{FailedCheck, Outcome, test_support::*},
     curios_common::{Qualifier, RootKind},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
@@ -16,7 +16,7 @@ use {
 
 #[test]
 fn the_description_schedules_every_rung() {
-    // The end-to-end scheduler, through the library: each declared test run by its index, in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the certifier checks and never reaches a runner.
+    // The end-to-end scheduler, through the library: each declared test run by its index, in declaration order. Two rungs, since a description is an outcome or an action — a proof is a `let` the certifier checks and never reaches a runner.
     assert_eq!(
         run_tests_program(
             r#"
@@ -82,12 +82,12 @@ fn an_index_argument_selects_one_test() {
         };
         assert_eq!(io.output(), b"", "the test at {index} writes nothing");
 
-        Verdict::read(&answer)
+        Outcome::read(&answer)
     };
 
-    assert!(selected("0").is_ok_and(|verdict| verdict.held()));
+    assert!(selected("0").is_ok_and(|outcome| outcome.held()));
     assert_eq!(
-        selected("1").map(|verdict| verdict.failures),
+        selected("1").map(|outcome| outcome.failures),
         Ok(vec![FailedCheck {
             steps: vec![],
             statement: "not equal".to_string(),
@@ -117,7 +117,7 @@ fn spelled_strings_are_quoted_and_escaped() {
 
 #[test]
 fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
-    // `Test/all` at every rung: passing verdicts conjoin to a passing verdict, the empty conjunction included; every failing case is reported, each by its position; an action performs before what follows it is consulted, and a case after a failing one still runs, its action with it.
+    // `Test/all` at every rung: passing outcomes conjoin to a passing outcome, the empty conjunction included; every failing case is reported, each by its position; an action performs before what follows it is consulted, and a case after a failing one still runs, its action with it.
     assert_eq!(
         run_tests_program(
             r#"

@@ -43,11 +43,11 @@ fn a_piece_is_built_as_its_reader_sees_it_and_plain() {
 
 #[test]
 fn only_what_went_wrong_is_worded_as_trouble() {
-    for verdict in ["refused", "failed", "trapped", "exited 0", "exited 7"] {
-        assert!(trouble(verdict), "{verdict}");
+    for ending in ["refused", "failed", "trapped", "exited 0", "exited 7"] {
+        assert!(trouble(ending), "{ending}");
     }
-    for verdict in ["passed", "1 goal", "3 goals"] {
-        assert!(!trouble(verdict), "{verdict}");
+    for ending in ["passed", "1 goal", "3 goals"] {
+        assert!(!trouble(ending), "{ending}");
     }
 }
 
