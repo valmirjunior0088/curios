@@ -846,15 +846,20 @@ fn the_classes_are_rows_of_four_fields_joined_by_tabs() {
     );
 }
 
-/// A place where nothing is named is an answer of nothing, and exits 0.
+/// A place where nothing is named is refused, as a path that names nothing is: no answer is written, and the refusal says why.
 #[test]
-fn a_place_naming_nothing_answers_nothing() {
+fn a_place_naming_nothing_is_refused() {
     let root = project("nothing-named");
 
     // The `pub` a declaration opens with names nothing.
     let nothing = curios(&root, &["wonder", "--at", "util.crs:1:1"], "");
-    assert!(nothing.status.success());
+    let said = String::from_utf8_lossy(&nothing.stderr);
+    assert_eq!(nothing.status.code(), Some(1), "{said}");
     assert_eq!(stdout(&nothing), "");
+    assert!(
+        said.contains("nothing here\n│  no name or term stands at this place"),
+        "{said}"
+    );
 }
 
 /// A written name is resolved where it is lowered, so a program whose first declaration is a type mismatch still answers where a name is declared.

@@ -833,7 +833,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, its source the one entry on it, opened on the path it is exposed at; for a term no name stands at, a block of what is written there, quoted at its place — and nothing where nothing stands there. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at FILE:LINE:COLUMN`: what stands at `place`, `staged` being what its file is admitted as, to stdout ([`placed`]) — for a name, the block a declaration is answered with, its source the one entry on it, opened on the path it is exposed at; for a term no name stands at, a block of what is written there, quoted at its place — and refused where nothing stands there, as a path that names nothing is. The block names the command that lists a declaration's witnesses where it has any, asked in the scope of the place's file. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -846,20 +846,20 @@ pub fn wonder_at(
 
     let placed = asked.placed(budget, &overlay, &file, place, telling);
     let answered = match placed {
-        Ok(answered) => {
+        Ok(Some(answered)) => {
             telling.answering();
             answered
         }
+        Ok(None) => return Err(nothing_at(place)),
         Err(diagnostics) => return Err(stopped(diagnostics)),
     };
     match answered {
-        None => {}
-        Some(Answer {
+        Answer {
             stands: Stands::Declaration {
                 described, brought, ..
             },
             ..
-        }) => {
+        } => {
             answer(format_args!(
                 "{}\n",
                 drawn(
@@ -870,10 +870,10 @@ pub fn wonder_at(
                 )
             ));
         }
-        Some(Answer {
+        Answer {
             stands: Stands::Module { path, place: at },
             ..
-        }) => {
+        } => {
             let about = match at {
                 Some(at) => About::Place(at),
                 None => About::Named(path.clone()),
@@ -883,7 +883,7 @@ pub fn wonder_at(
                 .trying(naming(&path, Some(place.subject())));
             answer(format_args!("{}\n", report.rendered(Kind::Module, &reader)));
         }
-        Some(answered) => {
+        answered => {
             let (about, said, kind) = match &answered.stands {
                 Stands::Local { name, bound, .. } => (
                     bound.clone().unwrap_or_else(|| answered.range.clone()),
@@ -1100,6 +1100,14 @@ fn declaration(
         Ok(None) => Err(unknown_declaration(path)),
         Err(diagnostics) => Err(stopped(diagnostics)),
     }
+}
+
+/// The refusal of a place where nothing stands, no name and no term, as a path that names nothing is refused ([`unknown_declaration`]).
+fn nothing_at(place: &Place) -> CompileError {
+    Refused::of("nothing here")
+        .stating("no name or term stands at this place")
+        .about_named(format!("{}:{}:{}", place.file, place.line, place.column))
+        .into()
 }
 
 /// The refusal of a path that names nothing in scope.
