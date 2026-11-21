@@ -1176,9 +1176,10 @@ pub enum Error {
     ParameterlessWitnessConcept {
         concept: Global,
     },
-    /// A witness's annotation does not elaborate to an application of a registered concept.
+    /// A witness's annotation does not elaborate to an application of a registered concept. `written` where the annotation as written was refused before it elaborated, its head applied as no concept can be: `found` is then the annotation as written.
     WitnessNotAConcept {
         found: Box<Term>,
+        written: bool,
     },
     /// A `use` parameter's type is not a concept application, so resolution could answer no call that omits it. `proposition` says whether the type is a proof the author likely meant to have discharged, which an implicit parameter does.
     UseParameterNotAConcept {
@@ -2215,6 +2216,15 @@ impl Error {
     pub fn witness_not_a_concept<T: Into<Term>>(found: T) -> Self {
         Self::WitnessNotAConcept {
             found: Box::new(found.into()),
+            written: false,
+        }
+    }
+
+    /// A witness whose annotation, as written, applies a head that takes no arguments: no concept with parameters, which every witness keys on.
+    pub fn witness_head_not_a_concept<T: Into<Term>>(written: T) -> Self {
+        Self::WitnessNotAConcept {
+            found: Box::new(written.into()),
+            written: true,
         }
     }
 

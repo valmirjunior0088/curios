@@ -2423,13 +2423,29 @@ impl Displayed<'_> {
                 f.stating("a global witness keys on its concept's parameter heads");
                 f.stating("supply a parameterless concept through a local `use` binder");
             }
-            Error::WitnessNotAConcept { found } => {
+            Error::WitnessNotAConcept {
+                found,
+                written: false,
+            } => {
                 f.text("not a concept");
                 f.stating("this witness witnesses no concept");
                 f.stating(format_args!(
                     "its annotation elaborates to: {}",
                     found.spelled(spelling)
                 ));
+            }
+            Error::WitnessNotAConcept {
+                found,
+                written: true,
+            } => {
+                f.text("not a concept");
+                f.stating(format_args!(
+                    "{} applies a head that is no concept",
+                    Code(found.spelled(spelling))
+                ));
+                f.stating(
+                    "a `satisfy` names the concept it witnesses, `satisfy Show(Point) { ... }`",
+                );
             }
             Error::UseParameterNotAConcept { found, proposition } => {
                 f.text("not a concept");

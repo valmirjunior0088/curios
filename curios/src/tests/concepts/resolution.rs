@@ -557,3 +557,27 @@ fn a_method_passed_as_a_value_is_its_field_of_the_witness_its_use_resolves() {
 
     assert_eq!(run(source), b"1, 2, 3");
 }
+
+// A witness whose annotation applies a type that is no concept is refused as naming none, at the annotation, rather than as a function applied; a concept that takes no parameter, applied, keeps the refusal its application meets, since its head is a concept.
+#[test]
+fn a_witness_applying_no_concept_is_refused_as_naming_none() {
+    let refused = |declarations: &str| {
+        error(&fill!(
+            "use /std/{Nat, Bool};\n${declarations}\n/std/print(\"\")\n",
+            declarations
+        ))
+    };
+
+    let intrinsic = refused("satisfy Nat(Nat) { }");
+    assert!(
+        intrinsic.contains("not a concept")
+            && intrinsic.contains("`Nat(Nat)` applies a head that is no concept"),
+        "{intrinsic}"
+    );
+    let parameterless =
+        refused("concept Flag: Type { on: Bool, }\nsatisfy Flag(Nat) { on = true }");
+    assert!(
+        !parameterless.contains("applies a head that is no concept"),
+        "{parameterless}"
+    );
+}

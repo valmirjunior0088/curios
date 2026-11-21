@@ -31,8 +31,8 @@ use {
         Advance, Bound, Declarations, Definition, DefinitionKind, Definitions, Entrypoint, Free,
         FuncType, Global, InductParam, Intrinsic, Item, Items, Label, Level, Made, Minted, Names,
         Nominal, Nominals, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseConstraintOrigin, UniverseContext, Universes, Visit,
-        stamp_declaration_instance, wire_term,
+        Telescope, Term, Totality, Transient, UniverseConstraintOrigin, UniverseContext, Universes,
+        Visit, stamp_declaration_instance, wire_term,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -508,6 +508,41 @@ fn opened_in_step<B: Bound>(
     )
 }
 
+/// A definition's type as `checked`, where a witness's is refused for what its head is: an annotation whose application is refused as applying no function, at a head that names no concept, witnesses nothing — which is what its author is told, at the annotation. A concept that takes no parameter, applied, keeps the refusal its application meets.
+fn witness_head_checked<T>(
+    context: &Context,
+    def: &Definition,
+    checked: Result<T, Error>,
+) -> Result<T, Error> {
+    checked.map_err(|error| {
+        let concept = written_head(&def.type_).is_some_and(|head| context.concept(&head).is_some());
+        match (context.is_witness_declaration(&def.name), error.raised()) {
+            (true, Error::NotAFunction { .. }) if !concept => {
+                Error::witness_head_not_a_concept(def.type_.clone()).at_opt(def.type_.extent())
+            }
+            _ => error,
+        }
+    })
+}
+
+/// The global a witness's annotation applies past its premises, where it applies one: the name its author wrote where the concept stands, as the lowering left it for elaboration, a reference, or a former that takes nothing. An intrinsic type's former, as `Nat(Nat)` applies, is none.
+fn written_head(type_: &Term) -> Option<Global> {
+    let mut term = type_;
+    while let Subterm::FuncType(func_type) = &**term {
+        term = func_type.telescope.terminal();
+    }
+    let Subterm::Apply(apply) = &**term else {
+        return None;
+    };
+    match &*apply.head {
+        Subterm::Transient(Transient::Name(name)) => Some(*name),
+        Subterm::Instance(instance) => Some(instance.name),
+        Subterm::StructType(record) => Some(record.name),
+        Subterm::InductType(family) => Some(family.name),
+        _ => None,
+    }
+}
+
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(
     context: &mut Context,
@@ -516,7 +551,8 @@ fn elaborate_module_let(
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
-    let type_ = check_is_sort(context, &def.type_)?.0;
+    let checked = check_is_sort(context, &def.type_);
+    let type_ = witness_head_checked(context, def, checked)?.0;
 
     // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
     if context.is_witness_declaration(&def.name) {
@@ -1156,7 +1192,8 @@ fn elaborate_members(
         check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
-        let type_ = check_is_sort(context, &def.type_)?.0;
+        let checked = check_is_sort(context, &def.type_);
+        let type_ = witness_head_checked(context, def, checked)?.0;
         // In scope from its own signature on, at the type it elaborated to: a signature reads the members written before it, and no type is judged before it is elaborated.
         context.assume(local, &type_);
         types.push(type_);
