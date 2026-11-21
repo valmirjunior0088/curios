@@ -518,7 +518,9 @@ pub fn elaborate_apply(
     }
 
     // A method named by its path is its η-form, so its call is that form opened at the call's arguments: the projection off the witness the call fills, as an operator's is.
-    if method && let Some(call) = method_call(&head, &elaborated.iter().collect::<Vec<_>>()) {
+    if method
+        && let Some(call) = method_call(context, &head, &elaborated.iter().collect::<Vec<_>>())
+    {
         return Ok((call, output));
     }
 

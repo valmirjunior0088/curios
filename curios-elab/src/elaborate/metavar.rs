@@ -223,7 +223,7 @@ pub fn insert_implicits_on_check(
     // A method's η-form is opened at the arguments rather than applied to them, as its call is ([`method_call`]).
     let opened = head_args.iter().map(|(_, arg)| arg).collect::<Vec<_>>();
     let body = match &**term {
-        Subterm::Transient(Transient::Method(_)) => method_call(&rebuilt, &opened),
+        Subterm::Transient(Transient::Method(_)) => method_call(context, &rebuilt, &opened),
         _ => None,
     }
     .unwrap_or_else(|| Term::apply_marked(rebuilt, head_args));

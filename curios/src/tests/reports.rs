@@ -1,6 +1,6 @@
 //! What a refusal's report says and where it points, for refusals `tests::rules` holds as patterns over the checker's error: a report is read by a person, so its words and its caret are claims of their own, which no pattern over an error states.
 
-use super::test_support::*;
+use {super::test_support::*, curios_common::fill};
 
 // The refusal names the declaration by the keyword it is written with and stands at the field's type, spelling the field as it is written: a superclass edge under `use`, a labeled field by its label, and a method or field written as a signature over the whole of it.
 #[test]
@@ -87,5 +87,35 @@ fn an_operations_bound_is_reported_at_the_operation_inside_a_chain() {
             "expected the bound's refusal:\n{report}"
         );
         assert!(report.contains(place), "expected the place:\n{report}");
+    }
+}
+
+// A goal stands where its `?` was written, which its birth records, whatever term it is later read in: the whole argument of a method named by its path, hidden or not, and a structure former's parameter, whose call is made as what it reduces to. Read off the term it was met in, each stood at the definition holding it.
+#[test]
+fn a_goal_stands_where_its_question_mark_was_written() {
+    for (declared, written) in [
+        (
+            "",
+            "let twice(a: Nat) -> Nat = /std/ops/Add/add(@Nat, a, ?);",
+        ),
+        (
+            "",
+            "let half(a: Nat) -> Nat = match a > 0 | true => /std/ops/Div/div(@Nat, a, a, @?) | false => 0 end;",
+        ),
+        (
+            "struct Pair(A: Type, B: Type): Type { fst: A, snd: B }",
+            "let first(a: Nat) -> Nat = let p: Pair(?, Nat) = Pair { fst = a, snd = a }; p.fst;",
+        ),
+    ] {
+        let report = error(&fill!(
+            "use /std/{Nat}; ${declared}\n${written}\n/std/Io/pure(())\n",
+            declared,
+            written
+        ));
+        let column = written.find('?').expect("a goal is written") + 1;
+        assert!(
+            report.contains(&format!("[goal] 2:{column}")),
+            "{written}: {report}"
+        );
     }
 }

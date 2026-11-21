@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_core::{
-        Exhaustion, Intrinsic, MetavarId, MetavarOrigin, Minted, Mints, Numeral, StructType,
-        Subterm, Term, Universes,
+        Anchor, Anchored, Exhaustion, Extent, Intrinsic, MetavarId, MetavarOrigin, Minted, Mints,
+        Numeral, StructType, Subterm, Term, Universes,
     },
     curios_num::{Floating, Integer, Natural},
     std::rc::Rc,
@@ -232,4 +232,40 @@ fn a_context_argument_the_budget_cannot_read_propagates_the_refusal() {
     let shape = monad_shape(&mut context, &region);
 
     assert!(shape.is_err_and(|spent| spent.is_exhausted()));
+}
+
+/// A method named by its path is called by opening its form at the arguments, and each argument keeps where it was written there, as an operator's operand does: the form's variables were written nowhere, and an argument placed by the variable it replaces would stand nowhere either. Mutation-checked: opening the form at the arguments directly leaves both without a place.
+#[test]
+fn a_method_called_by_its_path_keeps_each_arguments_place() {
+    let mut context = context();
+    let extent = |start| Extent {
+        anchor: Anchor::of(Anchored::Entry),
+        start,
+        end: start + 1,
+        stamp: 0,
+    };
+    let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
+    let form = Term::func(
+        vec![(a, nat()), (b, nat())],
+        Term::apply(
+            Term::written(nominal("add")),
+            [Term::free_var(&a), Term::free_var(&b)],
+        ),
+    );
+    let (first, second) = (
+        nat_lit(1).with_extent(extent(0)),
+        nat_lit(2).with_extent(extent(4)),
+    );
+
+    let call = method_call(&mut context, &form, &[&first, &second]).expect("a call of the form");
+
+    let Subterm::Apply(apply) = &*call else {
+        panic!("the call is no application: {call:?}");
+    };
+    let places = apply
+        .arguments
+        .iter()
+        .map(|argument| argument.term.extent())
+        .collect::<Vec<_>>();
+    assert_eq!(places, [Some(extent(0)), Some(extent(4))]);
 }

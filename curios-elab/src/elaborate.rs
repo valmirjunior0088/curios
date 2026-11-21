@@ -41,7 +41,7 @@ use {
     super::{Context, Error, Occurrence, check, check_is_sort, elaborate_derive, expect_as},
     curios_common::{Plicity, recurse},
     curios_core::{
-        ArgumentSite, Ascribed, Extent, Func, FuncType, Global, Method, Sort, Subterm, Term,
+        ArgumentSite, Ascribed, Bound, Extent, Func, FuncType, Global, Method, Sort, Subterm, Term,
         Transient, Universes, foreign_operands, foreign_produced, former_spelling,
         instantiate_universes, method_spelling,
     },
@@ -395,13 +395,30 @@ pub fn method_type(context: &Context, method: &Method) -> Option<Term> {
 }
 
 /// A call of a method's η-form `form` at `arguments`, one to each parameter of its one group: the form opened at them, the projection off the witness among them. `None` where `form` is no function taking exactly those.
-pub fn method_call(form: &Term, arguments: &[&Term]) -> Option<Term> {
-    match &**form {
-        Subterm::Func(Func { telescope }) if telescope.len() == arguments.len() => {
-            Some(telescope.open(arguments))
-        }
-        _ => None,
+///
+/// **Each argument keeps where it was written**, as an operator's operands do. Opening a scope places what it puts in by the variable it replaces, and a variable of a form the compiler made was written nowhere, so the form is opened at a fresh variable for each argument and the arguments are put in their place after, a replacement keeping its own place. An argument with a loose index is opened at directly, being no value a substitution may carry.
+pub fn method_call(context: &mut Context, form: &Term, arguments: &[&Term]) -> Option<Term> {
+    let Subterm::Func(Func { telescope }) = &**form else {
+        return None;
+    };
+    if telescope.len() != arguments.len() {
+        return None;
     }
+    if !arguments.iter().all(|argument| argument.closed()) {
+        return Some(telescope.open(arguments));
+    }
+    let fresh = arguments
+        .iter()
+        .map(|_| context.fresh(None))
+        .collect::<Vec<_>>();
+    let variables = fresh.iter().map(Term::free_var).collect::<Vec<_>>();
+    let opened = telescope.open(&variables.iter().collect::<Vec<_>>());
+    let placed = fresh
+        .into_iter()
+        .zip(arguments.iter().map(|argument| (*argument).clone()))
+        .collect::<Vec<_>>();
+
+    Some(opened.substitute(&placed))
 }
 
 /// The declaration `name` named where the context stands, at `universes`: inside the group being elaborated a member is the local its group names it by, and any other declaration its instance.

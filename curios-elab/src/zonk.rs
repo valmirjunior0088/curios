@@ -10,10 +10,10 @@ use {
     curios_common::recurse,
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
-        Extent, Func, FuncType, Global, InductDecl, InductType, Instance, Intrinsic, Item, Let,
-        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Nominal, Nominals, Proj,
-        Rec, Sort, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Universes, Var, Variant, Visit, project_erased_universes,
+        Func, FuncType, Global, InductDecl, InductType, Instance, Intrinsic, Item, Let, LetBinding,
+        Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Nominal, Nominals, Proj, Rec, Sort,
+        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
+        Variant, Visit, project_erased_universes,
     },
     std::{
         cell::RefCell,
@@ -197,9 +197,9 @@ impl<'a> Zonk<'a> {
         recurse(|| {
             // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
             if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
-                // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
+                // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed, at the place its birth recorded rather than this occurrence's, which a substitution may have placed.
                 if matches!(origin, MetavarOrigin::Goal) {
-                    return Err(self.goal_report(*id).at_opt(term.extent()));
+                    return Err(self.goal_report(*id).at_opt(self.goal_extent(*id).copied()));
                 }
 
                 // A filled recursive slot is spelled by its member's name, for the reason the tolerant walk above gives: the body reaches this very occurrence again, and the name is what the group's binder captures.
@@ -846,12 +846,12 @@ pub fn zonk_entry(
     Ok(entry)
 }
 
-/// Where a written goal was met: its id, its first occurrence's extent, and its owning definition when it sits inside one (the suggestion pools exclude the owner).
-pub type GoalSite = (MetavarId, Option<Extent>, Option<Global>);
+/// Which written goal was met: its id, and its owning definition when it sits inside one (the suggestion pools exclude the owner). Where it was written is its birth's record (`Context::goal_extent`), not an occurrence's: an occurrence a substitution placed — inside a type, or an argument a method named by its path was opened at — stands where the variable it replaced was written, which is not where the `?` is.
+pub type GoalSite = (MetavarId, Option<Global>);
 
 /// Find every written goal one successful elaboration reached — the same set strict zonking would meet — in discovery order.
 ///
-/// The walk covers what strict zonking covers, in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once with its first occurrence's extent. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
+/// The walk covers what strict zonking covers, in its order (items in declaration order, then the entrypoint body and annotation, then the registry telescopes that flow into erase), recording each `Goal`-origin metavariable once, where it is first met. Goals can also hide inside committed solutions of ordinary metavariables the module references — strict zonk would splice through them — so referenced solutions are scanned transitively afterwards, in discovery order.
 pub fn goal_sites(
     context: &Context,
     definitions: &Definitions,
@@ -884,7 +884,7 @@ pub fn goal_sites(
                     match origin {
                         MetavarOrigin::Goal => {
                             if seen_goals.borrow_mut().insert(*id) {
-                                goals.borrow_mut().push((*id, term.extent(), owner));
+                                goals.borrow_mut().push((*id, owner));
                             }
                         }
                         _ => referenced.borrow_mut().push(*id),
@@ -978,7 +978,7 @@ pub fn report_goals(
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
     context.restore_budget();
     let mut all_candidates: Vec<Suggestions> = Vec::with_capacity(sites.len());
-    for (id, _, owner) in sites {
+    for (id, owner) in sites {
         if context.metavar_solution(*id).is_some() {
             all_candidates.push(Suggestions {
                 candidates: Vec::new(),
@@ -1015,7 +1015,7 @@ pub fn report_goals(
         contract_redexes(&refold_recs(context, &project_erased_universes(term)))
     };
     let mut reports = Vec::with_capacity(sites.len());
-    for ((id, extent, owner), suggestions) in sites.iter().zip(all_candidates) {
+    for ((id, owner), suggestions) in sites.iter().zip(all_candidates) {
         // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
         let entry = context
             .metavar_entry(*id)
@@ -1068,7 +1068,7 @@ pub fn report_goals(
 
         reports.push(
             GoalReport::new(
-                *extent,
+                context.goal_extent(*id).copied(),
                 *owner,
                 witnesses,
                 scope
