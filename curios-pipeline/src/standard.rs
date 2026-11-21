@@ -455,7 +455,9 @@ impl<'a> Fold<'a> {
                     stand_in_of(sources),
                     progress,
                 )?;
-                progress(Progress::Compiled);
+                progress(Progress::Compiled {
+                    unit: &Qualifier::empty(),
+                });
 
                 Ok(compiled)
             },

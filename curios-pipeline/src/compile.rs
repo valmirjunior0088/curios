@@ -1878,13 +1878,13 @@ where
                 return Err(error);
             }
         };
-        progress(Progress::Compiled);
+        progress(Progress::Compiled { unit: &prefix });
 
         // Announced on its own: what a cache does with a unit is no part of compiling it, and it is where a large unit's record is made.
         if let Some(cache) = cache {
-            progress(Progress::Filing);
+            progress(Progress::Filing { unit: &prefix });
             curios_profile::profile!("cache::put" => cache.put(source, &unit));
-            progress(Progress::Filed);
+            progress(Progress::Filed { unit: &prefix });
         }
 
         answered(source, &unit)?;
@@ -2047,7 +2047,7 @@ pub struct Listeners<'a> {
 
 /// What the fold is doing, for a caller that reports it.
 ///
-/// Sequential by construction — the fold compiles one unit at a time — so [`Progress::Reused`] and [`Progress::Compiled`] refer to whichever subject was announced last and need not name it again.
+/// Each event names the unit it is of, so none means anything by the one before it: the fold compiles one unit at a time today, and a reader holds whatever number of units is open.
 ///
 /// Deliberately separate from the [`Stage`] observer, which belongs to `wonder --stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
@@ -2065,12 +2065,12 @@ pub enum Progress<'a> {
     Entry { held: bool },
     /// A mounted unit came from the cabinet instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
     Reused(&'a Qualifier),
-    /// The subject just announced finished.
-    Compiled,
-    /// The unit just compiled is about to be handed to the cache, which records what it compiled to and what each of its items read. Sent only where the fold has a cache, and followed by [`Progress::Filed`].
-    Filing,
-    /// The cache has taken the unit, or declined it: which, a cache says for itself.
-    Filed,
+    /// `unit` finished compiling: a mounted unit by its prefix, the entry program by the empty prefix it owns.
+    Compiled { unit: &'a Qualifier },
+    /// `unit`, just compiled, is about to be handed to the cache, which records what it compiled to and what each of its items read. Sent only where the fold has a cache, and followed by [`Progress::Filed`].
+    Filing { unit: &'a Qualifier },
+    /// The cache has taken `unit`, or declined it: which, a cache says for itself.
+    Filed { unit: &'a Qualifier },
 }
 
 /// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), its lowering, as soon as it is made ([`ReadLowering`]), and the step the program announces itself with ([`Progress::Entry`]), which says what only its compile knows.

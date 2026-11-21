@@ -6,7 +6,7 @@ use {
     crate::{Subject, Tree, apart, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
-    curios_common::{OsError, Report, STDIN_NAME, Source, Style},
+    curios_common::{OsError, Qualifier, Report, STDIN_NAME, Source, Style},
     curios_document::Documentation,
     curios_module::{Compiled, PackageRoot, RootSource},
     curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
@@ -288,6 +288,14 @@ impl Steps {
         self.closing == Closing::Library && *unit == self.subject
     }
 
+    /// The tree of `unit`, where it is the unit the fold took on: an event names the unit it is of, so it is drawn on that unit's tree and on no other.
+    fn tree_of(&mut self, unit: &Qualifier) -> Option<&mut Tree> {
+        self.unit
+            .as_mut()
+            .filter(|(subject, _)| *subject == Subject::Mounted(*unit))
+            .map(|(_, tree)| tree)
+    }
+
     /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end. `verdicts` is the one the fold files into, which says whether a unit has a `store` node to come and, once its filing ends, whether the cabinet took it.
     pub fn told(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>) {
         match progress {
@@ -326,28 +334,25 @@ impl Steps {
             // What the cabinet held is not narrated.
             Progress::Reused(_) => {}
             // A unit's check ends with the fold's step; the entry's has ended already, where its lowering began.
-            Progress::Compiled => {
-                if let Some((_, tree)) = &mut self.unit
+            Progress::Compiled { unit } => {
+                if let Some(tree) = self.tree_of(unit)
                     && tree.is_open()
                 {
                     tree.done();
                 }
             }
-            Progress::Filing => {
-                let last = !self
-                    .unit
-                    .as_ref()
-                    .is_some_and(|(subject, _)| self.goes_on(subject));
+            Progress::Filing { unit } => {
+                let last = !self.goes_on(&Subject::Mounted(*unit));
 
-                if let Some((_, tree)) = &mut self.unit {
+                if let Some(tree) = self.tree_of(unit) {
                     tree.open("store", last);
                 }
             }
             // A cabinet that took nothing says so at its node, and why beneath the first node it refused: a cabinet nobody can write refuses every unit for one reason, so the reason is one line however many units went past it.
-            Progress::Filed => {
+            Progress::Filed { unit } => {
                 let refusal = verdicts.and_then(Verdicts::refused);
 
-                if let Some((_, tree)) = &mut self.unit {
+                if let Some(tree) = self.tree_of(unit) {
                     match refusal {
                         Some(reason) => {
                             tree.ending("refused");
