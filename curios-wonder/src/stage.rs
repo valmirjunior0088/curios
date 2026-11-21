@@ -1,4 +1,4 @@
-//! The `stage` query: the program's representation at one rung of the pipeline, reprinted, and a library's at the rungs a unit has; beside `--name`, the part of either that one declaration is.
+//! The `stage` query: the program's representation at one rung of the pipeline, reprinted, and a unit's — a library's or a loose module's — at the rungs a unit has; beside `--name`, the part of either that one declaration is.
 //!
 //! The rungs are [`Stage::NAMES`], each observed exactly where the driver emits it.
 
@@ -8,7 +8,7 @@ use {
         described_core_text, described_entry, described_in_text, described_unit, of_error, open,
         overlaid, tested_last,
     },
-    curios_common::{MAX_LINE_WIDTH, Qualifier},
+    curios_common::{MAX_LINE_WIDTH, Qualifier, Source, SourceName},
     curios_core::{Anchors, Definitions, Global, Item},
     curios_cps::held,
     curios_emit::emitted_functions,
@@ -122,13 +122,13 @@ pub fn stage(
     }
 }
 
-/// The rung `name` of a library — the last of `units`, compiled against the ones before it and the prelude — asked through `file`, as its rendering. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `anf` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
+/// The rung `name` of a unit — a library or a loose module, the last of `units`, compiled against the ones before it and the prelude — asked through `through`, as its rendering. A unit has the rungs [`Stage::of_a_unit`] names and no other: every rung from `anf` on is rooted at a program's entry, and is [`Refusal::Unit`] here.
 ///
-/// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the file asked through, since a unit is several files and the rung's printer reprints one. `core` is the unit's lowering, made over the units before it as a question about a place makes one, and the unit checked nowhere (`Fold::lowered_unit`). `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
+/// **Each rung reprints what the unit holds of it, and none prints an entry.** `text` is the parse of the text asked through — a file, read through `overlay`, or what standard input held — since a unit is several files and the rung's printer reprints one. `core` is the unit's lowering, made over the units before it as a question about a place makes one, and the unit checked nowhere (`Fold::lowered_unit`). `core-elab` is its elaborated module as it stands, compiled over `cache` as a build compiles it.
 pub fn unit_stage(
     budget: u64,
     units: Vec<RootSource>,
-    file: &Path,
+    through: &Origin,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     name: &str,
@@ -145,12 +145,18 @@ pub fn unit_stage(
 
     let units = overlaid(units, overlay);
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
-    let through = reached.as_ref().map(|cache| cache as &dyn Cache);
+    let cached = reached.as_ref().map(|cache| cache as &dyn Cache);
     let rendered = match name {
         "text" => {
-            let parsed = match overlay.get(file) {
-                Some(text) => Module::overlaid(file, text).map_err(|error| error.report()),
-                None => read_module(file).map_err(|error| error.report()),
+            let parsed = match through {
+                Origin::File(file) => match overlay.get(file) {
+                    Some(text) => Module::overlaid(file, text).map_err(|error| error.report()),
+                    None => read_module(file).map_err(|error| error.report()),
+                },
+                Origin::Text { text, .. } => {
+                    Module::parse(&Source::named(SourceName::stdin(), text.as_str()))
+                        .map_err(|error| error.report())
+                }
             };
 
             parsed.map(|module| module.to_string()).map_err(|report| {
@@ -160,7 +166,7 @@ pub fn unit_stage(
                 }]
             })
         }
-        "core" => Fold::new(budget, &units, through)
+        "core" => Fold::new(budget, &units, cached)
             .lowered_unit(&mut *progress, |scope, lowered| {
                 lowered
                     .core()
@@ -168,12 +174,45 @@ pub fn unit_stage(
                     .to_string()
             })
             .map_err(of_error),
-        _ => last_unit(budget, &units, through, progress, |unit, spelling| {
+        _ => last_unit(budget, &units, cached, progress, |unit, spelling| {
             unit.core().spelled(spelling).to_string()
         }),
     };
 
     rendered.map_err(Refusal::Diagnostics)
+}
+
+/// The rung `name` of a loose module of Core text, read over the prelude, as its rendering: `core-elab`, the unit it reads to — the one rung a unit of Core text has, since a lowering's two make nothing of a text no lowering reads ([`Refusal::Lowered`]), and every rung from `anf` on is a program's ([`Refusal::Unit`]).
+pub fn core_text_unit_stage(
+    budget: u64,
+    origin: &Origin,
+    overlay: &Overlay,
+    name: &str,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<String, Refusal> {
+    let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {
+        return Err(Refusal::NoSuchStage {
+            asked: name.to_string(),
+        });
+    };
+    if !Stage::of_core_text(name) {
+        return Err(Refusal::Lowered);
+    }
+    if !Stage::of_a_unit(name) {
+        return Err(Refusal::Unit);
+    }
+
+    let (source, module) = origin
+        .read(overlay)
+        .map_err(|refusal| Refusal::Diagnostics(vec![*refusal]))?;
+
+    Fold::new(budget, &[], None)
+        .core_text_unit(&source, module, &mut *progress, |prelude, unit| {
+            unit.core()
+                .spelled(&dumped_over(prelude.iter().map(|unit| unit.core())))
+                .to_string()
+        })
+        .map_err(|error| Refusal::Diagnostics(of_error(error)))
 }
 
 /// What `read` makes of the last of `units` once the fold has compiled it over `cache`, under the spelling a dump of its Core is written in — a test's and a foreign row's forms made against the units before it, the prelude's roots first — or what stopped the fold.

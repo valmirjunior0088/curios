@@ -123,6 +123,36 @@ fn a_dumped_programs_rungs_are_printed_from_its_core_text_as_from_the_program() 
     }
 }
 
+/// A module of Core text is a unit, reprinted at `core-elab` — the one rung a unit of Core text has — as the loose module it was dumped from prints there; a lowering's rungs are refused, and a rung past a unit's refuses it as written as a module.
+#[test]
+fn a_module_of_core_text_is_reprinted_at_core_elab_as_the_module_it_was_dumped_from() {
+    let root = temporary("module-rungs");
+    fs::create_dir_all(&root).unwrap();
+    write(
+        &root,
+        "double.crs",
+        "pub let double(n: /std/Nat) -> /std/Nat =\n    n + n;\n",
+    );
+    let rung =
+        |name: &str, file: &str| said(&curios(&root, &["wonder", "--stage", name, file], ""));
+
+    let (dump, stderr, code) = rung("core-elab", "double.crs");
+    assert_eq!(code, Some(0), "{stderr}");
+    write(&root, "double.crsc", &dump);
+
+    let (reprinted, stderr, code) = rung("core-elab", "double.crsc");
+    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(reprinted, dump);
+
+    let (_, stderr, code) = rung("text", "double.crsc");
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("lowered by nothing"), "{stderr}");
+
+    let (_, stderr, code) = rung("anf", "double.crsc");
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.starts_with("not a program\n"), "{stderr}");
+}
+
 /// A declaration a text writes is answered off the unit it reads to, placed where the text writes it, as is its part at `core-elab` and the footprint of its functions; a name of the prelude is answered as the prelude's scope answers it; and a question answered off a lowering is refused, naming the cause.
 #[test]
 fn a_declaration_a_text_writes_is_answered_off_the_unit_it_reads_to() {

@@ -80,7 +80,7 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
         crate::unit_stage(
             DEFAULT_BUDGET,
             vec![library],
-            file,
+            &Origin::File(file.to_path_buf()),
             &overlay,
             None,
             name,
@@ -108,7 +108,7 @@ fn a_librarys_core_rung_lowers_it_and_compiles_nothing() {
     let printed = crate::unit_stage(
         DEFAULT_BUDGET,
         vec![library],
-        file,
+        &Origin::File(file.to_path_buf()),
         &overlay,
         None,
         "core",

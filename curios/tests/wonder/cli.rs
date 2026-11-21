@@ -149,7 +149,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own() {
     );
 }
 
-/// Text on standard input written as a module is checked as one, as a loose file is — a unit of its own, mounted at `/stdin` since it has no stem — so its items are answered one by one; a stage needs a program, and refuses it as written as a module.
+/// Text on standard input written as a module is checked as one, as a loose file is — a unit of its own, mounted at `/stdin` since it has no stem — so its items are answered one by one; a rung past a unit's needs a program, and refuses it as written as a module.
 #[test]
 fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let root = temporary("stdin-module");
@@ -161,7 +161,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let text = stdout(&answered);
     assert!(text.contains("└─ [error] <stdin>:1:24"), "{text}");
 
-    let staged = curios(&root, &["wonder", "--stage", "core", "-"], module);
+    let staged = curios(&root, &["wonder", "--stage", "anf", "-"], module);
     let refusal = String::from_utf8_lossy(&staged.stderr);
     assert_eq!(staged.status.code(), Some(1), "{refusal}");
     assert!(staged.stdout.is_empty());
@@ -171,6 +171,44 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
         ),
         "{refusal}"
     );
+}
+
+/// A loose module is reprinted at the rungs a unit has, as a library's file is — `text` its own text parsed, `core` its lowering and `core-elab` its elaborated declarations, under its stem from a file and under `/stdin` from standard input — and a rung past them, rooted at a program's entry, refuses it as written as a module.
+#[test]
+fn a_loose_module_is_reprinted_at_a_units_rungs_and_no_other() {
+    let root = temporary("loose-rungs");
+    fs::create_dir_all(&root).unwrap();
+    let module = "pub let double(n: /std/Nat) -> /std/Nat =\n    n + n;\n";
+    write(&root, "double.crs", module);
+
+    for (subject, stdin, mounted) in [
+        ("double.crs", "", "/double/double"),
+        ("-", module, "/stdin/double"),
+    ] {
+        let rung = |name: &str| curios(&root, &["wonder", "--stage", name, subject], stdin);
+
+        let text = rung("text");
+        assert!(text.status.success(), "{subject}: {}", stdout(&text));
+        assert_eq!(stdout(&text), module, "{subject}");
+        for name in ["core", "core-elab"] {
+            let reprinted = rung(name);
+            let printed = stdout(&reprinted);
+            assert!(reprinted.status.success(), "{subject} at {name}: {printed}");
+            assert!(
+                printed.starts_with(&format!("let {mounted}: ")),
+                "{subject} at {name}: {printed}"
+            );
+        }
+
+        let past = rung("anf");
+        let refusal = String::from_utf8_lossy(&past.stderr);
+        assert_eq!(past.status.code(), Some(1), "{subject}: {refusal}");
+        assert!(past.stdout.is_empty(), "{subject}");
+        assert!(
+            refusal.starts_with("not a program\n"),
+            "{subject}: {refusal}"
+        );
+    }
 }
 
 /// A declared executable is a program by its declaration, so an entry of declarations alone is refused by the program grammar, in its words, whichever command reads it: the check answers the refusal and `run` stops on it, one sentence in both.

@@ -8,8 +8,8 @@ use {
     crate::{
         Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
         Fact, Origin, Referent, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted,
-        Unput, checked, classed, declared_tests, described, diagnostics, exposing, falsified,
-        footprint, named_stage, placed, referent, stage, unit_stage,
+        Unput, checked, classed, core_text_unit_stage, declared_tests, described, diagnostics,
+        exposing, falsified, footprint, named_stage, placed, referent, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
@@ -601,7 +601,7 @@ pub fn wonder_stage(
         Staged::Library(library) => {
             return library_stage(budget, name, library, &overlay, telling);
         }
-        Staged::Module(module) => return Err(not_a_program(module.entry()).into()),
+        Staged::Module(module) => return module_stage(budget, name, module, &overlay, telling),
     };
 
     let refusal = not_a_program(program.entry());
@@ -711,12 +711,53 @@ fn library_stage(
     let reached = unit_stage(
         budget,
         library.units,
-        &file,
+        &Origin::File(file),
         overlay,
         Some(&verdicts),
         name,
         &mut |progress| telling.step(progress, Some(&verdicts)),
     );
+
+    answered_rung(name, reached, telling)
+}
+
+/// [`wonder_stage`] for a loose module: its unit's rung, reprinted, to stdout, as a library's is — its own text the one the `text` rung reprints, a file's or what standard input held — and a module of Core text's at `core-elab`, the one rung it has. No cabinet files a loose module, so nothing is read from one.
+fn module_stage(
+    budget: u64,
+    name: &str,
+    module: LooseModule,
+    overlay: &Overlay,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let through = origin_of(module.entry());
+
+    telling.asked(&module.named(), None);
+    let reached = match through.written() {
+        WrittenIn::Program => unit_stage(
+            budget,
+            vec![module.unit()?],
+            &through,
+            overlay,
+            None,
+            name,
+            &mut |progress| telling.step(progress, None),
+        ),
+        WrittenIn::CoreText => {
+            core_text_unit_stage(budget, &through, overlay, name, &mut |progress| {
+                telling.step(progress, None)
+            })
+        }
+    };
+
+    answered_rung(name, reached, telling)
+}
+
+/// A unit's rung `name` as `reached`, to stdout where it was, `telling` told how the compile ended; a rung the unit has none of is refused in the words a program's would be.
+fn answered_rung(
+    name: &str,
+    reached: Result<String, Refusal>,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
     telling.ended(match &reached {
         Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
         _ => Ended::Done,
@@ -728,12 +769,12 @@ fn library_stage(
     match reached {
         Ok(_) => Ok(()),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
-        // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
-        Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
+        // Whoever admits a unit admits it at a rung a unit has, and refuses it at any other in its own words.
+        Err(Refusal::Unit) => unreachable!("a unit was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-        Err(Refusal::Lowered) => unreachable!("a library is lowered"),
+        Err(Refusal::Lowered) => Err(no_lowering(name)),
         Err(Refusal::Kept { .. }) => {
-            unreachable!("a whole library's rung is asked of no declaration")
+            unreachable!("a whole unit's rung is asked of no declaration")
         }
     }
 }
