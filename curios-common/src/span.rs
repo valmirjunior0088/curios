@@ -209,11 +209,41 @@ impl Span {
         }
     }
 
-    /// Where the span begins, as a reader of `style` is told it: the file, spelled from where they stand, then the line and the column, the one token a terminal opens; the source's name in the file's place where no file on the machine holds the text, written as it is held, since it is no path of the reader's; the line and the column alone for text that has neither.
+    /// Where the span begins, as a reader of `style` is told it ([`Location::place`]).
     pub fn place(&self, style: &Style) -> String {
+        self.location().place(style)
+    }
+
+    /// Where the span begins, apart from the text it is a span of ([`Location`]).
+    pub fn location(&self) -> Location {
         let (line, column) = self.line_column();
 
-        match (&self.source.file, &self.source.name) {
+        Location {
+            name: self.source.name.clone(),
+            file: self.source.file.clone(),
+            line,
+            column,
+        }
+    }
+}
+
+/// Where a place of a text stands, apart from the text: the source's name, the file that holds it on this machine, and the line and the column, each counted from one. What a place is written from ([`Span::place`]), and what a record that outlives its text keeps of one: a filed test program keeps where each of its tests is written. Its file is left out where it is stored, as a source's is, a path of one machine, and found again by its name where it is restored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Location {
+    pub name: Option<SourceName>,
+    #[archived_with(curios_archive::Skip)]
+    pub file: Option<PathBuf>,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Location {
+    /// The place as a reader of `style` is told it: the file, spelled from where they stand, then the line and the column, the one token a terminal opens; the source's name in the file's place where no file on the machine holds the text, written as it is held, since it is no path of the reader's; the line and the column alone for text that has neither.
+    pub fn place(&self, style: &Style) -> String {
+        let (line, column) = (self.line, self.column);
+
+        match (&self.file, &self.name) {
             (Some(file), _) => format!("{}:{line}:{column}", style.spelled(file)),
             (None, Some(name)) => format!("{name}:{line}:{column}"),
             (None, None) => format!("{line}:{column}"),

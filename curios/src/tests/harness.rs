@@ -455,7 +455,13 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
             program
                 .modules
                 .iter()
-                .flat_map(|module| { module.scheduled.iter().chain(&module.skipped).copied() })
+                .flat_map(|module| {
+                    module
+                        .scheduled
+                        .iter()
+                        .map(|test| test.path)
+                        .chain(module.skipped.iter().copied())
+                })
                 .map(|path| path.join())
                 .collect::<Vec<_>>(),
             ["/Map", "/Map/inner", "/MapBuilder/beside", "/Set/member"]
@@ -465,7 +471,7 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
             .modules
             .iter()
             .flat_map(|module| &module.scheduled)
-            .map(|test| test.join())
+            .map(|test| test.path.join())
             .collect::<Vec<_>>();
         let unmatched = program
             .unmatched
@@ -522,7 +528,7 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         modules
             .iter()
             .flat_map(|module| &module.scheduled)
-            .map(|test| test.join())
+            .map(|test| test.path.join())
             .collect::<Vec<_>>()
     };
 

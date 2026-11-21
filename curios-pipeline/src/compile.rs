@@ -9,7 +9,7 @@ use {
     curios_anf::lower_to_cps,
     curios_cert::{Accepted, Globals, Rechecked, Refusal, certify_definitions, certify_program},
     curios_common::{
-        About, Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
+        About, Candidates, Kind, Location, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
     },
     curios_core::{
         Anchors, Arm, Func, Global, Intrinsic, Let, Lint, Matrix, MetavarOrigin, Program, Rec, Row,
@@ -769,8 +769,15 @@ impl EntryTail {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestModule {
     pub path: Qualifier,
-    pub scheduled: Vec<Qualifier>,
+    pub scheduled: Vec<ScheduledTest>,
     pub skipped: Vec<Qualifier>,
+}
+
+/// One test a test program runs: its path, and where its name is written, which its runner says of a test that did not pass. `None` where no label of the name was kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScheduledTest {
+    pub path: Qualifier,
+    pub location: Option<Location>,
 }
 
 /// Whether `prefix` selects `test`: a whole segment at a time, a test at or under it. The one statement of what a test tail's prefixes select, for what it schedules and for the prefixes that select nothing.
@@ -818,8 +825,8 @@ pub fn declared_test_paths(definitions: &curios_core::Definitions) -> Vec<String
         .collect()
 }
 
-/// The report metadata of each module's tests: the path of each scheduled one, and of each left out.
-fn test_modules(schedule: Vec<ScheduledModule>) -> Vec<TestModule> {
+/// The report metadata of each module's tests: the path of each scheduled one, with where `anchors` place its name, and of each left out.
+fn test_modules(schedule: Vec<ScheduledModule>, anchors: &[&Anchors]) -> Vec<TestModule> {
     schedule
         .into_iter()
         .map(|module| TestModule {
@@ -827,7 +834,12 @@ fn test_modules(schedule: Vec<ScheduledModule>) -> Vec<TestModule> {
             scheduled: module
                 .scheduled
                 .iter()
-                .filter_map(|test| test.qualifier().copied())
+                .filter_map(|test| {
+                    Some(ScheduledTest {
+                        path: *test.qualifier()?,
+                        location: Anchors::label(anchors, test).map(|span| span.location()),
+                    })
+                })
                 .collect(),
             skipped: module.skipped,
         })
@@ -1131,7 +1143,7 @@ where
     let schedule = tail.schedule(lowered.core(), &predecessors.lowered());
     let scheduled = tail_tests(&schedule);
     let unmatched = tail.unmatched(&schedule);
-    let modules = test_modules(schedule);
+    let modules = test_modules(schedule, &anchors_of(&lowered, predecessors));
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the certifier rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);

@@ -11,13 +11,15 @@ use {
     crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
     curios_abi::{ForeignStore, HostOps, TEST_ANSWER},
     curios_browser::page,
-    curios_common::{Qualifier, Report, Source, SourceName},
+    curios_common::{Location, Qualifier, Report, Source, SourceName},
     curios_module::{PackageRoot, RootSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{
         Cabinet, Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order, tests_filed_as,
     },
-    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, fold_sources},
+    curios_pipeline::{
+        Cache, CompileError, Fold, Progress, ScheduledTest, Stage, TestModule, fold_sources,
+    },
     curios_surface::Entrypoint,
     curios_verdict::{Program, Verdicts},
     std::{
@@ -121,6 +123,15 @@ pub fn test_subjects(selection: Selection) -> Result<Vec<TestSubject>, CompileEr
 }
 
 impl TestSubject {
+    /// The packages the subject reads its files for: what a test's file is found again through, where a filed test program keeps the name of its source alone ([`Location`]).
+    fn packages(&self) -> Vec<PackageRoot> {
+        self.units
+            .iter()
+            .chain([&self.loader])
+            .flat_map(RootSource::packages)
+            .collect()
+    }
+
     /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's last unit, compiled tested, and the tail replacing that entry schedules its tests. [`LIBRARY_KEY`] stands in for the entry text the payload is keyed on.
     fn library(
         mut units: Vec<RootSource>,
@@ -273,7 +284,7 @@ impl TestSubject {
 
         if let Some((verdicts, program)) = verdicts.zip(program.as_ref())
             && let Some((bytes, foreigns)) = verdicts.payload_get(program, &sources, runs)
-            && let Some(tested) = decode(&bytes, foreigns, target)
+            && let Some(tested) = decode(&bytes, foreigns, target, &self.packages())
         {
             return Ok(tested);
         }
@@ -361,7 +372,9 @@ impl Tested {
 
     /// The path of each scheduled test, in schedule order: a test's index among them is the one it is run at.
     pub fn scheduled(&self) -> impl Iterator<Item = &Qualifier> {
-        self.modules.iter().flat_map(|module| &module.scheduled)
+        self.modules
+            .iter()
+            .flat_map(|module| module.scheduled.iter().map(|test| &test.path))
     }
 
     /// Each prefix the program was selected under that selects none of the subject's tests.
@@ -371,9 +384,13 @@ impl Tested {
 
     /// Every test the subject declares, scheduled or not, by its path: the paths a selection meeting none of them is answered with the nearest of.
     pub fn declared(&self) -> impl Iterator<Item = &Qualifier> {
-        self.modules
-            .iter()
-            .flat_map(|module| module.scheduled.iter().chain(&module.skipped))
+        self.modules.iter().flat_map(|module| {
+            module
+                .scheduled
+                .iter()
+                .map(|test| &test.path)
+                .chain(&module.skipped)
+        })
     }
 
     /// Whether the program was taken from the cabinet rather than compiled.
@@ -475,12 +492,19 @@ struct TestPayload {
     payload: Option<Vec<u8>>,
 }
 
-/// One module's tests as the cabinet files them: the segments of its path, of each scheduled test's path and of each skipped test's.
+/// One module's tests as the cabinet files them: the segments of its path, each scheduled test's, and of each skipped test's path.
 #[curios_archive::archived]
 struct ModulePayload {
     path: Vec<String>,
-    scheduled: Vec<Vec<String>>,
+    scheduled: Vec<ScheduledPayload>,
     skipped: Vec<Vec<String>>,
+}
+
+/// One scheduled test as the cabinet files it: the segments of its path, and where its name is written, its file left out ([`Location`]).
+#[curios_archive::archived]
+struct ScheduledPayload {
+    path: Vec<String>,
+    location: Option<Location>,
 }
 
 /// `tested` as the bytes the cabinet files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
@@ -494,7 +518,10 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
                 scheduled: module
                     .scheduled
                     .iter()
-                    .map(|test| test.segments().to_vec())
+                    .map(|test| ScheduledPayload {
+                        path: test.path.segments().to_vec(),
+                        location: test.location.clone(),
+                    })
                     .collect(),
                 skipped: module
                     .skipped
@@ -517,15 +544,36 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
     curios_archive::to_bytes(&payload).ok()
 }
 
-/// The inverse of [`encode`], with the rows the cabinet filed beside the bytes and the target whose directory they were filed in, `None` on any malformation.
-fn decode(bytes: &[u8], foreigns: ForeignStore, target: Target) -> Option<Tested> {
+/// The inverse of [`encode`], with the rows the cabinet filed beside the bytes and the target whose directory they were filed in, `None` on any malformation; each test's file found again through `packages`, those the subject reads its files for.
+fn decode(
+    bytes: &[u8],
+    foreigns: ForeignStore,
+    target: Target,
+    packages: &[PackageRoot],
+) -> Option<Tested> {
     let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
+    let located = |location: Option<Location>| {
+        location.map(|location| Location {
+            file: location
+                .name
+                .as_ref()
+                .and_then(|name| packages.iter().find_map(|package| package.file_of(name))),
+            ..location
+        })
+    };
     let modules = payload
         .modules
         .into_iter()
         .map(|module| TestModule {
             path: Qualifier::from(module.path),
-            scheduled: module.scheduled.into_iter().map(Qualifier::from).collect(),
+            scheduled: module
+                .scheduled
+                .into_iter()
+                .map(|test| ScheduledTest {
+                    path: Qualifier::from(test.path),
+                    location: located(test.location),
+                })
+                .collect(),
             skipped: module.skipped.into_iter().map(Qualifier::from).collect(),
         })
         .collect();

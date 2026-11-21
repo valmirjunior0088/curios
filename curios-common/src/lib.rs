@@ -20,8 +20,8 @@ pub use entropy::{Entropy, Mint};
 
 mod span;
 pub use span::{
-    About, ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, Code, MAX_LINE_WIDTH, Note,
-    OsError, Pane, Report, Said, Source, Span,
+    About, ArchivedLocation, ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, Code,
+    Location, MAX_LINE_WIDTH, Note, OsError, Pane, Report, Said, Source, Span,
 };
 
 mod source_name;

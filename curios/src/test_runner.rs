@@ -21,7 +21,7 @@ use {
     curios_common::{Code, Qualifier, Report, Style},
     curios_native::{OsHost, Stop, TestEnd},
     curios_package::{Refused, Selection, Target},
-    curios_pipeline::{CompileError, TestModule},
+    curios_pipeline::{CompileError, ScheduledTest, TestModule},
     curios_verdict::Verdicts,
     std::{
         cell::RefCell,
@@ -264,7 +264,7 @@ fn edits(path: &str, filter: &str) -> usize {
 struct Hand {
     tree: Tree,
     /// The scheduled tests yet to end, in schedule order, the one in hand first.
-    scheduled: VecDeque<Qualifier>,
+    scheduled: VecDeque<ScheduledTest>,
     tally: Totals,
     /// What the tests that ended took together, where any ran.
     spent: Option<Duration>,
@@ -363,7 +363,7 @@ impl<'a> Printer<'a> {
     /// Open the node of the subject in hand's next scheduled test, by its path, before it runs: a test that never ends is the one whose line stands open.
     pub fn began(&mut self) {
         let hand = self.hand.as_mut().expect(IN_HAND);
-        let path = hand.scheduled.front().expect(IN_HAND).join();
+        let path = hand.scheduled.front().expect(IN_HAND).path.join();
 
         hand.tree.open(&path, false);
     }
@@ -371,7 +371,12 @@ impl<'a> Printer<'a> {
     /// The test whose node is open ended as `ending` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then what only the runner holds — what a failing test found, or a trap's text — and the subject's tally where it was the subject's last.
     pub fn ended(&mut self, ending: Ending, wrote: Wrote, taken: Duration) {
         let hand = self.hand.as_mut().expect(IN_HAND);
-        hand.scheduled.pop_front().expect(IN_HAND);
+        let test = hand.scheduled.pop_front().expect(IN_HAND);
+        // A test that did not pass is one its reader goes to, so its ending says where its name is written.
+        let place = match &ending {
+            Ending::Answered(outcome) if outcome.held() => None,
+            _ => test.location.map(|location| location.place(reader())),
+        };
         let (word, beneath) = match ending {
             Ending::Answered(outcome) if outcome.held() => {
                 hand.tally.passed += 1;
@@ -400,7 +405,8 @@ impl<'a> Printer<'a> {
             }
         };
 
-        hand.tree.ended(&word, taken, wrote, &beneath);
+        hand.tree
+            .ended(&word, taken, place.as_deref(), wrote, &beneath);
         hand.spent = Some(hand.spent.unwrap_or_default() + taken);
         self.settled();
     }

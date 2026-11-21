@@ -123,7 +123,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, closed where the test did not pass on where its name is written, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
@@ -137,9 +137,12 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ /app/doubling_passes; ✓ passed in ",
             "├─ /app/addition_passes; ✓ passed in ",
             "├─ /app/equality_fails\n│  > comparing\n│  ✗ failed in ",
+            "; lib.crs:11:6\n",
             "│    not equal\n│      obtained: `4`\n│      expected: `5`\n",
             "├─ /app/overflow_traps; ✗ trapped in ",
+            "; lib.crs:14:6\n",
             "├─ /app/exits_seven; ✗ exited 7 in ",
+            "; lib.crs:17:6\n",
             "├─ /app/effect_passes; ✓ passed in ",
             "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
@@ -199,7 +202,9 @@ test fails_quietly =
         &stderr(&output),
         &[
             "├─ /app/quits_early; ✗ exited 0 in ",
+            "; lib.crs:3:6\n",
             "├─ /app/fails_quietly; ✗ exited 1 in ",
+            "; lib.crs:6:6\n",
             "└─ 0 passed, 0 failed, 2 exited; ",
         ],
     );

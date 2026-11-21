@@ -155,7 +155,10 @@ pub fn run_tests_under(source: &str, host: impl Fn() -> MockHostBuilder) -> Vec<
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 
     let mut drawn = Vec::new();
-    let scheduled = program.modules.iter().flat_map(|module| &module.scheduled);
+    let scheduled = program
+        .modules
+        .iter()
+        .flat_map(|module| module.scheduled.iter().map(|test| &test.path));
     for (index, test) in scheduled.enumerate() {
         let (system, io) = host().args(["prog".to_string(), index.to_string()]).build();
         let end = compiled.run_test(system, ForeignBindings::empty());

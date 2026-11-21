@@ -256,20 +256,29 @@ fn wrote(stream: &str, bytes: &str) -> Message {
     ))
 }
 
-/// `text` with the time each line ends on, where it ends on one, replaced by `_`: what a step took is the one part of a report no two runs agree on.
+/// `text` with each time a line states, at its end or before the place a test's ending names, replaced by `_`: what a step took is the one part of a report no two runs agree on.
 fn untimed(text: &str) -> String {
     text.split_inclusive('\n')
         .map(|line| {
             let body = line.strip_suffix('\n').unwrap_or(line);
-            let timed = body.rsplit_once(' ').filter(|(_, last)| {
-                last.strip_suffix('s')
-                    .is_some_and(|seconds| seconds.parse::<f64>().is_ok())
-            });
+            let masked = body
+                .split(' ')
+                .map(|word| {
+                    let (bare, after) = word
+                        .strip_suffix(';')
+                        .map_or((word, ""), |bare| (bare, ";"));
+                    match bare
+                        .strip_suffix('s')
+                        .is_some_and(|seconds| seconds.parse::<f64>().is_ok())
+                    {
+                        true => format!("_{after}"),
+                        false => word.to_string(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
 
-            match timed {
-                Some((before, _)) => format!("{before} _{}", &line[body.len()..]),
-                None => line.to_string(),
-            }
+            format!("{masked}{}", &line[body.len()..])
         })
         .collect()
 }
@@ -391,11 +400,11 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "serve; http://127.0.0.1:{port}/\n",
                 "/app\n",
                 "├─ /app/holds; ✓ passed in _\n",
-                "├─ /app/fails; ✗ failed in _\n",
+                "├─ /app/fails; ✗ failed in _; lib.crs:6:6\n",
                 "│    not equal\n",
                 "│      obtained: `1`\n",
                 "│      expected: `2`\n",
-                "├─ /app/exits; ✗ exited 7 in _\n",
+                "├─ /app/exits; ✗ exited 7 in _; lib.crs:9:6\n",
                 "└─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
                 "├─ /own\n",

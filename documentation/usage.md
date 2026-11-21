@@ -314,7 +314,7 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ├─ build; 0.2s
 ├─ emit; 0.4s
 ├─ /demo/shapes/a_square_has_four_sides; ✓ passed in 0.0s
-├─ /demo/two_is_three; ✗ failed in 0.0s
+├─ /demo/two_is_three; ✗ failed in 0.0s; lib.crs:7:6
 │    not equal
 │      obtained: `2`
 │      expected: `3`
@@ -324,7 +324,7 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 └─ 2 passed, 1 failed; 0.1s
 ```
 
-Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
+Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`, then where the test's name is written, as a report closes on its place, since a test that did not pass is one its reader goes to. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
 
 What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a quote mark, `│  >`; the mark of a line on standard error is painted apart where colour is seen. Its first byte ends the line its node opened on, and the node closes beneath what was written, its outcome's mark in the quote's column, whichever stream that was; a stream sent elsewhere carries its lines behind the frame too. Beneath a test's outcome stands what only the runner holds: a trap's text, and what a failing test found — each check that failed on a line, the steps that reached it leading, a `Test/step`'s label and `case 2` for the third case of a `Test/all`, as in `parsing: case 2: not equal`, and beneath it each value it compared behind its label, in backticks. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 

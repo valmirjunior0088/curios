@@ -540,8 +540,15 @@ impl Tree {
         done
     }
 
-    /// Close the open test's node with its ending, led by its mark, and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each under the ending's word: `; ✓ passed in 0.1s` on the node's own line, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
-    pub fn ended(&mut self, ending: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
+    /// Close the open test's node with its ending, led by its mark, the time `taken` whoever ran it measured, and the `place` its name is written at where one is said, then what only they know of it, a line of `beneath` each under the ending's word: `; ✓ passed in 0.1s` on the node's own line, `; ✗ failed in 0.1s; tests.crs:4:6` with a place, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
+    pub fn ended(
+        &mut self,
+        ending: &str,
+        taken: Duration,
+        place: Option<&str>,
+        wrote: Wrote,
+        beneath: &[String],
+    ) {
         let mark = match trouble(ending) {
             true => troubled(UNPASSED),
             false => PASSED.into(),
@@ -551,6 +558,10 @@ impl Tree {
             .then(worded(ending))
             .then(" ")
             .then(dim(format_args!("in {}", seconds(taken))));
+        let closing = match place {
+            Some(place) => closing.then("; ").then(place.to_string()),
+            None => closing,
+        };
 
         self.opened = None;
         match wrote {
