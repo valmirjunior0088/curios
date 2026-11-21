@@ -176,7 +176,7 @@ fn every_bounded_operation_is_refused_one_past_the_edge_of_its_domain() {
 fn a_channel_of_no_capacity_is_refused_and_one_of_capacity_one_compiles() {
     let program = |capacity: u32| {
         fill!(
-            "${HEADER}\nlet edge: Io({Channel/Sender(Nat), Channel/Receiver(Nat)}) = Channel/new(@Nat, ${capacity});\n/std/print(\"\")",
+            "${HEADER}\nlet edge: Io(Channel(Nat)) = Channel/new(@Nat, ${capacity});\n/std/print(\"\")",
             HEADER,
             capacity
         )

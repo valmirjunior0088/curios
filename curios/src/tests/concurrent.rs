@@ -466,13 +466,13 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
         let program() -> Io({}) =
             let a = Channel/new(@Nat, 4)!;
             let b = Channel/new(@Nat, 4)!;
-            let _ = Channel/send(a.0, 10)!;
-            let _ = Channel/send(b.0, 20)!;
+            let _ = Channel/send(a, 10)!;
+            let _ = Channel/send(b, 20)!;
             let w = Io/select([
-                Offer/map(Channel/offer_receive(a.1), (o) => ("a", o)),
-                Offer/map(Channel/offer_receive(b.1), (o) => ("b", o))])!;
-            let rest_a = Channel/try_receive(a.1)!;
-            let rest_b = Channel/try_receive(b.1)!;
+                Offer/map(Channel/offer_receive(a), (o) => ("a", o)),
+                Offer/map(Channel/offer_receive(b), (o) => ("b", o))])!;
+            let rest_a = Channel/try_receive(a)!;
+            let rest_b = Channel/try_receive(b)!;
             /std/print(
                 Str/flatten(
                     [w.0, " ", shown(w.1), " ", left(rest_a), " ", left(rest_b)]));
@@ -488,7 +488,7 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Cell, Option, Io, print, Channel};
-        let feeder(s: Channel/Sender({Nat, Cell({})})) -> Io({}) =
+        let feeder(s: Channel({Nat, Cell({})})) -> Io({}) =
             let ack = Cell/new()!;
             let _ = Channel/send(s, (7, ack))!;
             let _ = print("queued ")!;
@@ -496,9 +496,9 @@ fn a_sender_waits_for_acknowledgement_after_its_message_is_taken() {
             print("acknowledged");
         let body(scope: Io/Scope) -> Io({}) =
             let c = Channel/new(@{Nat, Cell({})}, 1)!;
-            let task = Io/Scope/spawn(scope, feeder(c.0))!;
+            let task = Io/Scope/spawn(scope, feeder(c))!;
             let _ = print("receiving ")!;
-            let got = Channel/receive(c.1)!;
+            let got = Channel/receive(c)!;
             let _ = match got
                 | some((n, ack)) =>
                     let _ = print(Nat/to_str(n))!;
@@ -530,17 +530,17 @@ fn a_closed_channel_drains_before_it_ends() {
             match t | item(n) => Nat/to_str(n) | empty() => "empty" | ended() => "ended" end;
         let program() -> Io({}) =
             let c = Channel/new(@Nat, 2)!;
-            let nothing_yet = Channel/try_receive(c.1)!;
-            let _ = Channel/send(c.0, 1)!;
-            let _ = Channel/send(c.0, 2)!;
-            let full = Channel/try_send(c.0, 3)!;
-            let _ = Channel/finish(c.0)!;
-            let refused = Channel/try_send(c.0, 3)!;
-            let first = Channel/receive(c.1)!;
-            let second = Channel/receive(c.1)!;
-            let ended = Channel/receive(c.1)!;
-            let drained = Channel/try_receive(c.1)!;
-            let after = Channel/send(c.0, 4)!;
+            let nothing_yet = Channel/try_receive(c)!;
+            let _ = Channel/send(c, 1)!;
+            let _ = Channel/send(c, 2)!;
+            let full = Channel/try_send(c, 3)!;
+            let _ = Channel/finish(c)!;
+            let refused = Channel/try_send(c, 3)!;
+            let first = Channel/receive(c)!;
+            let second = Channel/receive(c)!;
+            let ended = Channel/receive(c)!;
+            let drained = Channel/try_receive(c)!;
+            let after = Channel/send(c, 4)!;
             /std/print(
                 Str/flatten(
                     [

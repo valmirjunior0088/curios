@@ -1,0 +1,40 @@
+-- `/std/Channel`: what a channel holds against what it was made with, and its finish, read as values go in and out.
+use /std/{Bool, Channel, Nat, Option, Test};
+
+-- The value a take found, where it found one.
+let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
+    match taken | item(a) => Option/some(a) | _ => Option/none() end;
+
+-- Whether a take found the channel finished and drained.
+let drained(@A: Type, taken: Channel/Take(A)) -> Bool =
+    match taken | ended() => true | _ => false end;
+
+-- The length follows each send and receive, and the capacity is the one the channel was made with.
+test a_channel_counts_what_it_holds_against_what_it_was_made_with =
+    let c = Channel/new(@Nat, 2)!;
+    let empty = Channel/len(c)!;
+    let _ = Channel/try_send(c, 1)!;
+    let one = Channel/len(c)!;
+    let _ = Channel/try_send(c, 2)!;
+    let full = Channel/len(c)!;
+    let _ = Channel/try_receive(c)!;
+    let after = Channel/len(c)!;
+    let made = Channel/capacity(c)!;
+    Test/equal([empty, one, full, after, made], [0, 1, 2, 1, 2]);
+
+-- A finish is seen at once, while what was queued before it is still received, and then the channel answers ended.
+test a_finished_channel_says_so_while_it_still_holds_values =
+    let c = Channel/new(@Nat, 2)!;
+    let open = Channel/finished(c)!;
+    let _ = Channel/try_send(c, 7)!;
+    let () = Channel/finish(c)!;
+    let finished = Channel/finished(c)!;
+    let held = Channel/len(c)!;
+    let first = Channel/try_receive(c)!;
+    let then = Channel/try_receive(c)!;
+    Test/all([
+        Test/assert("an open channel is not finished", Bool/not(open)),
+        Test/assert("a finish is seen at once", finished),
+        Test/equal(held, 1),
+        Test/equal(found(first), Option/some(7)),
+        Test/assert("then the channel answers ended", drained(then))]);

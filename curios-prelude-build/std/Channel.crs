@@ -1,4 +1,5 @@
-pub use /sys/{let Channel};
+mod tests;
+
 pub use /sys/Channel/{Push, Take};
 
 use /std/{Nat, Bool, Option, Cell, Io};
@@ -6,7 +7,7 @@ use /std/Io/{Offer};
 
 -- The cell the waiters of one side wait on, kept in a capacity-one channel until a change of that side fills it and the next waiter makes another.
 struct Woken: Type {
-    Channel(Cell({})),
+    /sys/Channel(Cell({})),
 }
 
 -- The cell a waiter of `side` waits on: the one there, or a fresh one left there.
@@ -24,62 +25,60 @@ let changed(side: Woken) -> Io({}) =
     | _ => Io/pure(())
     end;
 
--- A channel and the two sides waited on: its readers wait for an item or the close, its writers for room or the close. Every change goes through `try_send`, `try_receive` and `finish`, which wake the side it concerns.
-struct Ends(A: Type): Type {
-    channel: Channel(A),
+-- The queue and the two sides waited on: readers wait for a value or the finish, writers for room or the finish. Every change goes through `try_send`, `try_receive` and `finish`, which wake the side it concerns.
+--- A queue that holds at most the capacity it was made with.
+pub struct Channel(A: Type): Type {
+    queue: /sys/Channel(A),
     readers: Woken,
     writers: Woken,
 }
 
---- The end values are put in.
-pub struct Sender(A: Type): Type {
-    Ends(A),
-}
-
---- The end values are taken from.
-pub struct Receiver(A: Type): Type {
-    Ends(A),
-}
-
---- A channel holding at most `capacity` values, and the two ends of it. A sender needing acknowledgement can include a reply cell in its message.
-pub let new(
-    @A: Type,
-    capacity: Nat,
-    @positive: Bool/Holds(0 < capacity),
-) -> Io({Sender(A), Receiver(A)}) =
-    let channel = /sys/Channel/new(@A, capacity, @positive)!;
+--- A channel holding at most `capacity` values. A sender needing acknowledgement can include a reply cell in its message.
+pub let new(@A: Type, capacity: Nat, @positive: Bool/Holds(0 < capacity)) -> Io(Channel(A)) =
+    let queue = /sys/Channel/new(@A, capacity, @positive)!;
     let readers = /sys/Channel/new(@Cell({}), 1)!;
     let writers = /sys/Channel/new(@Cell({}), 1)!;
-    let ends = Ends { channel = channel, readers = Woken { readers }, writers = Woken { writers } };
-    Io/pure((Sender { ends }, Receiver { ends }));
+    Io/pure(Channel { queue = queue, readers = Woken { readers }, writers = Woken { writers } });
 
---- Put `a` in without waiting, answering this attempt's own outcome: `taken`, `full` while the channel is open and at capacity, or `closed`.
-pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Push) =
-    let outcome = /sys/Channel/push(s.0.channel, a)!;
+--- Put `a` in without waiting, answering this attempt's own outcome: `taken`, `full` while the channel is open and at capacity, or `closed` once it is finished.
+pub let try_send(@A: Type, c: Channel(A), a: A) -> Io(Push) =
+    let outcome = /sys/Channel/push(c.queue, a)!;
     match outcome
-    | taken() => Io/bind(changed(s.0.readers), (()) => Io/pure(outcome))
+    | taken() => Io/bind(changed(c.readers), (()) => Io/pure(outcome))
     | _ => Io/pure(outcome)
     end;
 
---- Take the next value without waiting, answering this attempt's own outcome: an `item`, `empty` while the channel is open with nothing queued, or `ended` once it is closed and drained.
-pub let try_receive(@A: Type, r: Receiver(A)) -> Io(Take(A)) =
-    let outcome = /sys/Channel/take(r.0.channel)!;
+--- Take the next value without waiting, answering this attempt's own outcome: an `item`, `empty` while the channel is open with nothing queued, or `ended` once it is finished and drained.
+pub let try_receive(@A: Type, c: Channel(A)) -> Io(Take(A)) =
+    let outcome = /sys/Channel/take(c.queue)!;
     match outcome
-    | item(_) => Io/bind(changed(r.0.writers), (()) => Io/pure(outcome))
+    | item(_) => Io/bind(changed(c.writers), (()) => Io/pure(outcome))
     | _ => Io/pure(outcome)
     end;
 
---- End what the channel sends: a receiver drains what is already queued and then answers `none`, and a send answers `false`.
-pub let finish(@A: Type, s: Sender(A)) -> Io({}) =
-    let () = /sys/Channel/close(s.0.channel)!;
-    let () = changed(s.0.readers)!;
-    changed(s.0.writers);
+--- End what the channel carries: a receive drains what is already queued and then answers `none`, and a send answers `false`. Finishing it again does nothing.
+pub let finish(@A: Type, c: Channel(A)) -> Io({}) =
+    let () = /sys/Channel/close(c.queue)!;
+    let () = changed(c.readers)!;
+    changed(c.writers);
 
---- An offer that yields the next value, or `none` once the channel is closed and drained.
-pub let offer_receive(@A: Type, r: Receiver(A)) -> Offer(Option(A)) =
+--- How many values the channel holds. The count holds until the caller next waits, so that many receives go through without waiting.
+pub let len(@A: Type, c: Channel(A)) -> Io(Nat) =
+    /sys/Channel/count(c.queue);
+
+--- The most values the channel holds, as it was made.
+pub let capacity(@A: Type, c: Channel(A)) -> Io(Nat) =
+    /sys/Channel/capacity(c.queue);
+
+--- Whether the channel was finished. What it held then is still received; `try_receive` answers `ended` once it is drained.
+pub let finished(@A: Type, c: Channel(A)) -> Io(Bool) =
+    /sys/Channel/closed(c.queue);
+
+--- An offer that yields the next value, or `none` once the channel is finished and drained.
+pub let offer_receive(@A: Type, c: Channel(A)) -> Offer(Option(A)) =
     Offer/new(
         Io/bind(
-            try_receive(r),
+            try_receive(c),
             (outcome) =>
                 Io/pure(
                     match outcome
@@ -87,13 +86,13 @@ pub let offer_receive(@A: Type, r: Receiver(A)) -> Offer(Option(A)) =
                     | empty() => Option/none()
                     | ended() => Option/some(Option/none())
                     end)),
-        Io/bind(waited(r.0.readers), (cell) => Io/pure(Offer/on_filled([cell]))));
+        Io/bind(waited(c.readers), (cell) => Io/pure(Offer/on_filled([cell]))));
 
---- An offer that yields `true` once `a` has been put in, or `false` if the channel closed first.
-pub let offer_send(@A: Type, s: Sender(A), a: A) -> Offer(Bool) =
+--- An offer that yields `true` once `a` has been put in, or `false` if the channel was finished first.
+pub let offer_send(@A: Type, c: Channel(A), a: A) -> Offer(Bool) =
     Offer/new(
         Io/bind(
-            try_send(s, a),
+            try_send(c, a),
             (outcome) =>
                 Io/pure(
                     match outcome
@@ -101,12 +100,12 @@ pub let offer_send(@A: Type, s: Sender(A), a: A) -> Offer(Bool) =
                     | full() => Option/none()
                     | closed() => Option/some(false)
                     end)),
-        Io/bind(waited(s.0.writers), (cell) => Io/pure(Offer/on_filled([cell]))));
+        Io/bind(waited(c.writers), (cell) => Io/pure(Offer/on_filled([cell]))));
 
---- The next value, waiting while there is none; `none` once the channel is closed and drained.
-pub let receive(@A: Type, r: Receiver(A)) -> Io(Option(A)) =
-    Io/select([offer_receive(r)]);
+--- The next value, waiting while there is none; `none` once the channel is finished and drained.
+pub let receive(@A: Type, c: Channel(A)) -> Io(Option(A)) =
+    Io/select([offer_receive(c)]);
 
---- Put `a` in, waiting while the channel is full; `false` when it is closed.
-pub let send(@A: Type, s: Sender(A), a: A) -> Io(Bool) =
-    Io/select([offer_send(s, a)]);
+--- Put `a` in, waiting while the channel is full; `false` once it is finished.
+pub let send(@A: Type, c: Channel(A), a: A) -> Io(Bool) =
+    Io/select([offer_send(c, a)]);

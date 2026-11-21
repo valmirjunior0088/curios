@@ -43,6 +43,7 @@ claims! {
     str => ["Str"],
     char => ["Char"],
     cell => ["Cell"],
+    channel => ["Channel"],
     rand => ["rand"],
     json => ["Json"],
     toml => ["Toml"],

@@ -13,18 +13,18 @@ fn a_channel_preserves_fifo_through_wraparound_and_close() {
             print(match t | item(n) => Str/concat(Nat/to_str(n), " ") | empty() => "empty " | ended() => "ended " end);
         let entry() -> /std/Io({}) =
             let c = Channel/new(@Nat, 2)!;
-            let _ = taken(Channel/try_receive(c.1)!)!;
-            let _ = pushed(Channel/try_send(c.0, 10)!)!;
-            let _ = pushed(Channel/try_send(c.0, 20)!)!;
-            let _ = pushed(Channel/try_send(c.0, 30)!)!;
-            let _ = taken(Channel/try_receive(c.1)!)!;
-            let _ = pushed(Channel/try_send(c.0, 30)!)!;
-            let _ = Channel/finish(c.0)!;
-            let _ = Channel/finish(c.0)!;
-            let _ = pushed(Channel/try_send(c.0, 40)!)!;
-            let _ = taken(Channel/try_receive(c.1)!)!;
-            let _ = taken(Channel/try_receive(c.1)!)!;
-            taken(Channel/try_receive(c.1)!);
+            let _ = taken(Channel/try_receive(c)!)!;
+            let _ = pushed(Channel/try_send(c, 10)!)!;
+            let _ = pushed(Channel/try_send(c, 20)!)!;
+            let _ = pushed(Channel/try_send(c, 30)!)!;
+            let _ = taken(Channel/try_receive(c)!)!;
+            let _ = pushed(Channel/try_send(c, 30)!)!;
+            let _ = Channel/finish(c)!;
+            let _ = Channel/finish(c)!;
+            let _ = pushed(Channel/try_send(c, 40)!)!;
+            let _ = taken(Channel/try_receive(c)!)!;
+            let _ = taken(Channel/try_receive(c)!)!;
+            taken(Channel/try_receive(c)!);
         entry()
     "#),
         b"empty taken taken full 10 taken closed 20 30 ended "
@@ -41,8 +41,8 @@ fn evidence_payloads_still_occupy_storage() {
             let _ = Cell/fill(proof, Option/some(Eq/refl()))!;
             let _ = print(match Cell/poll(proof)! | some(_) => "proof " | none() => "missing " end)!;
             let p = Channel/new(@Option(Eq()(1, 1)), 1)!;
-            let _ = Channel/try_send(p.0, Option/some(Eq/refl()))!;
-            print(match Channel/try_receive(p.1)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end);
+            let _ = Channel/try_send(p, Option/some(Eq/refl()))!;
+            print(match Channel/try_receive(p)! | item(_) => "proof" | empty() => "empty" | ended() => "ended" end);
         entry()
     "#),
         b"proof proof"
@@ -60,10 +60,10 @@ fn type_payloads_still_occupy_storage() {
         Io/bind(Cell/poll(c), (held) =>
         Io/bind(print(match held | some(_) => "type " | none() => "missing " end), (_) =>
         Io/bind(Channel/new(@Type, 1), (q) =>
-        Io/bind(Channel/try_send(q.0, Nat), (_) =>
-        Io/bind(Channel/try_receive(q.1), (first) =>
+        Io/bind(Channel/try_send(q, Nat), (_) =>
+        Io/bind(Channel/try_receive(q), (first) =>
         Io/bind(print(match first | item(_) => "item " | empty() => "empty " | ended() => "ended " end), (_) =>
-        Io/bind(Channel/try_receive(q.1), (second) =>
+        Io/bind(Channel/try_receive(q), (second) =>
         print(match second | item(_) => "item" | empty() => "empty" | ended() => "ended" end))))))))))
     "#),
         b"type item empty"

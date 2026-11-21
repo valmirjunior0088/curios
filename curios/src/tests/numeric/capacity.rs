@@ -66,7 +66,7 @@ fn a_channel_capacity_past_the_runtime_bound_refuses_before_allocating() {
             use /std/{Nat, Io, print, Channel};
             let entry() -> /std/Io({}) =
                 let c = Channel/new(@Nat, ${count})!;
-                print(match Channel/try_send(c.0, 1)!
+                print(match Channel/try_send(c, 1)!
                     | taken() => "taken"
                     | full() => "full"
                     | closed() => "closed"

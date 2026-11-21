@@ -36,11 +36,11 @@ fn reads(tail: &str) -> String {
     )
 }
 
-/// A stream of a program's own, whose chunks are what its other end is sent: a read of it waits until the program sends more, and ends once the sender is closed.
+/// A stream of a program's own, whose chunks are what the program sends on its channel: a read of it waits until the program sends more, and ends once the channel is finished.
 const WIRE: &str = r#"
     use /std/{Str, Bytes, Bool, Option, Result, Show, Try, Io, print, Channel};
     use /std/time/{Duration};
-    struct Wire: Type { Channel/Receiver(Bytes) }
+    struct Wire: Type { Channel(Bytes) }
     let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
         let got = Channel/receive(w.0)!;
         match got
@@ -99,14 +99,14 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
     let source = fill!(
         r#"${WIRE}
         let program() -> Io({}) =
-            let ends = Channel/new(@Bytes, 4)!;
-            let input = Io/Reader/new(Wire { ends.1 })!;
-            let _ = Channel/try_send(ends.0, Str/to_bytes("ab"))!;
+            let sent = Channel/new(@Bytes, 4)!;
+            let input = Io/Reader/new(Wire { sent })!;
+            let _ = Channel/try_send(sent, Str/to_bytes("ab"))!;
             let hurried = Io/timeout(Duration/of_secs(2), Try/run(Io/Reader/line(input)))!;
             let _ = print(match hurried | some(read) => line(read) | none() => "<deadline>" end)!;
             let held = Io/Reader/held(input)!;
             let _ = print(Str/concat("|", text(held)))!;
-            let _ = Channel/try_send(ends.0, Str/to_bytes("cd\nef"))!;
+            let _ = Channel/try_send(sent, Str/to_bytes("cd\nef"))!;
             let patient = Try/run(Io/Reader/line(input))!;
             print(Str/concat("|", line(patient)));
         program()
@@ -147,7 +147,7 @@ fn a_refusal_past_the_bound_leaves_the_bytes_held() {
     assert_eq!(String::from_utf8_lossy(&io.output()), "too_long|abcdef|ab");
 }
 
-/// Two branches that read one reader each get a whole line. Both have searched six bytes for a newline when one of them takes the arrival that holds it, cuts its line and leaves `b` and a newline held; the stream then ends, and the other is asked again of what is held now, from the start, where the search it had made would pass the newline by.
+/// Two branches that read one reader each get a whole line. Both have searched six bytes for a newline when one of them takes the arrival that holds it, cuts its line and leaves `b` and a newline held; the stream then sent, and the other is asked again of what is held now, from the start, where the search it had made would pass the newline by.
 #[test]
 fn two_branches_on_one_reader_each_get_a_whole_line() {
     let source = fill!(
@@ -156,14 +156,14 @@ fn two_branches_on_one_reader_each_get_a_whole_line() {
             let read = Try/run(Io/Reader/line(input))!;
             print(Str/flatten(["<", line(read), ">"]));
         let both_read(s: Io/Scope) -> Io({}) =
-            let ends = Channel/new(@Bytes, 4)!;
-            let input = Io/Reader/new(Wire { ends.1 })!;
-            let _ = Channel/try_send(ends.0, Str/to_bytes("aaaaaa"))!;
+            let sent = Channel/new(@Bytes, 4)!;
+            let input = Io/Reader/new(Wire { sent })!;
+            let _ = Channel/try_send(sent, Str/to_bytes("aaaaaa"))!;
             let first = Io/Scope/spawn(s, reading(input))!;
             let second = Io/Scope/spawn(s, reading(input))!;
             let _ = Io/yield()!;
-            let _ = Channel/try_send(ends.0, Str/to_bytes("\nb\n"))!;
-            let _ = Channel/finish(ends.0)!;
+            let _ = Channel/try_send(sent, Str/to_bytes("\nb\n"))!;
+            let _ = Channel/finish(sent)!;
             let _ = Io/Scope/Task/join(first)!;
             Io/Scope/Task/join(second);
         Io/Scope/run(both_read)
