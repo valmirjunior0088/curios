@@ -6,7 +6,6 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Qualifier, fill},
     curios_core::{Cost, Exhaustion, Global, Reducer, UniverseContext},
-    std::slice,
 };
 
 /// A case equation lives exactly as long as its arm.
@@ -376,58 +375,197 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does(
     );
 }
 
-/// An equation an arm on an expression restates stands once inside the arm, however many brackets close there: the arm binds no local, so a bracket it opens marks no deeper locals, and the restatement is filed against the equations as well, which the arm's own and the restated instance push past. Under the guard `match e(c) | false => k(1) | true => k(0) end` and an arm on `e(c)`, which restates it, a bracket opened and closed in the arm leaves the recorded guard stepped aside, so a second arm, on `k(1)`, restates the guard's instance alone.
+/// An equation is settled again under an arm on an expression, with the arm's equation in view. The guard `match e(c) | false => k(1) | true => k(0) end`, settled where it is recorded, is the match stuck on `e(c)`; in an arm on `e(c)` at `true` it is `k(0)`, so the guard answers `k(0)` there, and `k(1)` in the arm at `false`.
 ///
-/// Mutation-checked: with the revival read off the locals alone, the bracket revives the recorded guard beside its instance, and the second arm restates both.
+/// Mutation-checked: with an equation's own spelling read at every height, the guard's spelling in the arm is the stuck match, and `k(0)` stays stuck.
 #[test]
-fn an_equation_restated_under_an_arm_on_an_expression_stands_once_inside_it() {
+fn an_equation_is_settled_again_under_an_arm_on_an_expression() {
     let mut certifier = certifier();
-    let [guard, first, second] = under(
+    let [guard, key, at_true, at_false] = under(
         &mut certifier,
         "c: #NatType, e: (x: #NatType) -> #BoolType, k: (x: #NatType) -> #BoolType",
-        "#{goal = #BoolType} match e(c) | false => k(1) | true => k(0) end, e(c), k(1)",
+        "#{goal = #BoolType} match e(c) | false => k(1) | true => k(0) end, e(c), k(0), k(1)",
     );
+
     certifier.scoped(|certifier| {
         certifier
             .refine(guard, term("true"))
             .expect("the guard records");
         certifier.scoped(|certifier| {
-            let below = certifier.refinements_recorded();
             certifier
-                .refine(first.clone(), term("true"))
+                .refine(key.clone(), term("true"))
+                .expect("the arm's equation records");
+            assert_eq!(
+                certifier.reduce(at_true).expect("reduces").as_bool(),
+                Some(true)
+            );
+        });
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(key, term("false"))
+                .expect("the arm's equation records");
+            assert_eq!(
+                certifier.reduce(at_false).expect("reduces").as_bool(),
+                Some(true)
+            );
+        });
+    });
+}
+
+/// A spelling settled again under an arm goes with the arm. The guard above is `k(0)` in the arm on `e(c)` at `true`; in the arm beside it, at `false`, which stands at the same position among the equations, it is `k(1)`, and `k(0)` is no term the guard answers.
+///
+/// Mutation-checked: with a retraction keeping the spellings settled again, the second arm reads the first's, and `k(0)` reduces to `true` under `e(c)` at `false`.
+#[test]
+fn a_spelling_settled_under_an_arm_goes_with_the_arm() {
+    let mut certifier = certifier();
+    let [guard, key, at_true] = under(
+        &mut certifier,
+        "c: #NatType, e: (x: #NatType) -> #BoolType, k: (x: #NatType) -> #BoolType",
+        "#{goal = #BoolType} match e(c) | false => k(1) | true => k(0) end, e(c), k(0)",
+    );
+
+    certifier.scoped(|certifier| {
+        certifier
+            .refine(guard, term("true"))
+            .expect("the guard records");
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(key.clone(), term("true"))
                 .expect("the arm's equation records");
             assert_eq!(
                 certifier
-                    .restate_refinements(&[], slice::from_ref(&first), below)
-                    .len(),
-                1,
-                "the arm on `e(c)` restates the guard"
+                    .reduce(at_true.clone())
+                    .expect("reduces")
+                    .as_bool(),
+                Some(true)
             );
+        });
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(key, term("false"))
+                .expect("the arm's equation records");
+            assert_eq!(
+                certifier.reduce(at_true.clone()).expect("reduces"),
+                at_true,
+                "the guard is `k(1)` in this arm, and `k(0)` stays stuck"
+            );
+        });
+    });
+}
 
-            certifier.scoped(|_| ());
+/// An equation is settled again from its own spelling, never from its key. The guard `NatLe(c + 1 + … + 1, d)` folds its sums where its own spelling is settled; asked again under an arm on `e(c)`, which moves nothing of it, it walks the folded spelling, one sum, so the probe that settles both spends fewer units past the probe that settles its own than the key has sums.
+///
+/// Mutation-checked: with the key reduced again at the arm's height, the probe under the arm walks every sum again, past thirty units a sum.
+#[test]
+fn an_equation_is_settled_again_from_its_own_spelling() {
+    let sums = 200;
+    let binders = "c: #NatType, d: #NatType, e: (x: #NatType) -> #BoolType";
+    let terms = fill!(
+        "#NatLe(${key}, d), e(c), #NatLe(#NatAdd(c, ${sums}), d)",
+        key = added("c", sums),
+        sums,
+    );
 
+    let mut alone = certifier();
+    let [guard, _, folded] = under(&mut alone, binders, &terms);
+    let own = alone.scoped(|certifier| {
+        certifier
+            .refine(guard, term("true"))
+            .expect("the guard records");
+        spent(certifier, folded)
+    });
+
+    let mut certifier = certifier();
+    let [guard, key, folded] = under(&mut certifier, binders, &terms);
+    let again = certifier.scoped(|certifier| {
+        certifier
+            .refine(guard, term("true"))
+            .expect("the guard records");
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(key, term("true"))
+                .expect("the arm's equation records");
+            spent(certifier, folded)
+        })
+    });
+
+    let past = again.saturating_sub(own);
+    assert!(
+        past < u64::try_from(sums).expect("a count fits"),
+        "settled again for {past} units past its own spelling's {own}, over {sums} sums"
+    );
+}
+
+/// An arm's own equation answers before one recorded outside it, where the two disagree: an arm no value reaches still holds its own case. Under `e(c)` at `false`, a second arm on `e(c)` at `true` reads `e(c)` as `true`.
+///
+/// Mutation-checked: with the equations read outermost first, the inner arm reads `false`.
+#[test]
+fn an_arms_own_equation_answers_before_one_recorded_outside_it() {
+    let mut certifier = certifier();
+    let [key] = under(
+        &mut certifier,
+        "c: #NatType, e: (x: #NatType) -> #BoolType",
+        "e(c),",
+    );
+
+    certifier.scoped(|certifier| {
+        certifier
+            .refine(key.clone(), term("false"))
+            .expect("the outer equation records");
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(key.clone(), term("true"))
+                .expect("the arm's equation records");
+            assert_eq!(
+                certifier.reduce(key.clone()).expect("reduces").as_bool(),
+                Some(true)
+            );
+        });
+        assert_eq!(
+            certifier.reduce(key).expect("reduces").as_bool(),
+            Some(false)
+        );
+    });
+}
+
+/// An equation is settled again in view of every equation in force but itself, a neighbour's among them. The guard matches on `e(c)` and, in that match's `true` arm, on `r(c)`; under an arm on `r(c)` and one on `e(c)` inside it, the guard's spelling is the innermost case, which the arm on `e(c)` reaches only with the one on `r(c)` in view.
+///
+/// Mutation-checked: with every equation but the innermost withheld beside the guard, the spelling stops at the match on `r(c)`, and `k(0)` stays stuck.
+#[test]
+fn an_equation_settled_again_reads_its_neighbours() {
+    let mut certifier = certifier();
+    let [guard, outer, inner, fact] = under(
+        &mut certifier,
+        "c: #NatType, e: (x: #NatType) -> #BoolType, r: (x: #NatType) -> #BoolType, k: (x: #NatType) -> #BoolType",
+        "#{goal = #BoolType} match e(c) | false => k(2) | true => #{goal = #BoolType} match r(c) | false => k(1) | true => k(0) end end, r(c), e(c), k(0)",
+    );
+
+    certifier.scoped(|certifier| {
+        certifier
+            .refine(guard, term("true"))
+            .expect("the guard records");
+        certifier.scoped(|certifier| {
+            certifier
+                .refine(outer, term("true"))
+                .expect("the outer arm's equation records");
             certifier.scoped(|certifier| {
-                let below = certifier.refinements_recorded();
                 certifier
-                    .refine(second.clone(), term("true"))
+                    .refine(inner, term("true"))
                     .expect("the inner arm's equation records");
                 assert_eq!(
-                    certifier
-                        .restate_refinements(&[], slice::from_ref(&second), below)
-                        .len(),
-                    1,
-                    "the guard stands once inside the arm"
+                    certifier.reduce(fact).expect("reduces").as_bool(),
+                    Some(true)
                 );
             });
         });
     });
 }
 
-/// An equation recorded between an equation and the instance an arm on an expression restated it at is settled with the recorded one in view, as it was recorded under it: the recorded equation steps aside only behind its instance. Under `h(c) = 0`, the equation `NatLe(h(c) + 1, d) = false` is recorded, and then `h(c) = 0` restated after it, as an arm whose key it holds restates it; the equation between settles to `NatLe(1, d)` and answers it.
+/// An arm's own equation is settled with the equations recorded outside it in view. Under `h(c) = 0`, the equation `NatLe(h(c) + 1, d) = false` settles to `NatLe(1, d)` and answers it.
 ///
-/// Mutation-checked: with the recorded equation stepping aside wherever its instance is recorded, the equation between settles with neither in view, to the form as written, and `NatLe(1, d)` stays stuck.
+/// Mutation-checked: with every equation withheld while one's own spelling is settled, the inner equation settles to the form as written, and `NatLe(1, d)` stays stuck.
 #[test]
-fn an_equation_recorded_before_a_restatement_is_settled_with_the_restated_one_in_view() {
+fn an_arms_own_equation_is_settled_with_the_equations_outside_it_in_view() {
     let mut certifier = certifier();
     let [outer, inner, folded] = under(
         &mut certifier,
@@ -437,20 +575,12 @@ fn an_equation_recorded_before_a_restatement_is_settled_with_the_restated_one_in
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(outer.clone(), term("0"))
+            .refine(outer, term("0"))
             .expect("the outer equation records");
         certifier.scoped(|certifier| {
-            let below = certifier.refinements_recorded();
             certifier
-                .refine(inner.clone(), term("false"))
+                .refine(inner, term("false"))
                 .expect("the arm's equation records");
-            assert_eq!(
-                certifier
-                    .restate_refinements(&[], slice::from_ref(&outer), below)
-                    .len(),
-                1,
-                "the arm restates the outer equation"
-            );
 
             assert_eq!(
                 certifier.reduce(folded).expect("reduces").as_bool(),
@@ -541,7 +671,7 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
         );
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(locals[0], term("0"))], &[], 0);
+            certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
                 certifier
@@ -606,7 +736,7 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
             .expect("the equation records");
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(locals[0], term("0"))], &[], 0);
+            certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
                 certifier
@@ -635,7 +765,7 @@ fn a_restated_equation_steps_aside_until_its_arm_closes() {
             .expect("the equation records");
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(n, term("0"))], &[], 0);
+            certifier.restate_refinements(&[(n, term("0"))]);
             certifier.bind(&n, &term("#NatType"), &term("0"), false);
 
             certifier.scoped(|certifier| certifier.assume(&z, &term("#NatType")));

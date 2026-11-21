@@ -5,9 +5,9 @@
 //! `mark` and `retract` are `pub(super)` and the certifier's bracket is their only caller anywhere, opened by `Certifier::scoped` and by a reading's `ByValue::scoped` — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    curios_analysis::{meets_one_of, reads_one_of, records_case_equation},
+    curios_analysis::{reads_one_of, records_case_equation},
     curios_core::{Free, Term},
-    std::collections::HashMap,
+    std::collections::{BTreeMap, HashMap},
 };
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
@@ -37,21 +37,26 @@ struct Refinement {
     /// The weak-head normal form of `key` twice over — as a judgment reduces it, and as plain reduction does, a reading's mode ([`ByValue::plainly`](super::ByValue::plainly)) — each computed at most once and only when a probe of that reduction has already missed the written spelling. See [`Scope::unasked_refinement`].
     ///
     /// One for each because a probe is compared with the spelling reduced the way the probe was: plain reduction asks its checker's conversion nothing, so where a key holds a fold only a question decides, its two reducts are two terms.
+    ///
+    /// **Its own spelling**: settled with the equation and every equation inside it withheld, so it holds while the equation does.
     reducts: [Reduct; 2],
-    /// Where an arm restated this equation, or `None` while it answers as recorded. See [`Scope::restate`].
-    restated_at: Option<Restated>,
+    /// The reduced spelling again at each height past its own a probe has asked for it at, twice over as [`Refinement::reducts`] is: its own spelling reduced on with the equations recorded since in view and this one alone withheld. See [`Scope::height`].
+    ///
+    /// **An arm on an expression moves what an equation is spelled as, and nothing else of it.** The arm assumes an equation of its own, which an equation recorded outside it did not read: under a guard `pick(c)` whose definition matches on `e(c)`, an arm on `e(c)` is where the guard's spelling is a case of that match. Which equations an arm's own moves is known only by settling them under it, so every equation is settled again at each height it is asked at, and none until a probe asks; it keeps its place among the equations and the value it assumes, so an arm's own equation still answers before one recorded outside it.
+    ///
+    /// **Held while the equations it was settled under stand**: a retraction drops each settled with a dropped equation in view ([`Scope::retract`]).
+    again: BTreeMap<usize, [Reduct; 2]>,
+    /// The depth the locals stood at when an arm restated this equation under its solution, or `None` while it answers as recorded. See [`Scope::restate`].
+    restated_at: Option<usize>,
 }
 
-/// Where an arm restated an equation: the depths the locals and the equations stood at, before the arm bound its solution or recorded the restated instances.
-///
-/// **A bracket closing at or outside both was opened outside the arm**, and revives the equation; one the arm opens marks deeper in one of the two. An arm that solves a variable binds its solution among the locals next, so its brackets mark deeper locals, though a restatement naming no local is not recorded and leaves the equations where they stood. An arm on an expression binds nothing, but records its own equation before it restates and the restated instances after, each recorded, so its brackets mark deeper equations. Filed against either alone, the first bracket closing inside such an arm would revive the equation beside its instance, and an equation would stand once more at every arm inside.
-///
-/// **Where the arm's restatement stands, for an arm on an expression.** Such an arm restates an equation as it was, after its own, and binds nothing, so the equation steps aside only where its instance is in view or being settled ([`Scope::stepped_aside`]): an equation recorded between the two — the arm's own — is settled with this one in view, as it was recorded under it, where withholding its own inner side would leave it reading neither. An arm's solution re-types what a settlement reads, so an equation restated under one steps aside wherever the arm stands, and `instance` is `None`.
+/// The equations a settlement, or a question asked in a settlement's view, withholds.
 #[derive(Clone, Copy, Debug)]
-struct Restated {
-    locals: usize,
-    equations: usize,
-    instance: Option<usize>,
+pub struct Withheld {
+    /// Every equation from this position inwards.
+    limit: usize,
+    /// One equation before the limit, alone: the one whose spelling is settled again with the others in view.
+    masked: Option<usize>,
 }
 
 /// Whether an equation's reduced spelling has been asked for yet.
@@ -114,8 +119,8 @@ pub struct Scope {
     bound: usize,
     /// The case equations of the arms currently being checked, innermost last: within an arm, the scrutinee expression *is* the case's value, definitionally — the built-in face of the convoy pattern, which is how the elaborator's refinement store reads inside an arm. The reducer consults these at stuck heads.
     refinements: Vec<Refinement>,
-    /// How many equations are currently in force, when that is fewer than there are. `Some(n)` withholds everything from `n` inwards for the duration of one [`Scope::unasked_refinement`] settlement — see [`Scope::hide_refinements_from`].
-    hidden: Option<usize>,
+    /// The equations withheld, when any is: for the duration of one settlement, or of one question asked in a settlement's view — see [`Scope::hide_refinements_from`] and [`Scope::mask_refinement`].
+    hidden: Option<Withheld>,
     /// How many binders this walk has opened, closed ones included.
     openings: u64,
 }
@@ -294,6 +299,7 @@ impl Scope {
                 resolved: resolved.filter(records_case_equation),
                 value,
                 reducts: [Reduct::Unasked, Reduct::Unasked],
+                again: BTreeMap::new(),
                 restated_at: None,
             });
         }
@@ -309,14 +315,12 @@ impl Scope {
     ///
     /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it or `member_value` knows it as a member of a group being checked, names one, read through to the end ([`reads_one_of`]). Binding a solved variable re-types the first kind of local and binds the second again (`Certifier::bind`), and a settlement reads all three, a `let` by its value, a member known to terminate by its selection and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
     ///
-    /// **So is each equation recorded before `below` whose settlement would meet one of `keys` whole** ([`meets_one_of`]), the keys an arm on an expression assumes an equation over: its spelling, settled outside the arm, read none of what the arm assumes, and an occurrence the arm's equation takes apart inside it would meet the stale spelling. The instance is the equation as it was, pushed after the arm's, so a settlement, which withholds only what lies at or inside its entry, settles it with the arm's equation in view, in the arm and gone with it.
+    /// **An arm on an expression restates nothing.** It solves no variable, so every reader in it is handed each equation as it was recorded, and what its own equation moves of one is that equation's spelling there, which the equation settles again where it is asked ([`Scope::height`]).
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
     pub fn restate(
         &mut self,
         solutions: &[(Free, Term)],
-        keys: &[Term],
-        below: usize,
         member_value: impl Fn(&Free) -> Option<Term>,
     ) -> Vec<(Term, Term)> {
         assert!(
@@ -336,48 +340,43 @@ impl Scope {
         };
         let solved_names = solutions.iter().map(|(name, _)| *name).collect::<Vec<_>>();
         let solved = |term: &Term| reads_one_of(term, &solved_names, &reads);
-        let meets_assumed = |term: &Term| meets_one_of(term, keys, &reads);
-        // Each restated equation beside whether the arm's solution restates it, rather than its expression alone.
         let restating = self
             .refinements
             .iter()
             .enumerate()
-            .filter(|(_, entry)| entry.restated_at.is_none())
-            .filter_map(|(index, entry)| {
-                let under_solution = solved(&entry.key)
-                    || solved(&entry.value)
-                    || entry.resolved.as_ref().is_some_and(solved);
-                let read_by_arm = index < below
-                    && (meets_assumed(&entry.key)
-                        || entry.resolved.as_ref().is_some_and(meets_assumed));
-                (under_solution || read_by_arm).then_some((index, under_solution))
+            .filter(|(_, entry)| {
+                entry.restated_at.is_none()
+                    && (solved(&entry.key)
+                        || solved(&entry.value)
+                        || entry.resolved.as_ref().is_some_and(solved))
             })
+            .map(|(index, _)| index)
             .collect::<Vec<_>>();
 
-        // Filed against the locals and the equations both ([`Restated`]), so every bracket the arm opens from then on marks deeper in one of them and only the arm's own closing, or an outer one's, revives the equation.
-        let locals = self.locals.len();
-        let equations = self.refinements.len();
+        // Filed against the locals, which the arm binds its solution among next, so every bracket the arm opens from then on marks deeper and only the arm's own closing, or an outer one's, revives the equation. The equation stack would not do: a restatement naming no local is not recorded, so a bracket the arm opens marks the depth it was restated at.
+        let depth = self.locals.len();
         let mut restated = Vec::new();
-        for (index, under_solution) in restating {
-            let entry = &self.refinements[index];
-            let key = entry.key.substitute(solutions);
-            let resolved = entry
-                .resolved
-                .as_ref()
-                .map(|resolved| resolved.substitute(solutions));
-            let value = entry.value.substitute(solutions);
-            // The position the instance takes, which an arm on an expression steps the equation aside behind.
-            let instance = (!under_solution).then_some(self.refinements.len());
-            self.refinements[index].restated_at = Some(Restated {
-                locals,
-                equations,
-                instance,
-            });
-            self.refine(key.clone(), resolved, value.clone());
-            restated.push((key, value));
+        for index in restating {
+            let entry = &mut self.refinements[index];
+            entry.restated_at = Some(depth);
+            restated.push((
+                entry.key.substitute(solutions),
+                entry
+                    .resolved
+                    .as_ref()
+                    .map(|resolved| resolved.substitute(solutions)),
+                entry.value.substitute(solutions),
+            ));
         }
 
         restated
+            .into_iter()
+            .map(|(key, resolved, value)| {
+                self.refine(key.clone(), resolved, value.clone());
+
+                (key, value)
+            })
+            .collect()
     }
 
     /// The case value the term `term` is refined to under the *written* spelling or its resolved one, innermost arm first.
@@ -385,88 +384,125 @@ impl Scope {
     /// Probed by the keys [`Scope::refine`] stores under: the scrutinee itself, and the spelling its dispatch resolves to, which is what a probe presents once reduction has opened the same dispatch — so an intrinsic comparison meets a guard written through a concept before anything folds it.
     pub fn refinement_of(&self, term: &Term) -> Option<Term> {
         self.in_force_innermost_first()
-            .find(|entry| entry.key == *term || entry.resolved.as_ref() == Some(term))
-            .map(|entry| entry.value.clone())
+            .find(|(_, entry)| entry.key == *term || entry.resolved.as_ref() == Some(term))
+            .map(|(_, entry)| entry.value.clone())
     }
 
     /// The case value `term` is refined to under a *reduced* spelling already settled, innermost arm first.
     ///
-    /// The escalation the written spelling's probe misses reach, and it settles nothing itself: an equation whose reduced spelling has never been asked for cannot answer here.
+    /// The escalation the written spelling's probe misses reach, and it settles nothing itself: an equation whose reduced spelling has never been asked for at the height in view cannot answer here.
     pub fn refinement_of_reduct(&self, term: &Term, plain: bool) -> Option<Term> {
-        let plain = usize::from(plain);
         self.in_force_innermost_first()
-            .find(|entry| match &entry.reducts[plain] {
+            .find(|(index, _)| match self.reduct(*index, plain) {
                 Reduct::Known(Some(reduct)) => reduct == term,
                 _ => false,
             })
-            .map(|entry| entry.value.clone())
+            .map(|(_, entry)| entry.value.clone())
+    }
+
+    /// The height the view in force reads a reduced spelling at: how many equations it holds one up against. With one equation withheld alone, whose spelling is being settled again or asked about, that is one short of the view: the others answer as they did before the innermost of them was recorded.
+    ///
+    /// **An equation's spelling at a height is a function of the spellings beneath it.** At its own height, one past its position, it is its key reduced with the equation and every one inside it withheld ([`Scope::hide_refinements_from`]). At each height past that it is its own spelling reduced on, with every equation before the height in view but itself ([`Scope::mask_refinement`]), each of those read one height down. So a spelling at a height rests only on spellings at lower ones, and which of two equations a probe asked first moves neither.
+    pub fn height(&self) -> usize {
+        self.in_force() - usize::from(self.masked().is_some())
+    }
+
+    /// The reduced spelling of the equation at `index` as the view in force reads it: its own up to its own height, and past that the one settled again at the view's height.
+    fn reduct(&self, index: usize, plain: bool) -> &Reduct {
+        let entry = &self.refinements[index];
+        let height = self.height();
+        match height <= index + 1 {
+            true => &entry.reducts[usize::from(plain)],
+            false => entry
+                .again
+                .get(&height)
+                .map_or(&Reduct::Unasked, |reducts| &reducts[usize::from(plain)]),
+        }
+    }
+
+    /// What the equation at `index` settled to as its own spelling: `None` where no probe has asked for it, `Some(None)` where reducing its key refused.
+    pub fn own_reduct(&self, index: usize, plain: bool) -> Option<Option<Term>> {
+        match &self.refinements[index].reducts[usize::from(plain)] {
+            Reduct::Unasked => None,
+            Reduct::Known(reduct) => Some(reduct.clone()),
+        }
     }
 
     /// The equations in force a stuck form may be put to, as their positions and their keys: each no arm has restated. What [`could_answer`](curios_analysis::could_answer) is asked of, once a probe, to admit the positions the two lookups below read.
     pub fn keys_in_force(&self) -> Vec<(usize, Term)> {
-        self.refinements[..self.in_force()]
-            .iter()
-            .enumerate()
-            .filter(|(_, entry)| !self.stepped_aside(entry))
+        self.in_force_innermost_first()
             .map(|(index, entry)| (index, entry.key.clone()))
             .collect()
     }
 
-    /// The equations in force among `admitted` whose reduced spelling is settled, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
+    /// The equations in force among `admitted` whose reduced spelling is settled at the height in view, innermost first: each as its position, that spelling and the value it assumes. What [`answers`](curios_analysis::answers) is asked of.
     pub fn settled_refinements(&self, admitted: &[usize], plain: bool) -> Vec<(usize, Term, Term)> {
-        let plain = usize::from(plain);
-        self.refinements[..self.in_force()]
-            .iter()
-            .enumerate()
-            .rev()
+        self.in_force_innermost_first()
             .filter(|(index, _)| admitted.contains(index))
-            .filter_map(|(index, entry)| match &entry.reducts[plain] {
+            .filter_map(|(index, entry)| match self.reduct(index, plain) {
                 Reduct::Known(Some(reduct)) => Some((index, reduct.clone(), entry.value.clone())),
                 _ => None,
             })
             .collect()
     }
 
-    /// The innermost equation in force among `admitted` whose reduced spelling has not been asked for, as its position and the term to reduce.
+    /// The innermost equation in force among `admitted` whose reduced spelling has not been asked for at the height in view, as its position and its key.
     ///
     /// The position is always inside the current limit, which is what lets [`Scope::hide_refinements_from`] take it as the new limit rather than the smaller of the two: a settlement can only ever reach further out than the one it is nested in.
     ///
-    /// **Reading the limit here is also what makes the settlement loop finite**, and that is a second job rather than a restatement of the first. An entry being settled is outside the limit for the whole of its own reduction, so a probe reached from inside cannot select it again; relaxing this while keeping the probes' half sends `refined_reduct` back into the entry it is already settling.
+    /// **Reading the view here is also what makes the settlement loop finite**, and that is a second job rather than a restatement of the first. An entry whose own spelling is being settled is outside the limit for the whole of its reduction, and one being settled again is the one withheld alone, so a probe reached from inside cannot select either again at the height it is being settled at; and what a probe inside settles is read one height down ([`Scope::height`]), so the heights a nest of settlements asks at only fall.
     /// **`admitted` is what decides whether the reduction happens at all**, and without that test the deferral buys nothing. A settlement is the whole cost the two-tier key exists to avoid, and a probe reached under freshly opened binders — `Sort::of` walking a telescope, an arm body's own erasure obligations — presents a stuck form on almost every reduction, so *some* term would trigger a settlement in any arm whatever. What [`could_answer`](curios_analysis::could_answer) tests is the one thing a reduct's spelling cannot lie about: the binders conversion reads of it.
     pub fn unasked_refinement(&self, admitted: &[usize], plain: bool) -> Option<(usize, Term)> {
-        let plain = usize::from(plain);
-        self.refinements[..self.in_force()]
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(index, entry)| {
-                admitted.contains(index) && matches!(entry.reducts[plain], Reduct::Unasked)
+        self.in_force_innermost_first()
+            .find(|(index, _)| {
+                admitted.contains(index) && matches!(self.reduct(*index, plain), Reduct::Unasked)
             })
             .map(|(index, entry)| (index, entry.key.clone()))
     }
 
-    /// How many equations have been recorded, in force or withheld: the position the next one takes.
-    pub fn recorded(&self) -> usize {
-        self.refinements.len()
+    /// Record what the equation at `index` reduces to at `height`, or that reducing it refused: its own spelling up to its own height, and its spelling again past it.
+    pub fn settle_refinement(
+        &mut self,
+        index: usize,
+        height: usize,
+        plain: bool,
+        reduct: Option<Term>,
+    ) {
+        let entry = &mut self.refinements[index];
+        let reducts = match height <= index + 1 {
+            true => &mut entry.reducts,
+            false => entry
+                .again
+                .entry(height)
+                .or_insert([Reduct::Unasked, Reduct::Unasked]),
+        };
+        reducts[usize::from(plain)] = Reduct::Known(reduct);
     }
 
-    /// Record what the equation at `index` reduces to, or that reducing it refused.
-    pub fn settle_refinement(&mut self, index: usize, plain: bool, reduct: Option<Term>) {
-        let plain = usize::from(plain);
-        self.refinements[index].reducts[plain] = Reduct::Known(reduct);
-    }
-
-    /// Withhold the equation at `index` and every equation inside it, handing back the previous limit for [`Scope::show_refinements`].
+    /// Withhold the equation at `index` and every equation inside it, handing back what was withheld before for [`Scope::show_refinements`].
     ///
-    /// **This is what makes an equation's reduced spelling rest only on equations outside it.** Those retract no earlier than it does, so a reduct computed under them stays true for exactly as long as the entry holding it. An eager reduction, run before the equation is pushed and while the stack below it is frozen, would have that guarantee for free; computing the same reduct later has to reconstruct the same view, and withholding is how.
+    /// **This is what makes an equation's own spelling rest only on equations outside it.** Those retract no earlier than it does, so a reduct computed under them stays true for exactly as long as the entry holding it. An eager reduction, run before the equation is pushed and while the stack below it is frozen, would have that guarantee for free; computing the same reduct later has to reconstruct the same view, and withholding is how.
     ///
     /// Withholding the entry itself is the other half: without it, reducing `key` meets `key` at the reducer's own first probe and answers the case value, so the equation would settle its reduced spelling to whatever it was assuming.
-    pub fn hide_refinements_from(&mut self, index: usize) -> Option<usize> {
-        self.hidden.replace(index)
+    pub fn hide_refinements_from(&mut self, index: usize) -> Option<Withheld> {
+        self.hidden.replace(Withheld {
+            limit: index,
+            masked: None,
+        })
     }
 
-    /// Put back what [`Scope::hide_refinements_from`] withheld.
-    pub fn show_refinements(&mut self, previous: Option<usize>) {
+    /// Withhold the equation at `index` alone among those before `height`, and every equation from `height` inwards, handing back what was withheld before for [`Scope::show_refinements`]: the view an equation's spelling is settled again in at `height`, and asked about.
+    ///
+    /// **The equations recorded since are in view, which is what the spelling is settled again for**; the equation itself is withheld for the reason its own settlement withholds it. A spelling settled so rests on equations inside the one holding it, which retract first, so it is held under its height and dropped with them ([`Scope::retract`]).
+    pub fn mask_refinement(&mut self, height: usize, index: usize) -> Option<Withheld> {
+        self.hidden.replace(Withheld {
+            limit: height,
+            masked: Some(index),
+        })
+    }
+
+    /// Put back what [`Scope::hide_refinements_from`] or [`Scope::mask_refinement`] withheld.
+    pub fn show_refinements(&mut self, previous: Option<Withheld>) {
         self.hidden = previous;
     }
 
@@ -515,7 +551,8 @@ impl Scope {
     /// Where equations are withheld — for a settlement, or for a question asked under the view one was made in ([`Scope::hide_refinements_from`]) — only a scope opened inside the withholding closes here. That is structural rather than checked by discipline: `Certifier::scoped` is this method's only caller and a withholding is a bracket as well, so the two nest. A settlement runs reduction, which opens no binder scope; a question runs conversion, which opens them and assumes no equation in them.
     pub fn retract(&mut self, mark: Mark) -> bool {
         assert!(
-            self.hidden.is_none_or(|limit| limit <= mark.refinements),
+            self.hidden
+                .is_none_or(|withheld| withheld.limit <= mark.refinements),
             "a scope closed past the equations a settlement or a question was withholding"
         );
 
@@ -535,30 +572,36 @@ impl Scope {
         let dropped = self.refinements.len() > mark.refinements;
         self.refinements.truncate(mark.refinements);
 
-        // An equation restated at or past the mark, in its locals and its equations both, was restated by an arm this bracket held, which is gone with its restatement.
+        // An equation restated at or past the mark was restated by an arm this bracket held, which is gone with its restatement; and a spelling settled again past the mark was settled with an equation this bracket dropped in view, which another arm's at the same position would be read under.
         let mut revived = false;
         for entry in &mut self.refinements {
-            if entry
-                .restated_at
-                .is_some_and(|at| at.locals >= mark.locals && at.equations >= mark.refinements)
-            {
+            if entry.restated_at.is_some_and(|depth| depth >= mark.locals) {
                 entry.restated_at = None;
                 revived = true;
+            }
+            if dropped {
+                entry.again.retain(|height, _| *height <= mark.refinements);
             }
         }
 
         dropped || revived || retyped
     }
 
-    /// How many equations are in force: all of them, unless a settlement is withholding the inner ones.
+    /// How many equations are in force: all of them, unless a settlement or a question is withholding the inner ones.
     fn in_force(&self) -> usize {
-        self.hidden.unwrap_or(self.refinements.len())
+        self.hidden
+            .map_or(self.refinements.len(), |withheld| withheld.limit)
+    }
+
+    /// The one equation withheld alone before the limit, where one is ([`Scope::mask_refinement`]).
+    fn masked(&self) -> Option<usize> {
+        self.hidden.and_then(|withheld| withheld.masked)
     }
 
     /// The equations in force that answer, each under its written spelling and its resolved one where it has one, beside the value it stands for: what a reader of a term naming a key's locals may meet ([`curios_analysis::Driver::refined`]).
     pub fn refined(&self) -> Vec<(Term, Term)> {
         self.in_force_innermost_first()
-            .flat_map(|entry| {
+            .flat_map(|(_, entry)| {
                 [Some(&entry.key), entry.resolved.as_ref()]
                     .into_iter()
                     .flatten()
@@ -567,19 +610,13 @@ impl Scope {
             .collect()
     }
 
-    /// The equations in force that answer, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement ([`Scope::stepped_aside`]).
-    fn in_force_innermost_first(&self) -> impl Iterator<Item = &Refinement> {
+    /// The equations in force that answer, each beside its position, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement, and one withheld alone answers nothing.
+    fn in_force_innermost_first(&self) -> impl Iterator<Item = (usize, &Refinement)> {
+        let masked = self.masked();
         self.refinements[..self.in_force()]
             .iter()
+            .enumerate()
             .rev()
-            .filter(|entry| !self.stepped_aside(entry))
-    }
-
-    /// Whether `entry` steps aside for its restatement: wherever the arm that restated it under a solution stands, and, restated by an arm on an expression, where its instance is in force or being settled ([`Restated`]).
-    fn stepped_aside(&self, entry: &Refinement) -> bool {
-        entry.restated_at.is_some_and(|at| {
-            at.instance
-                .is_none_or(|instance| instance <= self.in_force())
-        })
+            .filter(move |(index, entry)| entry.restated_at.is_none() && Some(*index) != masked)
     }
 }

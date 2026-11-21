@@ -1172,26 +1172,16 @@ impl<'s> Certifier<'s> {
     }
 
     /// Restate the equations in force under an arm's solution, answering the restated ones ([`Scope::restate`](scope::Scope)). Which equations answer has changed where any was restated, so the local-bearing reducts remembered before it go.
-    pub(crate) fn restate_refinements(
-        &mut self,
-        solutions: &[(Free, Term)],
-        keys: &[Term],
-        below: usize,
-    ) -> Vec<(Term, Term)> {
+    pub(crate) fn restate_refinements(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
         let calls = &self.calls;
         let restated = self
             .scope
-            .restate(solutions, keys, below, |name| calls.member_value(name));
+            .restate(solutions, |name| calls.member_value(name));
         if !restated.is_empty() {
             self.memos.begin_equations();
         }
 
         restated
-    }
-
-    /// How many equations have been recorded: the position the next one takes ([`Scope::recorded`]).
-    pub(crate) fn refinements_recorded(&self) -> usize {
-        self.scope.recorded()
     }
 
     /// The case value `term` is refined to under the written spelling, innermost arm first.

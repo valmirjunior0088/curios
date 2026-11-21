@@ -1757,7 +1757,7 @@ pub fn grounded(certifier: &mut ByValue, this: &Term, that: &Term) -> Result<boo
 impl ByValue<'_, '_> {
     /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra: the second of the four questions a judgment's reduction asks (`documentation/design/soundness/a-question-reduction-asks-is-answered-by-plain-reduction.md`), beside [`asked_classes`], [`asked_within`] and [`unread_payload`].
     ///
-    /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`ByValue::withholding`]): under its own equation the key reduces to the case value, and nothing would convert with it.
+    /// Compared in the view the spelling was settled in ([`ByValue::settling`]): under its own equation the key reduces to the case value, and nothing would convert with it.
     ///
     /// **Two calls apart in their head's instance alone are asked about by their arguments** where the case value holds no type, as the elaborator asks them (`curios_analysis::one_up_to_instances`): an instance is no part of such a value. Where the value may hold a type, the elaborator committed the two instances one, and they are compared whole at the levels they closed at.
     pub(crate) fn asked_scrutinee(
@@ -1768,8 +1768,9 @@ impl ByValue<'_, '_> {
         value: &Term,
     ) -> Result<bool, ReduceError> {
         curios_profile::profile!("certifier::asked_scrutinee");
+        let height = self.refinement_height();
         self.plainly(|certifier| {
-            certifier.withholding(index, |certifier| match holds_no_type(value) {
+            certifier.settling(index, height, |certifier| match holds_no_type(value) {
                 true => one_up_to_instances(term, key, &mut |this, that| {
                     grounded(certifier, this, that)
                 }),

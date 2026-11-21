@@ -228,7 +228,7 @@ impl ByValue<'_, '_> {
         self.plain
     }
 
-    /// Run `read` with the equation at `index` and every equation inside it withheld: the view an equation's reduced spelling is settled in ([`ByValue::settle_refinement`]) and its scrutinee asked about (`ByValue::asked_scrutinee`).
+    /// Run `read` with the equation at `index` and every equation inside it withheld: the view an equation's own spelling is settled in and asked about ([`ByValue::settling`]), and, from the first, the view a filter reads a form in with no equation in force.
     ///
     /// Withholding equations is a change to the set in force, and so is restoring them: what was read off the scope under the equations in force is set aside while `read` runs and handed back where they are restored, and what `read` read under the narrowed ones goes (`Memos::set_aside`). Withholding is `Scope::hide_refinements_from`'s to justify.
     pub(crate) fn withholding<T>(&mut self, index: usize, read: impl FnOnce(&mut Self) -> T) -> T {
@@ -241,30 +241,90 @@ impl ByValue<'_, '_> {
         outcome
     }
 
-    /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld ([`ByValue::withholding`]).
+    /// Run `read` in the view the spelling of the equation at `index` is settled in at `height` ([`ByValue::settle_refinement`]) and asked about (`ByValue::asked_scrutinee`): up to its own height, that equation and every equation inside it withheld ([`ByValue::withholding`]); past it, that equation alone among those before `height`, and every equation from `height` inwards (`Scope::mask_refinement`). What was read off the scope is set aside and handed back as [`ByValue::withholding`] does it.
+    pub(crate) fn settling<T>(
+        &mut self,
+        index: usize,
+        height: usize,
+        read: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        if height <= index + 1 {
+            return self.withholding(index, read);
+        }
+        let outer = self.certifier.scope.mask_refinement(height, index);
+        let aside = self.certifier.memos.set_aside(self.plain);
+        let outcome = read(self);
+        self.certifier.scope.show_refinements(outer);
+        self.certifier.memos.hand_back(aside);
+
+        outcome
+    }
+
+    /// The height the view in force reads a reduced spelling at (`Scope::height`).
+    pub(crate) fn refinement_height(&self) -> usize {
+        self.certifier.scope.height()
+    }
+
+    /// Settle the reduced spelling of the equation at `index` at the height in view (`Scope::height`), in the view [`ByValue::settling`] gives it. Its own spelling is `key` reduced; past its own height, its spelling is its own reduced on, its own settled first where no probe has asked for it.
     ///
-    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing; this is where the reduction happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
+    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing; this is where the reduction happens — its key's at most once per equation, and only because a probe presented a term the written spelling did not answer.
     ///
-    /// An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
+    /// **Settled again from its own spelling, never from its key.** Its own spelling is what the key reduces to with nothing of the arms inside in view, so reducing it on with them in view is the key's settlement there, and where their equations answer no stuck part of it, one walk of a term already stuck. From the key, a proof would unfold every guard again at every arm inside it.
+    ///
+    /// An error settles the equation as having no reduced spelling at that height, so the attempt is paid once rather than repeated at every later probe; the settlement is a [`Probe`], so exhaustion settles it the same way and propagates besides.
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
+        let height = self.certifier.scope.height();
+        if height <= index + 1 {
+            return self.settle_own(index, key);
+        }
+        if self.certifier.scope.own_reduct(index, self.plain).is_none() {
+            self.settle_own(index, key)?;
+        }
+        let Some(Some(own)) = self.certifier.scope.own_reduct(index, self.plain) else {
+            self.certifier
+                .scope
+                .settle_refinement(index, height, self.plain, None);
+            return Ok(());
+        };
+        let reduct = self.settling(index, height, |certifier| {
+            certifier
+                .whnf(own)
+                .and_then(|reduct| canonical_operands(certifier, &reduct))
+        });
+
+        self.settled(index, height, reduct)
+    }
+
+    /// Settle the own spelling of the equation at `index`: `key` reduced with that equation and every equation inside it withheld.
+    fn settle_own(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
         // The reduced spelling is held operand-canonical, the form `refined_reduct` brings a probed value to before comparing — see `canonical_operands`.
-        let reduct = self.withholding(index, |certifier| {
+        let reduct = self.settling(index, index, |certifier| {
             certifier
                 .whnf(key)
                 .and_then(|reduct| canonical_operands(certifier, &reduct))
         });
 
+        self.settled(index, index, reduct)
+    }
+
+    /// Record what a settlement of the equation at `index` at `height` made, a refusal as no reduced spelling.
+    fn settled(
+        &mut self,
+        index: usize,
+        height: usize,
+        reduct: Result<Term, ReduceError>,
+    ) -> Result<(), ReduceError> {
         match reduct.probed() {
             Ok(settled) => {
                 self.certifier
                     .scope
-                    .settle_refinement(index, self.plain, settled);
+                    .settle_refinement(index, height, self.plain, settled);
                 Ok(())
             }
             Err(spent) => {
                 self.certifier
                     .scope
-                    .settle_refinement(index, self.plain, None);
+                    .settle_refinement(index, height, self.plain, None);
                 Err(spent)
             }
         }
