@@ -82,6 +82,8 @@ What a Curios package is, and everything that reads one: the `curios.toml` manif
 
 ### One subsystem, one owner
 
-**Decision.** The manifest, the walk that decides which manifest governs an invocation, the resolver and the cabinet are one crate. `curios-pipeline` never learns it exists: it folds its stages over whatever scope it is handed, and deciding that scope is a product's job, as supplying the syntax registry already is. `curios` is the product that decides it, over this crate; `curios-js` never touches it.
+**Decision.** The manifest, the walk that decides which manifest governs an invocation, the resolver and the cabinet are one crate: of the cabinet, where `.curios/` and the cabinet are, the paths of its families, the families the package fills itself, materialized sources and fetched modules, and the compiler's identity. `curios-pipeline` never learns it exists: it folds its stages over whatever scope it is handed, and deciding that scope is a product's job, as supplying the syntax registry already is. `curios` is the product that decides it, over this crate; `curios-js` never touches it.
 
 **Rationale.** The four are faces of a single question — what is in this compilation, and where did each part come from — so one crate answers it rather than four seams through the driver. `curios-js` reaching none of it is the constraint that keeps a resolver from quietly assuming a filesystem.
+
+**Rejected.** The addresses a unit and a payload are filed under, which pair with the record `curios-verdict` verifies, their one reader, and nothing here reads.

@@ -11,11 +11,11 @@ mod tests;
 
 use {
     super::resolved,
-    crate::{Verdicts, chained, replace, sweep, unchanged},
+    crate::{Verdicts, chained, payload_address, replace, sweep, unchanged},
     curios_abi::ForeignStore,
     curios_common::{Qualifier, SourceName, digest},
     curios_module::{RootSource, UnitSource},
-    curios_package::{Runs, payload_slot},
+    curios_package::Runs,
     curios_unit::{recorded, segments},
     std::{collections::BTreeSet, fs, io, time::SystemTime},
 };
@@ -146,7 +146,7 @@ impl Verdicts {
 fn slot(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<String> {
     let compiler = verdicts.compiler()?;
 
-    Some(payload_slot(
+    Some(payload_address(
         compiler,
         program.package,
         program.executable,

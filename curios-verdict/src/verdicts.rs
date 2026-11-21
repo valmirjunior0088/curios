@@ -1,6 +1,6 @@
 //! The unit family: what the fold consults before compiling a unit again, and what it files when it did.
 //!
-//! **A slot is addressed, and a hit is verified.** The address (`unit_slot`) names a place — these mounts, declaring these dependencies, by this compiler — and holds no file contents and no unit before it, so a project has as many slots as it has units rather than one per compile or one per scope. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
+//! **A slot is addressed, and a hit is verified.** The address (`unit_address`) names a place — these mounts, declaring these dependencies, by this compiler — and holds no file contents and no unit before it, so a project has as many slots as it has units rather than one per compile or one per scope. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, what each unit it could have read contained, and what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
 //! That split is deliberate. Hashing the unit's source directory into the address would hash a directory that, for a package's own library, *contains this cabinet*: filing a unit would change the address it is next looked for under, so a package's own code would never hit and `verdicts/` would grow a directory per compile. Excluding the cabinet from the walk is no answer: a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 //!
@@ -17,10 +17,10 @@ mod payload;
 pub use payload::*;
 
 use {
-    crate::{Packs, opened, replace},
+    crate::{Packs, entry_address, opened, replace, unit_address},
     curios_common::{Candidates, Qualifier, Source, SourceName, digest},
     curios_module::{Compiled, Overlay, PackageRoot, UnitSource},
-    curios_package::{Cabinet, compiler, entry_slot, unit_slot},
+    curios_package::{Cabinet, compiler},
     curios_pipeline::{After, Cache, Earlier, complete_records},
     curios_unit::{Indexed, Record, Unit, recorded},
     std::{
@@ -216,7 +216,7 @@ impl Verdicts {
         }
     }
 
-    /// This handle, told that the entry its fold ends in is `package`'s `executable`: the identity the unit of the entry's own declarations is filed under, as its payload is (`curios_package::entry_slot`). An entry claims the empty prefix whichever program it is, so a handle told of none files no entry's unit.
+    /// This handle, told that the entry its fold ends in is `package`'s `executable`: the identity the unit of the entry's own declarations is filed under, as its payload is (`entry_address`). An entry claims the empty prefix whichever program it is, so a handle told of none files no entry's unit.
     pub fn executing(mut self, package: &str, executable: &str) -> Self {
         self.executable = Some((package.to_string(), executable.to_string()));
         self
@@ -404,7 +404,7 @@ impl Verdicts {
         if source.is_entry() {
             let (package, executable) = self.executable.as_ref()?;
 
-            return Some(entry_slot(
+            return Some(entry_address(
                 compiler,
                 package,
                 executable,
@@ -414,7 +414,7 @@ impl Verdicts {
             ));
         }
 
-        Some(unit_slot(
+        Some(unit_address(
             compiler,
             &source.claims(),
             source.declared(),

@@ -1,12 +1,12 @@
 # curios-verdict
 
-The cabinet as a compilation sees it: the `Cache` the fold consults for units already judged, and the payload family an invocation consults before compiling a program it has already compiled — both believed on a verified record rather than on an address. The cabinet's families and keys belong to `curios-package`, what a stored unit is to `curios-unit`, and why believing one is sound to [Cached verdicts](../documentation/design/soundness/cached-verdicts.md) and [Reused payloads](../documentation/design/soundness/reused-payloads.md); the mechanism belongs to the crate rustdoc.
+The cabinet as a compilation sees it: the `Cache` the fold consults for units already judged, and the payload family an invocation consults before compiling a program it has already compiled — both believed on a verified record rather than on an address. The cabinet's families belong to `curios-package`, the addresses filed under them to this crate, what a stored unit is to `curios-unit`, and why believing one is sound to [Cached verdicts](../documentation/design/soundness/cached-verdicts.md) and [Reused payloads](../documentation/design/soundness/reused-payloads.md); the mechanism belongs to the crate rustdoc.
 
 ## Design
 
 ### Beside the pipeline, over the package, and under neither
 
-**Decision.** This crate depends on `curios-pipeline`, whose `Cache` trait it implements, and on `curios-package`, whose cabinet layout and keys it reads and writes through; neither holds the implementation. It links no back end: `cargo tree -p curios-verdict --edges normal` contains neither `curios-binaryen` nor `curios-native`, and the one machine-dependent fact a payload address carries, the engine that will run it, is handed in by the crate that owns the runtime.
+**Decision.** This crate depends on `curios-pipeline`, whose `Cache` trait it implements, and on `curios-package`, whose cabinet layout it reads and writes through; neither holds the implementation, and the addresses a unit and a payload are filed under are this crate's, beside the record each is verified against. It links no back end: `cargo tree -p curios-verdict --edges normal` contains neither `curios-binaryen` nor `curios-native`, and the one machine-dependent fact a payload address carries, the engine that will run it, is handed in by the crate that owns the runtime.
 
 **Rationale.** `Cache` in `curios-package` would make the crate answering what is in a compilation depend on the driver that folds stages over the answer; in `curios-pipeline` it would make the pure fold name a manifest. The `wonder` engine reads verdicts for every question it answers and links neither Binaryen nor Wasmtime, and a cabinet read has no use for either. `curios-package` depends on `curios-module` and so links the surface language, its lowering and `curios-core`; the dependency this boundary keeps out is the driver's.
 
@@ -22,7 +22,7 @@ The cabinet as a compilation sees it: the `Cache` the fold consults for units al
 
 ### An entry's unit is filed by the executable it is, and a handle with no cabinet keeps for its session
 
-**Decision.** A handle is told which executable the entry its fold ends in is (`Verdicts::executing`), and files the unit of that entry's own declarations under `curios_package::entry_slot`: the compiler, the package's name and the executable's, and what it declared. A handle told of none files no entry's unit. A handle with no cabinet behind it (`Verdicts::kept_by`) reads and files nothing, and keeps in its session what its fold compiles, each unit told from another by the prefixes it claims and where it reads from.
+**Decision.** A handle is told which executable the entry its fold ends in is (`Verdicts::executing`), and files the unit of that entry's own declarations under `entry_address`: the compiler, the package's name and the executable's, and what it declared. A handle told of none files no entry's unit. A handle with no cabinet behind it (`Verdicts::kept_by`) reads and files nothing, and keeps in its session what its fold compiles, each unit told from another by the prefixes it claims and where it reads from.
 
 **Rationale.** Every entry claims the empty prefix, so a unit's address would file every program of a project in one place, each overwriting the last. What tells two entries apart is what tells their payloads apart, the one identity in a compilation that cannot collide. A file no package declares has no project, hence nowhere to file a unit, and a session asking about it at every keystroke still has the last unit it compiled of it: a kept unit is believed on what a recompile over it asks again, which needs no cabinet ([Cached verdicts](../documentation/design/soundness/cached-verdicts.md)).
 

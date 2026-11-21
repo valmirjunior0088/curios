@@ -7,7 +7,7 @@
 //! Every refusal here fires before elaboration and names both parties. A manifest declaring two modes, a name no path could spell, a dependency row missing the pin its source requires: each is diagnosed against the file somebody wrote, never surfaced downstream as an unbound name.
 
 mod cabinet;
-pub use cabinet::{Cabinet, Runs, entry_slot, payload_slot, unit_slot};
+pub use cabinet::{Cabinet, Runs};
 
 mod compatibility;
 pub use compatibility::CompilerVersion;
