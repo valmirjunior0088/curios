@@ -1,0 +1,48 @@
+-- `/std/Try`: actions that may fail run side by side, the first failure answering for all of them.
+use /std/{Cell, Io, List, Nat, Option, Result, Str, Test, Try};
+use /std/time/{Duration};
+
+-- The failure of `outcome`, where it failed.
+let failed_with(@A: Type, outcome: Result(Str, A)) -> Option(Str) =
+    match outcome
+    | failure(why) => Option/some(why)
+    | success(_) => Option/none()
+    end;
+
+-- Two actions that succeed answer both, in their order.
+test both_answers_both_successes_in_their_order =
+    let ones: Try(Io, Str, Nat) = Try/pure(1);
+    let twos: Try(Io, Str, Nat) = Try/pure(2);
+    let outcome = Try/run(Try/both(ones, twos))!;
+    Test/assert(
+        "both answers its actions' answers",
+        match outcome
+        | success(pair) => pair.0 == 1 && pair.1 == 2
+        | failure(_) => false
+        end);
+
+-- A failure answers for both, and the action still waiting is cancelled where it waits rather than run to its end.
+test a_failure_answers_both_and_cancels_the_other_where_it_waits =
+    let ran = Cell/new(@{})!;
+    let fails: Try(Io, Str, {}) = Try/raise("refused");
+    -- A function, so its body sequences on its own: a `let`'s value would run its actions here, before `both`.
+    let slow() -> Try(Io, Str, {}) =
+        let () = Io/sleep(Duration/of_secs(3600))!;
+        let _ = Cell/fill(ran, ())!;
+        Try/pure(());
+    let outcome = Try/run(Try/both(slow(), fails))!;
+    let finished = Cell/poll(ran)!;
+    Test/all([
+        Test/equal(failed_with(outcome), Option/some("refused")),
+        Test/assert(
+            "the waiting action never ran on",
+            match finished | none() => true | some(()) => false end)]);
+
+-- `all` answers each action's value in their order, and the first failure answers for all of them.
+test all_answers_each_action_or_the_first_failure =
+    let actions: List(Try(Io, Str, Nat)) = [Try/pure(10), Try/pure(20)];
+    let answers = Try/run(Try/all(actions))!;
+    let refused = Try/run(Try/all([Try/pure(1), Try/raise("refused")]))!;
+    Test/all([
+        Test/equal(Result/unwrap_or(answers, []), [10, 20]),
+        Test/equal(failed_with(refused), Option/some("refused"))]);

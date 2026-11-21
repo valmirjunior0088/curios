@@ -1,4 +1,7 @@
-use /std/{Monad, Result, Io, Program, Show, Str, print_err, Proc};
+mod tests;
+
+use /std/{Monad, Result, List, Io, Program, Show, Str, print_err, Proc};
+use /std/Io/{Future};
 
 --- An `M(Result(E, A))` sequenced so that a failure stops the region.
 pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {
@@ -41,6 +44,39 @@ pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result
 --- `body` run with a scope, as `Io/Scope/run` runs one: its children cancelled and its resources released before the scope answers, its failure among the answers it may give.
 pub let scope(@E: Type, @A: Type, body: (Io/Scope) -> Try(Io, E, A)) -> Try(Io, E, A) =
     Try { Io/Scope/run((s) => run(body(s))) };
+
+-- What `x` answers, or where it fails, its failure left in `failed` and then no answer at all: a branch of `both` or `all` the first failure stops the rest of.
+let guarded(@E: Type, @A: Type, failed: Future(E), x: Try(Io, E, A)) -> Io(A) =
+    Io/bind(
+        run(x),
+        (r: Result(E, A)) =>
+            match r
+            | success(a) => Io/pure(a)
+            | failure(e) => Io/bind(Future/fill(failed, e), (()) => Io/select([]))
+            end);
+
+-- What `answers` answers, or the failure `failed` is filled with first, the branches then cancelled where they wait.
+let first_failure(@E: Type, @A: Type, failed: Future(E), answers: Io(A)) -> Try(Io, E, A) =
+    Try {
+        Io/select([
+            Io/bind(answers, (a: A) => Io/pure(Result/success(a))),
+            Io/bind(Future/wait(failed), (e: E) => Io/pure(Result/failure(e)))]) };
+
+--- `a` and `b` side by side, and both answers once both have them; the first to fail answers for both, the other then cancelled where it waits.
+pub let both(
+    @E: Type,
+    @A: Type,
+    @B: Type,
+    a: Try(Io, E, A),
+    b: Try(Io, E, B),
+) -> Try(Io, E, {A, B}) =
+    let failed: Future(E) = Future/new()!;
+    first_failure(failed, Io/both(guarded(failed, a), guarded(failed, b)));
+
+--- Every action of `actions` side by side, and their answers in their order once all have them; the first to fail answers for all, the rest then cancelled where they wait.
+pub let all(@E: Type, @A: Type, actions: List(Try(Io, E, A))) -> Try(Io, E, List(A)) =
+    let failed: Future(E) = Future/new()!;
+    first_failure(failed, Io/all(List/map(actions, (x: Try(Io, E, A)) => guarded(failed, x))));
 
 --- A failure handed to `handler`; a success passes through.
 pub let rescue(

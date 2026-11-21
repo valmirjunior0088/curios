@@ -62,6 +62,7 @@ claims! {
     vec => ["Vec"],
     io => ["Io"],
     program => ["Program"],
+    try_ => ["Try"],
     cli => ["Cli"],
     http => ["http"],
     tui => ["Tui"],

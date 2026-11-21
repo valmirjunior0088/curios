@@ -6,7 +6,7 @@ pub use Exit/{let Exit};
 pub mod Child;
 pub use Child/{let Child};
 
-use /std/{Byte, Bytes, Str, List, Option, Result, Path, Try, Io};
+use /std/{Byte, Bytes, Str, List, Option, Path, Try, Io};
 use /std/internal/{Handle, Status};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
@@ -43,38 +43,32 @@ pub let new(program: Str, args: List(Str)) -> Proc =
         stdout = Stdio/inherit(),
         stderr = Stdio/inherit() };
 
-let drain(o: Option(Input)) -> Io(Result(Io/Error, Bytes)) =
-    match o
-    | some(o) => Try/run(Io/read_all(o))
-    | none() => Io/pure(Result/success(x[]))
-    end;
+let drain(o: Option(Input)) -> Try(Io, Io/Error, Bytes) =
+    match o | some(o) => Io/read_all(o) | none() => Try/pure(x[]) end;
 
 let fed(i: Output, input: Bytes) -> Try(Io, Io/Error, {}) =
     let () = Io/write(i, input)!;
     Io/finish(i);
 
 -- A child that stops reading before its input is all written leaves the rest unread, which is its own to answer for: the broken pipe is no failure of the run.
-let feed(i: Option(Output), input: Bytes) -> Io(Result(Io/Error, {})) =
+let feed(i: Option(Output), input: Bytes) -> Try(Io, Io/Error, {}) =
     match i
     | some(i) =>
-        Io/bind(
-            Try/run(fed(i, input)),
-            (r) => Io/pure(match r | failure(broken_pipe()) => Result/success(()) | _ => r end))
-    | none() => Io/pure(Result/success(()))
+        Try/rescue(
+            fed(i, input),
+            (e) => match e | broken_pipe() => Try/pure(()) | _ => Try/raise(e) end)
+    | none() => Try/pure(())
     end;
 
+-- The input written while both outputs are read, the first failure among the three answering for them and cancelling the others where they wait.
 let exchange(
     c: Child,
     input: Bytes,
 ) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
-    let (fed, outputs) =
-        Io/both(
+    let ((), (stdout, stderr)) =
+        Try/both(
             feed(Child/stdin(c), input),
-            Io/both(drain(Child/stdout(c)), drain(Child/stderr(c))))!;
-    let (o, e) = outputs;
-    let () = fed!;
-    let stdout = o!;
-    let stderr = e!;
+            Try/both(drain(Child/stdout(c)), drain(Child/stderr(c))))!;
     let exit = Child/wait(c)!;
     Try/pure((exit = exit, stdout = stdout, stderr = stderr));
 

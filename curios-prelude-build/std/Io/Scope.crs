@@ -37,7 +37,7 @@ pub struct Task(A: Type): Type {
     Future(A),
 }
 
---- `child` run beside the body of the scope `s`, answering at once with the task `Task/join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs.
+--- `child` run beside the body of the scope `s`, answering at once with the task `Task/join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs. What it answers, a failure as much as a value, is read only by a join: a child nobody joins fails without anyone hearing it.
 pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let f = Future/new()!;
     let () = counted(s.live, (n) => n + 1)!;
