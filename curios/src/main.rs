@@ -39,6 +39,7 @@ use {
         pin, scaffold,
     },
     curios_pipeline::CompileError,
+    curios_profile::{Destination, fold_at, install},
     curios_surface::Formatted,
     curios_wonder::{
         Linted, Scope, Staged, answer, lint, serve, std_documentation, wonder_at, wonder_classes,
@@ -57,9 +58,6 @@ use {
     },
 };
 
-#[cfg(feature = "profile")]
-use curios_profile::{Destination, fold_at, install};
-
 /// File every span and event this invocation makes at `path`.
 ///
 /// **Whatever the arguments asked for is what gets measured**, so `run`, `test`, `document` and a package build are all profileable — where a dedicated mode could only ever profile the one compilation it performed itself.
@@ -69,7 +67,6 @@ use curios_profile::{Destination, fold_at, install};
 /// The stream is filed rather than piped because a hung run is the case profiling exists for, and a pipe dies with the interrupt that ends one. Standard output is also the *product* of most subcommands — a program's own output under `run`, an answer under `wonder` — so rows on it would corrupt the thing being profiled.
 ///
 /// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
-#[cfg(feature = "profile")]
 fn install_profiling(path: PathBuf) {
     if let Err(error) = install(Destination::File(path)) {
         eprintln!("profiling unavailable: {error}");
@@ -178,7 +175,6 @@ fn dispatch() -> Result<(), Failure> {
     };
 
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
-    #[cfg(feature = "profile")]
     if let Some(path) = cli.profile.clone() {
         install_profiling(path);
     }
@@ -905,7 +901,6 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
-        #[cfg(feature = "profile")]
         Mode::Profile { stream } => {
             let report = fold_at(&stream).map_err(|error| {
                 Refused::of("unreadable file")

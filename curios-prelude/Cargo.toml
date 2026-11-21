@@ -10,21 +10,12 @@ build = "build.rs"
 workspace = true
 
 [features]
-profile = [
-    "curios-module/profile",
-    "curios-elab/profile",
-    "curios-erase/profile",
-    "curios-unit/profile",
-    "curios-cert/profile",
-    "dep:curios-cert",
-    "dep:curios-elab",
-    "dep:curios-erase",
-    "dep:curios-package",
-]
+# The program's dependencies, which a `[[bin]]` takes from the library's table: behind a feature, so no crate above this one reaches them.
+profile = ["dep:curios-cert", "dep:curios-elab", "dep:curios-erase", "dep:curios-package"]
 # `test_support`: where `/std` is authored and its source as a package, for this crate's suites and for the suites of `curios-pipeline` and `curios` that compile it from its tree or ask about one of its files. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = ["dep:curios-package"]
 
-# The program that is asked for the build's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `compile.rs` as a module.
+# The program that is asked for the build's profile: the build script's work under a recorder, filed beside this crate. It stands beside `build.rs` so the two share `compile.rs` as a module.
 [[bin]]
 name = "profile-prelude"
 path = "profile.rs"

@@ -2188,23 +2188,20 @@ fn children_pairwise_shared(this: &Subterm, that: &Subterm) -> Option<bool> {
     }
 }
 
-#[cfg(feature = "profile")]
 thread_local! {
     static LOOKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// How many times a term handed out its node on this thread since the last call.
 ///
-/// The count of what walks cost, as budget units are the count of what reduction builds: a walk has to look at a node to see its children, and every way a node is read — [`Deref`], [`AsRef`], [`Term::unwrap_or_clone`] and this module's own derivations and comparisons — is counted. A walk that visits a shared node once per path shows as looks outgrowing the nodes there are to look at, on any machine, where a wall clock needs a quiet one.
-#[cfg(feature = "profile")]
+/// The count of what walks cost, as budget units are the count of what reduction builds: a walk has to look at a node to see its children, and every way a node is read — [`Deref`], [`AsRef`], [`Term::unwrap_or_clone`] and this module's own derivations and comparisons — is counted. A walk that visits a shared node once per path shows as looks outgrowing the nodes there are to look at, on any machine, where a wall clock needs a quiet one. Counted in every build, a thread-local increment a look.
 pub fn take_looks() -> u64 {
     LOOKS.with(|looks| looks.replace(0))
 }
 
 impl Term {
-    /// Count one look at a node, under `profile`.
+    /// Count one look at a node.
     fn looked() {
-        #[cfg(feature = "profile")]
         LOOKS.with(|looks| looks.set(looks.get() + 1));
     }
 

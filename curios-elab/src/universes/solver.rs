@@ -23,14 +23,12 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseParam,
         UniverseRole, UniverseSeed, Universes,
     },
+    curios_surface::Spellable,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, VecDeque},
     },
 };
-
-#[cfg(feature = "profile")]
-use curios_surface::Spellable;
 
 /// Where a scheme is instantiated: the declaration an occurrence names, and where that occurrence is written, when a term of the declaration being elaborated wrote it. A constraint the scheme states is restated under both ([`UniverseSolver::instantiate_at`]).
 #[derive(Debug, Clone, Copy)]

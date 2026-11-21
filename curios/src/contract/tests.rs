@@ -44,87 +44,78 @@ fn spelled(refusal: &Report) -> String {
 }
 
 /// Every command, as the command line that invokes it.
-///
-/// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_the_parser_knows_is_in_the_table`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
-fn commands() -> Vec<&'static [&'static str]> {
-    let mut lines: Vec<&'static [&'static str]> = vec![
-        &["run", SUBJECT],
-        &["compile", SUBJECT],
-        &["compile", SUBJECT, "--output", "out"],
-        &["document", SUBJECT],
-        &["document", "--std", "site"],
-        &["test", SUBJECT],
-        &["curate"],
-        &[
-            "pin",
-            "foreign",
-            "probe",
-            "--target",
-            "native",
-            "--path",
-            "probe.wasm",
-        ],
-        &[
-            "pin",
-            "foreign",
-            "probe",
-            "--target",
-            "browser",
-            "--url",
-            "https://example.invalid/probe.js",
-        ],
-        &["pin", "foreign", "probe", "--target", "native", "--refresh"],
-        &["pin", "dependency", "json", "--path", "../json"],
-        &[
-            "pin",
-            "dependency",
-            "json",
-            "--git",
-            "https://example.invalid/json",
-            "--rev",
-            "abc",
-        ],
-        &["pin", "dependency", "json", "--rev", "abc"],
-        &["pin", "dependency", "json", "--refresh"],
-        &["new", "fresh"],
-        &["lint", SUBJECT],
-        &["format", SUBJECT],
-        &["format", "--core", SUBJECT],
-        &["wonder", SUBJECT],
-        &["wonder", "--tests", SUBJECT],
-        &["wonder", "--stage", "core", SUBJECT],
-        &["wonder", "--stage", "anf", SUBJECT],
-        &["wonder", "--at", "SUBJECT:1:1"],
-        &["wonder", "--classes", SUBJECT],
-        &["wonder", "--name", "/std/Bool/not", SUBJECT],
-        &["wonder", "--name", "/std/Show", "--witnesses", SUBJECT],
-        &["wonder", "--name", "/std/Bool/not", "--footprint", SUBJECT],
-        &["wonder", "--false", SUBJECT],
-        &[
-            "wonder",
-            "--name",
-            "/std/Bool/not",
-            "--stage",
-            "core",
-            SUBJECT,
-        ],
-        &[
-            "wonder",
-            "--name",
-            "/std/Bool/not",
-            "--stage",
-            "anf",
-            SUBJECT,
-        ],
-        &["wonder", "--server"],
-    ];
-
-    if cfg!(feature = "profile") {
-        lines.push(&["profile", "stream.tsv"]);
-    }
-
-    lines
-}
+const COMMANDS: &[&[&str]] = &[
+    &["run", SUBJECT],
+    &["compile", SUBJECT],
+    &["compile", SUBJECT, "--output", "out"],
+    &["document", SUBJECT],
+    &["document", "--std", "site"],
+    &["test", SUBJECT],
+    &["curate"],
+    &[
+        "pin",
+        "foreign",
+        "probe",
+        "--target",
+        "native",
+        "--path",
+        "probe.wasm",
+    ],
+    &[
+        "pin",
+        "foreign",
+        "probe",
+        "--target",
+        "browser",
+        "--url",
+        "https://example.invalid/probe.js",
+    ],
+    &["pin", "foreign", "probe", "--target", "native", "--refresh"],
+    &["pin", "dependency", "json", "--path", "../json"],
+    &[
+        "pin",
+        "dependency",
+        "json",
+        "--git",
+        "https://example.invalid/json",
+        "--rev",
+        "abc",
+    ],
+    &["pin", "dependency", "json", "--rev", "abc"],
+    &["pin", "dependency", "json", "--refresh"],
+    &["new", "fresh"],
+    &["lint", SUBJECT],
+    &["format", SUBJECT],
+    &["format", "--core", SUBJECT],
+    &["wonder", SUBJECT],
+    &["wonder", "--tests", SUBJECT],
+    &["wonder", "--stage", "core", SUBJECT],
+    &["wonder", "--stage", "anf", SUBJECT],
+    &["wonder", "--at", "SUBJECT:1:1"],
+    &["wonder", "--classes", SUBJECT],
+    &["wonder", "--name", "/std/Bool/not", SUBJECT],
+    &["wonder", "--name", "/std/Show", "--witnesses", SUBJECT],
+    &["wonder", "--name", "/std/Bool/not", "--footprint", SUBJECT],
+    &["wonder", "--false", SUBJECT],
+    &[
+        "wonder",
+        "--name",
+        "/std/Bool/not",
+        "--stage",
+        "core",
+        SUBJECT,
+    ],
+    &[
+        "wonder",
+        "--name",
+        "/std/Bool/not",
+        "--stage",
+        "anf",
+        SUBJECT,
+    ],
+    &["wonder", "--server"],
+    &["profile", "stream.tsv"],
+];
 
 /// Where an invocation stands under the tree's root, and the argument it spells there — `None` for none.
 const ROWS: &[(&str, Option<&str>)] = &[
@@ -403,7 +394,7 @@ fn package_entire(entire: &Entire) -> String {
 fn table(root: &Path) -> String {
     let mut table = String::new();
 
-    for line in commands() {
+    for line in COMMANDS {
         // A place names a file, so a line whose subject stands in a word has a row only where one is written.
         let placed = line
             .iter()
@@ -454,22 +445,6 @@ fn table(root: &Path) -> String {
     }
 
     table
-}
-
-/// The section a profiling build adds, written the way [`table`] writes an [`Accepts::Nothing`] command: one header and the single row that says it resolves nothing.
-///
-/// Separate from [`EXPECTED`] for the reason [`commands`] is a function — the surface varies with the feature, so the expectation must vary with it, or one build would be held to the other's surface.
-const PROFILE_EXPECTED: &str = "profile stream.tsv — Nothing, cabinet None, leaves Nothing, options none\n  takes no subject\n";
-
-/// What [`table`] must read for the tree *this* build holds.
-fn expected() -> String {
-    let mut expected = String::from(EXPECTED);
-
-    if cfg!(feature = "profile") {
-        expected.push_str(PROFILE_EXPECTED);
-    }
-
-    expected
 }
 
 const EXPECTED: &str = r#"run SUBJECT — Program (its own file), cabinet Write, leaves Nothing, options --target --port --budget --manifest
@@ -913,6 +888,8 @@ wonder --name /std/Bool/not --stage anf SUBJECT — Program, cabinet Write, leav
   .: (none) → refused: no manifest: no `curios.toml` in this directory or any directory above it · run a `.crs` file by name, or work inside a package → <root>
 wonder --server — Nothing, cabinet Write, leaves Nothing, options --tests --stage --at --classes --name --false --witnesses --footprint --server --core --budget --manifest
   takes no subject
+profile stream.tsv — Nothing, cabinet None, leaves Nothing, options none
+  takes no subject
 "#;
 
 /// **The table.** Every command, admitted from every row it reads.
@@ -921,7 +898,7 @@ fn every_command_admits_what_the_table_says() {
     let root = tree();
     let table = table(&root);
 
-    assert!(table == expected(), "the table now reads:\n{table}");
+    assert!(table == EXPECTED, "the table now reads:\n{table}");
 }
 
 /// **The table of a module on standard input.** Every command whose argument is its subject, admitting `-` while standard input holds declarations alone: a unit of its own wherever a library's file is one, and refused by every command that needs a program or a library.
@@ -934,7 +911,7 @@ fn every_command_admits_a_module_on_standard_input_as_what_it_is() {
     };
     let mut table = String::new();
 
-    for line in commands() {
+    for line in COMMANDS {
         if !line.contains(&SUBJECT) {
             continue;
         }
@@ -1097,7 +1074,7 @@ fn every_command_the_parser_knows_is_in_the_table() {
     let mut known = BTreeSet::new();
     leaves(&Cli::command(), &[], &mut known);
 
-    let listed = commands()
+    let listed = COMMANDS
         .iter()
         .map(|line| {
             let mut command = Cli::command();

@@ -8,7 +8,7 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 - `curios/src/tests/codegen/` — `census.rs` surveys thirteen of the Curios-only programs and four of the workloads — every one but `lcg` and `walk` —, `ladder.rs` and `structural.rs` name individual programs, `churn.rs` measures three under the collector, and `alternation.rs` the rope's three. Figures live beside the probe that reproduces them, never here.
 - [`xbench/`](../xbench/README.md) — the bench times the six workloads against Rust, compiled natively and to WebAssembly. That README owns the timings, how a figure is read from them, and when a comparison is refused.
-- `cargo xtask profile debug programs/<file>.crs` — one run under a profiling build, folded into its summaries; `profile release` asks for the shipped compiler. What that build measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
+- `cargo xtask profile debug programs/<file>.crs` — one run under a recorder, folded into its summaries; `profile release` asks for the shipped compiler. What a recorder measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
 
 Run one directly:
 

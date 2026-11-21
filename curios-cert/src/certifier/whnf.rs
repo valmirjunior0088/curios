@@ -315,7 +315,6 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
 
         let Some((index, key)) = certifier.unasked_refinement(&admitted) else {
             // What a lookup that asked conversion would have been put to: the equations this stuck form could be the term of, each settled and none answering.
-            #[cfg(feature = "profile")]
             if let asked @ 1.. = admitted.len() {
                 curios_profile::sample!("whnf::missed_lookup", asked);
             }

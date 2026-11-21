@@ -47,14 +47,12 @@ use {
         Subterm, Telescope, Term, Tuple, TupleType, Two, UniverseConstraintOrigin, UniverseError,
         Universes, Variance, Variant, keys_paired, paired,
     },
+    curios_surface::Spellable,
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,
     },
 };
-
-#[cfg(feature = "profile")]
-use curios_surface::Spellable;
 
 /// The outcome of attempting to solve a metavariable against a candidate.
 enum Solved {

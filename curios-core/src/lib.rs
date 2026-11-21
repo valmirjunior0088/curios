@@ -168,8 +168,6 @@ mod trace;
 pub use trace::{ArchivedTrace, Trace};
 
 mod term;
-#[cfg(feature = "profile")]
-pub use term::take_looks;
 use term::*;
 pub use term::{
     Apply, ArchivedApply, ArchivedArgument, ArchivedArm, ArchivedAscribed, ArchivedBang,
@@ -190,7 +188,7 @@ pub use term::{
     Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort, SpineEntries,
     Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType, Variant,
     WantedPremise, WitnessOrigin, WitnessRole, WrittenAt, WrittenPlace, former_eta, goal_at,
-    keys_paired, paired,
+    keys_paired, paired, take_looks,
 };
 
 mod walk;

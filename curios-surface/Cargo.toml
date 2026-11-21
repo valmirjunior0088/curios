@@ -8,9 +8,6 @@ description = "The Curios written form: the tree a file is read into, its parser
 [lints]
 workspace = true
 
-[features]
-profile = ["curios-parse/profile"]
-
 [dependencies]
 curios-abi = { workspace = true }
 curios-archive = { workspace = true }

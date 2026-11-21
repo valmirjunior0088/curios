@@ -1,11 +1,8 @@
 use {
     super::{IntoParser, Parser, ParserError, ParserState},
     curios_common::{Source, grown},
-    std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc, sync::Arc},
+    std::{any::Any, cell::RefCell, collections::HashMap, path::Path, rc::Rc, sync::Arc},
 };
-
-#[cfg(feature = "profile")]
-use std::path::Path;
 
 /// One cached parse at a given grammar key and start offset: either the produced value (type-erased, since the table is shared across the memoized parsers) paired with the end offset to resume at, or the verbatim error the parser failed with.
 type MemoEntry = Result<(Rc<dyn Any>, usize), ParserError>;

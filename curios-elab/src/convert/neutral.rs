@@ -13,11 +13,9 @@ use {
         ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintOrigin,
         instantiate_universes,
     },
+    curios_surface::Spellable,
     std::{collections::HashMap, rc::Rc},
 };
-
-#[cfg(feature = "profile")]
-use curios_surface::Spellable;
 
 /// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
 ///
@@ -515,8 +513,7 @@ pub fn apply_param_types(
     Ok(Some(types))
 }
 
-/// Report, under `profile`, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
-#[cfg(feature = "profile")]
+/// Report, while a recorder listens, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
 pub fn probe_level_fallback(site: &'static str, type_: &Term) {
     curios_profile::note!(
         target: "curios_elab::sort",
@@ -526,11 +523,7 @@ pub fn probe_level_fallback(site: &'static str, type_: &Term) {
     );
 }
 
-#[cfg(not(feature = "profile"))]
-pub fn probe_level_fallback(_site: &'static str, _type_: &Term) {}
-
-/// Report, under `profile`, that the reader named `reader` took its answer for a sort its declaration leaves to a caller ([`UniverseSolver::left_to_caller`](crate::UniverseSolver::left_to_caller)). Each reader answers for such a sort in the direction it calls safe, and the notes under `curios_elab::sort` that carry a `reader` are what counts which of them meet one, and how often. Diagnostic only: it changes nothing.
-#[cfg(feature = "profile")]
+/// Report, while a recorder listens, that the reader named `reader` took its answer for a sort its declaration leaves to a caller ([`UniverseSolver::left_to_caller`](crate::UniverseSolver::left_to_caller)). Each reader answers for such a sort in the direction it calls safe, and the notes under `curios_elab::sort` that carry a `reader` are what counts which of them meet one, and how often. Diagnostic only: it changes nothing.
 pub fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality) {
     if context.universes().left_to_caller(quality) {
         curios_profile::note!(
@@ -540,6 +533,3 @@ pub fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality
         );
     }
 }
-
-#[cfg(not(feature = "profile"))]
-pub fn probe_open_sort(_context: &Context, _reader: &'static str, _quality: Quality) {}

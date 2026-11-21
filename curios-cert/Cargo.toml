@@ -9,7 +9,6 @@ description = "The Curios certifier: the independent checker deciding, from a fi
 workspace = true
 
 [features]
-profile = ["curios-analysis/profile", "curios-core/profile"]
 # `test_support`: what a reading through the certifier spends, which `curios-erase`'s suite measures, a certifier and a walk with their memos off, which `curios-analysis`'s and `curios-prelude`'s suites reduce and measure under, and the harness its suites put a candidate through, Core text read by `curios-surface`'s reader, the reader `curios-pipeline`'s door reads the board's tickets and a `.crsc` with. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
 test-support = ["curios-common/test-support", "dep:curios-surface"]
 

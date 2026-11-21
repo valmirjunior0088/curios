@@ -1,18 +1,18 @@
 //! Programmatic profiling for the Curios workspace.
 //!
-//! Every crate that wants a measurement point depends on this crate unconditionally and declares its own `profile` feature, which the macros expand under. A measurement point is then one statement or one wrapped expression, and this crate is the only place in the workspace that names `tracing` at all. Three macros ask three questions — how long, how big, and why:
+//! Every crate that wants a measurement point depends on this crate, and every build carries what it instruments: nothing records unless a caller installs a recorder, and a measurement point no recorder listens to costs one relaxed load. A measurement point is one statement or one wrapped expression, and this crate is the only place in the workspace that names `tracing` at all. Three macros ask three questions — how long, how big, and why:
 //!
 //! - [`profile!`] as the first statement of a function times the whole function. It takes fields after the name — a `group` field is what makes a per-item span report *which item* rather than an average over all of them — and an `=>` form times one expression rather than the enclosing function.
-//! - [`note!`] states *why* a decision went the way it did, for a refusal that has neither a duration nor a size. It carries the `profile` gate itself, and it is what keeps `tracing` named in this crate alone.
+//! - [`note!`] states *why* a decision went the way it did, for a refusal that has neither a duration nor a size. It is what keeps `tracing` named in this crate alone.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep. It is for a number that varies; a site that would always record the same number is a call counter, and a span already counts its calls.
 //! - [`trace()`] and [`install`] are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller, and they are the only producers.
 //! - [`fold()`] recomputes timings, allocation figures and distributions from those rows. A question the summaries do not answer is asked of the file.
 //! - The counting allocator adds the memory half of a report: this crate installs it as the `#[global_allocator]` of every binary it is linked into, and it counts only while a recorder listens — `install`'s for the rest of the process, `trace`'s for its closure — or a measurement has asked with [`count_allocations`], so a boundary row carries what the process took and returned while counting, no binary has to opt in, and none pays for a count nobody reads.
 //! - [`Instructions`] counts what a measurement's thread and the threads it starts retire, which neither a look nor a byte sees of a walk that allocates nothing or of code that is not Rust.
 //!
-//! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and is installed by this crate, why the library emits records rather than summaries, and why a span is this crate's macro rather than `tracing::instrument` are `README.md`'s decisions.
+//! Why the dependency is named here and nowhere else, why profiling is configured in code and never from the environment, why every build carries it, why a third instrument measures magnitude beside time and bytes and a fourth counts instructions, why the allocator counts process-wide and is installed by this crate, why the library emits records rather than summaries, and why a span is this crate's macro rather than `tracing::instrument` are `README.md`'s decisions.
 //!
-//! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing.
+//! Each macro above is a token template over `tracing`, whose callsite asks one relaxed load whether anything listens before it builds a span or evaluates a field.
 
 pub use tracing;
 
@@ -50,23 +50,20 @@ pub use tracing;
 #[macro_export]
 macro_rules! profile {
     ($name:literal => $expr:expr) => {{
-        #[cfg(feature = "profile")]
         let __profile_guard = $crate::tracing::trace_span!($name).entered();
         $expr
     }};
     ($name:literal) => {
-        #[cfg(feature = "profile")]
         let __profile_guard = $crate::tracing::trace_span!($name).entered();
     };
     ($name:literal, $($fields:tt)*) => {
-        #[cfg(feature = "profile")]
         let __profile_guard = $crate::tracing::trace_span!($name, $($fields)*).entered();
     };
 }
 
 /// Record one observation of a magnitude under `name` — the sibling of [`profile!`] for *how big* rather than *how long*.
 ///
-/// The expression is evaluated only in a `profile` build, so a measurement that is itself expensive to compute costs a disabled build nothing.
+/// The expression is evaluated only while a recorder listens, so a measurement that is itself expensive to compute costs a run nobody records nothing.
 ///
 /// ```text
 /// curios_profile::sample!("universe::substitute_positions", positions.len());
@@ -78,7 +75,6 @@ macro_rules! profile {
 #[macro_export]
 macro_rules! sample {
     ($name:expr, $value:expr) => {
-        #[cfg(feature = "profile")]
         $crate::tracing::event!(
             name: $name,
             target: module_path!(),
@@ -90,7 +86,7 @@ macro_rules! sample {
 
 /// Note why a decision went the way it did — the instrument for a refusal, which has neither a duration nor a size.
 ///
-/// Takes `tracing`'s own event syntax, and carries the `profile` gate itself, so a call site states the note and nothing else:
+/// Takes `tracing`'s own event syntax, so a call site states the note and nothing else, and what it formats is formatted only while a recorder listens:
 ///
 /// ```text
 /// curios_profile::note!(target: "curios_elab::solve", meta = id.0, "failed: occurs check");
@@ -100,7 +96,6 @@ macro_rules! sample {
 #[macro_export]
 macro_rules! note {
     ($($arguments:tt)*) => {
-        #[cfg(feature = "profile")]
         $crate::tracing::debug!($($arguments)*);
     };
 }

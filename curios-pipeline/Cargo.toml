@@ -11,17 +11,6 @@ workspace = true
 [features]
 # `test_support`: the puts, a program handed to the checkers with the fixed prelude in scope, for `curios`'s suites that judge what the checkers judge. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
-profile = [
-    "curios-module/profile",
-    "curios-unit/profile",
-    "curios-elab/profile",
-    "curios-erase/profile",
-    "curios-anf/profile",
-    "curios-cps/profile",
-    "curios-emit/profile",
-    "curios-cert/profile",
-    "curios-prelude/profile",
-]
 
 [dependencies]
 curios-abi = { workspace = true }

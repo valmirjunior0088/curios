@@ -9,7 +9,6 @@ description = "The Curios erased IR, in A-normal form: post-erasure optimization
 workspace = true
 
 [features]
-profile = []
 # `test_support`: a module's structural digest, the census's verdict on a field and the weight of a description's copy, for the suites of `curios-elab`, `curios-pipeline` and `curios` that pin what this crate built. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate's tests — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 

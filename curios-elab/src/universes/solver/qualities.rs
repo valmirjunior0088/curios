@@ -99,7 +99,6 @@ impl UniverseSolver {
     }
 
     /// Whether `quality` is, as far as it is solved, a `Sort` the declaration wrote that nothing decided: the metavariable one is while its declaration is checked, or the parameter it closes as.
-    #[cfg(feature = "profile")]
     pub fn left_to_caller(&self, quality: Quality) -> bool {
         match self.quality(quality) {
             Quality::Param(_) => true,

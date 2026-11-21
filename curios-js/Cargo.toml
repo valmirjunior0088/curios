@@ -8,9 +8,6 @@ description = "The Curios compiler in the browser: the wasm-bindgen export of th
 [lints]
 workspace = true
 
-[features]
-profile = ["curios-pipeline/profile"]
-
 # cdylib for the wasm-bindgen build; rlib so `cargo test -p curios-js` still has something to link against.
 [lib]
 crate-type = ["cdylib", "rlib"]

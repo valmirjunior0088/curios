@@ -7,7 +7,6 @@ mod binaryen;
 
 mod census;
 // Only the fixpoint probe reads the driver the census keeps.
-#[cfg(feature = "profile")]
 pub use census::*;
 
 mod churn;

@@ -12,11 +12,8 @@
 
 use {
     curios_common::Entropy,
-    curios_core::{Consumption, Cost, Free, ReduceError},
+    curios_core::{Consumption, Cost, Free, ReduceError, take_looks},
 };
-
-#[cfg(feature = "profile")]
-use curios_core::take_looks;
 
 pub struct Spend {
     /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
@@ -95,7 +92,7 @@ impl Spend {
     ///
     /// **The identities start over with it.** No judgment reads how far the counter had run — the carriers' algebra orders an atom by the age of each identity it holds, never by its value — so started over here a declaration's identities are its own, and a counter that ran on across the walk would spend the identity space of every declaration judged before it. Freshness asks only that no two binders open together share one, and the caller raises the counter past whatever is still open ([`Certifier::restore_budget`](super::Certifier::restore_budget)).
     ///
-    /// **What the judgment it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
+    /// **What the judgment it closes consumed is sampled while a recorder listens**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], which a fold reports as that sample's `max` beside the elaborator's under the same name — with the nodes its walks looked at beside it, as `term::looks`: the two are sampled at one point, so a declaration whose looks outgrow its units is one a walk paid per path for.
     pub fn restore_budget(&mut self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
         curios_profile::sample!("term::looks", take_looks());

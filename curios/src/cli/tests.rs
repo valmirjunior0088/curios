@@ -257,7 +257,6 @@ fn program_arguments_remain_opaque_while_subjects_require_utf8() {
     assert_eq!(error.kind(), ErrorKind::InvalidUtf8);
 }
 
-#[cfg(feature = "profile")]
 #[test]
 fn profiling_is_global_until_the_program_tail_starts() {
     for words in [

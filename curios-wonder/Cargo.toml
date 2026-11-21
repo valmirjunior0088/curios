@@ -11,7 +11,6 @@ workspace = true
 [features]
 # `test_support`: a library's documentation record made the way a question compiles, and the names a subject and its records are read by, which `curios`'s suites read. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
 test-support = []
-profile = ["curios-pipeline/profile", "curios-verdict/profile"]
 
 # Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
 # runs the compiler as far as it needs and reads the answer off the cabinet through `curios-verdict`.

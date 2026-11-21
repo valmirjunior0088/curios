@@ -91,7 +91,6 @@ impl<'s> Context<'s> {
             return Ok(None);
         };
         let found = self.typing.frames.universe_context(name);
-        #[cfg(feature = "profile")]
         if found
             .as_ref()
             .is_none_or(|context| context.parameter_count != universes.levels.len())

@@ -275,7 +275,6 @@ impl Nat {
         // The two magnitudes that say what distribution in full costs: monomials built against summands kept, the first growing as the square of the second, which is what an eager cross product is.
         curios_profile::sample!("multiply::products", summands.len() as u64);
         let merged = Self::sum_over_floor(summands, floor);
-        #[cfg(feature = "profile")]
         curios_profile::sample!(
             "multiply::merged",
             Self::summands(&Self::decompose(&merged).1).len() as u64

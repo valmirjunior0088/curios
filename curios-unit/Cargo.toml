@@ -9,13 +9,6 @@ description = "The Curios compilation unit: what one unit provides to its succes
 workspace = true
 
 [features]
-profile = [
-    "curios-elab/profile",
-    "curios-erase/profile",
-    "curios-anf/profile",
-    "curios-module/profile",
-]
-
 # `test_support`: a record of what was read filed whole, which `curios-pipeline`'s measurement of the prelude's image reads. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = []
 

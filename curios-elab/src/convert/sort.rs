@@ -12,7 +12,7 @@ use {
     },
 };
 
-/// [`Sort::is_prop`] as the reader named `reader` asks it, noted under `profile` where the answer is taken for a sort the declaration leaves to a caller ([`probe_open_sort`]).
+/// [`Sort::is_prop`] as the reader named `reader` asks it, noted while a recorder listens where the answer is taken for a sort the declaration leaves to a caller ([`probe_open_sort`]).
 pub fn is_prop_to(sort: &Sort, context: &Context, reader: &'static str) -> bool {
     probe_open_sort(context, reader, sort.quality);
     sort.is_prop()

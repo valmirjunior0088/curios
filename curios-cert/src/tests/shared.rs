@@ -6,7 +6,7 @@
 //!
 //! **Functions, and not the representation.** The types of `curios-core` are what a term *is*, imported wherever one is built or read, and their methods come with them: a term's substitution, a telescope's opening, a level's arithmetic. No judgment fails to reach them, so they are not listed.
 //!
-//! **One instrument.** `take_looks` is the profile's count of what walks cost, read under the `profile` feature and by no verdict. It is listed so the rule has no exception.
+//! **One instrument.** `take_looks` is the profile's count of what walks cost, read by a recorder's samples and by no verdict. It is listed so the rule has no exception.
 
 use {
     curios_common::fill,

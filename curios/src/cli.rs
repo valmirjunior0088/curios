@@ -296,7 +296,6 @@ pub enum Mode {
     /// Not the last step of a profiled run, deliberately. A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its own last step, so folding there could serve every case but the one profiling exists for. It is a separate pass over a file the compiler has already closed.
     ///
     /// PATH is the command's own argument rather than a SUBJECT: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject as a path the resolver never sees.
-    #[cfg(feature = "profile")]
     #[command(about = "Summarize a profile stream filed by --profile")]
     Profile {
         #[arg(
@@ -656,12 +655,11 @@ impl FromArgMatches for Query {
 {all-args}{after-help}"
 )]
 struct ParsedCli {
-    // Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including every one the integration suite spawns under `--all-features`, all of them onto one path.
+    // Inert until asked for: every build carries the instrumentation, and this decides whether anything listens to it. Without that, every invocation would record — every one the integration suite spawns among them, all onto one path.
     //
     // It takes the destination rather than defaulting to one. Global, because what it measures is the invocation rather than one command, so it may stand on either side of the command, before `run` hands its tail to the program.
     //
     // A plain comment rather than documentation, because clap prints a field's documentation of more than one paragraph as the flag's long help, and a global flag's help is printed under every command.
-    #[cfg(feature = "profile")]
     #[arg(
         long = "profile",
         value_name = "PATH",
@@ -690,7 +688,6 @@ struct ParsedCli {
 /// A command line whose `run` subject and program arguments have been separated. The private clap input cannot reach dispatch without this normalization.
 #[derive(Debug)]
 pub struct Cli {
-    #[cfg(feature = "profile")]
     pub profile: Option<PathBuf>,
     pub color: Color,
     pub mode: Mode,
@@ -873,7 +870,6 @@ impl Cli {
         }
 
         Ok(Self {
-            #[cfg(feature = "profile")]
             profile: parsed.profile,
             color: parsed.color,
             mode: parsed.mode,

@@ -210,7 +210,6 @@ pub const FORMAT: Contract = Contract {
 };
 
 /// Its argument is a filed stream rather than anything a package declares, so nothing is resolved against a manifest and no cabinet is opened: the file named is the whole of what it reads.
-#[cfg(feature = "profile")]
 pub const PROFILE: Contract = Contract {
     command: "profile",
     accepts: Accepts::Nothing,
@@ -378,7 +377,6 @@ impl Mode {
                 Query::False => &FALSE,
                 Query::Server => &SERVER,
             },
-            #[cfg(feature = "profile")]
             Mode::Profile { .. } => &PROFILE,
         }
     }
@@ -400,7 +398,6 @@ impl Mode {
             Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
             // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
-            #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
     }
@@ -417,7 +414,6 @@ impl Mode {
             | Mode::Pin { .. }
             | Mode::New { .. }
             | Mode::Lint { .. } => false,
-            #[cfg(feature = "profile")]
             Mode::Profile { .. } => false,
         }
     }
@@ -441,7 +437,6 @@ impl Mode {
             | Mode::Lint { .. }
             | Mode::Format { .. }
             | Mode::Wonder { .. } => None,
-            #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
     }
@@ -469,7 +464,6 @@ impl Mode {
             | Mode::Lint { elaboration, .. }
             | Mode::Wonder { elaboration, .. } => Some(elaboration),
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,
-            #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
     }

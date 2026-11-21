@@ -14,11 +14,9 @@ use {
         ArgumentSite, Bound, Extent, Free, Global, Mention, Metavar, MetavarId, MetavarOrigin,
         MetavarSpine, Names, Subterm, Term, WitnessOrigin,
     },
+    curios_surface::Spellable,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-#[cfg(feature = "profile")]
-use curios_surface::Spellable;
 
 impl<'s> Context<'s> {
     /// [`Solutions::note_solve_blockers`](super::Solutions::note_solve_blockers).

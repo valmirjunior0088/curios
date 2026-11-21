@@ -1,6 +1,6 @@
 //! What the CPS fixpoint costs, pass by pass.
 //!
-//! Instrumented because the per-pass spans and fired-samples `curios_cps::optimize` carries exist only under the `profile` feature. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
+//! Instrumented because the per-pass spans and fired-samples `curios_cps::optimize` carries are recorded only while a trace listens. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
     crate::tests::TOML_DRIVER,

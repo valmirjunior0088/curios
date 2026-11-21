@@ -383,7 +383,6 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
 /// A capture of local binders hands back a subterm with no local free unwalked: nothing in it is a binder's occurrence, and nothing in it is a loose index to shift. Counted in looks, since a memoized walk of the same subterm would hand back the same node.
 ///
 /// Mutation-checked: with the capture walking what it cannot change, the looks are those of the closed subterm's sixty levels.
-#[cfg(feature = "profile")]
 #[test]
 fn a_capture_of_local_binders_passes_over_a_closed_subterm() {
     let x = Free::local(0, Some("x"));
@@ -403,7 +402,6 @@ fn a_capture_of_local_binders_passes_over_a_closed_subterm() {
 /// A scope is read for a binder's use in its size, and a closed subterm of its body is not read at all: the closed type a `let` states is where a tower's tree was.
 ///
 /// Mutation-checked: with the read rebuilding what `reach` proves it cannot find the binder in, the looks are those of the closed subterm's sixty levels.
-#[cfg(feature = "profile")]
 #[test]
 fn a_binders_use_is_read_without_entering_a_closed_subterm() {
     let x = Free::local(0, Some("x"));

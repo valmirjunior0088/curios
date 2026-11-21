@@ -45,12 +45,9 @@ use {
         project_erased_universes, project_literal, reduce_closed, reduce_intrinsic, switch_arm,
         weak_head_value,
     },
-    curios_surface::{IntrinsicForm, intrinsic_form, intrinsic_global},
+    curios_surface::{IntrinsicForm, Spellable, intrinsic_form, intrinsic_global},
     std::collections::{BTreeSet, HashMap},
 };
-
-#[cfg(feature = "profile")]
-use curios_surface::Spellable;
 
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Context<'_> {
@@ -1152,7 +1149,6 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
         }
         let Some((frame, key, original)) = unsettled else {
             // What a lookup that asked conversion would have been put to: the entries this stuck form could be the term of, each settled and none answering.
-            #[cfg(feature = "profile")]
             if let asked @ 1.. = admitted.len() {
                 curios_profile::sample!("reduce::missed_lookup", asked);
             }

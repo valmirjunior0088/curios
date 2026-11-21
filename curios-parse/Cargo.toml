@@ -8,9 +8,6 @@ description = "The Curios parser combinator DSL: freely backtracking ordered cho
 [lints]
 workspace = true
 
-[features]
-profile = []
-
 [dependencies]
 curios-profile = { workspace = true }
 # The characters the database calls default-ignorable, which `unseen` reads as printing as nothing.

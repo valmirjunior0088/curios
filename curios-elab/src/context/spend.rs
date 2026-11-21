@@ -82,7 +82,7 @@ impl Spend {
     ///
     /// The live count is reset for the reason `curios-cert`'s `Spend::restore_budget` states in full: [`Spend::enter_level`] increments before it charges and propagates the refusal, so an exhausted level is never left, and elaboration continues to the next declaration. A leaked level costs every later declaration [`Cost::FRAME`] for a frame nothing holds.
     ///
-    /// **What the declaration it closes consumed is sampled under `profile`**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it — with `term::looks` beside it, the nodes its walks looked at, as `curios-cert`'s `Spend::restore_budget` samples the pair.
+    /// **What the declaration it closes consumed is sampled while a recorder listens**, as `budget::consumed` — the profile-side reading of [`Spend::heaviest`], whose `max` in a fold is that figure for whatever the profiled run elaborated, and whose distribution says whether it is one declaration or many near it — with `term::looks` beside it, the nodes its walks looked at, as `curios-cert`'s `Spend::restore_budget` samples the pair.
     pub fn restore(&self) {
         curios_profile::sample!("budget::consumed", self.consumed().units());
         curios_profile::sample!("term::looks", curios_core::take_looks());

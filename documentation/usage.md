@@ -75,7 +75,7 @@ A loose file has no project: no dependencies, not the library beside it, and no 
 
 ## The surface
 
-Ten commands, eleven where the compiler was built with the `profile` feature, which carries [`profile`](#profile) and `--profile`. What each takes and leaves:
+Eleven commands. What each takes and leaves:
 
 | Command | Subject | Its own flags | Writes | Cabinet |
 | --- | --- | --- | --- | --- |
@@ -196,7 +196,7 @@ curios run serve --help          # the program's help
 curios run --target browser      # the default executable's page, served on loopback
 ```
 
-Everything after the subject belongs to the program and reaches it through `/std/Proc/args`, including `--help`, `--budget`, `--manifest` and, in a profiling build, `--profile`. Compiler flags go before the subject. A leading `--` omits the subject and passes the words after it to the governing package's sole or `default` executable. One `--` immediately after an explicit subject is an optional separator too: `curios run serve -- --help` passes `--help`. Every later word is collected verbatim, hyphens and further separators included; `curios run -- -- mock` passes `--` and `mock`. Program arguments retain their OS bytes, including text that is not UTF-8; an explicit subject must be UTF-8. A file whose name starts with a hyphen can be named with its directory, such as `./-sample.crs`.
+Everything after the subject belongs to the program and reaches it through `/std/Proc/args`, including `--help`, `--budget`, `--manifest` and `--profile`. Compiler flags go before the subject. A leading `--` omits the subject and passes the words after it to the governing package's sole or `default` executable. One `--` immediately after an explicit subject is an optional separator too: `curios run serve -- --help` passes `--help`. Every later word is collected verbatim, hyphens and further separators included; `curios run -- -- mock` passes `--` and `mock`. Program arguments retain their OS bytes, including text that is not UTF-8; an explicit subject must be UTF-8. A file whose name starts with a hyphen can be named with its directory, such as `./-sample.crs`.
 
 A program the runtime stops rather than one that exits says why on one line of stderr and exits 1: the kind of stop, a colon, and what there is to say of this one. `panic:` is followed by one sentence naming the rule that refused the program — a `Nat` or `Int` argument to a `foreign` function past what the wire carries, a value past what the runtime can hold, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running. `stack exhausted:`, `heap exhausted:`, `overflow:`, `division by zero:` and `unreachable code:` are the engine's stops; a program's recursion with no end stops on `heap exhausted:` ([A recursion is as deep as the heap allows](design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md)), and a `foreign` module's on `stack exhausted:`. A call the runtime refuses where it crosses to what answers it is no panic: `invalid answer:` where a module answers `256` to a `foreign` declared `-> Byte`, `value too large:` where a byte string cannot cross to a module, `module failure:` where a module's own export fails, and `host failure:` where a host cannot answer a call that has no failure to report. `deadlock:` is a program waiting on nothing that can wake it. The line is no report block and carries no frame of the machine, and reads the same whether `curios run` ran the program, a test did, or it runs as a built executable, which says the same line of a bundle it cannot start: `not a bundle:`, `corrupt bundle:`.
 
@@ -573,7 +573,7 @@ curios profile .curios/profile.tsv
 
 Reads back a stream [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped.
 
-Present only in a compiler built with the `profile` feature, which carries the flag too; `PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)).
+`PATH` is spelled as it was to `--profile`. Reading is a pass of its own, not the profiled run's last step ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)).
 
 ## The manifest
 
@@ -716,7 +716,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version |
-| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH` — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
+| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`; nothing is recorded without it. [`profile`](#profile) reads the stream back |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `--help` prints the default this build carries.
 
