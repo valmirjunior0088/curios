@@ -4448,8 +4448,25 @@
                   "type": "SEQ",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "pattern_field"
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "@"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "pattern_field"
+                        }
+                      ]
                     },
                     {
                       "type": "REPEAT",
@@ -4461,8 +4478,25 @@
                             "value": ","
                           },
                           {
-                            "type": "SYMBOL",
-                            "name": "pattern_field"
+                            "type": "SEQ",
+                            "members": [
+                              {
+                                "type": "CHOICE",
+                                "members": [
+                                  {
+                                    "type": "STRING",
+                                    "value": "@"
+                                  },
+                                  {
+                                    "type": "BLANK"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "pattern_field"
+                              }
+                            ]
                           }
                         ]
                       }
@@ -4971,8 +5005,25 @@
                   "type": "SEQ",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "match_pattern_field"
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "@"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "match_pattern_field"
+                        }
+                      ]
                     },
                     {
                       "type": "REPEAT",
@@ -4984,8 +5035,25 @@
                             "value": ","
                           },
                           {
-                            "type": "SYMBOL",
-                            "name": "match_pattern_field"
+                            "type": "SEQ",
+                            "members": [
+                              {
+                                "type": "CHOICE",
+                                "members": [
+                                  {
+                                    "type": "STRING",
+                                    "value": "@"
+                                  },
+                                  {
+                                    "type": "BLANK"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "match_pattern_field"
+                              }
+                            ]
                           }
                         ]
                       }

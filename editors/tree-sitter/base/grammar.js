@@ -655,8 +655,14 @@ module.exports = grammar({
     pattern_field: ($) =>
       choice(seq(field("name", $._name), "=", $._pattern), $._pattern),
 
+    // A hidden field under `@`, as a literal's entry is; a tuple's field takes no mark.
     struct_pattern: ($) =>
-      seq(field("type", $.path), "{", commaList($.pattern_field), "}"),
+      seq(
+        field("type", $.path),
+        "{",
+        commaList(seq(optional("@"), $.pattern_field)),
+        "}",
+      ),
 
     parenthesized_pattern: ($) => seq("(", $._pattern, ")"),
 
@@ -720,7 +726,12 @@ module.exports = grammar({
       ),
 
     struct_match_pattern: ($) =>
-      seq(field("type", $.path), "{", commaList($.match_pattern_field), "}"),
+      seq(
+        field("type", $.path),
+        "{",
+        commaList(seq(optional("@"), $.match_pattern_field)),
+        "}",
+      ),
 
     parenthesized_match_pattern: ($) => seq("(", $._match_pattern, ")"),
 

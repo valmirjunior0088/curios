@@ -771,3 +771,39 @@ end
     (match_arm
       (identifier)
       (number))))
+
+================================================================================
+A structure pattern writes a hidden field under its mark
+================================================================================
+
+let Sized { @len = n, items } = s;
+match s | Sized { @m, _ } => m end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (struct_pattern
+        (path
+          (identifier))
+        (pattern_field
+          (identifier)
+          (identifier))
+        (pattern_field
+          (identifier)))
+      (path
+        (identifier)))
+    (match_term
+      (path
+        (identifier))
+      (match_arm
+        (struct_match_pattern
+          (path
+            (identifier))
+          (match_pattern_field
+            (identifier))
+          (match_pattern_field
+            (identifier)))
+        (path
+          (identifier))))))
