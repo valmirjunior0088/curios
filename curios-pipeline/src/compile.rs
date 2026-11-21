@@ -23,7 +23,7 @@ use {
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
     curios_module::{
-        BrokenItem, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
+        BrokenItem, Compiled, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
         into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_surface::{Entrypoint, ReaderPosition, Spelling},
@@ -1737,9 +1737,16 @@ where
         }
 
         let prefix = source.prefix();
+        let compiled = source.compiled();
         progress(match &baseline {
-            Some(_) => Progress::Recompiling(&prefix),
-            None => Progress::Compiling(&prefix),
+            Some(_) => Progress::Recompiling {
+                unit: &prefix,
+                compiled,
+            },
+            None => Progress::Compiling {
+                unit: &prefix,
+                compiled,
+            },
         });
 
         // A refused subject's findings, its lowering's lints and what its elaboration held, for whoever is told of them.
@@ -1976,10 +1983,16 @@ pub struct Listeners<'a> {
 ///
 /// Deliberately separate from the [`Stage`] observer, which belongs to `wonder --stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
-    /// A mounted unit is about to be compiled, named by the prefix it claims.
-    Compiling(&'a Qualifier),
-    /// A mounted unit is about to be compiled over a baseline — an earlier compilation of its sources, every item the edit did not reach reused from it — named by the prefix it claims. Followed by [`Progress::Compiled`] as a [`Progress::Compiling`] is.
-    Recompiling(&'a Qualifier),
+    /// A mounted unit is about to be compiled, named by the prefix it claims, with what it is compiled for: built, or tested, its tests with it.
+    Compiling {
+        unit: &'a Qualifier,
+        compiled: Compiled,
+    },
+    /// A mounted unit is about to be compiled over a baseline — an earlier compilation of its sources, every item the edit did not reach reused from it — named and stated as a [`Progress::Compiling`] is, and followed by [`Progress::Compiled`] as one is.
+    Recompiling {
+        unit: &'a Qualifier,
+        compiled: Compiled,
+    },
     /// The entry program is about to be compiled. Its declarations are a unit of their own, `held` where the cache handed them back, on which its final term alone is elaborated anew. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
     Entry { held: bool },
     /// A mounted unit came from the cabinet instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.

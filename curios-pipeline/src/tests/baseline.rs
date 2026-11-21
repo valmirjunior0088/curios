@@ -81,8 +81,12 @@ fn folded_offered(
             cache,
             |progress| {
                 events.push(match progress {
-                    Progress::Compiling(prefix) => format!("compiling {}", prefix.join()),
-                    Progress::Recompiling(prefix) => format!("recompiling {}", prefix.join()),
+                    Progress::Compiling { unit: prefix, .. } => {
+                        format!("compiling {}", prefix.join())
+                    }
+                    Progress::Recompiling { unit: prefix, .. } => {
+                        format!("recompiling {}", prefix.join())
+                    }
                     Progress::Reused(prefix) => format!("reused {}", prefix.join()),
                     Progress::Compiled => "compiled".to_string(),
                     Progress::Filing => "filing".to_string(),

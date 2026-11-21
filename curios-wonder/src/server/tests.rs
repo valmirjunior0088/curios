@@ -645,7 +645,13 @@ fn a_check_is_told_as_a_progress_reporting_each_unit_compiled() {
     };
     reporting.asked(&curios_package::Named::Stdin, None);
     reporting.step(curios_pipeline::Progress::Reused(&reused), None);
-    reporting.step(curios_pipeline::Progress::Compiling(&compiled), None);
+    reporting.step(
+        curios_pipeline::Progress::Compiling {
+            unit: &compiled,
+            compiled: curios_module::Compiled::Built,
+        },
+        None,
+    );
     reporting.step(curios_pipeline::Progress::Entry { held: false }, None);
     reporting.ended(Ended::Done);
 

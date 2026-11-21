@@ -867,6 +867,36 @@ fn a_question_stopped_by_goals_alone_exits_two() {
     assert_eq!(answered.status.code(), Some(0));
 }
 
+/// A check of a package compiles its library twice where an executable stands on it, with its tests, which the check reads, and as the executable is built over it: the transcript says which the first is, so the two trees of one unit are told apart.
+#[test]
+fn a_library_checked_with_its_tests_is_narrated_as_that() {
+    let root = project("tested-narrated");
+
+    let checked = curios(&root, &["wonder"], "");
+
+    let narrated = String::from_utf8_lossy(&checked.stderr);
+    assert!(checked.status.success(), "{narrated}");
+    // Each line up to what its step took, which no two runs share.
+    let steps = narrated
+        .lines()
+        .map(|line| line.split(';').next().unwrap_or(line))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        steps,
+        [
+            "/app",
+            "├─ check with its tests",
+            "└─ store",
+            "/app",
+            "├─ check",
+            "└─ store",
+            "app",
+            "└─ check",
+        ],
+        "{narrated}"
+    );
+}
+
 /// `--footprint` answers the block `--name` answers with, without the source it holds there, then, a blank line before, a row a function of four tab-separated fields: here the one row of a declaration the program never reaches.
 #[test]
 fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {

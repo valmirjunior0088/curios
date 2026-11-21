@@ -88,8 +88,10 @@ fn folded(directory: &Path, subject: Option<&str>, cache: &dyn Cache) -> Vec<Str
             &loader,
             |_| {},
             |progress| match progress {
-                Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
-                Progress::Recompiling(prefix) => {
+                Progress::Compiling { unit: prefix, .. } => {
+                    events.push(format!("compiling {}", prefix.join()))
+                }
+                Progress::Recompiling { unit: prefix, .. } => {
                     events.push(format!("recompiling {}", prefix.join()));
                 }
                 Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),

@@ -123,12 +123,12 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
             "/app\n",
-            "├─ check; ",
+            "├─ check with its tests; ",
             "└─ store; ",
             "/app\n",
             "├─ check; ",
@@ -298,8 +298,9 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
             "1 passed, 0 failed, 5 skipped; ",
         ],
     );
+    // No node is a check, of a unit with its tests or without.
     assert!(
-        !stderr(&warm).contains("check;"),
+        !stderr(&warm).contains("─ check"),
         "stderr: {}",
         stderr(&warm)
     );
@@ -669,8 +670,9 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
             "\n2 passed, 0 failed; ",
         ],
     );
+    // No node is a check, of a unit with its tests or without.
     assert!(
-        !stderr(&warm).contains("check;"),
+        !stderr(&warm).contains("─ check"),
         "stderr: {}",
         stderr(&warm)
     );

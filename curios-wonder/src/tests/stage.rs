@@ -113,7 +113,7 @@ fn a_librarys_core_rung_lowers_it_and_compiles_nothing() {
         None,
         "core",
         &mut |progress| {
-            if let curios_pipeline::Progress::Compiling(prefix) = progress {
+            if let curios_pipeline::Progress::Compiling { unit: prefix, .. } = progress {
                 compiled.push(prefix.join());
             }
         },

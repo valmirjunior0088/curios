@@ -628,8 +628,10 @@ fn folded_through(root: &Path, overlay: &Overlay, cache: &dyn Cache) -> Vec<Stri
     let mut events = Vec::new();
     Fold::new(DEFAULT_BUDGET, &units, Some(cache))
         .check_units(|progress| match progress {
-            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
-            Progress::Recompiling(prefix) => {
+            Progress::Compiling { unit: prefix, .. } => {
+                events.push(format!("compiling {}", prefix.join()))
+            }
+            Progress::Recompiling { unit: prefix, .. } => {
                 events.push(format!("recompiling {}", prefix.join()));
             }
             Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
@@ -758,8 +760,12 @@ fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
             Some(&Overlaid::over(&verdicts, overlay)),
         )
         .check_units(|progress| match progress {
-            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
-            Progress::Recompiling(prefix) => events.push(format!("recompiling {}", prefix.join())),
+            Progress::Compiling { unit: prefix, .. } => {
+                events.push(format!("compiling {}", prefix.join()))
+            }
+            Progress::Recompiling { unit: prefix, .. } => {
+                events.push(format!("recompiling {}", prefix.join()))
+            }
             Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
             _ => {}
         })

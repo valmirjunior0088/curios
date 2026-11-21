@@ -248,8 +248,8 @@ impl Telling for Reporting<'_> {
     }
 
     fn step(&mut self, progress: curios_pipeline::Progress<'_>, _: Option<&Verdicts>) {
-        let (curios_pipeline::Progress::Compiling(prefix)
-        | curios_pipeline::Progress::Recompiling(prefix)) = progress
+        let (curios_pipeline::Progress::Compiling { unit: prefix, .. }
+        | curios_pipeline::Progress::Recompiling { unit: prefix, .. }) = progress
         else {
             return;
         };

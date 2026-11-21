@@ -15,6 +15,7 @@ use {
         Term,
     },
     curios_erase::{Erasures, erase_unit},
+    curios_module::Compiled,
     curios_surface::{CoreFile, CoreItem, CoreNominals, FormScope, ReadError, to_core_at},
     curios_unit::{Predecessors, Unit},
     std::sync::Arc,
@@ -159,7 +160,11 @@ pub fn enter_core_text(
             Qualifier::empty()
         }
         None => {
-            progress(Progress::Compiling(&module));
+            // Core text is read once, as it is written: it is the subject of no test compilation, whatever tests it writes.
+            progress(Progress::Compiling {
+                unit: &module,
+                compiled: Compiled::Built,
+            });
             module
         }
     };

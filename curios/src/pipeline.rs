@@ -8,7 +8,7 @@ use {
     curios_abi::ForeignStore,
     curios_common::{OsError, Report, STDIN_NAME, Source, Style},
     curios_document::Documentation,
-    curios_module::{PackageRoot, RootSource},
+    curios_module::{Compiled, PackageRoot, RootSource},
     curios_package::{Entry, Home, Named, Program, Refused, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, fold_sources},
     curios_surface::Entrypoint,
@@ -298,11 +298,23 @@ impl Steps {
     pub fn told(&mut self, progress: Progress<'_>, verdicts: Option<&Verdicts>) {
         match progress {
             // A recompile over a baseline reads as a compile: what the node reports is that the unit is being checked and how long it took.
-            Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
+            Progress::Compiling {
+                unit: prefix,
+                compiled,
+            }
+            | Progress::Recompiling {
+                unit: prefix,
+                compiled,
+            } => {
                 let subject = Subject::Mounted(*prefix);
                 let mut tree = Tree::of(&subject, None);
+                // A question compiles its subject with its tests and then again as what stands on it is built: the first is checked as that, which tells the two trees of one unit apart.
+                let check = match compiled {
+                    Compiled::Tested => "check with its tests",
+                    Compiled::Built => "check",
+                };
 
-                tree.open("check", verdicts.is_none() && !self.goes_on(&subject));
+                tree.open(check, verdicts.is_none() && !self.goes_on(&subject));
                 self.unit = Some((subject, tree));
             }
             // The entry program is the subject, and its compile a tree of its own after every unit's. A build checks it whether or not the cabinet held its declarations, since it is erased and linked either way; a question that only checks it has nothing to narrate of one the cabinet held.
@@ -479,7 +491,7 @@ impl Telling for Asking {
         };
 
         match progress {
-            Progress::Compiling(_) | Progress::Recompiling(_) => self.narrated = true,
+            Progress::Compiling { .. } | Progress::Recompiling { .. } => self.narrated = true,
             // A program that is not narrated begins once every unit it stands on is compiled, and what a question prints of it follows from there.
             Progress::Entry { .. } if steps.closing == Closing::Units => {
                 if mem::take(&mut self.narrated) {

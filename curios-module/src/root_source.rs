@@ -268,7 +268,7 @@ impl RootSource {
     }
 
     /// What this source is compiled for ([`RootSource::tested`]).
-    pub(crate) fn compiled(&self) -> Compiled {
+    pub fn compiled(&self) -> Compiled {
         self.compiled
     }
 

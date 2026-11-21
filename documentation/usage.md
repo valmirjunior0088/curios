@@ -114,7 +114,7 @@ hello
 └─ emit; 0.4s
 ```
 
-A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, and filed where a cabinet keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the cabinet already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest.
+A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, or `check with its tests` where it is compiled with the tests it declares, as the one `test`, `wonder` and `lint` read is, and filed where a cabinet keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the cabinet already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest.
 
 A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `└─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
 
@@ -301,11 +301,11 @@ curios test --target browser     # the same tests, run by whatever opens the pri
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's selected tests — and every selected test runs in an instantiation of its own. The unit itself is compiled with every test it declares whatever the filter, and is the one `wonder` and `lint` read; the filter narrows the program, so only the tests it selects are built past the front end, and a unit it selects none from builds no program. A unit holds its tests only here and in what `wonder` and `lint` ask of it: `run`, `compile` and a unit compiled for the units after it leave them out.
 
-The report is on standard error, on each subject's own tree, after the nodes that built its test program ([What a command reports](#what-a-command-reports)). A unit and its test program are each a subject, so a library is named twice: checked and filed, then built into the program that runs its tests.
+The report is on standard error, on each subject's own tree, after the nodes that built its test program ([What a command reports](#what-a-command-reports)). A unit and its test program are each a subject, so a library is named twice: checked with its tests and filed, then built into the program that runs them.
 
 ```text
 /demo
-├─ check; 0.3s
+├─ check with its tests; 0.3s
 └─ store; 0.0s
 /demo
 ├─ check; 0.0s
@@ -475,7 +475,7 @@ Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, an
 
 ```text
 /demo
-├─ check; 0.3s
+├─ check with its tests; 0.3s
 └─ store; 0.0s
 demo
 └─ check; 0.1s
