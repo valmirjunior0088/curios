@@ -35,18 +35,12 @@ Every other fact is on disk: `documentation/language.md` for the surface languag
 ## Build and check
 
 - `cargo xtask <task>` runs a task of the files `xtask/tasks.toml` and `xtask/tasks/*.toml`, where every step is stated once: a path such as `cargo xtask workspace lint` names a group or a step, a group runs every step it holds, and `--help` at any depth lists what is there. `cargo xtask launcher build` builds the launcher the compiler embeds, once per checkout.
-- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint`, which holds the formatting too, after `cargo xtask format`, plus the change's own tests by name, `cargo xtask workspace test --filterset 'test(~<name>)'`. What the change touches adds to that or takes from it:
-  - Text, Core, ANF or the certifier: nothing more, since the lint already elaborates, erases and certifies all of `/std`.
-  - `curios-cps`, `curios-emit` or `curios-wasm`: the corpus tests that reach it, `curios-prelude`'s.
-  - A file of an `x*` crate, or a `pub` item one of them reads: `cargo xtask tools lint`, and `cargo xtask tools test` where a test of theirs covers it, since the workspace's steps leave the `x*` crates out.
-  - A link in a doc comment, written or its target renamed: `cargo xtask docs build`, last, the one step that follows a link.
+- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask format`, then every step that reads Rust — `cargo xtask workspace lint`, which holds the formatting too, `cargo xtask instrumented lint`, `cargo xtask tools lint`, and `cargo xtask docs build` last, the one step that follows a link — of which the first elaborates the prelude for the state of the sources and the rest take its images, so each costs what its own tool takes; plus the change's own tests by name, `cargo xtask workspace test --filterset 'test(~<name>)'`, or `cargo xtask tools test` where they are the jig's, and where the change touches `curios-cps`, `curios-emit` or `curios-wasm`, the corpus tests that reach it, `curios-prelude`'s. Test code and Markdown keep lines of their own:
   - Test code alone, after a run of the suite every other test of which passed: the tests it changed, by name, and the suite again only once production code moves.
-  - Doc comments alone: `cargo xtask format` and `cargo xtask docs build`, and no lint.
   - Markdown alone: nothing, and it is committed at once.
 - No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
 - Run a long command as a tracked background task with nothing after it and its output unredirected: the harness keeps the whole of it, both streams, in the file it names at the launch, where the user can watch it, and the task's notification reports the command's own exit code. Read that file for what a run printed, never the run again; report a finished check by the runner's own lines. Never detach one with `&` or add a shell that waits on it.
-- Keep the feature set constant within a session: every feature builds a second prelude archive, and the two evict each other. `cargo xtask instrumented lint` and `docs build` are the steps that build with every feature.
-- Past two packages' tests, run the suite once: each package selects another feature set, and a chain of by-package runs builds the prelude's archive before each.
+- Past two packages' tests, run the suite once: each package selects another feature set, and a chain of by-package runs compiles what each reaches again under its own.
 
 ## Where the rest is
 
