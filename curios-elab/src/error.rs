@@ -472,7 +472,7 @@ macro_rules! shown_terms {
                 $visit(head_type);
                 $visit(reduced);
             }
-            Self::NotATuple { head_type }
+            Self::NotATuple { head_type, .. }
             | Self::NotNatType { head_type }
             | Self::NotIntType { head_type }
             | Self::NotByteType { head_type }
@@ -688,6 +688,8 @@ pub enum Error {
     },
     NotATuple {
         head_type: Box<Term>,
+        /// The label read, where the projection named a field: a field read off a value that has none, which the report names as such rather than as a tuple's position.
+        label: Option<String>,
     },
     NotATupleType {
         expected: Box<Term>,
@@ -1569,6 +1571,15 @@ impl Error {
     pub fn not_a_tuple<U: Into<Term>>(head_type: U) -> Self {
         Self::NotATuple {
             head_type: Box::new(head_type.into()),
+            label: None,
+        }
+    }
+
+    /// A field read by `label` off a value of `head_type`, which is no tuple and no structure.
+    pub fn no_field_to_read<U: Into<Term>>(head_type: U, label: String) -> Self {
+        Self::NotATuple {
+            head_type: Box::new(head_type.into()),
+            label: Some(label),
         }
     }
 

@@ -903,7 +903,21 @@ impl Displayed<'_> {
                     ));
                 }
             }
-            Error::NotATuple { head_type } => {
+            // A label read off a value that holds no fields names the field it sought: the value is no tuple a position was asked of.
+            Error::NotATuple {
+                head_type,
+                label: Some(label),
+            } => {
+                f.text("no such field");
+                f.stating(format_args!(
+                    "`.{label}` reads a field, and a {} has none",
+                    Code(head_type.spelled(spelling))
+                ));
+            }
+            Error::NotATuple {
+                head_type,
+                label: None,
+            } => {
                 f.text("not a tuple");
                 f.stating(format_args!(
                     "projected from: a term of type {}",

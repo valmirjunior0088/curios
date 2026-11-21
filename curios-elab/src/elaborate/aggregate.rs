@@ -203,9 +203,21 @@ fn project(
             (index, Some(*name))
         }
         _ => {
-            return Err(pending(context, [head_type], |reporting, [head_type]| {
-                Error::not_a_tuple(resolved_for_display(reporting, &head_type))
-            }));
+            let label = match field {
+                Field::Label(label) => Some(label.to_string()),
+                Field::Tuple(_) | Field::Struct(..) | Field::Position(_) => None,
+            };
+            return Err(pending(
+                context,
+                [head_type],
+                move |reporting, [head_type]| {
+                    let head_type = resolved_for_display(reporting, &head_type);
+                    match label {
+                        Some(label) => Error::no_field_to_read(head_type, label),
+                        None => Error::not_a_tuple(head_type),
+                    }
+                },
+            ));
         }
     };
 
