@@ -20,7 +20,7 @@ use {
 /// ## Workloads and reproduction
 ///
 /// ```text
-/// cargo test --release --package curios --lib --all-features -- --ignored --nocapture coordination_measurements --test-threads=1
+/// cargo test --release --package curios --lib -- --ignored --nocapture coordination_measurements --test-threads=1
 /// ```
 ///
 /// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_suspend`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.

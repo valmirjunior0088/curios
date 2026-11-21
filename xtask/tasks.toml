@@ -24,7 +24,7 @@ install = "cargo install wasm-bindgen-cli --locked --version {version}"
 
 [handoff]
 description = "Run every check the handoff holds work to: each subject's steps, each after what it requires and consumes"
-requires = ["launcher", "workspace", "instrumented", "docs", "compiler", "bundle", "tree-sitter", "textmate", "vscode", "zed", "tools"]
+requires = ["launcher", "workspace", "docs", "compiler", "bundle", "tree-sitter", "textmate", "vscode", "zed", "tools"]
 
 [clean]
 description = "Remove the build products git ignores, keeping untracked work, the worktrees under .claude/worktrees and the hunts' snapshots under .claude/snapshots"

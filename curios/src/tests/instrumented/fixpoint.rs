@@ -38,7 +38,7 @@ impl std::io::Write for Rows {
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --release --package curios --lib --all-features -- --ignored --nocapture fixpoint_pass_measurements --test-threads=1
+/// cargo test --release --package curios --lib -- --ignored --nocapture fixpoint_pass_measurements --test-threads=1
 /// ```
 ///
 /// This prints one profiled compilation of `TOML_DRIVER`: each span's total, call count, extremes, allocated bytes and allocation calls, followed by its magnitude samples. A pass's boolean sample total counts rounds in which it changes the graph; its sample count counts invocations. A sweep can rewrite many candidates in one invocation. Its fired count neither counts rewrites nor establishes one-candidate draining or independence: the direct pass tests hold the snapshot and deferral contracts. Samples ending in `::nodes`, `::conts`, `::cap` and `::values` are graph sizes, not fired counts. Every span must close.

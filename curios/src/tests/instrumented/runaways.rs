@@ -87,7 +87,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --all-features --package curios --lib -- --ignored --nocapture runaway_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture runaway_measurements
 /// ```
 ///
 /// Counted, so the figures hold on any machine. The looks are the test profile's: a build with debug assertions asks every peel of a pair again, to hold their answers to each other (`curios-core`'s `peel_spine`), so a row whose comparisons peel reads fewer under the release compiler. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::take_looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.

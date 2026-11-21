@@ -957,7 +957,7 @@ fn survey(label: &str, source: &str) -> Survey {
 /// The corpus survey. Run explicitly:
 ///
 /// ```sh
-/// cargo test --package curios --all-features -- codegen::census::aggregate_flow_census --ignored --nocapture
+/// cargo test --package curios -- codegen::census::aggregate_flow_census --ignored --nocapture
 /// ```
 ///
 /// # What it last printed
@@ -1309,7 +1309,7 @@ entry()
 /// The death-birth census. Run explicitly:
 ///
 /// ```sh
-/// cargo test --package curios --all-features -- codegen::census::death_birth_census --ignored --nocapture
+/// cargo test --package curios -- codegen::census::death_birth_census --ignored --nocapture
 /// ```
 ///
 /// # What it last printed

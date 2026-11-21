@@ -68,24 +68,6 @@ jobs:
       - name: Test the runtime
         run: cargo xtask native test
 
-  instrumented:
-    name: Instrumented
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install the pinned toolchain
-        run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: instrumented
-          workspaces: .
-          cache-directories: |
-            curios/.artifacts
-            curios-binaryen/.artifacts
-      - name: Lint
-        run: cargo xtask instrumented lint
-
   compiler:
     name: Compiler
     runs-on: ubuntu-24.04

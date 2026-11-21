@@ -245,7 +245,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --all-features --package curios --lib -- --ignored --nocapture growth_slopes
+/// cargo test --package curios --lib -- --ignored --nocapture growth_slopes
 /// ```
 ///
 /// Alone in its invocation: the instruction counts open before Binaryen's and Wasmtime's pools start, so a stage before Binaryen is read on this thread alone and Binaryen and Cranelift with the pools' threads, and a measurement run beside it would share the allocator's counters. Counted, so the slopes hold on any machine; the instruction column reads `-` where the certifier opens no count.

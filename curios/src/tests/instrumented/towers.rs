@@ -72,7 +72,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --all-features --package curios --lib -- --ignored --nocapture tower_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture tower_measurements
 /// ```
 ///
 /// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::take_looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.

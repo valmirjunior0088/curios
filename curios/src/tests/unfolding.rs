@@ -324,7 +324,7 @@ struct Door {
 /// # How to take it
 ///
 /// ```sh
-/// cargo test --package curios --lib --all-features -- --ignored --nocapture scrutinee_refinement_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture scrutinee_refinement_measurements
 /// ```
 ///
 /// # What it last printed

@@ -93,7 +93,7 @@ fn every_step_the_handoff_runs_has_a_job() {
     }
 }
 
-/// The workspace is checked as it ships: no step of it turns a feature on, which is `instrumented`'s.
+/// The workspace is checked as it ships: no step of it turns a feature on.
 #[test]
 fn a_workspace_step_names_no_feature() {
     let tree = tree();
@@ -112,7 +112,7 @@ fn a_workspace_step_names_no_feature() {
 fn a_workspace_lint_goes_on_past_a_crate_that_fails() {
     let tree = tree();
 
-    for group in ["workspace", "instrumented", "native", "tools"] {
+    for group in ["workspace", "native", "tools"] {
         for (step, words) in commands_of(&tree, group) {
             if words.contains(&"clippy".to_string()) {
                 assert!(

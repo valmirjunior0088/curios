@@ -1,8 +1,0 @@
-description = "The workspace with every feature on"
-
-[lint]
-description = "Lint the workspace with every feature on; alone compiles the instrumentation a feature turns on"
-consumes = ["launcher.binary"]
-run = [
-    ["cargo", "clippy", "{workspace.shipped}", "--all-targets", "--all-features", "--keep-going"],
-]

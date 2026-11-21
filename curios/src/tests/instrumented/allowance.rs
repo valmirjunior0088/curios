@@ -13,7 +13,7 @@ use {
 
 /// **Every site the four corpora hold is classified inside [`LINT_ALLOWANCE`]**: the programs under `programs/`, the examples of `documentation/language.md`, and `/std`, its library and its test modules — compiled whole, since a fold handed no cabinet declines the archived unit as a baseline — each asked about as `curios lint` asks, under a stream filed at `curios/.artifacts/allowance/`. A classification that ran out would answer no class and leave its site unreported, so the allowance is the least power of ten above the largest figure here.
 ///
-/// cargo test --all-features --package curios --lib -- --ignored --nocapture classification_allowance_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture classification_allowance_measurements
 ///
 /// Counted, in units of the elaborator's budget, taken on top of `62915760a`: `classify` is what reducing a site's type to its class spent, `column` what inferring the type of a column a match pattern's `_` stands at spent.
 ///

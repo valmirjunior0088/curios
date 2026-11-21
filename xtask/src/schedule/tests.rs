@@ -95,7 +95,6 @@ fn the_handoff_runs_every_subject_s_steps_in_the_order_it_names_them() {
     for subject in [
         "launcher",
         "workspace",
-        "instrumented",
         "docs",
         "compiler",
         "bundle",

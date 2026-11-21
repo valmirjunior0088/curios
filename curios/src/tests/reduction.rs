@@ -1114,7 +1114,7 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str, left: usize) -> Str
 /// What each primitive of `/std/Parse/str` costs each checker beside its twin in `/std/Parse/bytes`, over 32 letters: a text primitive steps by a character and hands on a position that is a boundary of valid text, where its twin steps by a byte.
 ///
 /// ```sh
-/// cargo test --package curios --all-features -- --ignored --nocapture parse_primitive_measurements
+/// cargo test --package curios -- --ignored --nocapture parse_primitive_measurements
 /// ```
 ///
 /// Counted, so a reading transports between machines. A change to `/std/Parse`, to `/std/Str/At` or to what the closed machine evaluates retakes it.
@@ -1206,7 +1206,7 @@ fn parse_primitive_measurements() {
 /// What each claim of the type-level benchmark set costs each checker: an equality a type states and `Eq/refl()` proves, so that checking the program is reducing the claim's left side to its right. Six take a `Str` apart, one reads a `Flt`, one searches a `Str` and maps the position found.
 ///
 /// ```sh
-/// cargo test --package curios --all-features -- --ignored --nocapture type_level_claim_measurements
+/// cargo test --package curios -- --ignored --nocapture type_level_claim_measurements
 /// ```
 ///
 /// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 2 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.

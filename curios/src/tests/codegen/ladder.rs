@@ -377,7 +377,7 @@ fn reading_loops(wat: &str) -> Vec<Vec<&str>> {
 /// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement at a small input, and the recorded native timing protocol. Run explicitly:
 ///
 /// ```sh
-/// cargo test --package curios --lib --all-features -- --ignored --nocapture walk_mirror_attribution_measurements
+/// cargo test --package curios --lib -- --ignored --nocapture walk_mirror_attribution_measurements
 /// ```
 ///
 /// # The dynamic half, and how to retake it
@@ -530,7 +530,7 @@ entry()
 /// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/decode` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.
 ///
 /// ```sh
-/// cargo test --package curios --lib --all-features -- --ignored --nocapture decoder_doubling_slope
+/// cargo test --package curios --lib -- --ignored --nocapture decoder_doubling_slope
 /// ```
 ///
 /// It asserts nothing about time, which a busy machine moves: the ratio between neighbouring sizes is the reading, a median over interleaved rounds, and a size is only read against its neighbours in the same sitting.

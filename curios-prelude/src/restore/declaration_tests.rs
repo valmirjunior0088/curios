@@ -476,7 +476,7 @@ fn tree_and_graph(term: &Term) -> (u128, usize) {
 /// # How to take it
 ///
 /// ```sh
-/// cargo nextest run -p curios-prelude --all-targets --all-features --run-ignored only --no-capture printed_tree_measurements
+/// cargo nextest run -p curios-prelude --all-targets --run-ignored only --no-capture printed_tree_measurements
 /// ```
 ///
 /// Counted. For each definition's type and body: the nodes of its tree, the distinct nodes of its graph, and the first over the second. A print builds about one document per node of its term's tree, so an allowance of that many documents per distinct node, set well above the largest ratio here, elides none of them.
