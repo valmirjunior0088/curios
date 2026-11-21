@@ -162,6 +162,21 @@ fn values_and_functions_report_the_same_invalid_sequencing_types() {
     }
 }
 
+/// A `!` after a value that is no action is refused at the value as the `!` the reader wrote, with no line naming the call of `bind` it is elaborated through.
+#[test]
+fn a_bang_after_a_value_names_no_call_of_bind() {
+    let error = typecheck(
+        "use /std/{Nat, Io};\nlet both() -> Io({}) =\n    let x = 1!;\n    Io/pure(());\nboth()\n",
+    )
+    .expect_err("a numeral is no action");
+
+    assert!(
+        error.contains("inferred: `Nat`") && error.contains("expected: `Io(?)`"),
+        "{error}"
+    );
+    assert!(!error.contains("checked as"), "{error}");
+}
+
 /// A region whose monad is a telescope binder still sequences: the imitation reads a variable head, so the refusal above cannot fire on one.
 #[test]
 fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {

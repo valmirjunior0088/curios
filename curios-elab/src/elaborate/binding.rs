@@ -656,7 +656,8 @@ pub fn elaborate_bang(
         return Err(Error::bang_region_not_a_monad(region, owner).at_opt(term.extent()));
     };
     let witness = sequencing_witness(context, &monad, region, owner, term)?;
-    let head = Term::registered_method(context.syntax().monad.bind);
+    let bind = context.syntax().monad.bind;
+    let head = Term::registered_method(bind);
     let arguments = [(Plicity::Implicit, monad)]
         .into_iter()
         .chain(witness.map(|witness| (Plicity::Witness, witness)))
@@ -669,7 +670,31 @@ pub fn elaborate_bang(
         Some(extent) => Term::placed(extent, app),
         None => app,
     };
-    elaborate(context, &app, mode)
+    let bound = CalleeId::Method {
+        concept: Global::Authored(bind.concept.qualifier()),
+        field: bind.field.to_string(),
+    };
+    elaborate(context, &app, mode).map_err(|error| said_of_the_bang(error, &bound))
+}
+
+/// `error`, raised by the call of `bind` a `!` is elaborated through, as the `!` the reader wrote says it: the action it runs is checked as that call's first argument, a call no reader wrote, so the site naming it is left out and the action stands where it was written.
+fn said_of_the_bang(error: Error, bind: &CalleeId) -> Error {
+    match error {
+        Error::CheckedAs { site, error }
+            if site.callee == *bind && site.plicity == Plicity::Explicit && site.position == 0 =>
+        {
+            *error
+        }
+        Error::Located { extent, error } => Error::Located {
+            extent,
+            error: Box::new(said_of_the_bang(*error, bind)),
+        },
+        Error::InScope { scope, error } => Error::InScope {
+            scope,
+            error: Box::new(said_of_the_bang(*error, bind)),
+        },
+        error => error,
+    }
 }
 
 /// The `Monad` witness a `!` sequences through, resolved where the `!` stands, as an operator resolves the witness it dispatches through ([`infix_method`]): a region whose monad has none is refused as a region that is no monad. `None` where the registry names no `Monad` concept — an embedding elaborating without the prelude — and the wrapper then asks for the witness itself.
