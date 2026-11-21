@@ -161,3 +161,22 @@ fn lints_read_in_source_order() {
         ]
     );
 }
+
+/// One `use` declaration's unused selectors are one lint, naming each: a lint for each would repeat the declaration beneath every one.
+#[test]
+fn one_declarations_unused_selectors_are_one_lint() {
+    assert_eq!(
+        lints(
+            r#"
+        pub mod Foo
+            pub let a : Type = Type;
+            pub let b : Type = Type;
+            pub let c : Type = Type;
+        end
+        use /Foo/{a, b, c};
+        b
+    "#
+        ),
+        ["unused-import: unused imports\n  `a` and `c` are never used\n  delete them"]
+    );
+}

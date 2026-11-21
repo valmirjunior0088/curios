@@ -74,8 +74,8 @@ use {
     curios_abi::ForeignStore,
     curios_archive::Bytes,
     curios_common::{
-        Blob, Digest, Filed, Mount, Persistent, Qualifier, Recorded, Report, RootKind, Source,
-        SourceName, Span, SyntaxRegistry, grown,
+        Blob, Digest, Filed, Mount, Persistent, Qualifier, Recorded, Report, RootKind, Said,
+        Source, SourceName, Span, SyntaxRegistry, grown,
     },
     curios_document::Documentation,
     curios_surface::{
@@ -3217,29 +3217,64 @@ fn spellings_over(
     }
 }
 
-/// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
+/// The `unused-import` lints: every site no reference resolved through, a re-export excepted, the selectors of one `use` declaration in one lint.
 fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<curios_core::Lint> {
-    sites
+    // One declaration's unused selectors are one finding, said once and underlined at the first: a lint for each would repeat the line beneath every one.
+    let mut declared: Vec<(UseSite, Vec<String>)> = Vec::new();
+    for site in sites
         .into_iter()
         .filter(|site| !site.used && !site.exported)
-        .map(|site| {
+    {
+        // A selector is underlined at itself, a glob over its whole `use` declaration, since the glob itself is one character.
+        let name = match &site.what {
+            UseSiteKind::Selector(label) => label.to_string(),
+            UseSiteKind::Glob(path) => path.clone(),
+        };
+        let same_line = |first: &UseSite| {
+            first.body == site.body
+                && matches!(first.what, UseSiteKind::Selector(_))
+                && matches!(site.what, UseSiteKind::Selector(_))
+                && first.line.as_ref().map(|line| (line.start, line.end))
+                    == site.line.as_ref().map(|line| (line.start, line.end))
+        };
+        match declared.last_mut() {
+            Some((first, names)) if same_line(first) => names.push(name),
+            _ => declared.push((site, vec![name])),
+        }
+    }
+    declared
+        .into_iter()
+        .map(|(site, names)| {
             let at = site
                 .line
                 .as_ref()
                 .zip(site.span.as_ref())
                 .and_then(|(line, span)| anchoring.line(site.body, line, span));
-            // A selector is underlined at itself, a glob over its whole `use` declaration, since the glob itself is one character.
-            let name = match &site.what {
-                UseSiteKind::Selector(label) => label.to_string(),
-                UseSiteKind::Glob(path) => path.clone(),
-            };
-            curios_core::Lint::unused(
-                curios_core::LintKind::UnusedImport,
-                at,
-                "import",
-                name,
-                "delete it",
-            )
+            match names.as_slice() {
+                [name] => curios_core::Lint::unused(
+                    curios_core::LintKind::UnusedImport,
+                    at,
+                    "import",
+                    name,
+                    "delete it",
+                ),
+                [rest @ .., last] => {
+                    let listed = rest
+                        .iter()
+                        .map(|name| format!("`{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let mut said = Said::line("unused imports");
+                    said.stating(format_args!("{listed} and `{last}` are never used"));
+                    said.stating("delete them");
+                    curios_core::Lint {
+                        kind: curios_core::LintKind::UnusedImport,
+                        said,
+                        at,
+                    }
+                }
+                [] => unreachable!("a declaration's group holds the site it began with"),
+            }
         })
         .collect()
 }
