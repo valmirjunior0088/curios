@@ -1,6 +1,6 @@
 //! What the agent files hold of the tree: `CLAUDE.md` and every Markdown file under `.claude/`, with the hunter's guards beside them.
 //!
-//! A rule's globs decide where it loads, a citation is where a session is sent, and a guard is what stands between a hunter and the tree. Each is text no compiler reads, so a moved file or a pattern that reads a command line otherwise than the shell does fails nothing until it is put to the tree here.
+//! A rule's globs decide where it loads, a citation is where a session is sent, and a guard is what stands between a hunter and the tree. Each is text no compiler reads, so a moved file or a pattern that reads a command line otherwise than the shell does fails nothing until it is put to the tree here. The judge of a hunter's command line is put to a table, and the box its hook runs a command in is put to the kernel, where `bwrap` makes one.
 
 use {
     crate::*,
@@ -303,7 +303,7 @@ fn misjudged(script: &str, field: &str, table: &[(bool, &str, &str)]) -> Vec<Str
         .collect()
 }
 
-/// A hunter's shell runs the readers and the probes a hunt needs and nothing else: the guard admits each command line of the first rows, and refuses each of the rest, where the shell would run a program the guard never judged, hand one a flag it refuses, or write a file. The guard reads a command line as the shell does or refuses it: a heredoc is `<<'NAME'` alone, whose body is data, a backslash before a newline joins two lines, and a redirection is admitted only where its word ends.
+/// A hunter's shell runs the readers and the probes a hunt needs and nothing else: the judge admits each command line of the first rows, and refuses each of the rest, where the shell would run a program the guard never judged, hand one a flag it refuses, or write a file. The guard reads a command line as the shell does or refuses it: a heredoc is `<<'NAME'` alone, whose body is data, a backslash before a newline joins two lines, and a redirection is admitted only where its word ends.
 #[test]
 fn a_hunter_s_shell_runs_what_its_guard_judged_and_nothing_else() {
     let table = [
@@ -599,7 +599,7 @@ fn a_hunter_s_shell_runs_what_its_guard_judged_and_nothing_else() {
         ),
     ];
 
-    let misjudged = misjudged("guard.sh", "command", &table);
+    let misjudged = misjudged("judge.sh", "command", &table);
 
     assert!(misjudged.is_empty(), "{misjudged:#?}");
 }
@@ -655,4 +655,90 @@ fn a_hunter_writes_only_inside_its_directory_of_a_snapshot() {
     let misjudged = misjudged("write-guard.sh", "file_path", &table);
 
     assert!(misjudged.is_empty(), "{misjudged:#?}");
+}
+
+/// The command line the hunter's hook hands back for `command`, with `project` as its project: what the harness runs in the place of the one it was asked.
+fn handed_back(project: &Path, command: &str) -> String {
+    let input = ["{\"tool_input\":{\"command\":", &json(command), "}}"].concat();
+    let mut hook = Command::new("bash")
+        .arg(root().join(".claude/agents/hunter/guard.sh"))
+        .env("CLAUDE_PROJECT_DIR", project)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("bash runs the hook");
+    hook.stdin
+        .take()
+        .expect("the hook reads its input")
+        .write_all(input.as_bytes())
+        .expect("the hook takes its input");
+    let answered = hook.wait_with_output().expect("the hook ends");
+    assert!(answered.status.success(), "the hook admits `{command}`");
+
+    let mut read = Command::new("jq")
+        .args(["-r", ".hookSpecificOutput.updatedInput.command"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("jq reads the hook's answer");
+    read.stdin
+        .take()
+        .expect("jq reads its input")
+        .write_all(&answered.stdout)
+        .expect("jq takes its input");
+    let read = read.wait_with_output().expect("jq ends");
+
+    String::from_utf8(read.stdout)
+        .expect("a command line is text")
+        .trim_end()
+        .to_string()
+}
+
+/// A hunter's command runs where the kernel holds its writes: the hook hands the command back inside a box, under bash, and in that box a write lands in a hunter's directory of a snapshot and is refused anywhere else, its project's own tree included. Held where `bwrap` makes a box: a machine without it, or one that forbids the namespaces it takes, runs no hunt.
+#[test]
+fn a_hunter_s_command_runs_where_the_kernel_holds_its_writes() {
+    let boxes = Command::new("bwrap")
+        .args(["--ro-bind", "/", "/", "true"])
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success());
+    if !boxes {
+        return;
+    }
+
+    let project = target_directory()
+        .join("tmp")
+        .join(["hunter-box-", &std::process::id().to_string()].concat());
+    let hunter = project.join(".claude/snapshots/0abc123/hunters/hunter-1");
+    fs::create_dir_all(&hunter).expect("the project is made");
+
+    let handed = handed_back(&project, "true");
+    let within = handed
+        .strip_suffix("-- bash -c 'true'")
+        .expect("the box ends in the command, under bash");
+    let inside = hunter.join("inside");
+    let outside = project.join("outside");
+    let writes = [
+        "touch '",
+        &inside.to_string_lossy(),
+        "' && ! touch '",
+        &outside.to_string_lossy(),
+        "' 2>/dev/null",
+    ]
+    .concat();
+    let ran = Command::new("bash")
+        .arg("-c")
+        .arg([within, "-- bash -c \"", &writes, "\""].concat())
+        .status()
+        .expect("bash runs the boxed command");
+
+    let landed = (ran.success(), inside.exists(), outside.exists());
+    fs::remove_dir_all(&project).expect("the project is removed");
+    assert_eq!(landed, (true, true, false));
+}
+
+/// The hook asks the judge before it boxes anything: a command line the judge refuses is refused by the hook, whether or not a box can be made.
+#[test]
+fn a_hunter_s_hook_refuses_what_its_judge_refuses() {
+    assert!(!admits("guard.sh", "command", "touch x"));
 }
