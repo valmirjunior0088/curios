@@ -54,6 +54,26 @@ fn a_refused_program_is_answered_with_exit_zero() {
     );
 }
 
+/// A refusal beneath the verdict closes on its place as the answer's reader spells it: a program of a package, read through its manifest, closes on the file as it is named where the reader stands, which is how a check of the same file closes it.
+#[test]
+fn a_refusal_closes_on_its_place_as_a_check_spells_it() {
+    let root = project("false-place");
+
+    let output = curios(&root, &["wonder", "--false", "app.crs"], "");
+    let said = stdout(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(
+        said.starts_with("REFUSED    by elaborator `TypeMismatch` at the closing term"),
+        "{said}"
+    );
+    assert!(said.contains("\n└─ [error] app.crs:1:1\n"), "{said}");
+    assert!(
+        !said.contains(&root.display().to_string()),
+        "no line spells the file from the root of the disk: {said}"
+    );
+}
+
 /// A `.crsc` is put to the certifier alone, from a file or from standard input under `--core`, and answered alike.
 #[test]
 fn core_text_is_put_to_the_certifier_alone() {

@@ -208,11 +208,14 @@ fn a_step_the_certifier_refuses_is_reported_in_its_step() {
     let [refusal @ Refusal::Certifier { reported, .. }] = answer.refusals() else {
         panic!("the certifier refuses the step: {answer:?}");
     };
+    // The report opens on the step and goes on in the certifier's words, as far as their first line.
+    let reported = reported.to_string();
+    let said = refusal.said();
+    let opening = said.lines().next().unwrap_or_default();
     assert!(
-        reported.starts_with("in the step of `/lib`: "),
+        reported.starts_with(&format!("in the step of `/lib`: {opening}")),
         "{reported}"
     );
-    assert!(reported.ends_with(&refusal.said()), "{reported}");
 }
 
 /// A program a build refuses is reported as text, so the board cannot tell its checker and no expectation meets it: a witness whose fix refuses an earlier unit writes it as Core text.

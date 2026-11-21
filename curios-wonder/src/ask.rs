@@ -1202,19 +1202,20 @@ pub fn wonder_footprint(
     }
 }
 
-/// `wonder --false [SUBJECT]`: whether the checkers admit the program's closing term at `False`, to stdout — the verdict as the first word, `ADMITTED` or `REFUSED` and by whom, what each checker the subject meets made of it beneath, then every refusal as its checker reports it. Exit 0 once the question is answered, whichever way it went; a subject that does not lower or read was put to no checker, and stops the question as it stops a build.
+/// `wonder --false [SUBJECT]`: whether the checkers admit the program's closing term at `False`, to stdout — the verdict as the first word, `ADMITTED` or `REFUSED` and by whom, what each checker the subject meets made of it beneath, then every refusal as its checker reports it, rendered for the answer's reader as a check's refusals are ([`Put::rendered`]). Exit 0 once the question is answered, whichever way it went; a subject that does not lower or read was put to no checker, and stops the question as it stops a build.
 pub fn wonder_false(
     budget: u64,
     program: Program,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
+    let reader = telling.reader();
     let refusal = not_a_program(program.entry());
     let asked = Asked::about_program(program)?;
 
     match asked.falsified(budget, &Overlay::default(), telling) {
         Ok(put) => {
             telling.answering();
-            answer(put);
+            answer(put.rendered(&reader));
             Ok(())
         }
         Err(Unput::Unit) => Err(refusal.into()),

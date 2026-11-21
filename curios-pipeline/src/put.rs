@@ -13,7 +13,7 @@ use {
         program_refusal, read_core_text,
     },
     curios_cert::certify_program,
-    curios_common::{Report, Source, SyntaxRegistry, Variants},
+    curios_common::{Source, Style, SyntaxRegistry, Variants},
     curios_core::{Global, Program, Term, Universes},
     curios_module::RootSource,
     curios_surface::{Entrypoint, FormScope, Spelling},
@@ -58,15 +58,15 @@ impl fmt::Display for Checker {
 /// One refusal a term put at `False` met, as the checker that made it raised it.
 #[derive(Debug)]
 pub enum Refusal {
-    /// The elaborator's error, with the diagnostic a compilation prints for it.
+    /// The elaborator's error, with the reports a compilation makes of it.
     Elaborator {
         error: curios_elab::Error,
-        reported: String,
+        reported: CompileError,
     },
-    /// The certifier's refusal, of the item or registry entry it names, with the report a compilation makes of it.
+    /// The certifier's refusal, of the item or registry entry it names, with the reports a compilation makes of it.
     Certifier {
         refusal: curios_cert::Refusal,
-        reported: String,
+        reported: CompileError,
     },
 }
 
@@ -74,7 +74,7 @@ impl Refusal {
     /// The refusal in its checker's own words: the elaborator's diagnostic, which opens with them, and the certifier's error on no place ([`certifier_said`]).
     pub fn said(&self) -> String {
         match self {
-            Refusal::Elaborator { reported, .. } => reported.clone(),
+            Refusal::Elaborator { reported, .. } => reported.to_string(),
             Refusal::Certifier { refusal, .. } => certifier_said(refusal),
         }
     }
@@ -119,14 +119,21 @@ pub fn certifier_said(refusal: &curios_cert::Refusal) -> String {
     refusal.error.rendered(&Spelling::default()).to_string()
 }
 
-/// What the refusal says, as a compilation prints it.
-impl fmt::Display for Refusal {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Refusal {
+    /// What the refusal says, as a compilation prints it for a reader of `style`: each report a block that closes on its place as that reader spells it.
+    pub fn rendered(&self, style: &Style) -> String {
         match self {
             Refusal::Elaborator { reported, .. } | Refusal::Certifier { reported, .. } => {
-                formatter.write_str(reported)
+                reported.rendered(style)
             }
         }
+    }
+}
+
+/// What the refusal says, as a compilation prints it for a reader standing nowhere who sees no colour.
+impl fmt::Display for Refusal {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.rendered(&Style::plain()))
     }
 }
 
@@ -212,28 +219,32 @@ impl Put {
     }
 }
 
-/// The verdict as the answer's first word, `ADMITTED` or `REFUSED` and by whom; beneath it what each checker the term was put to made of it; then every refusal as its checker reports it.
-impl fmt::Display for Put {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.answer.admitted() {
-            true => writeln!(formatter, "ADMITTED   at `{}`", self.empty.faithful())?,
-            false => writeln!(formatter, "REFUSED    by {}", self.answer.refusers())?,
-        }
-
-        for &checker in self.asked {
-            writeln!(
-                formatter,
+impl Put {
+    /// The answer as a reader of `style` is shown it: the verdict as its first word, `ADMITTED` or `REFUSED` and by whom; beneath it what each checker the term was put to made of it, lines that read the same whoever reads them; then every refusal as its checker reports it, rendered for that reader, so a refusal closes on its place as a check of the same subject closes it.
+    pub fn rendered(&self, style: &Style) -> String {
+        let mut lines = vec![match self.answer.admitted() {
+            true => format!("ADMITTED   at `{}`", self.empty.faithful()),
+            false => format!("REFUSED    by {}", self.answer.refusers()),
+        }];
+        lines.extend(self.asked.iter().map(|&checker| {
+            format!(
                 "           {:<10}  {}",
                 checker.to_string(),
                 self.said(checker)
-            )?;
-        }
-
+            )
+        }));
         for refusal in self.answer.refusals() {
-            writeln!(formatter, "\n{}", refusal.to_string().trim_end())?;
+            lines.push(format!("\n{}", refusal.rendered(style).trim_end()));
         }
 
-        Ok(())
+        format!("{}\n", lines.join("\n"))
+    }
+}
+
+/// The answer as a reader standing nowhere, who sees no colour, is shown it ([`Put::rendered`]): what the soundness board files.
+impl fmt::Display for Put {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.rendered(&Style::plain()))
     }
 }
 
@@ -263,7 +274,7 @@ pub fn put_program(
             reported,
         }) => Answer::Unbuilt(Refusal::Elaborator {
             error: *error,
-            reported: reported.to_string(),
+            reported,
         }),
         Err(Refused {
             error: None,
@@ -277,12 +288,12 @@ pub fn put_program(
                 .into_iter()
                 .map(|obligation| Refusal::Elaborator {
                     error: obligation.error,
-                    reported: Report::render_all(&obligation.reported),
+                    reported: CompileError::Failure(obligation.reported),
                 })
                 .chain(verdicts.into_iter().map(|Refuted { verdict, reported }| {
                     Refusal::Certifier {
                         refusal: verdict,
-                        reported: Report::render_all(&reported),
+                        reported: CompileError::Failure(reported),
                     }
                 }))
                 .collect(),
@@ -332,8 +343,7 @@ pub fn put_core_text(
                         &lexicons,
                         &anchors,
                         syntax,
-                    )
-                    .to_string(),
+                    ),
                     refusal: verdict,
                 })
                 .collect(),

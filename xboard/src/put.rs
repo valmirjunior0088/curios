@@ -8,7 +8,9 @@ use {
     curios_common::{Report, Source},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{Put, Refusal, Unmade, certifier_said, put_core_text, put_program},
+    curios_pipeline::{
+        CompileError, Put, Refusal, Unmade, certifier_said, put_core_text, put_program,
+    },
     curios_surface::{Entrypoint, ReadError},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
@@ -152,7 +154,9 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Read(error) => unread(at(located(&error))),
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Put(curios_pipeline::Answer::Judged(vec![Refusal::Certifier {
-                reported: at(certifier_said(&verdict)),
+                reported: CompileError::Failure(vec![Report::unlocated(at(certifier_said(
+                    &verdict,
+                )))]),
                 refusal: *verdict,
             }]))
         }

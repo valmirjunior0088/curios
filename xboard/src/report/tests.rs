@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::Global,
-    curios_pipeline::{Checker, Refusal, certifier_said},
+    curios_pipeline::{Checker, CompileError, Refusal, certifier_said},
     std::slice,
 };
 
@@ -29,10 +29,15 @@ fn judged(refusals: Vec<Refusal>) -> Answer {
     Answer::Put(curios_pipeline::Answer::Judged(refusals))
 }
 
+/// A report of `said` alone, about no place: the compiler's report, which the board's own shares its name with.
+fn reported(said: impl Into<String>) -> CompileError {
+    CompileError::Failure(vec![curios_common::Report::unlocated(said)])
+}
+
 /// The certifier's refusal by `verdict`, reported in its own words.
 fn refusal_of(verdict: curios_cert::Refusal) -> Refusal {
     Refusal::Certifier {
-        reported: certifier_said(&verdict),
+        reported: reported(certifier_said(&verdict)),
         refusal: verdict,
     }
 }
@@ -50,7 +55,7 @@ fn by_certifier(error: curios_cert::Error) -> Answer {
 fn by_elaborator(error: curios_elab::Error) -> Answer {
     Answer::Put(curios_pipeline::Answer::Unbuilt(Refusal::Elaborator {
         error,
-        reported: "a diagnostic".to_string(),
+        reported: reported("a diagnostic"),
     }))
 }
 
@@ -117,7 +122,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
     let refused_by_both = judged(vec![
         Refusal::Elaborator {
             error: curios_elab::Error::Poisoned,
-            reported: "a diagnostic".to_string(),
+            reported: reported("a diagnostic"),
         },
         refusal_of(curios_cert::Refusal {
             name: None,
