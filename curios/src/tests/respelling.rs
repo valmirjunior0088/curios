@@ -13,7 +13,7 @@ use {
 const IMPORTS: &str =
     "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
-/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through.
+/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through; a structure over a natural, and a structure, a family and an indexed family over a proof, give the types one is spelled in.
 const DEFINITIONS: &str =
     "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
 let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
@@ -26,9 +26,13 @@ struct Pair: Type { left: Nat, right: Nat }
 let lemma(a: Nat, c: Nat, p: Holds(a < 10)) -> Holds(a < 10) = match c | 0 => p | _ => p end;
 let nonzero(b: Nat, c: Nat, p: Nat/NonZero(b)) -> Nat/NonZero(b) = match c | 0 => p | _ => p end;
 struct Bounded: Type { n: Nat, at: Holds(n < 10) }
-induct Checked: Type | checked(n: Nat, at: Holds(n < 10)) end";
+induct Checked: Type | checked(n: Nat, at: Holds(n < 10)) end
+struct Box(n: Nat): Type { at: Nat }
+struct Within(n: Nat, at: Holds(n < 10)): Type { k: Nat }
+induct Pinned(n: Nat, at: Holds(n < 10)): Type | pinned() end
+induct Proven: (n: Nat, at: Holds(n < 10)) -> Type end";
 
-/// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical.
+/// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical; functions of a type, of a proposition and of a structure, a type family, and a structure's value give the types and the literals a form is spelled with.
 const BINDERS: &[Binder] = &[
     Binder {
         name: "a",
@@ -129,6 +133,36 @@ const BINDERS: &[Binder] = &[
         name: "k",
         type_: "(Nat) -> Bool",
         needs: &[],
+    },
+    Binder {
+        name: "ft",
+        type_: "(Type) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "F",
+        type_: "(Nat) -> Type",
+        needs: &[],
+    },
+    Binder {
+        name: "fp",
+        type_: "(Prop) -> Nat",
+        needs: &[],
+    },
+    Binder {
+        name: "bx",
+        type_: "Box(c)",
+        needs: &["c"],
+    },
+    Binder {
+        name: "gb",
+        type_: "(Box(c)) -> Nat",
+        needs: &["c"],
+    },
+    Binder {
+        name: "pv",
+        type_: "(Pinned(a, p1)) -> Nat",
+        needs: &["a", "p1"],
     },
 ];
 
@@ -342,7 +376,138 @@ const GUARDS: &[Guard] = &[
         dual: Some("5 <= Nat/div(a, b, @nonzero(b, c, q))"),
         refused: &[],
     },
+    // A binder the guard does not name beneath a binder of the form's or in a type, where the filter in front of an equation reads the part as it stands and conversion reads it reduced: a lambda's body, a proof beneath a lambda, a function type's domain, an inductive type's index, a structure type's parameter, and a struct literal's parameter, which eta reads nowhere.
+    Guard {
+        guard: "u((x) => x) < 10",
+        respelled: "u((x) => x + 0 * c) < 10",
+        dual: Some("10 <= u((x) => x + 0 * c)"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "u((x) => Nat/div(x, b, @q)) < 5",
+        respelled: "u((x) => Nat/div(x, b, @nonzero(b, c, q))) < 5",
+        dual: Some("5 <= u((x) => Nat/div(x, b, @nonzero(b, c, q)))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "ft((y: F(b)) -> Nat) < 5",
+        respelled: "ft((y: F(b + 0 * c)) -> Nat) < 5",
+        dual: Some("5 <= ft((y: F(b + 0 * c)) -> Nat)"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "fp(Eq()(b, b)) < 5",
+        respelled: "fp(Eq()(b + 0 * c, b)) < 5",
+        dual: Some("5 <= fp(Eq()(b + 0 * c, b))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "ft(Box(b)) < 5",
+        respelled: "ft(Box(b + 0 * c)) < 5",
+        dual: Some("5 <= ft(Box(b + 0 * c))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "gb(bx) < 5",
+        respelled: "gb(Box { at = bx.at }) < 5",
+        dual: Some("5 <= gb(Box { at = bx.at })"),
+        refused: UNREAD,
+    },
+    // A binder the guard does not name inside a proof at a type's parameter or index, or at a constructor's parameter, which conversion compares at a proposition and reads nowhere.
+    Guard {
+        guard: "ft(Within(a, p1)) < 5",
+        respelled: "ft(Within(a, lemma(a, c, p1))) < 5",
+        dual: Some("5 <= ft(Within(a, lemma(a, c, p1)))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "ft(Pinned(a, p1)) < 5",
+        respelled: "ft(Pinned(a, lemma(a, c, p1))) < 5",
+        dual: Some("5 <= ft(Pinned(a, lemma(a, c, p1)))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "ft(Proven(a, p1)) < 5",
+        respelled: "ft(Proven(a, lemma(a, c, p1))) < 5",
+        dual: Some("5 <= ft(Proven(a, lemma(a, c, p1)))"),
+        refused: UNREAD,
+    },
+    Guard {
+        guard: "pv(Pinned/pinned(@a, @p1)) < 5",
+        respelled: "pv(Pinned/pinned(@a, @lemma(a, c, p1))) < 5",
+        dual: Some("5 <= pv(Pinned/pinned(@a, @lemma(a, c, p1)))"),
+        refused: UNREAD,
+    },
 ];
+
+/// Every arm past the control: where a respelling's equation is never put to the guard's, it is refused at each.
+const UNREAD: &[Arm] = &[
+    Arm::Qed,
+    Arm::Proved,
+    Arm::Term,
+    Arm::Type,
+    Arm::Dual,
+    Arm::Index,
+];
+
+/// A guard and a form apart from it past every reduction, with the form's dual: no conversion holds the two equal, so no arm of the guard answers the form, however the filter in front of an equation reads it.
+struct Apart {
+    guard: &'static str,
+    apart: &'static str,
+    dual: &'static str,
+}
+
+/// Near misses of the rows above whose binder stands beneath a binder of the form's or in a type: a lambda's body, a proof's neighbour beneath a lambda, a function type's domain, an inductive type's index and a structure type's parameter, each apart from the guard.
+const APART: &[Apart] = &[
+    Apart {
+        guard: "u((x) => x) < 10",
+        apart: "u((x) => x + c) < 10",
+        dual: "10 <= u((x) => x + c)",
+    },
+    Apart {
+        guard: "u((x) => Nat/div(x, b, @q)) < 5",
+        apart: "u((x) => Nat/div(x + c, b, @q)) < 5",
+        dual: "5 <= u((x) => Nat/div(x + c, b, @q))",
+    },
+    Apart {
+        guard: "ft((y: F(b)) -> Nat) < 5",
+        apart: "ft((y: F(b + c)) -> Nat) < 5",
+        dual: "5 <= ft((y: F(b + c)) -> Nat)",
+    },
+    Apart {
+        guard: "fp(Eq()(b, b)) < 5",
+        apart: "fp(Eq()(b + c, b)) < 5",
+        dual: "5 <= fp(Eq()(b + c, b))",
+    },
+    Apart {
+        guard: "ft(Box(b)) < 5",
+        apart: "ft(Box(b + c)) < 5",
+        dual: "5 <= ft(Box(b + c))",
+    },
+];
+
+impl Apart {
+    /// The form stated true in the guard's `true` arm, and its dual in the `false` arm: each refused.
+    fn cells(&self) -> Vec<Cell> {
+        let Apart { guard, apart, dual } = self;
+        [
+            format!(
+                "match {guard} | true => let _: Holds({apart}) = True/qed(); () | false => () end"
+            ),
+            format!(
+                "match {guard} | true => () | false => let _: Holds({dual}) = True/qed(); () end"
+            ),
+        ]
+        .into_iter()
+        .map(|body| Cell {
+            at: format!("`{guard}` beside `{apart}`"),
+            result: "{}".to_owned(),
+            body,
+            stated: Answer::Refused,
+        })
+        .collect()
+    }
+}
 
 impl Guard {
     fn cells(&self) -> Vec<Cell> {
@@ -717,6 +882,13 @@ fn misplaced(cells: &[Cell]) -> Vec<String> {
 #[test]
 fn every_respelled_guard_is_on_the_side_stated() {
     let cells = GUARDS.iter().flat_map(Guard::cells).collect::<Vec<_>>();
+    let misplaced = misplaced(&cells);
+    assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
+}
+
+#[test]
+fn a_form_apart_from_its_guard_past_every_reduction_is_answered_by_no_arm() {
+    let cells = APART.iter().flat_map(Apart::cells).collect::<Vec<_>>();
     let misplaced = misplaced(&cells);
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
 }

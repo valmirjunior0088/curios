@@ -6,9 +6,12 @@
 - under `match u((x) => Nat/div(x, b, @q)) < 5`, `u((x) => Nat/div(x, b, @nonzero(b, c, q))) < 5`, a proof beneath the binder, whose refusal prints the fact as `Holds(u((x) => Nat/div(x, b)) < 5)`, the guard's own spelling, the proof left out;
 - under `match ft((y: F(b)) -> Nat) < 5`, `ft((y: F(b + 0 * c)) -> Nat) < 5`, a function type's domain;
 - under `match fp(Eq()(b, b)) < 5`, `fp(Eq()(b + 0 * c, b)) < 5`, an inductive type's index;
-- under `match ft(Box(b)) < 5`, `ft(Box(b + 0 * c)) < 5`, a structure type's parameter.
+- under `match ft(Box(b)) < 5`, `ft(Box(b + 0 * c)) < 5`, a structure type's parameter;
+- under `match gb(bx) < 5`, `gb(Box { at = bx.at }) < 5`, a struct literal's parameter, for a `bx: Box(c)`: conversion compares the literal against `bx` through its type, by eta, and reads its parameter nowhere.
 
-The filter's contract is that every form conversion could hold equal to a reduct of the key passes it; these are where it does not. Both checkers' `question_tests` pin the first as `a_binder_beneath_a_lambda_is_counted_where_it_stands`.
+A proof at a type former's parameter or index, or at a constructor's parameter, is read like any term too, since each checker's `proof_parts` types an application's arguments, a constructor's payload, a struct literal's fields and an operation's operands alone: under `match ft(Within(a, p1)) < 5`, `ft(Within(a, lemma(a, c, p1))) < 5` is refused, and so are its family, index and constructor counterparts.
+
+The filter's contract is that every form conversion could hold equal to a reduct of the key passes it; these are where it does not. `curios/src/tests/respelling.rs`'s guard grid holds each as a row stated refused, beside a table of near misses apart past every reduction and held refused, and both checkers' `question_tests` pin the first as `a_binder_beneath_a_lambda_is_counted_where_it_stands`.
 
 The next step is stage 1.
 
@@ -25,9 +28,8 @@ Settled by the user on 2026-11-20.
 
 ## Stages
 
-1. **The refusals as tests.** Rows of `curios/src/tests/respelling.rs`'s guard grid for the five programs, stated refused at every arm past the control, and near misses in both checkers' `question_tests` — a lambda's body, a domain and an index each differing past every reduction — stuck.
-2. **The walk reads as conversion reads.** `Stands::Beneath` goes: every part reduction did not leave is reduced and read, and passes where conversion meets it only in step or eta never reads it; a metavariable and a transient end the test. The five rows turn held, the near misses stay stuck, and both `question_tests` turn to the answer; `could_answer`'s contract and [Case equations and their key](../../design/soundness/case-equations-and-their-key.md) are restated.
-3. **Proofs at a type's parameters.** Both checkers' `proof_parts` type a type former's parameters and indices and a constructor's parameters; a grid row whose respelling stands in a proof at a family's parameter turns held.
+1. **The walk reads as conversion reads.** `Stands::Beneath` goes: every part reduction did not leave is reduced and read, and passes where conversion meets it only in step or eta never reads it; a metavariable and a transient end the test. The six rows of the programs above turn held, the near misses stay refused, and both `question_tests` turn to the answer; `could_answer`'s contract and [Case equations and their key](../../design/soundness/case-equations-and-their-key.md) are restated.
+2. **Proofs at a type's parameters.** Both checkers' `proof_parts` type a type former's parameters and indices and a constructor's parameters; the four rows of a proof at one turn held.
 
 ## Verification
 
@@ -36,4 +38,4 @@ Settled by the user on 2026-11-20.
 
 ## Retirement
 
-When stage 3 lands, this file is deleted.
+When stage 2 lands, this file is deleted.
