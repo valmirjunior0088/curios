@@ -472,7 +472,8 @@ macro_rules! shown_terms {
             }
             Self::OperatorUndefined { type_, .. } => $visit(type_),
             Self::ImplicitAtOtherSort { given, .. } => $visit(given),
-            Self::UninferredImplicit {
+            Self::UninferredImplicit { type_, .. } => $visit(type_),
+            Self::UndischargedBound {
                 bound,
                 reduct,
                 refusal,
@@ -1005,16 +1006,23 @@ pub enum Error {
         symbol: String,
         type_: Box<Term>,
     },
-    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing would name a fault the author cannot find.
-    UninferredImplicit {
+    /// A hidden member at a proposition that nothing proved: the bound the reduct's one inhabitant and the procedure that proves a bound from the facts in scope both left open. Carries the insertion provenance (the applied function, literal or operator and the binder it filled) so the report says whose bound it is and how it is written, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for: `Has(layout, "sidebr")` is the whole of why the call was refused.
+    ///
+    /// Named by the procedure that fills the member, as [`Error::UninferredImplicit`] and [`Error::NoWitness`] are, so one fault reads alike at a call, a literal and an operator ([A diagnostic spells what its reader can write](../../documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md)).
+    UndischargedBound {
         callee: Callee,
         binder: Option<String>,
         bound: Box<Term>,
-        proposition: bool,
         /// What `bound` reduced to when it was asked at the mint, kept when that is an inductive type: `Has(spec, "prot")` reduces to `False`, and the reduct is the sentence the spelling alone does not say.
         reduct: Option<Box<Term>>,
         /// Why the procedure that proves a bound from the facts in scope proved nothing: the facts it considered, and what its search concluded.
         refusal: Option<Box<Refusal>>,
+    },
+    /// A hidden member at a type or a value that unification never pinned — `@T: Type`, `@n: Nat` — which no argument and no expected type determined. Carries the insertion provenance (the applied function, literal or operator and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type. It was never an obligation, so it is told from [`Error::UndischargedBound`]: reported as one discharged by nothing, it would name a fault the author cannot find.
+    UninferredImplicit {
+        callee: Callee,
+        binder: Option<String>,
+        type_: Box<Term>,
     },
     /// An argument handed where an implicit argument declared at the other sort is still open: a proof where the implicit is declared at `Type`, which is where `proposition`, and a value of a type where it is declared at `Prop`. `given`, the argument's type, is the one candidate the argument offers the implicit, and neither sort admits what stands at the other, so the implicit stays unsolved and the argument's own mismatch would show it as `?`.
     ImplicitAtOtherSort {
@@ -1272,6 +1280,7 @@ variants!(Error {
     BangRegionUndetermined,
     BangRegionNotAMonad,
     OperatorUndefined,
+    UndischargedBound,
     UninferredImplicit,
     ImplicitAtOtherSort,
     DomainNeverDetermined,
@@ -1828,21 +1837,27 @@ impl Error {
         }
     }
 
-    pub fn uninferred_implicit(
+    pub fn undischarged_bound(
         callee: Callee,
         binder: Option<String>,
         bound: Term,
-        proposition: bool,
         reduct: Option<Term>,
         refusal: Option<Refusal>,
     ) -> Self {
-        Self::UninferredImplicit {
+        Self::UndischargedBound {
             callee,
             binder,
             bound: Box::new(bound),
-            proposition,
             reduct: reduct.map(Box::new),
             refusal: refusal.map(Box::new),
+        }
+    }
+
+    pub fn uninferred_implicit(callee: Callee, binder: Option<String>, type_: Term) -> Self {
+        Self::UninferredImplicit {
+            callee,
+            binder,
+            type_: Box::new(type_),
         }
     }
 

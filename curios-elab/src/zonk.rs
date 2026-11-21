@@ -221,15 +221,19 @@ impl<'a> Zonk<'a> {
                                 .map(|entry| entry.result().clone())
                                 .unwrap_or_else(Term::type_ground);
                             let bound = self.zonk_term(&bound).unwrap_or(bound);
-                            // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
-                            let unsolved = Error::uninferred_implicit(
-                                callee(self, &origin.callee),
-                                origin.parameter.map(|name| name.as_str().to_string()),
-                                bound,
-                                entry.is_some_and(|entry| entry.proposition()),
-                                entry.and_then(|entry| entry.reduct().cloned()),
-                                entry.and_then(|entry| entry.refusal().cloned()),
-                            );
+                            // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name. A member at a proposition is the bound procedure's to fill and any other unification's, and each is refused under the procedure that left it open.
+                            let callee = callee(self, &origin.callee);
+                            let binder = origin.parameter.map(|name| name.as_str().to_string());
+                            let unsolved = match entry {
+                                Some(entry) if entry.proposition() => Error::undischarged_bound(
+                                    callee,
+                                    binder,
+                                    bound,
+                                    entry.reduct().cloned(),
+                                    entry.refusal().cloned(),
+                                ),
+                                _ => Error::uninferred_implicit(callee, binder, bound),
+                            };
                             // Minted in an arm no value reaches — one its scrutinee's indices rule out, or one a guard says is never taken, which was asked where the bound was given up — the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
                             let unsolved = match entry
                                 .and_then(|entry| entry.frames().dead_arm().or(entry.dead_arm()))

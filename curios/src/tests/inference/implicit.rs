@@ -148,10 +148,29 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
 
     let report = error(source);
     assert!(
-        report.contains("implicit argument `n` of `pad` was not inferred")
-            && report.contains("no argument or expected type determined it\n│  its type: `Nat`")
+        report.contains(
+            "uninferred argument\n│  the implicit argument `n` of `pad` was not inferred"
+        ) && report.contains("no argument or expected type determined it\n│  its type: `Nat`")
             && !report.contains("nothing discharged"),
         "the report should say nothing determined the value, got: {report}"
+    );
+}
+
+// A literal's hidden field at a value is unification's, as a call's implicit argument is: headed as a field nothing inferred, with how a literal writes it, and never as a bound.
+#[test]
+fn an_undetermined_hidden_field_is_reported_as_an_uninferred_field() {
+    let source = r#"
+        use /std/{Nat};
+        struct Tagged: pub Type { @tag: Nat, value: Nat }
+        /std/print(Nat/to_str(Tagged { value = 1 }.value))
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains(
+            "uninferred field\n│  the hidden field `tag` of `Tagged` was not inferred\n│  no field or expected type determined it\n│  its type: `Nat`\n│  write it explicitly, `Tagged { @... }`"
+        ) && !report.contains("nothing discharged"),
+        "{report}"
     );
 }
 

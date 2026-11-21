@@ -1664,11 +1664,10 @@ fn root_blocker_error(
     let binder = origin.parameter.map(|name| name.as_str().to_string());
     Some(
         pending(context, [&bound], move |reporting, [bound]| {
-            Error::uninferred_implicit(
+            Error::undischarged_bound(
                 callee,
                 binder,
                 resolved_for_display(reporting, &bound),
-                true,
                 reduct,
                 refusal,
             )

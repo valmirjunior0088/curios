@@ -323,6 +323,12 @@ fn spelled_mention(name: &Mention, spelling: &Spelling) -> String {
     }
 }
 
+/// What a report says of a witness's hidden parameter where it would say how to write one: nothing can, since a witness is never called and its parameters are filled from the goal it answers.
+fn witness_never_called(said: &mut Said) {
+    said.stating("a witness is never called");
+    said.stating("its parameters are filled from the goal it is resolved for");
+}
+
 impl ErasedSite {
     /// This site as a refusal's sentence names it, each declaration spelled for the reader.
     pub fn phrase(&self, spelling: &Rc<Spelling>) -> String {
@@ -1584,100 +1590,60 @@ impl Displayed<'_> {
                     type_.spelled(spelling)
                 ));
             }
-            Error::UninferredImplicit {
+            // A bound is the procedure's that proves one, and its report reads alike wherever it stands: the headline and what was asked are the fault's, and the place says only whose bound it is and how it is written there.
+            Error::UndischargedBound {
                 callee,
                 binder,
                 bound,
-                proposition,
                 reduct,
                 refusal,
             } => {
                 let bound = bound.spelled(spelling);
-                // A proposition is a bound, and what was asked for is the fact nothing established. Anything else is a value or a type the arguments and the expectation left undetermined, which is a different fault with a different remedy.
-                let why = match proposition {
-                    true => {
-                        let nothing = match reduct {
-                            // An inductive proposition as written reduces to itself, and a report that said so would say the bound twice.
-                            Some(reduct) => {
-                                let reduct = reduct.spelled(spelling).to_string();
-                                match reduct == bound.to_string() {
-                                    true => format!("nothing discharged `{bound}`"),
-                                    false => format!(
-                                        "nothing discharged `{bound}`, which reduces to `{reduct}`"
-                                    ),
-                                }
-                            }
-                            None => format!("nothing discharged `{bound}`"),
-                        };
-                        let mut why = Said::line(nothing);
-                        if let Some(refusal) = refusal {
-                            refused(&mut why, refusal, spelling);
-                        }
-
-                        why
-                    }
-                    false => {
-                        // A literal has fields where a call has arguments.
-                        let given = match callee {
-                            Callee::Structure(_) => "field",
-                            _ => "argument",
-                        };
-                        let mut why =
-                            Said::line(format!("no {given} or expected type determined it"));
-                        why.stating(format_args!("its type: {}", Code(&bound)));
-
-                        why
-                    }
-                };
+                f.text("undischarged bound");
+                f.stating(format_args!(
+                    "{} was not discharged",
+                    callee.slot("bound", binder.as_deref(), spelling)
+                ));
+                match reduct {
+                    // An inductive proposition as written reduces to itself, and a report that said so would say the bound twice.
+                    Some(reduct) if reduct.spelled(spelling).to_string() != bound.to_string() => f
+                        .stating(format_args!(
+                            "nothing discharged `{bound}`, which reduces to `{}`",
+                            reduct.spelled(spelling)
+                        )),
+                    _ => f.stating(format_args!("nothing discharged `{bound}`")),
+                }
+                if let Some(refusal) = refusal {
+                    refused(f, refusal, spelling);
+                }
                 // A bound the search read is one the facts in scope may prove, so the way out named first is a fact: a guard. One it read nothing in has the written proof alone.
-                let searched =
-                    *proposition && refusal.as_ref().is_some_and(|refusal| !refusal.is_silent());
-                // The way out by writing the slot, after the guard where there is one.
-                let written = |f: &mut Said, before: &str, explicit: String| match searched {
-                    true => {
+                let searched = refusal.as_ref().is_some_and(|refusal| !refusal.is_silent());
+                let guarded = |f: &mut Said, before: &str| {
+                    if searched {
                         f.stating(format_args!(
                             "decide the bound with a guard before the {before}"
                         ));
-                        f.stating(format_args!("or {explicit}"));
                     }
-                    false => f.stating(explicit),
                 };
+                let or = if searched { "or " } else { "" };
                 match callee {
-                    // A literal's slot is a field, written in braces under `@`. One declared as its type alone has no name to quote.
+                    // A literal's slot is a field, written in braces under `@`.
                     Callee::Structure(name) => {
-                        let name = spelling.symbol(name);
-                        let field = match binder {
-                            None => "a hidden field".to_string(),
-                            Some(binder) => format!("the hidden field `{binder}`"),
-                        };
-                        f.text("unfilled field");
-                        f.stating(format_args!("{field} of `{name}` was not filled"));
-                        f.extend(why);
-                        written(
-                            f,
-                            "literal",
-                            format!("write it explicitly, `{name} {{ @... }}`"),
-                        );
+                        guarded(f, "literal");
+                        f.stating(format_args!(
+                            "{or}write it explicitly, `{} {{ @... }}`",
+                            spelling.symbol(name)
+                        ));
                     }
                     Callee::Function(func) => {
-                        let func = spelled_mention(func, spelling);
-                        let argument = match binder {
-                            None => "an implicit argument".to_string(),
-                            Some(binder) => format!("the implicit argument `{binder}`"),
-                        };
-                        f.text("uninferred argument");
-                        f.stating(format_args!("{argument} of `{func}` was not inferred"));
-                        f.extend(why);
-                        written(f, "call", format!("supply it explicitly, `{func}(@...)`"));
+                        guarded(f, "call");
+                        f.stating(format_args!(
+                            "{or}supply it explicitly, `{}(@...)`",
+                            spelled_mention(func, spelling)
+                        ));
                     }
                     // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.
                     Callee::Operator { method, .. } => {
-                        f.text("undischarged bound");
-                        f.stating(format_args!(
-                            "{} was not discharged",
-                            callee.slot("bound", binder.as_deref(), spelling)
-                        ));
-                        f.extend(why);
                         f.stating("an operator takes no written arguments");
                         f.stating("decide the bound with a guard before the operation");
                         f.stating(format_args!(
@@ -1686,38 +1652,82 @@ impl Displayed<'_> {
                         ));
                     }
                     Callee::Constructor { .. } => {
-                        let argument = match binder {
-                            None => "an implicit argument".to_string(),
-                            Some(binder) => format!("the implicit argument `{binder}`"),
-                        };
-                        f.text("uninferred argument");
-                        f.stating(format_args!(
-                            "{argument} of {} was not inferred",
-                            callee.phrase(spelling)
-                        ));
-                        f.extend(why);
-                        f.stating("supply it explicitly");
+                        guarded(f, "call");
+                        f.stating(format_args!("{or}supply it explicitly"));
                     }
-                    // A head the program gave no name to: a computed function, or a projection out of a recursive group. There is nothing to quote, so the advice names the slot rather than a callee it cannot spell.
+                    // A head the program gave no name to: a computed function, or a projection out of a recursive group. There is nothing to quote, so the advice names the place rather than a callee it cannot spell.
                     Callee::Anonymous => {
+                        guarded(f, "call");
+                        f.stating(format_args!("{or}supply it explicitly at the call site"));
+                    }
+                    Callee::Witness { .. } => witness_never_called(f),
+                }
+            }
+            // A value or a type no argument and no expected type determined: unification's, which is a different fault from a bound with a different remedy.
+            Error::UninferredImplicit {
+                callee,
+                binder,
+                type_,
+            } => {
+                let type_ = type_.spelled(spelling);
+                match callee {
+                    // A literal has fields where a call has arguments, written in braces under `@`.
+                    Callee::Structure(name) => {
+                        let name = spelling.symbol(name);
+                        f.text("uninferred field");
+                        f.stating(format_args!(
+                            "{} was not inferred",
+                            callee.slot("hidden field", binder.as_deref(), spelling)
+                        ));
+                        f.stating("no field or expected type determined it");
+                        f.stating(format_args!("its type: {}", Code(&type_)));
+                        f.stating(format_args!("write it explicitly, `{name} {{ @... }}`"));
+                    }
+                    Callee::Function(func) => {
                         f.text("uninferred argument");
                         f.stating(format_args!(
                             "{} was not inferred",
                             callee.slot("implicit argument", binder.as_deref(), spelling)
                         ));
-                        f.extend(why);
-                        f.stating("supply it explicitly at the call site");
+                        f.stating("no argument or expected type determined it");
+                        f.stating(format_args!("its type: {}", Code(&type_)));
+                        f.stating(format_args!(
+                            "supply it explicitly, `{}(@...)`",
+                            spelled_mention(func, spelling)
+                        ));
                     }
-                    // A witness is never called, so there is no argument to supply: its parameters are filled from the goal it answers.
-                    Callee::Witness { .. } => {
+                    // An operator takes no written arguments, so the slot is written through the method call it stands for.
+                    Callee::Operator { method, .. } => {
                         f.text("uninferred argument");
                         f.stating(format_args!(
                             "{} was not inferred",
-                            callee.slot("implicit parameter", binder.as_deref(), spelling)
+                            callee.slot("implicit argument", binder.as_deref(), spelling)
                         ));
-                        f.extend(why);
-                        f.stating("a witness is never called");
-                        f.stating("its parameters are filled from the goal it is resolved for");
+                        f.stating("no argument or expected type determined it");
+                        f.stating(format_args!("its type: {}", Code(&type_)));
+                        f.stating("an operator takes no written arguments");
+                        f.stating(format_args!(
+                            "write it in a call of `{}`",
+                            spelling.symbol(method)
+                        ));
+                    }
+                    Callee::Constructor { .. } | Callee::Anonymous | Callee::Witness { .. } => {
+                        let noun = match callee {
+                            Callee::Witness { .. } => "implicit parameter",
+                            _ => "implicit argument",
+                        };
+                        f.text("uninferred argument");
+                        f.stating(format_args!(
+                            "{} was not inferred",
+                            callee.slot(noun, binder.as_deref(), spelling)
+                        ));
+                        f.stating("no argument or expected type determined it");
+                        f.stating(format_args!("its type: {}", Code(&type_)));
+                        match callee {
+                            Callee::Witness { .. } => witness_never_called(f),
+                            Callee::Anonymous => f.stating("supply it explicitly at the call site"),
+                            _ => f.stating("supply it explicitly"),
+                        }
                     }
                 }
             }

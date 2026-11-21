@@ -72,8 +72,8 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     .expect_err("a guard over one window does not discharge another");
 
     assert!(
-        error.contains("was not inferred"),
-        "expected an uninferred window bound, got: {error}"
+        error.contains("was not discharged"),
+        "expected an undischarged window bound, got: {error}"
     );
 }
 

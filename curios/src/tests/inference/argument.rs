@@ -158,7 +158,7 @@ fn a_witness_telescopes_undischarged_bound_names_the_witness() {
     );
     assert!(
         report.contains(
-            "the implicit parameter `ok` of the witness of `Show` for head `Small` was not inferred"
+            "the bound `ok` of the witness of `Show` for head `Small` was not discharged"
         ) && report.contains("a witness is never called")
             && !report.contains("supply it explicitly")
             && !report.contains("witness~"),

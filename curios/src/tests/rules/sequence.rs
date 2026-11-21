@@ -301,7 +301,7 @@ fn a_surrogate_is_neither_text_nor_a_character() {
     .refused(&[
         ("0x9F", "0xA0"),
     ])
-    .by_elaborator_in("/edge", |error| matches!(error, curios_elab::Error::UninferredImplicit { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Str/Valid/Valid(x[0xED, 0xA0, 0x80])" && pinned(reduct) == "/sys/Bool/False"));
+    .by_elaborator_in("/edge", |error| matches!(error, curios_elab::Error::UndischargedBound { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Str/Valid/Valid(x[0xED, 0xA0, 0x80])" && pinned(reduct) == "/sys/Bool/False"));
     control(
         r#"
         use /std/{Char};
@@ -315,7 +315,7 @@ fn a_surrogate_is_neither_text_nor_a_character() {
     .refused(&[
         ("0xD7FF", "0xD800"),
     ])
-    .by_elaborator_in("/edge", |error| matches!(error, curios_elab::Error::UninferredImplicit { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Char/Valid/Valid(55296)" && pinned(reduct) == "/sys/Bool/False"));
+    .by_elaborator_in("/edge", |error| matches!(error, curios_elab::Error::UndischargedBound { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Char/Valid/Valid(55296)" && pinned(reduct) == "/sys/Bool/False"));
 }
 
 // The certifier's half of `a_surrogate_is_neither_text_nor_a_character`: the certifier reads no privacy and discharges nothing, so a value built past the elaborator is held by the field its literal states alone. `c` is elaborated at `A`, whose validity reduces to `True`, and its code is rewritten to the surrogate `U+D800` with the elaborated proof kept, which the field then states at `Valid(55296)`, reducing to `False`.

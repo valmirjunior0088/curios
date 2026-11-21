@@ -126,7 +126,7 @@ fn a_hidden_field_nothing_fills_is_refused_at_the_literal() {
 
     let report = error(source);
     assert!(
-        report.contains("a hidden field of") && report.contains("was not filled"),
+        report.contains("undischarged bound\n│  the bound of `Positive` was not discharged"),
         "{report}"
     );
     assert!(
@@ -194,7 +194,7 @@ fn a_spread_does_not_carry_a_bound_its_override_breaks() {
 
     let report = error(source);
     assert!(
-        report.contains("hidden field `ok` of") && report.contains("was not filled"),
+        report.contains("the bound `ok` of `Positive` was not discharged"),
         "{report}"
     );
 }

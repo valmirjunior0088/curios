@@ -251,8 +251,14 @@ impl fmt::Display for Refusals {
                 )?,
                 _ => {}
             }
-            if let curios_elab::Error::UninferredImplicit { bound, .. } = error.raised() {
-                write!(formatter, "\n  bound: {}", pinned(bound))?;
+            match error.raised() {
+                curios_elab::Error::UndischargedBound { bound, .. } => {
+                    write!(formatter, "\n  bound: {}", pinned(bound))?
+                }
+                curios_elab::Error::UninferredImplicit { type_, .. } => {
+                    write!(formatter, "\n  type: {}", pinned(type_))?
+                }
+                _ => {}
             }
             if let curios_elab::Error::TypeMismatch {
                 inferred, expected, ..

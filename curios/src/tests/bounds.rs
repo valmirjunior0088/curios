@@ -1373,6 +1373,36 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     );
 }
 
+// A bound nothing discharged is the procedure's that proves one, and is headed by it wherever it stands: at a call, at a literal's hidden field and at an operator the report opens alike, and the place says only whose bound it is.
+#[test]
+fn an_undischarged_bound_is_headed_alike_at_a_call_a_literal_and_an_operator() {
+    let refusal = |declared: &str, binders: &str, body: &str| {
+        let program =
+            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat = {body};\nIo/pure(())");
+        typecheck(&program).expect_err("the control is refused")
+    };
+    let call = refusal("", "xs: List(Nat), i: Nat", "List/get(xs, i)");
+    let literal = refusal(
+        "struct Positive: Type { n: Nat, @Holds(0 < n) }",
+        "n: Nat",
+        "Positive { n = n }.n",
+    );
+    let operator = refusal("", "a: Nat, b: Nat", "a / b");
+
+    for (report, whose) in [
+        (call, "the bound `ok` of `List/get`"),
+        (literal, "the bound of `Positive`"),
+        (operator, "the bound of the `/` operator"),
+    ] {
+        assert!(
+            report.contains(&format!(
+                "undischarged bound\n│  {whose} was not discharged\n│  nothing discharged"
+            )),
+            "{report}"
+        );
+    }
+}
+
 #[test]
 fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
     let goal = |binders: &str| {

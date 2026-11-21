@@ -421,7 +421,7 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
             Ok(_) => panic!("expression should be refused: {body}"),
         };
         assert!(
-            error.contains("was not inferred") && error.contains(operation),
+            error.contains("was not discharged") && error.contains(operation),
             "expected {operation} to demand its precondition for {body}, got: {error}"
         );
     }
