@@ -4,7 +4,7 @@ use {
         PATTERN_TAKES_NO_USE, Read, begins_a_name, digit_led, member_ends, members,
         parse_binder_label, parse_block_str, parse_keyword, parse_label, parse_line_str,
         parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_number,
-        parse_place, parse_qualified_name, parse_word_raw, parse_written_char, parse_written_word,
+        parse_place, parse_qualified_name, parse_quoted_char, parse_word_raw, parse_written_word,
         refused, require_space, trimmed, unbindable,
     },
     crate::{
@@ -486,9 +486,7 @@ fn refuse_misread_successor<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a
 pub fn parse_char_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    take_exact("'")
-        .and_keep(parse_written_char)
-        .and_drop(take_exact("'"))
+    parse_quoted_char
         .and_drop(parse_whitespace)
         .map(MatchPattern::Char)
         .parse(state)

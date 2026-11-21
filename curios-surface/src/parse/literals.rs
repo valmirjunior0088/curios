@@ -8,8 +8,8 @@ use {
     curios_core::Numeral,
     curios_num::{Floating, Integer, Natural},
     curios_parse::{
-        Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
-        mark, not_ahead, pure, sep_by0_trailing, spanned, take_exact, take_n, take_while,
+        Mark, Parsed, Parser, ParserState, ahead, commit, expecting, fail, fail_from, look_ahead,
+        many0, mark, not_ahead, pure, sep_by0_trailing, spanned, take_exact, take_n, take_while,
     },
 };
 
@@ -137,9 +137,7 @@ fn not_ahead_digit<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 
 // A character literal is a monomorphic, proof-certified `/std/Char` value.
 pub fn parse_char_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    take_exact("'")
-        .and_keep(parse_written_char)
-        .and_drop(take_exact("'"))
+    parse_quoted_char
         .and_drop(parse_whitespace)
         .map(|character| Subterm::ProofLiteral(ProofLiteral::Char(character)))
         .map(Into::into)
@@ -360,8 +358,31 @@ fn written(span: &Span) -> Written {
     Written::new(&span.source.text()[span.start..span.end])
 }
 
+/// What a run of characters between single quotes is refused with: a string, which another language may quote so, is written between double quotes.
+const QUOTED_RUN: &[&str] = &[
+    "a character literal holds one character",
+    "a string is written between double quotes, `\"...\"`",
+];
+
+/// A character between single quotes. The opener and one character discriminate the literal, so a run past them that a quote on its line closes is the literal's own fault, refused from its opener: most often a string written between single quotes. With no quote left on the line, nothing was written between quotes, and the closer is what is missing, asked for where it belongs.
+pub fn parse_quoted_char<'a>(state: ParserState<'a>) -> Parsed<'a, CharLit> {
+    mark()
+        .and_drop(take_exact("'"))
+        .flat_map(|start| {
+            parse_written_char.and_drop(ahead().flat_map(move |rest: &str| {
+                let closed_run = !rest.starts_with('\'')
+                    && rest.lines().next().is_some_and(|line| line.contains('\''));
+                match closed_run {
+                    true => commit(fail_from(&start, QUOTED_RUN)).boxed(),
+                    false => take_exact("'").boxed(),
+                }
+            }))
+        })
+        .parse(state)
+}
+
 /// A character literal's value between its quotes, with the text it was written as.
-pub fn parse_written_char<'a>(state: ParserState<'a>) -> Parsed<'a, CharLit> {
+fn parse_written_char<'a>(state: ParserState<'a>) -> Parsed<'a, CharLit> {
     spanned(parse_char_value)
         .map(|(span, value)| CharLit {
             value,

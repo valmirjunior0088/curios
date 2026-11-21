@@ -27,6 +27,28 @@ fn char_literals_round_trip_unicode_and_supported_escapes() {
     }
 }
 
+/// A run of characters between single quotes is refused from its opening quote as the string it most often is, in a term and in a pattern alike.
+#[test]
+fn a_run_between_single_quotes_is_refused_with_the_double_quoted_form() {
+    for (source, column) in [
+        ("let s : Str = 'hello';\ns", 15),
+        ("match 97 | 'ab' => 0 | _ => 1 end", 12),
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+        assert!(
+            report.contains("a character literal holds one character")
+                && report.contains("a string is written between double quotes"),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span().expect("located").line_column(),
+            (1, column),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
 #[test]
 fn a_character_literal_is_a_dispatch_pattern() {
     // The former exclusion, overturned: a character pattern is a `Nat` dispatch case spelled by its scalar value, and it round-trips as written.
