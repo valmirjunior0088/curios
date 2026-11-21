@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "The benchmark bench: Curios and Rust on the measurement corpus, held to one answer and timed, as timings that record what they were taken under"
+publish = false
 
 [lints]
 workspace = true

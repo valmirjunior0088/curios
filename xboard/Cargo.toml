@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "The soundness board: every flaw found in the Curios checkers as a ticket, a record whose witnesses are put to them again on each run"
+publish = false
 
 [lints]
 workspace = true
