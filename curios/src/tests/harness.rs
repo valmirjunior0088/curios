@@ -62,7 +62,7 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
 
 #[test]
 fn an_index_argument_selects_one_test() {
-    // The runner's protocol: argv[1] names the test to run, which answers what it found and writes nothing of it, since whoever selected it names it, says how it ended and presents what it found. An index the program does not hold answers no verdict, which the runner reports as its own fault.
+    // The runner's protocol: argv[1] names the test to run, which answers what it found and writes nothing of it, since whoever selected it names it, says how it ended and presents what it found. An index the program does not hold answers no outcome, which the runner reports as its own fault.
     let (module, foreigns) = test_program(
         r#"
         use /std/{Nat, Test};
@@ -128,12 +128,12 @@ fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
         test passing = Test/all([Test/equal(1, 1), Test/equal(2, 2)]);
         test empty = Test/all([]);
         test first_failure = Test/all([Test/assert("the first case holds", true), Test/equal(2, 3), Test/equal(4, 5)]);
-        test action_then_verdict = Test/all([counter(), Test/assert("the verdict after the action holds", true)]);
+        test action_then_check = Test/all([counter(), Test/assert("the check after the action holds", true)]);
         test failure_before_action = Test/all([Test/assert("the first case fails", false), counter()]);
         ()
         "#
         ),
-        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    obtained: `2`\n    expected: `3`\n  case 2: not equal\n    obtained: `4`\n    expected: `5`\nperformed\n/action_then_verdict: passed\nperformed\n/failure_before_action: failed\n  case 0: the first case fails\n"
+        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    obtained: `2`\n    expected: `3`\n  case 2: not equal\n    obtained: `4`\n    expected: `5`\nperformed\n/action_then_check: passed\nperformed\n/failure_before_action: failed\n  case 0: the first case fails\n"
     );
 }
 

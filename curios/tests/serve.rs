@@ -337,7 +337,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (status, _, library) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
 
-    // What each page's runner sends of its test: what its entry answered, in base64 — the text of an empty list for a test that held, and for the failing one the verdict `/std/Test` spells of `Test/equal(1, 2)` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, ahead of the outcome.
+    // What each page's runner sends of its test: what its entry answered, in base64 — the text of an empty list for a test that held, and for the failing one the outcome `/std/Test` spells of `Test/equal(1, 2)` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, ahead of the outcome.
     let held = vec![posted("0", "null", "\"W10=\"")];
     let failed = vec![posted(
         "0",

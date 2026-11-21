@@ -123,7 +123,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its verdict beneath that, closed where the test did not pass on where its name is written, and beneath its verdict what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked with its tests and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: what a test writes stands behind the frame its own lines stand behind, its ending beneath that, closed where the test did not pass on where its name is written, and beneath its ending what only the runner holds — what a failing test found, its values in backticks, and a trap's text. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
@@ -169,7 +169,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     assert_eq!(output.status.code(), Some(1));
 }
 
-/// A verdict is what a test program answers, so a test's own exit is never read as one: a test that exits before it reports has not passed at `0`, and at `1` is not the failure a report makes.
+/// An outcome is what a test program answers, so a test's own exit is never read as one: a test that exits before it reports has not passed at `0`, and at `1` is not the failure a report makes.
 #[test]
 fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
     let root = temporary("exits");
