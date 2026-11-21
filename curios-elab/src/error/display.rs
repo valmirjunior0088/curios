@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, FieldReading,
-        GoalReport, Need,
+        GoalReport, Need, RecordKeyword,
         RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
     },
     crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
@@ -337,6 +337,14 @@ fn spelled_mention(name: &Mention, spelling: &Spelling) -> String {
     match name {
         Mention::Declaration(declaration) => spelling.symbol(declaration),
         Mention::Local(local) => local.hint().unwrap_or("_").to_string(),
+    }
+}
+
+/// What a record's entries are called: a structure's are its fields, and a concept's its methods, as the reference names them.
+fn member_noun(keyword: RecordKeyword) -> &'static str {
+    match keyword {
+        RecordKeyword::Struct => "field",
+        RecordKeyword::Concept => "method",
     }
 }
 
@@ -1177,24 +1185,26 @@ impl Displayed<'_> {
             }
             Error::WrongNumberOfFields {
                 name,
+                keyword,
                 expected,
                 got,
                 missing,
                 surplus,
                 hidden,
             } => {
-                f.text("field count mismatch");
+                let noun = member_noun(*keyword);
+                f.text(format_args!("{noun} count mismatch"));
                 f.stating(format_args!(
                     "`{}` has {}",
                     spelling.symbol(name),
-                    counted(*expected, "field")
+                    counted(*expected, noun)
                 ));
                 f.stating(format_args!("written: {got}"));
                 if !missing.is_empty() {
                     f.stating(format_args!("missing: {}", codes(missing)));
                 }
                 if !surplus.is_empty() {
-                    f.stating(format_args!("no such field: {}", codes(surplus)));
+                    f.stating(format_args!("no such {noun}: {}", codes(surplus)));
                 }
                 // A plain entry past the plain fields may be a hidden field written as a plain one: each is shown as it is written, under its mark.
                 if !hidden.is_empty() {
@@ -1228,27 +1238,31 @@ impl Displayed<'_> {
             }
             Error::FieldOutOfOrder {
                 name,
+                keyword,
                 label,
                 order,
                 reading,
                 repeated,
             } => {
+                let noun = member_noun(*keyword);
                 // A label written twice is a repeat whatever the order, and is headed as one.
                 match repeated {
-                    true => f.text("repeated field"),
-                    false => f.text("field out of order"),
+                    true => f.text(format_args!("repeated {noun}")),
+                    false => f.text(format_args!("{noun} out of order")),
                 }
                 f.stating(match repeated {
                     true => format!("`{label}` is written twice"),
-                    false => format!("`{label}` is written after a field declared after it"),
+                    false => format!("`{label}` is written after a {noun} declared after it"),
                 });
                 let name = spelling.symbol(name);
                 f.stating(match reading {
                     FieldReading::Literal => {
-                        format!("a literal writes the fields of `{name}` in their order, each once")
+                        format!(
+                            "a literal writes the {noun}s of `{name}` in their order, each once"
+                        )
                     }
                     FieldReading::Pattern => {
-                        format!("a pattern reads the fields of `{name}` in their order, each once")
+                        format!("a pattern reads the {noun}s of `{name}` in their order, each once")
                     }
                 });
                 f.stating(format_args!("order: {}", codes(order)));
@@ -1259,15 +1273,17 @@ impl Displayed<'_> {
             }
             Error::UnknownStructField {
                 name,
+                keyword,
                 label,
                 available,
             } => {
-                f.text("unknown field");
+                let noun = member_noun(*keyword);
+                f.text(format_args!("unknown {noun}"));
                 f.stating(format_args!(
-                    "`{}` has no field `{label}` at that position",
+                    "`{}` has no {noun} `{label}` at that position",
                     spelling.symbol(name)
                 ));
-                f.stating(format_args!("fields in order: {}", codes(available)));
+                f.stating(format_args!("{noun}s in order: {}", codes(available)));
             }
             Error::UseEntryOutsideConcept { name } => {
                 f.text("not a concept");

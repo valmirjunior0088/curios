@@ -3,8 +3,9 @@ use {
         Misaligned, SlotPositions, align, check_args_against, insert_auto_argument, is_placeholder,
     },
     crate::{
-        Context, Error, Expectation, FieldReading, Mode, Occurrence, attempt_witness_goal, check,
-        check_as, elaborate, expect_as, is_prop, reduce_with, resolve_witness_goal,
+        Context, Error, Expectation, FieldReading, Mode, Occurrence, RecordKeyword,
+        attempt_witness_goal, check, check_as, elaborate, expect_as, is_prop, reduce_with,
+        resolve_witness_goal,
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
@@ -322,6 +323,7 @@ fn elaborate_struct_entries(
         true => {
             return Err(Error::wrong_number_of_fields(
                 *name,
+                record_keyword(context, name),
                 slots.len(),
                 fields.len(),
                 Vec::new(),
@@ -350,7 +352,12 @@ fn elaborate_struct_entries(
         .iter()
         .map(|(mark, label, field)| (*mark, *label, field.extent()))
         .collect::<Vec<_>>();
-    let fills = aligned_fields(name, &field_telescope, &members)?;
+    let fills = aligned_fields(
+        name,
+        record_keyword(context, name),
+        &field_telescope,
+        &members,
+    )?;
     let sources = fills
         .iter()
         .zip(&slots)
@@ -400,6 +407,7 @@ pub type WrittenMember<'w> = (Plicity, Option<&'w str>, Option<Extent>);
 /// Which of the `written` members fills each of the fields `fields` holds, the fields of `name`, `None` for a hidden field left out: what a literal's entries and a structure pattern's fields are both read by. The plain members are the plain fields in order, counted against them and held to their labels by position, and a plain member labelled as a hidden field is that field unmarked. The hidden ones meet the hidden fields of their run as a call's hidden arguments meet its parameters ([`align()`]), each held to the label it is written with: it says which field the author meant and selects nothing. In a dependent telescope the written order is the check order, so no member is reordered.
 pub fn aligned_fields(
     name: &Global,
+    keyword: RecordKeyword,
     fields: &Telescope<()>,
     written: &[WrittenMember],
 ) -> Result<Vec<Option<usize>>, Error> {
@@ -436,6 +444,7 @@ pub fn aligned_fields(
                 .any(|(earlier, written, _)| earlier == mark && *written == Some(*label));
             return Err(Error::field_out_of_order(
                 *name,
+                keyword,
                 spelled(*mark, label),
                 written_fields(&labels, &slots),
                 FieldReading::Literal,
@@ -491,6 +500,7 @@ pub fn aligned_fields(
 
         return Err(Error::wrong_number_of_fields(
             *name,
+            keyword,
             plain_labels.len(),
             plain.len(),
             missing,
@@ -505,6 +515,7 @@ pub fn aligned_fields(
         if declared != *written {
             return Err(Error::unknown_struct_field(
                 *name,
+                keyword,
                 (*written).to_string(),
                 plain_labels
                     .iter()
@@ -537,6 +548,7 @@ pub fn aligned_fields(
         if mark != Plicity::Explicit && labels[position] != label {
             return Err(Error::unknown_struct_field(
                 *name,
+                keyword,
                 format!("@{label}"),
                 written_fields(&labels, &slots),
             )
@@ -550,6 +562,7 @@ pub fn aligned_fields(
 /// The slot of the fields `fields` holds, the fields of `name`, each of a struct pattern's `written` members reads, in the order they are written: the literal's rule ([`aligned_fields`]), where a field may be left out, since a pattern reads a value a literal builds whole. A positional plain member reads the next plain field, a labelled one the field its label names, held to that field's mark, and a hidden one written alone the next hidden field of its run, ahead of the plain field the run precedes. Each reads past the one before it, so the written order is the declared order.
 pub fn read_fields(
     name: &Global,
+    keyword: RecordKeyword,
     fields: &Telescope<()>,
     written: &[WrittenMember],
 ) -> Result<Vec<usize>, Error> {
@@ -579,6 +592,7 @@ pub fn read_fields(
                         let repeated = read.iter().any(named);
                         return Err(Error::field_out_of_order(
                             *name,
+                            keyword,
                             spelled,
                             written_fields(&labels, &slots),
                             FieldReading::Pattern,
@@ -591,9 +605,10 @@ pub fn read_fields(
                             Plicity::Explicit => plain_labels(),
                             _ => written_fields(&labels, &slots),
                         };
-                        return Err(
-                            Error::unknown_struct_field(*name, spelled, available).at_opt(*at)
-                        );
+                        return Err(Error::unknown_struct_field(
+                            *name, keyword, spelled, available,
+                        )
+                        .at_opt(*at));
                     }
                 }
             }
@@ -612,6 +627,7 @@ pub fn read_fields(
                             .collect();
                         return Err(Error::wrong_number_of_fields(
                             *name,
+                            keyword,
                             count(&mut slots.iter().copied()),
                             count(&mut written.iter().map(|(mark, ..)| *mark)),
                             Vec::new(),
@@ -667,6 +683,14 @@ fn mismarked(
             Some(Error::plain_field_marked(*name, written.to_string()))
         }
         _ => None,
+    }
+}
+
+/// What `name` is declared as, a structure or a concept: what a refusal of its entries calls them.
+pub fn record_keyword(context: &Context, name: &Global) -> RecordKeyword {
+    match context.concept(name) {
+        Some(_) => RecordKeyword::Concept,
+        None => RecordKeyword::Struct,
     }
 }
 
@@ -853,6 +877,7 @@ pub fn elaborate_struct_spread(
                             }
                             return Err(Error::unknown_struct_field(
                                 *name,
+                                record_keyword(context, name),
                                 written.to_string(),
                                 listed(),
                             ));
@@ -908,6 +933,7 @@ pub fn elaborate_struct_spread(
             {
                 return Err(Error::unknown_struct_field(
                     *name,
+                    record_keyword(context, name),
                     format!("@{written}"),
                     written_fields(&labels, &slots),
                 )

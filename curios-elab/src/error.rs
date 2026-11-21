@@ -897,6 +897,8 @@ pub enum Error {
     /// A struct literal supplies the wrong number of fields: the declared labels it leaves out and the written ones the declaration lacks, where the literal's labels say which, and the labels of its hidden fields, an empty one for a field declared as its type alone, where a plain entry was written past the plain fields.
     WrongNumberOfFields {
         name: Global,
+        /// What `name` is declared as: a concept's fields are its methods, and a report names them so.
+        keyword: RecordKeyword,
         expected: usize,
         got: usize,
         missing: Box<[String]>,
@@ -916,6 +918,7 @@ pub enum Error {
     /// A literal writes, or a pattern reads, a field it names after a field the structure declares after it, or a second time: `repeated` where the label was written before. The fields as the structure orders them, a hidden one under its mark.
     FieldOutOfOrder {
         name: Global,
+        keyword: RecordKeyword,
         label: String,
         order: Vec<String>,
         reading: FieldReading,
@@ -928,6 +931,7 @@ pub enum Error {
     /// A written field label does not match the declared label at its position (fields are given in declaration order — no reordering).
     UnknownStructField {
         name: Global,
+        keyword: RecordKeyword,
         label: String,
         available: Vec<String>,
     },
@@ -1740,6 +1744,7 @@ impl Error {
 
     pub fn wrong_number_of_fields(
         name: Global,
+        keyword: RecordKeyword,
         expected: usize,
         got: usize,
         missing: Vec<String>,
@@ -1748,6 +1753,7 @@ impl Error {
     ) -> Self {
         Self::WrongNumberOfFields {
             name,
+            keyword,
             expected,
             got,
             missing: missing.into_boxed_slice(),
@@ -1766,6 +1772,7 @@ impl Error {
 
     pub fn field_out_of_order(
         name: Global,
+        keyword: RecordKeyword,
         label: String,
         order: Vec<String>,
         reading: FieldReading,
@@ -1773,6 +1780,7 @@ impl Error {
     ) -> Self {
         Self::FieldOutOfOrder {
             name,
+            keyword,
             label,
             order,
             reading,
@@ -1785,9 +1793,15 @@ impl Error {
         Self::UnknownDeclaration { name }
     }
 
-    pub fn unknown_struct_field(name: Global, label: String, available: Vec<String>) -> Self {
+    pub fn unknown_struct_field(
+        name: Global,
+        keyword: RecordKeyword,
+        label: String,
+        available: Vec<String>,
+    ) -> Self {
         Self::UnknownStructField {
             name,
+            keyword,
             label,
             available,
         }

@@ -70,7 +70,7 @@ fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
     assert_eq!(run(source), b"falsefalse");
 }
 
-// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Equal`'s superclass is reached by resolution, never by name).
+// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-method error, a concept's entries being its methods, with no special `use`-field diagnostic (`Equal`'s superclass is reached by resolution, never by name).
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
@@ -91,7 +91,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
 
     let message = error(source);
     assert!(message.contains("`eq4`"), "got: {message}");
-    assert!(message.contains("no field"), "got: {message}");
+    assert!(message.contains("has no method `eq4`"), "got: {message}");
 }
 
 // `use` entries are rejected outside concept literals, and one written past the concept's last edge has no slot.

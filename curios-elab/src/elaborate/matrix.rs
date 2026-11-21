@@ -17,7 +17,7 @@
 use {
     super::{
         BoolSplit, Expectation, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit,
-        SwitchSplit, elaborate, payload_fills, read_fields, realize,
+        SwitchSplit, elaborate, payload_fills, read_fields, realize, record_keyword,
     },
     crate::{
         Context, Error, HeldFrames, Resolved, WrittenLiteral, check, expect_as, pending,
@@ -2802,10 +2802,15 @@ fn parts<'m>(
                         .iter()
                         .map(|(mark, label, _)| (*mark, label.as_deref(), None))
                         .collect::<Vec<_>>();
-                    read_fields(&name, declaration.fields(), &written)?
-                        .into_iter()
-                        .map(|slot| Read::Slot(name, slot))
-                        .collect()
+                    read_fields(
+                        &name,
+                        record_keyword(context, &name),
+                        declaration.fields(),
+                        &written,
+                    )?
+                    .into_iter()
+                    .map(|slot| Read::Slot(name, slot))
+                    .collect()
                 }
                 None => fields
                     .iter()
