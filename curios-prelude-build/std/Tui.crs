@@ -182,7 +182,7 @@ let running(
     children: Io/Scope,
 ) -> Try(Io, Io/Error, M) =
     let answers: Channel(E) = Channel/new(256)!;
-    let never: Io(Wake(E)) = Io/race([]);
+    let never: Io(Wake(E)) = Io/select([]);
     -- `a` run beside the loop, and a second child handing its answer to the loop: a quit waits on the first, never on the queue the second may wait on.
     let performed(a: Io(E)) -> Io(Io/Scope/Task(E)) =
         let task = Io/Scope/spawn(children, a)!;
@@ -287,7 +287,7 @@ let running(
             | none() => never
             end;
         -- A deadline that has passed is acted on before what arrived as it passed, which the read leaves where it was.
-        let woke = Io/race([tick, answer, read])!;
+        let woke = Io/select([tick, answer, read])!;
         match woke
         | read(failure(why)) => Try/raise(why)
         | read(success(none())) => step(m, false, due)

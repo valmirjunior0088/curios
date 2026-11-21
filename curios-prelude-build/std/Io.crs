@@ -7,10 +7,6 @@ pub use /sys/Io/{pure, bind};
 pub mod Error;
 pub use Error/{let Error};
 
---- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
-pub mod Offer;
-pub use Offer/{let Offer};
-
 --- A value filled once, which whatever waits on it waits for until it is.
 pub mod Future;
 pub use Future/{let Future};
@@ -24,16 +20,8 @@ pub mod Scope;
 pub use Scope/{let Scope};
 
 use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Program, Try};
-use /std/internal/{Handle};
+use /std/internal/{Handle, Waiting, on_filled, suspend_on};
 use /std/time/{Duration, Instant};
-
--- `Waiting` is declared here and not in `Offer`, so that `select` reads it and an offer builds it, and nothing outside `Io` does: the handles it names are the library's.
---- What an offer waits on while it declines: handles a host makes ready and cells the program fills, and what releases the handles the wait made for itself, whether the wait ends or is cancelled. A program's offer waits on cells, through `Offer/on_filled`.
-pub struct Waiting: Type {
-    on: List(Handle),
-    filled: List(Cell({})),
-    release: Io({}),
-}
 
 satisfy Monad(Io) {
     pure = pure,
@@ -56,7 +44,7 @@ pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
 
 --- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
-    /sys/Io/suspend([], cells, pure(()), pure(()));
+    suspend_on(on_filled(cells));
 
 --- A handle ready once the monotonic clock reads at least so many seconds and nanoseconds.
 foreign clock_deadline(Int, Nat) -> Handle;
@@ -78,7 +66,7 @@ let deadline(i: Instant) -> Io(Handle) =
 --- Until the monotonic clock has reached `i`, on a deadline of its own, closed whether the wait ends or is cancelled. An instant already past ends the wait at once.
 pub let sleep_until(i: Instant) -> Io({}) =
     let h = deadline(i)!;
-    /sys/Io/suspend([h], [], Close/close(h), Close/close(h));
+    suspend_on(Waiting { on = [h], filled = [], release = Close/close(h) });
 
 --- Until `d` has passed from now: the clock read once, and a wait until then. A length of no time, or of less, ends at once.
 pub let sleep(d: Duration) -> Io({}) =
@@ -137,7 +125,7 @@ pub use Read/*;
 
 --- What a stream is written through.
 pub concept Write(S: Type): pub Type {
-    --- Writes the whole of the bytes, a short write resent.
+    --- Writes the whole of the bytes, a short write resent. A write cancelled where it waits after a short write has sent part of the bytes, so `select` and `timeout` may leave a stream with a part of what was written.
     write(S, Bytes) -> Try(Io, Error, {}),
     --- Hand on what the stream holds of the writes it accepted: a TLS stream's records, which a write can accept before the socket takes them. Every other stream holds nothing.
     flush(S) -> Try(Io, Error, {}),
@@ -168,11 +156,11 @@ let drain(
         match r | bytes(b) => go(x[..acc, ..b]) | ended() => Try/pure(acc) end;
     go(x[]);
 
---- Everything up to the end of the stream; a failure before the end drops what was read.
+--- Everything up to the end of the stream; a failure before the end drops what was read, and so does a cancel where it waits.
 pub let read_all(@S: Type, use Read(S), s: S) -> Try(Io, Error, Bytes) =
     drain((n, @positive) => Read/read(@S, s, n, @positive));
 
---- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
+--- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer. A copy cancelled where it waits has moved part of the stream.
 pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =
     let go() -> Try(Io, Error, {}) =
         let c = Read/read(from, 4096)!;
@@ -183,52 +171,6 @@ pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> T
         | ended() => Try/pure(())
         end;
     go();
-
--- The first offer of `offers` to yield, trying each in its order.
-let attempt(@A: Type, offers: List(Offer(A))) -> Io(Option(A)) =
-    match offers
-    | [] => pure(Option/none())
-    | [o, ..more] =>
-        let got = o.try!;
-        match got
-        | some(a) => pure(Option/some(a))
-        | none() => attempt(more)
-        end
-    end;
-
--- What every offer of `offers` waits on, in their order.
-let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Waiting)) =
-    match offers
-    | [] => pure([])
-    | [o, ..more] =>
-        let w = o.wait!;
-        let ws = waits(more)!;
-        pure([w, ..ws])
-    end;
-
--- Every release of `ws`, in their order.
-let released(ws: List(Waiting)) -> Io({}) =
-    match ws
-    | [] => pure(())
-    | [w, ..more] => bind(w.release, (()) => released(more))
-    end;
-
---- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
----
---- This is the one place a wait on the program's own state checks and then suspends, with nothing run between the two, so no change is missed: a future and a channel each wait as an offer through it.
-pub let select(@A: Type, offers: List(Offer(A))) -> Io(A) =
-    let taken = attempt(offers)!;
-    match taken
-    | some(a) => pure(a)
-    | none() =>
-        let ws = waits(offers)!;
-        let release = released(ws);
-        /sys/Io/suspend(
-            List/flatten(List/map(ws, (w: Waiting) => w.on)),
-            List/flatten(List/map(ws, (w: Waiting) => w.filled)),
-            release,
-            bind(release, (()) => select(offers)))
-    end;
 
 -- Descriptions run side by side under one: each runs until it suspends, and the one that holds them waits on what all of them wait on. A branch no longer needed — a loser, a timed-out action, a child of a scope whose body has answered — is cancelled where it waits.
 -- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.
@@ -406,12 +348,14 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
             pure(false))!;
     awaited(List/map(pairs, (p: {Io(A), Future(A)}) => p.1));
 
---- The first of `actions` to answer; every other one is cancelled where it waits. Actions are stepped in list order, so of two that can answer at once — two whose waits ended together — the earlier in the list answers. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. Which action answered is its answer's to say. With no action, nothing answers.
-pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
+--- The answer of the first of `actions` to finish; every other one is cancelled where it waits. They are stepped in list order, so of two that can answer at once the earlier wins: `select([a, Io/pure(d)])` tries `a` and answers `d` rather than wait, and in a loop an action that is always ready starves the ones after it. Which action answered is its answer's to say. With no action, nothing answers.
+---
+--- An action cancelled where it waits has taken nothing, unless it took something and then waited again. A receive, a read, a join, a `Future`'s wait and a sleep can be dropped and run again without loss; a `write` dropped after a short write has sent part of its bytes, and `read_all` and `copy` lose what they had moved. Keep what must not be lost as the last step of its action, and do what follows after `select` answers.
+pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
     let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
     Future/wait(won);
 
---- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits. An answer that lands after `d` is dropped, which is what a timeout means.
+--- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits: a `select` against a sleep. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
-    race([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (()) => pure(Option/none()))]);
+    select([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (()) => pure(Option/none()))]);

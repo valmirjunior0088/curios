@@ -553,7 +553,7 @@ let reading() -> Io({}) =
     | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
     | failure(_) => /std/print("failed")
     end;
-Io/race([reading(), ticks(3000)])
+Io/select([reading(), ticks(3000)])
 "#,
     )
     .expect("write the temp source");

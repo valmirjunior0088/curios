@@ -1,6 +1,6 @@
 -- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a send, a selection, a notification and a cancellation wake.
 use /std/{Bool, Cell, Io, Nat, Option, Test, Channel};
-use /std/Io/{Future, Offer};
+use /std/Io/{Future};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.
@@ -26,7 +26,7 @@ test a_yield_at_the_top_of_a_program_goes_on =
     Test/assert("the program goes on past the yield", true);
 
 test a_sleep_holds_only_its_own_branch =
-    let n = Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
+    let n = Io/select([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
     Test/assert("the branch that does not sleep wins", n == 2);
 
 test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
@@ -51,7 +51,7 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
             Io/bind(
                 Io/Scope/defer(scope, (ended) => told(endings, ended)),
                 (()) => Io/bind(Io/wait_filled([never]), (()) => Io/pure(3))));
-    let _ = Io/race([body, Io/pure(4)])!;
+    let _ = Io/select([body, Io/pure(4)])!;
     let cancelled = heard(endings, false)!;
     Test/assert("the release was told the body was dropped", cancelled);
 
@@ -59,14 +59,14 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
 let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
     match taken | item(a) => Option/some(a) | _ => Option/none() end;
 
--- One fulfilment wakes a waiter once, however many of its offers wait on the same future.
-test a_fulfilment_wakes_a_waiter_once_across_duplicate_offers =
+-- One fulfilment answers a selection once, however many of its actions wait on the same future.
+test a_fulfilment_answers_a_selection_once_across_actions_waiting_on_it =
     let wakes = Channel/new(@Nat, 2)!;
     let n =
         Io/Scope/run((s) =>
             let f = Future/new(@Nat)!;
             let waiter() -> Io(Nat) =
-                let n = Io/select([Future/offer(f), Future/offer(f)])!;
+                let n = Io/select([Future/wait(f), Future/wait(f)])!;
                 let _ = Channel/try_send(wakes, 1)!;
                 Io/pure(n);
             let task = Io/Scope/spawn(s, waiter())!;
@@ -100,16 +100,16 @@ test two_woken_receivers_retry_after_only_one_can_take =
             Io/pure((x, y)))!;
     Test/equal([x, y], [1, 2]);
 
--- An offer that loses a selection has taken nothing and waits on nothing after it: a message sent once the selection has answered stays in its channel, unacknowledged, for the next receive.
-test a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it =
+-- A receive that loses a selection has taken nothing and waits on nothing after it: a message sent once the selection has answered stays in its channel, unacknowledged, for the next receive.
+test a_losing_receive_neither_takes_a_later_message_nor_acknowledges_it =
     let (acknowledged, n) =
         Io/Scope/run((s) =>
             let messages = Channel/new(@{Nat, Cell({})}, 1)!;
             let other = Channel/new(@Nat, 1)!;
             let select_one() -> Io({}) =
                 Io/select([
-                    Offer/map(Channel/offer_receive(messages), (_) => ()),
-                    Offer/map(Channel/offer_receive(other), (_) => ())]);
+                    Io/bind(Channel/receive(messages), (_) => Io/pure(())),
+                    Io/bind(Channel/receive(other), (_) => Io/pure(()))]);
             let selecting = Io/Scope/spawn(s, select_one())!;
             let () = Io/yield()!;
             let _ = Channel/send(other, 1)!;
@@ -123,7 +123,7 @@ test a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it =
             Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell({})}) => message.0))))!;
     Test/all([
         Test/assert(
-            "the message the losing offer left is not acknowledged",
+            "the message the losing receive left is not acknowledged",
             Bool/not(acknowledged)),
         Test/equal(n, Option/some(7))]);
 
@@ -153,7 +153,7 @@ test a_waiter_cancelled_on_a_cell_is_released_once =
     let waiting =
         Io/Scope/run((scope) =>
             Io/bind(Io/Scope/defer(scope, release), (()) => Io/wait_filled([c])));
-    let () = Io/race([waiting, Io/pure(())])!;
+    let () = Io/select([waiting, Io/pure(())])!;
     let _ = Cell/fill(c, ())!;
     let () = Io/wait_filled([c])!;
     let first = Channel/try_receive(releases)!;

@@ -1,5 +1,5 @@
 use /std/{Option, Cell, Io};
-use /std/Io/{Offer};
+use /std/internal/{on_filled, until};
 
 --- A value filled once and read as often as asked, beside the cell its filling fills for whatever waits on it.
 pub struct Future(A: Type): Type {
@@ -25,10 +25,6 @@ pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
     | false => Io/pure(())
     end;
 
---- An offer that yields the value once there is one.
-pub let offer(@A: Type, f: Future(A)) -> Offer(A) =
-    Offer/new(poll(f), Io/pure(Offer/on_filled([f.filled])));
-
 --- The value, waiting until there is one.
 pub let wait(@A: Type, f: Future(A)) -> Io(A) =
-    Io/select([offer(f)]);
+    until(poll(f), Io/pure(on_filled([f.filled])));

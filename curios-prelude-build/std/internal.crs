@@ -6,8 +6,34 @@ pub use Handle/{let Handle};
 pub mod Status;
 pub use Status/{let Status};
 
-use /std/{Io};
+use /std/{List, Option, Cell, Io};
 
 --- An argument refused before any host call, by the errno `/sys/errno` names for it.
 pub let invalid: Io/Error =
     Io/Error/other(/sys/errno/inval);
+
+--- What a wait waits on: handles a host makes ready and cells the program fills, and what releases what the wait made for itself, whether the wait ends or is cancelled.
+pub struct Waiting: pub Type {
+    on: List(Handle),
+    filled: List(Cell({})),
+    release: Io({}),
+}
+
+--- A wait on cells alone, which made nothing to release.
+pub let on_filled(cells: List(Cell({}))) -> Waiting =
+    Waiting { on = [], filled = cells, release = Io/pure(()) };
+
+--- Until something `w` waits on has moved: a suspension that releases what `w` made, whether it ends or is cancelled.
+pub let suspend_on(w: Waiting) -> Io({}) =
+    /sys/Io/suspend(w.on, w.filled, w.release, w.release);
+
+--- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait on the program's own state goes through. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.
+pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
+    let got = attempt!;
+    match got
+    | some(a) => Io/pure(a)
+    | none() =>
+        let w = wait!;
+        let () = suspend_on(w)!;
+        until(attempt, wait)
+    end;

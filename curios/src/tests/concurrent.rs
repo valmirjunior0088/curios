@@ -135,7 +135,7 @@ fn race_cancels_a_started_loser_and_runs_its_release_before_answering() {
             let _ = /std/print("slow;")!;
             Io/pure(20);
         let program() -> Io({}) =
-            let v = Io/race([
+            let v = Io/select([
                 Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow())),
                 Io/bind(/std/print("fast;"), (_) => Io/pure(10))
             ])!;
@@ -392,7 +392,7 @@ fn race_of_two_sleeps_answers_the_earlier_and_cancels_the_later() {
             let _ = /std/print("slow;")!;
             Io/pure(2);
         let program() -> Io({}) =
-            let v = Io/race([quick(), Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow()))])!;
+            let v = Io/select([quick(), Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => slow()))])!;
             /std/print(Nat/to_str(v));
         program()
         "#,
@@ -402,9 +402,9 @@ fn race_of_two_sleeps_answers_the_earlier_and_cancels_the_later() {
     assert_eq!(io.output(), b"quick;released;1");
 }
 
-// A selection over no offers waits on nothing, so at the top of a program nothing can ever end it: the host reports the deadlock rather than waiting for good.
+// A selection over no actions waits on nothing, so at the top of a program nothing can ever end it: the host reports the deadlock rather than waiting for good.
 #[test]
-fn a_selection_over_no_offers_at_the_top_is_a_deadlock() {
+fn a_selection_over_no_actions_at_the_top_is_a_deadlock() {
     let (system, io) = MockHost::builder().build();
     let _ = run_text(
         r#"
@@ -451,13 +451,12 @@ fn a_notification_wakes_its_waiter_and_one_sent_before_anyone_waits_is_kept() {
     assert_eq!(io.output(), b"wait notify woken again");
 }
 
-// A selection takes nothing out of a source that does not win it. Both channels hold a value and both offers would answer, so the losing offer is what proves the discipline: a selection that started both and cancelled one would have taken from both.
+// A selection takes nothing out of a source that does not win it. Both channels hold a value and both receives could answer, so the losing receive is what proves it: a selection that ran both to their ends would have taken from both.
 #[test]
-fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
+fn a_selection_keeps_the_value_of_the_receive_it_did_not_take() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Option, Io, Channel};
-        use /std/Io/{Offer};
         let shown(o: Option(Nat)) -> Str =
             match o | some(n) => Nat/to_str(n) | none() => "none" end;
         let left(t: Channel/Take(Nat)) -> Str =
@@ -468,8 +467,8 @@ fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
             let _ = Channel/send(a, 10)!;
             let _ = Channel/send(b, 20)!;
             let w = Io/select([
-                Offer/map(Channel/offer_receive(a), (o) => ("a", o)),
-                Offer/map(Channel/offer_receive(b), (o) => ("b", o))])!;
+                Io/bind(Channel/receive(a), (o) => Io/pure(("a", o))),
+                Io/bind(Channel/receive(b), (o) => Io/pure(("b", o)))])!;
             let rest_a = Channel/try_receive(a)!;
             let rest_b = Channel/try_receive(b)!;
             /std/print(

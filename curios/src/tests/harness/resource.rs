@@ -63,7 +63,7 @@ fn an_external_race_cancels_a_suspended_test_and_runs_its_release() {
             Io/pure(());
         let entry() -> Io({}) =
             let discarded = Io/bind(Test/main([protected]), (_) => Io/pure(()));
-            let _ = Io/race([discarded, competing()])!;
+            let _ = Io/select([discarded, competing()])!;
             print("done|");
         entry()
         "#,

@@ -190,7 +190,7 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
         use /std/{Option, Io};
 
         let probe(@A: Type, body: Io(A)) -> Io(Option(A)) =
-            Io/race([Io/bind(body, (a) => Io/pure(Option/some(a)))]);
+            Io/select([Io/bind(body, (a) => Io/pure(Option/some(a)))]);
 
         /std/Io/pure(())
     "#;

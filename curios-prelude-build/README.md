@@ -38,7 +38,7 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 ### An intrinsic carrier is extended in its own root module
 
-**Decision.** Each intrinsic carrier's `/std` facade is a root module named for the carrier. `/std/Cell` exposes write-once cells, `/std/Channel` extends bounded queues with waits, offers and their length, capacity and finish, and `/std/Io` supplies descriptions and their composition. A facade re-exports the carrier's type alone, `pub use /sys/{let Io};`, where a program holds the carrier as it is, and wraps it where a wait needs what the carrier does not hold, as `/std/Channel`'s `Channel` holds the queue beside the cells its waiters wait on; it re-exports each operation of `/sys` it means a program to call by name; a `/sys` module is re-exported whole only where every public member is meant, as a type's constructors are with `/std/Bool`'s `True`.
+**Decision.** Each intrinsic carrier's `/std` facade is a root module named for the carrier. `/std/Cell` exposes write-once cells, `/std/Channel` extends bounded queues with waits and their length, capacity and finish, and `/std/Io` supplies descriptions and their composition. A facade re-exports the carrier's type alone, `pub use /sys/{let Io};`, where a program holds the carrier as it is, and wraps it where a wait needs what the carrier does not hold, as `/std/Channel`'s `Channel` holds the queue beside the cells its waiters wait on; it re-exports each operation of `/sys` it means a program to call by name; a `/sys` module is re-exported whole only where every public member is meant, as a type's constructors are with `/std/Bool`'s `True`.
 
 **Rationale.** The library extends a type where a program reaches it, following the [subject-based organization](#sys-declares-no-host-operation-and-io-owns-only-the-sequencing) of the intrinsic substrate. A root module gives each carrier one home for its type and operations. A module re-exported carries its public members, as resolution walks into them, so a re-export by label alone hands a program every operation `/sys` holds for the library.
 
@@ -244,7 +244,7 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 **Rejected.**
 
-- **The bytes handed on as a value, each read answering the reader after it**: a deadline put on a read loses the arrival its abandoned body took, so `timeout` and `race` would each want a twin that knows the reader, and a reader read again after a later one took an arrival answers bytes out of their order.
+- **The bytes handed on as a value, each read answering the reader after it**: a deadline put on a read loses the arrival its abandoned body took, so `timeout` and `select` would each want a twin that knows the reader, and a reader read again after a later one took an arrival answers bytes out of their order.
 - **A reading region**, a monad whose state is the bytes held: `/std`'s control takes an action of a fixed monad, and run down to its base the state is the body's, lost where the body is abandoned.
 - **A buffer behind the handle**, the host holding the bytes: rows that answer a line on every host, a cut no certifier judges, and a loop the host cannot run, never waiting on a peer.
 - **A chain of write-once cells**, which retains what was consumed through any older reader, or **a rewritable cell of the reader's own**, the second mutation vocabulary [A wait is a suspension, and only the host waits](../documentation/design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md) rejects.

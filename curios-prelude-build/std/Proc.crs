@@ -78,7 +78,7 @@ let exchange(
     let exit = Child/wait(c)!;
     Try/pure((exit = exit, stdout = stdout, stderr = stderr));
 
---- `p` run to its end with `input` written to its standard input, which then ends, and both outputs captured, and how it ended. The input is written while the outputs are read, so neither stalls the other.
+--- `p` run to its end with `input` written to its standard input, which then ends, and both outputs captured, and how it ended. The input is written while the outputs are read, so neither stalls the other. A run cancelled where it waits has written part of the input and read part of the outputs, and its child is killed with its scope.
 pub let run(
     p: Proc,
     input: Bytes,

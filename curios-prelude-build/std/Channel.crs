@@ -3,7 +3,7 @@ mod tests;
 pub use /sys/Channel/{Push, Take};
 
 use /std/{Nat, Bool, Option, Cell, Io};
-use /std/Io/{Offer};
+use /std/internal/{on_filled, until};
 
 -- The cell the waiters of one side wait on, kept in a capacity-one channel until a change of that side fills it and the next waiter makes another.
 struct Woken: Type {
@@ -74,9 +74,9 @@ pub let capacity(@A: Type, c: Channel(A)) -> Io(Nat) =
 pub let finished(@A: Type, c: Channel(A)) -> Io(Bool) =
     /sys/Channel/closed(c.queue);
 
---- An offer that yields the next value, or `none` once the channel is finished and drained.
-pub let offer_receive(@A: Type, c: Channel(A)) -> Offer(Option(A)) =
-    Offer/new(
+--- The next value, waiting while there is none; `none` once the channel is finished and drained.
+pub let receive(@A: Type, c: Channel(A)) -> Io(Option(A)) =
+    let taken =
         Io/bind(
             try_receive(c),
             (outcome) =>
@@ -85,12 +85,12 @@ pub let offer_receive(@A: Type, c: Channel(A)) -> Offer(Option(A)) =
                     | item(a) => Option/some(Option/some(a))
                     | empty() => Option/none()
                     | ended() => Option/some(Option/none())
-                    end)),
-        Io/bind(waited(c.readers), (cell) => Io/pure(Offer/on_filled([cell]))));
+                    end));
+    until(taken, Io/bind(waited(c.readers), (cell) => Io/pure(on_filled([cell]))));
 
---- An offer that yields `true` once `a` has been put in, or `false` if the channel was finished first.
-pub let offer_send(@A: Type, c: Channel(A), a: A) -> Offer(Bool) =
-    Offer/new(
+--- Put `a` in, waiting while the channel is full; `false` once it is finished.
+pub let send(@A: Type, c: Channel(A), a: A) -> Io(Bool) =
+    let sent =
         Io/bind(
             try_send(c, a),
             (outcome) =>
@@ -99,13 +99,5 @@ pub let offer_send(@A: Type, c: Channel(A), a: A) -> Offer(Bool) =
                     | taken() => Option/some(true)
                     | full() => Option/none()
                     | closed() => Option/some(false)
-                    end)),
-        Io/bind(waited(c.writers), (cell) => Io/pure(Offer/on_filled([cell]))));
-
---- The next value, waiting while there is none; `none` once the channel is finished and drained.
-pub let receive(@A: Type, c: Channel(A)) -> Io(Option(A)) =
-    Io/select([offer_receive(c)]);
-
---- Put `a` in, waiting while the channel is full; `false` once it is finished.
-pub let send(@A: Type, c: Channel(A), a: A) -> Io(Bool) =
-    Io/select([offer_send(c, a)]);
+                    end));
+    until(sent, Io/bind(waited(c.writers), (cell) => Io/pure(on_filled([cell]))));
