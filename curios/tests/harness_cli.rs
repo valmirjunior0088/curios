@@ -369,8 +369,13 @@ end
             "├─ /app/second; ✓ passed in ",
             "├─ /app/Inner/kept; ✓ passed in ",
             "└─ 3 passed, 0 failed, 2 skipped; ",
-            "\n3 passed, 0 failed, 2 skipped; ",
         ],
+    );
+    // A run of one subject ends on that subject's tally, which is the run's.
+    assert!(
+        !stderr(&output).contains("\n3 passed"),
+        "{}",
+        stderr(&output)
     );
 }
 
