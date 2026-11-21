@@ -674,10 +674,7 @@ impl Reading {
             })
             .collect::<Vec<_>>();
 
-        // Where each module the file names is declared: by its `mod` line, in the subject or in a unit in scope.
-        let scoped = std::iter::once(text.anchors())
-            .chain(scope.iter().map(|unit| unit.anchors()))
-            .collect::<Vec<_>>();
+        // Where each module the file names is declared: by its `mod` line, in the subject always and in a unit in scope where a file holds the line, as a declaration is placed.
         let modules = texts
             .iter()
             .flat_map(|written| &written.modules)
@@ -685,14 +682,11 @@ impl Reading {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .map(|module| {
-                let place = text
-                    .module_place(&module)
-                    .or_else(|| {
-                        scope
-                            .iter()
-                            .find_map(|unit| unit.text()?.module_place(&module))
-                    })
-                    .and_then(|at| at.resolved(&scoped));
+                let place = module_placed(text, true, &module).or_else(|| {
+                    scope
+                        .iter()
+                        .find_map(|unit| module_placed(unit.text()?, false, &module))
+                });
 
                 (module, place)
             })
@@ -1190,7 +1184,88 @@ fn said_by(
     })
 }
 
-/// What the module `asked` names exposes ([`Exported`]), by the unit that declares it: a unit in scope whose mount is the path's root, the prelude's where none is, and the program itself, lowered and no further, where the root is no unit's — a module its own `mod` line declares. A module a documentation page shows lists what the page lists, the record made over the units before the unit holding it as `curios document` makes one ([`Fold::documentation`]) and the prelude's the one the image carries, so a page and the listing list one set; a module no page shows — one beneath a `mod` line written without `pub`, a program's own — lists what the lowering holds of it ([`PreparedText::exposure`]), and is answered whether or not its unit checks. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where no module stands at the path. `overlay` and `cache` behave as they do for `diagnostics`.
+/// What `asked` names in the subject's scope ([`Referent`]): the declaration, as [`described`] answers one, and the module, as [`exported`] lists one — both where a facade exports a declaration at its module's path. The subject is read once for the two. `None` where the path names nothing in scope. `overlay` and `cache` behave as they do for `diagnostics`.
+pub fn referent(
+    budget: u64,
+    subject: Subject,
+    asked: &Qualifier,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Referent>, Vec<Diagnosis>> {
+    let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
+    let through = overlaid_verdicts
+        .as_ref()
+        .map(|overlaid_verdicts| overlaid_verdicts as &dyn Cache);
+
+    let (declaration, module) = match subject.formed(overlay) {
+        Subject::Unit { units } => {
+            let units = tested_last(overlaid(units, overlay));
+
+            (
+                described_unit(budget, &units, asked, through, &mut *progress)?,
+                exported_among(budget, &units, None, asked, through, progress),
+            )
+        }
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+            package,
+        } => {
+            let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
+            let (units, loader) = (overlaid(units, overlay), loader.tested());
+
+            (
+                described_entry(
+                    budget,
+                    &units,
+                    &entrypoint,
+                    &loader,
+                    asked,
+                    through,
+                    &mut *progress,
+                )?,
+                exported_among(
+                    budget,
+                    &units,
+                    Some((&entrypoint, &loader)),
+                    asked,
+                    through,
+                    progress,
+                ),
+            )
+        }
+        Subject::CoreText { origin } => (
+            described_core_text(
+                budget,
+                &origin,
+                asked,
+                overlay,
+                (cache, through),
+                &mut *progress,
+            )?,
+            exported_among(budget, &[], None, asked, through, progress),
+        ),
+    };
+    let module = module.map_err(of_error)?;
+
+    Ok(
+        (declaration.is_some() || module.is_some()).then_some(Referent {
+            declaration,
+            module,
+        }),
+    )
+}
+
+/// What a path names in the subject's scope ([`referent`]): a declaration, a module, or both where a facade exports a declaration at its module's path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Referent {
+    pub declaration: Option<Described>,
+    pub module: Option<Exported>,
+}
+
+/// What the module `asked` names exposes in the subject's scope ([`exported_among`]), the program on top opened where the module may be its own — no unit in scope and no prelude root holds the path's root — and left unread otherwise, so a program that does not parse still answers a library's module. `overlay` and `cache` behave as they do for `diagnostics`.
 pub fn exported(
     budget: u64,
     subject: Subject,
@@ -1199,7 +1274,6 @@ pub fn exported(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Exported>, CompileError> {
-    let root = Qualifier::from([asked.head()]);
     let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = overlaid_verdicts
         .as_ref()
@@ -1216,70 +1290,114 @@ pub fn exported(
         Subject::CoreText { .. } => (Vec::new(), None),
     };
     let units = overlaid(units, overlay);
+    let opened = match entry {
+        Some((origin, declares, package)) if holder(&units, asked).is_none() => {
+            let (entrypoint, loader) =
+                open(origin, declares, package.as_ref(), overlay).map_err(|diagnostics| {
+                    CompileError::Failure(
+                        diagnostics
+                            .into_iter()
+                            .map(|diagnosis| diagnosis.report)
+                            .collect(),
+                    )
+                })?;
 
-    if let Some(holding) = units
+            Some((entrypoint, loader.tested()))
+        }
+        _ => None,
+    };
+
+    exported_among(
+        budget,
+        &units,
+        opened
+            .as_ref()
+            .map(|(entrypoint, loader)| (entrypoint, loader)),
+        asked,
+        through,
+        progress,
+    )
+}
+
+/// Which unit declares the modules under a path's root ([`holder`]): one of the scope's, by its place among them, or the prelude's, by its documentation record.
+enum Holder {
+    Unit(usize),
+    Prelude(Documentation),
+}
+
+/// The unit that declares the modules under `asked`'s root: a unit of `units` whose mount is the root, and the prelude's where none is. A unit in scope comes first, so a package named `std` answers its own modules where the archived library stands behind it. `None` where neither holds the root: a module there is the program's own.
+fn holder(units: &[RootSource], asked: &Qualifier) -> Option<Holder> {
+    let root = Qualifier::from([asked.head()]);
+
+    units
         .iter()
         .position(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
-    {
-        let units = &units[..=holding];
-        let Some((reached, lowered)) = Fold::new(budget, units, through)
-            .lowered_unit(&mut *progress, |scope, own| {
-                listed(scope, own, false, asked, None)
-            })?
-        else {
-            return Ok(None);
-        };
-        // A page shows a module every `mod` line down to which is written `pub`, so one beneath a line written without it has none, and its unit is not checked to find that out.
-        if !reached {
-            return Ok(Some(lowered));
+        .map(Holder::Unit)
+        .or_else(|| {
+            prelude_documentation()
+                .into_iter()
+                .find(|record| record.prefix == root)
+                .map(Holder::Prelude)
+        })
+}
+
+/// What the module `asked` names exposes ([`Exported`]), by the unit that declares it ([`holder`]): a unit of `units`, the prelude's, or `program`, the program on top with the source it loads through, lowered and no further, where the root is no unit's — a module its own `mod` line declares. A module a documentation page shows lists what the page lists, the record made over the units before the unit holding it as `curios document` makes one ([`Fold::documentation`]) and the prelude's the one the image carries, so a page and the listing list one set; a module no page shows — one beneath a `mod` line written without `pub`, a program's own — lists what the lowering holds of it ([`PreparedText::exposure`]), and is answered whether or not its unit checks. `None` where no module stands at the path.
+fn exported_among(
+    budget: u64,
+    units: &[RootSource],
+    program: Option<(&curios_surface::Entrypoint, &RootSource)>,
+    asked: &Qualifier,
+    through: Option<&dyn Cache>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Exported>, CompileError> {
+    match holder(units, asked) {
+        Some(Holder::Unit(holding)) => {
+            let units = &units[..=holding];
+            let Some((reached, lowered)) = Fold::new(budget, units, through)
+                .lowered_unit(&mut *progress, |scope, own| {
+                    listed(scope, own, false, asked, None)
+                })?
+            else {
+                return Ok(None);
+            };
+            // A page shows a module every `mod` line down to which is written `pub`, of a unit that documents one: a module beneath a line written without `pub` has none, nor has a loose module's, and the unit is not checked to find that out.
+            if !reached || !units[holding].documents() {
+                return Ok(Some(lowered));
+            }
+            let record = Fold::new(budget, units, through).documentation(&mut *progress)?;
+            let Some(page) = paged(record, asked) else {
+                return Ok(Some(lowered));
+            };
+
+            Fold::new(budget, units, through).lowered_unit(progress, |scope, own| {
+                listed(scope, own, false, asked, Some(&page)).map(|(_, listed)| listed)
+            })
         }
-        let record = Fold::new(budget, units, through).documentation(&mut *progress)?;
-        let Some(page) = paged(record, asked) else {
-            return Ok(Some(lowered));
-        };
+        Some(Holder::Prelude(record)) => {
+            let root = record.prefix;
+            let page = paged(record, asked);
 
-        return Fold::new(budget, units, through).lowered_unit(progress, |scope, own| {
-            listed(scope, own, false, asked, Some(&page)).map(|(_, listed)| listed)
-        });
+            // The prelude's own unit holding the root reads its names, the others standing beside it.
+            Fold::new(budget, &[], through).units(progress, |prelude, _| {
+                let own = prelude
+                    .iter()
+                    .find(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
+                    .and_then(|unit| unit.text())
+                    .expect("a prelude record is a prelude unit's");
+
+                Ok(listed(prelude, own, false, asked, page.as_ref()).map(|(_, listed)| listed))
+            })
+        }
+        None => match program {
+            Some((entrypoint, loader)) => Fold::new(budget, units, through).lowered(
+                entrypoint,
+                loader,
+                progress,
+                |scope, own, _| listed(scope, own, true, asked, None).map(|(_, listed)| listed),
+            ),
+            None => Ok(None),
+        },
     }
-
-    if let Some(record) = prelude_documentation()
-        .into_iter()
-        .find(|record| record.prefix == root)
-    {
-        let page = paged(record, asked);
-
-        // The prelude's own unit holding the root reads its names, the others standing beside it.
-        return Fold::new(budget, &[], through).units(progress, |prelude, _| {
-            let own = prelude
-                .iter()
-                .find(|unit| unit.mounts().iter().any(|mount| mount.prefix == root))
-                .and_then(|unit| unit.text())
-                .expect("a prelude record is a prelude unit's");
-
-            Ok(listed(prelude, own, false, asked, page.as_ref()).map(|(_, listed)| listed))
-        });
-    }
-
-    let Some((origin, declares, package)) = entry else {
-        return Ok(None);
-    };
-    let (entrypoint, loader) =
-        open(origin, declares, package.as_ref(), overlay).map_err(|diagnostics| {
-            CompileError::Failure(
-                diagnostics
-                    .into_iter()
-                    .map(|diagnosis| diagnosis.report)
-                    .collect(),
-            )
-        })?;
-
-    Fold::new(budget, &units, through).lowered(
-        &entrypoint,
-        &loader.tested(),
-        progress,
-        |scope, own, _| listed(scope, own, true, asked, None).map(|(_, listed)| listed),
-    )
 }
 
 /// The page `record` shows of the module `asked`, where it shows one.

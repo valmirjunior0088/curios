@@ -559,7 +559,7 @@ impl Args for Query {
                     .value_name("PATH")
                     .value_parser(declaration_path)
                     .help(NAME.query_help(
-                        "The declaration an absolute path names in the subject's scope: what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text",
+                        "What an absolute path names in the subject's scope: a declaration, by what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text; a module, by what it exposes; both where a path names both",
                     )),
             )
             .arg(flag(

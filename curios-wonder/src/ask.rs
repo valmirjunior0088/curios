@@ -7,9 +7,9 @@
 use {
     crate::{
         Answer, Classed, Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Exported,
-        Fact, Origin, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted, Unput, checked,
-        classed, declared_tests, described, diagnostics, exported, falsified, footprint,
-        named_stage, placed, stage, unit_stage,
+        Fact, Origin, Referent, Refusal, Rendering, Row, Severity, Stands, Subject, Unfooted,
+        Unput, checked, classed, declared_tests, described, diagnostics, exported, falsified,
+        footprint, named_stage, placed, referent, stage, unit_stage,
     },
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
@@ -453,6 +453,27 @@ impl Asked {
         described
     }
 
+    /// What `path` names in the subject's scope, a declaration, a module or both ([`referent`]), `telling` told of the compile as it goes.
+    pub fn referent(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        path: &Qualifier,
+        telling: &mut dyn Telling,
+    ) -> Result<Option<Referent>, Vec<Diagnosis>> {
+        let (subject, verdicts) = self.taken(telling);
+        let cache = verdicts.as_ref();
+        let referent = referent(budget, subject, path, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &referent {
+            Err(diagnostics) => Ended::of(diagnostics),
+            Ok(_) => Ended::Done,
+        });
+
+        referent
+    }
+
     /// What a consumer reaches through the module `path` names ([`exported`]), `telling` told of the compile as it goes.
     pub fn exported(
         self,
@@ -847,7 +868,7 @@ pub fn wonder_at(
             };
             let report = Report::about(about, Said::line(&path))
                 .stating("module")
-                .trying(exports_listing(&path, Some(place.subject())));
+                .trying(naming(&path, Some(place.subject())));
             answer(format_args!("{}\n", report.rendered(Kind::Module, &reader)));
         }
         Some(answered) => {
@@ -922,7 +943,7 @@ pub fn wonder_classes(
     Ok(())
 }
 
-/// `wonder --name PATH [SUBJECT]`: the declaration `path` names in `scope`, to stdout — a block, then its whole text as its author wrote it, where its unit read one. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --name PATH [SUBJECT]`: what `path` names in `scope`, to stdout — a declaration by a block, then its whole text as its author wrote it, where its unit read one, the block naming the command that lists its witnesses where it has any, `subject` as the command line wrote it; a module by a block holding an entry for each thing it exposes ([`Report::listing`]); and a facade's path, which names both, by the declaration and then the module, a blank line between. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_name(
     budget: u64,
     scope: Scope,
@@ -931,14 +952,40 @@ pub fn wonder_name(
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
-    let described = declaration(budget, scope, path, telling)?;
-    answer(format_args!(
-        "{}\n",
-        block(&described, Some(listing(&path.join(), subject)))
-            .rendered(Kind::Declaration, &reader)
-    ));
-    if let Some(declaration) = &described.declaration {
-        answer(format_args!("\n{}\n", declaration.written()));
+    let named = scope
+        .asked()?
+        .referent(budget, &Overlay::default(), path, telling);
+    let Referent {
+        declaration,
+        module,
+    } = match named {
+        Ok(Some(named)) => {
+            telling.answering();
+            named
+        }
+        Ok(None) => return Err(unknown_declaration(path)),
+        Err(diagnostics) => return Err(stopped(diagnostics)),
+    };
+
+    if let Some(described) = &declaration {
+        answer(format_args!(
+            "{}\n",
+            block(described, Some(listing(&path.join(), subject)))
+                .rendered(Kind::Declaration, &reader)
+        ));
+        if let Some(declaration) = &described.declaration {
+            answer(format_args!("\n{}\n", declaration.written()));
+        }
+    }
+    if let Some(module) = &module {
+        // A facade's path names both, and the module stands after the declaration, a blank line between.
+        if declaration.is_some() {
+            answer("\n");
+        }
+        answer(format_args!(
+            "{}\n",
+            module_block(path, module).listing(Kind::Module, &reader, &module.entries)
+        ));
     }
 
     Ok(())
@@ -1028,11 +1075,11 @@ fn counted(count: usize, noun: &str) -> String {
     }
 }
 
-/// The command that lists what the module at `path` exposes, asked in the scope of `subject` as the command line wrote it.
-fn exports_listing(path: &str, subject: Option<&str>) -> String {
+/// The command that answers what `path` names, asked in the scope of `subject` as the command line wrote it.
+fn naming(path: &str, subject: Option<&str>) -> String {
     match subject {
-        Some(subject) => format!("curios wonder --name {path} --exports {subject}"),
-        None => format!("curios wonder --name {path} --exports"),
+        Some(subject) => format!("curios wonder --name {path} {subject}"),
+        None => format!("curios wonder --name {path}"),
     }
 }
 

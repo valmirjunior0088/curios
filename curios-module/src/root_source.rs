@@ -207,6 +207,11 @@ impl RootSource {
         self
     }
 
+    /// Whether the unit documents a mount: a package's library and the standard library do, and a loose module, which no consumer reaches, does not.
+    pub fn documents(&self) -> bool {
+        self.documented.is_some()
+    }
+
     /// The mount this source documents, with its description, when one was marked.
     pub(crate) fn documented_mount(&self) -> Option<(Qualifier, Option<String>)> {
         self.documented.clone()

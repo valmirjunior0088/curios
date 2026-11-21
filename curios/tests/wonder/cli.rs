@@ -238,7 +238,7 @@ fn a_place_answers_the_name_written_there() {
         concat!(
             "/app/util\n",
             "│  module\n",
-            "├─ try; curios wonder --name /app/util --exports app.crs\n",
+            "├─ try; curios wonder --name /app/util app.crs\n",
             "└─ [module] lib.crs:1:9\n",
         )
     );
@@ -483,6 +483,64 @@ fn a_private_module_answers_where_its_library_does_not_check() {
     let refused = String::from_utf8_lossy(&shown.stderr);
     assert!(!shown.status.success());
     assert!(refused.contains("[error] util.crs:2:5"), "{refused}");
+}
+
+/// `--name` answers everything a path names: a module by its block, and a facade's path, which names a declaration and a module, by the declaration and then the module, a blank line between.
+#[test]
+fn a_path_naming_a_module_answers_the_module_beside_its_declaration() {
+    let root = project("named-module");
+    write(
+        &root,
+        "lib.crs",
+        "pub mod util;\npub mod word;\npub use word/{let word};\n",
+    );
+    write(
+        &root,
+        "word.crs",
+        "pub let word: /std/Str =\n    \"w\";\npub let other: /std/Str =\n    \"o\";\n",
+    );
+
+    let module = curios(&root, &["wonder", "--name", "/app/util", "app.crs"], "");
+    assert!(
+        module.status.success(),
+        "{}",
+        String::from_utf8_lossy(&module.stderr)
+    );
+    assert_eq!(
+        stdout(&module),
+        concat!(
+            "/app/util\n",
+            "│  public module, exposing 1 name and 0 modules\n",
+            "├─ pub let word: /std/Str\n",
+            "└─ [module] lib.crs:1:9\n",
+        )
+    );
+
+    let facade = curios(&root, &["wonder", "--name", "/app/word", "app.crs"], "");
+    assert!(
+        facade.status.success(),
+        "{}",
+        String::from_utf8_lossy(&facade.stderr)
+    );
+    assert_eq!(
+        stdout(&facade),
+        concat!(
+            "/app/word\n",
+            "│  public definition, declared at `/app/word/word`\n",
+            "│  type: `Str`\n",
+            "│  totality: total\n",
+            "└─ [declaration] word.crs:1:9\n",
+            "\n",
+            "pub let word: /std/Str =\n",
+            "    \"w\";\n",
+            "\n",
+            "/app/word\n",
+            "│  public module, exposing 2 names and 0 modules\n",
+            "├─ pub let word: /std/Str\n",
+            "├─ pub let other: /std/Str\n",
+            "└─ [module] lib.crs:2:9\n",
+        )
+    );
 }
 
 /// A place where nothing is named is an answer of nothing, and exits 0.

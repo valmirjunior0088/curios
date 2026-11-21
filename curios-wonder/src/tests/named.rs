@@ -908,6 +908,80 @@ fn a_path_names_a_module_only_where_a_mod_line_declares_one() {
     assert_eq!(exposed_in(MODULES, "/nowhere"), None);
 }
 
+/// What `--name` answers of `path` in the scope of `program`, read of standard input.
+fn named_in(program: &str, path: &str) -> Option<Referent> {
+    crate::referent(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                text: program.to_string(),
+                written: WrittenIn::Program,
+            },
+            declares: None,
+            package: None,
+        },
+        &qualified(path),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .unwrap_or_else(|_| panic!("the program checks"))
+}
+
+/// A path is answered wherever it names something: a module of functions as the module, a declaration as the declaration, a facade's path as both, a private module and a program's own as modules, and a path nothing stands at as nothing.
+#[test]
+fn a_path_answers_the_declaration_and_the_module_it_names() {
+    const PROGRAM: &str = "mod helpers\n    pub let one: /std/Nat = 1;\nend\n/std/print(\"\")";
+    let named = |path| {
+        named_in(PROGRAM, path).map(|named| {
+            (
+                named.declaration.map(|described| described.declared),
+                named.module.map(|module| module.names),
+            )
+        })
+    };
+
+    assert_eq!(named("/std/ops"), Some((None, Some(9))));
+    assert_eq!(named("/std/print"), Some((Some(Declared::Function), None)));
+    assert_eq!(
+        named("/std/Map").map(|(declared, module)| (declared, module.is_some())),
+        Some((Some(Declared::Struct), true))
+    );
+    assert_eq!(named("/std/Map/internal"), Some((None, Some(1))));
+    assert_eq!(named("/helpers"), Some((None, Some(1))));
+    assert_eq!(named("/helpers/one"), Some((Some(Declared::Value), None)));
+    assert_eq!(named("/nowhere"), None);
+}
+
+/// A loose text written as a module is a unit of its own, mounted under the name it is asked by, and its own path answers the module: read off the lowering, since a loose module documents nothing.
+#[test]
+fn a_loose_modules_own_path_answers_the_module() {
+    let module = named_in(
+        "pub let twice(n: /std/Nat) -> /std/Nat = n + n;\n",
+        "/stdin",
+    )
+    .and_then(|named| named.module)
+    .expect("the text is a module");
+
+    assert_eq!(
+        (module.public, module.entries),
+        (
+            None,
+            vec!["pub let twice(n: /std/Nat) -> /std/Nat".to_string()]
+        )
+    );
+}
+
+/// A module of the library the compiler was built with answers its path and no place, no file holding its `mod` line, as a declaration of that library answers none.
+#[test]
+fn a_library_modules_segment_answers_no_place() {
+    const PROGRAM: &str = "let three: /std/Nat = /std/Nat/succ(2);\n/std/print(\"\")";
+    let module = at(PROGRAM, "Nat/succ", 0, 0).expect("a module stands there");
+
+    assert_eq!(moduled(module), ("/std/Nat".to_string(), None));
+}
+
 /// A program writing a word in each place elaboration resolves one: a structure's field labels in a literal, a projection and a pattern, a concept's method in a witness, and a constructor in a match.
 const LABELLED: &str = "\
 use /std/{Nat, Show, print};
