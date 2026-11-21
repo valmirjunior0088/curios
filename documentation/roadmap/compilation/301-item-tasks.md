@@ -19,9 +19,9 @@ Working specification for multithreaded compilation, the payoff of [a declaratio
 
 Each declaration's lowering is held to its record and to its answers by a census ([A lowering is kept where its text and the names it resolved stand](../../design/compilation/a-lowering-is-kept-where-its-text-and-the-names-it-resolved-stand.md)), which scheduling from those records rests on. Source identity is settled by [A source is named by its package and read from its file](../../design/compilation/a-source-is-named-by-its-package-and-read-from-its-file.md).
 
-Take demonstrated compiler-scaling violations first under the filing order. Once those costs have moved, the bounded investigation here records current default-release elapsed time, allocation work, peak memory, critical-path weight and serial stage shares over `/std` and `programs/`. It ends with a rebuildable whole-declaration scheduling model and a protocol for measuring the representation change and executor against that serial baseline. No measured speedup is claimed before the implementation is compared with it. Publishing a signature ahead of its body is [a specification of its own](301-a-signature-is-published-ahead-of-its-body.md), which this model releases; whole-declaration scheduling does not wait for it.
+Take demonstrated compiler-scaling violations first under the filing order. Once those costs have moved, the bounded investigation here records current default-release elapsed time, allocation work, peak memory, critical-path weight and serial stage shares over `/std` and `programs/`. It ends with a rebuildable whole-declaration scheduling model and a protocol for measuring the representation change and executor against that serial baseline. No measured speedup is claimed before the implementation is compared with it. Publishing a signature ahead of its body is [a specification of its own](302-a-signature-is-published-ahead-of-its-body.md), which this model releases; whole-declaration scheduling does not wait for it.
 
-**What the transcript shows of concurrent work is settled before the executor.** A step is written as a label before its work and an outcome after it, on one line, and a subject's steps hang beneath it ([A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)): a form for one open subject, which `Steps` (`curios/src/pipeline.rs`) holds as one tree. Which work runs together decides how far that reaches: the items of one unit leave its `check` node the one open line, and units side by side, or the independent jobs of stage 2, open several. The candidate keeps one stream, appended and never redrawn: a subject is stated again whenever the writer changes subject, and a node left open when another must write is closed with `…` and written again with its outcome, so a run on one worker stays byte for byte what it is, nothing waits for a segment to end, and a hang is still a label no outcome follows. Peers bound the choice: GNU make's `--output-sync` holds a recipe's output until it ends, which its manual describes as long silences and then bursts; nextest writes one line a result and a `SLOW` line for what still runs; BuildKit's plain progress heads every line with its step. The step ends with the form chosen against what the executor really runs together, and the decision restated.
+**The transcript holds several open subjects already** ([A transcript is drawn plain or live](300-a-transcript-is-drawn-plain-or-live.md)): a worker sends the events the sequential compiler sends, each naming its subject, and both drawings show what is open as they do on one worker.
 
 ## Permanent decisions
 
@@ -39,8 +39,7 @@ Take demonstrated compiler-scaling violations first under the filing order. Once
 | Parsing and lowering | Per file, then per module in two phases over the possibly cyclic module graph: collect every module's exports, then lower |
 | Terms and trees | `Arc`-shared; `Cell` caches computed at construction, `OnceCell`s become `OnceLock`s |
 | Per-thread tables | The prelude restored once per process; the packrat and comment tables become state of the parse that owns them; the parsed-file memo and an extent's last read become the session's; the look count stays per thread |
-| Progress | Each report names its subject, since several are in flight |
-| Transcript | One stream for every number of workers; its form where several subjects are open is settled under *Readiness* |
+| Progress and transcript | Each event names its subject, and both drawings hold any number of subjects open ([A transcript is drawn plain or live](300-a-transcript-is-drawn-plain-or-live.md)) |
 
 ## Stages
 
@@ -61,8 +60,6 @@ Each lands alone, on its own check.
 
 - [`curios-prelude`'s README](../../../curios-prelude/README.md#a-root-is-imaged-as-a-certified-unit): the images are restored once per process.
 - `curios-wonder/src/server.rs`: its module documentation's *single-threaded by construction*.
-- `curios-pipeline`: `Progress`'s *sequential by construction*.
-- [A command narrates on one transcript and reports in blocks](../../design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md): its transcript's one open subject.
 - `curios-core/src/term/mentions.rs`: `Mentions::empty`'s comment justifying a per-thread table by `Rc`.
 
 ## Rejected
