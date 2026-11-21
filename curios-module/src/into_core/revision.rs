@@ -212,6 +212,40 @@ pub struct Bodies {
     foreign: Ordered<()>,
 }
 
+/// The modules of a table read in the modules' order — `last` its greatest, `before` the greatest below one — that lie in no module of `files`, those being the modules a file backs, in their order: a program's own, a module supplied as a tree, and the ones each writes inline. Read without visiting a module a file holds.
+pub(super) fn outside_files<'a, 't>(
+    files: impl Iterator<Item = &'a Qualifier>,
+    last: impl Fn() -> Option<&'t Qualifier>,
+    before: impl Fn(&Qualifier) -> Option<&'t Qualifier>,
+) -> Vec<Qualifier> {
+    // A module's subtree is contiguous in the modules' order, so what no file holds lies between the subtrees of the outermost file modules: each gap is read backwards from the module before the file that ends it.
+    let mut outermost = Vec::<Qualifier>::new();
+    for file in files {
+        if !outermost.last().is_some_and(|last| file.is_within(last)) {
+            outermost.push(*file);
+        }
+    }
+    let mut outside = Vec::new();
+    let mut previous = None::<&Qualifier>;
+    for end in outermost.iter().map(Some).chain([None]) {
+        let mut at = match end {
+            Some(file) => before(file),
+            None => last(),
+        };
+        let gap = outside.len();
+        while let Some(module) = at
+            && !previous.is_some_and(|file| module <= file || module.is_within(file))
+        {
+            outside.push(*module);
+            at = before(module);
+        }
+        outside[gap..].reverse();
+        previous = end;
+    }
+
+    outside
+}
+
 /// One module body's declarations ([`Bodies`]).
 #[derive(Clone, Debug, Default)]
 pub struct Body {
@@ -249,34 +283,13 @@ impl Bodies {
         self.by.iter().map(|(module, body)| (module, &**body))
     }
 
-    /// The bodies that hold a declaration and lie in no module a file backs, `files` being those modules in their order: a program's own, a module supplied as a tree, and the ones each writes inline. Read without visiting a body a file holds.
+    /// The bodies that hold a declaration and lie in no module a file backs, `files` being those modules in their order ([`outside_files`]).
     pub(super) fn unfiled<'a>(&self, files: impl Iterator<Item = &'a Qualifier>) -> Vec<Qualifier> {
-        // A module's subtree is contiguous in the modules' order, so what no file holds lies between the subtrees of the outermost file modules: each gap is read backwards from the body before the file that ends it.
-        let mut outermost = Vec::<Qualifier>::new();
-        for file in files {
-            if !outermost.last().is_some_and(|last| file.is_within(last)) {
-                outermost.push(*file);
-            }
-        }
-        let mut unfiled = Vec::new();
-        let mut previous = None::<&Qualifier>;
-        for end in outermost.iter().map(Some).chain([None]) {
-            let mut at = match end {
-                Some(file) => self.by.before(file),
-                None => self.by.last(),
-            };
-            let gap = unfiled.len();
-            while let Some((module, _)) = at
-                && !previous.is_some_and(|file| module <= file || module.is_within(file))
-            {
-                unfiled.push(*module);
-                at = self.by.before(module);
-            }
-            unfiled[gap..].reverse();
-            previous = end;
-        }
-
-        unfiled
+        outside_files(
+            files,
+            || self.by.last().map(|(module, _)| module),
+            |module| self.by.before(module).map(|(module, _)| module),
+        )
     }
 
     /// The first item's place of the last declaration `root` or a module under it holds, where they hold any: what a walk that passes them unentered places what follows after.

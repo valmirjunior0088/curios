@@ -14,7 +14,7 @@
 mod tests;
 
 use {
-    super::{Head, Headed},
+    super::{Head, Headed, outside_files},
     crate::PreparedText,
     curios_common::{Qualifier, Source, Span},
     std::{
@@ -63,7 +63,17 @@ impl PreparedText {
         for (module, scan) in scans.iter().filter(|(_, scan)| lies(&scan.source)) {
             inline_bodies(*module, &scan.heads, &mut written);
         }
-        written.extend(bodies.unfiled(scans.keys()));
+        // A body no file backs is read where it writes a declaration or a line: a program's `use` line names what it imports whether or not a declaration stands beside it.
+        let imports = self.imports();
+        let mut unfiled = bodies.unfiled(scans.keys());
+        unfiled.extend(outside_files(
+            scans.keys(),
+            || imports.last_lined(),
+            |body| imports.lined_before(body),
+        ));
+        unfiled.sort();
+        unfiled.dedup();
+        written.extend(unfiled);
 
         // Each declaration written in them, with the names its items declare, and the program's closing term.
         let mut keys = Vec::new();

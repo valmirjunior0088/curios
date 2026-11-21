@@ -768,6 +768,16 @@ impl Imports {
             .map_or(&[][..], |lines| lines.as_slice())
     }
 
+    /// The greatest body whose lines name something, in the modules' order.
+    pub fn last_lined(&self) -> Option<&Qualifier> {
+        self.lines.last().map(|(body, _)| body)
+    }
+
+    /// The greatest body below `body` whose lines name something, in the modules' order.
+    pub fn lined_before(&self, body: &Qualifier) -> Option<&Qualifier> {
+        self.lines.before(body).map(|(body, _)| body)
+    }
+
     /// Every name some body's lines write, body by body.
     pub fn every_line(&self) -> impl Iterator<Item = &LineName> {
         self.lines.iter().flat_map(|(_, lines)| lines.iter())

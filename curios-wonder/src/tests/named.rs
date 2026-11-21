@@ -1141,6 +1141,25 @@ let picked: /Shapes/Colour = /Shapes/Colour/red();
     );
 }
 
+/// A `use` or a `mod` line of a body that writes no declaration answers what it names, as one beside a declaration does: the selector of a program that is an import and a closing term, and a `mod` line alone in its body, at the root and inside another module.
+#[test]
+fn a_line_of_a_body_that_declares_nothing_answers_what_it_names() {
+    let selector =
+        at("use /std/{print};\nprint(\"\")", "print}", 0, 0).expect("a name stands there");
+    assert_eq!(said(&selector).0, "/std/print");
+
+    const ALONE: &str = "mod helpers\n    pub let one: /std/Nat = 1;\nend\n/std/print(\"\")";
+    let declared = at(ALONE, "helpers", 0, 0).expect("a module stands there");
+    assert_eq!(moduled(declared), ("/helpers".to_string(), Some((1, 5))));
+
+    const NESTED: &str = "mod outer\n    mod inner\n        pub let one: /std/Nat = 1;\n    end\nend\n/std/print(\"\")";
+    let inner = at(NESTED, "inner", 0, 0).expect("a module stands there");
+    assert_eq!(moduled(inner), ("/outer/inner".to_string(), Some((2, 9))));
+    // The body around it writes a line and nothing else too, and is read as well.
+    let outer = at(NESTED, "outer", 0, 0).expect("a module stands there");
+    assert_eq!(moduled(outer), ("/outer".to_string(), Some((1, 5))));
+}
+
 /// A program writing a module's `mod` line, and a `use` line through it.
 const LINES: &str = "\
 pub mod Shapes

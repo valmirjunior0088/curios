@@ -240,3 +240,18 @@ fn a_contextual_word_is_the_keyword_where_it_opened_a_member() {
 fn a_subject_that_does_not_lower_classes_nothing() {
     assert!(classes("use /std/{Nope};\n/std/print(\"\")").is_err());
 }
+
+/// A `use` line is classed where its body writes no declaration beside it: the module its path walks and the function its selector names, before the closing term's.
+#[test]
+fn a_line_of_a_body_that_declares_nothing_is_classed() {
+    let rows = classes("use /std/{print};\nprint(\"\")").expect("the program lowers");
+
+    assert_eq!(
+        rows,
+        [
+            row("std", "module", false, true),
+            row("print", "function", false, true),
+            row("print", "function", false, true),
+        ]
+    );
+}
