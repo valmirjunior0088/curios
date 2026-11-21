@@ -117,6 +117,23 @@ impl CycleMember {
     }
 }
 
+/// What a pattern takes apart, as a report on a column whose patterns disagree names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatternShape {
+    /// A tuple of this many fields.
+    Tuple(usize),
+    /// A structure, by its head as the pattern writes it.
+    Structure(String),
+    /// A value of a family, by one of its constructors.
+    Constructor,
+    Truth,
+    /// A number, or a character, which is dispatched on by its scalar value.
+    Number,
+    Text,
+    List,
+    Bytes,
+}
+
 /// The keyword a record type is declared with, by which a report names it: a concept is a record, as a struct is.
 #[derive(Clone, Copy, Debug)]
 pub enum RecordKeyword {
@@ -794,8 +811,10 @@ pub enum Error {
         binder: String,
         constructor: String,
     },
-    /// The rows that take one column apart write shapes that disagree: a tuple or struct of another arity or other labels, a struct of another structure, a constructor beside a carrier's case.
-    MatrixInconsistentShape,
+    /// The rows that take one column apart write shapes that disagree: a tuple or struct of another arity or other labels, a struct of another structure, a constructor beside a carrier's case. `shapes` names the first shape and one that disagrees with it, where the two are told apart by what they take apart.
+    MatrixInconsistentShape {
+        shapes: Option<(PatternShape, PatternShape)>,
+    },
     /// An arm no value reaches: every value it matches is taken by an arm written before it. A repeated arm is one, and so is a final `_` after arms that cover every case. `covered` is an arm before it that takes a value it matches, as that arm is written.
     MatrixDuplicateRow {
         covered: Option<String>,
@@ -2000,6 +2019,10 @@ impl Error {
         }
     }
 
+    pub fn matrix_inconsistent_shape(shapes: Option<(PatternShape, PatternShape)>) -> Self {
+        Self::MatrixInconsistentShape { shapes }
+    }
+
     pub fn hidden_member_without_slot(written: Plicity) -> Self {
         Self::HiddenMemberWithoutSlot { written }
     }
@@ -2270,7 +2293,7 @@ impl Error {
             self.unwrapped(),
             Self::MatrixStructHead { .. }
                 | Self::MatrixTupleArity { .. }
-                | Self::MatrixInconsistentShape
+                | Self::MatrixInconsistentShape { .. }
                 | Self::MatrixLiteralColumn { .. }
                 | Self::MatrixByteSuccessor { .. }
         )

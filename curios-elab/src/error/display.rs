@@ -8,8 +8,8 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, FieldReading,
-        GoalReport, Need, RecordKeyword,
-        RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
+        GoalReport, Need, PatternShape, RecordKeyword, RegionOwner, ShapeDiagnosis, Underivable,
+        Watched, WrittenLiteral,
     },
     crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
@@ -460,6 +460,20 @@ impl ErasedSite {
                 format!("the bound of `{}`", operation.spelled(spelling))
             }
         }
+    }
+}
+
+/// What a pattern of `shape` takes apart, as a report on a column whose patterns disagree says it.
+fn shape_said(shape: &PatternShape) -> String {
+    match shape {
+        PatternShape::Tuple(fields) => format!("a tuple of {}", counted(*fields, "field")),
+        PatternShape::Structure(head) => format!("a `{head}`"),
+        PatternShape::Constructor => "a value by its constructor".to_string(),
+        PatternShape::Truth => "a truth value".to_string(),
+        PatternShape::Number => "a number".to_string(),
+        PatternShape::Text => "a string".to_string(),
+        PatternShape::List => "a list".to_string(),
+        PatternShape::Bytes => "a byte string".to_string(),
     }
 }
 
@@ -1515,9 +1529,16 @@ impl Displayed<'_> {
                 ));
                 f.stating(format_args!("written: {got}"));
             }
-            Error::MatrixInconsistentShape => {
+            Error::MatrixInconsistentShape { shapes } => {
                 f.text("shape mismatch");
                 f.stating("the arms' patterns disagree on shape in one column");
+                if let Some((first, other)) = shapes {
+                    f.stating(format_args!(
+                        "one arm takes apart {}, another {}",
+                        shape_said(first),
+                        shape_said(other)
+                    ));
+                }
             }
             Error::MatrixDefaultNamesAConstructor {
                 binder,

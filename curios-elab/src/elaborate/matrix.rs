@@ -20,8 +20,8 @@ use {
         SwitchSplit, elaborate, payload_fills, read_fields, realize, record_keyword,
     },
     crate::{
-        Context, Error, HeldFrames, Resolved, WrittenLiteral, check, expect_as, pending,
-        reduce_with, resolved_for_display, stuck_on_metavar,
+        Context, Error, HeldFrames, PatternShape, Resolved, WrittenLiteral, check, expect_as,
+        pending, reduce_with, resolved_for_display, stuck_on_metavar,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -369,6 +369,33 @@ fn states_no_case(cells: &[Cell<'_>]) -> bool {
         .any(|(shape, _)| shape.is_peeled_literal())
 }
 
+/// What `shape` takes apart, as a report on a column whose patterns disagree names it: what is left of a run is a run of its sequence, and what is left of a number a number.
+fn said_shape(shape: Shape<'_>) -> PatternShape {
+    match shape {
+        Shape::Pattern(pattern) | Shape::Peeled(pattern, _) => shape_of(pattern),
+        Shape::Remains(Sequence::List, ..) => PatternShape::List,
+        Shape::Remains(Sequence::Bytes, ..) => PatternShape::Bytes,
+        Shape::Text(_) => PatternShape::Text,
+    }
+}
+
+/// What `pattern` takes apart, as a report on a column whose patterns disagree names it. A binder and a wildcard take nothing apart, so no column disagrees over one.
+fn shape_of(pattern: &Pattern) -> PatternShape {
+    match pattern {
+        Pattern::Tuple(fields) => PatternShape::Tuple(fields.len()),
+        Pattern::Struct { head, .. } => PatternShape::Structure(head.clone()),
+        Pattern::Variant { .. } => PatternShape::Constructor,
+        Pattern::Bool(_) => PatternShape::Truth,
+        Pattern::Succ { .. } | Pattern::Literal(_) => PatternShape::Number,
+        Pattern::Str(_) => PatternShape::Text,
+        Pattern::List(_) => PatternShape::List,
+        Pattern::Bytes(_) => PatternShape::Bytes,
+        Pattern::Binder | Pattern::Wildcard(_) => {
+            unreachable!("a binder or a wildcard is no pattern a column is split by")
+        }
+    }
+}
+
 /// The pattern a part a case always holds is read as at a column of its own, a predecessor or an open run's rest: a binder, or `_`.
 fn slot_pattern(slot: Slot) -> &'static Pattern {
     const BINDER: &Pattern = &Pattern::Binder;
@@ -593,11 +620,14 @@ impl<'m> Compiler<'m> {
         };
 
         if let Some((sequence, _)) = first.run() {
-            if !written
+            if let Some(other) = written
                 .iter()
-                .all(|other| other.run().is_some_and(|(other, _)| other == sequence))
+                .find(|other| !other.run().is_some_and(|(other, _)| other == sequence))
             {
-                return Err(Error::MatrixInconsistentShape);
+                return Err(Error::matrix_inconsistent_shape(Some((
+                    said_shape(first),
+                    said_shape(*other),
+                ))));
             }
 
             return self.sequence(context, sequence, columns, lines, top, mode);
@@ -608,31 +638,41 @@ impl<'m> Compiler<'m> {
             .map(|shape| shape.pattern())
             .collect::<Option<Vec<_>>>()
         else {
-            return Err(Error::MatrixInconsistentShape);
+            let other = written.iter().find(|shape| shape.pattern().is_none());
+            return Err(Error::matrix_inconsistent_shape(
+                other.map(|other| (said_shape(first), said_shape(*other))),
+            ));
         };
         let first = written[0];
 
-        let every =
-            |alike: fn(&Pattern, &Pattern) -> bool| written.iter().all(|other| alike(first, other));
+        // The first written pattern that is not `alike` the first, which a refusal names beside it.
+        let disagreeing = |alike: fn(&Pattern, &Pattern) -> bool| {
+            written.iter().find(|other| !alike(first, other)).copied()
+        };
+        let apart = |other: &Pattern| {
+            Error::matrix_inconsistent_shape(Some((shape_of(first), shape_of(other))))
+        };
         match first {
             Pattern::Variant { .. } => {
-                if !every(|_, other| matches!(other, Pattern::Variant { .. })) {
-                    return Err(Error::MatrixInconsistentShape);
+                if let Some(other) =
+                    disagreeing(|_, other| matches!(other, Pattern::Variant { .. }))
+                {
+                    return Err(apart(other));
                 }
 
                 self.variants(context, columns, lines, top, mode)
             }
             Pattern::Tuple(_) => {
-                if !every(
+                if let Some(other) = disagreeing(
                     |first, other| matches!((first, other), (Pattern::Tuple(first), Pattern::Tuple(other)) if first.len() == other.len()),
                 ) {
-                    return Err(Error::MatrixInconsistentShape);
+                    return Err(apart(other));
                 }
 
                 self.fields(context, columns, lines, top, mode)
             }
             Pattern::Struct { .. } => {
-                if !every(|first, other| {
+                if let Some(other) = disagreeing(|first, other| {
                     matches!(
                         (first, other),
                         (
@@ -641,28 +681,30 @@ impl<'m> Compiler<'m> {
                         ) if first_structure == other_structure && first.len() == other.len()
                     )
                 }) {
-                    return Err(Error::MatrixInconsistentShape);
+                    return Err(apart(other));
                 }
 
                 self.fields(context, columns, lines, top, mode)
             }
             // A numeral is realized at its column's type, so `0` and `1` share a `Bool`'s column with its truth values.
             Pattern::Bool(_) => {
-                if !every(|_, other| matches!(other, Pattern::Bool(_) | Pattern::Literal(_))) {
-                    return Err(Error::MatrixInconsistentShape);
+                if let Some(other) =
+                    disagreeing(|_, other| matches!(other, Pattern::Bool(_) | Pattern::Literal(_)))
+                {
+                    return Err(apart(other));
                 }
 
                 self.booleans(context, columns, lines, top, mode)
             }
             // A character is a dispatch case spelled by its scalar value, so it shares a column with the numerals.
             Pattern::Succ { .. } | Pattern::Literal(_) => {
-                if !every(|_, other| {
+                if let Some(other) = disagreeing(|_, other| {
                     matches!(
                         other,
                         Pattern::Succ { .. } | Pattern::Literal(_) | Pattern::Bool(_)
                     )
                 }) {
-                    return Err(Error::MatrixInconsistentShape);
+                    return Err(apart(other));
                 }
 
                 let truths = written
@@ -672,7 +714,10 @@ impl<'m> Compiler<'m> {
                     .iter()
                     .any(|other| matches!(other, Pattern::Succ { .. }));
                 match (truths, peels) {
-                    (true, true) => Err(Error::MatrixInconsistentShape),
+                    (true, true) => Err(Error::matrix_inconsistent_shape(Some((
+                        PatternShape::Truth,
+                        PatternShape::Number,
+                    )))),
                     (true, false) => self.booleans(context, columns, lines, top, mode),
                     (false, _) => self.numbers(context, columns, lines, top, mode),
                 }
@@ -1513,7 +1558,10 @@ impl<'m> Compiler<'m> {
         // A truth value beside the numerals decides a column of a type nothing has decided yet as a `Bool`, which its split then holds it to.
         let scrutinee = Scrutinee::read(context, &column.term)?;
         if !scrutinee.is_bool() && !scrutinee.is_undecided(context) {
-            return Err(Error::MatrixInconsistentShape);
+            return Err(Error::matrix_inconsistent_shape(Some((
+                PatternShape::Truth,
+                PatternShape::Number,
+            ))));
         }
         let carrier = Subterm::Intrinsic(Intrinsic::BoolType);
         for line in lines.iter_mut() {
@@ -1811,7 +1859,7 @@ impl<'m> Compiler<'m> {
                 .iter()
                 .any(|line| line.cells[0].is_some() && !whole(line))
         {
-            return Err(Error::MatrixInconsistentShape);
+            return Err(Error::matrix_inconsistent_shape(None));
         }
         // Read before a case is missed, so a column no string fits is refused as one and a missing case is spelled as the string it is.
         let read = match texts {
@@ -1970,7 +2018,7 @@ impl<'m> Compiler<'m> {
                 Some((shape, mut place)) => {
                     let parts = written(context, shape)?;
                     if reads(&parts) != canonical {
-                        return Err(Error::MatrixInconsistentShape);
+                        return Err(Error::matrix_inconsistent_shape(None));
                     }
                     // What each label names, at the row's own place for it.
                     if let Some(Pattern::Struct {

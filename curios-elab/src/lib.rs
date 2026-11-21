@@ -51,9 +51,9 @@ use denoise::*;
 mod error;
 pub use error::{
     BinderSite, Callee, CycleMember, DeadArm, Declined, EmbeddingDiagnosis, ErasedSite, Error,
-    FieldReading, FunctionTyped, GoalReport, Joining, Need, OpenKey, ReaderScope, Reading,
-    RecordKeyword,
-    RegionOwner, Runner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
+    FieldReading, FunctionTyped, GoalReport, Joining, Need, OpenKey, PatternShape, ReaderScope,
+    Reading, RecordKeyword, RegionOwner, Runner, ShapeDiagnosis, Underivable, Watched,
+    WrittenLiteral,
 };
 
 mod report;

@@ -2,7 +2,7 @@
 
 use crate::tests::test_support::*;
 
-// Two rows write a tuple pattern of different arity in the same column — there is no single shape to explode into projections.
+// Two rows write a tuple pattern of different arity in the same column — there is no single shape to explode into projections — and the refusal names both shapes.
 #[test]
 fn match_rejects_inconsistent_tuple_arity() {
     let source = r#"
@@ -17,7 +17,9 @@ fn match_rejects_inconsistent_tuple_arity() {
 
     let error = error(source);
     assert!(
-        error.contains("disagree on shape"),
+        error.contains("disagree on shape")
+            && error
+                .contains("one arm takes apart a tuple of 2 fields, another a tuple of 1 field"),
         "unexpected error: {error}"
     );
 }
