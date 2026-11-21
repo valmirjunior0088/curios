@@ -28,7 +28,7 @@ use proof::*;
 
 mod report;
 use report::*;
-pub use report::{Conclusion, Refusal};
+pub use report::{Answer, Conclusion, Refusal};
 
 mod search;
 use search::*;
@@ -150,6 +150,20 @@ pub fn entail(context: &mut Context, bound: &Term, reduced: &Term) -> Result<Ent
         }
         entailed => entailed,
     })
+}
+
+/// The facts in scope a report names beside a bound that holds, each with where it came from: what the procedure reads of the hypotheses, their proof fields and the live guards, as a refusal names the facts it considered ([`considered`]).
+pub fn facts_in_scope(context: &mut Context) -> Result<Vec<(Origin, Term)>, Error> {
+    curios_profile::profile!("entailment::facts_in_scope");
+    let facts = context.with_entailing(|context| {
+        let mut views = LinearViews::default();
+        let mut classes = Classes::default();
+        Reader::new(&mut views, &mut classes).collect(context, None)
+    })?;
+    Ok(considered(&facts)
+        .into_iter()
+        .map(|(from, statement)| (from, zonk_solved_term_metas(context, &statement)))
+        .collect())
 }
 
 /// The fact that states `bound` outright, as its proof: the first hypothesis, or proof field one level down, in scope order, whose statement converts with the bound and checks against it.

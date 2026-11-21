@@ -1412,11 +1412,14 @@ fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
         typecheck(&program).expect_err("a written goal never compiles")
     };
 
-    // Where the facts prove the bound, the proof is a candidate the author can paste.
+    // Where the facts prove the bound, the goal names them and is offered the call that proves it again where it is pasted, never the proof the procedure wrote.
     let proved =
         goal("xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(xs))");
     assert!(
-        proved.contains("? \u{2248}") && proved.contains("add("),
+        proved.contains("it follows from the facts in scope:")
+            && proved.contains("a hypothesis, `p`: `i < m`")
+            && proved.contains("? \u{2248} proved()")
+            && !proved.contains("add("),
         "{proved}"
     );
 

@@ -376,6 +376,8 @@ pub struct EntailmentSyntax {
     pub or_first: SyntaxName,
     /// A disjunction from its second side, in the case every side before it fails.
     pub or_second: SyntaxName,
+    /// The library's door to the procedure, `/std/proved`: what a written goal's report offers where the bound it stands for holds, the call that asks the procedure again where it is pasted, in place of the proof the procedure wrote.
+    pub proved: SyntaxName,
     /// The order vocabulary at `Nat`.
     pub nat: OrderSyntax,
     /// The order vocabulary at `Int`.
@@ -399,6 +401,7 @@ impl EntailmentSyntax {
             and_both,
             or_first,
             or_second,
+            proved,
             nat,
             int,
             natural,
@@ -407,6 +410,7 @@ impl EntailmentSyntax {
 
         [
             equality, sym, range, in_range, and_first, and_second, and_both, or_first, or_second,
+            proved,
         ]
         .into_iter()
         .chain(nat.targets())

@@ -410,7 +410,7 @@ fn a_candidate_of_the_other_sort_is_not_suggested() {
     assert!(!error.contains("? \u{2248} p"), "unexpected error: {error}");
 }
 
-/// A goal written under two guards is offered the proof its inner guard gives under the outer. `q(p(x), y) <= z` is `y <= z` once the outer guard has made `p(x)` true, and the goal's candidates are sought standing on the frames it was born under, the inner guard's inside the outer's. With the two registered side by side in one frame the inner one said nothing, and the report read `a proof was found and did not check, which is the compiler's fault`, where `True/qed()` written in the goal's place compiled.
+/// A goal written under two guards holds by its inner guard under the outer, and is offered `proved()`. `q(p(x), y) <= z` is `y <= z` once the outer guard has made `p(x)` true, and the goal is answered standing on the frames it was born under, the inner guard's inside the outer's. With the two registered side by side in one frame the inner one said nothing, and the report read `a proof was found and did not check, which is the compiler's fault`, where a proof written in the goal's place compiled.
 #[test]
 fn a_goal_under_two_guards_is_offered_the_proof_the_inner_one_gives() {
     let source = r#"
@@ -435,11 +435,57 @@ fn a_goal_under_two_guards_is_offered_the_proof_the_inner_one_gives() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("? \u{2248} True/qed()"),
+        error.contains("? \u{2248} /std/proved()") && !error.contains("True/qed()"),
         "unexpected error: {error}"
     );
     assert!(
         !error.contains("did not check"),
         "unexpected error: {error}"
     );
+}
+
+/// A goal its guard decides is answered as the bound it stands for would be filled had it been left out: the report names the guard it follows from and offers `proved()`, never `True/qed()`, the term the fill writes. Pasted, the call asks the same fill, so it compiles.
+#[test]
+fn a_goal_its_guard_decides_names_the_guard_and_offers_proved() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        let share(total: Nat, people: Nat, @_: Holds(people > 0)) -> Nat = total / people;
+        let tab(total: Nat, guests: Nat) -> Nat =
+            match guests > 0 | true => share(total, guests, @?) | false => 0 end;
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        error.contains("it follows from the facts in scope:")
+            && error.contains("a guard, `guests > 0`")
+            && error.contains("? \u{2248} /std/proved()")
+            && !error.contains("True/qed()"),
+        "unexpected error: {error}"
+    );
+    assert!(compile(&source.replace("@?", "@/std/proved()")).is_ok());
+}
+
+/// A goal a hypothesis written `@_` proves is answered too: the proof the procedure writes reads a binder no program can name, so offered as the fit it left the report silent, and the call that proves it again names none.
+#[test]
+fn a_goal_an_unnamed_hypothesis_proves_is_offered_proved() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        let share(total: Nat, people: Nat, @_: Holds(people > 0)) -> Nat = total / people;
+        let tab(total: Nat, guests: Nat, @_: Holds(guests >= 2)) -> Nat =
+            share(total, guests, @?);
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        error.contains("it follows from the facts in scope:")
+            && error.contains("? \u{2248} /std/proved()"),
+        "unexpected error: {error}"
+    );
+    assert!(compile(&source.replace("@?", "@/std/proved()")).is_ok());
 }

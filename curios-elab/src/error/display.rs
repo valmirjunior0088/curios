@@ -10,7 +10,7 @@ use {
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, GoalReport, Need,
         RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
     },
-    crate::{Conclusion, Origin, Refusal, ordinal, premise_label},
+    crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{Code, Kind, MAX_LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
@@ -149,8 +149,10 @@ pub fn goal_said(report: &GoalReport, spelling: &Rc<Spelling>) -> Said {
     if typed {
         said.stating(format_args!("? : {goal}"));
     }
-    if let Some(refusal) = &report.refusal {
-        refused(&mut said, refusal, &spelling);
+    match &report.answer {
+        Some(Answer::Follows(facts)) => follows(&mut said, facts, &spelling),
+        Some(Answer::Refused(refusal)) => refused(&mut said, refusal, &spelling),
+        None => {}
     }
     if let (true, Some(solution)) = (solved, &solution) {
         said.stating(format_args!("? = {solution}"));
@@ -233,31 +235,6 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             conjunct.spelled(spelling)
         ));
     }
-    let origin = |origin: &Origin| match origin {
-        Origin::Hypothesis(name) => format!("a hypothesis, `{}`", name.spelled(spelling)),
-        Origin::Field(name, label) => {
-            format!("a proof field, `{}.{label}`", name.spelled(spelling))
-        }
-        Origin::Guard(written, true) => format!("a guard, `{}`", written.spelled(spelling)),
-        Origin::Guard(written, false) => {
-            format!("a guard's false arm, `{}`", written.spelled(spelling))
-        }
-        Origin::Natural
-        | Origin::Definition
-        | Origin::Product(..)
-        | Origin::Negated
-        | Origin::Disjunct => String::new(),
-    };
-    // A guard read as it was written states itself, and its line names it once.
-    let fact = |from: &Origin, statement: &Term| {
-        let stated = statement.spelled(spelling).to_string();
-        match from {
-            Origin::Guard(written, _) if written.spelled(spelling).to_string() == stated => {
-                origin(from)
-            }
-            _ => format!("{}: `{stated}`", origin(from)),
-        }
-    };
     if !refusal.considered().is_empty() {
         // A counterexample no program takes says what the search found, and nothing of the facts themselves.
         let heading = match refusal.conclusion() {
@@ -277,13 +254,13 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             }
         };
         // One fact: the heading, and each fact it heads on a line beneath it.
-        said.stating(heading);
-        for (from, statement) in refusal.considered() {
-            said.text(format_args!("\n  {}", fact(from, statement)));
-        }
+        facts_said(said, heading, refusal.considered(), spelling);
     }
     for (from, statement) in refusal.unread() {
-        said.stating(format_args!("not read: {}", fact(from, statement)));
+        said.stating(format_args!(
+            "not read: {}",
+            fact_said(from, statement, spelling)
+        ));
     }
     match refusal.conclusion() {
         Conclusion::Counterexample(assignment) if !assignment.is_empty() => {
@@ -313,6 +290,45 @@ fn refused(said: &mut Said, refusal: &Refusal, spelling: &Rc<Spelling>) {
             said.stating("that is the compiler's fault: please report it");
         }
         Conclusion::Unsearched | Conclusion::Counterexample(_) => {}
+    }
+}
+
+/// What a report says beside a bound that holds: the facts in scope it follows from, under the heading a refusal that wrote a proof gives them. A bound that holds by reduction alone, with no fact in scope, says nothing beside the fit that proves it.
+fn follows(said: &mut Said, facts: &[(Origin, Term)], spelling: &Rc<Spelling>) {
+    if !facts.is_empty() {
+        facts_said(said, "it follows from the facts in scope:", facts, spelling);
+    }
+}
+
+/// One fact: `heading`, and each of `facts` on a line beneath it.
+fn facts_said(said: &mut Said, heading: &str, facts: &[(Origin, Term)], spelling: &Rc<Spelling>) {
+    said.stating(heading);
+    for (from, statement) in facts {
+        said.text(format_args!("\n  {}", fact_said(from, statement, spelling)));
+    }
+}
+
+/// A fact as a report names it: where it came from, and what it states. A guard read as it was written states itself, and its line names it once.
+fn fact_said(from: &Origin, statement: &Term, spelling: &Rc<Spelling>) -> String {
+    let origin = match from {
+        Origin::Hypothesis(name) => format!("a hypothesis, `{}`", name.spelled(spelling)),
+        Origin::Field(name, label) => {
+            format!("a proof field, `{}.{label}`", name.spelled(spelling))
+        }
+        Origin::Guard(written, true) => format!("a guard, `{}`", written.spelled(spelling)),
+        Origin::Guard(written, false) => {
+            format!("a guard's false arm, `{}`", written.spelled(spelling))
+        }
+        Origin::Natural
+        | Origin::Definition
+        | Origin::Product(..)
+        | Origin::Negated
+        | Origin::Disjunct => String::new(),
+    };
+    let stated = statement.spelled(spelling).to_string();
+    match from {
+        Origin::Guard(written, _) if written.spelled(spelling).to_string() == stated => origin,
+        _ => format!("{origin}: `{stated}`"),
     }
 }
 

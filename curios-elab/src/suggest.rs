@@ -8,14 +8,15 @@
 //!
 //! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with one shared hole, a metavariable nothing solves and a report prints `?`, standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
 //!
-//! A goal that is a bound is also put to the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox: a proof it finds is a complete fit of pool 0, and a refusal is kept for the report, which then says beside the goal what it says beside an omitted bound.
+//! A goal that is a bound — one at a proposition — is answered by what would have filled it had it been left out (`answered`): its reduct's one inhabitant, then the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox. A bound that holds is offered as `proved()`, the library's door to that procedure, which asks it again where the fit is pasted, and the report names the facts in scope beside it; the proof the procedure wrote is no fit, since it need not read back. A bound refused keeps the procedure's refusal for the report, which then says beside the goal what it says beside an omitted bound.
 //!
 //! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq()(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal would see an application fit — which is every goal outside a function body, and almost no goal in a proof.
 
 use {
     super::{
-        Context, Entailed, HeldFrames, Outcome, Refusal, check, convert_outcome, entail,
-        reduce_with, subsume_outcome, zonk_solved_term_metas,
+        Answer, Context, Entailed, Error, HeldFrames, Outcome, check, convert_outcome, entail,
+        facts_in_scope, is_prop, reduce_with, subsume_outcome, trivially_inhabited,
+        zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_common::Plicity,
@@ -31,10 +32,10 @@ const CANDIDATES: usize = 3;
 /// The attempt cap per goal across the application-fit pools — a hard bound on error-path work, not a completeness promise.
 const ATTEMPTS: usize = 128;
 
-/// What a goal's report offers: the candidates that fit it, and — where the goal is a bound the procedure proves nothing about — why.
+/// What a goal's report offers: the candidates that fit it, and — where the goal is a bound — what the procedure that would have filled it says of it.
 pub struct Suggestions {
     pub candidates: Vec<Term>,
-    pub refusal: Option<Refusal>,
+    pub answer: Option<Answer>,
 }
 
 /// A found fit: the display term, its residual hole count, and its pool rank (scope values, constructors, scope functions, module definitions, referenced globals, imported bindings — in that order).
@@ -75,29 +76,19 @@ fn suggest_in_scope(
 ) -> Suggestions {
     let mut candidates: Vec<Candidate> = Vec::new();
 
-    // Pool 0 as well — a proof from the facts in scope, where the goal is a bound: verified as the fill verifies one, and materialized before the rollback as every hit is. One that reads an unnameable binder is skipped, as pool 0's binders are.
-    let mut refusal = None;
-    if let Ok(reduced) = reduce_with(context, goal_type) {
-        let mark = context.solution_mark();
-        match entail(context, goal_type, &reduced) {
-            Ok(Entailed::Proved(proof)) => {
-                let term = zonk_solved_term_metas(context, &proof);
-                let unwritable = telescope
-                    .iter()
-                    .any(|(name, _)| !name.nameable() && term.mentions_free(name));
-                if !unwritable {
-                    candidates.push(Candidate {
-                        term,
-                        holes: 0,
-                        pool: 0,
-                    });
-                }
-            }
-            Ok(Entailed::Refused(refused)) if !refused.is_silent() => refusal = Some(refused),
-            _ => {}
+    // Pool 0 as well — the bound's answer, where the goal is one. A bound that holds is offered as the call that proves it again where it is pasted, ahead of every other fit.
+    let answer = answered(context, goal_type);
+    let holds = matches!(answer, Some(Answer::Follows(_)));
+    if holds {
+        let door = context.syntax().entailment.proved;
+        let door = Global::Authored(door.qualifier());
+        if context.proof_may_apply(&door) {
+            candidates.push(Candidate {
+                term: Term::apply(Term::written(door), Vec::<Term>::new()),
+                holes: 0,
+                pool: 0,
+            });
         }
-        context.rollback_solutions(mark);
-        context.end_solutions(mark);
     }
     // One shared hole per goal, a metavariable nothing solves, so every unsolved slot spells the same bare `?`.
     let hole = Term::hole(context.mint_metavar());
@@ -165,9 +156,13 @@ fn suggest_in_scope(
         }
     }
 
-    // Complete fits first, then fewest holes, then pool order; discovery order breaks the remaining ties (the sort is stable). Structural dedup follows: a referenced global can rediscover a constructor the local pass already found.
+    // Complete fits first, then fewest holes, then pool order; discovery order breaks the remaining ties (the sort is stable). Structural dedup follows: a referenced global can rediscover a constructor the local pass already found. Where the bound holds, `True/qed()` — the term the fill writes for a reduct that is `True`, found as a constructor or a referenced global — is seen already: `proved()` stands for it.
     candidates.sort_by_key(|candidate| (candidate.holes, candidate.pool));
     let mut seen: Vec<Term> = Vec::new();
+    if holds {
+        let qed = Global::Authored(context.syntax().proof.true_qed.qualifier());
+        seen.push(Term::apply(Term::written(qed), Vec::<Term>::new()));
+    }
     let candidates = candidates
         .into_iter()
         .filter(|candidate| {
@@ -181,10 +176,31 @@ fn suggest_in_scope(
         .take(CANDIDATES)
         .map(|candidate| candidate.term)
         .collect();
-    Suggestions {
-        candidates,
-        refusal,
+    Suggestions { candidates, answer }
+}
+
+/// What would have filled the goal says of it, where the goal is a bound: one at a proposition, asked as an omitted one is filled — its reduct's one inhabitant, then the procedure that proves a bound from the facts in scope — with nothing committed. That it holds, with the facts in scope a report names beside it, or the procedure's refusal; `None` where the goal is no proposition, or one the procedure reads nothing in and nothing proves.
+fn answered(context: &mut Context, goal_type: &Term) -> Option<Answer> {
+    if !matches!(is_prop(context, goal_type), Ok(true)) {
+        return None;
     }
+    let mark = context.solution_mark();
+    let answer = (|| -> Result<Option<Answer>, Error> {
+        let (reduced, inhabitant) = trivially_inhabited(context, goal_type)?;
+        if inhabitant.is_none() {
+            match entail(context, goal_type, &reduced)? {
+                Entailed::Proved(_) => {}
+                Entailed::Refused(refused) if !refused.is_silent() => {
+                    return Ok(Some(Answer::Refused(refused)));
+                }
+                Entailed::Refused(_) => return Ok(None),
+            }
+        }
+        Ok(Some(Answer::Follows(facts_in_scope(context)?)))
+    })();
+    context.rollback_solutions(mark);
+    context.end_solutions(mark);
+    answer.ok().flatten()
 }
 
 /// Pools 3 to 5: the unit's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each a name the context holds a type for. The goal's owning definition is excluded.

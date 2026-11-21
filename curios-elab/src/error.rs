@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Context, HeldFrames, Pending, Refusal, written},
+    super::{Answer, Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
     curios_common::{
         Code, InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry, variants,
@@ -134,8 +134,8 @@ pub struct GoalReport {
     obligations: Vec<(Term, Term)>,
     /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
     candidates: Vec<Term>,
-    /// Why the procedure that proves a bound from the facts in scope proved nothing, where the goal is a bound: the facts it considered and what its search concluded, rendered as a refused bound's report renders them.
-    refusal: Option<Refusal>,
+    /// What would have filled the goal says of it, where the goal is a bound: that it follows, from the facts in scope it names, or the refusal of the procedure that proves a bound from them, rendered as a refused bound's report renders it.
+    answer: Option<Answer>,
 }
 
 impl GoalReport {
@@ -155,7 +155,7 @@ impl GoalReport {
         }
     }
 
-    /// Whether a term this report shows beside its scope's lines mentions `binder`: a scope binder's type, the goal, the solution, an obligation or a candidate. Where one does, the printer names the binder there, and a binder no source spells is named on its own line the same way.
+    /// Whether a term this report shows beside its scope's lines mentions `binder`: a scope binder's type, the goal, the solution, an obligation, a candidate, or a fact the bound's answer names. Where one does, the printer names the binder there, and a binder no source spells is named on its own line the same way.
     fn mentions(&self, binder: &Free) -> bool {
         let mentions = |term: &Term| term.mentions_free(binder);
         self.scope.iter().any(|(_, type_)| mentions(type_))
@@ -166,6 +166,7 @@ impl GoalReport {
                 .iter()
                 .any(|(this, that)| mentions(this) || mentions(that))
             || self.candidates.iter().any(mentions)
+            || self.answer.iter().flat_map(Answer::terms).any(mentions)
     }
 
     /// The report of a goal as it stands, with nothing said beside it ([`GoalReport::beside`]).
@@ -186,21 +187,21 @@ impl GoalReport {
             solution,
             obligations: Vec::new(),
             candidates: Vec::new(),
-            refusal: None,
+            answer: None,
         }
     }
 
-    /// The report with what is said beside the goal: the conversions it holds up, the candidates that fit it, and why the procedure proving a bound proved nothing.
+    /// The report with what is said beside the goal: the conversions it holds up, the candidates that fit it, and what would have filled it says of it.
     pub fn beside(
         self,
         obligations: Vec<(Term, Term)>,
         candidates: Vec<Term>,
-        refusal: Option<Refusal>,
+        answer: Option<Answer>,
     ) -> Self {
         Self {
             obligations,
             candidates,
-            refusal,
+            answer,
             ..self
         }
     }
@@ -223,7 +224,7 @@ impl GoalReport {
         for candidate in &self.candidates {
             names.add(candidate);
         }
-        for term in self.refusal.iter().flat_map(Refusal::terms) {
+        for term in self.answer.iter().flat_map(Answer::terms) {
             names.add(term);
         }
         Rc::new(build_rename(&names, spelling))
@@ -539,7 +540,7 @@ macro_rules! shown_terms {
                         goal,
                         solution,
                         candidates,
-                        refusal,
+                        answer,
                         ..
                     } = report;
                     for (name, type_) in scope {
@@ -553,8 +554,8 @@ macro_rules! shown_terms {
                     for candidate in candidates {
                         $visit(candidate);
                     }
-                    if let Some(refusal) = refusal {
-                        for term in refusal.$terms() {
+                    if let Some(answer) = answer {
+                        for term in answer.$terms() {
                             $visit(term);
                         }
                     }

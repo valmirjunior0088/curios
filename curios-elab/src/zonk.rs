@@ -982,7 +982,7 @@ pub fn report_goals(
         if context.metavar_solution(*id).is_some() {
             all_candidates.push(Suggestions {
                 candidates: Vec::new(),
-                refusal: None,
+                answer: None,
             });
             continue;
         }
@@ -1048,7 +1048,7 @@ pub fn report_goals(
             .iter()
             .map(|candidate| solved(context, candidate))
             .collect::<Vec<_>>();
-        let mut refusal = suggestions.refusal;
+        let mut answer = suggestions.answer;
 
         context.reporting(|context| {
             context.standing_on(&frames, |context| {
@@ -1059,7 +1059,7 @@ pub fn report_goals(
                     .chain(solution.as_mut())
                     .chain(obligations.iter_mut().flat_map(|(this, that)| [this, that]))
                     .chain(candidates.iter_mut())
-                    .chain(refusal.iter_mut().flat_map(|refusal| refusal.terms_mut()));
+                    .chain(answer.iter_mut().flat_map(|answer| answer.terms_mut()));
                 for term in terms {
                     *term = written(context, term);
                 }
@@ -1087,7 +1087,7 @@ pub fn report_goals(
                     .iter()
                     .map(|candidate| shown(context, candidate))
                     .collect(),
-                refusal,
+                answer,
             ),
         );
     }

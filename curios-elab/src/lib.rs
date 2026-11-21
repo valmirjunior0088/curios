@@ -73,7 +73,7 @@ use written::*;
 
 mod entailment;
 use entailment::*;
-pub use entailment::{Conclusion, Origin, Refusal};
+pub use entailment::{Answer, Conclusion, Origin, Refusal};
 
 mod established;
 pub use established::Established;

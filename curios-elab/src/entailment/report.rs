@@ -156,24 +156,7 @@ impl Refusal {
         absurd: bool,
         refuted: bool,
     ) -> Self {
-        // A fact two hypotheses state as one, as a structure update's base and the term it stands for do, is listed once.
-        let mut considered: Vec<(Origin, Term)> = Vec::new();
-        // A disequality read as the two cases its sides' order makes is a fact of neither alone, and is named with the scope's.
-        let cases = facts
-            .splits()
-            .iter()
-            .flat_map(|split| split.holds().iter().chain(split.fails()))
-            .filter(|fact| fact.origin.named().is_some());
-        let scope = facts
-            .facts()
-            .iter()
-            .filter(|fact| fact.origin.is_reported());
-        for fact in scope.chain(cases) {
-            let stated = (fact.origin.clone(), fact.stated.clone());
-            if !considered.contains(&stated) {
-                considered.push(stated);
-            }
-        }
+        let considered = considered(facts);
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
                 Conclusion::Counterexample(counterexample(views, &assignment))
@@ -190,6 +173,64 @@ impl Refusal {
             refuted,
             conjunct: None,
         }
+    }
+}
+
+/// The facts of `facts` a report names, each with where it came from: those a reader can act on, and a disequality's two cases, each once.
+pub(super) fn considered(facts: &Facts) -> Vec<(Origin, Term)> {
+    // A fact two hypotheses state as one, as a structure update's base and the term it stands for do, is listed once.
+    let mut considered: Vec<(Origin, Term)> = Vec::new();
+    // A disequality read as the two cases its sides' order makes is a fact of neither alone, and is named with the scope's.
+    let cases = facts
+        .splits()
+        .iter()
+        .flat_map(|split| split.holds().iter().chain(split.fails()))
+        .filter(|fact| fact.origin.named().is_some());
+    let scope = facts
+        .facts()
+        .iter()
+        .filter(|fact| fact.origin.is_reported());
+    for fact in scope.chain(cases) {
+        let stated = (fact.origin.clone(), fact.stated.clone());
+        if !considered.contains(&stated) {
+            considered.push(stated);
+        }
+    }
+    considered
+}
+
+/// What the procedure that proves a bound from the facts in scope says of a written goal that is a bound, for the goal's report: the procedure is what would have filled the goal had it been left out, so it answers the goal too.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Answer {
+    /// The bound holds, by reduction or from the facts in scope, which are named as a refusal names those it considered.
+    Follows(Vec<(Origin, Term)>),
+    /// It does not, and why.
+    Refused(Refusal),
+}
+
+impl Answer {
+    /// Every term the answer spells, for the reader's spelling to cover.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+        let (facts, refusal) = match self {
+            Answer::Follows(facts) => (facts.as_slice(), None),
+            Answer::Refused(refusal) => (&[][..], Some(refusal)),
+        };
+        facts
+            .iter()
+            .flat_map(|(from, statement)| from.named().into_iter().chain([statement]))
+            .chain(refusal.into_iter().flat_map(Refusal::terms))
+    }
+
+    /// [`Answer::terms`], each to be written over.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        let (facts, refusal): (&mut [(Origin, Term)], _) = match self {
+            Answer::Follows(facts) => (facts.as_mut_slice(), None),
+            Answer::Refused(refusal) => (&mut [][..], Some(refusal)),
+        };
+        facts
+            .iter_mut()
+            .flat_map(|(from, statement)| from.named_mut().into_iter().chain([statement]))
+            .chain(refusal.into_iter().flat_map(Refusal::terms_mut))
     }
 }
 
