@@ -141,6 +141,21 @@ fn each_span_is_classed_as_what_stands_there() {
     );
 }
 
+const AGAIN: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\n/std/print(\"\")";
+
+/// A local read again is classed where it stands, as its first read is: each read of a parameter is a row of its own.
+#[test]
+fn a_local_read_again_is_classed_where_it_stands() {
+    let read = row("n", "parameter", false, false);
+    let reads = classes(AGAIN)
+        .expect("the program lowers")
+        .into_iter()
+        .filter(|classed| *classed == read)
+        .count();
+
+    assert_eq!(reads, 2);
+}
+
 const WORDS: &str = r#"use /std/{Nat, Bool, Test};
 
 concept Sized(T: Type): Type {
@@ -190,7 +205,12 @@ fn a_contextual_word_is_the_keyword_where_it_opened_a_member() {
     assert_eq!(keywords, ["concept", "satisfy", "and", "and", "test"]);
     assert_eq!(
         tests,
-        [("local", true), ("local", false), ("keyword", false)]
+        [
+            ("local", true),
+            ("local", false),
+            ("local", false),
+            ("keyword", false)
+        ]
     );
 }
 

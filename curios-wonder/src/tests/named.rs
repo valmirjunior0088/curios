@@ -133,7 +133,7 @@ const TYPED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\nlet th
 
 const LOCAL: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\nlet four: /std/Nat = twice(/std/Nat/add(1, 1));\n/std/print(\"\")";
 
-/// A local answers where it is bound and its type, at a use and where it is bound alike: the type a use settled at, and the one its binder was opened at.
+/// A local answers where it is bound and its type, at each use and where it is bound alike: the type a use settled at, and the one its binder was opened at. A second read answers as the first does, at its own place.
 #[test]
 fn a_local_answers_where_it_is_bound_and_its_type() {
     let local = |nth| match at(LOCAL, "n", nth, 0).map(|answer| answer.stands) {
@@ -162,6 +162,20 @@ fn a_local_answers_where_it_is_bound_and_its_type() {
 
     assert_eq!(local(0), typed(true));
     assert_eq!(local(1), typed(false));
+    assert_eq!(local(2), typed(false));
+}
+
+const NAMED: &str = "let outer(given: /std/Nat) -> /std/Nat =\n    let inner(taken: /std/Nat) -> /std/Nat = taken;\n    inner(given);\n/std/print(\"\")";
+
+/// A local's type is spelled with the names its own binders were written with: a local function read under a declaration whose type differs from its own by a parameter's name alone answers its own.
+#[test]
+fn a_locals_type_is_spelled_with_its_own_binders_names() {
+    let read = match at(NAMED, "inner", 1, 0).map(|answer| answer.stands) {
+        Some(Stands::Local { type_, .. }) => type_,
+        stands => panic!("no local stands there: {stands:?}"),
+    };
+
+    assert_eq!(read, Some("(taken: /std/Nat) -> /std/Nat".to_string()));
 }
 
 const TELESCOPE: &str = "induct Shape(A: Type): Type\n| circle(radius: A)\nend\nlet apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";

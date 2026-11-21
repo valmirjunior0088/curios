@@ -85,8 +85,8 @@ use {
     crate::{Classified, Published, ZonkPass, zonk},
     curios_common::SyntaxRegistry,
     curios_core::{
-        Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
-        Nominal, Subterm, Term, WrittenBinder,
+        Bound, Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine,
+        Mints, Nominal, Subterm, Term, WrittenBinder,
     },
     std::{
         collections::{BTreeSet, HashMap},
@@ -559,20 +559,33 @@ impl<'s> Context<'s> {
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     ///
     /// One pass across them all, the solutions standing still while it runs: the terms are each other's subterms, a deep expression's recorded once at each of its levels, and zonked apart they would cost the sum of their sizes.
+    ///
+    /// **A recorded term keeps its place and its binders' names.** The memo is keyed on a term, whose equality leaves both out, so what it answers is the first equal term recorded. A term holding nothing unsolved is its own answer and goes past the memo, as the zonk answers one before its own; a term the zonk rebuilds is placed again where the one asked stands, as `elaborate` places what its cache answers. So a second read of a local settles at its own place, and a type is spelled with the names its own binders were written with.
     pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
         let mut zonked = HashMap::<Term, Term>::new();
         let mut pass = ZonkPass::default();
         let mut settled = Vec::with_capacity(self.underway.checked.mark() - mark);
         for (term, type_, site) in &self.underway.checked.terms()[mark..] {
-            let mut settle = |term: &Term| match zonked.get(term) {
-                Some(done) => Ok(done.clone()),
-                None => {
-                    let done = pass.zonk(self, term)?;
-                    zonked.insert(term.clone(), done.clone());
-                    Ok::<_, Error>(done)
+            let mut settle = |term: &Term| {
+                if !term.has_metavar() && !term.has_universe_meta() {
+                    return Ok::<_, Error>(term.clone());
+                }
+                match zonked.get(term) {
+                    Some(done) => Ok(done.clone()),
+                    None => {
+                        let done = pass.zonk(self, term)?;
+                        zonked.insert(term.clone(), done.clone());
+                        Ok(done)
+                    }
                 }
             };
-            settled.push((settle(term)?, settle(type_)?, *site));
+            let placed = match (settle(term)?, term.extent()) {
+                (rebuilt, Some(extent)) if rebuilt.extent() != Some(extent) => {
+                    rebuilt.with_extent(extent)
+                }
+                (settled, _) => settled,
+            };
+            settled.push((placed, settle(type_)?, *site));
         }
         self.underway.checked.replace_since(mark, settled);
         let mut labels = mem::take(&mut self.underway.checked);

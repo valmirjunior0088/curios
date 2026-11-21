@@ -17,8 +17,8 @@ use {
     },
     curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
     curios_core::{
-        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Sharing,
-        Subterm, Term, Totality,
+        Bound, Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId,
+        Sharing, Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeSet, HashMap, HashSet},
@@ -247,8 +247,11 @@ pub struct Zonked {
     sorts: HashMap<Term, bool>,
 }
 
-/// `term` zonked, through `cache`: the two types and two terms the two obligations zonk.
+/// `term` zonked, through `cache`: the two types and two terms the two obligations zonk. A term holding nothing unsolved is its own answer and goes past the cache, whose key leaves out a term's place and its binders' names ([`Context::settle_checked`](crate::Context)).
 fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Error> {
+    if !term.has_metavar() && !term.has_universe_meta() {
+        return Ok(term.clone());
+    }
     if let Some(done) = cache.done.get(term) {
         return Ok(done.clone());
     }
