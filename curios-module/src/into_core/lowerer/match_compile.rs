@@ -86,7 +86,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
     /// Lowers a headed match — its scrutinee already lowered, `written` the head as it is written — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
     ///
-    /// A final arm that binds a name after arms that dispatch takes every value they leave under that name, and where the head is a name it renames what the head already names, which `renaming-binder` reports ([`Self::renaming`]). Whether the name is a constructor of what the arms dispatch over is elaboration's to say, which reads the scrutinee's family.
+    /// A final arm that binds a name after arms that dispatch takes every value they leave under that name, and where the head is a name it renames what the head already names, which `renaming-binder` reports ([`Self::renaming`]), as it does a lone arm that binds the whole value under a head that is a name. Whether the name is a constructor of what the arms dispatch over is elaboration's to say, which reads the scrutinee's family.
     pub fn headed(
         &self,
         written: &Term,
@@ -109,18 +109,30 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }))
     }
 
-    /// The `renaming-binder` lint of a match whose head is written as a name and whose final arm binds the default its arms leave ([`default_binder`]): the arm's name is the head's again, so it reads under a second name what the first already names. Decided here, where the text as written is the last fact it needs.
+    /// The `renaming-binder` lint of a match whose head is written as a name and whose final arm binds the default its arms leave ([`default_binder`]), or whose one arm binds the whole value ([`lone_binder`]): the arm's name is the head's again, so it reads under a second name what the first already names. Decided here, where the text as written is the last fact it needs.
     fn renaming(&self, written: &Term, arms: &[MatrixArm]) -> Option<curios_core::Lint> {
         let Subterm::Name(head) = written.as_subterm() else {
             return None;
         };
-        let (binder, span) = default_binder(arms)?;
         let head = head.join();
         let mut said = Said::line("renaming binder");
-        said.stating(format_args!(
-            "`{binder}` renames `{head}`, which this match takes apart"
-        ));
-        said.stating(format_args!("read `{head}`, or write `_`"));
+        let span = match default_binder(arms) {
+            Some((binder, span)) => {
+                said.stating(format_args!(
+                    "`{binder}` renames `{head}`, which this match takes apart"
+                ));
+                said.stating(format_args!("read `{head}`, or write `_`"));
+                span
+            }
+            None => {
+                let (binder, span) = lone_binder(arms)?;
+                said.stating(format_args!(
+                    "`{binder}` renames `{head}`, and this match takes nothing apart"
+                ));
+                said.stating(format_args!("read `{head}` where `{binder}` stands"));
+                span
+            }
+        };
 
         Some(curios_core::Lint {
             kind: curios_core::LintKind::RenamingBinder,
@@ -384,6 +396,25 @@ fn default_binder(arms: &[MatrixArm]) -> Option<(&str, Option<&Span>)> {
         return None;
     }
     match last.alternatives.as_slice() {
+        [
+            Alternative {
+                pattern: MatchPattern::Binder(name),
+                span,
+            },
+        ] if name.as_str() != "_" => Some((name.as_str(), name.span().or(span.as_ref()))),
+        _ => None,
+    }
+}
+
+/// The name a headed match's one arm binds where that arm is a lone binder with no guard, with where it is written: the whole match's binding, which takes nothing apart. None for a `_`, which binds nothing.
+fn lone_binder(arms: &[MatrixArm]) -> Option<(&str, Option<&Span>)> {
+    let [arm] = arms else {
+        return None;
+    };
+    if !arm.guards.is_empty() {
+        return None;
+    }
+    match arm.alternatives.as_slice() {
         [
             Alternative {
                 pattern: MatchPattern::Binder(name),
