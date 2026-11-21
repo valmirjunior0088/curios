@@ -83,7 +83,7 @@ fn document_writes_the_bundle_among_the_products() {
     );
 
     let bundle = root.join(".curios/documentation/shapes");
-    // The landing page is the root module's page: the description, the module cards, then the root's own declarations.
+    // The landing page is the root module's page: the description, then what the root exposes, a declaration of its own whole.
     let landing = fs::read_to_string(bundle.join("index.html")).expect("a landing page");
     assert!(
         landing.contains(r#"<h1><span class="sep">/</span>shapes</h1>"#),
@@ -172,7 +172,8 @@ fn the_standard_library_documents_into_the_directory_std_names() {
     );
     assert!(landing.contains("href=\"Result.crs.html\""), "{landing}");
     let result = fs::read_to_string(site.join("Result.crs.html")).expect("a module's page");
-    assert!(result.contains("id=\"Result/success\""), "{result}");
+    // A declaration that is a module too is whole on the page of its path, its constructor anchored under the joint alone.
+    assert!(result.contains("id=\"/success\""), "{result}");
     // A nested module's page climbs back to the bundle's static files and the landing page.
     let signal = fs::read_to_string(site.join("Io/Signal.crs.html")).expect("a nested page");
     assert!(

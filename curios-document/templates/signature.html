@@ -1,15 +1,23 @@
-{#- A printed signature, segment by segment: text as it is, and a span the printer set apart, painted by its class's name — a word of the language, or a name by what its declaration is — and linked where it names a declaration in this bundle. Every tag trims both sides, so the segments join with nothing between them. -#}
-{%- macro segments(items) -%}
-    {%- for segment in items.iter() -%}
-        {%- match segment -%}
-            {%- when Segment::Text(text) -%}
-                {{ text }}
-            {%- when Segment::Marked { class, text, href } -%}
-                {%- if let Some(href) = href -%}
-                    <a class="{{ class }}" href="{{ href }}">{{ text }}</a>
-                {%- else -%}
-                    <span class="{{ class }}">{{ text }}</span>
-                {%- endif -%}
-        {%- endmatch -%}
-    {%- endfor -%}
+{#- One line of a printed signature, segment by segment, after the spaces the printer indented it by, which are no place to fold it: text as it is, a span the printer set apart, painted by its class's name — a word of the language, or a name by what its declaration is — and linked where it names a declaration in this bundle, and the name the signature declares. A text that ends at a space is followed by the one place a page may fold the line, which the stylesheet keeps whole otherwise. Every tag trims both sides, so the segments join with nothing between them. -#}
+{%- macro line(line) -%}
+    <div class="line" style="--indent: {{ line.indent }}">
+        {{- line.lead() -}}
+        {%- for segment in line.segments.iter() -%}
+            {%- match segment -%}
+                {%- when Segment::Text(text) -%}
+                    {{ text }}
+                    {%- if text.ends_with(' ') -%}
+                        <wbr>
+                    {%- endif -%}
+                {%- when Segment::Marked { class, text, href } -%}
+                    {%- if let Some(href) = href -%}
+                        <a class="{{ class }}" href="{{ href }}">{{ text }}</a>
+                    {%- else -%}
+                        <span class="{{ class }}">{{ text }}</span>
+                    {%- endif -%}
+                {%- when Segment::Declared(name) -%}
+                    <b class="declared">{{ name }}</b>
+            {%- endmatch -%}
+        {%- endfor -%}
+    </div>
 {%- endmacro -%}

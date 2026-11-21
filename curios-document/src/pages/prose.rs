@@ -11,14 +11,22 @@ pub enum Span {
     Code(String),
 }
 
-/// The paragraphs of a comment's lines; `None` is no comment, and so no paragraphs.
-pub fn paragraphs(lines: Option<&[String]>) -> Vec<Paragraph> {
+/// The text of each paragraph of a comment's lines, its lines joined by a space; `None` is no comment, and so no paragraphs.
+pub fn texts(lines: Option<&[String]>) -> Vec<String> {
     lines
         .unwrap_or_default()
         .split(|line| line.is_empty())
         .filter(|paragraph| !paragraph.is_empty())
+        .map(|paragraph| paragraph.join(" "))
+        .collect()
+}
+
+/// The paragraphs of a comment's lines ([`texts`]), each cut at its code spans.
+pub fn paragraphs(lines: Option<&[String]>) -> Vec<Paragraph> {
+    texts(lines)
+        .iter()
         .map(|paragraph| Paragraph {
-            spans: spans(&paragraph.join(" ")),
+            spans: spans(paragraph),
         })
         .collect()
 }

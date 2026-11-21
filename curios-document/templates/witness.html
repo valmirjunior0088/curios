@@ -1,0 +1,23 @@
+{#- One witness on a page: its head, which with the module that declares it is its anchor, whether the compiler wrote its body, the module that declares it where the section lists the witnesses of more than one — a link where that is another page — and the note written above it. -#}
+{%- import "signature.html" as sig -%}
+{%- import "prose.html" as words -%}
+<li id="{{ witness.anchor }}"><div class="signature">
+        {%- for line in witness.lines -%}
+            {% call sig::line(line) %}{% endcall %}
+        {%- endfor -%}
+    </div><span class="aside">
+        {%- if witness.derived -%}
+            <span class="fact" title="the compiler writes its body">derived</span>
+        {%- endif -%}
+        {%- if let Some(home) = witness.home -%}
+            {%- if let Some(href) = home.href -%}
+                <a class="where" href="{{ href }}">{{ home.text }}</a>
+            {%- else -%}
+                <span class="where">{{ home.text }}</span>
+            {%- endif -%}
+        {%- endif -%}
+    </span>
+    {%- for paragraph in witness.prose -%}
+        <span class="note">{% call words::paragraph(paragraph) %}{% endcall %}</span>
+    {%- endfor -%}
+</li>

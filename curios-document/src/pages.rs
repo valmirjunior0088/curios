@@ -1,10 +1,12 @@
-//! The pages `curios document` writes from a [`Documentation`] record: one page per module at its source path, the root's doubling as the landing page, the static files every page shares, and the search index every page loads. Pages are static, read from `file://`, fetch nothing, and are complete without script: the script scrolls the rail to the page's own module, since a new page's rail starts at the top, and shows the search field, which is hidden until it runs and ranks the index over every module, declaration and member of the bundle.
+//! The pages `curios document` writes from a [`Documentation`] record: one page per path that is a module, the root's doubling as the landing page, the static files every page shares, and the search index every page loads. Pages are static, read from `file://`, fetch nothing, and are complete without script: the script scrolls the rail to the page's own path, since a new page's rail starts at the top, and shows the search field, which is hidden until it runs and ranks the index over every path of the bundle.
 //!
-//! **The index is a script, written from the record.** A page read from `file://` may load a script and may fetch nothing, so the corpus a search needs is `static/index.js`, one row per module, declaration and member — its kind, the path a mark names it by, and its address from the bundle's root — assigned to a global the page script reads. It is the one file under `static/` that depends on the record, and it is written beside the constant ones. The README says why this and not the alternatives.
+//! **A page is the answer to its path.** A path is often a module and a declaration at once — `/std/Option` is the type its parent exposes and the module that holds what works on it — and its page opens on the declaration and then lists what the module exposes, each thing once ([A block and a page draw one answer](../../documentation/design/tools/a-block-and-a-page-draw-one-answer.md)). So a declaration is drawn whole on one page, the page of its own path where that is a module too and otherwise the page of the module a consumer finds it in, and every other page that exposes it shows its source, the paragraph its note opens with and the way there.
 //!
-//! **The templates hold the markup and the contexts hold the facts.** Each page is an Askama template under `templates/`, compiled into this crate, over a context [`context`] prepares from the record: every href, anchor, badge and keyword is decided in Rust, and a template loops, branches and escapes. What this module decides is the layout of the bundle and its addressing — where a module's page is, what a declaration's anchor is, and how a link from one page reaches another — because every page, whatever its design, renders into the same places. Addresses are read off the record's declarations, each at the home its marks name it under, so a declaration a facade documents is linked where it is shown. The stylesheet, the fonts and the mark are embedded with `include_bytes!` and written under `static/`, so a bundle is complete on disk and a binary needs nothing beside it.
+//! **The index is a script, written from the record.** A page read from `file://` may load a script and may fetch nothing, so the corpus a search needs is `static/index.js`, one row per path — its kind, the path, and its address from the bundle's root — assigned to a global the page script reads. It is the one file under `static/` that depends on the record, and it is written beside the constant ones. The README says why this and not the alternatives.
 //!
-//! **The root module's page is the landing page.** A unit's root declares things of its own — `/std/print` is one — and a landing page that listed the modules and hid the root's declarations behind a second page would send every link to that page. So `index.html` is the root's page, opening with the unit's description and the module cards before the root's own declarations, and every other module's page sits at its path below.
+//! **The templates hold the markup and the contexts hold the facts.** Each page is an Askama template under `templates/`, compiled into this crate, over a context [`context`] prepares from the record: every href, anchor, fact and keyword is decided in Rust, and a template loops, branches and escapes. What this module decides is the layout of the bundle and its addressing — where a path's page is, what a declaration's anchor is, and how a link from one page reaches another — because every page, whatever its design, renders into the same places. Addresses are read off the record's declarations, each by the path its marks name it by, so a link finds a declaration where it is drawn whole. The stylesheet, the fonts and the mark are embedded with `include_bytes!` and written under `static/`, so a bundle is complete on disk and a binary needs nothing beside it.
+//!
+//! **The root module's page is the landing page.** A unit's root declares things of its own — `/std/print` is one — and a landing page that listed the modules and hid the root's declarations behind a second page would send every link to that page. So `index.html` is the root's page, opening with the unit's description before what the root exposes, and every other module's page sits at its path below.
 
 mod context;
 use context::*;
@@ -13,9 +15,9 @@ mod prose;
 use prose::*;
 
 use {
-    crate::Documentation,
+    crate::{Declaration, Documentation, Entry, Kind, ModuleDocumentation},
     askama::Template,
-    curios_common::{Qualifier, write_whole},
+    curios_common::{Keyword, Qualifier, write_whole},
     std::{collections::BTreeMap, fs, io, path::Path},
 };
 
@@ -50,7 +52,7 @@ const STATIC: &[(&str, &[u8])] = &[
     ),
 ];
 
-/// Write `record`'s pages under `directory`: `index.html` for the root, one page per other module, the static files and the search index. Files are overwritten by name and nothing else in the directory is touched. The record is the whole input: its prefix names the pages and its description opens the landing page, so a record read off a stored unit renders exactly as one read off a compilation just made.
+/// Write `record`'s pages under `directory`: `index.html` for the root, one page per other module, the static files and the search index. Files are overwritten by name and nothing else in the directory is touched. The record is the whole input: its prefix names the pages and its description opens the landing page, so a record read back from an image renders as the one a build just made.
 pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Result<()> {
     let bundle = Bundle::new(record);
 
@@ -78,43 +80,164 @@ pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Resu
 /// The record with the addressing every page shares.
 struct Bundle<'a> {
     record: &'a Documentation,
-    /// Where every module, declaration and member of the record is found, by the path a mark names: a module's page, a declaration's page and anchor, a member's beneath its declaration. Read off the record rather than off the path, so a declaration a facade documents is found where the facade put it, not under a module that has no page; a path that names none of them has no address, and a link to it renders as its name.
+    /// The record's modules, each by its path.
+    modules: BTreeMap<Qualifier, &'a ModuleDocumentation>,
+    /// The declaration each page opens on, by the page's path: the one the module above exposes under the module's own name. The root has none, which no module is above, and neither has a module that is no declaration.
+    subjects: BTreeMap<Qualifier, &'a Declaration>,
+    /// Where a mark's path is found: a module at its page, and a declaration where it is drawn whole, by the path every mark names it by, each of its constructors and methods beneath it. A path that names none of them has no address, and a link to it renders as its name. A field is no path a mark names, since the path of its owner and its label may be a function's, and it has none.
     addresses: BTreeMap<Qualifier, (String, Option<String>)>,
+    /// The path of the page that opens on a declaration, by the path every mark names the declaration by: what a reader holds for it, `/std/Option` of the type the module `/std/Option` declares as `Option`.
+    held: BTreeMap<Qualifier, Qualifier>,
 }
 
 impl<'a> Bundle<'a> {
     fn new(record: &'a Documentation) -> Self {
+        let modules = record
+            .modules
+            .iter()
+            .map(|module| (module.path, module))
+            .collect::<BTreeMap<_, _>>();
+        let subjects = record
+            .modules
+            .iter()
+            .flat_map(|module| {
+                module
+                    .declarations()
+                    .filter(|declaration| declaration.kind != Kind::Witness)
+                    .map(move |declaration| (module.path.with(&declaration.name), declaration))
+            })
+            .filter(|(path, _)| modules.contains_key(path))
+            .collect();
         let mut bundle = Bundle {
             record,
+            modules,
+            subjects,
             addresses: BTreeMap::new(),
+            held: BTreeMap::new(),
         };
+
+        // A module is its page, and the declaration the page opens on is whole there: the page is the address of both, where the declaration is the module's own or stands at the page's own path. One another module declares, exposed above a module that merely shares its name, keeps the address its own module's page gives it.
         for module in &record.modules {
             let page = bundle.page_path(&module.path);
-            bundle
-                .addresses
-                .entry(module.path)
-                .or_insert((page.clone(), None));
+            bundle.addresses.insert(module.path, (page, None));
+        }
+        for module in &record.modules {
+            if let Some(subject) = bundle.subject(&module.path)
+                && (subject.named == module.path || subject.named.without_last() == module.path)
+            {
+                bundle.address(&module.path, subject, true);
+                bundle.held.entry(subject.named).or_insert(module.path);
+            }
+        }
+        // Any other is whole on the page of the module a consumer finds it in.
+        for module in &record.modules {
             for declaration in module.declarations() {
-                if declaration.name.is_empty() {
-                    continue;
+                let here = declaration.named == module.path.with(&declaration.name);
+                if here && declaration.kind != Kind::Witness {
+                    bundle.address(&module.path, declaration, false);
                 }
-                let path = declaration.home.with(&declaration.name);
-                for member in &declaration.members {
-                    if member.name.is_empty() {
-                        continue;
-                    }
-                    bundle.addresses.entry(path.with(&member.name)).or_insert((
-                        page.clone(),
-                        Some(format!("{}/{}", declaration.name, member.name)),
-                    ));
-                }
-                bundle
-                    .addresses
-                    .entry(path)
-                    .or_insert((page.clone(), Some(declaration.name.clone())));
             }
         }
         bundle
+    }
+
+    /// File where `declaration` is drawn whole, the page of `module`, as what the page opens on or as an entry of it, unless a page already draws it so.
+    fn address(&mut self, module: &Qualifier, declaration: &Declaration, subject: bool) {
+        let page = self.page_path(module);
+        for member in &declaration.members {
+            if member.name.is_empty() || declaration.kind == Kind::Structure {
+                continue;
+            }
+            self.addresses
+                .entry(declaration.named.with(&member.name))
+                .or_insert((
+                    page.clone(),
+                    Some(member_anchor(declaration, member, subject)),
+                ));
+        }
+        self.addresses.entry(declaration.named).or_insert((
+            page,
+            match subject {
+                true => None,
+                false => Some(declaration.name.clone()),
+            },
+        ));
+    }
+
+    /// The module at `path`, where the record has one.
+    fn module(&self, path: &Qualifier) -> Option<&'a ModuleDocumentation> {
+        self.modules.get(path).copied()
+    }
+
+    /// The declaration at `path`, which its page opens on.
+    fn subject(&self, path: &Qualifier) -> Option<&'a Declaration> {
+        self.subjects.get(path).copied()
+    }
+
+    /// The path a reader holds for the declaration every mark names `named`: the path of the page that opens on it, and its own where none does.
+    fn held(&self, named: &Qualifier) -> Qualifier {
+        self.held.get(named).copied().unwrap_or(*named)
+    }
+
+    /// What the page of `module` lists: what the module exposes, in its order, without its witnesses, which a page lists apart, and without the declaration the page opens on, where the module exposes that too.
+    fn exposed(&self, module: &'a ModuleDocumentation) -> impl Iterator<Item = &'a Entry> {
+        let subject = self.subject(&module.path).map(|subject| subject.named);
+
+        module.entries.iter().filter(move |entry| match entry {
+            Entry::Declaration(declaration) => {
+                declaration.kind != Kind::Witness && Some(declaration.named) != subject
+            }
+            Entry::Exposure(_) => true,
+        })
+    }
+
+    /// The child modules of `module` that are no declaration of it, in the order their `mod` lines are written.
+    fn lone(&self, module: &'a ModuleDocumentation) -> impl Iterator<Item = &'a Qualifier> {
+        module
+            .children
+            .iter()
+            .filter(|child| self.subject(child).is_none())
+    }
+
+    /// The paths beneath `module` that have a page: each name it exposes that is a module too, in the order the module writes them, then its modules that are no declaration.
+    fn doors(&self, module: &'a ModuleDocumentation) -> Vec<Qualifier> {
+        self.exposed(module)
+            .filter_map(|entry| match entry {
+                Entry::Declaration(declaration) => Some(module.path.with(&declaration.name)),
+                Entry::Exposure(_) => None,
+            })
+            .filter(|path| self.module(path).is_some())
+            .chain(self.lone(module).copied())
+            .collect()
+    }
+
+    /// How many names and modules `module` exposes beside the declaration its page opens on, `23 names · 2 modules`, a count of none unsaid.
+    fn counts(&self, module: &'a ModuleDocumentation) -> String {
+        let names = self
+            .exposed(module)
+            .map(|entry| match entry {
+                Entry::Declaration(_) => 1,
+                Entry::Exposure(line) => line.names.len(),
+            })
+            .sum::<usize>();
+        let modules = self.lone(module).count();
+        // A count and its word never part at a line's end.
+        let counted = |count: usize, one: &str, many: &str| {
+            let word = match count {
+                1 => one,
+                _ => many,
+            };
+            (count > 0).then(|| format!("{count}\u{a0}{word}"))
+        };
+
+        [
+            counted(names, "name", "names"),
+            counted(modules, "module", "modules"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ")
     }
 
     /// Where a module's page is, relative to the bundle: the module's path under the unit's prefix with `.crs.html`, so `/json/parse/lexer` is `parse/lexer.crs.html`. The root has no path of its own under the prefix and is the landing page, `index.html`; the suffix is what keeps a module named `index` from landing on it, and a module page from ever sharing a name with a static file.
@@ -131,7 +254,7 @@ impl<'a> Bundle<'a> {
         (module.segments().len() - self.record.prefix.segments().len()).saturating_sub(1)
     }
 
-    /// A link from the page at `depth` to `referent`, or `None` when nothing in this bundle is found at that path.
+    /// A link from the page at `depth` to `referent`, or `None` when nothing in this bundle is drawn whole at that path.
     fn href(&self, depth: usize, referent: &Qualifier) -> Option<String> {
         let (page, anchor) = self.addresses.get(referent)?;
         let climb = "../".repeat(depth);
@@ -141,44 +264,73 @@ impl<'a> Bundle<'a> {
         })
     }
 
-    /// The search index, as the script every page loads: `window.curiosIndex`, an array of rows, each a kind, a path and an address from the bundle's root, in the record's order — every module, then under it every named declaration with its named members beneath it. A witness has no name and no row, and neither has the superclass constraint a concept lists among its members. Every string is a keyword, a qualifier or a page name, so escaping the two characters a JavaScript string cannot hold bare is all the quoting there is.
+    /// The search index, as the script every page loads: `window.curiosIndex`, an array of rows, each a kind, a path and an address from the bundle's root, in the record's order and every path once. A page's row says what its path is, by the keyword of the declaration it opens on or `mod` where it is a module alone, and the named members of that declaration follow it; then each name the module exposes that has no page of its own, and under one drawn whole there its named members. A field is written as a projection writes it, `Owner.field`, since the path of its owner and its label may be a function's. A witness has no name and no row, and neither has the superclass edge a concept lists among its members, nor a member a module exposes beside its owner, which is a row of its owner's.
     fn index(&self) -> String {
         let mut rows = Vec::new();
-        let mut row = |kind: &str, path: &Qualifier, address: String| {
-            rows.push(format!(
-                "[\"{}\",\"{}\",\"{}\"]",
-                escape(kind),
-                escape(&path.join()),
-                escape(&address)
-            ));
-        };
         for module in &self.record.modules {
             let page = self.page_path(&module.path);
-            row("mod", &module.path, page.clone());
-            for declaration in module.declarations() {
-                if declaration.name.is_empty() {
+            let subject = self.subject(&module.path);
+            rows.push(row(
+                subject.map_or(Keyword::Mod.spelling(), |subject| keyword(subject.kind)),
+                &module.path.join(),
+                &page,
+            ));
+            if let Some(subject) = subject {
+                rows.extend(member_rows(subject, &module.path, &page, true));
+            }
+            for entry in self.exposed(module) {
+                let Entry::Declaration(declaration) = entry else {
+                    continue;
+                };
+                let path = module.path.with(&declaration.name);
+                // A name that is a module too is its own page's row.
+                if self.module(&path).is_some() {
                     continue;
                 }
-                let path = declaration.home.with(&declaration.name);
-                row(
+                rows.push(row(
                     keyword(declaration.kind),
-                    &path,
-                    format!("{page}#{}", declaration.name),
-                );
-                for member in &declaration.members {
-                    if member.name.is_empty() {
-                        continue;
-                    }
-                    row(
-                        member_kind(declaration.kind),
-                        &path.with(&member.name),
-                        format!("{page}#{}/{}", declaration.name, member.name),
-                    );
+                    &path.join(),
+                    &format!("{page}#{}", declaration.name),
+                ));
+                // Its members are rows where it is drawn whole.
+                if declaration.named == path {
+                    rows.extend(member_rows(declaration, &path, &page, false));
                 }
             }
         }
         format!("window.curiosIndex=[{}];\n", rows.join(","))
     }
+}
+
+/// One row of the index, an array of three strings. Every string is a keyword, a path or a page name, so escaping the two characters a JavaScript string cannot hold bare is all the quoting there is.
+fn row(kind: &str, path: &str, address: &str) -> String {
+    format!(
+        "[\"{}\",\"{}\",\"{}\"]",
+        escape(kind),
+        escape(path),
+        escape(address)
+    )
+}
+
+/// The rows of the named members of `declaration`, drawn whole on `page` at `path`, `subject` saying it is what the page opens on.
+fn member_rows(
+    declaration: &Declaration,
+    path: &Qualifier,
+    page: &str,
+    subject: bool,
+) -> Vec<String> {
+    declaration
+        .members
+        .iter()
+        .filter(|member| !member.name.is_empty())
+        .map(|member| {
+            row(
+                member_kind(declaration.kind),
+                &format!("{}{}{}", path.join(), joint(declaration.kind), member.name),
+                &format!("{page}#{}", member_anchor(declaration, member, subject)),
+            )
+        })
+        .collect()
 }
 
 /// `text` as the body of a JavaScript string literal in double quotes.

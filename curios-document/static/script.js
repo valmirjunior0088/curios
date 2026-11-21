@@ -1,4 +1,4 @@
-// What a page cannot do for itself. A new page's rail starts at the top, so the module it is about is scrolled into view; and the search field, hidden until here so a page is complete without script, ranks the bundle's index — every module, declaration and member, loaded by the script before this one — and shows the hits as rows in place of the tree.
+// What a page cannot do for itself. A new page's rail starts at the top, so the path it is about is scrolled into view; and the search field, hidden until here so a page is complete without script, ranks the bundle's index — every path, loaded by the script before this one — and shows the hits as rows in place of the tree.
 (() => {
   const tree = document.querySelector(".tree");
   const current = document.querySelector(".tree a.current");
@@ -31,7 +31,7 @@
   const root = document.documentElement.dataset.root || "";
   const LIMIT = 30;
 
-  // A row's label is what a reader types: a member as owner/member, a declaration as its name, a module as its whole path; the rest of the path is where it lives.
+  // A row's label is what a reader types: a constructor or a method under its owner, `Owner/member`, a field as a projection writes it, `Owner.field`, which is one segment, a declaration as its name, a module as its whole path; the rest of the path is where it lives.
   const corpus = window.curiosIndex.map((row) => {
     const kind = row[0],
       path = row[1],
@@ -40,7 +40,7 @@
     const keep =
       kind === "mod"
         ? segments.length
-        : kind === "case" || kind === "field" || kind === "method"
+        : kind === "case" || kind === "method"
           ? 2
           : 1;
     const label = segments.slice(segments.length - keep).join("/");
@@ -107,7 +107,7 @@
     hits.forEach((hit) => {
       const entry = hit.entry;
       const row = document.createElement("a");
-      row.className = "entry";
+      row.className = "row";
       row.href = entry.href;
       row.appendChild(span("kind", entry.kind));
       const text = span("label", "");

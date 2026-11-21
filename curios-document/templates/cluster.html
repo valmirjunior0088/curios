@@ -1,0 +1,53 @@
+{#- Everything a page says of one thing, on one trunk: the source that declares it with the facts its source does not show on its corner, its note, and the way on — the page of the module the name is too, said in the line that declares one with what it exposes, or the path that declares it. The line by which a module exposes a declaration's members is its source alone. -#}
+{%- import "signature.html" as sig -%}
+{%- import "prose.html" as words -%}
+<article class="cluster{% if cluster.exposure %} exposure{% endif %}"{% if let Some(anchor) = cluster.anchor %} id="{{ anchor }}"{% endif %}>
+    <div class="head">
+        <div class="signature">
+            {%- for line in cluster.head %}
+                {% call sig::line(line) %}{% endcall %}
+            {%- endfor %}
+            {%- for member in cluster.members %}
+                <div class="member{% if member.deep %} deep{% endif %}"{% if let Some(anchor) = member.anchor %} id="{{ anchor }}"{% endif %}>
+                    {%- for line in member.lines %}
+                        {% call sig::line(line) %}{% endcall %}
+                    {%- endfor %}
+                    {%- for paragraph in member.notes %}
+                        <p class="note">{% call words::paragraph(paragraph) %}{% endcall %}</p>
+                    {%- endfor %}
+                </div>
+            {%- endfor %}
+            {%- for line in cluster.closer %}
+                {% call sig::line(line) %}{% endcall %}
+            {%- endfor %}
+        </div>
+        {%- if !cluster.facts.is_empty() %}
+            <div class="facts">
+                {%- for fact in cluster.facts -%}
+                    <span class="fact{% if !fact.drawing.is_empty() %} {{ fact.drawing }}{% endif %}" title="{{ fact.meaning }}">{{ fact.word }}</span>
+                {%- endfor -%}
+            </div>
+        {%- endif %}
+    </div>
+    {%- for paragraph in cluster.prose %}
+        <p class="prose">{% call words::paragraph(paragraph) %}{% endcall %}</p>
+    {%- endfor %}
+    {%- if let Some(door) = cluster.door %}
+        <div class="ways"><a class="door" href="{{ door.href }}">
+            {%- if let Some(name) = door.name -%}
+                <span class="keyword">pub mod</span> <b>{{ name }}</b>
+            {%- endif -%}
+            {%- if !door.counts.is_empty() -%}
+                <span class="count">{{ door.counts }}</span>
+            {%- endif -%}
+            <span class="arrow">→</span></a></div>
+    {%- endif %}
+    {%- if let Some(home) = cluster.home %}
+        <div class="ways"><span class="home">declared at {% if let Some(href) = home.href -%}
+                <a href="{{ href }}">{{ home.text }}</a>
+            {%- else -%}
+                {{ home.text }}
+            {%- endif -%}
+        </span></div>
+    {%- endif %}
+</article>

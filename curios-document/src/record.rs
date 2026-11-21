@@ -1,6 +1,6 @@
 //! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every word it writes classed and every name it mentions resolved and classed, and the prose attached to each — plain data a renderer walks and a transport encodes. The text lowering builds it where a command asks for one, from the tables the unit's lowering stored and the surface tree its sources parse to, and no unit carries it.
 //!
-//! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names its home; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
+//! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is an entry of the declaration it names, by the path every mark names it by — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names it; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
 use curios_common::{Class, Keyword, Qualifier};
 
@@ -59,7 +59,7 @@ pub struct ExposureLine {
     pub signature: Signature,
 }
 
-/// What kind of declaration a page entry is, ordered as a module card tallies the kinds.
+/// What kind of declaration a page entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub enum Kind {
@@ -110,8 +110,6 @@ impl Block {
 pub struct Declaration {
     /// The declared label — and the anchor a link to it names. Empty for a witness, which is anonymous by design.
     pub name: String,
-    /// The module a consumer names it under, which is this page's own module — for a declaration written here, one exposed out of a module with no page, and one re-exported from another page alike. Every [`Mark`] naming this declaration carries the same path, so a link finds it where it is shown and no reader is ever handed the path it was written at.
-    pub home: Qualifier,
     pub kind: Kind,
     pub signature: Signature,
     pub prose: Option<Vec<String>>,
@@ -127,9 +125,9 @@ pub struct Declaration {
     pub total: Option<bool>,
     /// What a witness takes part in: the concept it witnesses and each declaration its key names, by the path a consumer names them. Empty for anything else.
     pub parties: Vec<Qualifier>,
-    /// The path every [`Mark`] names this declaration by: its own, `home` with `name`, where this page is where a consumer finds it, and another page's where it is shown there too, so two entries of one declaration name one path. Never a path inside a root no consumer can name.
+    /// The path every [`Mark`] names this declaration by: its own, the path of the module that lists it with its `name`, where that module's page is where a consumer finds it, and the one another page shows it by where it is shown there too, so two entries of one declaration name one path. Never a path inside a root no consumer can name. A witness, which no mark names, carries the path of the module that declares it.
     pub named: Qualifier,
-    /// What kind of thing a declaration adopted out of a root a consumer cannot name is — the word that root's owner chose, never its path. It is the only thing a card can say about a declaration whose signature says little: `let Nat: Type` lists no constructors because there are none to list, and this is what says so.
+    /// What kind of thing a declaration adopted out of a root a consumer cannot name is — the word that root's owner chose, never its path. It is the only thing a page can say about a declaration whose signature says little: `let Nat: Type` lists no constructors because there are none to list, and this is what says so.
     pub chip: Option<String>,
 }
 
@@ -171,7 +169,7 @@ pub enum Marked {
     Name {
         /// What the declaration is painted as, read off what it states; `None` where the compilation does not say.
         class: Option<Class>,
-        /// The path a consumer names the declaration by — a [`Declaration::home`] with its name, never a declaration site inside a root this unit keeps to itself.
+        /// The path a consumer names the declaration by — a [`Declaration::named`], never a declaration site inside a root this unit keeps to itself.
         referent: Qualifier,
         /// Whether the referent lies within the documented unit, and so has a page in the same bundle.
         within: bool,

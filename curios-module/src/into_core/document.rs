@@ -183,7 +183,7 @@ struct Reader<'a> {
     internal: &'a [Qualifier],
     /// The records of the units this one adopts a root of, which is where an adopted declaration is read from.
     ///
-    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations are rendered from its own source, by its own record, which is made before this one. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
+    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations are rendered from its own source, by its own record, which is made before this one. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of an entry.
     records: &'a [&'a Documentation],
     /// The units this one was lowered over and itself: what says what each declaration a name resolves to is, with nothing read ([`PreparedText::declared_as`]).
     units: &'a [&'a PreparedText],
@@ -540,7 +540,6 @@ impl Reader<'_> {
         };
 
         declaration.name = label.to_string();
-        declaration.home = *module;
         declaration.named = self.public_name(&entry.target);
         declaration.chip = chip;
 
@@ -724,7 +723,6 @@ impl Reader<'_> {
                 .then(|| curios_core::Global::Authored(home.with(&stated.name)));
 
             out.push(Declaration {
-                home: *home,
                 kind: stated.kind,
                 signature: self.signature(home, source, stated.head),
                 prose: stated.prose,

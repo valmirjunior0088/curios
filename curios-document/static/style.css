@@ -1,4 +1,4 @@
-/* The one stylesheet every page links. The brand is three colors and three faces: navy for every surface, ice sage for every word at one of four strengths, amber for what a reader reaches for; Faustina italic for display headings alone, Geist for prose, Geist Mono for everything the compiler said. */
+/* The one stylesheet every page links. The brand is three colors and three faces: navy for every surface, ice sage for every word at one of five strengths, amber for what a reader reaches for; Faustina italic for display headings alone, Geist for what an author wrote, Geist Mono for everything the compiler said. */
 
 @font-face {
   font-family: "Geist";
@@ -31,19 +31,17 @@
   --ink-85: rgba(222, 233, 233, 0.85);
   --ink-70: rgba(222, 233, 233, 0.7);
   --ink-57: rgba(222, 233, 233, 0.57);
+  --ink-40: rgba(222, 233, 233, 0.4);
   --ink-28: rgba(222, 233, 233, 0.28);
   --edge: rgba(222, 233, 233, 0.14);
-  --edge-soft: rgba(222, 233, 233, 0.1);
+  --edge-soft: rgba(222, 233, 233, 0.09);
+  --wash: rgba(222, 233, 233, 0.04);
   --well: rgba(0, 0, 0, 0.2);
-  --well-deep: rgba(0, 0, 0, 0.34);
-  --amber-wash: rgba(247, 197, 119, 0.14);
-  --amber-edge: rgba(247, 197, 119, 0.5);
-  --amber-ring: rgba(247, 197, 119, 0.28);
-  --amber-85: rgba(247, 197, 119, 0.85);
-  --amber-hover: rgba(247, 197, 119, 0.06);
-  --edge-dashed: rgba(222, 233, 233, 0.22);
+  --amber-wash: rgba(247, 197, 119, 0.12);
+  --amber-edge: rgba(247, 197, 119, 0.55);
+  --amber-ring: rgba(247, 197, 119, 0.3);
+  --amber-hover: rgba(247, 197, 119, 0.07);
   --rail: #122d38;
-  --well-flat: #102933;
   --sans: Geist, system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, monospace;
   --serif: Faustina, Georgia, serif;
@@ -74,56 +72,78 @@ a:hover {
 code {
   font-family: var(--mono);
   font-size: 0.92em;
-  color: var(--ink-85);
+  color: var(--ink);
+}
+img {
+  display: block;
 }
 
-/* The frame: a rail and a main column side by side, stacked when the width runs out. The footer closes the main column rather than the body, so the frame reaches the page's end and the sticky rail is never pushed up by anything below it.
+/* The frame is three columns: where the page is in the unit, the page, and what the page holds. The footer closes the main column rather than the body, so the frame reaches the page's end and the rail is never pushed up by anything below it.
 
-   The main column's cap is the page's one measure: nothing inside it sets a width of its own, so every paragraph, signature and note shares one right edge and each type size gets the character count that edge gives it. The cap is on the content box, so the number is the card's own width: a card must clear the widest line the record can print — a signature pre-broken at a hundred columns, plus the `| ` a constructor adds — in the mono face and inside the card's padding. A narrower column would not break a signature, since the breaks are the record's; it would put the longest of them behind the horizontal scroll `.signature` carries. */
+   The main column's cap is the page's one measure: a signature is pre-broken by the record at a hundred columns, and a line wider than the column folds at its own spaces, so nothing on a page scrolls sideways. */
 .frame {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 240px;
   min-height: 100vh;
 }
 .rail {
-  flex: 0 0 300px;
   position: sticky;
   top: 0;
-  min-height: 100vh;
-  max-height: 100vh;
+  height: 100vh;
   overflow-y: auto;
   box-sizing: border-box;
   background: var(--rail);
-  border-right: 1px solid var(--edge);
-  padding: 0 0 16px;
+  border-right: 1px solid var(--edge-soft);
+  padding: 0 0 28px;
 }
 main {
-  flex: 1 1 480px;
-  min-width: 0;
-  max-width: 930px;
-  padding: 22px clamp(20px, 4vw, 40px) 40px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 940px;
+  padding: 44px 56px 96px;
+}
+/* What the page holds never scrolls on its own, so the wheel moves the page wherever the pointer stands: a list that fits stays in view, and a long one stands at the top of the page. */
+.holds {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  box-sizing: border-box;
+  padding: 50px 22px 28px 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+.holds.long {
+  position: static;
 }
 
-/* The rail: the search field pinned at its top, then the tree, every row a link; the current module carries the page's declarations beneath it. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
+/* The rail: the unit's mark and name, the search field pinned at its top, then the unit's paths that have a page, every row a link, the branch the page is on opened. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 22px 4px;
+  font-family: var(--mono);
+  font-size: 15px;
+  color: var(--amber);
+}
 .search {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 16px;
-  background: var(--well-flat);
+  padding: 12px 22px;
+  background: var(--rail);
 }
 .search input {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: 9px 40px 9px 12px;
+  padding: 8px 36px 8px 12px;
   border: 1px solid var(--edge);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--well);
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.3;
   appearance: none;
   -webkit-appearance: none;
@@ -144,7 +164,7 @@ main {
 .search .clear {
   position: absolute;
   top: 50%;
-  right: 22px;
+  right: 26px;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
@@ -174,48 +194,52 @@ main {
 }
 /* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
 .search[hidden] ~ nav {
-  padding-top: 16px;
+  padding-top: 12px;
 }
 .results {
   display: none;
   flex-direction: column;
-  --depth: 0;
 }
-.tree a {
+.tree .row {
   flex: none;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 6px 16px;
-  padding-left: calc(16px + var(--depth) * 22px);
+  padding: 4px 22px 4px calc(22px + var(--depth, 0) * 16px);
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-70);
-  overflow: hidden;
 }
-.tree a:hover {
+.tree .row:hover {
   background: var(--amber-hover);
+  color: var(--amber-bright);
+}
+/* A path the page lies beneath is brighter, and the page's own takes the amber. */
+.tree .row.open {
+  color: var(--ink);
+}
+.tree .row.current {
+  background: var(--amber-wash);
+  box-shadow: inset 2px 0 0 var(--amber);
   color: var(--amber);
 }
-.tree a.current {
-  color: var(--amber);
-}
-.tree .entry .kind {
+/* The word a thing is declared by, in a column of its own, which never breaks: the widest is seven letters. */
+:is(.tree, .holds, .brief) .kind {
   flex: none;
-  width: 52px;
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--amber-85);
+  width: 50px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ink-40);
 }
-.tree .entry .label {
+.tree .row .label {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The module a hit lives in gives way before the hit's own name does. */
-.tree .entry .where {
+/* The path a hit lives under gives way before the hit's own name does. */
+.tree .where {
   flex: 0 4 auto;
   min-width: 0;
   max-width: 50%;
@@ -229,275 +253,390 @@ main {
   background: none;
   color: var(--amber-bright);
 }
-.results a[aria-current] {
+.results .row[aria-current] {
   background: var(--amber-wash);
   color: var(--amber);
 }
 .results .none {
-  padding: 6px 16px;
+  padding: 4px 22px;
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--ink-57);
 }
 
-/* The head of a page: where it sits, what it is, what it is for. */
-/* The heading is the page's path, each module above the page a link and the separators dimmed. */
+/* The head of a page: the path it answers, each path above it a link and the separators dimmed, then what its module says of itself. */
 h1 {
-  margin: 0 0 32px;
+  margin: 0;
   font-family: var(--mono);
-  font-weight: 400;
-  font-size: clamp(24px, 4.4vw, 34px);
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  overflow-wrap: break-word;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 h1 .sep {
   color: var(--ink-28);
 }
 h2 {
-  margin: 40px 0 18px;
+  margin: 52px 0 4px;
   font-family: var(--serif);
   font-style: italic;
   font-weight: 500;
-  font-size: clamp(22px, 3.4vw, 26px);
+  font-size: 26px;
+  line-height: 1.2;
+}
+h2 .tally {
+  margin-left: 14px;
+  font-family: var(--mono);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink-57);
 }
 .lead {
-  margin: -12px 0 32px;
-  font-size: clamp(16px, 2.1vw, 17.5px);
-  font-weight: 300;
-  line-height: 1.6;
+  margin: 14px 0 0;
+  max-width: 70ch;
+  font-size: 20px;
+  line-height: 1.55;
   color: var(--ink-70);
   text-wrap: pretty;
 }
 
-/* Child modules, as cards in a grid. */
-.modules {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
-  gap: 12px;
+/* A cluster is everything a page says of one thing, hung on one trunk, the amber rule down its left, as the parts of a report's block hang on theirs. The rule ends where the thing does, and the gap to the next is wider than any gap inside. The line that exposes a declaration's members names nothing of its own, and its trunk is quieter. */
+.cluster {
+  margin-top: 46px;
+  padding: 2px 0 4px 18px;
+  border-left: 2px solid var(--amber-edge);
+  scroll-margin-top: 20px;
 }
-.module-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  background: var(--well);
-  color: inherit;
+.subject .cluster {
+  margin-top: 24px;
 }
-.module-card:hover {
-  border-color: var(--amber-edge);
-  color: inherit;
-}
-.module-card .path {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--amber);
-}
-.module-card .counts {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  color: var(--ink-57);
-}
-.module-card .gloss {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--ink-70);
-  text-wrap: pretty;
+.cluster.exposure {
+  border-left-color: var(--ink-28);
 }
 
-/* A declaration: a header naming it, the signature the compiler printed, the prose the author wrote. */
-.card {
-  margin-bottom: 12px;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  background: var(--well);
-  overflow: hidden;
-}
-.card header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--edge-soft);
-}
-.card header .tag {
-  padding: 4px 8px;
-  border-radius: 2px;
-  background: var(--amber-wash);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--amber);
-}
-.card header .title {
-  font-family: var(--mono);
-  font-size: 15px;
-  color: var(--ink);
-}
-.badge {
-  padding: 4px 8px;
-  border-radius: 2px;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.badge.plain {
-  border: 1px solid var(--edge);
-  color: var(--ink-70);
-}
-.badge.dashed {
-  border: 1px dashed var(--edge-dashed);
-  color: var(--ink-57);
-}
+/* What the compiler said, in the source's own words: the signature is its own heading, the name it declares set apart. A line is laid out by the printer; where the column is narrower than it, it folds after one of its own spaces, each marked by the page, under a hanging indent past the spaces the printer indented it by, and nowhere else: an arrow, a path and a call stay whole. A word wider than the column is the one thing that scrolls sideways, inside its box. */
 .signature {
-  padding: 18px 22px;
+  padding: 13px 18px 13px 16px;
+  border: 1px solid var(--edge-soft);
+  border-radius: 7px;
+  background: var(--well);
   font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.85;
+  font-size: 13.5px;
+  line-height: 1.8;
   color: var(--ink-85);
   overflow-x: auto;
 }
-.signature .line {
-  white-space: pre;
+.subject .signature {
+  padding: 16px 20px 16px 18px;
+  font-size: 14px;
 }
-/* A member and its notes are one block, so the indent is the block's and a note always sits under its own line. */
-.signature .member {
-  padding-left: 2em;
-}
-.signature.cases .member {
-  padding-left: 0;
-}
-/* A signature's words and names, each painted by its class (`curios-common`'s `Class`), by the code palette's logic: a keyword keeps the amber, a boolean and a sort its paler step, a type and a concept stand out by being brighter, and every other name keeps the text's strength; a name the compilation does not class steps back. A linked name keeps its class's colour, underlined faintly, and takes the amber where the reader reaches for it. */
-:is(.signature, .witnesses) .keyword {
-  color: var(--amber);
-}
-:is(.signature, .witnesses) :is(.boolean, .sort) {
-  color: var(--amber-bright);
-}
-:is(.signature, .witnesses) :is(.type, .concept) {
-  color: var(--ink);
-}
-:is(.signature, .witnesses) .name {
+.exposure .signature {
   color: var(--ink-70);
 }
-:is(.signature, .witnesses) a {
+.signature .line {
+  padding-left: calc((var(--indent, 0) + 4) * 1ch);
+  text-indent: calc((var(--indent, 0) + 4) * -1ch);
+  white-space: pre;
+}
+.signature .declared {
+  font-weight: 700;
+  color: var(--amber-bright);
+}
+/* A member and its notes are one block, so the indent is the block's and a note always sits under its own line: under a constructor's name past its bar, and flush with a field or a method. */
+.signature .member.deep {
+  --note: 0;
+  padding-left: 4ch;
+}
+.signature .note {
+  margin: 0 0 6px;
+  padding-left: var(--note, 2ch);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-57);
+}
+/* A signature's words and names, each painted by its class (`curios-common`'s `Class`), by the code palette's logic: a keyword keeps the amber, a boolean and a sort its paler step, a type and a concept stand out by being brighter, and every other name keeps the text's strength; a name the compilation does not class steps back. A linked name keeps its class's colour, underlined faintly, and takes the amber where the reader reaches for it. */
+.signature .keyword {
+  color: var(--amber);
+}
+.signature :is(.boolean, .sort) {
+  color: var(--amber-bright);
+}
+.signature :is(.type, .concept) {
+  color: var(--ink);
+}
+.signature .name {
+  color: var(--ink-70);
+}
+.signature a {
   color: inherit;
   text-decoration: underline dotted var(--ink-28);
   text-underline-offset: 3px;
 }
-:is(.signature, .witnesses) a:hover {
+.signature a:hover {
   color: var(--amber);
 }
-.signature .note {
-  margin: 0 0 6px;
-  font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--ink-57);
-  white-space: normal;
+
+/* What the source does not show, each in the one word a report says it in, on the corner of the source it is a fact of, where it takes no row of its own. A fact that says a representation is public, or a definition proven total, takes a straight outline, and one that says something is kept, the compiler's own or unproven a dashed one; the two are alike otherwise. A proof alone takes a third drawing, the straight outline with squared corners. */
+.head {
+  position: relative;
 }
-.card .prose {
-  margin: 0;
-  padding: 0 22px 20px;
-  font-size: 15px;
-  line-height: 1.65;
+.facts {
+  position: absolute;
+  top: -11px;
+  right: 14px;
+  display: flex;
+  gap: 6px;
+}
+.fact {
+  padding: 1px 9px;
+  border: 1px dashed var(--ink-28);
+  border-radius: 999px;
+  background: var(--navy);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.6;
   color: var(--ink-70);
-  text-wrap: pretty;
+  cursor: help;
+}
+.fact.plain {
+  border-style: solid;
+}
+.fact.proof {
+  border-style: solid;
+  border-radius: 3px;
 }
 
-/* The declaration a link lands on takes the amber: a card its edge, and a member's or a witness's row its wash. */
-.card:target {
+/* What an author wrote of the thing; the paragraphs after the first step back. */
+.prose {
+  margin: 10px 0 0 2px;
+  max-width: 72ch;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--ink-85);
+  text-wrap: pretty;
+}
+.prose + .prose {
+  color: var(--ink-70);
+}
+
+/* The ways on from a cluster: the page of the module its name is too, said in the line that declares one with what it exposes, or the path that declares it. */
+.ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 0 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-57);
+}
+.ways .door {
+  padding: 3px 12px;
+  border: 1px solid var(--amber-ring);
+  border-radius: 999px;
+  color: var(--amber);
+}
+.ways .door:hover {
+  background: var(--amber-hover);
+}
+.ways .door b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ways .door .count {
+  margin-left: 12px;
+  color: var(--ink-57);
+}
+.ways .door .count:first-child {
+  margin-left: 0;
+  color: var(--amber);
+}
+.ways .arrow {
+  margin-left: 8px;
+}
+
+/* What the path exposes, in brief: each name and the paragraph its note opens with. Every other row takes a faint wash, so the eye keeps its line from a name to its sentence. */
+.brief {
+  margin: 18px 0 8px;
+  padding: 10px 0;
+  list-style: none;
+}
+.brief li {
+  display: grid;
+  grid-template-columns: minmax(0, 24ch) minmax(0, 1fr);
+  gap: 14px;
+  margin: 0 -10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.brief li:nth-child(even) {
+  background: var(--wash);
+}
+.brief a {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.brief .said {
+  color: var(--ink-70);
+}
+
+/* The witnesses: one row each, its head, what the compiler says of it and the module that declares it, then its note beneath. */
+.witnesses {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.witnesses li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 7px 0;
+  border-top: 1px solid var(--edge-soft);
+  scroll-margin-top: 20px;
+}
+.witnesses li:first-child {
+  border-top: 0;
+}
+.witnesses .signature {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+}
+.witnesses .aside {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.witnesses .where {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-40);
+}
+.witnesses a.where:hover {
+  color: var(--amber);
+}
+.witnesses .note {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-57);
+}
+
+/* The thing a link lands on takes the amber: a cluster its trunk and its source's edge, and a member's or a witness's row its wash. */
+.cluster:target {
+  border-left-color: var(--amber-bright);
+}
+.cluster:target .signature {
   border-color: var(--amber-edge);
+  background: var(--amber-hover);
 }
 .signature .member:target,
 .witnesses li:target {
   background: var(--amber-wash);
 }
-/* The witnesses: one row each, in one box. */
-.witnesses {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  overflow: hidden;
+
+/* What the page holds, by name, then its sections. */
+.holds .title {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-40);
 }
-.witnesses li {
+.holds a {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--edge-soft);
-  background: var(--well);
-  font-family: var(--mono);
-  font-size: 13px;
+  gap: 8px;
+  padding: 3px 0;
+  color: var(--ink-70);
+  overflow-wrap: anywhere;
 }
-.witnesses li:last-child {
-  border-bottom: none;
+.holds a:hover {
+  color: var(--amber-bright);
 }
-.witnesses .line {
-  flex: 1 1 320px;
-  min-width: 0;
-  line-height: 1.7;
-  color: var(--ink-85);
-  overflow-x: auto;
-  white-space: pre;
+.holds a.section {
+  margin-top: 12px;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink);
 }
-.witnesses .note {
-  flex-basis: 100%;
-  font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--ink-57);
+.holds .title + a.section {
+  margin-top: 0;
 }
 
 footer {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-top: 72px;
-  padding: 28px 0 0;
-  border-top: 1px solid var(--edge);
+  gap: 10px;
+  margin-top: 80px;
   font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-57);
-}
-footer img {
-  display: block;
+  font-size: 12px;
+  color: var(--ink-40);
 }
 
-/* Below 900px the rail is a bar pinned above the main column, the field and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and the tree or the results open as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
-@media (max-width: 900px) {
-  .rail {
-    flex: 1 1 100%;
-    z-index: 2;
-    min-height: 0;
-    max-height: none;
-    overflow: visible;
-    border-right: none;
-    border-bottom: 1px solid var(--edge);
-    padding: 0;
+/* Below 1240px the page keeps the unit's paths and gives up the list of what it holds, which its own headings and the brief list already say. */
+@media (max-width: 1240px) {
+  .frame {
+    grid-template-columns: 272px minmax(0, 1fr);
   }
-  .tree {
-    position: relative;
+  .holds {
+    display: none;
+  }
+}
+
+/* Below 860px the rail is a bar pinned above the main column, the mark, the field and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and the tree or the results open as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
+@media (max-width: 860px) {
+  .frame {
+    display: block;
+  }
+  .rail {
+    z-index: 2;
     display: flex;
     align-items: center;
-    background: var(--well-flat);
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--edge);
+  }
+  .brand {
+    flex: none;
+    padding: 0 0 0 16px;
+  }
+  .brand span {
+    display: none;
+  }
+  .tree {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
   }
   .search {
     flex: 1 1 auto;
     min-width: 0;
     position: relative;
-    padding: 16px 8px 16px 16px;
+    padding: 12px 8px 12px 12px;
   }
   .search .clear {
-    right: 14px;
+    right: 12px;
   }
   .tree label {
     display: flex;
@@ -506,7 +645,7 @@ footer img {
     justify-content: center;
     width: 40px;
     height: 40px;
-    margin-right: 8px;
+    margin: 8px 8px 8px 0;
     border: 1px solid transparent;
     border-radius: 4px;
     color: var(--ink-70);
@@ -537,12 +676,10 @@ footer img {
   .tree nav {
     display: none;
   }
-  /* Under the top bar the footer has no column to sit under, so it is centred. */
-  footer {
-    justify-content: center;
-  }
+  /* The flap hangs from the bar, which is what the rail is pinned as. */
   .results,
-  .tree nav {
+  .tree nav,
+  .search[hidden] ~ nav {
     position: absolute;
     top: 100%;
     left: 0;
@@ -556,10 +693,30 @@ footer img {
   .tree .toggle:checked ~ nav {
     display: flex;
   }
-  .card,
+  main {
+    padding: 24px 16px 72px;
+  }
+  h1 {
+    font-size: 23px;
+  }
+  .signature,
+  .subject .signature {
+    padding: 11px 12px;
+    font-size: 12.5px;
+  }
+  /* A name stands over its sentence. */
+  .brief li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .cluster,
   .signature .member,
   .witnesses li {
     scroll-margin-top: 82px;
+  }
+  /* Under the top bar the footer has no column to sit under, so it is centred. */
+  footer {
+    justify-content: center;
   }
 }
 
@@ -569,18 +726,4 @@ footer img {
 }
 .tree.live nav {
   display: none;
-}
-
-/* What a card says about where it came from, pushed to the far end of its header. Both are asides — they say where a declaration comes from, never what it does — so the chip borrows the badge's shape and the origin reads quieter still, and neither competes with the name. A card carries at most one of them: a declaration is either written on a page this bundle holds or adopted out of a root it does not name. */
-.card header .chip,
-.card header .origin {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-57);
-}
-.card header .origin a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }

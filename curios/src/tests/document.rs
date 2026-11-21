@@ -1,11 +1,12 @@
 //! A package's documentation record, made from the unit its compilation builds: what `curios document` renders, checked over the standard library — the largest interface in the tree, read off the image it ships in — and over a fixture package whose every rule of the record is written out.
 
 use {
-    curios_common::{Class, Qualifier, test_support::*},
-    curios_document::{Entry, Kind, Marked, Signature},
+    curios_common::{Class, Qualifier, Source, test_support::*},
+    curios_document::{Block, Entry, Kind, Marked, Signature},
     curios_elab::DEFAULT_BUDGET,
-    curios_module::Overlay,
+    curios_module::{Overlay, written},
     curios_package::{Governing, order},
+    curios_surface::{Format, Formatted, WrittenIn},
     curios_wonder::{std_documentation, test_support::*},
     std::fs,
 };
@@ -309,7 +310,7 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
             });
 
         match found {
-            // Adopted out of a root with no page here, so the card says what that root holds and names no path.
+            // Adopted out of a root with no page here, so the entry says what that root holds and names no path.
             Some(declaration) => {
                 if declaration.chip.as_deref() != Some("intrinsic") {
                     missing.push(format!(
@@ -331,8 +332,8 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
     );
 }
 
-/// The signature of the card the module at `module`, an absolute path, shows for `label`, and the declaration each name it marks is linked to, in the order they are written.
-fn card(
+/// The signature the module at `module`, an absolute path, shows `label` by, and the declaration each name it marks is linked to, in the order they are written.
+fn shown(
     documentation: &curios_document::Documentation,
     module: &str,
     label: &str,
@@ -363,16 +364,16 @@ fn card(
     )
 }
 
-/// **An adopted card links its carriers and its operations as an authored one does.** `/sys` is typed by core's table, so its types and preconditions hold intrinsic nodes rather than names. The printer writes each node through core's one table of how an intrinsic is written, naming every declaration it builds on by its path, so the card marks each one and the page links it.
+/// **An adopted declaration links its carriers and its operations as an authored one does.** `/sys` is typed by core's table, so its types and preconditions hold intrinsic nodes rather than names. The printer writes each node through core's one table of how an intrinsic is written, naming every declaration it builds on by its path, so the card marks each one and the page links it.
 #[test]
 fn an_adopted_signature_marks_its_carriers_and_operations() {
     let documentation = standard_library();
 
-    let (_, fill) = card(&documentation, "/std/Cell", "fill");
+    let (_, fill) = shown(&documentation, "/std/Cell", "fill");
     assert_eq!(fill, ["/std/Cell", "/std/Io", "/std/Bool"]);
 
     // A precondition reads as a report reads it: an operator where the surface writes one, a call of the declaration where it does not.
-    let (text, get) = card(&documentation, "/std/Bytes", "get");
+    let (text, get) = shown(&documentation, "/std/Bytes", "get");
     assert!(text.contains("(i < "), "{text}");
     assert_eq!(
         get,
@@ -391,7 +392,7 @@ fn an_adopted_signature_marks_its_carriers_and_operations() {
 fn a_written_name_links_what_the_lowering_resolved_it_to() {
     let documentation = standard_library();
 
-    let (text, begins) = card(&documentation, "/std/Str/Valid", "begins");
+    let (text, begins) = shown(&documentation, "/std/Str/Valid", "begins");
     assert!(text.contains("Holds(Str/At/starts(b))"), "{text}");
     assert!(
         begins
@@ -512,16 +513,16 @@ fn shades() -> curios_document::Documentation {
     documentation(DEFAULT_BUDGET, units, &Overlay::default(), None).expect("the package documents")
 }
 
-/// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted card shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
+/// **A path the compiler wrote is spelled as a consumer writes it, and laid out as it is spelled.** `/sys` names what its declarations build on by absolute `/sys` paths, which no consumer may write; an adopted declaration shows each by its path below `/sys`, which `/std` re-exports it under, rather than in full beside names an author chose. The spelling is decided before the line is laid out, so `get` stays on the one line its shown text fits.
 #[test]
 fn an_adopted_signature_spells_its_names_below_their_root() {
     let documentation = standard_library();
 
-    let (fill, _) = card(&documentation, "/std/Cell", "fill");
+    let (fill, _) = shown(&documentation, "/std/Cell", "fill");
     assert_eq!(fill, "pub let fill(@T: Sort, c: Cell(T), v: T) -> Io(Bool)");
-    let (poll, _) = card(&documentation, "/std/Cell", "poll");
+    let (poll, _) = shown(&documentation, "/std/Cell", "poll");
     assert_eq!(poll, "pub let poll(@T: Sort, c: Cell(T)) -> Io(Option(T))");
-    let (get, _) = card(&documentation, "/std/Bytes", "get");
+    let (get, _) = shown(&documentation, "/std/Bytes", "get");
     assert_eq!(
         get,
         "pub let get(b: Bytes, i: Nat, @ok: Bool/Holds(i < Bytes/len(b))) -> Byte"
@@ -530,23 +531,26 @@ fn an_adopted_signature_spells_its_names_below_their_root() {
     let in_full = documentation
         .modules
         .iter()
-        .flat_map(|page| page.declarations())
-        .filter(|declaration| declaration.chip.as_deref() == Some("intrinsic"))
-        .flat_map(|declaration| {
+        .flat_map(|page| {
+            page.declarations()
+                .map(move |declaration| (page, declaration))
+        })
+        .filter(|(_, declaration)| declaration.chip.as_deref() == Some("intrinsic"))
+        .flat_map(|(page, declaration)| {
             std::iter::once(&declaration.signature)
                 .chain(declaration.members.iter().map(|member| &member.signature))
                 .filter(|signature| signature.text.contains("/std/"))
-                .map(move |signature| format!("{}: {}", declaration.home.join(), signature.text))
+                .map(move |signature| format!("{}: {}", page.path.join(), signature.text))
         })
         .collect::<Vec<_>>();
     assert!(
         in_full.is_empty(),
-        "an adopted card spells a name in full:\n{}",
+        "an adopted declaration spells a name in full:\n{}",
         in_full.join("\n")
     );
 }
 
-/// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
+/// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a fact, a search row or a crumb.
 ///
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.
 #[test]
@@ -678,12 +682,7 @@ fn a_package_documents_its_interface_for_its_consumers() {
             .unwrap_or_else(|| panic!("{name} on the library's page"))
     };
 
-    // Every name this page offers is named for this page, whether it was written here or exposed out of a module with none.
-    for declaration in library.declarations() {
-        assert_eq!(declaration.home, Qualifier::from(["shapes"]));
-    }
-
-    // The facade: `Token` and `unseen` are declared in `hidden`, which has no page — so their cards are this page's, under this page's name, with the prose and members written where they were declared. Nothing names `hidden`, since a consumer cannot write it.
+    // The facade: `Token` and `unseen` are declared in `hidden`, which has no page — so their entries are this page's, under this page's name, with the prose and members written where they were declared. Nothing names `hidden`, since a consumer cannot write it.
     let token = named("Token");
     assert_eq!(token.kind, Kind::Inductive);
     assert_eq!(
@@ -776,19 +775,17 @@ fn a_package_documents_its_interface_for_its_consumers() {
         "a binder is plain text, an own declaration links within, an import links outside"
     );
 
-    // A re-export is a card of the page that offers it, naming the page it is written on; one out of a private module is a card too, and names nothing, since a consumer has no path to that module.
+    // A re-export is an entry of the page that offers it, named by the path of the page it is written on; one out of a private module is an entry too, named by this page's path, since a consumer has no path to that module.
     let exposed = library
         .declarations()
         .find(|declaration| declaration.name == "origin")
         .expect("origin");
-    assert_eq!(exposed.home.join(), "/shapes");
     assert_eq!(exposed.named.join(), "/shapes/geometry/origin");
 
     let facade = library
         .declarations()
         .find(|declaration| declaration.name == "Token")
         .expect("Token");
-    assert_eq!(facade.home.join(), "/shapes");
     assert_eq!(
         facade.named.join(),
         "/shapes/Token",
@@ -917,5 +914,62 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
         ],
         "{}",
         signature("halt").text
+    );
+}
+
+/// **The block a page and a report write is the formatter's.** How a declaration writes its members — the bar before a constructor, the braces and the commas of fields and methods, the word that closes them — is stated once for every reader of a record ([`Block`]), beside the printer and not by it. So every declaration of the standard library that writes a block is written out as a report writes it ([`written`]), a text of its own, and the formatter leaves each as it is.
+#[test]
+fn a_declaration_written_out_is_as_the_formatter_writes_it() {
+    let documentation = standard_library();
+    let mut wrong = Vec::new();
+    let mut blocks = 0;
+
+    for page in &documentation.modules {
+        for declaration in page.declarations() {
+            if Block::of(declaration.kind, declaration.opaque).is_none() {
+                continue;
+            }
+            blocks += 1;
+            let members = declaration
+                .members
+                .iter()
+                .map(|member| member.signature.text.as_str())
+                .collect::<Vec<_>>();
+            let text = format!(
+                "{}\n",
+                written(
+                    declaration.kind,
+                    declaration.opaque,
+                    &declaration.signature.text,
+                    &members
+                )
+            );
+            let stands = format!("{}/{}", page.path.join(), declaration.name);
+            match Formatted::from_source(
+                &Source::inline(text.as_str()),
+                WrittenIn::Program,
+                Format::default(),
+            ) {
+                Ok(Formatted::Unchanged(_)) => {}
+                Ok(Formatted::Changed(formatted)) => wrong.push(format!(
+                    "{stands} is written\n{text}and formats to\n{formatted}"
+                )),
+                Err(refusal) => wrong.push(format!(
+                    "{stands} is written\n{text}and is refused:\n{}",
+                    refusal.render()
+                )),
+            }
+        }
+    }
+
+    assert!(
+        blocks > 100,
+        "{blocks} declarations of the library write a block"
+    );
+    assert!(
+        wrong.is_empty(),
+        "{} of {blocks} declarations are not written as `curios format` writes them:\n\n{}",
+        wrong.len(),
+        wrong.join("\n")
     );
 }
