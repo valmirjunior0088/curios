@@ -2,7 +2,7 @@
 //!
 //! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type may stand at the goal type, asked as `check` asks it and with nothing committed, and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type may stand at the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq()(7, k)` from `h : Eq()(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
 //!
-//! A fit is kept only when it says something: a candidate whose head has explicit parameters, none of which the goal pinned or the scope filled, is `Eq/sym(?)` — true of every equation, and an arity rather than a suggestion — so it is dropped. And a fit whose output conversion is undecided is kept when its blockers are exactly the explicit slots still open: `Eq/cong(?, ih)` has its hypothesis placed and its function genuinely unknown, which is the refinement a reader wants, where the same hole-free candidate would have had to convert outright. Pool 1 admits a holed constructor on the same reasoning.
+//! A fit is kept only when it says something: a candidate whose head has explicit parameters, none of which the goal pinned or the scope filled, is `Eq/sym(?)` — true of every equation, and an arity rather than a suggestion — so it is dropped. A head whose result is one of its own parameters meets every goal once that parameter is solved to it, so `List/get(?, i)` is dropped too, and such a head is kept only with every explicit argument written. And a fit whose output conversion is undecided is kept when its blockers are exactly the explicit slots still open: `Eq/cong(?, ih)` has its hypothesis placed and its function genuinely unknown, which is the refinement a reader wants, where the same hole-free candidate would have had to convert outright. Pool 1 admits a holed constructor on the same reasoning.
 //!
 //! Every attempt runs inside the `solution_mark`/`rollback_solutions` bracket, and a hit is materialized (committed solutions spliced) *before* rollback — the pinned values the display shows would otherwise die with the transaction. Any error skips its candidate: the pass is infallible. Attempts are capped at [`ATTEMPTS`] per goal and the rendered list at [`CANDIDATES`], ranked complete-first, then fewest holes, then pool order.
 //!
@@ -397,6 +397,7 @@ fn apply_fit(
         }
 
         let mut holes = 0usize;
+        let mut written = true;
         let mut pinned = 0usize;
         let mut hole_ids = BTreeSet::new();
         let mut kept: Vec<(Plicity, Term)> = Vec::new();
@@ -414,6 +415,7 @@ fn apply_fit(
                 (Plicity::Implicit | Plicity::Witness, _) => {}
                 (Plicity::Explicit, true) => {
                     holes += 1;
+                    written = false;
                     hole_ids.extend(arg.metavars());
                     kept.push((Plicity::Explicit, hole.clone()));
                 }
@@ -422,6 +424,11 @@ fn apply_fit(
                     kept.push((Plicity::Explicit, arg));
                 }
             }
+        }
+
+        // A head whose result is one of its own parameters meets any goal once that parameter is solved to it, so it says something only where its explicit arguments are all written, the parameter then set by them: `List/get(?, i)` fits every goal, and `List/get(names, i)` the goal its list holds, its bound open or not.
+        if flex_result && !written {
+            return None;
         }
 
         match outcome {

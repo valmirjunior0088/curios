@@ -490,6 +490,24 @@ fn a_goal_an_unnamed_hypothesis_proves_is_offered_proved() {
     assert!(compile(&source.replace("@?", "@/std/proved()")).is_ok());
 }
 
+/// A head whose result is one of its own parameters meets every goal once that parameter is solved to it, so it is offered only with every explicit argument written: at a bound, with a list and an index in scope, `List/get(?, i)` and `List/fold(xs, ?, ?)` say nothing of it.
+#[test]
+fn a_head_whose_result_is_its_own_parameter_is_offered_only_with_its_arguments_written() {
+    let source = r#"
+        use /std/{Nat, List};
+        let row(xs: List(Nat), i: Nat) -> Nat =
+            match i < List/len(xs) | true => List/get(xs, i, @?) | false => 0 end;
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        !error.contains("List/get(?") && !error.contains("List/fold("),
+        "unexpected error: {error}"
+    );
+}
+
 /// A fit whose hidden bound nothing proves where the goal stands is offered with the bound open, a hole of its own, so the fit offered complete is one whose paste compiles: `List/get(names, i)` is complete under a guard that proves its bound, and written `List/get(names, i, @?)` where nothing does.
 #[test]
 fn a_fit_whose_bound_nothing_proves_writes_the_bound_open() {
