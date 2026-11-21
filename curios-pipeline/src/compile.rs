@@ -16,7 +16,7 @@ use {
         Subterm, Term, Transient,
     },
     curios_elab::{
-        Context, Established, FinalizedProgram, Observed, Reading, Tail, Traces,
+        Context, Established, FinalizedProgram, Observed, ReaderWrites, Reading, Tail, Traces,
         elaborate_and_zonk_entry, elaborate_and_zonk_program, elaborate_and_zonk_program_reporting,
         elaborate_and_zonk_unit, validate_entry_universes,
     },
@@ -26,9 +26,14 @@ use {
         BrokenItem, Compiled, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
         into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
-    curios_surface::{Entrypoint, ReaderPosition, Spelling},
+    curios_surface::{Entrypoint, ReaderPosition, Spelling, spell},
     curios_unit::{Predecessors, Unit},
-    std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
+    std::{
+        cell::{LazyCell, OnceCell},
+        collections::BTreeSet,
+        fmt,
+        rc::Rc,
+    },
 };
 
 /// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it was written under — see [`Lint`]. Taken off the lowering before elaboration consumes it and credited with the binders elaboration's proofs read however elaboration ended, so a question about a program has them whether or not elaboration accepted it.
@@ -327,6 +332,48 @@ pub fn erasure_refusal(
         syntax,
         |reading| CompileError::Failure(error.reports(reading.spelling(), reading.anchors)),
     )
+}
+
+/// What a unit's reader writes ([`ReaderWrites`]), answered by resolution in reverse ([`spell`]) over the unit's `spellings`: made by the first question, and by no elaboration that asks none.
+fn reader_writes<'s>(spellings: impl Fn() -> Rc<curios_core::Spellings> + 's) -> ReaderWrites<'s> {
+    let made = OnceCell::new();
+
+    Box::new(move |island, owner, declaration| {
+        let held: &Rc<curios_core::Spellings> = made.get_or_init(&spellings);
+
+        spell(held, island, owner, declaration).is_some()
+    })
+}
+
+/// A context to elaborate what the lowering `lowered` holds in, over `predecessors`: the imports its `use` lines brought into scope and what its reader writes ([`reader_writes`]) installed, for a unit, a recompile and a program's closing term alike.
+fn context_for<'s>(
+    budget: u64,
+    syntax: &SyntaxRegistry,
+    lowered: &'s PreparedText,
+    predecessors: Predecessors<'s>,
+) -> Context<'s> {
+    let mut context = Context::new(budget, *syntax);
+    context.set_imports(lowered.imports().clone());
+    context.set_reader(reader_writes(move || {
+        Rc::new(lowered.spellings(&predecessors.text()))
+    }));
+
+    context
+}
+
+/// A unit's lowering elaborated by `walk`, in a context made for it ([`context_for`]) that also holds the names its parser could not read, and let go with it: what the context observed handed back beside what `walk` came to, whatever that is, a lint being no part of its verdict.
+pub fn elaborating<'s, T>(
+    budget: u64,
+    syntax: &SyntaxRegistry,
+    lowered: &'s PreparedText,
+    predecessors: Predecessors<'s>,
+    walk: impl FnOnce(&mut Context<'s>) -> T,
+) -> (T, Observed) {
+    let mut context = context_for(budget, syntax, lowered, predecessors);
+    context.set_broken(lowered.broken_names());
+    let walked = walk(&mut context);
+
+    (walked, context.observed())
 }
 
 /// `report` over the reading a refusal of `module` is spelled and placed by: its unit's names spelled as resolution reaches them from the reader's place, and its positions placed in the files they were written in.
@@ -845,7 +892,7 @@ where
 pub fn elaborate_entry<'s, O>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
-    predecessors: Predecessors<'_>,
+    predecessors: Predecessors<'s>,
     lowered: LoweredEntry,
     tail: EntryTail,
     observe: &mut O,
@@ -874,8 +921,12 @@ where
             .chain(scope.iter().map(|text| text.anchors()))
             .collect::<Vec<_>>()
     });
-    // Made by the first report that spells a name, and by no elaboration that reports nothing.
-    let spellings = LazyCell::new(|| Rc::new(names.spellings(&scope)));
+    // Made by the first report that spells a name or asks what its reader writes, and by no elaboration that reports nothing. Shared with the context, which holds the question past this call.
+    let names = Rc::new(names);
+    let spellings = Rc::new(LazyCell::new({
+        let (names, scope) = (Rc::clone(&names), scope.clone());
+        move || Rc::new(names.spellings(&scope))
+    }));
 
     let scheduled = tail_tests(&tail.schedule(&lowered.definitions, &predecessors.lowered()));
 
@@ -893,6 +944,10 @@ where
 
     context.set_imports(names.imports().clone());
     context.set_broken(broken.iter().filter_map(|item| item.declares).collect());
+    context.set_reader(reader_writes({
+        let spellings = Rc::clone(&spellings);
+        move || Rc::clone(&**spellings)
+    }));
     let elaborated = elaborate_and_zonk_program_reporting(
         context,
         established,
@@ -914,7 +969,7 @@ where
         kept: None,
         scope: &lexicons,
         syntax,
-        spellings: Some(&*spellings),
+        spellings: Some(&**spellings),
         minted: None,
         anchors: &anchors,
     };
@@ -1256,8 +1311,7 @@ fn close_over(
     let scope = Predecessors::over(&units);
     let fixed = scope.fixed();
     let established = Established::placed(&scope.placed()).fixed(&fixed);
-    let mut context = Context::new(budget, *syntax);
-    context.set_imports(lowered.imports().clone());
+    let mut context = context_for(budget, syntax, lowered, predecessors);
 
     let own = nothing();
     elaborate_and_zonk_program(
@@ -1524,27 +1578,31 @@ pub fn compile_lowered(
 
     let fixed = predecessors.fixed();
     let established = Established::placed(&predecessors.placed()).fixed(&fixed);
-    let mut context = Context::new(budget, *syntax);
-    context.set_imports(lowered.imports().clone());
-    context.set_broken(lowered.broken_names());
-    let walked = match tail {
-        Some(tail) => elaborate_and_zonk_entry(
-            &mut context,
-            &established,
-            lowered.core(),
-            lowered.mounts(),
-            lowered.minted(),
-            tail,
-        ),
-        None => elaborate_and_zonk_unit(
-            &mut context,
-            &established,
-            lowered.core(),
-            lowered.mounts(),
-            lowered.minted(),
-        )
-        .map(|(core, traces)| (core, None, traces)),
-    };
+    let (walked, mut observed) =
+        elaborating(
+            budget,
+            syntax,
+            &lowered,
+            predecessors,
+            |context| match tail {
+                Some(tail) => elaborate_and_zonk_entry(
+                    context,
+                    &established,
+                    lowered.core(),
+                    lowered.mounts(),
+                    lowered.minted(),
+                    tail,
+                ),
+                None => elaborate_and_zonk_unit(
+                    context,
+                    &established,
+                    lowered.core(),
+                    lowered.mounts(),
+                    lowered.minted(),
+                )
+                .map(|(core, traces)| (core, None, traces)),
+            },
+        );
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
@@ -1557,8 +1615,6 @@ pub fn compile_lowered(
             )
         }),
     );
-    // Whatever elaboration said: a lint is no part of its verdict.
-    let mut observed = context.observed();
     let mut refuse = |lowered: &PreparedText, observed: &Observed, error: CompileError| {
         if let Some(refused) = &mut refused {
             refused(lowered, observed);

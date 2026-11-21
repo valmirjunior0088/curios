@@ -7,13 +7,27 @@ use {
         Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture, Sites,
     },
     crate::{Resolved, SettledPlace, Traces},
+    curios_common::Qualifier,
     curios_core::{Declarations, Definitions, Extent, Free, Global, Imports, Lint, Minted},
-    std::{collections::BTreeSet, rc::Rc},
+    std::{collections::BTreeSet, fmt, rc::Rc},
 };
+
+/// Whether the unit's reader, standing in a module and inside a declaration of it (the entry's final term where `None`), writes a declaration by some name: the driver's answer, which holds the tables resolution reads a name by ([`Context::set_reader`](super::Context::set_reader)).
+pub type ReaderWrites<'s> = Box<dyn Fn(&Qualifier, Option<&Global>, &Global) -> bool + 's>;
+
+/// What the unit's reader writes, where a driver handed it in ([`ReaderWrites`]).
+#[derive(Default)]
+pub struct Reader<'s>(pub Option<ReaderWrites<'s>>);
+
+impl fmt::Debug for Reader<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("Reader").finish_non_exhaustive()
+    }
+}
 
 /// The half of a context that exists because a unit is being elaborated.
 #[derive(Debug)]
-pub struct Underway {
+pub struct Underway<'s> {
     // What the attempt under way mints and solves — its metavariables with their solutions, its universe levels with their solver, what it noted of its goals; flat and frame-independent. See [`Attempt`].
     pub attempt: Attempt,
     // Which of the unit's declarations have not finished, and what the attempt under way read of them; see [`Needs`].
@@ -54,9 +68,11 @@ pub struct Underway {
     pub group: Vec<(Global, Free)>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals.
     pub imports: Imports,
+    /// What the unit's reader writes, the driver's answer installed before elaboration ([`Reader`]). Asked where a report's side is reduced for display alone, of a declaration `/sys` writes an operation by.
+    pub reader: Reader<'s>,
 }
 
-impl Default for Underway {
+impl Default for Underway<'_> {
     /// The elaboration of nothing: no unit begun, no attempt made, standing at the root module with whatever is in scope on offer.
     fn default() -> Self {
         Self {
@@ -80,6 +96,7 @@ impl Default for Underway {
             embedding_sites: Vec::new(),
             group: Vec::new(),
             imports: Imports::default(),
+            reader: Reader::default(),
         }
     }
 }

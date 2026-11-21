@@ -1,6 +1,11 @@
 //! How a mismatch is spelled: universe instances withheld, implicit parameters marked, witnesses folded back to their operators.
 
-use super::test_support::*;
+use {
+    super::test_support::*,
+    crate::{EntryTail, Refused, test_support::examine_with_prelude},
+    curios_elab::DEFAULT_BUDGET,
+    curios_module::RootSource,
+};
 
 #[test]
 fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_numbered() {
@@ -766,4 +771,56 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
         bare.contains("the bound of the `/` operator was not discharged"),
         "unexpected report: {bare}"
     );
+}
+
+/// A statement `Flt/rounded/add` makes at its rounding: its dispatch reaches an addition `/sys` declares at a path no program writes.
+const ROUNDED: &str = r#"
+    use /std/{Flt, Eq};
+    use /std/Flt/{Rounding};
+
+    pub let f(a: Flt, b: Flt) -> Eq()(Flt/rounded/add(Rounding/toward_zero(), a, b), a) =
+        Eq/refl();
+"#;
+
+/// A side's call whose unfolding reaches an operation of `/sys` its reader writes by no name keeps the call as it was written, and the report says nothing of a term shown as the compiler holds it: in a program, in a library unit, in a library recompiled over a baseline, and in a program put whole as the soundness board puts one, each driver handing the elaborator what the unit's reader writes.
+#[test]
+fn a_call_that_unfolds_to_an_operation_no_reader_writes_keeps_its_name() {
+    let kept = |report: &str| {
+        assert!(
+            report
+                .contains("expected: `Eq(@Flt)(Flt/rounded/add(Rounding/toward_zero(), a, b), a)`"),
+            "unexpected report: {report}"
+        );
+        assert!(
+            !report.contains("as the compiler holds it") && !report.contains("/sys"),
+            "unexpected report: {report}"
+        );
+    };
+
+    let program = format!("{ROUNDED}\nIo/pure(())\n").replace("Eq};", "Eq, Io};");
+    kept(&refused(&program));
+    kept(
+        &compile_modules(&mounted("lib", ROUNDED))
+            .map(|_| ())
+            .unwrap_err(),
+    );
+    let baseline = compile_modules(&mounted(
+        "lib",
+        "use /std/{Flt};\n\npub let g(a: Flt) -> Flt = a;\n",
+    ))
+    .expect("the baseline compiles");
+    kept(
+        &recompile_modules(&mounted("lib", ROUNDED), &baseline)
+            .map(|_| ())
+            .unwrap_err(),
+    );
+    match examine_with_prelude(
+        DEFAULT_BUDGET,
+        &entrypoint_of(&program),
+        &RootSource::none(),
+        EntryTail::Program,
+    ) {
+        Err(Refused { reported, .. }) => kept(&String::from(reported)),
+        Ok(_) => panic!("the program put whole is refused"),
+    }
 }

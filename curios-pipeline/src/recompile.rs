@@ -6,14 +6,14 @@
 
 use {
     crate::{
-        Closing, CompileError, OnRefusal, anchors_of, certifier_refusal, compile_unit,
+        Closing, CompileError, OnRefusal, anchors_of, certifier_refusal, compile_unit, elaborating,
         erasure_refusal, globals_after, lowering_refusal, with_broken,
     },
     curios_cert::{Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
     curios_core::{Definitions, Entrypoint, Places},
     curios_elab::{
-        Context, Established, Observed, Recompile, Recompiled, elaborate_and_zonk_entry_over,
+        Established, Observed, Recompile, Recompiled, elaborate_and_zonk_entry_over,
         elaborate_and_zonk_unit_over,
     },
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
@@ -103,9 +103,6 @@ pub fn compile_lowered_over(
         .fixed(&fixed)
         .after(moved)
         .keeping(baseline.core(), baseline.places(), baseline.traces());
-    let mut context = Context::new(budget, *syntax);
-    context.set_imports(lowered.imports().clone());
-    context.set_broken(lowered.broken_names());
     let recompile = Recompile {
         baseline: baseline.core(),
         places: baseline.places(),
@@ -116,26 +113,33 @@ pub fn compile_lowered_over(
         dropped: &dropped,
         candidates,
     };
-    let walked = match tail {
-        Some(tail) => elaborate_and_zonk_entry_over(
-            &mut context,
-            &established,
-            recompile,
-            lowered.core(),
-            lowered.mounts(),
-            lowered.minted(),
-            tail,
-        ),
-        None => elaborate_and_zonk_unit_over(
-            &mut context,
-            &established,
-            recompile,
-            lowered.core(),
-            lowered.mounts(),
-            lowered.minted(),
-        )
-        .map(|recompiled| (recompiled, None)),
-    };
+    let (walked, mut observed) =
+        elaborating(
+            budget,
+            syntax,
+            &lowered,
+            predecessors,
+            |context| match tail {
+                Some(tail) => elaborate_and_zonk_entry_over(
+                    context,
+                    &established,
+                    recompile,
+                    lowered.core(),
+                    lowered.mounts(),
+                    lowered.minted(),
+                    tail,
+                ),
+                None => elaborate_and_zonk_unit_over(
+                    context,
+                    &established,
+                    recompile,
+                    lowered.core(),
+                    lowered.mounts(),
+                    lowered.minted(),
+                )
+                .map(|recompiled| (recompiled, None)),
+            },
+        );
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
@@ -148,8 +152,6 @@ pub fn compile_lowered_over(
             )
         }),
     );
-    // What the proofs written now read, whatever elaboration said: a lint is no part of its verdict.
-    let mut observed = context.observed();
     let mut refuse = |lowered: &PreparedText, observed: &Observed, error: CompileError| {
         if let Some(refused) = &mut refused {
             refused(lowered, observed);

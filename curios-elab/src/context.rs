@@ -58,6 +58,7 @@ mod typing;
 use typing::*;
 
 mod underway;
+pub use underway::ReaderWrites;
 use underway::*;
 
 mod scope;
@@ -170,7 +171,7 @@ pub struct Context<'s> {
     // What any judgment reads, and the machine it runs on; see [`Typing`].
     typing: Typing<'s>,
     // What exists because a unit is being elaborated; see [`Underway`].
-    underway: Underway,
+    underway: Underway<'s>,
 }
 
 /// What an auto-lift site names as written: the action, and the region's monad — its type without the value slot, as a report shows a monad. A missing embedding is reported through these rather than through the monads unification solved, which are reduced and so spell a type alias by its representation: `Of(Str, (input, offset) => Boundary(input, offset))` where the program wrote `Parse(Str, …)`. The action's monad is read off its head's declaration only when a report asks, since reading it opens the declaration's arrows.
@@ -227,6 +228,20 @@ impl<'s> Context<'s> {
     /// Install what the unit's `use` declarations brought into scope — each binding's canonical name with the spelling it resolves under, and per definition the ones in scope where it was written — so a goal report may suggest an imported definition the program has not mentioned yet, spelled the way the author would paste it where the goal is.
     pub fn set_imports(&mut self, imports: Imports) {
         self.underway.imports = imports;
+    }
+
+    /// Install what the unit's reader writes ([`ReaderWrites`]): the driver's answer, made of the tables a report spells a name by, which the driver holds once the unit is lowered and a report reads only after its sides are reduced.
+    pub fn set_reader(&mut self, writes: ReaderWrites<'s>) {
+        self.underway.reader = Reader(Some(writes));
+    }
+
+    /// Whether the reader of the declaration being elaborated writes `declaration` by some name, standing in the module its item stands in. True where no driver said what its reader writes, and where no item's module stands, as the display it is asked for then reduces as it did before a reader was known.
+    pub(crate) fn reader_writes(&self, declaration: &Global) -> bool {
+        let (Some(writes), Some(island)) = (&self.underway.reader.0, self.island()) else {
+            return true;
+        };
+
+        writes(island, self.underway.declaration.as_ref(), declaration)
     }
 
     /// The table [`Context::set_imports`] installed.
