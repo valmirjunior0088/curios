@@ -1,6 +1,6 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** An address names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the object is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the object's one file: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's certifier recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
@@ -51,13 +51,13 @@ struct Record {
     entry: (SourceName, String),
     /// Each file the entry's loader read, by the name its package gives it, with the digest of the text that was parsed from it, as a unit's record names its reads (`curios_unit::recorded`).
     reads: Vec<(SourceName, String)>,
-    /// What each unit of the compilation contained, in fold order — the digest of the bytes its own unit slot holds.
+    /// What each unit of the compilation contained, in fold order — the digest of the bytes its object holds.
     predecessors: Vec<String>,
     /// The prefixes the program's tests were scheduled under, spelled and in order ([`selection`]), or `None` for a program.
     tests: Option<Vec<String>>,
-    /// The prefixes the entry declared a dependency on, spelled and in the order its loader holds them ([`declared`]), or `None` where it declared nothing: what decides which of its references resolve, and which a unit's slot keys its own unit by, so a manifest that stops declaring a dependency the fold still holds is a miss.
+    /// The prefixes the entry declared a dependency on, spelled and in the order its loader holds them ([`declared`]), or `None` where it declared nothing: what decides which of its references resolve, and which a unit's address keys its own unit by, so a manifest that stops declaring a dependency the fold still holds is a miss.
     declares: Option<Vec<String>>,
-    /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_native::run_bytes` deserializes.
+    /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the payload's file is exactly the byte string a bundled executable carries and `curios_native::run_bytes` deserializes.
     payload: String,
     /// The `ffi` rows the program imports, which is what a link types its marshalling by and holds each answer to: the standard library's that it reaches, which the host answers, and any of a package's own.
     foreigns: ForeignStore,
@@ -66,7 +66,7 @@ struct Record {
 impl Verdicts {
     /// The payload filed for `program` after `units`, when everything it was made from still agrees.
     ///
-    /// **Decidable without deserializing anything.** The units are verified through `Verdicts::chain` — the same slot and record checks the fold makes, minus the decode a payload hit has no use for — and the payload itself is bytes to hand on, not a structure to read. A stale unit is a miss by construction, since it is about to recompile into bytes no record could match.
+    /// **Decidable without deserializing anything.** The units are verified through `Verdicts::chain` — the same address and record checks the fold makes, minus the decode a payload hit has no use for — and the payload itself is bytes to hand on, not a structure to read. A stale unit is a miss by construction, since it is about to recompile into bytes no record could match.
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units.
     ///
@@ -79,9 +79,9 @@ impl Verdicts {
     ) -> Option<(Vec<u8>, ForeignStore)> {
         let units = self.chain(units)?;
 
-        // A file that is not a slot, or a stored record that will not read back, is ignored, never a compile to fail.
+        // A file that is not framed, or a stored record that will not read back, is ignored, never a compile to fail.
         let cabinet = self.cabinet.as_ref()?;
-        let filed = fs::read(cabinet.payload(runs, &slot(self, program, runs)?)).ok()?;
+        let filed = fs::read(cabinet.payload(runs, &address(self, program, runs)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -95,7 +95,7 @@ impl Verdicts {
     ///
     /// Called after the fold, which is what makes the units it took the right ones to record: each with what it was filed as in *this* compilation, whether it was reused or compiled. Best effort, exactly as a unit's write is — a cabinet that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
     ///
-    /// **`units` is taken so this can refuse a compilation one of whose units has no place, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe verifies each unit through `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, so a record naming fewer units than the compilation held is one no probe agrees with: not a stale answer, but a slot rewritten by every build and found by none. Withholding the record is free, since the compilation it came from is correct either way.
+    /// **`units` is taken so this can refuse a compilation one of whose units has no place, and it is the same slice [`Verdicts::payload_get`] probes with.** The probe verifies each unit through `Verdicts::chain`, which refuses any unit `Verdicts::address` declines, so a record naming fewer units than the compilation held is one no probe agrees with: not a stale answer, but an object rewritten by every build and found by none. Withholding the record is free, since the compilation it came from is correct either way.
     pub fn payload_put(
         &self,
         program: &Program<'_>,
@@ -109,7 +109,7 @@ impl Verdicts {
             return;
         };
 
-        let (Some(cabinet), Some(slot)) = (&self.cabinet, slot(self, program, runs)) else {
+        let (Some(cabinet), Some(address)) = (&self.cabinet, address(self, program, runs)) else {
             return;
         };
 
@@ -127,7 +127,7 @@ impl Verdicts {
             foreigns: foreigns.clone(),
         };
 
-        let path = cabinet.payload(runs, &slot);
+        let path = cabinet.payload(runs, &address);
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
             .and_then(|record| replace(&path, &record, bytes));
@@ -142,8 +142,8 @@ impl Verdicts {
     }
 }
 
-/// The slot `program` is filed in for what `runs` it, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
-fn slot(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<String> {
+/// The address `program` is filed at for what `runs` it, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
+fn address(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<String> {
     let compiler = verdicts.compiler()?;
 
     Some(payload_address(
@@ -179,7 +179,7 @@ fn selection(program: &Program<'_>) -> Option<Vec<String>> {
     })
 }
 
-/// The prefixes `program`'s entry declared, as a record holds them: spelled, in the order its loader holds them, as a unit's slot keys them.
+/// The prefixes `program`'s entry declared, as a record holds them: spelled, in the order its loader holds them, as a unit's address keys them.
 fn declared(program: &Program<'_>) -> Option<Vec<String>> {
     program
         .loader

@@ -68,7 +68,7 @@ struct Produced {
     readers: Rc<OnceCell<Readers>>,
     /// Whether the unit is the compiler's own: restored out of bytes that are a constant of the executable, so one thing under one compiler. Never stored, being where the unit came from.
     ///
-    /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — a slot's address names the compiler, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
+    /// **Nothing records a read of a fixed unit.** A baseline is offered by the compiler that made it — an object's address names the compiler, and a session lives in one process — so a fixed unit is the one every baseline was compiled after, and what a unit read of it is never asked again (`curios_elab::Established::fixed`).
     #[archived_with(curios_archive::Skip)]
     fixed: bool,
 }

@@ -9,7 +9,7 @@ description = "The Curios cabinet as a compilation sees it: the fold's units and
 workspace = true
 
 [features]
-# What restoring a unit from its slot and filing one cost, as spans beside the compilation's own.
+# What restoring a unit from its object and filing one cost, as spans beside the compilation's own.
 profile = ["curios-profile/enabled", "curios-pipeline/profile"]
 # `test_support::History`: units walked step by step over a cabinet of their own, as builds walk them, for the soundness board. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to every other crate — the same reason `curios-native`'s `test-support` is a feature. **Never add this to `default`.**
 test-support = [

@@ -3,36 +3,36 @@
 use {super::*, std::path::Path};
 
 #[test]
-fn a_slot_frames_its_record_ahead_of_the_artifact_and_reads_both_back() {
-    let slot = framed(b"the record", b"the artifact");
+fn a_frame_holds_its_record_ahead_of_the_artifact_and_reads_both_back() {
+    let file = framed(b"the record", b"the artifact");
 
     assert_eq!(
-        segments(&slot),
+        segments(&file),
         Some((b"the record".as_slice(), b"the artifact".as_slice()))
     );
 }
 
 #[test]
-fn bytes_that_do_not_open_with_the_magic_are_not_a_slot() {
+fn bytes_that_do_not_open_with_the_magic_are_not_framed() {
     assert_eq!(segments(b"an archive of something else"), None);
     assert_eq!(segments(b""), None);
 }
 
 #[test]
-fn a_slot_truncated_past_its_record_is_not_read() {
-    let slot = framed(b"the record", b"the artifact");
-    let truncated = &slot[..PREAMBLE + 3];
+fn a_frame_truncated_past_its_record_is_not_read() {
+    let file = framed(b"the record", b"the artifact");
+    let truncated = &file[..PREAMBLE + 3];
 
     assert_eq!(segments(truncated), None);
 }
 
-/// A reader deciding whether to believe a slot reads its preamble and its record and nothing behind them.
+/// A reader deciding whether to believe a file reads its preamble and its record and nothing behind them.
 #[test]
-fn a_slots_record_is_found_from_its_preamble_alone() {
-    let slot = framed(b"the record", b"the artifact");
-    let preamble = slot
+fn a_frames_record_is_found_from_its_preamble_alone() {
+    let file = framed(b"the record", b"the artifact");
+    let preamble = file
         .first_chunk::<PREAMBLE>()
-        .expect("a slot opens with its preamble");
+        .expect("a framed file opens with its preamble");
 
     assert_eq!(record_length(preamble), Some(b"the record".len()));
     assert_eq!(record_length(&[0; PREAMBLE]), None);

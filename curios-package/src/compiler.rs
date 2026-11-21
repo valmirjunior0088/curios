@@ -63,7 +63,7 @@ pub fn compiler(cabinet: &Cabinet) -> Option<String> {
 
     // Best-effort: a cabinet that cannot be written costs the next compile another digest, and nothing else. It must not cost the verdict.
     //
-    // Renamed into place rather than written in place, as every slot in the cabinet is. Two compilers sharing a cache would otherwise interleave their writes, and a torn memo pairs a stamp with a digest no binary ever had together — which fails safe, since a stamp nobody matches costs one digest, but the cabinet's one rule is cheaper than the reasoning that it does.
+    // Renamed into place rather than written in place, as every file in the cabinet is. Two compilers sharing a cache would otherwise interleave their writes, and a torn memo pairs a stamp with a digest no binary ever had together — which fails safe, since a stamp nobody matches costs one digest, but the cabinet's one rule is cheaper than the reasoning that it does.
     if let Some(parent) = record.parent() {
         let _ = fs::create_dir_all(parent);
     }

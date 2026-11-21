@@ -103,7 +103,7 @@ fn no_image_holds_the_directory_it_was_built_in() {
     }
 }
 
-/// The record ahead of each image digests exactly the index behind it, as a slot's record digests the index it was filed with.
+/// The record ahead of each image digests exactly the index behind it, as an object's record digests the index it was filed with.
 #[test]
 fn each_record_digests_the_index_it_sits_ahead_of() {
     for (root, bytes, _) in ROOTS {

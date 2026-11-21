@@ -266,10 +266,10 @@ fn a_cabinet_that_cannot_be_written_is_said_once_and_changes_nothing() {
     );
 
     let refused = package("unstored");
-    // A file where the slots would go.
-    let verdicts = Cabinet::of(&refused, None).verdicts();
-    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
-    fs::write(&verdicts, "").unwrap();
+    // A file where the objects would go.
+    let objects = Cabinet::of(&refused, None).objects();
+    fs::create_dir_all(objects.parent().unwrap()).unwrap();
+    fs::write(&objects, "").unwrap();
     let unstored = curios(&refused, &["lint"], "");
     let narrated = String::from_utf8_lossy(&unstored.stderr);
 

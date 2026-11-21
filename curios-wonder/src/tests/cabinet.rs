@@ -28,7 +28,7 @@ fn a_question_files_what_it_compiled_whole_from_the_disk() {
         ["compiling /alpha", "compiling /beta"],
         "nothing is filed for a package nothing has compiled"
     );
-    assert_eq!(slots(&root).len(), 2, "one slot per unit");
+    assert_eq!(objects(&root).len(), 2, "one address per unit");
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
@@ -41,7 +41,7 @@ fn a_question_files_what_it_compiled_whole_from_the_disk() {
     );
 }
 
-/// One unit, whoever files it: the slots a question files hold the bytes a build files there, record and unit alike.
+/// One unit, whoever files it: the objects a question files hold the bytes a build files there, record and unit alike.
 ///
 /// This is what lets a build believe a question's unit, and it fails if a question's fold ever stops short of a build's.
 #[test]
@@ -49,13 +49,13 @@ fn a_question_and_a_build_file_the_same_bytes() {
     let root = mounted_project("one-unit");
 
     folded(&root, &Overlay::default());
-    let asked = slots(&root);
-    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a question filed");
+    let asked = objects(&root);
+    fs::remove_dir_all(Cabinet::of(&root, None).objects()).expect("the objects a question filed");
     built(&root);
 
-    assert_eq!(asked.len(), 2, "one slot per unit");
+    assert_eq!(asked.len(), 2, "one address per unit");
     assert!(
-        slots(&root) == asked,
+        objects(&root) == asked,
         "a build filed other bytes than the question did"
     );
 }
@@ -69,14 +69,18 @@ fn a_unit_read_through_an_open_document_is_filed_while_the_disk_holds_its_text()
         folded(&root, &held(&root, "a/lib.crs")),
         ["compiling /alpha", "compiling /beta"]
     );
-    assert_eq!(slots(&root).len(), 2, "both units stand on the disk's text");
+    assert_eq!(
+        objects(&root).len(),
+        2,
+        "both units stand on the disk's text"
+    );
 }
 
 /// A unit whose record still agrees comes from the cabinet, however many units before it missed.
 ///
-/// A missing unit is compiled whole from the same text into the same bytes and filed where it was, so the unit after it, whose record vouches for those bytes, is reused. Which slot is the first unit's is not spelled here, so each is taken out in turn and the two outcomes are read together.
+/// A missing unit is compiled whole from the same text into the same bytes and filed where it was, so the unit after it, whose record vouches for those bytes, is reused. Which object is the first unit's is not spelled here, so each is taken out in turn and the two outcomes are read together.
 ///
-/// Read off the fold's own progress events, as the cabinet's own tests are: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with the chain broken.
+/// Read off the fold's own progress events, as the cabinet's own tests are: whether a unit was reused is exactly the question a caller asks, and asserting on an object's address would pass just as happily with the chain broken.
 #[test]
 fn a_miss_does_not_refuse_the_units_after_it() {
     let root = mounted_project("chain");
@@ -88,16 +92,16 @@ fn a_miss_does_not_refuse_the_units_after_it() {
         "both units are the cabinet's when nothing is missing"
     );
 
-    let slots = Cabinet::of(&root, None).verdict_files();
-    assert_eq!(slots.len(), 2, "one slot per unit: {slots:?}");
+    let units = Cabinet::of(&root, None).unit_files();
+    assert_eq!(units.len(), 2, "one object per unit: {units:?}");
 
-    let mut outcomes = slots
+    let mut outcomes = units
         .iter()
-        .map(|slot| {
-            let aside = slot.with_extension("aside");
-            fs::rename(slot, &aside).unwrap();
+        .map(|unit| {
+            let aside = unit.with_extension("aside");
+            fs::rename(unit, &aside).unwrap();
             let events = folded(&root, &Overlay::default());
-            fs::rename(&aside, slot).unwrap();
+            fs::rename(&aside, unit).unwrap();
             events
         })
         .collect::<Vec<_>>();
@@ -113,23 +117,23 @@ fn a_miss_does_not_refuse_the_units_after_it() {
     );
 }
 
-/// A unit compiled after one from unsaved text is not filed, and its slot holds the bytes it held.
+/// A unit compiled after one from unsaved text is not filed, and its object holds the bytes it held.
 ///
-/// An edited unit recompiles the units that could have read it: a unit's record vouches for what each unit it may name contained, and one that no longer contains it is a disagreement whether or not anything was read of it. `/beta` is then compiled over its slot from text the disk holds — and filed, it would take the place of the slot a build filed, under a record naming an `/alpha` nothing on disk reproduces.
+/// An edited unit recompiles the units that could have read it: a unit's record vouches for what each unit it may name contained, and one that no longer contains it is a disagreement whether or not anything was read of it. `/beta` is then compiled over its object from text the disk holds — and filed, it would take the place of the object a build filed, under a record naming an `/alpha` nothing on disk reproduces.
 #[test]
 fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     let root = mounted_project("unsaved-before");
     built(&root);
-    let before = slots(&root);
+    let before = objects(&root);
 
     assert_eq!(
         folded(&root, &edited(&root, "a/lib.crs")),
         ["recompiling /alpha", "recompiling /beta"],
-        "the overlay edits /alpha alone, which is compiled over its slot; /beta's record vouched for the /alpha it was compiled after, so its slot is no hit, and is the baseline it is compiled over"
+        "the overlay edits /alpha alone, which is compiled over its object; /beta's record vouched for the /alpha it was compiled after, so its object is no hit, and is the baseline it is compiled over"
     );
     assert!(
-        slots(&root) == before,
-        "a keystroke in /alpha's document moved a slot"
+        objects(&root) == before,
+        "a keystroke in /alpha's document moved an object"
     );
     assert_eq!(
         folded(&root, &Overlay::default()),
@@ -138,14 +142,14 @@ fn a_unit_after_one_compiled_from_unsaved_text_is_not_filed() {
     );
 }
 
-/// One unit, however it was compiled: over a text saved since the cabinet was filed, a question compiles the unit over its slot and files it, and the unit after it, and each slot holds the bytes a build files there.
+/// One unit, however it was compiled: over a text saved since the cabinet was filed, a question compiles the unit over its object and files it, and the unit after it, and each object holds the bytes a build files there.
 ///
 /// This is what lets a build believe a unit a question compiled over a baseline, and the next question start from it.
 #[test]
 fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
     let root = mounted_project("baseline-files");
     built(&root);
-    let before = slots(&root);
+    let before = objects(&root);
 
     write(
         &root,
@@ -157,7 +161,7 @@ fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
         folded(&root, &Overlay::default()),
         ["recompiling /alpha", "recompiling /beta"]
     );
-    let asked = slots(&root);
+    let asked = objects(&root);
     assert!(asked != before, "a question filed nothing for a saved text");
     assert_eq!(
         folded(&root, &Overlay::default()),
@@ -165,15 +169,15 @@ fn a_unit_compiled_over_a_baseline_is_filed_as_a_build_files_it() {
         "the next question starts from what the first filed"
     );
 
-    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a question filed");
+    fs::remove_dir_all(Cabinet::of(&root, None).objects()).expect("the objects a question filed");
     assert_eq!(built(&root), ["compiling /alpha", "compiling /beta"]);
     assert!(
-        slots(&root) == asked,
+        objects(&root) == asked,
         "a build filed other bytes than the question did over a baseline"
     );
 }
 
-/// A unit whose slot disagrees with its files is compiled over that slot's unit rather than from nothing: the slot is a baseline, and every declaration the edit did not reach is reused. A query is what takes it; the disk is untouched either way.
+/// A unit whose object disagrees with its files is compiled over that object's unit rather than from nothing: the object is a baseline, and every declaration the edit did not reach is reused. A query is what takes it; the disk is untouched either way.
 #[test]
 fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
     let root = mounted_project("baseline");
@@ -182,7 +186,7 @@ fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
     assert_eq!(
         folded(&root, &edited(&root, "b/lib.crs")),
         ["reused /alpha", "recompiling /beta"],
-        "an edited last unit is compiled over its own slot, after a predecessor that is the cabinet's"
+        "an edited last unit is compiled over its own object, after a predecessor that is the cabinet's"
     );
     assert_eq!(
         folded(&root, &Overlay::default()),
@@ -261,12 +265,12 @@ fn a_file_rewritten_while_its_unit_compiles_leaves_the_cabinet_as_it_was() {
         ["compiling /alpha", "compiling /beta"]
     );
     assert!(
-        slots(&root).is_empty(),
+        objects(&root).is_empty(),
         "a unit was filed for a text the disk no longer holds, or after one"
     );
 }
 
-/// A package the cabinet cannot take recompiles over what the session compiled last, rather than compiling whole every time: no slot can be written, so the unit a check produced is the only baseline there is.
+/// A package the cabinet cannot take recompiles over what the session compiled last, rather than compiling whole every time: no object can be written, so the unit a check produced is the only baseline there is.
 ///
 /// **The baseline advances without the cabinet.** A unit is kept whether or not it is filed, so a session over a cabinet nobody can write still recompiles what each edit moved, and a question with no session is where it was.
 #[test]
@@ -292,7 +296,7 @@ fn a_session_recompiles_what_the_cabinet_could_not_take() {
     );
 }
 
-/// A unit after an edited one is compiled over a baseline at every check: over the cabinet's slot at the first, though that was filed after the first unit's disk text, each stage asking again what it read of the unit that moved, and over what the session kept from then on, which was compiled after the text the edit still holds.
+/// A unit after an edited one is compiled over a baseline at every check: over the cabinet's object at the first, though that was filed after the first unit's disk text, each stage asking again what it read of the unit that moved, and over what the session kept from then on, which was compiled after the text the edit still holds.
 #[test]
 fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check() {
     let root = mounted_project("session-downstream");
@@ -303,7 +307,7 @@ fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
         ["recompiling /alpha", "recompiling /beta"],
-        "the first check has only the cabinet, whose slot for /beta is a baseline though it vouches for the /alpha on disk"
+        "the first check has only the cabinet, whose object for /beta is a baseline though it vouches for the /alpha on disk"
     );
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
@@ -314,7 +318,7 @@ fn a_unit_downstream_of_an_edit_is_compiled_over_a_baseline_from_the_first_check
 
 /// A unit compiled in a second scope replaces what the session kept for it in the first, rather than sitting beside it: the session holds one unit per unit, so what it holds is bounded by the units the editor reached and never by how often their scope moved.
 ///
-/// Observed from the far side of the bound, over a `/beta` held edited throughout, so that the cabinet never holds it and the session is all there is. `/beta` is compiled after `/alpha`, then with its dependency dropped from the manifest, then after `/alpha` again — and the third check compiles it whole, since the second replaced what the first kept. A session keyed by slot would still hold the first scope's unit, and would have recompiled over it, beside a stranded unit per scope the session had ever seen.
+/// Observed from the far side of the bound, over a `/beta` held edited throughout, so that the cabinet never holds it and the session is all there is. `/beta` is compiled after `/alpha`, then with its dependency dropped from the manifest, then after `/alpha` again — and the third check compiles it whole, since the second replaced what the first kept. A session keyed by object would still hold the first scope's unit, and would have recompiled over it, beside a stranded unit per scope the session had ever seen.
 #[test]
 fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     let root = mounted_project("session-rescoped");
@@ -351,9 +355,9 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     );
 }
 
-/// A session keeps a unit the cabinet restored for it as it keeps one it compiled: with the slots gone, the next check recompiles each unit over the copy in hand, where a question with no session has only what that check filed.
+/// A session keeps a unit the cabinet restored for it as it keeps one it compiled: with the objects gone, the next check recompiles each unit over the copy in hand, where a question with no session has only what that check filed.
 ///
-/// What this spares an editor is the second read of a slot: the first edit after a check the cabinet answered misses, asks for a baseline, and is handed the unit already decoded.
+/// What this spares an editor is the second read of an object: the first edit after a check the cabinet answered misses, asks for a baseline, and is handed the unit already decoded.
 #[test]
 fn a_session_keeps_a_unit_the_cabinet_restored() {
     let root = mounted_project("session-restored");
@@ -365,7 +369,7 @@ fn a_session_keeps_a_unit_the_cabinet_restored() {
         ["reused /alpha", "reused /beta"]
     );
 
-    fs::remove_dir_all(Cabinet::of(&root, None).verdicts()).expect("the slots a build filed");
+    fs::remove_dir_all(Cabinet::of(&root, None).objects()).expect("the objects a build filed");
     assert_eq!(
         folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
         ["recompiling /alpha", "recompiling /beta"],
@@ -378,9 +382,9 @@ fn a_session_keeps_a_unit_the_cabinet_restored() {
     );
 }
 
-/// A session answers a hit on a slot it filed with the unit it compiled, and reads nothing of the slot past its record: with every filed artifact damaged, the session's next check still takes each unit from the cabinet, where a question with no session reads the damage and compiles each again.
+/// A session answers a hit on an object it filed with the unit it compiled, and reads nothing of the object past its record: with every filed artifact damaged, the session's next check still takes each unit from the cabinet, where a question with no session reads the damage and compiles each again.
 ///
-/// What this spares an editor is the decode after a save: the save's check files the unit, the question after it hits that slot, and the session goes on holding the unit it compiled in place of a copy read back out of the bytes it just wrote.
+/// What this spares an editor is the decode after a save: the save's check files the unit, the question after it hits that object, and the session goes on holding the unit it compiled in place of a copy read back out of the bytes it just wrote.
 #[test]
 fn a_session_answers_a_hit_on_what_it_filed_with_the_unit_it_compiled() {
     let root = mounted_project("session-filed");
@@ -414,7 +418,7 @@ fn a_session_files_a_dependency_and_no_keystroke() {
         folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
         ["compiling /alpha", "compiling /beta"]
     );
-    let filed = slots(&root);
+    let filed = objects(&root);
     assert_eq!(
         filed.len(),
         1,
@@ -429,17 +433,17 @@ fn a_session_files_a_dependency_and_no_keystroke() {
         folded_reusing(&root, &keystroke, &session),
         ["reused /alpha", "recompiling /beta"]
     );
-    assert!(slots(&root) == filed, "a keystroke moved the cabinet");
+    assert!(objects(&root) == filed, "a keystroke moved the cabinet");
 }
 
-/// A unit a session compiles whole after a saved manifest edit moved its scope is filed where its new scope addresses it, beside the slots its old scope filed.
+/// A unit a session compiles whole after a saved manifest edit moved its scope is filed where its new scope addresses it, beside the objects its old scope filed.
 #[test]
 fn a_unit_compiled_whole_in_a_new_scope_is_filed_there() {
     let root = mounted_project("session-rescoped-files");
     let session = Session::default();
 
     folded_reusing(&root, &Overlay::default(), &session);
-    let before = slots(&root);
+    let before = objects(&root);
     assert_eq!(before.len(), 2, "/alpha, and /beta after it");
 
     write(
@@ -454,21 +458,21 @@ fn a_unit_compiled_whole_in_a_new_scope_is_filed_there() {
     assert_eq!(
         folded_reusing(&root, &Overlay::default(), &session),
         ["compiling /beta"],
-        "alone, a scope no slot was filed in and nothing was kept for"
+        "alone, a scope no object was filed in and nothing was kept for"
     );
-    let after = slots(&root);
-    assert_eq!(after.len(), 3, "/beta alone is another slot");
+    let after = objects(&root);
+    assert_eq!(after.len(), 3, "/beta alone is another object");
     assert!(
         before
             .iter()
-            .all(|(slot, bytes)| after.get(slot) == Some(bytes)),
-        "and the old scope's slots hold what they held"
+            .all(|(address, bytes)| after.get(address) == Some(bytes)),
+        "and the old scope's objects hold what they held"
     );
 }
 
 /// A kept unit is refused once a unit before it holds something else, and what it would have hidden is reported.
 ///
-/// **The guard a slot cannot provide.** A slot addresses a unit's predecessors by where they are, not by what they hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit would be offered after `/alpha` changed its declared type, the diff would be empty, every item reused, and the mismatch this asserts never reported.
+/// **The guard an address cannot provide.** An address names nothing of what a unit's predecessors hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit would be offered after `/alpha` changed its declared type, the diff would be empty, every item reused, and the mismatch this asserts never reported.
 #[test]
 fn a_kept_unit_after_a_changed_predecessor_is_refused() {
     let root = mounted_project("session-guard");
@@ -571,8 +575,8 @@ fn a_cabinet_that_cannot_be_written_answers_as_one_that_can() {
     assert!(
         refusal
             .as_deref()
-            .is_some_and(|refusal| refusal.contains("verdicts")),
-        "the refusal names the slot it happened at: {refusal:?}"
+            .is_some_and(|refusal| refusal.contains("objects")),
+        "the refusal names the family it happened in: {refusal:?}"
     );
 
     let (answer, refusal) = asked(&taken);
@@ -659,39 +663,40 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
     .diagnostics
 }
 
-/// Every unit slot the cabinet at `root` holds, by name, with its bytes.
-fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
-    let Ok(entries) = fs::read_dir(Cabinet::of(root, None).verdicts()) else {
+/// Every object the cabinet at `root` holds, by its address, with its unit file's bytes.
+fn objects(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    let Ok(entries) = fs::read_dir(Cabinet::of(root, None).objects()) else {
         return BTreeMap::new();
     };
 
     entries
-        .map(|slot| {
-            let name = slot
-                .expect("a readable store")
+        .map(|object| {
+            let name = object
+                .expect("a readable object")
                 .file_name()
                 .to_string_lossy()
                 .into_owned();
-            let bytes = fs::read(Cabinet::of(root, None).verdict(&name)).expect("a readable slot");
+            let bytes =
+                fs::read(Cabinet::of(root, None).unit(&name)).expect("a readable unit file");
             (name, bytes)
         })
         .collect()
 }
 
-/// Damage the last byte of every unit slot the cabinet at `root` holds: the artifact's, behind a record that still reads.
+/// Damage the last byte of every object's unit file the cabinet at `root` holds: the artifact's, behind a record that still reads.
 fn damaged(root: &Path) {
-    for (name, mut bytes) in slots(root) {
-        let last = bytes.last_mut().expect("a slot holds an artifact");
+    for (name, mut bytes) in objects(root) {
+        let last = bytes.last_mut().expect("a unit file holds an artifact");
         *last ^= 0xff;
-        fs::write(Cabinet::of(root, None).verdict(&name), bytes).expect("a writable slot");
+        fs::write(Cabinet::of(root, None).unit(&name), bytes).expect("a writable unit file");
     }
 }
 
-/// Leave the cabinet at `root` unable to take a unit: a file where its slots would go.
+/// Leave the cabinet at `root` unable to take a unit: a file where its objects would go.
 fn unwritable(root: &Path) {
-    let verdicts = Cabinet::of(root, None).verdicts();
-    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
-    fs::write(verdicts, "").unwrap();
+    let objects = Cabinet::of(root, None).objects();
+    fs::create_dir_all(objects.parent().unwrap()).unwrap();
+    fs::write(objects, "").unwrap();
 }
 
 /// An overlay holding `path`'s own text: a document an editor has open and has not yet changed.
@@ -740,7 +745,7 @@ impl Cache for Noting<'_> {
 
 /// A file no package declares has no cabinet, and the session that asks about it keeps what it compiled of it all the same. A module is compiled whole at the first check and over what the session kept at the next, with the text an editor holds; and nothing is filed, there being nowhere to file it.
 ///
-/// Mutation-checked: with a handle that has no cabinet given no slot to keep a unit at, the second check compiles the module whole.
+/// Mutation-checked: with a handle that has no cabinet given no object to keep a unit at, the second check compiles the module whole.
 #[test]
 fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
     let root = Temporary::new("wonder", "loose-module");

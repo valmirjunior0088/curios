@@ -140,7 +140,7 @@ fn named(blobs: &[&Blob]) -> BTreeSet<Digest> {
     blobs.iter().map(|blob| blob.digest).collect()
 }
 
-/// A blob the slot stops naming is dropped by the first collection that finds it unnamed five days after a collection first did, and kept by every one before; a blob the slot names is kept whatever its pack holds beside it.
+/// A blob the object stops naming is dropped by the first collection that finds it unnamed five days after a collection first did, and kept by every one before; a blob the object names is kept whatever its pack holds beside it.
 #[test]
 fn a_blob_unnamed_for_five_days_is_dropped() {
     let directory = Temporary::new("packs", "collected");
@@ -176,7 +176,7 @@ fn a_blob_unnamed_for_five_days_is_dropped() {
     );
 }
 
-/// What a filer stopped short of in the address's directory — a slot's staged verdict as a pack's — is swept by the first collection that finds it five days old, and one younger is left to a filer that may still be writing it.
+/// What a filer stopped short of in the address's directory — an object's staged unit file as a pack's — is swept by the first collection that finds it five days old, and one younger is left to a filer that may still be writing it.
 #[test]
 fn a_collection_sweeps_a_staging_five_days_old() {
     let directory = Temporary::new("packs", "staged");
@@ -244,7 +244,7 @@ fn an_address_is_collected_once_a_day() {
     );
 }
 
-/// A blob named again before its five days are out is forgotten, and its time starts over if the slot stops naming it again.
+/// A blob named again before its five days are out is forgotten, and its time starts over if the object stops naming it again.
 #[test]
 fn a_blob_named_again_is_forgotten() {
     let directory = Temporary::new("packs", "renamed");

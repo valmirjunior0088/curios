@@ -1,6 +1,6 @@
 //! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a cabinet mechanism.
 //!
-//! The cabinet's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
+//! The cabinet's own behaviour is covered where it lives, in `curios-verdict`'s payload tests: those decide when a payload may be believed. These decide what the *subcommands* do with the answer — that one object serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
@@ -64,8 +64,8 @@ fn reused(output: &Output) -> bool {
     !String::from_utf8_lossy(&output.stderr).contains("emit;")
 }
 
-/// The native payload slots the project at `root` holds.
-fn slots(root: &Path) -> usize {
+/// The native payloads the project at `root` holds.
+fn payloads(root: &Path) -> usize {
     fs::read_dir(Cabinet::of(root, None).payloads(Target::Native)).map_or(0, Iterator::count)
 }
 
@@ -100,9 +100,9 @@ fn running_twice_reuses_and_behaves_identically() {
     );
 }
 
-/// One slot serves both subcommands, which is what makes `compile` after `run` a file write.
+/// One payload serves both subcommands, which is what makes `compile` after `run` a file write.
 #[test]
-fn one_slot_serves_run_and_compile() {
+fn one_payload_serves_run_and_compile() {
     let root = project("both");
 
     assert!(!reused(&curios(&root, &["run"])));
@@ -112,9 +112,13 @@ fn one_slot_serves_run_and_compile() {
     );
     assert!(
         reused(&curios(&root, &["run"])),
-        "and `run` afterwards finds the same slot"
+        "and `run` afterwards finds the same payload"
     );
-    assert_eq!(slots(&root), 1, "one program, one slot, whoever asked");
+    assert_eq!(
+        payloads(&root),
+        1,
+        "one program, one payload, whoever asked"
+    );
 
     assert!(
         root.join(".curios/native/app/app").exists(),
@@ -147,7 +151,7 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
         !narrated.contains("build;") && !narrated.contains("emit;"),
         "{narrated}"
     );
-    assert_eq!(slots(&root), 0, "a question files no payload");
+    assert_eq!(payloads(&root), 0, "a question files no payload");
 
     let run = curios(&root, &["run"]);
     let narrated = String::from_utf8_lossy(&run.stderr);
@@ -156,13 +160,13 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
         "the library is the unit the question filed, so no unit is checked and filed again: {narrated}"
     );
     assert_eq!(
-        slots(&root),
+        payloads(&root),
         1,
         "and the program was compiled over it, and its payload filed"
     );
 }
 
-/// A bare file has no project, hence no cabinet and no slot — the declared-versus-bare split.
+/// A bare file has no project, hence no cabinet and no object — the declared-versus-bare split.
 #[test]
 fn a_bare_file_files_nothing() {
     let root = temporary("bare");
@@ -456,7 +460,7 @@ fn a_named_cabinet_takes_what_is_kept_and_leaves_what_is_emitted() {
 
     let cabinet = Cabinet::of(&root, Some(&named));
     assert!(
-        cabinet.verdicts().is_dir(),
+        cabinet.objects().is_dir(),
         "the units are filed in the cabinet named"
     );
     assert!(cabinet.payloads(Target::Native).is_dir(), "and the payload");

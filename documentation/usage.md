@@ -757,8 +757,8 @@ Everything generated lands under one `.curios/`, beside the governing manifest â
 | `documentation/<package>/` | what `document` emits |
 | `cabinet/sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against |
 | `cabinet/foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way |
-| `cabinet/verdicts/<slot>/` | judged units, a slot per unit, a library or an executable's own declarations: its `verdict`, the packs of what it names, each named by what it holds, and what its last collection found |
-| `cabinet/payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own |
+| `cabinet/objects/<address>/` | judged units, an object per unit, a library or an executable's own declarations: its `unit` file, the packs of the blobs it names, each named by what it holds, and what its last collection found |
+| `cabinet/payloads/<target>/<address>` | precompiled payloads, one file per executable and target, each target's in a directory of its own |
 | `cabinet/compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary |
 
 One transient entry passes through the cabinet beside its families: [`pin`](#pin) stages a delivery at `cabinet/pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
@@ -769,7 +769,7 @@ Set `CURIOS_CABINET` to a directory to make it the cabinet of every project a co
 
 ## Reusing what was already built
 
-Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the cabinet beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it and narrates nothing, where a compile shows a tree for each unit it compiled and the program's own ([What a command reports](#what-a-command-reports)). One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
+Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the cabinet beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it and narrates nothing, where a compile shows a tree for each unit it compiled and the program's own ([What a command reports](#what-a-command-reports)). One payload serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
 
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written cabinet entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
@@ -779,4 +779,4 @@ A cabinet that cannot be written costs the reuse and never the answer. The comma
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no cabinet. Standard input has none either, so its test program is compiled every time.
 
-Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot, overwritten in place.
+Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one payload, overwritten in place.

@@ -458,7 +458,7 @@ pub fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
 ///
 /// **A stored unit is verified through the overlay.** A unit is believed on a re-read of every file it was compiled from, and here that re-read takes an open document's text over the disk's (`Verdicts::get_overlaid`), so a unit whose source an editor holds edited is a miss and one whose source is merely open is not. The rule is exact because the record lists what the unit read: a document the unit never read — an executable beside a package's library, in the very directory the library reads from — leaves the hit standing. Refusing on containment instead would cost the language server that library on every keystroke in a program file.
 ///
-/// **A unit is filed where the disk holds every text its fold has read** — its own and those of every unit before it, each restored on a record the disk confirms or compiled from text the disk holds, whole or over a baseline — which is [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../documentation/design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md)'s rule. How it was compiled is no part of the test: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so the slot is the one a build files. A fold that has read a text the disk does not hold files nothing: a record names what each unit before it contained, so a unit filed after one nothing on disk reproduces would be a miss for every later reader, in the place of a slot that may have held the disk's own.
+/// **A unit is filed where the disk holds every text its fold has read** — its own and those of every unit before it, each restored on a record the disk confirms or compiled from text the disk holds, whole or over a baseline — which is [A command compiles only as far as its answer needs, and a project keeps what it compiled](../../documentation/design/tools/a-command-compiles-only-as-far-as-its-answer-needs-and-a-project-keeps-what-it-compiled.md)'s rule. How it was compiled is no part of the test: a unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so the object is the one a build files. A fold that has read a text the disk does not hold files nothing: a record names what each unit before it contained, so a unit filed after one nothing on disk reproduces would be a miss for every later reader, in the place of an object that may have held the disk's own.
 pub struct Overlaid<'a> {
     cache: &'a Verdicts,
     overlay: &'a Overlay,
@@ -476,7 +476,7 @@ impl Cache for Overlaid<'_> {
         self.cache.get_overlaid(source, self.overlay)
     }
 
-    /// The cabinet's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the slot this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the cabinet nearer than the session, and then the recompile redoes more than it had to and answers the same.
+    /// The cabinet's own answer ([`Verdicts`]' `Cache::baseline`): the session's last unit, then the object this tree filed, then what the scope offered. A build run in another terminal mid-session can leave the cabinet nearer than the session, and then the recompile redoes more than it had to and answers the same.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
         Cache::baseline(self.cache, source, offered)
     }
@@ -487,7 +487,7 @@ impl Cache for Overlaid<'_> {
     ///
     /// **The disk is asked as the unit is handed over**, of everything the fold has read so far, which is what catches a file rewritten while its unit compiled.
     ///
-    /// **A unit that is not filed has no place in the cabinet.** No slot is addressed after another, so a unit that cannot read it is restored as though it were not there, and one that can is compiled over its baseline, each stage asking again what it read of the unit that moved. Saying what an unfiled unit's slot would hold costs a serialization of the whole unit, which on the standard library is most of what a cache would cost a keystroke, and nothing reads it.
+    /// **A unit that is not filed has no place in the cabinet.** No object is addressed after another, so a unit that cannot read it is restored as though it were not there, and one that can is compiled over its baseline, each stage asking again what it read of the unit that moved. Saying what an unfiled unit's object would hold costs a serialization of the whole unit, which on the standard library is most of what a cache would cost a keystroke, and nothing reads it.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
         self.cache.keep(source, unit);
 

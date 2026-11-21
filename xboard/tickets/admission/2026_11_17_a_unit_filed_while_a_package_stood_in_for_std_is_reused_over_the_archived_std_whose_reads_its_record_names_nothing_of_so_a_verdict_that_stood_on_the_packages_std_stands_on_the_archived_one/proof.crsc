@@ -1,2 +1,2 @@
--- With the package unmounted, `/std` is the archived root again, and `/p`, whose address names nothing of which `/std` it was filed over, is offered its slot as a baseline: no read of a fixed unit is recorded, so `d`'s verdict stands, and `/std/Nat/NonZero(0)` is now `False`.
+-- With the package unmounted, `/std` is the archived root again, and `/p`, whose address names nothing of which `/std` it was filed over, is offered its object as a baseline: no read of a fixed unit is recorded, so `d`'s verdict stands, and `/std/Nat/NonZero(0)` is now `False`.
 /p/d

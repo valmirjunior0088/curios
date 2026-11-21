@@ -566,7 +566,7 @@ fn entry_source<'a>(
 
 /// The source each of `units` is compiled from in a fold: over the archived root the first takes the place of, where it takes one ([`stood_in_for`]), every unit of the fold, and that first unit seeing what the root could see ([`granted_in_place`]).
 ///
-/// **Stated once, so a unit has one address.** A unit's slot is a function of its source, so the fold compiling and filing a unit, a payload's probe naming the units it was made from and the payload's filing all read their sources here, and each names a unit by the slot the others do. It reads the roots' prefixes alone and restores none of the prelude, so a probe that hits pays nothing for it.
+/// **Stated once, so a unit has one address.** A unit's address is a function of its source, so the fold compiling and filing a unit, a payload's probe naming the units it was made from and the payload's filing all read their sources here, and each names a unit by the address the others do. It reads the roots' prefixes alone and restores none of the prelude, so a probe that hits pays nothing for it.
 pub fn fold_sources(units: &[RootSource]) -> Vec<UnitSource<'_>> {
     let roots = root_prefixes();
     let withheld = stood_in_for(&roots, units);

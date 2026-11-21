@@ -1,6 +1,6 @@
 //! What the cabinet does across two compilations of the same project.
 //!
-//! Every test here compiles for real, twice, and reads the answer off the fold's own progress events rather than off the cabinet's internals: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with verification broken.
+//! Every test here compiles for real, twice, and reads the answer off the fold's own progress events rather than off the cabinet's internals: whether a unit was reused is exactly the question a caller asks, and asserting on an object's address would pass just as happily with verification broken.
 
 use {
     super::*,
@@ -51,7 +51,7 @@ fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
-/// A question's reading of the cabinet, as far as the cabinet's own pieces go: verified through an overlay, taking a disagreeing slot as a baseline, and keeping what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
+/// A question's reading of the cabinet, as far as the cabinet's own pieces go: verified through an overlay, taking a disagreeing object as a baseline, and keeping what it compiled without filing it, as the `wonder` engine does with a unit the disk does not answer for.
 struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
 
 impl Cache for Overlaid<'_> {
@@ -205,7 +205,7 @@ impl Cache for Recorded<'_> {
     }
 }
 
-/// A unit taken back from a slot carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the cabinet rather than from what elaboration concluded, and the reads a recompile over it invalidates along.
+/// A unit taken back from an object carries the record the certifier filed beside it, every entry whole — its totality and what judging it read — so a later walk reads the verdicts on its definitions from the cabinet rather than from what elaboration concluded, and the reads a recompile over it invalidates along.
 #[test]
 fn a_reused_unit_brings_its_certification_back() {
     let root = project("certified");
@@ -239,7 +239,7 @@ fn a_reused_unit_brings_its_certification_back() {
     );
 }
 
-/// A unit taken back from a slot lies in its package's files: what was stored of each source is its name, and the cabinet restores the unit for the source asking, whose package stands on this machine, so a place in it reads as a place in a unit compiled here does.
+/// A unit taken back from an object lies in its package's files: what was stored of each source is its name, and the cabinet restores the unit for the source asking, whose package stands on this machine, so a place in it reads as a place in a unit compiled here does.
 #[test]
 fn a_reused_unit_lies_in_its_packages_files() {
     let root = project("filed");
@@ -336,7 +336,7 @@ fn an_overlaid_compilation_is_verified_by_the_text_it_would_read() {
     );
 }
 
-/// A slot is addressed without its contents, so it is the *verification* that has to notice an edit. This is the half that would still pass if the record were never checked.
+/// An object is addressed without its contents, so it is the *verification* that has to notice an edit. This is the half that would still pass if the record were never checked.
 #[test]
 fn an_edited_unit_is_not_reused() {
     let root = project("edited");
@@ -348,7 +348,7 @@ fn an_edited_unit_is_not_reused() {
     assert!(!reused(&root), "and refused once its source differs");
 }
 
-/// A unit is reused only under the claims its package made when it was compiled. A manifest whose provider's `answers` table has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where a slot that still answered would vouch for claims nobody checked.
+/// A unit is reused only under the claims its package made when it was compiled. A manifest whose provider's `answers` table has changed since is a disagreement like an edited source, so what it claims now is held to the unit's declarations again, where an object that still answered would vouch for claims nobody checked.
 #[test]
 fn a_unit_is_not_reused_under_other_claims() {
     const ROW: &str = concat!(
@@ -383,11 +383,11 @@ fn a_unit_is_not_reused_under_other_claims() {
     assert!(reused(&root), "then stored under the claims it has now");
 }
 
-/// A slot filed by one project does not answer for another's source where its files hold other texts, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do: its record's names resolve to this project's files.
+/// An object filed by one project does not answer for another's source where its files hold other texts, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do: its record's names resolve to this project's files.
 ///
 /// A cabinet is shared wherever one is named for every project a run sees, so this is reachable.
 #[test]
-fn a_slot_does_not_answer_for_another_projects_source() {
+fn an_object_does_not_answer_for_another_projects_source() {
     let mine = project("mine");
     let theirs = project("theirs");
     let directory = temporary("not-answering-shared");
@@ -405,9 +405,9 @@ fn a_slot_does_not_answer_for_another_projects_source() {
 
 /// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
 ///
-/// The dependency sits outside both projects, standing in for the `sources/` tree `curate` materializes in a shared cabinet — the only way two projects ever read one unit's source from one path. `mine` never compiles it before `theirs` does, so a hit has nowhere to come from but the slot `theirs` filed.
+/// The dependency sits outside both projects, standing in for the `sources/` tree `curate` materializes in a shared cabinet — the only way two projects ever read one unit's source from one path. `mine` never compiles it before `theirs` does, so a hit has nowhere to come from but the object `theirs` filed.
 #[test]
-fn a_slot_answers_for_a_dependency_both_projects_read() {
+fn an_object_answers_for_a_dependency_both_projects_read() {
     let materialized = temporary("materialized");
     write(
         &materialized,
@@ -445,35 +445,35 @@ fn a_damaged_unit_is_not_reused() {
     reused(&root);
     assert!(reused(&root), "filed by the first compilation");
 
-    let slot = own(&root).verdict_files().pop().expect("one slot");
-    let mut bytes = fs::read(&slot).unwrap();
+    let unit = own(&root).unit_files().pop().expect("one object");
+    let mut bytes = fs::read(&unit).unwrap();
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
-    fs::write(&slot, &bytes).unwrap();
+    fs::write(&unit, &bytes).unwrap();
 
     assert!(!reused(&root), "damaged bytes are not the bytes filed");
-    assert!(reused(&root), "and the recompile repairs the slot");
+    assert!(reused(&root), "and the recompile repairs the object");
 }
 
-/// The cabinet holds one slot per unit rather than one per compile — the property the address exists to have.
+/// The cabinet holds one object per unit rather than one per compile — the property the address exists to have.
 #[test]
-fn compiling_repeatedly_files_one_slot() {
+fn compiling_repeatedly_files_one_object() {
     let root = project("bounded");
 
     for _ in 0..4 {
         reused(&root);
     }
 
-    let slots = fs::read_dir(own(&root).verdicts())
+    let objects = fs::read_dir(own(&root).objects())
         .expect("a cabinet with units in it")
         .count();
 
-    assert_eq!(slots, 1, "four compiles of one unit, one slot");
+    assert_eq!(objects, 1, "four compiles of one unit, one object");
 }
 
-/// Opening a cabinet is not a decision to file anything in it: the compiler's memo is written by the first slot that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
+/// Opening a cabinet is not a decision to file anything in it: the compiler's memo is written by the first object that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
 #[test]
-fn opening_a_cabinet_writes_nothing_until_a_slot_is_addressed() {
+fn opening_a_cabinet_writes_nothing_until_a_unit_is_addressed() {
     let root = temporary("untouched");
     fs::create_dir_all(&root).unwrap();
 
@@ -490,7 +490,7 @@ fn opening_a_cabinet_writes_nothing_until_a_slot_is_addressed() {
     );
 }
 
-/// A lint stores no copy of its source: it stands in a text of its unit, whose anchors hold that text once, beside the slot. So a library that leaves one binder unused files slots larger than its clean twin's by about the lint, not by the library's text again.
+/// A lint stores no copy of its source: it stands in a text of its unit, whose anchors hold that text once, beside the object. So a library that leaves one binder unused files unit files larger than its clean twin's by about the lint, not by the library's text again.
 #[test]
 fn a_lint_stores_no_copy_of_its_source() {
     let source = |binders: &str| {
@@ -509,7 +509,7 @@ fn a_lint_stores_no_copy_of_its_source() {
         write(&root, "shape/lib.crs", library);
         folded(&root);
 
-        slots(&root).iter().map(Vec::len).sum::<usize>()
+        filed(&root).iter().map(Vec::len).sum::<usize>()
     };
     let clean = source("n: Nat");
 
@@ -517,24 +517,24 @@ fn a_lint_stores_no_copy_of_its_source() {
 
     assert!(
         grown < clean.len() / 4,
-        "one lint grew the slots by {grown} bytes, over a library of {} bytes",
+        "one lint grew the unit files by {grown} bytes, over a library of {} bytes",
         clean.len()
     );
 }
 
-/// The bytes of every slot the cabinet at `root` holds.
-fn slots(root: &Path) -> Vec<Vec<u8>> {
-    let mut slots = own(root)
-        .verdict_files()
+/// The bytes of every object's unit file the cabinet at `root` holds.
+fn filed(root: &Path) -> Vec<Vec<u8>> {
+    let mut filed = own(root)
+        .unit_files()
         .into_iter()
-        .map(|slot| fs::read(slot).unwrap())
+        .map(|unit| fs::read(unit).unwrap())
         .collect::<Vec<_>>();
-    slots.sort();
+    filed.sort();
 
-    slots
+    filed
 }
 
-/// A unit held built is the baseline of its source compiled tested, and one held tested the baseline of it built: the two differ by the source's tests alone, so neither compiles whole after the other, and each is then filed under a slot of its own.
+/// A unit held built is the baseline of its source compiled tested, and one held tested the baseline of it built: the two differ by the source's tests alone, so neither compiles whole after the other, and each is then filed under an object of its own.
 #[test]
 fn a_unit_held_for_one_kind_is_the_baseline_of_the_other() {
     let tested = fill!(
@@ -561,9 +561,9 @@ fn a_unit_held_for_one_kind_is_the_baseline_of_the_other() {
     assert_eq!(folded(&tested_first), ["recompiling /shape"]);
 }
 
-/// A slot whose files were edited since it was filed is a baseline, for a query and for a build alike: each compiles the unit over it.
+/// An object whose files were edited since it was filed is a baseline, for a query and for a build alike: each compiles the unit over it.
 #[test]
-fn an_edited_slot_is_a_baseline_for_a_query_and_for_a_build() {
+fn an_edited_object_is_a_baseline_for_a_query_and_for_a_build() {
     let root = project("baseline-edited");
     reused(&root);
 
@@ -576,12 +576,12 @@ fn an_edited_slot_is_a_baseline_for_a_query_and_for_a_build() {
     assert_eq!(folded(&root), ["recompiling /shape"]);
 }
 
-/// A unit kept without being filed leaves its slot holding what it held; a build files what it compiled.
+/// A unit kept without being filed leaves its object holding what it held; a build files what it compiled.
 #[test]
-fn a_unit_kept_without_being_filed_leaves_the_slot_as_it_was() {
+fn a_unit_kept_without_being_filed_leaves_its_object_as_it_was() {
     let root = project("baseline-unfiled");
     reused(&root);
-    let before = slots(&root);
+    let before = filed(&root);
 
     write(&root, "shape/lib.crs", &library("second"));
 
@@ -589,15 +589,15 @@ fn a_unit_kept_without_being_filed_leaves_the_slot_as_it_was() {
         folded_overlaid(&root, &Overlay::default()),
         ["recompiling /shape"]
     );
-    assert_eq!(slots(&root), before, "keeping a unit moved its slot");
+    assert_eq!(filed(&root), before, "keeping a unit rewrote its object");
 
     assert_eq!(folded(&root), ["recompiling /shape"]);
-    assert_ne!(slots(&root), before, "a build files what it compiled");
+    assert_ne!(filed(&root), before, "a build files what it compiled");
 }
 
-/// Another project's slot for a package of the same name is a baseline as any slot is: a recompile over it keeps what it lowered from the texts this project still holds, and lowers again what this project wrote otherwise.
+/// Another project's object for a package of the same name is a baseline as any object is: a recompile over it keeps what it lowered from the texts this project still holds, and lowers again what this project wrote otherwise.
 #[test]
-fn another_projects_slot_is_a_baseline() {
+fn another_projects_object_is_a_baseline() {
     let mine = project("baseline-mine");
     let theirs = project("baseline-theirs");
     let directory = temporary("baseline-shared");
@@ -612,9 +612,9 @@ fn another_projects_slot_is_a_baseline() {
     );
 }
 
-/// A slot another project filed answers for this one where this project's files hold the texts it was compiled from: the unit is the one this project would compile, so a cabinet shared across projects compiles it once.
+/// An object another project filed answers for this one where this project's files hold the texts it was compiled from: the unit is the one this project would compile, so a cabinet shared across projects compiles it once.
 #[test]
-fn a_slot_answers_for_another_project_holding_its_texts() {
+fn an_object_answers_for_another_project_holding_its_texts() {
     let mine = project("sharing-mine");
     let theirs = project("sharing-theirs");
     let directory = temporary("sharing-shared");
@@ -746,11 +746,11 @@ fn an_entrys_declarations_are_filed_by_the_executable_it_is() {
     assert_eq!(entered(&root, "tool.crs", Some("tool")), "reused");
 }
 
-/// An executable's slot answers only for the file its entry is: a manifest that points the executable at another file finds the slot's record naming the first, whose text still stands, and compiles the second's declarations rather than believing the first's.
+/// An executable's object answers only for the file its entry is: a manifest that points the executable at another file finds the object's record naming the first, whose text still stands, and compiles the second's declarations rather than believing the first's.
 ///
 /// Mutation-checked at `agrees`: with the record held only to the files it names, the second file's term is compiled over the first file's declarations.
 #[test]
-fn an_executables_slot_answers_for_no_file_but_the_one_it_was_filed_from() {
+fn an_executables_object_answers_for_no_file_but_the_one_it_was_filed_from() {
     let root = project("entry-moved");
     write(&root, "x.crs", DECLARING_ENTRY);
     write(
@@ -764,7 +764,7 @@ fn an_executables_slot_answers_for_no_file_but_the_one_it_was_filed_from() {
     assert_ne!(
         entered(&root, "y.crs", Some("prog")),
         "reused",
-        "the slot filed from x.crs answered for y.crs"
+        "the object filed from x.crs answered for y.crs"
     );
 }
 
@@ -800,9 +800,9 @@ fn library_of_three(word: &str) -> String {
 
 /// The packs of the cabinet at `root`, each by where it is kept.
 fn packs(root: &Path) -> Vec<PathBuf> {
-    fs::read_dir(own(root).verdicts())
-        .expect("a cabinet with slots in it")
-        .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
+    fs::read_dir(own(root).objects())
+        .expect("a cabinet with objects in it")
+        .flat_map(|object| fs::read_dir(object.unwrap().path()).unwrap())
         .map(|pack| pack.unwrap().path())
         .filter(|path| {
             path.extension()
@@ -825,7 +825,7 @@ fn packed_counts(root: &Path) -> Vec<usize> {
     counts
 }
 
-/// A unit compiled over its slot files the blobs it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration, its erasure and its judgment, each named by what it was made from, beside the pack the first filing wrote.
+/// A unit compiled over its object files the blobs it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration, its erasure and its judgment, each named by what it was made from, beside the pack the first filing wrote.
 #[test]
 fn a_refiling_writes_only_the_blobs_it_made() {
     let root = project("refiled-blobs");
@@ -842,7 +842,7 @@ fn a_refiling_writes_only_the_blobs_it_made() {
     assert!(reused(&root), "and what it filed is restored");
 }
 
-/// A slot names blobs it does not hold: one whose blobs are gone is not restored, and the compile that misses writes them again.
+/// An object names blobs it does not hold: one whose blobs are gone is not restored, and the compile that misses writes them again.
 #[test]
 fn a_unit_whose_blobs_are_gone_is_compiled_again() {
     let root = project("blobs-gone");
@@ -855,7 +855,7 @@ fn a_unit_whose_blobs_are_gone_is_compiled_again() {
         fs::remove_file(pack).expect("a pack a filing wrote");
     }
 
-    assert!(!reused(&root), "a slot naming blobs nowhere is no unit");
+    assert!(!reused(&root), "an object naming blobs nowhere is no unit");
     assert!(reused(&root), "and the recompile writes them again");
 }
 

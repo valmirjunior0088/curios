@@ -538,7 +538,7 @@ ${check}let /lib/t : /lib/Q =
     )
 }
 
-/// A unit compiled for one kind is the baseline of its text compiled for the other ([Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md)): `/lib` filed tested with `Q` true, then compiled built, without its test and with `Q` false, over that slot. `t`'s terms are the slot's and it read `Q`'s body, so it is judged again and refused.
+/// A unit compiled for one kind is the baseline of its text compiled for the other ([Cached verdicts](../../../documentation/design/soundness/cached-verdicts.md)): `/lib` filed tested with `Q` true, then compiled built, without its test and with `Q` false, over that object. `t`'s terms are the object's and it read `Q`'s body, so it is judged again and refused.
 #[test]
 fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_it_read_moved() {
     let directory = Temporary::new("history", "kinds");
@@ -571,7 +571,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
         verdicts
             .baseline(&UnitSource::mounted(&built_root), None)
             .is_some(),
-        "the slot filed tested is offered to the text compiled built"
+        "the object filed tested is offered to the text compiled built"
     );
     let refused = with_prelude(|prelude| {
         super::read(

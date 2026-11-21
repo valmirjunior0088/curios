@@ -349,7 +349,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
 
 /// **A cached unit and a freshly elaborated one produce the same program**, and changing the terms invalidates.
 ///
-/// The dependency is what gets stored here: the handle is told of no executable, so the unit of the entry's own declarations has no slot. So the third run below is the one that matters: it reuses a verdict reached in the first, and has to agree with it. The middle run is the control that says the cabinet is keyed on content rather than merely written to, since an edited dependency must not be answered from it.
+/// The dependency is what gets stored here: the handle is told of no executable, so the unit of the entry's own declarations has no object. So the third run below is the one that matters: it reuses a verdict reached in the first, and has to agree with it. The middle run is the control that says the cabinet is keyed on content rather than merely written to, since an edited dependency must not be answered from it.
 #[test]
 fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     let root = tree(
@@ -378,7 +378,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     let cold = cached(&app, None, Some(&verdicts));
     assert_eq!(cold, b"42");
     assert!(
-        Cabinet::of(&root, None).verdicts().is_dir(),
+        Cabinet::of(&root, None).objects().is_dir(),
         "the dependency's verdict is recorded"
     );
 
@@ -436,7 +436,7 @@ fn a_library_test_declaration_rides_through_the_cabinet() {
 
     assert_eq!(cached(&app, None, Some(&verdicts)), b"42");
     assert!(
-        Cabinet::of(&root, None).verdicts().is_dir(),
+        Cabinet::of(&root, None).objects().is_dir(),
         "the dependency's verdict is recorded"
     );
     assert_eq!(

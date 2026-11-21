@@ -1,6 +1,6 @@
-//! The packs of one slot's address, in the slot's own directory beside its verdict: the blobs its slots name, written before a slot names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric.
+//! The packs at one address, in its object's own directory beside the object's `unit` file: the blobs the object names, written before the object names them ([`Packs::write`]), found by name ([`Packs::find`]), and kept geometric.
 //!
-//! **Written whole and renamed into place, as a slot is.** A pack is complete before it bears its name, and its name is the digest of its bytes, so a reader sees a pack whole or not at all, and two filers packing the same blobs write one file twice.
+//! **Written whole and renamed into place, as a unit file is.** A pack is complete before it bears its name, and its name is the digest of its bytes, so a reader sees a pack whole or not at all, and two filers packing the same blobs write one file twice.
 //!
 //! **A pack is held to its name where a blob of it is read.** Its bytes are digested once, the first time anything of it is asked for, which vouches for every blob it holds. A pack whose bytes are not its name is damaged, since nothing renames a pack into place before it is whole: it is taken away, and a blob only it held is not found and is written again by the next filing that names it.
 //!
@@ -10,9 +10,9 @@
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where a blob is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
 //!
-//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): a blob the address's slot has not named for five days is dropped from its pack, each address keeping a table of the blobs a collection found its slot not naming, with when one first did, and a staging file five days old is swept ([`sweep`]). A read writes nothing. Every time is asked of the clock the handle was opened at.
+//! **What no object names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): a blob the address's object has not named for five days is dropped from its pack, each address keeping a table of the blobs a collection found its object not naming, with when one first did, and a staging file five days old is swept ([`sweep`]). A read writes nothing. Every time is asked of the clock the handle was opened at.
 //!
-//! Why a slot's blobs are kept in packs at its address, merged so and collected so, is the crate `README.md`'s.
+//! Why an object's blobs are kept in packs at its address, merged so and collected so, is the crate `README.md`'s.
 
 #[cfg(test)]
 mod tests;
@@ -39,13 +39,13 @@ const EXTENSION: &str = "pack";
 /// How many times the blobs of the pack before it each pack holds, in a geometric address.
 const FACTOR: usize = 2;
 
-/// The file that says when the address was last collected, and which blobs a collection found its slot not naming, since when ([`Collection`]).
+/// The file that says when the address was last collected, and which blobs a collection found its object not naming, since when ([`Collection`]).
 const COLLECTION: &str = "collection";
 
 /// How long an address goes between collections.
 const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// How long a blob goes unnamed by its address's slot before a collection drops it, and a staging file stands before it is swept ([`sweep`]).
+/// How long a blob goes unnamed by its address's object before a collection drops it, and a staging file stands before it is swept ([`sweep`]).
 pub const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 
 /// The packs of one address.
@@ -101,7 +101,7 @@ impl Packs {
             .collect()
     }
 
-    /// Collect this address where a day has passed since it was last collected, `named` being what its slot names: a blob it does not name is noted with the time a collection first found it so, one named again is forgotten, and one unnamed for [`GRACE`] is dropped from its pack, which is taken away where it holds nothing else and written again holding the rest otherwise. Nothing is collected at an address never collected before, which starts its clock.
+    /// Collect this address where a day has passed since it was last collected, `named` being what its object names: a blob it does not name is noted with the time a collection first found it so, one named again is forgotten, and one unnamed for [`GRACE`] is dropped from its pack, which is taken away where it holds nothing else and written again holding the rest otherwise. Nothing is collected at an address never collected before, which starts its clock.
     pub fn collect(&self, named: &BTreeSet<Digest>) -> io::Result<()> {
         let path = self.directory.join(COLLECTION);
         let earlier = fs::read(&path)
@@ -345,7 +345,7 @@ impl Candidates for Packs {
     }
 }
 
-/// What an address's last collection found: when it ran, and each blob it found the slot not naming, with when a collection first did.
+/// What an address's last collection found: when it ran, and each blob it found the object not naming, with when a collection first did.
 struct Collection {
     at: SystemTime,
     unnamed: BTreeMap<Digest, SystemTime>,

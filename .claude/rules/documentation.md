@@ -52,3 +52,5 @@ A word the project renamed is not written again for what it named, in a document
 | full gate, hand-off gate, `cargo xtask gate` | the handoff, `cargo xtask handoff` | nothing |
 | the store, for `.curios/` or what it keeps for reuse | the cabinet, or `.curios/` | the verb, and a unit's `store` node; the elaborator's, the universe solver's and the certifier's own stores; Wasmtime's `Store`, the ABI's `ForeignStore` and a store into memory |
 | object, for a content-addressed piece of a stored unit | blob (`curios_common::Blob`) | a unit as the cabinet keeps it; a heap object, a trait object, a JavaScript or JSON object, and git's |
+| slot, for where the cabinet files a unit or a payload | object (`objects/<address>/`), its address, or the file a record frames | a row's field position in the back end, a registry's slot, and a field's or an argument's place in a term |
+| verdict, for the cabinet's family or a unit's file in it | `objects/`, and an object's `unit` file | a checker's judgment, and `curios-verdict` and its `Verdicts`, which keep one as it was filed |

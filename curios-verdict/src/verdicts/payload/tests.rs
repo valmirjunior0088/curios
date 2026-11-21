@@ -1,8 +1,8 @@
 //! What the payload family does across two invocations of one target.
 //!
-//! Every test here compiles for real and asks the question a caller asks — was this invocation served from the cabinet — rather than reading the cabinet's internals. Asserting on a slot name would pass just as happily with verification broken.
+//! Every test here compiles for real and asks the question a caller asks — was this invocation served from the cabinet — rather than reading the cabinet's internals. Asserting on a payload's address would pass just as happily with verification broken.
 //!
-//! The address parts and their separation are `curios-package`'s to test, and are: this file is about the *record*, which is what stands between an address and a stale answer.
+//! The address parts and their separation are the `address` module's to test, and are: this file is about the *record*, which is what stands between an address and a stale answer.
 
 use {
     super::*,
@@ -187,33 +187,33 @@ fn greeting(word: &str) -> String {
     format!("pub let word : /std/Str =\n    \"{word}\";\n")
 }
 
-/// The directory the payload family files the native slots of the project at `root` in.
+/// The directory the payload family files the native payloads of the project at `root` in.
 fn payloads(root: &Path) -> PathBuf {
     Cabinet::of(root, None).payloads(Runs::Native { engine: ENGINE }.target())
 }
 
-/// The payload slots at `root`, counting a cabinet that was never created as the none it holds — which is what a refusal to file leaves behind.
+/// The payloads at `root`, counting a cabinet that was never created as the none it holds — which is what a refusal to file leaves behind.
 fn filed(root: &Path) -> usize {
     fs::read_dir(payloads(root)).map_or(0, Iterator::count)
 }
 
-/// The slots the payload family holds for the project at `root`.
-fn slots(root: &Path) -> usize {
+/// The payloads the payload family holds for the project at `root`.
+fn held(root: &Path) -> usize {
     fs::read_dir(payloads(root))
         .expect("a cabinet with payloads in it")
         .count()
 }
 
-/// The one payload slot's file, for a test that has to damage what is in it.
-fn slot_of(root: &Path) -> PathBuf {
-    let mut slots = fs::read_dir(payloads(root))
+/// The one payload's file, for a test that has to damage what is in it.
+fn payload_of(root: &Path) -> PathBuf {
+    let mut filed = fs::read_dir(payloads(root))
         .expect("a cabinet with payloads in it")
-        .map(|slot| slot.unwrap().path())
+        .map(|payload| payload.unwrap().path())
         .collect::<Vec<_>>();
 
-    assert_eq!(slots.len(), 1, "these fixtures build one executable");
+    assert_eq!(filed.len(), 1, "these fixtures build one executable");
 
-    slots.pop().unwrap()
+    filed.pop().unwrap()
 }
 
 /// The point of the thing: a program nothing has changed is not compiled again, and what comes back is what the compile produced.
@@ -305,7 +305,7 @@ fn an_edited_dependency_is_not_reused() {
     assert!(run(&root).reused, "the recompile refiles");
 }
 
-/// Changing what a program is compiled *against* invalidates the record and leaves the address where it was: a payload's slot names its executable, its compiler and its engine, and what every unit of the compilation contained is what its record vouches for. So an executable has one slot whatever it has been compiled against, and each configuration files over the last.
+/// Changing what a program is compiled *against* invalidates the record and leaves the address where it was: a payload's address names its executable, its compiler and its engine, and what every unit of the compilation contained is what its record vouches for. So an executable has one object whatever it has been compiled against, and each configuration files over the last.
 #[test]
 fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     let shape = temporary("addressed-shape");
@@ -324,8 +324,8 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     write(&root, "app.crs", "/std/print(/app/word)\n");
 
     run(&root);
-    assert!(run(&root).reused, "one slot, filed and found");
-    assert_eq!(slots(&root), 1);
+    assert!(run(&root).reused, "one address, filed and found");
+    assert_eq!(held(&root), 1);
 
     // The dependency set is what the manifest declares, so changing it is a manifest edit — which is also what makes this test about a configuration rather than about a flag.
     let plain = fs::read_to_string(root.join("curios.toml")).expect("a manifest");
@@ -336,20 +336,20 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
         !run(&root).reused,
         "declaring another unit is a different compilation, which the record of the first does not vouch for"
     );
-    assert_eq!(slots(&root), 1, "filed over the first, at the one address");
+    assert_eq!(held(&root), 1, "filed over the first, at the one address");
     assert!(run(&root).reused, "and found there");
 
     write(&root, "curios.toml", &plain);
     assert!(
         !run(&root).reused,
-        "dropping the dependency again is a compilation the slot no longer holds"
+        "dropping the dependency again is a compilation the payload no longer holds"
     );
-    assert_eq!(slots(&root), 1, "two configurations, one slot");
+    assert_eq!(held(&root), 1, "two configurations, one address");
 }
 
-/// Two executables of one package are two programs, so they occupy two slots and neither answers for the other.
+/// Two executables of one package are two programs, so they are two payloads and neither answers for the other.
 #[test]
-fn two_executables_occupy_two_slots() {
+fn two_executables_are_two_payloads() {
     let root = temporary("two-executables");
 
     write(
@@ -370,12 +370,12 @@ fn two_executables_occupy_two_slots() {
     assert!(!one.reused && !two.reused, "neither is stored yet");
     assert_ne!(one.payload, two.payload, "and they are different programs");
 
-    assert_eq!(slots(&root), 2, "one slot each");
+    assert_eq!(held(&root), 2, "one address each");
     assert!(invoke(&root, Some("one")).reused);
     assert!(invoke(&root, Some("two")).reused);
 }
 
-/// The payload's own digest is in its record, so a slot whose artifact has been damaged is a miss here rather than a failure to deserialize at run time.
+/// The payload's own digest is in its record, so a payload whose artifact has been damaged is a miss here rather than a failure to deserialize at run time.
 #[test]
 fn a_corrupted_payload_is_not_reused() {
     let root = project("corrupted");
@@ -384,17 +384,17 @@ fn a_corrupted_payload_is_not_reused() {
     assert!(run(&root).reused, "filed by the first invocation");
 
     // The last byte is the artifact's: the record is framed ahead of it.
-    let stored = slot_of(&root);
+    let stored = payload_of(&root);
     let mut bytes = fs::read(&stored).unwrap();
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
     fs::write(&stored, &bytes).unwrap();
 
     assert!(!run(&root).reused, "damaged bytes are not the bytes filed");
-    assert!(run(&root).reused, "and the recompile repairs the slot");
+    assert!(run(&root).reused, "and the recompile repairs the payload");
 }
 
-/// A slot is written beside its name and renamed into place, so an interrupted write leaves the slot as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a cabinet can be found in, and each reads as a miss or as the intact slot it is.
+/// A payload is written beside its name and renamed into place, so an interrupted write leaves the payload as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a cabinet can be found in, and each reads as a miss or as the intact object it is.
 #[test]
 fn no_state_a_cabinet_is_left_in_reads_as_a_hit_it_is_not() {
     let root = project("interrupted");
@@ -402,44 +402,44 @@ fn no_state_a_cabinet_is_left_in_reads_as_a_hit_it_is_not() {
     run(&root);
     assert!(run(&root).reused, "filed by the first invocation");
 
-    let slot = slot_of(&root);
-    let filed = fs::read(&slot).unwrap();
-    let restore = || fs::write(&slot, &filed).unwrap();
+    let payload = payload_of(&root);
+    let filed = fs::read(&payload).unwrap();
+    let restore = || fs::write(&payload, &filed).unwrap();
 
-    // A write interrupted before its rename: the slot is absent and a staging file sits beside where it would be.
-    let staged = slot.with_extension("0.part");
-    fs::rename(&slot, &staged).unwrap();
+    // A write interrupted before its rename: the payload is absent and a staging file sits beside where it would be.
+    let staged = payload.with_extension("0.part");
+    fs::rename(&payload, &staged).unwrap();
     assert!(
         !run(&root).reused,
-        "a staging file is not a slot, whatever it holds"
+        "a staging file is not a payload, whatever it holds"
     );
     fs::remove_file(&staged).unwrap();
     restore();
 
-    // A slot cut short past its record, which the record's own digest catches.
-    fs::write(&slot, &filed[..filed.len() - 1]).unwrap();
+    // A payload cut short past its record, which the record's own digest catches.
+    fs::write(&payload, &filed[..filed.len() - 1]).unwrap();
     assert!(
         !run(&root).reused,
         "a truncated artifact is not the artifact filed"
     );
     restore();
 
-    // A slot cut short inside its record, which is not a slot at all.
-    fs::write(&slot, &filed[..24]).unwrap();
+    // A payload cut short inside its record, which is not framed at all.
+    fs::write(&payload, &filed[..24]).unwrap();
     assert!(
         !run(&root).reused,
-        "a file that will not read back as a slot is ignored"
+        "a file that will not read back as a payload is ignored"
     );
     restore();
 
-    assert!(run(&root).reused, "and the intact slot still answers");
+    assert!(run(&root).reused, "and the intact payload still answers");
 }
 
-/// A slot filed by one project must not answer for another's, even when both address it identically — which two projects declaring a package and an executable of one name, compiled by one compiler after one chain, always do.
+/// A payload filed by one project must not answer for another's, even when both address it identically — which two projects declaring a package and an executable of one name, compiled by one compiler after one chain, always do.
 ///
 /// A cabinet is shared wherever one is named for every project a run sees, so this is reachable. The dependency sits outside both projects and is read from that one path by each, standing in for the `sources/` tree `curate` materializes — so the *units* legitimately cross and only the payload's own record can refuse this.
 #[test]
-fn a_slot_does_not_answer_for_another_projects_program() {
+fn a_payload_does_not_answer_for_another_projects_program() {
     let shape = temporary("aliasing-shape");
     write(
         &shape,
@@ -516,7 +516,7 @@ fn an_unwritable_cabinet_refuses_once_and_stops_nothing() {
 
 /// A payload is filed only over a chain a later look-up can derive — never over one with a gap in it.
 ///
-/// **A unit with nothing on disk is the gap, and `RootSource::supplied` is what builds one.** It holds no directory, so `Verdicts::slot` declines to address it: the fold compiles it every time and places nothing for it, which leaves `Verdicts::placed` one entry shorter than the scope it folded. [`Verdicts::payload_get`] derives its own chain through `Verdicts::chain`, which refuses that unit outright — so a payload filed against the short chain is addressed under a prefix the probe never computes. Nothing stale comes back; a slot is simply written that nothing will ever read, on every invocation, forever.
+/// **A unit with nothing on disk is the gap, and `RootSource::supplied` is what builds one.** It holds no directory, so `Verdicts::address` declines to address it: the fold compiles it every time and places nothing for it, which leaves `Verdicts::placed` one entry shorter than the scope it folded. [`Verdicts::payload_get`] derives its own chain through `Verdicts::chain`, which refuses that unit outright — so a payload filed against the short chain is addressed under a prefix the probe never computes. Nothing stale comes back; an object is simply written that nothing will ever read, on every invocation, forever.
 ///
 /// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the cabinet's own shape rather than on a reuse verdict, because the failure it guards against produces no wrong answer to assert against: it produces a write.
 #[test]

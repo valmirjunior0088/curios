@@ -3,19 +3,19 @@
 use super::*;
 
 impl Cabinet {
-    /// The directory every unit's slot is filed in.
-    pub fn verdicts(&self) -> PathBuf {
-        self.directory.join(VERDICTS)
+    /// The directory every unit's object is kept in.
+    pub fn objects(&self) -> PathBuf {
+        self.directory.join(OBJECTS)
     }
 
-    /// The [`verdict`](Self::verdict) of every slot filed in the cabinet, in no order: what a test reads, damages or writes again of a slot. None where nothing is filed.
-    pub fn verdict_files(&self) -> Vec<PathBuf> {
-        let Ok(slots) = std::fs::read_dir(self.verdicts()) else {
+    /// The [`unit`](Self::unit) file of every object kept in the cabinet, in no order: what a test reads, damages or writes again of an object. None where nothing is filed.
+    pub fn unit_files(&self) -> Vec<PathBuf> {
+        let Ok(objects) = std::fs::read_dir(self.objects()) else {
             return Vec::new();
         };
 
-        slots
-            .map(|slot| slot.expect("a listed slot").path().join(VERDICT))
+        objects
+            .map(|object| object.expect("a listed object").path().join(UNIT))
             .collect()
     }
 

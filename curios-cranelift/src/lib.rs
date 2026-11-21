@@ -43,7 +43,7 @@ pub fn module_exports(bytes: &[u8]) -> Result<Vec<String>, String> {
 
 /// Fold what decides whether a `.cwasm` produced here deserializes elsewhere into `hasher`: the target triple, the ISA flags Cranelift compiled for, this engine's tunables and wasm feature set, and wasmtime's own version.
 ///
-/// **A fold rather than a digest, because the digest is the caller's vocabulary and wasmtime is this crate's.** A payload's slot address has to carry this — it is the one input neither the compiler binary's digest nor any recorded source file covers, since Cranelift compiles for the host's ISA — and both halves of that sentence name a crate the other must not depend on. Handing over a [`Hasher`] to write into keeps `sha2` out of the engine's crates and `wasmtime` out of `curios`, which is where the address is assembled.
+/// **A fold rather than a digest, because the digest is the caller's vocabulary and wasmtime is this crate's.** A payload's address has to carry this — it is the one input neither the compiler binary's digest nor any recorded source file covers, since Cranelift compiles for the host's ISA — and both halves of that sentence name a crate the other must not depend on. Handing over a [`Hasher`] to write into keeps `sha2` out of the engine's crates and `wasmtime` out of `curios`, which is where the address is assembled.
 ///
 /// Wasmtime's own stamp inside the artifact stays the backstop. This decides where a payload is looked for; `Module::deserialize` still decides whether the bytes found there may be run, and refuses whatever this failed to separate.
 pub fn engine_compatibility<H: Hasher>(hasher: &mut H) {

@@ -19,5 +19,5 @@
 - **A `wonder document` query that writes files**: a query answers on stdout and leaves no product on disk.
 - **The record built by the lowering and carried on the unit**, whole or kept a page at a time over a baseline: every compilation of a library builds or copies what two commands read, every stored unit holds it, and every process that compiles restores the prelude's.
 - **A second marker for module prose**, Rust's `//!`; **positional rules for a block at the top of a file, or `---` after code on a line**, each readable differently after a reformat; **Haskell's `-- |` or `--|`**, whose bar stacks on the constructors' bars.
-- **Loose files and standard input as subjects**, which have no consumer and nowhere to be filed; **an archived unit named by path**, when a cabinet slot's library is documented by `document` itself and the prelude image is the one the compiler carries.
+- **Loose files and standard input as subjects**, which have no consumer and nowhere to be filed; **an archived unit named by path**, when a cabinet object's library is documented by `document` itself and the prelude image is the one the compiler carries.
 - **The dependency closure documented as one bundle**, deferred with an audience parameter, since the record already carries each referent's identity.

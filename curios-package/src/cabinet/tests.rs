@@ -14,7 +14,7 @@ fn a_materialized_tree_files_under_its_scheme() {
     );
 }
 
-/// The families never share a namespace, so a package named `c1` cannot land on a scheme's directory, a package named `cabinet` cannot land in the cabinet, and a unit slot cannot land on a payload's.
+/// The families never share a namespace, so a package named `c1` cannot land on a scheme's directory, a package named `cabinet` cannot land in the cabinet, and an object cannot land on a payload.
 #[test]
 fn the_families_do_not_share_a_namespace() {
     let root = PathBuf::from("/w/u");
@@ -58,9 +58,9 @@ fn the_families_do_not_share_a_namespace() {
         "and documentation sits beside the executables, under its package"
     );
     assert_ne!(
-        cabinet.verdict("key"),
+        cabinet.unit("key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
-        "one slot name, two families, two places"
+        "one address, two families, two places"
     );
 }
 
@@ -72,8 +72,8 @@ fn kept(cabinet: &Cabinet) -> [PathBuf; 8] {
     [
         cabinet.source(&hash),
         cabinet.foreign(&module),
-        cabinet.verdict("key"),
-        cabinet.slot("key"),
+        cabinet.unit("key"),
+        cabinet.object("key"),
         cabinet.payload(Runs::Native { engine: "e" }, "key"),
         cabinet.payload(Runs::Browser, "key"),
         cabinet.compiler(),

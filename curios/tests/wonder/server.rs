@@ -510,7 +510,7 @@ fn a_warm_cabinet_does_not_answer_for_the_buffer() {
         String::from_utf8_lossy(&built.stderr)
     );
     assert!(
-        Cabinet::of(&root, None).verdicts().is_dir(),
+        Cabinet::of(&root, None).objects().is_dir(),
         "a build files the library's unit"
     );
 
@@ -895,10 +895,10 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
 #[test]
 fn the_server_says_nothing_of_a_cabinet_that_takes_nothing() {
     let root = project("unstored");
-    // A file where the slots would go.
-    let verdicts = Cabinet::of(&root, None).verdicts();
-    fs::create_dir_all(verdicts.parent().unwrap()).unwrap();
-    fs::write(&verdicts, "").unwrap();
+    // A file where the objects would go.
+    let objects = Cabinet::of(&root, None).objects();
+    fs::create_dir_all(objects.parent().unwrap()).unwrap();
+    fs::write(&objects, "").unwrap();
 
     let uri = format!("file://{}", root.join("util.crs").display());
     let mut editor = Editor::launch(&root);
@@ -926,14 +926,14 @@ fn the_server_says_nothing_of_a_cabinet_that_takes_nothing() {
 #[test]
 fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     let root = project("server-files");
-    let slots = |root: &Path| {
-        let mut slots = Cabinet::of(root, None)
-            .verdict_files()
+    let filed = |root: &Path| {
+        let mut units = Cabinet::of(root, None)
+            .unit_files()
             .into_iter()
-            .map(|slot| fs::read(slot).unwrap())
+            .map(|unit| fs::read(unit).unwrap())
             .collect::<Vec<_>>();
-        slots.sort();
-        slots
+        units.sort();
+        units
     };
 
     let uri = format!("file://{}", root.join("util.crs").display());
@@ -945,9 +945,9 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word: /std/Str =\n    \"placed\";\n"}}}"#, uri));
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
-    let filed = slots(&root);
+    let before = filed(&root);
     assert_eq!(
-        filed.len(),
+        before.len(),
         1,
         "the library, compiled whole from the text on disk"
     );
@@ -955,7 +955,7 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"typed\";\n"}]}}"#, uri));
     let republished = editor.receive();
     assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
-    assert!(slots(&root) == filed, "a keystroke moved the cabinet");
+    assert!(filed(&root) == before, "a keystroke moved the cabinet");
 
     let output = editor.finish();
     assert!(

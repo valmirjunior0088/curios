@@ -638,7 +638,7 @@ pub fn asked_stored(asked: &AskedItems) -> Vec<u8> {
     bytes
 }
 
-/// `unit` stored and restored, the blobs its index names found in one pack of their own, as a cabinet keeps them beside a slot.
+/// `unit` stored and restored, the blobs its index names found in one pack of their own, as a cabinet keeps them beside an object's unit file.
 pub fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
     let blobs = stored.blobs(|_| true).expect("a unit's blobs serialize");

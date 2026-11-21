@@ -6,17 +6,17 @@
 //!
 //! ```text
 //! .curios/
-//!   native/           json/serve      what `curios compile` emits for the native target
-//!   browser/          json/serve/     what it emits for a browser: the page's directory
-//!   documentation/    json/           what `curios document` emits
+//!   native/           json/serve        what `curios compile` emits for the native target
+//!   browser/          json/serve/       what it emits for a browser: the page's directory
+//!   documentation/    json/             what `curios document` emits
 //!   cabinet/
-//!     sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
-//!     foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
-//!     verdicts/       <slot>/         judged units, a directory per unit and compiler: its `verdict`, the packs
-//!                                     of what it names, and what its last collection found
-//!     payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
-//!                     browser/<slot>  and, natively, engine
-//!     compiler                        this machine's memo of the digest of the compiler running now
+//!     sources/        c1/<digest>/      materialized source trees, keyed by their manifest hash
+//!     foreign/        f1/<digest>       fetched foreign modules, keyed by the hash they were accepted against
+//!     objects/        <address>/        judged units, an object per unit and compiler: its `unit` file, the
+//!                                       packs of the blobs it names, and what its last collection found
+//!     payloads/       native/<address>  precompiled payloads, one file per executable, compiler and target —
+//!                     browser/<address> and, natively, engine
+//!     compiler                          this machine's memo of the digest of the compiler running now
 //! ```
 //!
 //! One transient entry passes through the cabinet beside its families: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Cabinet::staging`](crate::Cabinet::staging).
@@ -25,7 +25,7 @@
 //!
 //! That tree is what a project gets when nothing points elsewhere. A cabinet named for every project a run sees (`CURIOS_CABINET`, which the command line reads) stands in for `cabinet/` whole — never for `native/`, `browser/` or `documentation/`, which belong to the package that declared them — so two projects pinning one revision materialize and compile it once, and a project shares, moves or clears what it keeps for reuse as one directory.
 //!
-//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing tree rebuilds once.
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<handle>.<target>]` tables name it, and every family of the cabinet is the plural of what it holds: sources, foreign modules, objects and payloads. A rename orphans entries under an old name rather than misreading them, since an address holds its family's schema tag and nothing looks in the old directory, so an existing tree rebuilds once.
 
 #[cfg(test)]
 mod tests;

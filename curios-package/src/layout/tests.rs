@@ -164,7 +164,7 @@ fn a_program_the_library_declares_as_a_module_is_refused() {
 
 /// Two programs compiled from one file are refused whether or not there is a library: a package of nothing but programs has units sharing its directory too.
 ///
-/// Checked only where there is a library, a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — would be refused in a package with a library and accepted in one without, so adding or deleting a header would turn the rule on and off for a manifest that had not changed.
+/// Checked only where there is a library, a row aliasing the discovered `exe.crs` — two names for one file, two payloads, two emitted binaries — would be refused in a package with a library and accepted in one without, so adding or deleting a header would turn the rule on and off for a manifest that had not changed.
 #[test]
 fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
     let directory = package(

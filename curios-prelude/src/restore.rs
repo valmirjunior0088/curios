@@ -1,4 +1,4 @@
-//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a cabinet slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the blobs the index names, as a cabinet keeps them beside a slot.
+//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as the cabinet frames a unit — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the blobs the index names, as a cabinet keeps them beside an object.
 
 use {
     curios_archive::{Bytes, parted},
@@ -12,11 +12,11 @@ use {
 
 // From `OUT_DIR`, where the build script files them.
 //
-// Two images rather than one paired file, because each is framed as a cabinet slot is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
+// Two images rather than one paired file, because each is framed as a unit the cabinet keeps is: a pair would be a second framing beside the one `curios-unit` defines, and the fold that consumes these wants them separately anyway.
 const SYS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.rkyv"));
 const STD_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.rkyv"));
 
-// The blobs each image's index names, one pack beside each, as a cabinet keeps the packs of a slot's address beside it.
+// The blobs each image's index names, one pack beside each, as a cabinet keeps an object's packs beside its unit file.
 const SYS_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/sys.pack"));
 const STD_PACK: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/std.pack"));
 
@@ -55,7 +55,7 @@ fn validate_archives() -> [Validated; 2] {
 ///
 /// There is deliberately no content-digest check. The archive reaches this function through `include_bytes!`, so it is a constant in the executable's own read-only data, and a digest computed by `build.rs` would be another constant from the same build: hashing one to compare it against the other could not fail except under corruption of our own image, and would cover only the prelude rather than any of the compiler's code. It could not detect a stale or substituted archive, because there is no runtime file to be stale or substituted. Bytecheck is what does real work here — it is what makes handing out references into these bytes sound. Nor is there an image of other sources to reject: the bytes are made, or taken from the checkout's entry of their key, by the build of the sources that compiles this line, so a schema or source fingerprint beside them could only ever compare those sources against themselves.
 ///
-/// The record is not checked against anything here either, for the same reason: nothing in this process is about to believe a verdict on its strength, nor reads it at all. It is carried because the image is framed exactly as a slot is, and this crate's tests hold it to the tree.
+/// The record is not checked against anything here either, for the same reason: nothing in this process is about to believe a verdict on its strength, nor reads it at all. It is carried because the image is framed exactly as an object is, and this crate's tests hold it to the tree.
 fn validate_bytes(root: &str, bytes: &'static [u8], pack: &'static [u8]) -> Validated {
     let (record, artifact) =
         segments(bytes).ok_or_else(|| format!("invalid archived /{root}: not a stored unit"))?;

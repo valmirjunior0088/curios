@@ -36,7 +36,7 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
     let std_text = lower("std", &std_modules, &[&sys_text]);
     validate_syntax_targets(&[sys_text.core(), std_text.core()]);
 
-    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every cabinet slot is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
+    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every unit the cabinet keeps is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
     let sys = unit("sys", sys_text, &Established::nothing(), &[]);
     let std = unit(
         "std",
@@ -51,7 +51,7 @@ pub fn compile(out: &Path) -> Vec<PathBuf> {
     let sys_record = documented("sys", &sys_modules, &sys, &[], &[]);
     let std_record = documented("std", &std_modules, &std, &[&sys], &[&sys_record]);
 
-    // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
+    // Each image carries the record an object carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
     let sys_digest = write_image(out, "sys", &sys, sys_modules.reads(), Vec::new());
     let sys_prefix = Qualifier::from(["sys"]).join();
     write_image(
@@ -308,7 +308,7 @@ fn certified(
     (stated, anf)
 }
 
-/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to `<root>.pack`, one pack as a cabinet keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
+/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the blobs its index names to `<root>.pack`, one pack as a cabinet keeps beside an object's unit file, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: it is made again, or taken from the checkout's entry of the same key (`entry.rs`), whenever what the build links changes — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare one state of the sources against itself.
 ///
@@ -362,7 +362,7 @@ fn write_image(
 
 /// Serialize the roots' documentation records, in the fold's order, to `documentation.rkyv`, twice, refusing a serializer that does not agree with itself.
 ///
-/// Unframed, where a root's image is framed as a cabinet slot is: a record is no unit, nothing compiles against one, and no slot holds one.
+/// Unframed, where a root's image is framed as a unit the cabinet keeps is: a record is no unit, nothing compiles against one, and no object holds one.
 fn write_documentation(directory: &Path, records: &Vec<Documentation>) {
     let first = curios_archive::to_bytes(records)
         .unwrap_or_else(|error| panic!("documentation serialization failed: {error}"));
