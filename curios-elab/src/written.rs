@@ -1005,7 +1005,7 @@ fn parameters_of(context: &mut Context, head: &Term) -> Option<Telescope<Term>> 
 }
 
 /// Whether elaboration fills an omitted hidden member of type `bound` where the context stands with a proof, as it fills an omitted `@` argument: `bound` is a proposition its reduct's one inhabitant proves, or the procedure that proves a bound from the facts in scope does. Any proof does where one is asked, a proposition being proof-irrelevant.
-fn proved_there(context: &mut Context, bound: &Term) -> bool {
+pub fn proved_there(context: &mut Context, bound: &Term) -> bool {
     if !matches!(is_prop(context, bound), Ok(true)) {
         return false;
     }

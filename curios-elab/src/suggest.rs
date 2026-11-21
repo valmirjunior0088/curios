@@ -6,7 +6,7 @@
 //!
 //! Every attempt runs inside the `solution_mark`/`rollback_solutions` bracket, and a hit is materialized (committed solutions spliced) *before* rollback — the pinned values the display shows would otherwise die with the transaction. Any error skips its candidate: the pass is infallible. Attempts are capped at [`ATTEMPTS`] per goal and the rendered list at [`CANDIDATES`], ranked complete-first, then fewest holes, then pool order.
 //!
-//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with one shared hole, a metavariable nothing solves and a report prints `?`, standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
+//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — save a hidden bound the fit leaves open that what fills an omitted one does not prove where the goal stands, written `@?` as a hole of its own, so a complete fit carries no obligation its paste would be refused for; with one shared hole, a metavariable nothing solves and a report prints `?`, standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
 //!
 //! A goal that is a bound — one at a proposition — is answered by what would have filled it had it been left out (`answered`): its reduct's one inhabitant, then the procedure that proves a bound from the facts in scope ([`crate::entail`]), in the same sandbox. A bound that holds is offered as `proved()`, the library's door to that procedure, which asks it again where the fit is pasted, and the report names the facts in scope beside it; the proof the procedure wrote is no fit, since it need not read back. A bound refused keeps the procedure's refusal for the report, which then says beside the goal what it says beside an omitted bound.
 //!
@@ -15,7 +15,7 @@
 use {
     super::{
         Answer, Context, Entailed, Error, HeldFrames, Outcome, check, convert_outcome, entail,
-        facts_in_scope, is_prop, reduce_with, subsume_outcome, trivially_inhabited,
+        facts_in_scope, is_prop, proved_there, reduce_with, subsume_outcome, trivially_inhabited,
         zonk_solved_term_metas,
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
@@ -92,6 +92,8 @@ fn suggest_in_scope(
     }
     // One shared hole per goal, a metavariable nothing solves, so every unsolved slot spells the same bare `?`.
     let hole = Term::hole(context.mint_metavar());
+    // A hidden bound a fit leaves open is written `@?`: a hole at a hidden position reads as `@_`, a place elaboration fills, so it is a goal's.
+    let bound = Term::goal(context.mint_metavar());
 
     // Pool 0 — scope fits: a binder whose type may stand at the goal type is itself a candidate. An unnameable binder is skipped: the paste-and-recheck promise needs a spelling the author can write.
     for (name, type_) in telescope {
@@ -129,6 +131,7 @@ fn suggest_in_scope(
             type_,
             goal_type,
             &hole,
+            &bound,
         ) {
             candidates.push(Candidate {
                 term,
@@ -146,7 +149,9 @@ fn suggest_in_scope(
         // A candidate is a use of its declaration, so its type is read at an instance of its own, as an occurrence's is: the levels and the sorts the declaration leaves to a caller are the goal's to state. The instance goes with the attempt.
         let mark = context.solution_mark();
         let fit = match context.instantiate_declaration(&name, None) {
-            Ok(Some((type_, _))) => apply_fit(context, telescope, &head, &type_, goal_type, &hole),
+            Ok(Some((type_, _))) => {
+                apply_fit(context, telescope, &head, &type_, goal_type, &hole, &bound)
+            }
             Ok(None) | Err(_) => None,
         };
         context.rollback_solutions(mark);
@@ -177,6 +182,12 @@ fn suggest_in_scope(
         .map(|candidate| candidate.term)
         .collect();
     Suggestions { candidates, answer }
+}
+
+/// Whether a hidden member of type `domain` a fit leaves open is a bound nothing proves where the goal stands: one the fit writes open rather than leave for its paste to be refused at.
+fn unproved_bound(context: &mut Context, domain: &Term) -> bool {
+    let domain = zonk_solved_term_metas(context, domain);
+    matches!(is_prop(context, &domain), Ok(true)) && !proved_there(context, &domain)
 }
 
 /// What would have filled the goal says of it, where the goal is a bound: one at a proposition, asked as an omitted one is filled — its reduct's one inhabitant, then the procedure that proves a bound from the facts in scope — with nothing committed. That it holds, with the facts in scope a report names beside it, or the procedure's refusal; `None` where the goal is no proposition, or one the procedure reads nothing in and nothing proves.
@@ -293,7 +304,7 @@ fn fits(context: &mut Context, type_: &Term, goal_type: &Term) -> bool {
     matches!(outcome, Ok(Outcome::Converts))
 }
 
-/// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, offer each explicit slot the output left unpinned to the scope's binders, and hand back the applied candidate with its hole count when the fit is definite, or undecided on exactly the holes — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste); an unsolved explicit slot spells the shared hole.
+/// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, offer each explicit slot the output left unpinned to the scope's binders, and hand back the applied candidate with its hole count when the fit is definite, or undecided on exactly the holes — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste) but a bound nothing proves where the goal stands, which spells `bound`; an unsolved explicit slot spells the shared hole.
 ///
 /// The output is probed *before* any slot is filled, so a slot the goal determines keeps the goal's value (`mk(3)` against `Eq()(3, 3)` with a `k : Nat` in scope stays `mk(3)`, not `mk(k)`), and a binder is offered only to what the goal left open. The first binder whose type fits a slot is taken, in binding order; a later hypothesis that would also have fit is not a second candidate, since the cap is three lines and the reader can see the scope. Every trial is its own transaction inside the attempt's, so a rejected binder leaves no solution behind for the next.
 fn apply_fit(
@@ -303,6 +314,7 @@ fn apply_fit(
     head_type: &Term,
     goal_type: &Term,
     hole: &Term,
+    bound: &Term,
 ) -> Option<(Term, usize)> {
     let Ok(reduced) = reduce_with(context, head_type) else {
         return None;
@@ -387,27 +399,30 @@ fn apply_fit(
         let mut holes = 0usize;
         let mut pinned = 0usize;
         let mut hole_ids = BTreeSet::new();
-        let kept: Vec<Term> = args
-            .iter()
-            .zip(plicities)
-            .filter_map(|(slot, plicity)| {
-                let (arg, _) = slot;
-                let arg = zonk_solved_term_metas(context, arg);
-                match (plicity, unsolved(context, &arg)) {
-                    // Hidden slots re-infer on paste, solved or not.
-                    (Plicity::Implicit | Plicity::Witness, _) => None,
-                    (Plicity::Explicit, true) => {
-                        holes += 1;
-                        hole_ids.extend(arg.metavars());
-                        Some(hole.clone())
-                    }
-                    (Plicity::Explicit, false) => {
-                        pinned += 1;
-                        Some(arg)
-                    }
+        let mut kept: Vec<(Plicity, Term)> = Vec::new();
+        for ((arg, domain), plicity) in args.iter().zip(plicities) {
+            let arg = zonk_solved_term_metas(context, arg);
+            let open = unsolved(context, &arg);
+            match (plicity, open) {
+                // A hidden bound the fit leaves open is what fills an omitted one asked where the goal stands: one it proves is left out, to be filled again where the fit is pasted, and one it does not is a hole written under its mark, so a fit is complete only where every obligation it carries is met.
+                (Plicity::Implicit, true) if unproved_bound(context, domain) => {
+                    holes += 1;
+                    hole_ids.extend(arg.metavars());
+                    kept.push((Plicity::Implicit, bound.clone()));
                 }
-            })
-            .collect();
+                // Any other hidden slot re-infers on paste, solved or not.
+                (Plicity::Implicit | Plicity::Witness, _) => {}
+                (Plicity::Explicit, true) => {
+                    holes += 1;
+                    hole_ids.extend(arg.metavars());
+                    kept.push((Plicity::Explicit, hole.clone()));
+                }
+                (Plicity::Explicit, false) => {
+                    pinned += 1;
+                    kept.push((Plicity::Explicit, arg));
+                }
+            }
+        }
 
         match outcome {
             Outcome::Converts => {}
@@ -434,7 +449,7 @@ fn apply_fit(
             return None;
         }
 
-        let built = zonk_solved_term_metas(context, &Term::apply(head.clone(), kept));
+        let built = zonk_solved_term_metas(context, &Term::apply_marked(head.clone(), kept));
         Some((built, holes))
     })
 }

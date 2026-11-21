@@ -489,3 +489,32 @@ fn a_goal_an_unnamed_hypothesis_proves_is_offered_proved() {
     );
     assert!(compile(&source.replace("@?", "@/std/proved()")).is_ok());
 }
+
+/// A fit whose hidden bound nothing proves where the goal stands is offered with the bound open, a hole of its own, so the fit offered complete is one whose paste compiles: `List/get(names, i)` is complete under a guard that proves its bound, and written `List/get(names, i, @?)` where nothing does.
+#[test]
+fn a_fit_whose_bound_nothing_proves_writes_the_bound_open() {
+    let open = r#"
+        use /std/{Nat, List};
+        struct Name: Type { Nat }
+        let pick(names: List(Name), i: Nat) -> Name = ?;
+        /std/Io/pure(())
+    "#;
+    let guarded = r#"
+        use /std/{Nat, List};
+        struct Name: Type { Nat }
+        let pick(names: List(Name), i: Nat) -> Name =
+            match i < List/len(names) | true => ? | false => Name { 0 } end;
+        /std/Io/pure(())
+    "#;
+
+    let error = compile(open).unwrap_err();
+    assert!(
+        error.contains("? \u{2248} List/get(names, i, @?)"),
+        "unexpected error: {error}"
+    );
+    let error = compile(guarded).unwrap_err();
+    assert!(
+        error.contains("? \u{2248} List/get(names, i)\n") && !error.contains("@?"),
+        "unexpected error: {error}"
+    );
+}
