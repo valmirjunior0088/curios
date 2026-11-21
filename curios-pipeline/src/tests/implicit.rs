@@ -154,7 +154,7 @@ fn plain_arguments_do_not_pass_through_an_all_implicit_parameter_list() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("written: 2\n│  expected: 0"),
+        error.contains("written: 2\n│  `pair` takes 0 arguments"),
         "unexpected error: {error}"
     );
 }

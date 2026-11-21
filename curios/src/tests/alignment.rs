@@ -166,7 +166,7 @@ fn a_plain_argument_does_not_spill_past_a_hidden_only_list() {
     let spilled =
         error("use /std/{Nat, Eq, print};\nlet p: Eq(0, 1) = Eq/refl();\nprint(\"no\")\n");
     assert!(
-        spilled.contains("written: 2\n│  expected: 0")
+        spilled.contains("written: 2\n│  `Eq` takes 0 arguments")
             && spilled.contains("a call fills one parameter list"),
         "got: {spilled}"
     );

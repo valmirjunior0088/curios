@@ -747,6 +747,8 @@ pub enum Error {
         got: usize,
         /// Whether the arguments past the list are a call's and what that call answers is itself a function, which a call of its own takes them in.
         answers_a_function: bool,
+        /// The function called, where a call names one: whose arguments the count counts.
+        callee: Option<Callee>,
     },
     /// A lambda writes binders that claim no parameter of the expected function type.
     ///
@@ -1079,6 +1081,11 @@ pub enum Error {
     HiddenMemberWithoutSlot {
         written: Plicity,
     },
+    /// A hidden argument written to a function that takes none of its mark at all, which no order of the arguments would place.
+    NoHiddenParameter {
+        callee: Callee,
+        written: Plicity,
+    },
     /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `callee`/`role` are the insertion provenance: who the goal was inserted for, and what its slot is to the callee where something states it.
     NoWitness {
         goal: Box<Term>,
@@ -1320,6 +1327,7 @@ variants!(Error {
     WitnessMemberNeverStated,
     HiddenMemberOutOfOrder,
     HiddenMemberWithoutSlot,
+    NoHiddenParameter,
     NoWitness,
     DeclarationCycle,
     GroupApart,
@@ -1644,6 +1652,25 @@ impl Error {
             expected,
             got,
             answers_a_function: false,
+            callee: None,
+        }
+    }
+
+    /// This refusal of an argument count, as a count of `callee`'s arguments; any other refusal as it is.
+    pub fn of_callee(self, callee: Callee) -> Self {
+        match self {
+            Self::WrongNumberOfArguments {
+                expected,
+                got,
+                answers_a_function,
+                ..
+            } => Self::WrongNumberOfArguments {
+                expected,
+                got,
+                answers_a_function,
+                callee: Some(callee),
+            },
+            error => error,
         }
     }
 
@@ -1653,6 +1680,7 @@ impl Error {
             expected,
             got,
             answers_a_function,
+            callee: None,
         }
     }
 
@@ -1956,6 +1984,10 @@ impl Error {
 
     pub fn hidden_member_without_slot(written: Plicity) -> Self {
         Self::HiddenMemberWithoutSlot { written }
+    }
+
+    pub fn no_hidden_parameter(callee: Callee, written: Plicity) -> Self {
+        Self::NoHiddenParameter { callee, written }
     }
 
     pub fn no_witness<T: Into<Term>>(

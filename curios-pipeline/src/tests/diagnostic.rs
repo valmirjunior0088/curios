@@ -516,7 +516,8 @@ fn a_typed_mistake_names_what_is_written_instead() {
     "#,
     );
     assert!(
-        curried.contains("written: 2\n│  expected: 1") && curried.contains("`f(a)(b)`"),
+        curried.contains("written: 2\n│  `Fmt/print` takes 1 argument")
+            && curried.contains("`f(a)(b)`"),
         "unexpected report: {curried}"
     );
 
@@ -532,7 +533,8 @@ fn a_typed_mistake_names_what_is_written_instead() {
     "#,
     );
     assert!(
-        surplus.contains("written: 2\n│  expected: 1") && !surplus.contains("`f(a)(b)`"),
+        surplus.contains("written: 2\n│  `double` takes 1 argument")
+            && !surplus.contains("`f(a)(b)`"),
         "unexpected report: {surplus}"
     );
 }

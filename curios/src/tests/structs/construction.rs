@@ -386,7 +386,10 @@ fn a_literal_head_with_nothing_written_is_the_application() {
         /std/print("no")
         "#;
     let report = error(refused);
-    assert!(report.contains("written: 0\n│  expected: 2"), "{report}");
+    assert!(
+        report.contains("written: 0\n│  `Pair` takes 2 arguments"),
+        "{report}"
+    );
 
     let accepted = r#"
         use /std/{Nat};

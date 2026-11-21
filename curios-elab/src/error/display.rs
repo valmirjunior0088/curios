@@ -991,10 +991,21 @@ impl Displayed<'_> {
                 expected,
                 got,
                 answers_a_function,
+                callee,
             } => {
                 f.text("argument count mismatch");
                 f.stating(format_args!("written: {got}"));
-                f.stating(format_args!("expected: {expected}"));
+                // A count is of a function's arguments, which the function a call names says.
+                match callee {
+                    Some(callee) if !matches!(callee, Callee::Anonymous) => {
+                        f.stating(format_args!(
+                            "{} takes {}",
+                            callee.phrase(spelling),
+                            counted(*expected, "argument")
+                        ));
+                    }
+                    _ => f.stating(format_args!("expected: {expected}")),
+                }
                 if *answers_a_function {
                     f.stating(
                         "a call fills one parameter list, and what this one answers is itself a function",
@@ -1965,6 +1976,18 @@ impl Displayed<'_> {
                 f.stating(format_args!(
                     "write `{placeholder}` first to leave that one to the elaborator"
                 ));
+            }
+            Error::NoHiddenParameter { callee, written } => {
+                let written = match written {
+                    Plicity::Witness => "use",
+                    Plicity::Implicit | Plicity::Explicit => "@",
+                };
+                f.text("surplus member");
+                f.stating(format_args!(
+                    "{} takes no `{written}` argument",
+                    callee.phrase(spelling)
+                ));
+                f.stating("write it with no mark");
             }
             Error::HiddenMemberWithoutSlot { written } => {
                 let written = match written {

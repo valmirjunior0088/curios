@@ -416,22 +416,32 @@ pub fn elaborate_apply(
         let result = ft.telescope.open(&parameters.iter().collect::<Vec<_>>());
         reduce_with(context, &result).is_ok_and(|result| matches!(&*result, Subterm::FuncType(_)))
     };
-    let fills = aligned.map_err(|misaligned| match misaligned {
-        Misaligned::Missing => {
-            Error::wrong_number_of_arguments(explicit(&marks), explicit(&written))
-        }
-        Misaligned::Extra { .. } => {
-            Error::arguments_past_the_list(explicit(&marks), explicit(&written), answers_a_function)
-        }
-        Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
-            written[member],
-            marks[slot],
-            ft.telescope.hints()[slot],
-        )
-        .at_opt(arguments[member].term.extent()),
-        Misaligned::Surplus { member } => Error::hidden_member_without_slot(written[member])
+    let named = callee(context, &func_label);
+    let fills = aligned
+        .map_err(|misaligned| match misaligned {
+            Misaligned::Missing => {
+                Error::wrong_number_of_arguments(explicit(&marks), explicit(&written))
+            }
+            Misaligned::Extra { .. } => Error::arguments_past_the_list(
+                explicit(&marks),
+                explicit(&written),
+                answers_a_function,
+            ),
+            Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+                written[member],
+                marks[slot],
+                ft.telescope.hints()[slot],
+            )
             .at_opt(arguments[member].term.extent()),
-    })?;
+            // A function that takes no hidden argument of the mark written has no slot an order would find for it.
+            Misaligned::Surplus { member } if !marks.contains(&written[member]) => {
+                Error::no_hidden_parameter(named.clone(), written[member])
+                    .at_opt(arguments[member].term.extent())
+            }
+            Misaligned::Surplus { member } => Error::hidden_member_without_slot(written[member])
+                .at_opt(arguments[member].term.extent()),
+        })
+        .map_err(|error| error.of_callee(named.clone()))?;
 
     // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
     let expected_ground = match &mode {

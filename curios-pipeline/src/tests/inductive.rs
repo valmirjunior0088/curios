@@ -557,7 +557,7 @@ fn an_indexed_family_applied_in_one_call_is_refused() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("written: 2\n│  expected: 1"),
+        error.contains("written: 2\n│  `Vec` takes 1 argument"),
         "unexpected error: {error}"
     );
 }
@@ -580,7 +580,7 @@ fn a_familys_implicit_parameters_still_take_a_call_of_their_own() {
     "#;
     let error = compile(refused).unwrap_err();
     assert!(
-        error.contains("written: 2\n│  expected: 0"),
+        error.contains("written: 2\n│  `Eq` takes 0 arguments"),
         "unexpected error: {error}"
     );
 }
