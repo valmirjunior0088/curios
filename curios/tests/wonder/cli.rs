@@ -762,6 +762,29 @@ fn a_block_says_where_a_declaration_is_declared_once() {
     );
 }
 
+/// `--classes` lists a row a span, four fields joined by tabs in every row — its place, its length, its class and its modifiers — and `-` where a span has no modifier, so a script splits every row alike.
+#[test]
+fn the_classes_are_rows_of_four_fields_joined_by_tabs() {
+    let root = project("classes-rows");
+
+    let classed = curios(&root, &["wonder", "--classes", "app.crs"], "");
+    assert!(
+        classed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&classed.stderr)
+    );
+    assert_eq!(
+        stdout(&classed),
+        concat!(
+            "app.crs:1:2\t3\tmodule\tdefault-library\n",
+            "app.crs:1:6\t5\tfunction\tdefault-library\n",
+            "app.crs:1:13\t3\tmodule\t-\n",
+            "app.crs:1:17\t4\tmodule\t-\n",
+            "app.crs:1:22\t4\tvalue\t-\n",
+        )
+    );
+}
+
 /// A place where nothing is named is an answer of nothing, and exits 0.
 #[test]
 fn a_place_naming_nothing_answers_nothing() {
