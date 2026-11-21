@@ -78,18 +78,17 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
     assert_eq!(
         run_tests_program(
             r#"
-        use /std/{Io, Test, print};
-        use /std/Io/{Signal};
-        let child(started: Signal) -> Io({}) =
+        use /std/{Io, Test, print, Channel};
+        let child(started: Channel({})) -> Io({}) =
             let waiting() -> Io({}) =
                 let _ = print("child-started|")!;
-                let _ = Signal/notify(started)!;
+                let _ = Channel/try_send(started, ())!;
                 Io/wait_filled([]);
             Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("child-cancelled|")), (_) => waiting()));
         let body(s: Io/Scope) -> Test({}) =
-            let started = Signal/new()!;
+            let started = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(s, child(started))!;
-            let _ = Signal/wait(started)!;
+            let _ = Channel/receive(started)!;
             Test/assert("the scoped test fails", false);
         test scoped = Test/scope(body);
         ()

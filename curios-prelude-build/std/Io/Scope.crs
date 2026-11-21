@@ -2,12 +2,12 @@
 pub mod Task;
 
 use /std/{Nat, List, Channel, Io};
-use /std/Io/{Ended, Future, Signal, Branch, drive, into, answered, using};
+use /std/Io/{Ended, Future, Branch, drive, into, answered, using};
 
--- How many children of a scope have not ended, kept in a capacity-one channel, and the signal raised as each ends: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
+-- How many children of a scope have not ended, kept in a capacity-one channel, and a capacity-one channel notified as each ends, whose notifications coalesce while one is unread: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
 struct Live: Type {
     count: Channel(Nat),
-    ended: Signal,
+    ended: Channel({}),
 }
 
 -- `change` applied to the count of `live`.
@@ -20,7 +20,8 @@ let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
 -- One child of `live` ended.
 let ended(live: Live) -> Io({}) =
     let () = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
-    Signal/notify(live.ended);
+    let _ = Channel/try_send(live.ended, ())!;
+    Io/pure(());
 
 --- What a scope's body spawns its children into and defers its releases to.
 pub struct Scope: Type {
@@ -51,7 +52,7 @@ pub let join_all(s: Scope) -> Io({}) =
     match n
     | 0 => Io/pure(())
     | _ =>
-        let () = Signal/wait(s.live.ended)!;
+        let _ = Channel/receive(s.live.ended)!;
         join_all(s)
     end;
 
@@ -86,7 +87,7 @@ let spawned(r: Channel(Io({}))) -> Io(List(Branch)) =
 pub let run(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
     let children = Channel/new(@Io({}), 64)!;
     let count = Channel/new(@Nat, 1)!;
-    let ended = Signal/new()!;
+    let ended = Channel/new(@{}, 1)!;
     let releases = Channel/new(@List((Ended) -> Io({})), 1)!;
     let s =
         Scope {

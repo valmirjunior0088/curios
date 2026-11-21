@@ -171,23 +171,22 @@ fn constructing_a_read_performs_no_effect() {
     assert_eq!(io.output(), b"hello\n");
 }
 
-// A child still waiting when its scope's body answers is cancelled where it waits, and the bracket it entered is released: the child raises a signal from inside its bracket and sleeps far past the test, the body waits for the signal, writes "root;" and answers, and the child's release runs before the scope does.
+// A child still waiting when its scope's body answers is cancelled where it waits, and the bracket it entered is released: the child sends a notification from inside its bracket and sleeps far past the test, the body waits for the notification, writes "root;" and answers, and the child's release runs before the scope does.
 #[test]
 fn a_scope_cancels_a_child_still_waiting_when_its_body_answers() {
     let (system, io) = ticking();
     run_text(
         r#"
-        use /std/{Str, Io};
-        use /std/Io/{Signal};
+        use /std/{Str, Io, Channel};
         use /std/time/{Duration};
-        let child(started: Signal) -> Io({}) =
-            let _ = Signal/notify(started)!;
+        let child(started: Channel({})) -> Io({}) =
+            let _ = Channel/try_send(started, ())!;
             let _ = Io/sleep(Duration/of_secs(1000))!;
             /std/print("child;");
         let body(s: Io/Scope) -> Io({}) =
-            let started = Signal/new()!;
+            let started = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(s, Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("released;")), (_) => child(started))))!;
-            let _ = Signal/wait(started)!;
+            let _ = Channel/receive(started)!;
             /std/print("root;");
         let entry() -> /std/Io({}) =
             let _ = Io/Scope/run(body)!;
@@ -422,27 +421,27 @@ fn a_selection_over_no_offers_at_the_top_is_a_deadlock() {
     assert_eq!(io.errors(), curios_abi::DEADLOCK.as_bytes());
 }
 
-// A signal wakes its waiter once notified, and a notify that lands before anyone waits is kept, so the second wait answers at once rather than waiting on a flag already raised.
+// A notification through a capacity-one channel wakes its waiter, and one sent before anyone waits is kept, so the second wait answers at once rather than waiting on a notification already sent.
 #[test]
-fn a_signal_wakes_its_waiter_once_notified_and_keeps_an_early_notify() {
+fn a_notification_wakes_its_waiter_and_one_sent_before_anyone_waits_is_kept() {
     let (system, io) = ticking();
     run_text(
         r#"
-        use /std/{Str, Io};
-        use /std/Io/{Signal};
+        use /std/{Str, Io, Channel};
         use /std/time/{Duration};
-        let notifier(s: Signal) -> Io({}) =
+        let notifier(s: Channel({})) -> Io({}) =
             let _ = Io/sleep(Duration/of_secs(1))!;
             let _ = /std/print("notify ")!;
-            Signal/notify(s);
+            let _ = Channel/try_send(s, ())!;
+            Io/pure(());
         let body(scope: Io/Scope) -> Io({}) =
-            let s = Signal/new()!;
+            let s = Channel/new(@{}, 1)!;
             let _ = Io/Scope/spawn(scope, notifier(s))!;
             let _ = /std/print("wait ")!;
-            let _ = Signal/wait(s)!;
+            let _ = Channel/receive(s)!;
             let _ = /std/print("woken ")!;
-            let _ = Signal/notify(s)!;
-            let _ = Signal/wait(s)!;
+            let _ = Channel/try_send(s, ())!;
+            let _ = Channel/receive(s)!;
             /std/print("again");
         Io/Scope/run(body)
         "#,

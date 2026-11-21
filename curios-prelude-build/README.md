@@ -239,7 +239,7 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 - **A stream has an identity already**, its descriptor's position, and the bytes read ahead of a piece are part of that position: kept as a value beside it, the two can disagree, and nothing in the language holds a value to one use; kept in the reader, a reader read from two places is one sequence of pieces.
 - **A read under `Io/timeout` is as safe as a read under none**, a branch being cancelled only where it suspends and nothing between a take and a put suspending.
-- **The slot is of the vocabulary [A wait is a suspension, and only the host waits](../documentation/design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md) already gives**, a channel of one slot as `Io/Signal`'s flag is, so the host gains no row and the guest no cell of a new kind.
+- **The slot is of the vocabulary [A wait is a suspension, and only the host waits](../documentation/design/standard-library/a-wait-is-a-suspension-and-only-the-host-waits.md) already gives**, a channel of one slot, so the host gains no row and the guest no cell of a new kind.
 - **A piece that holds no stream is asked alike by a reader, by a message held entire and by a test at every cut of its input**, so what the tests hold is what runs, and the state it answers with is what keeps a search from starting over at each arrival; a line read a byte at a time is a host call a byte, and a bound keeps a peer that never sends the delimiter from growing what is held without end.
 
 **Rejected.**

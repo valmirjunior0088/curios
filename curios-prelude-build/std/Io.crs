@@ -15,10 +15,6 @@ pub use Offer/{let Offer};
 pub mod Future;
 pub use Future/{let Future};
 
---- A flag one branch raises and another waits on: a wait on no handle and no deadline.
-pub mod Signal;
-pub use Signal/{let Signal};
-
 --- A stream with the bytes read ahead of what was asked of it, and the reads that cut a piece from them.
 pub mod Reader;
 pub use Reader/{let Reader};
@@ -219,7 +215,7 @@ let released(ws: List(Waiting)) -> Io({}) =
 
 --- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
 ---
---- This is the one place a wait on the program's own state checks and then suspends, with nothing run between the two, so no change is missed: a future, a channel and a signal each wait as an offer through it.
+--- This is the one place a wait on the program's own state checks and then suspends, with nothing run between the two, so no change is missed: a future and a channel each wait as an offer through it.
 pub let select(@A: Type, offers: List(Offer(A))) -> Io(A) =
     let taken = attempt(offers)!;
     match taken

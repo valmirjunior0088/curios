@@ -1,6 +1,6 @@
--- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a send, a selection, a signal and a cancellation wake.
+-- Waiting in `Io`: what a wait holds of the branch beside it, what a scope tells its releases, and what a fulfilment, a send, a selection, a notification and a cancellation wake.
 use /std/{Bool, Cell, Io, Nat, Option, Test, Channel};
-use /std/Io/{Future, Offer, Signal};
+use /std/Io/{Future, Offer};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.
@@ -127,18 +127,14 @@ test a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it =
             Bool/not(acknowledged)),
         Test/equal(n, Option/some(7))]);
 
--- What a signal's offer finds without waiting.
-let tried(s: Signal) -> Io(Option({})) =
-    Signal/offer(s).try;
-
--- Notifications a signal has not been waited on for coalesce into one, and a future keeps the first answer it was filled with.
-test signals_coalesce_and_futures_preserve_their_first_answer =
-    let s = Signal/new()!;
-    let () = Signal/notify(s)!;
-    let () = Signal/notify(s)!;
-    let () = Signal/wait(s)!;
-    let again = tried(s)!;
-    let coalesced = match again | none() => true | some(()) => false end;
+-- Notifications a capacity-one channel has not been read for coalesce into one, and a future keeps the first answer it was filled with.
+test notifications_coalesce_and_futures_preserve_their_first_answer =
+    let s = Channel/new(@{}, 1)!;
+    let _ = Channel/try_send(s, ())!;
+    let _ = Channel/try_send(s, ())!;
+    let _ = Channel/receive(s)!;
+    let again = Channel/try_receive(s)!;
+    let coalesced = match again | empty() => true | _ => false end;
     let f = Future/new(@Nat)!;
     let () = Future/fill(f, 7)!;
     let () = Future/fill(f, 99)!;
