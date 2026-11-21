@@ -1,6 +1,6 @@
 //! Declaring a struct and building one: labels, parameter inference, dependent fields, and the sorts a struct may carry.
 
-use crate::tests::test_support::*;
+use {crate::tests::test_support::*, curios_common::fill};
 
 #[test]
 fn named_fields_run_end_to_end() {
@@ -144,17 +144,38 @@ fn struct_wrong_field_count_rejected() {
     );
 }
 
-// Written field labels are validated positionally — no reordering.
+// Written field labels are validated positionally — no reordering. The labels are read before the fields are counted, so a label written twice, or a mark on a plain field, is refused as what it is even where the count would differ.
 #[test]
 fn struct_field_label_out_of_order_rejected() {
-    let source = r#"
-        use /std/{Nat};
-        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
-        let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
-        /std/print("no")
-        "#;
+    let refused = |fields: &str| {
+        error(&fill!(
+            r#"
+            use /std/{Nat};
+            pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
+            let p : Pair(Nat, Nat) = Pair { ${fields} };
+            /std/print("no")
+            "#,
+            fields,
+        ))
+    };
 
-    error(source);
+    let reordered = refused("snd = 1, fst = 2");
+    assert!(
+        reordered.contains("field out of order")
+            && reordered.contains("`fst` is written after a field declared after it"),
+        "{reordered}"
+    );
+    let repeated = refused("fst = 1, fst = 2, snd = 3");
+    assert!(
+        repeated.contains("repeated field") && repeated.contains("`fst` is written twice"),
+        "{repeated}"
+    );
+    let marked = refused("@fst = 1, snd = 2");
+    assert!(
+        marked.contains("`fst` is a plain field of `Pair`")
+            && marked.contains("write it `fst = ...`"),
+        "{marked}"
+    );
 }
 
 // A struct literal whose head names a non-struct binding is rejected as `NotAStructType` (its type is reported), not misreported as unbound.

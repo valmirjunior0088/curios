@@ -7,7 +7,8 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, GoalReport, Need,
+        BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, FieldReading,
+        GoalReport, Need,
         RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
     },
     crate::{Answer, Conclusion, Origin, Refusal, ordinal, premise_label},
@@ -1216,13 +1217,40 @@ impl Displayed<'_> {
                 f.stating("a hidden field is written under `@`, or left out");
                 f.stating(format_args!("write it `@{label} = ...`"));
             }
-            Error::FieldOutOfOrder { name, label, order } => {
-                f.text("field out of order");
-                f.stating(format_args!("`{label}` is repeated or out of place"));
+            Error::PlainFieldMarked { name, label } => {
+                f.text("mark mismatch");
                 f.stating(format_args!(
-                    "a pattern reads the fields of `{}` in their order",
+                    "`{label}` is a plain field of `{}`",
                     spelling.symbol(name)
                 ));
+                f.stating("a plain field is written with no mark");
+                f.stating(format_args!("write it `{label} = ...`"));
+            }
+            Error::FieldOutOfOrder {
+                name,
+                label,
+                order,
+                reading,
+                repeated,
+            } => {
+                // A label written twice is a repeat whatever the order, and is headed as one.
+                match repeated {
+                    true => f.text("repeated field"),
+                    false => f.text("field out of order"),
+                }
+                f.stating(match repeated {
+                    true => format!("`{label}` is written twice"),
+                    false => format!("`{label}` is written after a field declared after it"),
+                });
+                let name = spelling.symbol(name);
+                f.stating(match reading {
+                    FieldReading::Literal => {
+                        format!("a literal writes the fields of `{name}` in their order, each once")
+                    }
+                    FieldReading::Pattern => {
+                        format!("a pattern reads the fields of `{name}` in their order, each once")
+                    }
+                });
                 f.stating(format_args!("order: {}", codes(order)));
             }
             Error::UnknownDeclaration { name } => {

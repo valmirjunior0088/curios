@@ -111,6 +111,13 @@ pub enum RecordKeyword {
     Concept,
 }
 
+/// What holds a structure's fields to their order: a literal that writes them, or a pattern that reads them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldReading {
+    Literal,
+    Pattern,
+}
+
 impl fmt::Display for RecordKeyword {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
@@ -901,11 +908,18 @@ pub enum Error {
         name: Global,
         label: String,
     },
-    /// A struct pattern reads a field it names before a field it already read: the fields as the structure orders them, a hidden one under its mark.
+    /// A literal or a pattern writes a plain field by its label under `@`, as a hidden field is written: the twin of [`Error::HiddenFieldUnmarked`].
+    PlainFieldMarked {
+        name: Global,
+        label: String,
+    },
+    /// A literal writes, or a pattern reads, a field it names after a field the structure declares after it, or a second time: `repeated` where the label was written before. The fields as the structure orders them, a hidden one under its mark.
     FieldOutOfOrder {
         name: Global,
         label: String,
         order: Vec<String>,
+        reading: FieldReading,
+        repeated: bool,
     },
     /// A nominal type whose declaration is absent from the registry.
     UnknownDeclaration {
@@ -1259,6 +1273,7 @@ variants!(Error {
     StructArityMismatch,
     WrongNumberOfFields,
     HiddenFieldUnmarked,
+    PlainFieldMarked,
     FieldOutOfOrder,
     UnknownDeclaration,
     UnknownStructField,
@@ -1745,8 +1760,24 @@ impl Error {
         Self::HiddenFieldUnmarked { name, label }
     }
 
-    pub fn field_out_of_order(name: Global, label: String, order: Vec<String>) -> Self {
-        Self::FieldOutOfOrder { name, label, order }
+    pub fn plain_field_marked(name: Global, label: String) -> Self {
+        Self::PlainFieldMarked { name, label }
+    }
+
+    pub fn field_out_of_order(
+        name: Global,
+        label: String,
+        order: Vec<String>,
+        reading: FieldReading,
+        repeated: bool,
+    ) -> Self {
+        Self::FieldOutOfOrder {
+            name,
+            label,
+            order,
+            reading,
+            repeated,
+        }
     }
 
     /// A nominal type whose declaration is missing from the registry — a well-typed term can only carry a declared nominal head, so this is an invariant violation surfaced as a diagnostic rather than a panic.

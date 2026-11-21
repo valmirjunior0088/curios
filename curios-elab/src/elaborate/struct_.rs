@@ -3,8 +3,8 @@ use {
         Misaligned, SlotPositions, align, check_args_against, insert_auto_argument, is_placeholder,
     },
     crate::{
-        Context, Error, Expectation, Mode, Occurrence, attempt_witness_goal, check, check_as,
-        elaborate, expect_as, is_prop, reduce_with, resolve_witness_goal,
+        Context, Error, Expectation, FieldReading, Mode, Occurrence, attempt_witness_goal, check,
+        check_as, elaborate, expect_as, is_prop, reduce_with, resolve_witness_goal,
     },
     curios_common::{Plicity, Symbol},
     curios_core::{
@@ -418,12 +418,32 @@ pub fn aligned_fields(
         .map(|(_, label)| *label)
         .collect();
 
-    for (mark, label, at) in written {
-        if let (Plicity::Explicit, Some(label)) = (mark, label)
-            && let Some(unmarked) = unmarked(name, &labels, &slots, label)
-        {
-            return Err(unmarked.at_opt(*at));
+    // Each labelled member is read against the fields before any is counted, so a field written under the other mark, twice or after a field declared after it is refused as what it is, where a count would say only how many were written.
+    let mut reached: Option<usize> = None;
+    for (index, (mark, label, at)) in written.iter().enumerate() {
+        let Some(label) = label else { continue };
+        if let Some(mismarked) = mismarked(name, &labels, &slots, *mark, label) {
+            return Err(mismarked.at_opt(*at));
         }
+        let Some(slot) =
+            (0..slots.len()).find(|slot| slots[*slot] == *mark && labels[*slot] == *label)
+        else {
+            continue;
+        };
+        if reached.is_some_and(|reached| slot <= reached) {
+            let repeated = written[..index]
+                .iter()
+                .any(|(earlier, written, _)| earlier == mark && *written == Some(*label));
+            return Err(Error::field_out_of_order(
+                *name,
+                spelled(*mark, label),
+                written_fields(&labels, &slots),
+                FieldReading::Literal,
+                repeated,
+            )
+            .at_opt(*at));
+        }
+        reached = Some(slot);
     }
 
     if plain.len() != plain_labels.len() {
@@ -548,23 +568,21 @@ pub fn read_fields(
     for (mark, label, at) in written {
         let slot = match label {
             Some(label) => {
-                if *mark == Plicity::Explicit
-                    && let Some(unmarked) = unmarked(name, &labels, &slots, label)
-                {
-                    return Err(unmarked.at_opt(*at));
+                if let Some(mismarked) = mismarked(name, &labels, &slots, *mark, label) {
+                    return Err(mismarked.at_opt(*at));
                 }
                 let named = |slot: &usize| slots[*slot] == *mark && labels[*slot] == *label;
-                let spelled = match mark {
-                    Plicity::Explicit => label.to_string(),
-                    _ => format!("@{label}"),
-                };
+                let spelled = spelled(*mark, label);
                 match (next..slots.len()).find(named) {
                     Some(slot) => slot,
                     None if (0..next).any(|slot| named(&slot)) => {
+                        let repeated = read.iter().any(named);
                         return Err(Error::field_out_of_order(
                             *name,
                             spelled,
                             written_fields(&labels, &slots),
+                            FieldReading::Pattern,
+                            repeated,
                         )
                         .at_opt(*at));
                     }
@@ -627,12 +645,37 @@ pub fn read_fields(
 }
 
 /// The refusal of a plain entry `written` labels, where the label is a hidden field's of `name`: a hidden field is written under its mark wherever it is written, so one written as a plain field is that, and no unknown field.
-fn unmarked(name: &Global, labels: &[&str], slots: &[Plicity], written: &str) -> Option<Error> {
-    labels
-        .iter()
-        .zip(slots)
-        .any(|(label, slot)| *slot == Plicity::Implicit && *label == written)
-        .then(|| Error::hidden_field_unmarked(*name, written.to_string()))
+/// The refusal of a member written by `label` under the mark `mark`, where `label` names a field of the other mark: a hidden field written as a plain one, or a plain field under `@`.
+fn mismarked(
+    name: &Global,
+    labels: &[&str],
+    slots: &[Plicity],
+    mark: Plicity,
+    written: &str,
+) -> Option<Error> {
+    let declared = |marked: Plicity| {
+        labels
+            .iter()
+            .zip(slots)
+            .any(|(label, slot)| *slot == marked && *label == written)
+    };
+    match mark {
+        Plicity::Explicit if declared(Plicity::Implicit) => {
+            Some(Error::hidden_field_unmarked(*name, written.to_string()))
+        }
+        Plicity::Implicit if declared(Plicity::Explicit) => {
+            Some(Error::plain_field_marked(*name, written.to_string()))
+        }
+        _ => None,
+    }
+}
+
+/// A member's label as it is written, a hidden one under its mark.
+fn spelled(mark: Plicity, label: &str) -> String {
+    match mark {
+        Plicity::Explicit => label.to_string(),
+        _ => format!("@{label}"),
+    }
 }
 
 /// The labelled fields in order as a literal writes them, a hidden one under its mark: what a refusal of a misnamed hidden entry lists.
@@ -803,7 +846,9 @@ pub fn elaborate_struct_spread(
                             ));
                         }
                         None => {
-                            if let Some(unmarked) = unmarked(name, &labels, &slots, written) {
+                            if let Some(unmarked) =
+                                mismarked(name, &labels, &slots, Plicity::Explicit, written)
+                            {
                                 return Err(unmarked);
                             }
                             return Err(Error::unknown_struct_field(
