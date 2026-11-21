@@ -51,15 +51,11 @@ pub enum Subject {
 }
 
 impl Subject {
-    /// The prelude's scope alone: a module of no text over it, mounted where a module on standard input is, which holds nothing of its own.
+    /// The prelude's scope alone: a unit of nothing over it, mounted nowhere, so no name answers in it but the prelude's.
     pub fn prelude() -> Self {
-        let empty = RootSource::supplied_module(
-            STDIN_MOUNT,
-            &Source::named(SourceName::stdin(), String::new()),
-        )
-        .expect("a text of nothing is a module");
-
-        Subject::Unit { units: vec![empty] }
+        Subject::Unit {
+            units: vec![RootSource::supplied()],
+        }
     }
 }
 

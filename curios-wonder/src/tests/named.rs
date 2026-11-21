@@ -719,7 +719,7 @@ fn a_member_a_module_exposes_beside_its_owner_is_the_line_that_does_it() {
     assert_eq!((show.names, show.modules), (1, 0));
 }
 
-/// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing.
+/// In the prelude's scope alone a path answers the standard library's declaration, and one no prelude unit holds answers nothing — `/stdin` among them, the scope holding no text of standard input to mount there.
 #[test]
 fn the_prelude_alone_answers_the_standard_librarys_declarations_and_nothing_else() {
     let described = |path| {
@@ -740,6 +740,7 @@ fn the_prelude_alone_answers_the_standard_librarys_declarations_and_nothing_else
         ("/sys/List/map", Declared::Function)
     );
     assert!(described("/app/main").is_none());
+    assert!(exposed("/stdin").is_none());
 }
 
 /// Every module of the standard library a consumer reaches is reached from its root by its entries alone, each child's `mod` line answered in turn, and the modules so reached are the ones its documentation pages are: the listing and the pages are one reading of the record.
