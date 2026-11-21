@@ -61,7 +61,7 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     );
     let report = error(&looping);
     assert!(
-        report.contains("a proof in `_apart` is a proof position\n│  it reaches `/witness~/std/ops/Eql(/Tree)`, which is not known to terminate"),
+        report.contains("a proof in `_apart` reaches the witness of `Eql` for head `Tree`, which is not known to terminate"),
         "{report}"
     );
 }

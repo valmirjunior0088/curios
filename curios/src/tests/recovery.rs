@@ -208,7 +208,10 @@ fn both_erasure_obligations_are_reported_together() {
     );
 
     assert!(report.contains("is a type position"), "{report}");
-    assert!(report.contains("is a proof position"), "{report}");
+    assert!(
+        report.contains("a proof in `loop` reaches `loop`, which is not known to terminate"),
+        "{report}"
+    );
 }
 
 /// A declaration the parser could not read is a refusal like any other: reported once, with its dependents withheld.

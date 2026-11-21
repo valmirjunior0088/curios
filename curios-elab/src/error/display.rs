@@ -361,6 +361,22 @@ fn readable(type_: &Term) -> bool {
     )
 }
 
+/// A declaration a refusal says is reached, as a reader finds it: a definition by its name, and a witness, which has none, by the concept it witnesses and the key it is declared at.
+fn reached(declaration: &Global, spelling: &Rc<Spelling>) -> String {
+    match declaration {
+        Global::Witness(witness) => match witness.spelled() {
+            Some((concept, key)) => format!(
+                "the witness of `{}` for {} `{}`",
+                spelling.symbol(&concept),
+                key_noun(&key),
+                key.spelled(spelling)
+            ),
+            None => "a witness".to_string(),
+        },
+        Global::Authored(_) => format!("`{}`", spelling.symbol(declaration)),
+    }
+}
+
 /// What a report says of a witness's hidden parameter where it would say how to write one: nothing can, since a witness is never called and its parameters are filled from the goal it answers.
 fn witness_never_called(said: &mut Said) {
     said.stating("a witness is never called");
@@ -1173,16 +1189,35 @@ impl Displayed<'_> {
                     }
                 };
                 f.text("may not terminate");
-                f.stating(format_args!(
-                    "{} is a {erased} position",
-                    site.phrase(spelling)
-                ));
+                // A term met within a definition is said as the term it is there, a type or a proof in it, and every other site as the declaration's part it names.
+                let subject = match site {
+                    ErasedSite::Within {
+                        definition,
+                        settled,
+                    } => {
+                        let place = match definition {
+                            Some(name) => format!("`{}`", spelling.symbol(name)),
+                            None => "the entrypoint".to_string(),
+                        };
+                        match settled {
+                            Some(what) => format!("{what} in {place}"),
+                            None => format!("a {erased} in {place}"),
+                        }
+                    }
+                    site => {
+                        f.stating(format_args!(
+                            "{} is a {erased} position",
+                            site.phrase(spelling)
+                        ));
+                        "it".to_string()
+                    }
+                };
                 match offender {
                     Some(offender) => f.stating(format_args!(
-                        "it reaches `{}`, which is not known to terminate",
-                        spelling.symbol(offender)
+                        "{subject} reaches {}, which is not known to terminate",
+                        reached(offender, spelling)
                     )),
-                    None => f.stating("it does not terminate on every input"),
+                    None => f.stating(format_args!("{subject} does not terminate on every input")),
                 }
                 f.stating(advice);
             }
