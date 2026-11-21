@@ -178,6 +178,9 @@ fn plicity_word(plicity: Plicity) -> &'static str {
 fn role_written<D: Rendered>(role: &WitnessRole, frame: Frame<'_, D>) -> crate::Term<D> {
     match role {
         WitnessRole::Premise(position) => called(word("Premise"), vec![super::numeral(*position)]),
+        WitnessRole::Argument(position) => {
+            called(word("Argument"), vec![super::numeral(*position)])
+        }
         WitnessRole::Superclass(concept) => called(word("Superclass"), vec![frame.global(concept)]),
         WitnessRole::Implementation(field) => {
             called(word("Implementation"), vec![string(field.as_str())])
@@ -462,6 +465,10 @@ fn role_read(
     let held = &argument.term;
     match term_word(head) {
         Some("Premise") => Ok(WitnessRole::Premise(number_read(
+            held,
+            "a premise's position",
+        )?)),
+        Some("Argument") => Ok(WitnessRole::Argument(number_read(
             held,
             "a premise's position",
         )?)),

@@ -467,6 +467,8 @@ impl ErasedSite {
 fn role_said(role: &WitnessRole, callee: &Callee, spelling: &Rc<Spelling>) -> String {
     match role {
         WitnessRole::Premise(position) => premise_label(*position),
+        // The goal stands at the argument, which is what a reader wrote: the premise is in the callee's type, which a computed one keeps out of sight.
+        WitnessRole::Argument(_) => "this argument".to_string(),
         WitnessRole::Superclass(concept) => {
             format!("its `{}` superclass", spelling.symbol(concept))
         }

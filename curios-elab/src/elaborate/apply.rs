@@ -208,12 +208,14 @@ pub fn insert_auto_argument(
             }
             Ok(hole)
         }
-        Plicity::Witness => insert_witness_argument(context, type_, func, origin, position, true),
+        Plicity::Witness => {
+            insert_witness_argument(context, type_, func, origin, position, true, None)
+        }
         Plicity::Explicit => unreachable!("explicit slots are never auto-filled"),
     }
 }
 
-/// Fill an omitted `use` slot: a fresh metavariable and its resolution goal. `named` says whether what follows the slot in its telescope mentions its binder — a later parameter's type or the result type — and so whether unification can give the slot a dictionary. One it can waits for its term ([`attempt_witness_goal`]), so that a part read later names the dictionary whichever of the two the walk reaches first; one it cannot has resolution as its one source, and is resolved where it stands ([`resolve_witness_goal`]).
+/// Fill an omitted `use` slot: a fresh metavariable and its resolution goal. `named` says whether what follows the slot in its telescope mentions its binder — a later parameter's type or the result type — and so whether unification can give the slot a dictionary. One it can waits for its term ([`attempt_witness_goal`]), so that a part read later names the dictionary whichever of the two the walk reaches first; one it cannot has resolution as its one source, and is resolved where it stands ([`resolve_witness_goal`]). `served` is the written argument the premise lets the call take, where one does ([`served_slot`]): the goal is anchored there rather than at `origin`, the call, and named by it.
 pub fn insert_witness_argument(
     context: &mut Context,
     type_: &Term,
@@ -221,10 +223,16 @@ pub fn insert_witness_argument(
     origin: &Term,
     position: usize,
     named: bool,
+    served: Option<&Term>,
 ) -> Result<Term, Error> {
+    let role = match served {
+        Some(_) => WitnessRole::Argument(position),
+        None => WitnessRole::Premise(position),
+    };
+    let origin = served.unwrap_or(origin);
     let provenance = WitnessOrigin {
         func: func.clone(),
-        role: Some(WitnessRole::Premise(position)),
+        role: Some(role),
     };
     let (id, metavar) =
         context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
@@ -505,14 +513,20 @@ pub fn elaborate_apply(
                     )?
                 }
             }
-            None if *plicity == Plicity::Witness => insert_witness_argument(
-                context,
-                &ty,
-                &func_label,
-                term,
-                position,
-                cursor.binder_used(),
-            )?,
+            None if *plicity == Plicity::Witness => {
+                let served = served_slot(&ty, &opened_link(&cursor), &marks[index + 1..])
+                    .and_then(|offset| fills[index + 1 + offset])
+                    .map(|member| &arguments[member].term);
+                insert_witness_argument(
+                    context,
+                    &ty,
+                    &func_label,
+                    term,
+                    position,
+                    cursor.binder_used(),
+                    served,
+                )?
+            }
             None => {
                 insert_auto_argument(context, *plicity, &ty, hint, &func_label, term, position)?
             }
@@ -586,6 +600,29 @@ fn function_typed(
         cursor = next.body();
     }
 
+    None
+}
+
+/// Past an omitted `use` slot of type `premise`, the first plain slot whose type names a metavariable the premise names, as its offset among `later`: the argument the premise is about, which the call cannot take without it. A premise whose type names none is about no argument still to be read.
+fn served_slot(
+    premise: &Term,
+    rest: &Scope<One, Telescope<Term>>,
+    later: &[Plicity],
+) -> Option<usize> {
+    let named = premise.metavars();
+    if named.is_empty() {
+        return None;
+    }
+    let mut cursor = rest.body();
+    for (offset, mark) in later.iter().enumerate() {
+        let Telescope::Cons(_, ty, next, ..) = cursor else {
+            break;
+        };
+        if *mark == Plicity::Explicit && ty.metavars().iter().any(|id| named.contains(id)) {
+            return Some(offset);
+        }
+        cursor = next.body();
+    }
     None
 }
 

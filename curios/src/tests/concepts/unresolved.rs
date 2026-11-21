@@ -56,11 +56,11 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
     );
 }
 
-// Which premise needs it. A `use` parameter is anonymous by design — `let`, `rec` and `satisfy` sugar declare one without a name — so naming the binder reported `_` for every premise a program actually writes. The position is always there to be named.
+// Which premise needs it. A `use` parameter is anonymous by design — `let`, `rec` and `satisfy` sugar declare one without a name — so naming the binder reported `_` for every premise a program actually writes. A premise that is about an argument the call writes is named by that argument, and stands at it: what the reader wrote is the argument, and the wanted line says which concept it lacks.
 //
 // The argument is a *labeled* tuple for the reason above: the positional shapes all have a `Show`.
 #[test]
-fn a_missing_witness_names_the_premise_by_position() {
+fn a_missing_witness_names_the_argument_its_premise_is_about() {
     let source = r#"
         use /std/{Nat, Bool, Show, Str};
         let f(@A : Type, use Show(A), a : A) -> Str = Show/show(a);
@@ -70,12 +70,12 @@ fn a_missing_witness_names_the_premise_by_position() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by `f` for its 1st `use` premise"),
-        "expected the premise named by position:\n{report}"
+        report.contains("needed by `f` for this argument") && report.contains("[error] 4:25"),
+        "expected the premise named by its argument, at it:\n{report}"
     );
 }
 
-// The position is a position, not a decoration: a head with two premises whose *second* is the unsatisfied one says so, which is the whole reason a number beats a name here.
+// A premise no written argument is about is named by its position, and the position is a position, not a decoration: a head with two premises whose *second* is the unsatisfied one says so, which is the whole reason a number beats a name here.
 #[test]
 fn a_later_premise_is_named_by_its_own_position() {
     let source = r#"
@@ -83,8 +83,8 @@ fn a_later_premise_is_named_by_its_own_position() {
         use /std/ops/{Eql};
         induct T : pub Type | t() end
         satisfy Show(T) { show(x) = "t", }
-        let g(@A : Type, use Show(A), use Eql(A), a : A) -> Str = Show/show(a);
-        let s : Str = g(T/t());
+        let g(@A : Type, use Show(A), use Eql(A)) -> Str = "g";
+        let s : Str = g(@T);
         /std/print("unreachable")
         "#;
 
@@ -124,6 +124,20 @@ fn a_missing_premise_names_the_witness_that_needed_it() {
         report.contains(
             "wanted: `Show(Foo)`\n│  needed by the witness of `Show` for head `List` for its 1st `use` premise"
         ) && !report.contains("witness~"),
+        "{report}"
+    );
+}
+
+// A `use` premise that lets a call take a written argument is named by that argument and stands at it: a format's place asks for a `Show` witness in a type the format computes, where no premise is written to name.
+#[test]
+fn a_premise_that_takes_an_argument_stands_at_the_argument() {
+    let source = "use /std/{Nat, Fmt};\nstruct Point: Type { x: Nat, y: Nat }\nFmt/print(\"%\\n\")(Point { x = 1, y = 2 })\n";
+
+    let report = error(source);
+    assert!(
+        report.contains("wanted: `/std/Show(Point)`")
+            && report.contains("needed by `Fmt/print` for this argument")
+            && report.contains("[error] 3:18"),
         "{report}"
     );
 }

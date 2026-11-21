@@ -1133,6 +1133,8 @@ pub struct WitnessOrigin {
 pub enum WitnessRole {
     /// The callee's `use` premise at this position among them, from zero.
     Premise(usize),
+    /// The callee's `use` premise at this position among them, from zero, where it is what lets the call take a written argument: a later plain parameter's type names what the premise is about, so the goal stands at that argument, which a report names it by.
+    Argument(usize),
     /// A record literal's anonymous superclass slot, by the concept it edges to.
     Superclass(Global),
     /// The method an operator's witness implements, by the concept's field.
