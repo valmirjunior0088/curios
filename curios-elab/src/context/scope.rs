@@ -1,7 +1,7 @@
 //! The context's doors to the frames: binders entered and left, arms opened and ruled out, what is assumed and defined in scope, and the refinements an arm installs.
 
 use {
-    super::{Bracket, ByValue, DefEntry, KeptWindow},
+    super::{Bracket, ByValue, DefEntry, Frames, Height, KeptWindow, Withheld},
     crate::DefinedGroup,
     crate::{
         Context, DeadArm, HeldFrames, Question, RegionOwner, ScrutineeEntry, hold_at_one_instance,
@@ -666,12 +666,34 @@ impl<'s> Context<'s> {
         result
     }
 
-    /// Run `f` with the entries of the one equation `equation` registered in `frame` withheld alone among the frames before `height`, and the refinements of every frame from `height` inwards: the bracket an entry's spelling is settled again under at a height past its own ([`Frames::withhold_equation`](super::Frames::withhold_equation)). The caches set the live window's scoped answers aside for it as for any settlement, and it starts from nothing a settlement kept and keeps nothing: what it remembers rests on frames inside the entry's, which a settlement of another entry does not read alike.
+    /// Run `f` with the entries of the one equation `equation` registered in `frame` withheld alone in the view of `height`: the bracket an entry's spelling is settled again under at a height past its own ([`Frames::withhold_equation`](super::Frames::withhold_equation)).
     pub(crate) fn with_equation_withheld<R>(
         &mut self,
-        height: usize,
+        height: Height,
         frame: usize,
         equation: usize,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.in_unkept_view(
+            |frames| frames.withhold_equation(height, frame, equation),
+            f,
+        )
+    }
+
+    /// Run `f` with the refinements of `frame` and every frame inside it withheld but for the equations `frame` registered before the one numbered `equation`: the bracket an entry's own spelling is settled under where its frame registered an equation before it ([`Frames::withhold_from_equation`](super::Frames::withhold_from_equation)), as the certifier withholds from an equation's position.
+    pub(crate) fn with_equations_withheld_from<R>(
+        &mut self,
+        frame: usize,
+        equation: usize,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.in_unkept_view(|frames| frames.withhold_from_equation(frame, equation), f)
+    }
+
+    /// Run `f` in the view `withhold` sets on the frames, the live window's scoped answers set aside for it as for any settlement ([`Caches::enter_window`](super::Caches::enter_window)), starting from nothing a settlement kept and keeping nothing: the view reads part of a frame, or all of one but an equation, so what it remembers rests on what no other settlement's view reads alike.
+    fn in_unkept_view<R>(
+        &mut self,
+        withhold: impl FnOnce(&mut Frames<'s>) -> Withheld,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let plain = self.typing.asking.plain();
@@ -679,10 +701,7 @@ impl<'s> Context<'s> {
         self.typing
             .caches
             .enter_window(Bracket::Settlement { plain }, None);
-        let previous = self
-            .typing
-            .frames
-            .withhold_equation(height, frame, equation);
+        let previous = withhold(&mut self.typing.frames);
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);
         self.typing.frames.end_reads();
@@ -691,20 +710,23 @@ impl<'s> Context<'s> {
         result
     }
 
-    /// Run `f` in the view the spelling of the entry `key` registered in `frame` is settled in at `height`, and asked about: up to its own height, one past its frame, that frame and every frame inside it withheld ([`Context::with_refinements_withheld_from`]); past it, the entry's equation alone among the frames before `height` ([`Context::with_equation_withheld`]).
+    /// Run `f` in the view the spelling of the entry `key` registered in `frame` is settled in at `height`, and asked about. Up to its own bound ([`Frames::own_bound`](super::Frames::own_bound)), that frame and every frame inside it are withheld, but for the equations the frame registered before the entry's ([`Context::with_equations_withheld_from`]), and where it registered none, whole ([`Context::with_refinements_withheld_from`]); past it, the entry's equation alone in the view of `height` ([`Context::with_equation_withheld`]).
     pub(crate) fn settling<R>(
         &mut self,
         frame: usize,
         key: &Term,
-        height: usize,
+        height: Height,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        match (height > frame + 1)
-            .then(|| self.typing.frames.scrutinee_equation(frame, key))
-            .flatten()
-        {
-            Some(equation) => self.with_equation_withheld(height, frame, equation, f),
-            None => self.with_refinements_withheld_from(frame, f),
+        let Some(equation) = self.typing.frames.scrutinee_equation(frame, key) else {
+            return self.with_refinements_withheld_from(frame, f);
+        };
+        if height > self.typing.frames.own_bound(frame, equation) {
+            self.with_equation_withheld(height, frame, equation, f)
+        } else if self.typing.frames.registers_before(frame, equation) {
+            self.with_equations_withheld_from(frame, equation, f)
+        } else {
+            self.with_refinements_withheld_from(frame, f)
         }
     }
 }

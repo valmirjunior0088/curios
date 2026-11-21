@@ -1,7 +1,7 @@
 //! The context's doors to reduction's caches and to the protocol by which reduction asks conversion.
 
 use {
-    super::{ElabProbe, ElaborationStamp, Footing, SpelledAgain},
+    super::{ElabProbe, ElaborationStamp, Footing, Height, SpelledAgain},
     crate::{AskedAt, Context, Settled, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{Bound, ClosedMemo, Free, Level, ReduceError, Sort, Term},
@@ -115,11 +115,11 @@ impl<'s> Context<'s> {
         self.typing.caches.proof_insert(name, proof);
     }
 
-    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`, at the height the view in force reads one at ([`Context::scrutinee_height`]): `None` if no probe has asked for it there yet, `Some(None)` if reducing it refused. Up to one past its frame that is its own spelling ([`Context::settled_own_key`]); past it, the spelling settled again there, while the own spelling it was reduced on from is still the entry's own.
+    /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`, at the height the view in force reads one at ([`Context::scrutinee_height`]): `None` if no probe has asked for it there yet, `Some(None)` if reducing it refused. Up to its own bound that is its own spelling ([`Context::own_bound`], [`Context::settled_own_key`]); past it, the spelling settled again there, while the own spelling it was reduced on from is still the entry's own.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
         let height = self.scrutinee_height();
         let own = self.settled_own_key(frame, key);
-        if height <= frame + 1 {
+        if height <= self.own_bound(frame, key) {
             return own;
         }
         let from = own?.map(|own| own.unerased);
@@ -142,8 +142,19 @@ impl<'s> Context<'s> {
     }
 
     /// The height the view in force reads a reduced spelling at ([`Frames::height`](super::Frames::height)).
-    pub(crate) fn scrutinee_height(&self) -> usize {
+    pub(crate) fn scrutinee_height(&self) -> Height {
         self.typing.frames.height()
+    }
+
+    /// The height up to which the scrutinee entry `key` registered in `frame` reads its own spelling ([`Frames::own_bound`](super::Frames::own_bound)).
+    pub(crate) fn own_bound(&self, frame: usize, key: &Term) -> Height {
+        let equation = self
+            .typing
+            .frames
+            .scrutinee_equation(frame, key)
+            .unwrap_or_default();
+
+        self.typing.frames.own_bound(frame, equation)
     }
 
     /// Record a settlement of an entry's own spelling, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
@@ -168,7 +179,7 @@ impl<'s> Context<'s> {
         &mut self,
         frame: usize,
         key: Term,
-        height: usize,
+        height: Height,
         from: Option<Term>,
         settled: Option<Settled>,
         footing: Footing,

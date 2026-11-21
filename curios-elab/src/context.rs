@@ -27,7 +27,7 @@ use declared::*;
 
 mod frame;
 use frame::*;
-pub use frame::{HeldFrames, ScrutineeEntry, Settled};
+pub use frame::{Height, HeldFrames, ScrutineeEntry, Settled};
 
 mod in_scope;
 pub use in_scope::*;

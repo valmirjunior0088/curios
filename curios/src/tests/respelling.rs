@@ -927,11 +927,16 @@ const NESTS: &[Nest] = &[
         body: "match first(e, a, c) | true => (match second(e, r, a, c) | true => (match a | 0 => (match k(5) | true => let _: Holds(r(c)) = True/qed(); () | false => () end) | _ => () end) | false => () end) | false => () end",
         stated: Answer::Held,
     },
-    // The same with no arm on an expression inside: the second instance is read at its own height, which the elaborator settles with its whole frame withheld, the first instance with it, where the certifier withholds the instance and what follows it alone.
+    // The same with no arm on an expression inside, in either nesting: whichever instance the arm registers first is read past its own height, settled again with the other in view, and the one registered last is settled with the one before it in view, as the certifier settles an equation with those recorded before it.
     Nest {
         at: "`second(e, r, a, c)` under `first(e, a, c)`, both restated at `a` = 0",
         body: "match first(e, a, c) | true => (match second(e, r, a, c) | true => (match a | 0 => let _: Holds(r(c)) = True/qed(); () | _ => () end) | false => () end) | false => () end",
-        stated: Answer::Refused,
+        stated: Answer::Held,
+    },
+    Nest {
+        at: "`first(e, a, c)` under `second(e, r, a, c)`, both restated at `a` = 0",
+        body: "match second(e, r, a, c) | true => (match first(e, a, c) | true => (match a | 0 => let _: Holds(r(c)) = True/qed(); () | _ => () end) | false => () end) | false => () end",
+        stated: Answer::Held,
     },
     // A second match on the guard's own scrutinee, in the arm no value reaches: the arm's own equation answers before the guard's, so the arm holds its case. The proofs the elaborator writes for a bound rest on it, splitting a conjunction by a match on a comparison an arm around it decided.
     Nest {

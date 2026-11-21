@@ -182,6 +182,14 @@ impl Spelling {
     }
 }
 
+/// The entry a spelling settled again is of, by the depth of the frame that registers it and its key, and the height it was settled at ([`Frame::spellings_again`]).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EntryAt {
+    pub frame: usize,
+    pub key: Term,
+    pub height: Height,
+}
+
 /// What a settlement of an entry's spelling again, at a height past its own, left: its spelling there, beside the entry's own spelling it was reduced on from.
 ///
 /// **It answers only while that is still the entry's own.** An entry's own spelling is settled again where what it rests on moves (a solution landing where it held an unsolved metavariable, a rewrite of levels, an answer withdrawn), and a spelling reduced on from the one before is no reduct of the new one; its own footing reads only what its own reduction met.
@@ -392,12 +400,12 @@ pub struct Frame {
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the certifier settles an equation's reduct once for each.
     scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
-    /// The reduced spelling again of each scrutinee entry registered in a frame outside this one, settled with this frame the innermost in view that registers a refinement: under the entry's frame's depth and its key, for each of the two reductions as [`Frame::scrutinee_spellings`] is.
+    /// The reduced spelling again of each scrutinee entry settled at a height past its own whose view this frame ends ([`Height::ends_at`]): this frame whole, or its equations below a number: under the entry's frame's depth, its key and the height, for each of the two reductions as [`Frame::scrutinee_spellings`] is.
     ///
     /// **An arm moves what an entry outside it is spelled as, and nothing else of it.** The arm registers an equation of its own, which an entry registered outside did not read: under a guard `pick(c)` whose definition matches on `e(c)`, an arm on `e(c)` is where the guard's spelling is a case of that match. Which entries an arm's own moves is known only by settling them under it, so every entry is settled again at each height it is asked at ([`Frames::height`](super::Frames::height)), from its own spelling and with its own equation alone withheld ([`Frames::withhold_equation`](super::Frames::withhold_equation)), and none until a probe asks. The entry keeps its frame and its value, so an arm's own equation still answers before one registered outside it.
     ///
     /// **It lives as long as this frame registers nothing more.** It rests on the refinements of this frame and the frames beneath, which hold still until this one registers another, and it is forgotten there; otherwise it stands while its [`Footing`] does, as an entry's own spelling does.
-    spellings_again: RefCell<[HashMap<(usize, Term), SpelledAgain>; 2]>,
+    spellings_again: RefCell<[HashMap<EntryAt, SpelledAgain>; 2]>,
     /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///
     /// **It rests on the refinements it read, and on the deepest frame it read.** Every settlement of such an entry withholds the frames from its entry's inwards and reads the refinements of this frame and the frames beneath, which hold still while this one registers nothing more: a registration, and an equation withheld, land in the innermost frame and forget what is kept here. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the deepest frame it read ([`Prefix`], `Frames::begin_reads`) and answers only while that frame still stands, and with a footing that reads every part, since its reducts are many.

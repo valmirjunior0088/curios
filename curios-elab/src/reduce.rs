@@ -21,7 +21,8 @@ pub mod test_support;
 
 use {
     super::{
-        Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
+        Context, Height, Settled, hold_at_one_instance, levels_clash_to_conversion,
+        zonk_solved_term_metas,
     },
     crate::{
         Binders, Error, apply_param_types, classing, is_prop, reduce_with, same_uncommitted,
@@ -1503,11 +1504,11 @@ fn scan_settled(
     })
 }
 
-/// Settle the reduced spelling of the entry `key` registered in `frame` at the height in view ([`Context::scrutinee_height`]), brought to [`reduct_spelling`]'s form. Its own spelling, up to one past its frame, is its unerased spelling reduced with that frame and every frame inside it withheld; past it, its spelling again is its own reduced on with its equation alone withheld ([`Context::settling`]), its own settled first where no probe has asked for it.
+/// Settle the reduced spelling of the entry `key` registered in `frame` at the height in view ([`Context::scrutinee_height`]), brought to [`reduct_spelling`]'s form. Its own spelling, up to its own bound ([`Context::own_bound`]), is its unerased spelling reduced with its frame's equations from its own on, and every frame inside it, withheld; past it, its spelling again is its own reduced on with its equation alone withheld ([`Context::settling`]), its own settled first where no probe has asked for it.
 ///
 /// **Settled again from its own spelling, never from its key**, as the certifier settles one. Its own spelling is what its key reduces to with nothing of the arms inside in view, so reducing it on with them in view is the key's settlement there, and where their equations answer no stuck part of it, one walk of a term already stuck. From the key, a proof would unfold every guard again at every arm inside it.
 ///
-/// **Withheld for the certifier's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
+/// **Withheld for the certifier's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live; so are the equations its own frame registered before it, which stand as long as it does and which the certifier, withholding from the equation's position, reads (`Frames::withhold_from_equation`).
 ///
 /// **Bounded by the declaration's budget alone**, as the certifier's settlement is. What a settlement spends reads what the tables remember, a hit being free, so a ceiling below the budget would make whether an entry settles follow when the tables were last cleared, and with it what the program elaborates to. A guard over a subject an accumulation built reduces that accumulation, which the declaration pays for as it pays for any reduction it asks. The certifier settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where what the spelling rests on has moved — a solution it read unwound, a level it holds rewritten, an answer it was given withdrawn, the definitions in view changed at once, or a solution landed where it held an unsolved metavariable (`Frame::scrutinee_spellings`). A refusal settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration propagates.
 ///
@@ -1518,7 +1519,7 @@ fn settle(
     key: Term,
     original: &Term,
 ) -> Result<(), ReduceError> {
-    let own = frame + 1;
+    let own = context.own_bound(frame, &key);
     let height = context.scrutinee_height();
     if height <= own {
         return settle_at(context, frame, key, original, own);
@@ -1543,10 +1544,10 @@ fn settle_at(
     frame: usize,
     key: Term,
     start: &Term,
-    height: usize,
+    height: Height,
 ) -> Result<(), ReduceError> {
     // The term reduced and its frame are what a hunt for repeated settlements needs: the same pair recurring at an entry's own height is the entry settled anew, and the costliest calls name the keys that pay. The height tells one settled again under an arm from one settled anew.
-    curios_profile::profile!("reduce::settle", key = %start.faithful(), frame, height);
+    curios_profile::profile!("reduce::settle", key = %start.faithful(), frame, height = ?height);
     let declined = context.declined();
     let questions = context.questions();
     let settled = context.settling(frame, &key, height, |context| {
@@ -1562,7 +1563,7 @@ fn settle_at(
     // And what a withdrawal of level constraints could: an answer conversion gave while the key was reduced.
     let asked = context.questions() != questions;
     // A spelling again is read beside the own spelling it was reduced on from, which a settlement anew of that one replaces.
-    let again = (height > frame + 1).then(|| start.clone());
+    let again = (height > context.own_bound(frame, &key)).then(|| start.clone());
 
     let (settled, footing, outcome) = match settled {
         Ok(reduct) => {
