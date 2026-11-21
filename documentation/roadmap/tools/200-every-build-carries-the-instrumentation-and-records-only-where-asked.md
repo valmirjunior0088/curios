@@ -1,6 +1,6 @@
 # Every build carries the instrumentation, and records only where asked
 
-This specification removes the cost of the instrumentation being a build of its own: what only the `profile` features compile takes a second compilation of the workspace at every check, a profile of a change takes another, and the compiler a user installs can profile nothing. Its next step is the study under *Stages*, a bounded investigation of what every build pays and what changes once it carries the instrumentation, which settles *Open* and decides whether the rest proceeds.
+This specification removes the cost of the instrumentation being a build of its own: what only the `profile` features compile takes a second compilation of the workspace at every check, a profile of a change takes another, and the compiler a user installs can profile nothing. The study of what every build pays has settled how; the next step is the delivery of stage 1.
 
 ## What is wrong today
 
@@ -37,41 +37,43 @@ This specification removes the cost of the instrumentation being a build of its 
 
 Adopted: the instrumentation in every build, switched at run time by an argument, as rustc, Clang, Lean and GHC's eventlog are; a counter in every build where a reading shows it cheap. Avoided: counters compiled into one configuration, which LLVM's own header steers away from, and the environment as the switch, which [`curios-profile`'s README](../../../curios-profile/README.md#profiling-is-configured-in-code-never-from-the-environment) refuses. Curios's own: a count a verdict reads is the budget, in every build already, so the looks need no verdict's argument and stand or fall by the study alone.
 
+## What the study found
+
+Counted at `decbf4ff5`, in the user-space instructions retired by a subject's process and every thread and process it starts, read by a wrapper that opens `Instructions` and then starts the subject, under `BINARYEN_CORES=1 RAYON_NUM_THREADS=1`. Six release builds of one scratch copy of that commit, each of `curios` and of `profile-prelude` with its `main` reduced to `compile` into a kept directory and no recorder, told apart by digest: **A**, every `profile` feature off; **B**, the macros and every `cfg(feature = "profile")` site compiled, the look counter and the allocator not, the guest's map off; **C**, B and the look counter counting; **C′**, B and the counter behind a relaxed load nothing sets; **D**, B and the allocator counting; **E**, B and the allocator installed, behind a relaxed load nothing sets. The copy splits `curios-profile`'s `enabled` from the allocator and `curios-core`'s `profile` from the counter by features of its own, and names `curios-core` as a dependency of `curios`, whose dev-dependency it is, so the counter's features reach the shipped binary. Subjects: `profile-prelude`, the prelude's elaboration, certification and erasure; and `curios compile -o` over the 31 programs of `programs/`, each with a fresh `CURIOS_CABINET`. One reading of each build and subject, the six builds in a fresh shuffled order for each subject:
+
+| | the prelude's build | the corpus compiled |
+| --- | --- | --- |
+| A | 1,323,874,529,180 | 480,562,435,429 |
+| B over A, the macros and their sites | −0.22% | +0.05% |
+| C over B, the look counter counting | +0.31% | +0.01% |
+| C′ over B, the counter behind a load | +0.15% | −0.01% |
+| D over B, the allocator counting | +3.42% | +0.53% |
+| E over B, the allocator behind a load | −0.78% | −0.06% |
+
+- **A build repeats to 0.02%**: B and E read again on the prelude retire 1,320,689,926,581 and 1,310,430,046,188 against 1,320,956,043,088 and 1,310,623,317,179. A gap of up to 0.8% between two builds is the price of compiling a different binary, which E, doing more than B, reads below it by; only D stands past it, by four locked read-modify-writes an allocation.
+- **Bytes**: the release `curios` grows by 1,028,376 bytes under B, 0.49%; the bundle's `curios_js.wasm`, built for `wasm32-unknown-unknown`, by 330,591, 0.26%.
+- **Outputs**: every program's executable and the prelude's five images are one digest across the six builds.
+
 ## Settled
 
 - **The ask stays one argument**, `--profile <PATH>`, read where it is written ([`curios-profile`'s README](../../../curios-profile/README.md#profiling-is-configured-in-code-never-from-the-environment)): nothing records unasked, in any build.
 - **`--profile` turns on the guest's map too**, settled by the user on 2026-11-20: one ask makes a compile and its run legible, the stream where the argument says and the map where a sampler looks for it, `/tmp/perf-<pid>.map`, a path the engine's agent offers no other choice of. A run without it writes none, in any build.
+- **The engine is started with its choice**, settled by the user on 2026-11-21: `curios-native`'s engine is started explicitly, with the map or without, by whoever runs it — `curios`'s `main` as `--profile` says, the launcher's without, a test's through `curios-native`'s test support without — and refuses use before it is started; starting it again with the same choice answers the same engine, and with another is refused. `curios-native` names no `curios-profile`, so the launcher a compiled program carries links none of it.
 - **`Instructions` stays a measurement's**, opened by the measurements that read it and recorded at no span; with the recorder in every build, it is compiled in every build beside it.
 - **`profile-prelude` stays**, a build script taking no argument.
-- **The study decides by a share of 0.5%**, settled by the user on 2026-11-21, of the instructions retired over either subject, and of the bundle's bytes: the macros and their sites past it over A drop this specification; each of the node-look counter and the allocator counts in every build where that costs at most 0.5% over B, behind a relaxed load where that does, and is otherwise kept to a build of its own; the bundle carries the macros where they add at most 0.5% of its bytes, and they expand to nothing on `wasm32` otherwise.
+- **The study decided by a share of 0.5%**, settled by the user on 2026-11-21, and by *What the study found*: the macros and their sites are in every build; the look counter counts in every build; the allocator is installed in every build and counts only while a recorder listens, behind one relaxed load, a flag `curios-profile` owns that `install` sets for the process and `trace` for its closure's extent, so its live bytes are counted from where counting began; the bundle carries the macros.
 - **`profile-prelude`'s dependencies are unconditional**, settled by the user on 2026-11-21: `curios-prelude` keeps no feature, so `workspace lint` compiles the program, and `curios-package` joins `curios-pipeline`'s and the bundle's closures.
 - **The trusted base takes `tracing`'s four crates**, settled by the user on 2026-11-21: they time and decide nothing, as `curios-profile` beside them, and `curios-cert`'s README lists them.
 
-## Open
-
-- **The counting allocator**: counting in every build; installed in every build and counting only while a recorder listens, behind one relaxed load; or kept to a build of its own. Decided by the study.
-- **The node-look counter**: the same three, decided by the study.
-- **The browser bundle**: carrying the macros, or their expanding to nothing on `wasm32`; decided by the bytes the study counts.
-
-An instrument kept to a build of its own keeps `instrumented lint` for it, and with it the second compilation at every check.
+With nothing kept to a build of its own, `instrumented` goes whole.
 
 ## Stages
 
-1. **The study of what every build pays**, counted, at one commit, in a scratch copy of it under `target/scratch/` with its own target directory, the launcher, Binaryen's and `curios-unicode`'s artifacts copied in.
-   - *Six builds*, each in release, of `curios` and of `curios-prelude`'s `profile-prelude`, whose `main` is reduced to `compile` into a scratch directory with no recorder: **A**, every `profile` feature off; **B**, the macros and every `cfg(feature = "profile")` site compiled, the node-look counter and the allocator not; **C**, B and the node-look counter counting; **C′**, B and the counter counting behind a relaxed load nothing sets; **D**, B and the allocator counting; **E**, B and the allocator installed, counting behind a relaxed load nothing sets. The guest's map is off in all six. The copy splits `curios-profile`'s `enabled` from the allocator, and `curios-core`'s `profile` from the counter, by features of its own.
-   - *The instrument*: the user-space instructions a subject's process and every thread and process it starts retire, read by a wrapper that opens `Instructions` and then starts the subject. Each build's binaries are told apart by digest before any reading.
-   - *Subjects*: `profile-prelude`, the prelude's elaboration, certification and erasure; and `curios compile` over each program of `programs/`, every `.crs` and each directory's Curios program, each with a fresh `CURIOS_CABINET`. Three readings a build and subject, the builds interleaved; the median of each.
-   - *Shares*: B over A is what the macros and their sites cost; C and C′ over B the counter's two options, D and E over B the allocator's.
-   - *Bytes*: the release `curios` of A and of B, and the bundle `cargo xtask bundle build` writes under A and under B.
-   - *Outputs*: every program's compiled artifact and the prelude's images, by digest, equal across the six builds: the instrumentation changes nothing it measures.
-   - *The suite*: `cargo nextest run` over the workspace as `workspace test suite` selects it, once, under the build the shares keep, with the feature-gated tests in it: what fails, and which recursion runs out of stack, is a finding of this study.
-   - *Compilations*: the workspace's units a check compiles, counted off Cargo's own lines for `workspace lint` and `instrumented lint` as they stand and as the build the shares keep leaves them, and the crates the shipped compiler gains.
-   - Check: the figures written here with their commit, and *Open* settled by the shares *Settled* states.
-2. **The recorder in every build.** `curios-profile`'s `enabled` goes: `trace`, `install`, `fold` and `Instructions` compile in every build, with the allocator as the study decided, and its tests run in `workspace test`. Check: `cargo xtask workspace lint`, `curios-profile`'s tests by name.
-3. **The macros and their sites in every build.** The macros expand unconditionally; every crate's `profile` feature and `cfg(feature = "profile")` site goes, the node-look counter as decided; `--profile` and `curios profile` are in every build, which `curios`'s contract and command-line tests hold unconditionally; the instrumented measurements compile with the suite; `profile-prelude`'s dependencies are unconditional and `curios-prelude`'s feature goes, the bundle still building. Check: `cargo xtask workspace lint`, `curios`'s tests of the contract and the command line, and a stream an ordinary build's `curios --profile` files folded by its `curios profile`.
-4. **The guest's map where `--profile` asks**, the engine configured before its first use. Check: a test that a run under `--profile` leaves a map naming the guest's functions and one without leaves none, mutation-checked.
-5. **The jig builds nothing of its own.** `cargo xtask profile debug` and `release` run the ordinary build; `instrumented` keeps only what the study and *Open* left it, or goes, with its job in `check.yml`, its line in CLAUDE.md's checks and its paragraphs in `xtask`'s README and [Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md); the measurements' recorded commands drop `--all-features`, and the protocols that build a compiler `--features profile` (`curios-wonder`'s and `curios-cert`'s READMEs, [A compile costs what it reads](../../design/compilation/a-compile-costs-what-it-reads.md)) take the ordinary one. Check: `cargo xtask tools test`, `cargo xtask docs build`.
+1. **The recorder in every build.** `curios-profile`'s `enabled` goes: `trace`, `install`, `fold` and `Instructions` compile in every build, and the allocator counts while a recorder listens; its tests run in `workspace test`. Check: `cargo xtask workspace lint`, `curios-profile`'s tests by name, the allocator's gate mutation-checked.
+2. **The macros and their sites in every build.** The macros expand unconditionally; every crate's `profile` feature and `cfg(feature = "profile")` site goes, the look counter counting; `--profile` and `curios profile` are in every build, which `curios`'s contract and command-line tests hold unconditionally; the instrumented measurements compile with the suite; `profile-prelude`'s dependencies are unconditional and `curios-prelude`'s feature goes, the bundle still building. Check: `cargo xtask workspace lint`, the suite once, and a stream an ordinary build's `curios --profile` files folded by its `curios profile`.
+3. **The engine started with its choice, and the guest's map where `--profile` asks.** Check: tests that a run under `--profile` leaves a map naming the guest's functions, that one without leaves none, and that a second, different choice is refused, each mutation-checked.
+4. **The jig builds nothing of its own.** `cargo xtask profile debug`, `release` and `prelude` run the ordinary build; `instrumented` goes, with its job in `check.yml`, its line in CLAUDE.md's checks and its paragraphs in `xtask`'s README and [Every handoff step catches what no other step does](../../design/every-handoff-step-catches-what-no-other-step-does.md); the measurements' recorded commands drop `--all-features`, and the protocols that build a compiler `--features profile` (`curios-wonder`'s and `curios-cert`'s READMEs, [A compile costs what it reads](../../design/compilation/a-compile-costs-what-it-reads.md)) take the ordinary one. Check: `cargo xtask tools test`, `cargo xtask docs build`.
 
 ## Retirement
 
-Once stage 5 lands, `curios-profile`'s README says what every build carries and what `--profile` turns on, [the usage reference](../../usage.md) states `--profile` and `profile` as every build's and the guest's map among what the toolchain writes when asked, and this file is deleted. Where the study drops it, its figures become the rationale of a decision in that README that the instrumentation is a build of its own, and this file is deleted.
+Once stage 4 lands, `curios-profile`'s README says what every build carries and what `--profile` turns on, with *What the study found* as its rationale's argument, [the usage reference](../../usage.md) states `--profile` and `profile` as every build's and the guest's map among what the toolchain writes when asked, and this file is deleted.
