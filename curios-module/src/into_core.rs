@@ -940,6 +940,59 @@ impl PreparedText {
         )
     }
 
+    /// Why the absolute `path` names nothing for the reader [`PreparedText::named_by`] asks for: the resolver's own refusal of the step the walk stops at, a module or a name, with the nearest name a reader may write there, as the resolver's own `unresolved` says it. `None` where the path names something such a reader sees.
+    pub fn unnamed_by(
+        &self,
+        predecessors: &[&PreparedText],
+        path: &Qualifier,
+    ) -> Option<curios_core::Unresolved> {
+        let tables = predecessors
+            .iter()
+            .map(|earlier| &earlier.table)
+            .chain([&self.table])
+            .collect::<Vec<_>>();
+        let exports = predecessors
+            .iter()
+            .map(|earlier| &earlier.public)
+            .chain([&self.public])
+            .collect::<Vec<_>>();
+        let (public, table) = (Scoped::over(&exports), Scoped::over(&tables));
+        let segments = path.iter().collect::<Vec<_>>();
+        let (last, parents) = segments.split_last()?;
+        let root = Qualifier::empty();
+
+        let mut current = root;
+        for segment in parents {
+            match visible_child(&public, &table, &root, &current, segment) {
+                Some(child) => current = child,
+                None => {
+                    return Some(unresolved(
+                        &public,
+                        &table,
+                        &root,
+                        &current,
+                        segment,
+                        curios_core::Sought::Module,
+                    ));
+                }
+            }
+        }
+        // The last step names a declaration or a module, which a question takes either of.
+        match visible_binding(&public, &table, &root, &current, last)
+            .or_else(|| visible_child(&public, &table, &root, &current, last))
+        {
+            Some(_) => None,
+            None => Some(unresolved(
+                &public,
+                &table,
+                &root,
+                &current,
+                last,
+                curios_core::Sought::Either,
+            )),
+        }
+    }
+
     /// Whether `name` is written `pub` where this unit declares it, as a binding of its module. `None` for a name no module of the unit binds.
     pub fn is_public(&self, name: &Qualifier) -> Option<bool> {
         self.table

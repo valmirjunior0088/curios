@@ -692,6 +692,7 @@ fn exposed(path: &str) -> Option<Exported> {
         &mut |_| {},
     )
     .unwrap_or_else(|_| panic!("the prelude's scope checks"))
+    .ok()
     .and_then(|named| named.module)
 }
 
@@ -912,6 +913,7 @@ fn named_in(text: &str, path: &str) -> Option<Referent> {
         &mut |_| {},
     )
     .unwrap_or_else(|_| panic!("the program checks"))
+    .ok()
 }
 
 /// A path is answered wherever it names something: a module of functions as the module, a declaration as the declaration, a facade's path as both, a private module and a program's own as modules, and a path nothing stands at as nothing.

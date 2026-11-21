@@ -14,6 +14,7 @@ use {
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
     },
+    curios_core::Unresolved,
     curios_module::{Brought, LoadError, Overlay},
     curios_package::{Entry, Home, Library, LooseModule, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
@@ -470,14 +471,14 @@ impl Asked {
         described
     }
 
-    /// What `path` names in the subject's scope, a declaration, a module or both ([`referent`]), `telling` told of the compile as it goes.
+    /// What `path` names in the subject's scope, a declaration, a module or both, or why it names nothing ([`referent`]), `telling` told of the compile as it goes.
     pub fn referent(
         self,
         budget: u64,
         overlay: &Overlay,
         path: &Qualifier,
         telling: &mut dyn Telling,
-    ) -> Result<Option<Referent>, Vec<Diagnosis>> {
+    ) -> Result<Result<Referent, Option<Unresolved>>, Vec<Diagnosis>> {
         let (subject, verdicts) = self.taken(telling);
         let cache = verdicts.as_ref();
         let referent = referent(budget, subject, path, overlay, cache, &mut |progress| {
@@ -671,7 +672,7 @@ pub fn wonder_named_stage(
             }
             Ok(())
         }
-        Ok(None) => Err(unknown_declaration(path)),
+        Ok(None) => Err(unknown_declaration(path, None)),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
         Err(Refusal::Lowered) => Err(no_lowering(name)),
@@ -975,11 +976,11 @@ pub fn wonder_name(
         declaration,
         module,
     } = match named {
-        Ok(Some(named)) => {
+        Ok(Ok(named)) => {
             telling.answering();
             named
         }
-        Ok(None) => return Err(unknown_declaration(path)),
+        Ok(Err(unnamed)) => return Err(unknown_declaration(path, unnamed)),
         Err(diagnostics) => return Err(stopped(diagnostics)),
     };
 
@@ -1097,7 +1098,7 @@ fn declaration(
             telling.answering();
             Ok(described)
         }
-        Ok(None) => Err(unknown_declaration(path)),
+        Ok(None) => Err(unknown_declaration(path, None)),
         Err(diagnostics) => Err(stopped(diagnostics)),
     }
 }
@@ -1110,12 +1111,19 @@ fn nothing_at(place: &Place) -> CompileError {
         .into()
 }
 
-/// The refusal of a path that names nothing in scope.
-fn unknown_declaration(path: &Qualifier) -> CompileError {
-    Refused::of("unknown declaration")
-        .stating("nothing in scope is declared or exported at this path")
-        .about_named(path.join())
-        .into()
+/// The refusal of a path that names nothing in scope: the resolver's own, `unnamed`, where the subject's lowering says why, the step that failed and the nearest name there, as a program that wrote the path is told; a bare one where it does not.
+fn unknown_declaration(path: &Qualifier, unnamed: Option<Unresolved>) -> CompileError {
+    let refused = match unnamed {
+        Some(unnamed) => {
+            let mut said = Said::default();
+            unnamed.say(&mut said);
+            Refused::saying(said)
+        }
+        None => Refused::of("unknown declaration")
+            .stating("nothing in scope is declared or exported at this path"),
+    };
+
+    refused.about_named(path.join()).into()
 }
 
 /// What `wonder --name`, its views and `wonder --at` say of `described` first, a block: the path it is answered by, then each fact stated of it ([`Described::facts`]), a fact of several values laid over as many lines as keep each within a block's width, then `listing`, the command that lists its witnesses, where there are any to list, closed on where its name is written, or where no file holds it on the path it is declared at — and on the path it was asked by where a root no reader names declares it.
@@ -1280,7 +1288,7 @@ pub fn wonder_footprint(
             }
             Ok(())
         }
-        Ok(None) => Err(unknown_declaration(path)),
+        Ok(None) => Err(unknown_declaration(path, None)),
         Err(Unfooted::Unit) => Err(refusal.into()),
         Err(Unfooted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }

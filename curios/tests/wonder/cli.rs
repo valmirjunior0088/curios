@@ -862,6 +862,21 @@ fn a_place_naming_nothing_is_refused() {
     );
 }
 
+/// A path that names nothing is refused as a program that wrote it is told: the step that failed, and the nearest name a reader may write there.
+#[test]
+fn a_path_naming_nothing_offers_the_nearest_name() {
+    let root = temporary("nearest-named");
+    fs::create_dir_all(&root).unwrap();
+
+    let refused = curios(&root, &["wonder", "--name", "/std/Nat/ad"], "");
+    let said = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(1), "{said}");
+    assert!(
+        said.contains("has no `ad`") && said.contains("did you mean `add`?"),
+        "{said}"
+    );
+}
+
 /// A written name is resolved where it is lowered, so a program whose first declaration is a type mismatch still answers where a name is declared.
 #[test]
 fn a_program_that_does_not_check_answers_where_a_name_is_declared() {

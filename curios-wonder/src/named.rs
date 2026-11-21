@@ -23,7 +23,7 @@ use {
     curios_core::{
         Anchors, Binds, Certification, Declared, Definitions, Entrypoint, Free, Global, HeadKey,
         Imports, Item, Lexicon, Places, Spellings, StructDecl, Subterm, Term, Totality, UnitPaths,
-        WitnessKey, WrittenBinder,
+        Unresolved, WitnessKey, WrittenBinder,
     },
     curios_document::{Documentation, Kind, ModuleDocumentation},
     curios_elab::{Resolved, Traces},
@@ -1300,7 +1300,7 @@ fn said_by(
     })
 }
 
-/// What `asked` names in the subject's scope ([`Referent`]): the declaration, as [`described`] answers one, and the module, as [`exported_among`] lists one — both where a facade exports a declaration at its module's path. The subject is read once for the two. A path under a unit's mount that the unit's lowering declares nothing at is asked of no check ([`declared_among`]), so one naming a module alone answers where its library does not check. `None` where the path names nothing in scope. `overlay` and `cache` behave as they do for `diagnostics`.
+/// What `asked` names in the subject's scope ([`Referent`]): the declaration, as [`described`] answers one, and the module, as [`exported_among`] lists one — both where a facade exports a declaration at its module's path. The subject is read once for the two. A path under a unit's mount that the unit's lowering declares nothing at is asked of no check ([`declared_among`]), so one naming a module alone answers where its library does not check. Where the path names nothing in scope, why: the resolver's refusal of the step a program's path would stop at, where the subject's lowering says it ([`PreparedText::unnamed_by`]), read again for it alone. `overlay` and `cache` behave as they do for `diagnostics`.
 pub fn referent(
     budget: u64,
     subject: Subject,
@@ -1308,7 +1308,7 @@ pub fn referent(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
-) -> Result<Option<Referent>, Vec<Diagnosis>> {
+) -> Result<Result<Referent, Option<Unresolved>>, Vec<Diagnosis>> {
     let overlaid_verdicts = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = overlaid_verdicts
         .as_ref()
@@ -1317,7 +1317,7 @@ pub fn referent(
     let facade = |declaration: &Option<Described>| {
         declaration.as_ref().map(|described| described.path.clone())
     };
-    let (declaration, module) = match subject {
+    let (declaration, module, unnamed) = match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             let declaration = described_unit(budget, &units, asked, through, &mut *progress)?;
@@ -1330,8 +1330,14 @@ pub fn referent(
                 through,
                 progress,
             );
+            let unnamed = (declaration.is_none() && matches!(module, Ok(None))).then(|| {
+                Fold::new(budget, &units, through)
+                    .lowered_unit(|_| {}, |scope, own| own.unnamed_by(&texts(scope), asked))
+                    .ok()
+                    .flatten()
+            });
 
-            (declaration, module)
+            (declaration, module, unnamed.flatten())
         }
         Subject::Entry {
             units,
@@ -1373,8 +1379,19 @@ pub fn referent(
                 through,
                 progress,
             );
+            let unnamed = (declaration.is_none() && matches!(module, Ok(None))).then(|| {
+                Fold::new(budget, &units, through)
+                    .lowered(
+                        &entrypoint,
+                        &loader,
+                        |_| {},
+                        |scope, own, _| own.unnamed_by(&texts(scope), asked),
+                    )
+                    .ok()
+                    .flatten()
+            });
 
-            (declaration, module)
+            (declaration, module, unnamed.flatten())
         }
         Subject::CoreText { origin } => {
             let declaration = described_core_text(
@@ -1395,17 +1412,19 @@ pub fn referent(
                 progress,
             );
 
-            (declaration, module)
+            // Core text names its declarations by their paths and no resolver reads it, so a path it names nothing at has no step to refuse.
+            (declaration, module, None)
         }
     };
     let module = module.map_err(of_error)?;
 
-    Ok(
-        (declaration.is_some() || module.is_some()).then_some(Referent {
+    Ok(match declaration.is_some() || module.is_some() {
+        true => Ok(Referent {
             declaration,
             module,
         }),
-    )
+        false => Err(unnamed),
+    })
 }
 
 /// What a path names in the subject's scope ([`referent`]): a declaration, a module, or both where a facade exports a declaration at its module's path.
@@ -1771,12 +1790,12 @@ fn module_placed(lowered: &PreparedText, owned: bool, module: &Qualifier) -> Opt
 
 /// The declaration `asked` names, a path read as a reader outside every module writes one: a declaration at it, or one some module exports there ([`PreparedText::named_by`]), by `own` and the units in `scope`.
 fn resolved(scope: &[&Unit], own: &PreparedText, asked: &Qualifier) -> Global {
-    let texts = scope
-        .iter()
-        .filter_map(|unit| unit.text())
-        .collect::<Vec<_>>();
+    Global::Authored(own.named_by(&texts(scope), asked).unwrap_or(*asked))
+}
 
-    Global::Authored(own.named_by(&texts, asked).unwrap_or(*asked))
+/// The lowerings of the units in `scope` that hold one, which a path is walked over beside the subject's own.
+fn texts<'s>(scope: &[&'s Unit]) -> Vec<&'s PreparedText> {
+    scope.iter().filter_map(|unit| unit.text()).collect()
 }
 
 /// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering, then the units in scope, as `saying` reads them — beside the unit in scope that declares it, none for the subject's own. `None` for a name no lowered item declares.
