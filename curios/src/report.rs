@@ -197,7 +197,7 @@ pub enum Subject {
     File(PathBuf),
     /// A directory, as it was written: the separator it is shown closed by is what tells a reader the nodes beneath are what landed in it.
     Directory(PathBuf),
-    /// The program on standard input, which was asked for as `-` and is reported as what that means: a `-` alone on a line reads as one the compiler failed to finish writing.
+    /// The text on standard input, which was asked for as `-` and is reported as what that means: a `-` alone on a line reads as one the compiler failed to finish writing.
     Stdin,
 }
 

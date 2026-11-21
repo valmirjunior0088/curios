@@ -711,16 +711,8 @@ impl Contract {
     ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        let not_a_library = |entry: &Entry| {
-            let refused = Refused::of("not a library")
-                .stating(format_args!("`{}` takes a library", self.command))
-                .stating("a program is not one");
-
-            Err(match entry {
-                Entry::File(path) => refused.about_path(path),
-                Entry::Stdin(_) => refused.about_named(STDIN_NAME),
-            })
-        };
+        let refused = Refused::of("not a library")
+            .stating(format_args!("`{}` takes a library", self.command));
 
         match self.selection(subject, manifest, directory, cabinet, stdin)? {
             Selection::Library(library) => Ok(library),
@@ -733,8 +725,24 @@ impl Contract {
                     ))
                     .about_path(&entire.governing.manifest)
             }),
-            Selection::Program(program) => not_a_library(program.entry()),
-            Selection::Module(module) => not_a_library(module.entry()),
+            Selection::Program(program) => {
+                let refused = refused.stating("a program is not one");
+
+                Err(match program.entry() {
+                    Entry::File(path) => refused.about_path(path),
+                    Entry::Stdin(_) => refused.about_named(STDIN_NAME),
+                })
+            }
+            // A module no package declares is a unit with no package to document it under: a `mod` line in a library's header makes it one of that library's modules, which standard input's text can never be.
+            Selection::Module(module) => Err(match module.entry() {
+                Entry::File(path) => refused
+                    .stating("this file is a module no package declares")
+                    .stating("a `mod` line in a package's `lib.crs` puts it in that library")
+                    .about_path(path),
+                Entry::Stdin(_) => refused
+                    .stating("this text is a module no package declares")
+                    .about_named(STDIN_NAME),
+            }),
         }
     }
 

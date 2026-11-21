@@ -33,7 +33,7 @@ pub const STDIN_MOUNT: &str = "stdin";
 /// How an argument is spelled, decided before anything looks at a manifest or the disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Spelling {
-    /// `-`: the program on standard input.
+    /// `-`: the text on standard input, a program or a module.
     Stdin,
     /// A path, by its `.crs` or `.crsc` suffix or a separator.
     File(PathBuf),
@@ -238,7 +238,7 @@ pub enum Named {
     Executable(String),
     /// A file no unit declares, as it was given.
     File(PathBuf),
-    /// The program on standard input.
+    /// The text on standard input.
     Stdin,
 }
 

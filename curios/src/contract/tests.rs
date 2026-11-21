@@ -545,10 +545,10 @@ document SUBJECT — Library, cabinet Write, leaves Pages, options --std --outpu
   work/app: bench.crs → refused: not a library: `document` takes a library · a program is not one → <root>/work/app/bench.crs
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → refused: not a library: `document` takes a library · a program is not one → <root>/work/app/stray.crs
+  work/app: stray.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/work/app/stray.crs
   work/app: proof.crsc → refused: core text: `document` reads no Core text · a `.crsc` file is Core text, which `wonder` checks and `format` formats · try; curios wonder <root>/work/app/proof.crsc → <root>/work/app/proof.crsc
   work/app: nested/lib.crs → library nested through nested/lib.crs
-  work/app: <root>/scratch.crs → refused: not a library: `document` takes a library · a program is not one → <root>/scratch.crs
+  work/app: <root>/scratch.crs → refused: not a library: `document` takes a library · this file is a module no package declares · a `mod` line in a package's `lib.crs` puts it in that library → <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file: no such file or directory → <root>/work/app/missing.crs
   work: (none) → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
   work: serve → refused: not a package: this manifest declares an umbrella · an umbrella compiles nothing of its own · work in one of its members → <root>/work/curios.toml
@@ -948,7 +948,7 @@ fn every_command_admits_a_module_on_standard_input_as_what_it_is() {
 const MODULE_ON_STDIN: &str = r#"run SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
 compile SUBJECT: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
 compile SUBJECT --output out: refused: not a program: this text is written as a module · it has no final term to compile a program from → <stdin>
-document SUBJECT: refused: not a library: `document` takes a library · a program is not one → <stdin>
+document SUBJECT: refused: not a library: `document` takes a library · this text is a module no package declares → <stdin>
 test SUBJECT: module -
 lint SUBJECT: module -
 format SUBJECT: standard input within 100
