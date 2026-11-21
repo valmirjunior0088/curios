@@ -382,7 +382,8 @@ fn counts(declarations: &[Declaration]) -> String {
     }
     tally
         .into_iter()
-        .map(|(kind, count)| format!("{count} {}", keyword(kind)))
+        // A count and its word never part at a line's end.
+        .map(|(kind, count)| format!("{count}\u{a0}{}", keyword(kind)))
         .collect::<Vec<_>>()
         .join(" · ")
 }

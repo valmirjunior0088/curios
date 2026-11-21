@@ -57,6 +57,7 @@
   });
 
   let hits = [];
+  let more = 0;
   let chosen = -1;
 
   function narrow() {
@@ -83,6 +84,7 @@
         a.entry.label.length - b.entry.label.length ||
         a.order - b.order,
     );
+    more = Math.max(0, scored.length - LIMIT);
     return scored.slice(0, LIMIT);
   }
 
@@ -126,6 +128,13 @@
       }
       results.appendChild(row);
     });
+    // The rows are the first of the hits, and the last row says how many it left out.
+    if (more > 0) {
+      const rest = document.createElement("div");
+      rest.className = "none";
+      rest.textContent = `${more} more`;
+      results.appendChild(rest);
+    }
     results.hidden = false;
     tree.classList.add("live");
   }
@@ -163,14 +172,6 @@
     render(query);
   }
 
-  function follow(href) {
-    // At a narrow width the rail is pinned, so a same-page anchor is reached with the tree folded.
-    if (toggle && narrow()) {
-      toggle.checked = false;
-    }
-    location.href = href;
-  }
-
   field.addEventListener("input", update);
   field.addEventListener("keydown", (event) => {
     const live = tree.classList.contains("live");
@@ -197,7 +198,7 @@
       const rows = results.querySelectorAll("a");
       const target = rows[Math.max(chosen, 0)];
       if (live && target) {
-        follow(target.href);
+        target.click();
       }
     } else if (event.key === "Escape") {
       if (field.value === "") {
@@ -215,21 +216,9 @@
       field.focus();
     });
   }
-  results.addEventListener("click", (event) => {
-    const row = event.target.closest("a");
-    if (row) {
-      event.preventDefault();
-      follow(row.href);
-    }
-  });
-  nav.addEventListener("click", (event) => {
-    const row = event.target.closest("a");
-    if (
-      row &&
-      toggle &&
-      narrow() &&
-      row.getAttribute("href").charAt(0) === "#"
-    ) {
+  // At a narrow width the rail is pinned over the page, so a link followed from it, a hit or a row of the tree, folds the tree and is left to the browser.
+  tree.addEventListener("click", (event) => {
+    if (event.target.closest("a") && toggle && narrow()) {
       toggle.checked = false;
     }
   });

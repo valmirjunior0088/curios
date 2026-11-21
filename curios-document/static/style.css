@@ -23,6 +23,7 @@
 }
 
 :root {
+  color-scheme: dark;
   --navy: #143340;
   --ink: #dee9e9;
   --amber: #f7c577;
@@ -38,6 +39,9 @@
   --amber-wash: rgba(247, 197, 119, 0.14);
   --amber-edge: rgba(247, 197, 119, 0.5);
   --amber-ring: rgba(247, 197, 119, 0.28);
+  --amber-85: rgba(247, 197, 119, 0.85);
+  --amber-hover: rgba(247, 197, 119, 0.06);
+  --edge-dashed: rgba(222, 233, 233, 0.22);
   --rail: #122d38;
   --well-flat: #102933;
   --sans: Geist, system-ui, sans-serif;
@@ -160,7 +164,8 @@ main {
 .search .clear[hidden] {
   display: none;
 }
-.tree label {
+.tree label,
+.tree .toggle {
   display: none;
 }
 .tree nav {
@@ -189,7 +194,7 @@ main {
   overflow: hidden;
 }
 .tree a:hover {
-  background: rgba(247, 197, 119, 0.06);
+  background: var(--amber-hover);
   color: var(--amber);
 }
 .tree a.current {
@@ -200,7 +205,7 @@ main {
   width: 52px;
   font-size: 10.5px;
   letter-spacing: 0.06em;
-  color: rgba(247, 197, 119, 0.85);
+  color: var(--amber-85);
 }
 .tree .entry .label {
   flex: 1 1 auto;
@@ -344,7 +349,7 @@ h2 {
   color: var(--ink-70);
 }
 .badge.dashed {
-  border: 1px dashed rgba(222, 233, 233, 0.22);
+  border: 1px dashed var(--edge-dashed);
   color: var(--ink-57);
 }
 .signature {
@@ -366,34 +371,24 @@ h2 {
   padding-left: 0;
 }
 /* A signature's words and names, each painted by its class (`curios-common`'s `Class`), by the code palette's logic: a keyword keeps the amber, a boolean and a sort its paler step, a type and a concept stand out by being brighter, and every other name keeps the text's strength; a name the compilation does not class steps back. A linked name keeps its class's colour, underlined faintly, and takes the amber where the reader reaches for it. */
-.signature .keyword,
-.witnesses .keyword {
+:is(.signature, .witnesses) .keyword {
   color: var(--amber);
 }
-.signature .boolean,
-.signature .sort,
-.witnesses .boolean,
-.witnesses .sort {
+:is(.signature, .witnesses) :is(.boolean, .sort) {
   color: var(--amber-bright);
 }
-.signature .type,
-.signature .concept,
-.witnesses .type,
-.witnesses .concept {
+:is(.signature, .witnesses) :is(.type, .concept) {
   color: var(--ink);
 }
-.signature .name,
-.witnesses .name {
+:is(.signature, .witnesses) .name {
   color: var(--ink-70);
 }
-.signature a,
-.witnesses a {
+:is(.signature, .witnesses) a {
   color: inherit;
   text-decoration: underline dotted var(--ink-28);
   text-underline-offset: 3px;
 }
-.signature a:hover,
-.witnesses a:hover {
+:is(.signature, .witnesses) a:hover {
   color: var(--amber);
 }
 .signature .note {
@@ -413,6 +408,14 @@ h2 {
   text-wrap: pretty;
 }
 
+/* The declaration a link lands on takes the amber: a card its edge, and a member's or a witness's row its wash. */
+.card:target {
+  border-color: var(--amber-edge);
+}
+.signature .member:target,
+.witnesses li:target {
+  background: var(--amber-wash);
+}
 /* The witnesses: one row each, in one box. */
 .witnesses {
   margin: 0;
@@ -511,6 +514,19 @@ footer img {
   }
   .tree label svg {
     transition: transform 0.15s ease;
+  }
+  /* The checkbox is out of sight and in the tab order, so the tree opens from the keyboard where no script runs, the chevron showing the ring. */
+  .tree .toggle {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    opacity: 0;
+  }
+  .tree .toggle:focus-visible ~ label {
+    border-color: var(--amber-edge);
+    box-shadow: 0 0 0 3px var(--amber-ring);
   }
   .tree .toggle:checked ~ label {
     color: var(--amber);

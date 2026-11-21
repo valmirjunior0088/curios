@@ -159,6 +159,21 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
         landing.contains("<div class=\"results\" hidden></div>"),
         "{landing}"
     );
+    // The page names its icon; the checkbox behind the chevron is kept from sight by the stylesheet and never by the markup, so it stays in the tab order; and a module card's tally keeps each count with its word.
+    assert!(
+        landing.contains("<link rel=\"icon\" href=\"static/mark.svg\" type=\"image/svg+xml\">"),
+        "{landing}"
+    );
+    assert!(
+        landing.contains(
+            "<input type=\"checkbox\" id=\"rail-toggle\" class=\"toggle\" aria-label=\"Show the index\">"
+        ),
+        "{landing}"
+    );
+    assert!(
+        landing.contains("<span class=\"counts\">1\u{a0}let</span>"),
+        "{landing}"
+    );
     assert!(landing.contains("href=\"#Token\""), "{landing}");
     assert!(landing.contains("id=\"satisfy-1\""), "{landing}");
     // The concept's superclass edge prints as a member line and, being anonymous, carries no anchor.

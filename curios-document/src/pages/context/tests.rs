@@ -107,6 +107,10 @@ fn a_module_card_tallies_kinds_in_their_order() {
         declaration(&home, "", Kind::Definition),
     ];
 
-    assert_eq!(counts(&declarations), "2 let · 1 induct · 1 satisfy");
+    // A count and its word are joined by a no-break space, so the two never part at a line's end.
+    assert_eq!(
+        counts(&declarations),
+        "2\u{a0}let · 1\u{a0}induct · 1\u{a0}satisfy"
+    );
     assert_eq!(counts(&[]), "");
 }
