@@ -464,14 +464,13 @@ impl TestRun {
     }
 }
 
-/// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused as written as a module where its text is one, rather than as missing the term a program ends in.
+/// The entry program written in `path`, what its own modules resolve against, and the text it was parsed from — refused, where no package declares it and its text is written as a module, as the module it is rather than as missing the term a program ends in. A declared entry is a program by its declaration, and the program grammar's refusal says what it lacks.
 pub fn opened(
     path: &Path,
     package: Option<&PackageRoot>,
 ) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    open_entrypoint(path, package).map_err(|error| match fs::read_to_string(path) {
-        // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
-        Ok(text) if Form::of(path, &text) == Form::Module => {
+    open_entrypoint(path, package).map_err(|error| match (package, fs::read_to_string(path)) {
+        (None, Ok(text)) if Form::of(path, &text) == Form::Module => {
             not_a_program(&Entry::File(path.to_path_buf())).into()
         }
         _ => CompileError::Failure(vec![error.report()]),

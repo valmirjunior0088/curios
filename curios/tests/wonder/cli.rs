@@ -173,6 +173,25 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     );
 }
 
+/// A declared executable is a program by its declaration, so an entry of declarations alone is refused by the program grammar, in its words, whichever command reads it: the check answers the refusal and `run` stops on it, one sentence in both.
+#[test]
+fn an_entry_of_declarations_alone_is_refused_for_its_term_by_every_reader() {
+    let root = project("termless-entry");
+    write(&root, "app.crs", "pub let w : /std/Str = \"a\";\n");
+    let refusal = "a program closes with one term, the description it performs, and this text ends before one";
+
+    let checked = curios(&root, &["wonder", "app.crs"], "");
+    assert!(checked.status.success());
+    let answered = stdout(&checked);
+    assert!(answered.contains(refusal), "{answered}");
+    assert!(answered.contains("app.crs:2:1"), "{answered}");
+
+    let ran = curios(&root, &["run", "app"], "");
+    let stopped = String::from_utf8_lossy(&ran.stderr);
+    assert_eq!(ran.status.code(), Some(1), "{stopped}");
+    assert!(stopped.contains(refusal), "{stopped}");
+}
+
 /// A file written as a module whose stem is no name a module can take is mounted nowhere, so it is checked item by item by nothing: the answer says so, where the program's grammar refused its last line for a term it was never meant to hold. The same text under a stem that is a name is checked as a module and reports nothing.
 #[test]
 fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {

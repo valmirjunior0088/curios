@@ -1,6 +1,6 @@
 //! A form the grammar does not have, refused by what was read: two terms side by side, where the refusal stands and what follows a term without being one; a head or a form missing a part, named for the part; and a word another language reserves, named with the form written in its place.
 
-use crate::*;
+use {crate::*, curios_common::Source};
 
 fn refusal(source: &str) -> String {
     source.parse::<Entrypoint>().unwrap_err().format()
@@ -234,4 +234,33 @@ fn a_missing_semicolon_is_refused_where_it_is_written() {
     ] {
         source.parse::<Entrypoint>().unwrap();
     }
+}
+
+/// A text whose declarations close it is refused at its end for the term a program closes with, rather than as a term the end of the input stood in place of, and says where declarations alone belong; a broken declaration standing last is still refused as itself.
+#[test]
+fn a_text_of_declarations_alone_is_refused_for_the_term_a_program_closes_with() {
+    for (source, place) in [("pub let w : /std/Str = \"a\";\n", (2, 1)), ("", (1, 1))] {
+        let error = source.parse::<Entrypoint>().unwrap_err();
+        let report = error.format();
+        assert!(
+            report.contains("a program closes with one term, the description it performs, and this text ends before one")
+                && report.contains("declarations alone are a module"),
+            "{source:?} reported {report}"
+        );
+        assert!(
+            !report.contains("expected: a term"),
+            "{source:?} reported {report}"
+        );
+        assert_eq!(
+            error.report().span().expect("located").line_column(),
+            place,
+            "{source:?} reported {report}"
+        );
+    }
+
+    // Read as a compilation reads a program, recovering past the broken declaration.
+    let broken = Entrypoint::parse(&Source::inline("pub let w : /std/Str = ;\n"))
+        .unwrap_err()
+        .format();
+    assert!(!broken.contains("this text ends before one"), "{broken}");
 }

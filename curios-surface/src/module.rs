@@ -529,6 +529,19 @@ impl Entrypoint {
     }
 }
 
+/// What refuses a program whose declarations close its text, with no term after them: the rule, as the refusals of what stands past a program's final term state theirs, and where declarations alone belong.
+const PROGRAM_ENDS_BEFORE_ITS_TERM: &[&str] = &[
+    "a program closes with one term, the description it performs, and this text ends before one",
+    "declarations alone are a module, which a `mod` line or a package's `lib.crs` declares",
+];
+
+/// The term `items` close with, and the end of the program past it: a program's whole tail.
+fn closing<'a>(items: Vec<Recovered<TopItem>>) -> impl Parser<'a, Entrypoint> {
+    parse_term
+        .and_drop(parse_program_end::<Program>)
+        .map(move |tail| Entrypoint::new(into_module(items), tail))
+}
+
 impl Entrypoint {
     /// The compilation's reading of a program, recovering past a broken item as [`Module::parse`] does. A broken item that stands last swallows the tail, since a tail begins with no word an anchor could find; the tail's absence is then that item's fault and reported as it, rather than as a term missing at the end of the input.
     pub fn parse(source: &Arc<Source>) -> Result<Self, ParserError> {
@@ -548,15 +561,13 @@ impl Entrypoint {
         let entrypoint = run_parser(
             parse_file_head
                 .and_keep(parse_items(strict))
-                .flat_map(|items| {
-                    let swallowed = match first_broken(&items) {
-                        Some(error) => commit(raise(error)).boxed(),
-                        None => fail("expected: a program's final term").boxed(),
-                    };
-                    parse_term
-                        .and_drop(parse_program_end::<Program>)
-                        .map(move |tail| Entrypoint::new(into_module(items), tail))
-                        .or(swallowed)
+                .flat_map(|items| match first_broken(&items) {
+                    Some(error) => closing(items).or(commit(raise(error))).boxed(),
+                    // Committed before a term is tried: at the end of the input the term's own failure, `expected: a term`, stands at the same place and would outrank one stated after it.
+                    None => take_eof()
+                        .and_keep(commit(fail(PROGRAM_ENDS_BEFORE_ITS_TERM)))
+                        .or(closing(items))
+                        .boxed(),
                 }),
             source,
         )?;
