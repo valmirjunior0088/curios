@@ -119,3 +119,140 @@ fn a_goal_stands_where_its_question_mark_was_written() {
         );
     }
 }
+
+// One refusal of each kind a reader meets as they write, raised once, with its words and where it points: the headline names the fault, each fact speaks of what the reader wrote, and the caret stands on it. Each kind's own rule has a test of its own; this one holds the whole of what each says, so a change to any is seen here.
+#[test]
+fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
+    for (source, words, place) in [
+        // Repeated field.
+        (
+            "use /std/{Nat};\nstruct Point: Type { x: Nat, y: Nat }\nlet p: Point = Point { x = 1, x = 2, y = 3 };\n/std/print(\"\")\n",
+            "repeated field\n│  `x` is written twice\n│  a literal writes the fields of `Point` in their order, each once\n│  order: `x`, `y`\n",
+            "│  3 │ let p: Point = Point { x = 1, x = 2, y = 3 };\n│    │                                   ^",
+        ),
+        // Field out of order.
+        (
+            "use /std/{Nat};\nstruct Point: Type { x: Nat, y: Nat }\nlet p: Point = Point { y = 2, x = 1 };\n/std/print(\"\")\n",
+            "field out of order\n│  `x` is written after a field declared after it\n│  a literal writes the fields of `Point` in their order, each once\n│  order: `x`, `y`\n",
+            "│  3 │ let p: Point = Point { y = 2, x = 1 };\n│    │                                   ^",
+        ),
+        // Mark mismatch.
+        (
+            "use /std/{Nat};\nstruct Point: Type { x: Nat, y: Nat }\nlet p: Point = Point { @x = 1, y = 2 };\n/std/print(\"\")\n",
+            "mark mismatch\n│  `x` is a plain field of `Point`\n│  a plain field is written with no mark\n│  write it `x = ...`\n",
+            "│  3 │ let p: Point = Point { @x = 1, y = 2 };\n│    │                             ^",
+        ),
+        // Method count mismatch.
+        (
+            "use /std/{Nat, Show};\nstruct Point: Type { x: Nat }\nsatisfy Show(Point) { }\n/std/print(\"\")\n",
+            "method count mismatch\n│  `Show` has 1 method\n│  written: 0\n│  missing: `show`\n",
+            "│  3 │ satisfy Show(Point) { }\n│    │         ^^^^^^^^^^^",
+        ),
+        // Not a function.
+        (
+            "use /std/{Nat, Fmt};\nFmt/print(\"%\\n\")(1)(2)\n",
+            "not a function\n│  applied: a term of type `/std/Io({})`, which takes no argument\n",
+            "│  2 │ Fmt/print(\"%\\n\")(1)(2)\n│    │ ^^^^^^^^^^^^^^^^^^^^^^",
+        ),
+        // No witness for a closing function.
+        (
+            "use /std/{Nat, Fmt};\nFmt/print(\"% and %\\n\")(1)\n",
+            "no witness\n│  wanted: `/std/Program((@A: Type, use /std/Show(A), a: A) -> /std/Io({}))`\n│  a program closes with an action a `Program` witness runs, such as an `Io({})`\n│  this one's type is `(@A: Type, use /std/Show(A), a: A) -> /std/Io({})`\n│  it is a function still to be called with what it takes\n",
+            "│  2 │ Fmt/print(\"% and %\\n\")(1)\n│    │ ^^^^^^^^^^^^^^^^^^^^^^^^^",
+        ),
+        // Type mismatch at a bang.
+        (
+            "use /std/{Nat, Io};\nlet both() -> Io({}) =\n    let x = 1!;\n    Io/pure(());\nboth()\n",
+            "type mismatch\n│  inferred: `Nat`\n│  expected: `Io(?)`\n",
+            "│  3 │     let x = 1!;\n│    │             ^",
+        ),
+        // Undetermined type.
+        (
+            "use /std/{Io, Str, Bool, Nat};\nconcept Joint(T: Type, R: Type): Type {\n    run(T) -> Io(R),\n}\nsatisfy (@A: Type, @B: Type, @C: Type) => Joint({Io(A), Io(B), Io(C)}, {A, B, C}) {\n    run(t) =\n        let (x, (y, z)) = Io/both(t.0, Io/both(t.1, t.2))!;\n        Io/pure((x, y, z)),\n}\nlet all_of(@T: Type, @R: Type, use Joint(T, R), actions: T) -> Io(R) =\n    Joint/run(actions);\nlet execute() -> Io({}) =\n    let (n, s, b) = all_of((Io/pure(7), Io/pure(\"seven\"), Io/pure(true)))!;\n    Io/pure(());\nexecute()\n",
+            "undetermined type\n│  a tuple pattern of 3 fields takes apart a value whose type is not known here\n│  write the type where the value is bound, `let x: {A, B} = ...;`, and take `x` apart\n",
+            "│  13 │     let (n, s, b) = all_of((Io/pure(7), Io/pure(\"seven\"), Io/pure(true)))!;\n│     │         ^^^^^^^^^",
+        ),
+        // Declaration cycle.
+        (
+            "use /std/{Nat};\nconcept A(T: Type): Type { use B(T), }\nconcept B(T: Type): Type { use A(T), }\n/std/print(\"\")\n",
+            "declaration cycle\n│  `A` and `B` need one another\n│  each reads another before it can be elaborated, so none can be first\n│  declare types and concepts that name one another as one group, `struct ... and ...` or `concept ... and ...`\n│  a concept's `use` fields form no cycle, grouped or not\n",
+            "│  3 │ concept B(T: Type): Type { use A(T), }\n│    │         ^",
+        ),
+        // Undischarged bound under guards.
+        (
+            "use /std/{Nat, List};\nlet pick(xs: List(Nat), i: Nat) -> Nat =\n    match i <= List/len(xs) | true => List/get(xs, i) | false => 0 end;\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound `ok` of `List/get` was not discharged\n│  nothing discharged `/std/Bool/Holds(i < List/len(xs))`\n│  it does not follow from the facts in scope:\n│    a guard, `i <= List/len(xs)`\n│  it fails at `i = 0`, `List/len(xs) = 0`\n│  guard the call with `i < List/len(xs)`\n│  or supply it explicitly, `List/get(@...)`\n",
+            "│  3 │     match i <= List/len(xs) | true => List/get(xs, i) | false => 0 end;\n│    │                                       ^^^^^^^^^^^^^^^",
+        ),
+        // Undischarged bound of an operator.
+        (
+            "use /std/{Nat};\nlet share(total: Nat, people: Nat) -> Nat = total / people;\n/std/print(\"\")\n",
+            "undischarged bound\n│  the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(people)`\n│  it fails at `people = 0`\n│  an operator takes no written arguments\n│  guard the operation with `people != 0`\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`\n",
+            "│  2 │ let share(total: Nat, people: Nat) -> Nat = total / people;\n│    │                                             ^^^^^^^^^^^^^^",
+        ),
+        // Argument count mismatch.
+        (
+            "use /std/{Nat};\nlet double(n: Nat) -> Nat = n + n;\nlet four: Nat = double(1, 2);\n/std/print(\"\")\n",
+            "argument count mismatch\n│  written: 2\n│  `double` takes 1 argument\n",
+            "│  3 │ let four: Nat = double(1, 2);\n│    │                 ^^^^^^^^^^^^",
+        ),
+        // Surplus member.
+        (
+            "use /std/{Nat};\nlet double(n: Nat) -> Nat = n + n;\nlet two: Nat = double(@1);\n/std/print(\"\")\n",
+            "surplus member\n│  `double` takes no `@` argument\n│  write it with no mark\n",
+            "│  3 │ let two: Nat = double(@1);\n│    │                        ^",
+        ),
+        // No witness for a returned action.
+        (
+            "use /std/{Nat, Io, Option};\nlet wrap() -> Option(Nat) = Io/pure(1);\n/std/print(\"\")\n",
+            "no witness\n│  wanted: `/std/Monad/Lift(Io, Option)`\n│  needed to return an `Io` action where this `Option` region's is expected\n",
+            "│  2 │ let wrap() -> Option(Nat) = Io/pure(1);\n│    │                             ^^^^^^^^^^",
+        ),
+        // A word another language reserves.
+        (
+            "use /std/{Nat};\nlet big(n: Nat) -> Nat = if n > 10 then 1 else 0;\n/std/print(\"\")\n",
+            "syntax error\n│  `if` is no keyword of Curios: a choice is a `match` on its condition, `match c | true => a | false => b end`\n",
+            "│  2 │ let big(n: Nat) -> Nat = if n > 10 then 1 else 0;\n│    │                          ^",
+        ),
+        // A run between single quotes.
+        (
+            "use /std/{Str};\nlet s: Str = 'hello';\n/std/print(s)\n",
+            "syntax error\n│  a character literal holds one character\n│  a string is written between double quotes, `\"...\"`\n",
+            "│  2 │ let s: Str = 'hello';\n│    │              ^^",
+        ),
+        // No such field.
+        (
+            "use /std/{Nat, List};\nlet count(xs: List(Nat)) -> Nat = xs.len();\n/std/print(\"\")\n",
+            "no such field\n│  `.len` reads a field, and a `List(Nat)` has none\n",
+            "│  2 │ let count(xs: List(Nat)) -> Nat = xs.len();\n│    │                                   ^^^^^^",
+        ),
+        // Not a concept.
+        (
+            "use /std/{Nat};\nsatisfy Nat(Nat) { }\n/std/print(\"\")\n",
+            "not a concept\n│  `Nat(Nat)` applies a head that is no concept\n│  a `satisfy` names the concept it witnesses, `satisfy Show(Point) { ... }`\n",
+            "│  2 │ satisfy Nat(Nat) { }\n│    │         ^^^^^^^^",
+        ),
+        // Ambiguous witness.
+        (
+            "use /std/{Str, Show};\nconcept Pretty(T: Type): Type { use Show(T), }\nconcept Loud(T: Type): Type { use Show(T), }\npub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);\n/std/print(\"\")\n",
+            "ambiguous witness\n│  wanted: `Show(T)`\n│  `use Pretty(T)` and `use Loud(T)` both hold it as a superclass, neither nearer than the other\n",
+            "│  4 │ pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);\n│    │                                                                  ^^^^^^^^^^^^",
+        ),
+        // No witness for an argument.
+        (
+            "use /std/{Nat, Fmt};\nstruct Point: Type { x: Nat, y: Nat }\nFmt/print(\"%\\n\")(Point { x = 1, y = 2 })\n",
+            "no witness\n│  wanted: `/std/Show(Point)`\n│  needed by `Fmt/print` for this argument\n",
+            "│  3 │ Fmt/print(\"%\\n\")(Point { x = 1, y = 2 })\n│    │                  ^^^^^^^^^^^^^^^^^^^^^^",
+        ),
+        // Shape mismatch.
+        (
+            "use /std/{Nat};\nlet pick(p: {Nat, Nat}) -> Nat =\n    match p | (a, b) => a | (a, b, c) => b end;\n/std/print(\"\")\n",
+            "shape mismatch\n│  the arms' patterns disagree on shape in one column\n│  one arm takes apart a tuple of 2 fields, another a tuple of 3 fields\n",
+            "│  3 │     match p | (a, b) => a | (a, b, c) => b end;\n│    │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        ),
+    ] {
+        let report = error(source);
+        assert!(report.contains(words), "expected the words:\n{report}");
+        assert!(report.contains(place), "expected the place:\n{report}");
+    }
+}
