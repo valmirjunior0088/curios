@@ -33,7 +33,7 @@ use {
     curios_common::{Kind, OsError, Report, Source, SourceName, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
-    curios_native::{Bundle, Compiled, OsHost, Stop},
+    curios_native::{Bundle, Compiled, GuestMap, OsHost, Stop, start_engine},
     curios_package::{
         Entry, Fetch, Pinning, Products, Refused, Repoint, Spelling, Target, Transport, curate,
         pin, scaffold,
@@ -178,6 +178,8 @@ fn dispatch() -> Result<(), Failure> {
     if let Some(path) = cli.profile.clone() {
         install_profiling(path);
     }
+    // The first start of the process, so none is refused; the engine itself is built where a command first runs or compiles a module.
+    start_engine(GuestMap::Unwritten).expect("the engine is started once, here, before any use");
 
     // Decided once, before anything is written: asked for or refused outright, and otherwise on where standard error goes and whether the reader has said `NO_COLOR`, which a value that is not empty says.
     let seen = |terminal: bool| match cli.color {

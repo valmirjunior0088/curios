@@ -34,6 +34,7 @@ fn residual_entry_capability_selects_the_abi_and_preserves_execution() {
             "{source}"
         );
         let raw = to_bytes(&module, &Names::default());
+        start_test_engine();
         for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
             let code =
                 curios_cranelift::compile(&bytes).expect("selected ABI validates and compiles");
@@ -131,6 +132,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
     assert!(module.suspension().is_some());
     assert!(!wasm.to_string().contains("(export \"func/advance\""));
     let raw = to_bytes(&wasm, &Names::default());
+    start_test_engine();
     for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
         let code = curios_cranelift::compile(&bytes).expect("internal suspension module validates");
         let compiled = Compiled::of(code, foreigns.clone());

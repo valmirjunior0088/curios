@@ -4,8 +4,8 @@
 
 use {
     curios_native::{
-        Bundle, Compiled, DeclaredModule, MachineCode, OsHost, Stop, extract_bundle,
-        plugin_bindings,
+        Bundle, Compiled, DeclaredModule, GuestMap, MachineCode, OsHost, Stop, extract_bundle,
+        plugin_bindings, start_engine,
     },
     std::{env, ffi::OsString, fs, process::ExitCode},
 };
@@ -34,6 +34,8 @@ fn main() -> ExitCode {
     let args = env::args_os().map(OsString::into_encoded_bytes).collect();
 
     let launch = || {
+        // A compiled program writes no map a sampler would read: that is the compiler's, asked by `--profile`.
+        start_engine(GuestMap::Unwritten).map_err(|refusal| Stop::of("host failure", refusal))?;
         let bundle = bundle()?;
 
         // Every module the bundle carries is machine code this engine emitted: nothing here compiles, which is what keeps a backend out of this binary. `plugin_bindings` still checks the coverage rule against the store, so a bundle whose modules and declarations disagree is refused here exactly as it would have been at `curios run`.

@@ -176,6 +176,7 @@ fn plugin() -> Vec<u8> {
 
 /// One module answering the declarations `exports` names, each an export beside the declaration it answers.
 fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
+    start_test_engine();
     vec![DeclaredModule {
         package: "fixture".to_string(),
         name: "probe".to_string(),

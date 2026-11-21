@@ -13,7 +13,7 @@ use {
         collections::{HashMap, hash_map::Entry},
         error::Error,
         fmt, panic,
-        sync::{Arc, LazyLock},
+        sync::{Arc, LazyLock, OnceLock},
         thread,
     },
     wasmtime::{
@@ -94,9 +94,42 @@ pub fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, St
     })
 }
 
-/// The one wasm engine for the whole process. Building an `Engine` stands up the Cranelift backend and is expensive, so it is created once and shared; `Engine` is `Send + Sync` (internally reference-counted), so a `static` is sound and a clone is cheap. Every module, store, and type below is created against it, so they stay engine-consistent.
+/// Whether the engine writes `/tmp/perf-<pid>.map`, the map a sampling profiler names the guest's emitted functions by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GuestMap {
+    /// No map: what a run nobody profiles writes.
+    Unwritten,
+    /// The map, each module's functions written to it as the engine compiles or reads the module back: what `--profile` asks.
+    Written,
+}
+
+/// The process's choice of [`GuestMap`], made once, by whoever runs the engine, before its first use.
+static CHOSEN: OnceLock<GuestMap> = OnceLock::new();
+
+/// Start the one wasm engine of the process, with its guest map or without: the process's entry chooses, `curios`'s `main` as `--profile` says, the launcher's without, a test's without, and nothing uses the engine before it is started ([`shared_engine`]).
+///
+/// The engine is built at its first use, which a command that runs no module never reaches. Started again with the same choice it is started already; with the other it is refused, since the engine is built once.
+pub fn start_engine(map: GuestMap) -> Result<(), String> {
+    let chosen = *CHOSEN.get_or_init(|| map);
+
+    match chosen == map {
+        true => Ok(()),
+        false => Err(format!(
+            "the engine is started with the guest's map {}, and is built once",
+            match chosen {
+                GuestMap::Written => "written",
+                GuestMap::Unwritten => "unwritten",
+            }
+        )),
+    }
+}
+
+/// The one wasm engine for the whole process, as [`start_engine`] chose it; refused, with a panic, where nothing started it. Building an `Engine` stands up the Cranelift backend and is expensive, so it is created once, at its first use, and shared; `Engine` is `Send + Sync` (internally reference-counted), so a `static` is sound and a clone is cheap. Every module, store, and type below is created against it, so they stay engine-consistent.
 pub fn shared_engine() -> &'static Engine {
     static ENGINE: LazyLock<Engine> = LazyLock::new(|| {
+        let map = *CHOSEN
+            .get()
+            .expect("the engine is used before it is started: `start_engine` comes first");
         let mut config = Config::new();
         config.wasm_reference_types(true);
         config.wasm_function_references(true);
@@ -111,11 +144,12 @@ pub fn shared_engine() -> &'static Engine {
         config.max_wasm_stack(GUEST_STACK);
         config.async_stack_size(GUEST_STACK + HOST_RESERVE);
 
-        // Under the `profile` feature, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-emit` emitted. Without it every sample landing in emitted wasm resolves to a bare address, or symbolicates into an unrelated host function's prologue.
+        // Where the map is asked, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-emit` emitted. Without it every sample landing in emitted wasm resolves to a bare address, or symbolicates into an unrelated host function's prologue.
         //
-        // This is the guest-side half of the same flag `curios-profile` uses for the compiler, so one feature profiles both ends of a compile-and-run. It selects how compiled code is registered with the host rather than how it is compiled, so a `.cwasm` produced without it still deserializes against an engine built with it.
-        #[cfg(feature = "profile")]
-        config.profiler(wasmtime::ProfilingStrategy::PerfMap);
+        // This is the guest-side half of `--profile`, so one ask profiles both ends of a compile-and-run. It selects how compiled code is registered with the host rather than how it is compiled, and no compatibility hash reads it, so a `.cwasm` produced without it still deserializes against an engine built with it.
+        if map == GuestMap::Written {
+            config.profiler(wasmtime::ProfilingStrategy::PerfMap);
+        }
 
         Engine::new(&config).expect("failed to create wasm engine")
     });

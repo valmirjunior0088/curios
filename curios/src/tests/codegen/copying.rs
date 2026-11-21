@@ -39,6 +39,7 @@ fn small_suspension_programs_do_not_expand_into_callback_families() {
             "{source}: {} raw bytes reaches the {ceiling}-byte ceiling",
             raw.len()
         );
+        start_test_engine();
         for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
             let code = curios_cranelift::compile(&bytes).expect("module validates and compiles");
             let compiled = Compiled::of(code, foreigns.clone());

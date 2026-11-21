@@ -169,6 +169,7 @@ fn loop_cont(fixture: &Fixture) {
 
 fn run_both(fixture: &Fixture, cases: &[(&[&str], &str)]) {
     let raw = to_bytes(&fixture.wasm, &Names::default());
+    start_test_engine();
     for bytes in [raw.clone(), curios_binaryen::optimize(raw)] {
         let code = curios_cranelift::compile(&bytes).expect("raw and optimized modules validate");
         let compiled = Compiled::of(code, fixture.foreigns.clone());

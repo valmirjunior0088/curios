@@ -33,6 +33,7 @@ fn doubling() -> ForeignStore {
 
 /// What linking `name` of `foreigns` answers, over `bindings` and a host that answers nothing.
 fn linked(foreigns: &ForeignStore, bindings: &ForeignBindings, name: &str) -> Result<(), String> {
+    start_test_engine();
     let engine = shared_engine();
 
     link(
@@ -142,6 +143,7 @@ fn a_row_that_does_not_return_is_answered_by_a_termination() {
 fn every_host_answer_crosses_as_its_row() {
     let (host, _io) = MockHost::builder().build();
     let answers = host_rows(Arc::new(host));
+    start_test_engine();
     let engine = shared_engine();
     let mut linker = Linker::new(engine);
     let mut store = ForeignStore::new();

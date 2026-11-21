@@ -100,6 +100,7 @@ fn library() -> TestSubject {
             refusal.render()
         )
     });
+    start_test_engine();
     let mut subjects = test_subjects(selection)
         .unwrap_or_else(|error| panic!("the standard library is no test subject:\n{error}"));
 

@@ -426,6 +426,7 @@ fn walk_mirror_attribution_measurements() {
     .map(|(label, source)| {
         let (module, foreigns) = compile_raw_program(source);
         let counts = mirror_counts(&module.to_string());
+        start_test_engine();
         let raw = Compiled::of(
             curios_cranelift::compile(&to_bytes(&module, &Names::default()))
                 .expect("raw module compiles"),

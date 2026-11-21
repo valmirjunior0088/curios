@@ -3,7 +3,7 @@
 use {
     crate::compile::optimize,
     curios_abi::{ForeignStore, HostOps},
-    curios_native::{Compiled, ForeignBindings},
+    curios_native::{Compiled, ForeignBindings, GuestMap, start_engine},
 };
 
 /// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-native`'s shared engine: [`to_cwasm`](crate::to_cwasm)'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
@@ -11,6 +11,8 @@ pub fn to_compiled(
     module: &curios_wasm::Module,
     foreigns: ForeignStore,
 ) -> Result<Compiled, String> {
+    // A suite runs no `main`, so it starts the engine as every test does, with no map for a sampler, before the optimizer validates against it.
+    start_engine(GuestMap::Unwritten)?;
     let bytes = optimize(module);
 
     let code = curios_profile::profile!("precompile" => curios_cranelift::compile(&bytes))

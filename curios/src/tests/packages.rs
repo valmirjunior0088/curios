@@ -571,6 +571,7 @@ fn library(root: &Path) -> TestSubject {
         || unreachable!("the package reads nothing on standard input"),
     )
     .expect("a governed package");
+    start_test_engine();
     let mut subjects = test_subjects(selection).expect("the package is a test subject");
 
     subjects.remove(0)

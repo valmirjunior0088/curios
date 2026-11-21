@@ -12,6 +12,8 @@
 //!
 //! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
 //!
+//! It starts the engine as every test does, with no map for a sampler ([`start_test_engine`](crate::test_support::start_test_engine)).
+//!
 //! And it holds the mock host the suites run programs against, [`MockHost`](crate::test_support::MockHost): a host made of memory, whose disk, network and devices a test seeds and reads back, and which no build that ships runs a program under.
 
 mod mock_host;
@@ -24,6 +26,12 @@ use {
     std::sync::{Arc, Mutex, Once},
     wasmtime::{Caller, Instance, Linker, Memory, Store, Val},
 };
+
+/// Start the engine as a test runs it, without the guest's map: what a test that reaches the engine asks first, since nothing uses the engine unstarted ([`start_engine`]).
+pub fn start_test_engine() {
+    start_engine(GuestMap::Unwritten)
+        .expect("every test starts the engine without the guest's map, so none is refused");
+}
 
 /// One wasm value crossing into or out of a guest call, opaque by construction.
 ///

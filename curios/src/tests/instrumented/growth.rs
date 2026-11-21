@@ -8,6 +8,7 @@ use {
     curios_core::take_looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
+    curios_native::test_support::*,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count, count_allocations},
     curios_surface::Entrypoint,
@@ -127,6 +128,7 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
         .expect("a growth compiles");
     let mark = mark.expect("the last stage left a mark");
 
+    start_test_engine();
     let bytes = optimize(&module);
     let (count, mark) = mark.since(counters, 9);
     counts[9] = count;

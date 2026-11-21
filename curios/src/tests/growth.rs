@@ -9,6 +9,7 @@ use {
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
+    curios_native::test_support::*,
     curios_pipeline::{compile_with_prelude, test_support::*},
     curios_surface::Entrypoint,
     std::{fmt::Write, iter},
@@ -532,6 +533,7 @@ fn emits(source: &str) -> Result<(), String> {
         .map_err(|error| error.format())?;
     let (module, _) =
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})?;
+    start_test_engine();
     curios_native::validate(&curios_wasm::to_bytes(
         &module,
         &curios_wasm::Names::default(),

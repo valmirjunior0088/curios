@@ -15,6 +15,7 @@ fn func_arity(sub_type: &SubType) -> (usize, usize) {
 }
 
 fn bridge() -> GuestInstance {
+    start_test_engine();
     let code = curios_cranelift::compile(&crate::bridge_bytes()).expect("the bridge compiles");
 
     GuestInstance::instantiate(&code).expect("the bridge module instantiates")

@@ -5,13 +5,14 @@
 //! Each module is written in the WebAssembly text format and parsed by the crate, so one source string exercises the parser, the printer's inverse, and the encoder at once.
 
 use {
-    curios_native::validate,
+    curios_native::{test_support::*, validate},
     curios_wasm::{Module, Names, to_bytes},
 };
 
 fn validates(source: &str) {
     let module = source.parse::<Module>().expect("expected a module");
 
+    start_test_engine();
     if let Err(error) = validate(&to_bytes(&module, &Names::default())) {
         panic!("expected a valid module: {error}");
     }
