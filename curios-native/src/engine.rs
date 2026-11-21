@@ -581,13 +581,13 @@ fn answering<'a, T>(
         return Err(Unlinked::of("signature mismatch")
             .stating(format_args!("{answerer} answers `{name}`"))
             .stating(format_args!(
-                "expected: ({}) -> {returned}",
-                spelled(&signature.params)
-            ))
-            .stating(format_args!(
                 "obtained: ({}) -> {}",
                 spelled(&stated.params),
                 stated.returned
+            ))
+            .stating(format_args!(
+                "expected: ({}) -> {returned}",
+                spelled(&signature.params)
             )));
     }
 

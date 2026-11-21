@@ -74,8 +74,8 @@ pub fn take_n<'a>(expected: usize) -> impl Parser<'a, &'a str> {
         None => Err(ParserError::new(
             state,
             vec![
-                format!("expected: {expected} more characters"),
                 "obtained: the end of the file".to_string(),
+                format!("expected: {expected} more characters"),
             ],
         )),
     }

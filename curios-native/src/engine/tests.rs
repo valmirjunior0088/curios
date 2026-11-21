@@ -68,7 +68,7 @@ fn an_answer_whose_operands_cross_otherwise_is_refused() {
 
     assert_eq!(
         linked(&doubling(), &bindings, "/double").unwrap_err(),
-        "signature mismatch: a binding answers `/double`; expected: (Nat) -> (Nat); obtained: (Int) -> (Nat)"
+        "signature mismatch: a binding answers `/double`; obtained: (Int) -> (Nat); expected: (Nat) -> (Nat)"
     );
 }
 
@@ -79,7 +79,7 @@ fn an_answer_whose_results_cross_otherwise_is_refused() {
 
     assert_eq!(
         linked(&doubling(), &bindings, "/double").unwrap_err(),
-        "signature mismatch: a binding answers `/double`; expected: (Nat) -> (Nat); obtained: (Nat) -> (Bool)"
+        "signature mismatch: a binding answers `/double`; obtained: (Nat) -> (Bool); expected: (Nat) -> (Nat)"
     );
 }
 
@@ -134,7 +134,7 @@ fn a_row_that_does_not_return_is_answered_by_a_termination() {
 
     assert_eq!(
         linked(&store, &returning, "/abort").unwrap_err(),
-        "signature mismatch: a binding answers `/abort`; expected: (Byte) -> Never; obtained: (Byte) -> ()"
+        "signature mismatch: a binding answers `/abort`; obtained: (Byte) -> (); expected: (Byte) -> Never"
     );
 }
 

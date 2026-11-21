@@ -584,16 +584,16 @@ fn parse_keyword_at<'a>(keyword: Keyword) -> impl Parser<'a, Span> {
                 move |((start, (span, word)), rest)| match (word, expected == word) {
                     (_, true) => pure(span).boxed(),
                     ("", false) => fail(vec![
-                        format!("expected: the keyword `{expected}`"),
                         format!("obtained: {}", obtained(rest)),
+                        format!("expected: the keyword `{expected}`"),
                     ])
                     .boxed(),
                     // The report spans the word, so the caret underlines it rather than standing after it.
                     (word, false) => fail_from(
                         &start,
                         vec![
-                            format!("expected: the keyword `{expected}`"),
                             format!("obtained: `{word}`"),
+                            format!("expected: the keyword `{expected}`"),
                         ],
                     )
                     .boxed(),

@@ -628,8 +628,8 @@ impl Delivery {
                         "the foreign module `{name}` at {} is not what it is pinned to",
                         path.display()
                     ))
-                    .stating(format_args!("expected: {}", Code(&self.hash)))
                     .stating(format_args!("obtained: {}", Code(&delivered)))
+                    .stating(format_args!("expected: {}", Code(&self.hash)))
                     .stating("intended if you rebuilt the module from source you control")
                     .stating("pay close attention if you did not rebuild it, or a dependency delivered it rather than you building it")
                     .trying(format!(

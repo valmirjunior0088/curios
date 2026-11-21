@@ -346,7 +346,7 @@ fn an_export_of_another_type_is_refused_before_the_program_runs() {
 
     assert!(
         refusal.contains(
-            "exports `double` to answer `/flip`; expected: (i32) -> (i32); obtained: (i64) -> (i64)"
+            "exports `double` to answer `/flip`; obtained: (i64) -> (i64); expected: (i32) -> (i32)"
         ),
         "{refusal}"
     );

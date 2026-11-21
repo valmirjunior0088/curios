@@ -435,8 +435,8 @@ fn accept_module(
                     "the foreign module `{}` of `{}` was fetched from `{}`",
                     acquisition.name, acquisition.package, acquisition.url
                 ))
-                .stating(format_args!("expected: {}", Code(&acquisition.hash)))
                 .stating(format_args!("obtained: {}", Code(&delivered)))
+                .stating(format_args!("expected: {}", Code(&acquisition.hash)))
                 .stating("intended if the publisher re-cut this version and said so, or you repointed this row yourself")
                 .stating("pay close attention if nothing announced a change")
                 .stating("an artifact replaced in place, under a version already published, is what a compromised release looks like")
@@ -537,11 +537,11 @@ fn accept(scratch: &Path, cabinet: &Cabinet, acquisition: &Acquisition) -> Resul
                     "the dependency `{}` was fetched from `{}` at `{}`",
                     acquisition.name, acquisition.url, acquisition.snapshot.rev
                 ))
+                .stating(format_args!("obtained: {}", Code(&delivered)))
                 .stating(format_args!(
                     "expected: {}",
                     Code(&acquisition.snapshot.hash)
                 ))
-                .stating(format_args!("obtained: {}", Code(&delivered)))
                 .stating("intended if this row pins a branch or a tag, and it has moved")
                 .stating("pay close attention if this row pins a commit, which should not move")
                 .stating("a tree that changed under one means its history was rewritten")

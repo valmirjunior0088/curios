@@ -82,8 +82,8 @@ pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Tes
     | true => pure(())
     | false =>
         failing("not equal", [
-            ("expected", Spell/spell(expected)),
-            ("obtained", Spell/spell(actual))])
+            ("obtained", Spell/spell(actual)),
+            ("expected", Spell/spell(expected))])
     end;
 
 --- Flatten a fallible thunk returning a test, reporting its error when it fails.

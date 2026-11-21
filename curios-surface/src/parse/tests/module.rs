@@ -371,15 +371,15 @@ fn a_keyword_expected_at_punctuation_names_both() {
     for (source, expected) in [
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p;\n()",
-            "expected: the keyword `end`\n│  obtained: `;`",
+            "obtained: `;`\n│  expected: the keyword `end`",
         ),
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n\n/std/print(1)",
-            "expected: the keyword `end`\n│  obtained: `/`",
+            "obtained: `/`\n│  expected: the keyword `end`",
         ),
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n",
-            "expected: the keyword `end`\n│  obtained: the end of the file",
+            "obtained: the end of the file\n│  expected: the keyword `end`",
         ),
     ] {
         let report = source.parse::<Entrypoint>().unwrap_err().format();

@@ -304,7 +304,7 @@ fn a_declarations_member_written_alone_is_reported_where_it_stands() {
             .expect_err("the member is no parameter");
         let report = error.format();
         assert!(
-            report.contains("expected: `:`\n│  obtained: `)`"),
+            report.contains("obtained: `)`\n│  expected: `:`"),
             "{source:?} reported {report}"
         );
         assert_eq!(

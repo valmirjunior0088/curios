@@ -164,14 +164,14 @@ fn a_position_that_begins_no_term_names_the_input_rather_than_an_alternative() {
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            report.contains(&format!("expected: a term\n│  obtained: `{obtained}`")),
+            report.contains(&format!("obtained: `{obtained}`\n│  expected: a term")),
             "{source:?} reported {report}"
         );
     }
     // Nothing is left to consume at the end of input, so that case is named ahead of the alternatives instead of after them.
     let report = "".parse::<Term>().unwrap_err().format();
     assert!(
-        report.contains("expected: a term\n│  obtained: the end of the file"),
+        report.contains("obtained: the end of the file\n│  expected: a term"),
         "reported {report}"
     );
     // The caret underlines the offending character rather than standing after it.

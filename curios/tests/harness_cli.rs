@@ -137,7 +137,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ /app/doubling_passes; ✓ passed in ",
             "├─ /app/addition_passes; ✓ passed in ",
             "├─ /app/equality_fails\n│  > comparing\n│  ✗ failed in ",
-            "│    not equal\n│      expected: `5`\n│      obtained: `4`\n",
+            "│    not equal\n│      obtained: `4`\n│      expected: `5`\n",
             "├─ /app/overflow_traps; ✗ trapped in ",
             "├─ /app/exits_seven; ✗ exited 7 in ",
             "├─ /app/effect_passes; ✓ passed in ",

@@ -165,7 +165,7 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
         // A field whose separator is missing is no field standing alone: the brace reports it.
         (
             "foreign m(Nat) -> {a: Nat b: Nat};",
-            "expected: `}`\n│  obtained: `b`",
+            "obtained: `b`\n│  expected: `}`",
             "                          ^",
         ),
         // `List` reaches the wire type's own refusal, as a result and as an operand.
@@ -274,24 +274,24 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
             "foreign f(Str) -> Nat;",
-            "expected: a wire type\n│  obtained: `Str`",
+            "obtained: `Str`\n│  expected: a wire type",
         ),
         // A result goes through the same parser, so it names the same vocabulary.
         (
             "foreign f() -> Str;",
-            "expected: a wire type\n│  obtained: `Str`",
+            "obtained: `Str`\n│  expected: a wire type",
         ),
         (
             "foreign f(List(List(Nat))) -> Bool;",
-            "expected: a `List` or `Option` element type\n│  obtained: `List`",
+            "obtained: `List`\n│  expected: a `List` or `Option` element type",
         ),
         (
             "foreign f(Option(List(Nat))) -> Bool;",
-            "expected: a `List` or `Option` element type\n│  obtained: `List`",
+            "obtained: `List`\n│  expected: a `List` or `Option` element type",
         ),
         (
             "foreign f(List(Option(Nat))) -> Bool;",
-            "expected: a `List` or `Option` element type\n│  obtained: `Option`",
+            "obtained: `Option`\n│  expected: a `List` or `Option` element type",
         ),
         // A `/` stops `parse_identifier` before either arm is reached, so the qualified spelling is refused by name of its own.
         (

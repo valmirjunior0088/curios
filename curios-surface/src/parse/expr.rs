@@ -681,7 +681,7 @@ fn term<'a, D: Grammar>() -> impl Parser<'a, Term<D>> {
             refuse_declaration_head.and_keep(
                 // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
                 look_ahead(take_eof)
-                    .and_keep(fail(&["expected: a term", "obtained: the end of the file"]))
+                    .and_keep(fail(&["obtained: the end of the file", "expected: a term"]))
                     .or(parse_let)
                     .or(parse_func_type)
                     .or(parse_func)
@@ -702,8 +702,8 @@ fn refuse_non_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>
             fail_from(
                 &start,
                 vec![
-                    "expected: a term".to_string(),
                     format!("obtained: `{}`", shown(text)),
+                    "expected: a term".to_string(),
                 ],
             )
         })

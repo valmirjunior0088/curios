@@ -191,13 +191,13 @@ fn a_literal_expected_at_a_blank_obtains_a_blank() {
         .unwrap_err()
         .format();
     assert!(
-        blank.contains("expected: `'`\n│  obtained: a blank"),
+        blank.contains("obtained: a blank\n│  expected: `'`"),
         "{blank}"
     );
 
     let end = "let c = 'a".parse::<Entrypoint>().unwrap_err().format();
     assert!(
-        end.contains("expected: `'`\n│  obtained: the end of the file"),
+        end.contains("obtained: the end of the file\n│  expected: `'`"),
         "{end}"
     );
 }

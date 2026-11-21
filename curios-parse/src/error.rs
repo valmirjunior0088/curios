@@ -143,12 +143,13 @@ impl ParserError {
             Message::Unexpected(unexpected) => {
                 said.stating(format_args!("unexpected: `{unexpected}`"));
             }
+            // What stands there first, then what was owed: a reader looks at what they wrote before at what the grammar asks of it, as a type mismatch says `inferred` before `expected`.
             Message::Expected(expected) => {
-                said.stating(format_args!("expected: `{expected}`"));
                 said.stating(format_args!(
                     "obtained: {}",
                     obtained(&self.source.text()[self.offset..])
                 ));
+                said.stating(format_args!("expected: `{expected}`"));
             }
         }
 

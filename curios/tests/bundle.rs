@@ -333,7 +333,7 @@ fn compile_refuses_the_modules_a_run_would() {
     let mistyped = calling_double(&root, "mistyped", &[("probe", "truthy")]);
     let refusal = refused(&mistyped, &root.join("mistyped.out"), &[]);
     assert!(
-        refusal.contains("the module `probe` of `/mistyped` exports `truthy` to answer `/mistyped/double`\n│  expected: (i64) -> (i64)\n│  obtained: () -> (i32)"),
+        refusal.contains("the module `probe` of `/mistyped` exports `truthy` to answer `/mistyped/double`\n│  obtained: () -> (i32)\n│  expected: (i64) -> (i64)"),
         "{refusal}"
     );
 }

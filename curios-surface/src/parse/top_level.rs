@@ -222,10 +222,9 @@ fn wire_leaf_expected() -> Vec<String> {
     ]
 }
 
-/// The facts of what was `expected`, with the word obtained in its place said after the first of them, which says what was expected.
+/// The facts of what was `expected`, with the word obtained in its place said before them, as what is found is said before what was owed.
 fn obtained_instead(mut expected: Vec<String>, obtained: &str) -> Vec<String> {
-    let at = expected.len().min(1);
-    expected.insert(at, format!("obtained: `{obtained}`"));
+    expected.insert(0, format!("obtained: `{obtained}`"));
     expected
 }
 

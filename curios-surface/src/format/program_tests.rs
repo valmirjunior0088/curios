@@ -44,7 +44,7 @@ fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
     .expect_err("garbled tail")
     .render();
     assert!(
-        refusal.starts_with("syntax error\n│  expected: `)`\n│  obtained: the end of the file"),
+        refusal.starts_with("syntax error\n│  obtained: the end of the file\n│  expected: `)`"),
         "{refusal}"
     );
     assert!(refusal.contains("\n│  2 │ "), "{refusal}");

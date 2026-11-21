@@ -574,14 +574,14 @@ impl Row {
                     "{subject} exports `{export}` to answer `{declaration}`"
                 ))
                 .stating(format_args!(
-                    "expected: ({}) -> ({})",
-                    expected.0.join(", "),
-                    expected.1.join(", ")
-                ))
-                .stating(format_args!(
                     "obtained: ({}) -> ({})",
                     found.0.join(", "),
                     found.1.join(", ")
+                ))
+                .stating(format_args!(
+                    "expected: ({}) -> ({})",
+                    expected.0.join(", "),
+                    expected.1.join(", ")
                 )));
         }
 

@@ -107,11 +107,11 @@ fn a_malformed_guard_reports_the_guard() {
     for (source, expected) in [
         (
             "match\n| some(v) = key v\n| _ => 0\nend",
-            "expected: `=>`\n│  obtained: `v`",
+            "obtained: `v`\n│  expected: `=>`",
         ),
         (
             "match\n| true 1\n| _ => 0\nend",
-            "expected: `=>`\n│  obtained: `1`",
+            "obtained: `1`\n│  expected: `=>`",
         ),
         (
             "match\n| Option/some(v) = key => v\n| _ => 0\nend",
@@ -136,7 +136,7 @@ fn a_guard_written_with_alternatives_is_refused_at_its_bar() {
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            report.contains("expected: `=>`\n│  obtained: `|`"),
+            report.contains("obtained: `|`\n│  expected: `=>`"),
             "{source:?} reported {report}"
         );
     }

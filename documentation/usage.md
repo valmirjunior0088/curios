@@ -159,15 +159,15 @@ declaration cycle
 └─ [error] demo.crs:9:5
 ```
 
-A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `expected:` there and what was `obtained:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
+A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `obtained:` there and what was `expected:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
 
 What a command refuses before it compiles anything is a report of the same form: a subject it cannot take, a flag that cannot stand, a line that does not parse, a manifest it cannot read, a dependency it cannot place or fetch, a `foreign` nothing answers. It closes on what it is about. That is a row of a manifest, at its line and column with the row shown, where a manifest states what is refused; a file or a directory as a whole; or a flag, a filter or a command by the word that was written. A way out that is a command stands on the line above, behind `try`:
 
 ```text
 hash mismatch
 │  the dependency `json` was fetched from `https://example.org/json` at `v1.2`
-│  expected: `c1:ab12…`
 │  obtained: `c1:9f3c…`
+│  expected: `c1:ab12…`
 │  intended if this row pins a branch or a tag, and it has moved
 │  pay close attention if this row pins a commit, which should not move
 │  a tree that changed under one means its history was rewritten
@@ -316,8 +316,8 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ├─ /demo/shapes/a_square_has_four_sides; ✓ passed in 0.0s
 ├─ /demo/two_is_three; ✗ failed in 0.0s
 │    not equal
-│      expected: `3`
 │      obtained: `2`
+│      expected: `3`
 ├─ /demo/render/draws_a_square
 │  > ■■■■
 │  ✓ passed in 0.1s

@@ -34,7 +34,7 @@ fn the_description_schedules_every_rung() {
         ()
         "#
         ),
-        b"/a_bool: passed\n/doubling: passed\n/a_failing_equal: failed\n  not equal\n    expected: `5`\n    obtained: `4`\n/an_action: passed\n/a_failing_action: failed\n  the action's check fails\n"
+        b"/a_bool: passed\n/doubling: passed\n/a_failing_equal: failed\n  not equal\n    obtained: `4`\n    expected: `5`\n/an_action: passed\n/a_failing_action: failed\n  the action's check fails\n"
     );
 }
 
@@ -92,8 +92,8 @@ fn an_index_argument_selects_one_test() {
             steps: vec![],
             statement: "not equal".to_string(),
             facts: vec![
-                ("expected".to_string(), "3".to_string()),
                 ("obtained".to_string(), "2".to_string()),
+                ("expected".to_string(), "3".to_string()),
             ],
         }])
     );
@@ -111,7 +111,7 @@ fn spelled_strings_are_quoted_and_escaped() {
         ()
         "#
         ),
-        b"/newline: failed\n  not equal\n    expected: `\"a\"`\n    obtained: `\"a\\n\"`\n"
+        b"/newline: failed\n  not equal\n    obtained: `\"a\\n\"`\n    expected: `\"a\"`\n"
     );
 }
 
@@ -133,7 +133,7 @@ fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
         ()
         "#
         ),
-        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    expected: `3`\n    obtained: `2`\n  case 2: not equal\n    expected: `5`\n    obtained: `4`\nperformed\n/action_then_verdict: passed\nperformed\n/failure_before_action: failed\n  case 0: the first case fails\n"
+        b"/passing: passed\n/empty: passed\n/first_failure: failed\n  case 1: not equal\n    obtained: `2`\n    expected: `3`\n  case 2: not equal\n    obtained: `4`\n    expected: `5`\nperformed\n/action_then_verdict: passed\nperformed\n/failure_before_action: failed\n  case 0: the first case fails\n"
     );
 }
 
@@ -149,7 +149,7 @@ fn a_failure_is_reported_under_every_step_that_reached_it() {
         ()
         "#
         ),
-        b"/nested: failed\n  parsing: headers: case 1: not equal\n    expected: `3`\n    obtained: `2`\n"
+        b"/nested: failed\n  parsing: headers: case 1: not equal\n    obtained: `2`\n    expected: `3`\n"
     );
 }
 
@@ -303,7 +303,7 @@ fn a_structural_fixture_compares_and_spells() {
         ()
         "#
         ),
-        b"/options: failed\n  not equal\n    expected: `Option/some(4)`\n    obtained: `Option/some(3)`\n"
+        b"/options: failed\n  not equal\n    obtained: `Option/some(3)`\n    expected: `Option/some(4)`\n"
     );
 }
 

@@ -333,7 +333,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let failed = vec![posted(
         "0",
         "null",
-        "\"W0ZhaWx1cmUgeyBzdGVwcyA9IFtdLCBzdGF0ZW1lbnQgPSAibm90IGVxdWFsIiwgZmFjdHMgPSBbKCJleHBlY3RlZCIsICIyIiksICgib2J0YWluZWQiLCAiMSIpXSB9XQ==\"",
+        "\"W0ZhaWx1cmUgeyBzdGVwcyA9IFtdLCBzdGF0ZW1lbnQgPSAibm90IGVxdWFsIiwgZmFjdHMgPSBbKCJvYnRhaW5lZCIsICIxIiksICgiZXhwZWN0ZWQiLCAiMiIpXSB9XQ==\"",
     )];
     let exited = vec![posted("7", "null", "null")];
     let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "\"W10=\"")];
@@ -393,8 +393,8 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "├─ /app/holds; ✓ passed in _\n",
                 "├─ /app/fails; ✗ failed in _\n",
                 "│    not equal\n",
-                "│      expected: `2`\n",
                 "│      obtained: `1`\n",
+                "│      expected: `2`\n",
                 "├─ /app/exits; ✗ exited 7 in _\n",
                 "└─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",

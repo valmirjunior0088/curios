@@ -174,19 +174,19 @@ fn a_missed_literal_names_the_token_in_its_place() {
     for (source, expected) in [
         (
             "let x : Nat = (1 end;\nx",
-            "expected: `)`\n│  obtained: `end`",
+            "obtained: `end`\n│  expected: `)`",
         ),
         (
             "let x : Nat = (1 ]] y;\nx",
-            "expected: `)`\n│  obtained: `]]`",
+            "obtained: `]]`\n│  expected: `)`",
         ),
         (
             "let x : List(Nat) = [1, 2 end;\nx",
-            "expected: `]`\n│  obtained: `end`",
+            "obtained: `end`\n│  expected: `]`",
         ),
         (
             "let x : Nat = (1",
-            "expected: `)`\n│  obtained: the end of the file",
+            "obtained: the end of the file\n│  expected: `)`",
         ),
     ] {
         let report = refusal(source);
